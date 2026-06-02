@@ -136,3 +136,72 @@ _Concept_: 当 Issue 进入完成操作时，如果配置启用 `agent_auto_comm
 _Novelty_: 自动提交不是应用层 Git 脚本，而是 Agent 工作流的一部分，利用 Agent 对上下文和文件改动的理解降低误提交概率。
 
 **Validation:** 应用在 completion 前后记录 `git status`，检测是否产生新 commit，并把 commit hash 写入 IssueAction。若 Agent 未提交成功，Issue 保持在 review 或提示用户处理。
+
+## Checkpoint - 2026-06-02
+
+### 已确认产品定位
+
+- 产品定位为 **VS Code 形态的 Agent 工作台**，不是桌面版 Agent Kanban。
+- 核心工作流是 **Issue 驱动的一窗口开发闭环**。
+- 第一阶段目标用户是 AI Coding 重度用户、独立开发者、一两人协作小团队。
+- 第一阶段为本地版本，第二阶段接入 GitHub/GitLab，第三阶段引入自有云服务。
+
+### 已确认 MVP 边界
+
+- MVP 必须支持本地 Issue 创建、分配 Codex Agent、内嵌 Agent Session 执行交互、Session 完成提醒、Issue review、Issue 完成。
+- 第一阶段不要求完整代码浏览、Diff 查看、Git 历史、插件系统、终端恢复。
+- Worktree 第一阶段可选，但 auto commit / 合并策略后续最好与 Worktree 结合。
+- 第一阶段必须内嵌终端，不接受外部终端作为主路径。
+
+### 已确认信息架构
+
+- 左侧 Activity Bar 至少包含 `Issues` 和 `Agents`。
+- Issue 与 Agent Session 是分离实体，通过关联关系和跳转联动。
+- Issue 看板中点击 Issue 打开详情弹窗，可查看/编辑 Issue、查看状态和操作按钮。
+- 如果 Issue 正在运行，详情中提供链接跳转到 Agent 菜单。
+- Agent 菜单显示 Session 列表，默认按状态组织，也可按 Agent 类型组织并按历史排序。
+- Agent 页面中间为 Session 信息/内嵌 Codex 终端，左侧为 Issue/Session 信息卡片，右侧预留可伸缩区域用于未来展示代码变更/Diff。
+
+### 已确认状态模型
+
+- 一个 Issue 对应一个 Agent Session。
+- 如果 Session 关闭但执行失败，优先通过 Codex `resume` 在同一上下文中继续。
+- Session 主状态只有 `running` 和 `completed`。
+- 等待用户输入属于 `running` 期间的事件/提醒，不作为 Session 主状态。
+- Session 结果为 `success`、`failed`、`cancelled` 或 `unknown`。
+- Issue 状态为 `backlog`、`running`、`review`、`completed`。
+- Session 结束后 Issue 进入 `review`，由用户决定 resume、放弃、或确认完成。
+
+### 已确认技术方向
+
+- 桌面框架：Tauri v2。
+- 前端：React + TypeScript。
+- 后端核心：Rust。
+- 本地数据库：SQLite。
+- 终端前端：xterm.js。
+- PTY 方向：先用 `portable-pty` 做 Embedded Codex Terminal Spike。
+- 首个 Agent：Codex。
+- Agent 架构：定义统一 `AgentAdapter`，MVP 先实现 CodexAdapter。
+- Codex 状态识别优先调研/利用 JSONL 事件；前台体验保持 Codex CLI 原生感。
+
+### 已确认数据与日志策略
+
+- 核心实体包括 Workspace、Issue、AgentSession、SessionEvent、IssueAction/AuditLog。
+- 数据库保存关键事件和原始日志文件路径。
+- 不把完整终端逐字符输出写入 SQLite，避免高频输出拖垮数据库。
+- 保存 Codex session id，以支持 resume。
+
+### 已确认 Completion Policy
+
+- 配置项命名为 `completion_policy = manual | agent_auto_commit`。
+- 支持全局级、Workspace 级、项目级覆盖。
+- `agent_auto_commit` 不是应用直接执行 `git add .`。
+- 当 Issue 完成时，应用向 Codex 注入 completion prompt / skill / hook，让 Agent 检查改动，只提交本次 Issue/Session 相关改动，并生成规范 commit message。
+- 应用负责记录提交前后状态、commit hash 和 IssueAction。
+
+### 下一步建议
+
+1. 细化 MVP 用户故事和验收标准。
+2. 设计第一阶段技术架构图和模块边界。
+3. 拆出 Spike 任务：Embedded Codex Terminal、Codex Session State、Issue-Session Binding。
+4. 形成第一版开发计划。
