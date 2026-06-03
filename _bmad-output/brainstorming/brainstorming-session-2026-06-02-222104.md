@@ -698,3 +698,21 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 右侧 Diff Panel 可以在 Agent 页面中预留，但不作为独立一级页面。
 - 第一阶段一级导航只服务核心闭环：`Issue -> Run -> Agent Session -> Review -> Complete`。
 - 后续代码浏览、完整 Diff、Git 历史、Workspace 终端恢复可以作为 M6+ 能力或插件化方向再进入导航。
+
+### Confirmed IA #43：Issues Activity 使用四泳道看板
+
+用户已确认并修订：MVP 的 `Issues Activity` 使用四个泳道展示 Issue：
+
+1. `Backlog`
+2. `Running`
+3. `Review`
+4. `Completed`
+
+**确认后的设计口径：**
+
+- `Completed` 需要作为常驻泳道展示，而不是仅放在过滤器或历史列表中。
+- 四个泳道直接对应 MVP Issue 状态：`backlog`、`running`、`review`、`completed`。
+- Issue 卡片字段保持极简：`title`、`status`、`updated_at`。
+- 若有关联 AgentSession，卡片显示小型 Agent / Session 标记。
+- 若 Session 需要用户关注，卡片显示 attention 标记。
+- 点击 Issue 卡片打开 Issue 详情弹窗；看板卡片本身不展开复杂内容。
