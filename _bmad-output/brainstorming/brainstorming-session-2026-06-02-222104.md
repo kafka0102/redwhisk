@@ -596,7 +596,7 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #36-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Pending Confirmation：** #37-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
 
 **Confirmed #35：Command/Event 同步模型**
 
@@ -609,4 +609,15 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 进程启动失败、Git 检测失败、completion 未检测到 commit 等失败路径由 Rust Core 返回明确结果。
 - 前端可以做临时 loading，但最终状态以 Rust Core 返回值和 Core 事件为准。
 
-**Pending Confirmation：** #36-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Confirmed #36：WorkspaceSettings 与 CompletionAttempt 数据模型**
+
+用户已确认认可：MVP 数据模型中保留 `WorkspaceSettings` 与 `CompletionAttempt`。
+
+**确认后的设计口径：**
+
+- `WorkspaceSettings` 保存 workspace 级配置，例如 `completion_policy`、默认 AgentProfile、语言等。
+- `CompletionAttempt` 单独记录每次完成尝试，包含完成前 HEAD、完成后 HEAD、changed files 摘要、用户选择、是否检测到新 commit、commit hash、失败原因。
+- `Complete with Agent Commit` 属于高信任动作，不能只依赖 Codex 输出文本，必须有应用侧结构化审计记录。
+- 如果 Agent 未创建 commit，CompletionAttempt 应记录 `no_commit_detected`，Issue 保持 `review`。
+
+**Pending Confirmation：** #37-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
