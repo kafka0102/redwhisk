@@ -863,3 +863,16 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 不通过左侧 Activity Bar 或 icon 菜单来“返回”关闭 Inspector。
 - 右侧不重复显示 Session 标题、Agent 类型和运行状态；这些信息属于左侧 Session 列表。
 - 本确认修订 #45 中“右侧保留当前 Session 上下文信息”的泛化说法：右侧 Header 优先承载 Issue 上下文，Session 基本信息保留在左侧栏。
+
+### Confirmed IA #49：新建不关联 Issue 的 Session 先打开 Session Dialog
+
+用户已确认：Agents 左侧 Session 列表顶部的小按钮不直接创建临时 Session，而是先打开 `Session Dialog`。
+
+**确认后的设计口径：**
+
+- `Session Dialog` 用于创建不与任何 Issue 关联的临时 Session。
+- 用户在 Dialog 中确认后，Rust Core 才启动 Agent 进程并创建 AgentSession。
+- 创建成功后，该 Session 出现在 Agents 左侧列表中。
+- 不关联 Issue 的 Session 仍展示运行状态：`Running` 或 `Completed`。
+- 不关联 Issue 的 Session 不触发 Issue 状态流转，不参与 completion policy。
+- `Session Dialog` 的具体字段和交互另行确认。
