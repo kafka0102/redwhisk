@@ -1,6 +1,8 @@
-# API Conventions
+# API 约定
 
-本文档仅保留 Agent 生成和校验 API 时必须遵守的规则。
+本文档仅保留 Agent 生成和校验 HTTP API 时必须遵守的规则。
+
+当前仓库尚未包含应用运行时代码或 HTTP API 描述文件。以下规则适用于后续新增 API、补充 OpenAPI 描述或审查 API 设计时，不表示当前仓库已经存在可用 API。
 
 ## 关键词
 
@@ -131,6 +133,6 @@ GET /jobs/{jobId}/result
 
 ## 5. OpenAPI 要求
 
-- 所有 API 必须提供 OpenAPI 描述文件
+- 新增 HTTP API 时必须同步提供 OpenAPI 描述文件
 - OpenAPI 版本必须大于 `3.0.0`
 - 推荐使用当前可用的最新稳定版本
