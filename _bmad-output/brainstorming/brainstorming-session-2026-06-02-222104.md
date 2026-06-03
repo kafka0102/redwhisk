@@ -596,7 +596,7 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #37-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Pending Confirmation：** #38-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
 
 **Confirmed #35：Command/Event 同步模型**
 
@@ -620,4 +620,15 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - `Complete with Agent Commit` 属于高信任动作，不能只依赖 Codex 输出文本，必须有应用侧结构化审计记录。
 - 如果 Agent 未创建 commit，CompletionAttempt 应记录 `no_commit_detected`，Issue 保持 `review`。
 
-**Pending Confirmation：** #37-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Confirmed #37：Embedded Codex Terminal Spike 作为第一优先级**
+
+用户已确认认可：第一优先级先做 Embedded Codex Terminal Spike，而不是先做完整业务 UI。
+
+**确认后的设计口径：**
+
+- MVP 的最大早期风险是 Codex CLI 能否在 Tauri + Rust PTY + xterm.js 中提供接近原生终端的体验。
+- 第一 Spike 只验证可丢弃原型：启动 `codex`、显示 TUI、输入输出、resize、Ctrl+C、粘贴、退出检测和日志写入。
+- 该 Spike 先以 macOS 通过为主，Windows/Linux 兼容性风险记录下来，但不阻塞 MVP 主路径设计。
+- 如果内嵌 Codex TUI 体验不成立，需要优先调整 Agent Session 方案，再继续 Issue/Review/Completion 的业务闭环。
+
+**Pending Confirmation：** #38-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
