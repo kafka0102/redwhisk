@@ -802,3 +802,36 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - Workspace Settings 通过 `Inherit global default` / `Override for this workspace` 与 Global Settings 连接。
 - UI language 是全局设置，不属于 Workspace Settings。
 - 若未来需要 Workspace 级语言偏好，应命名为 `Agent response language` 或 `Prompt language preference`，避免与 UI language 混淆；MVP 暂不加入。
+
+### Confirmed IA #47：Run Dialog 保持轻量，不展示配置来源和 command 可用性
+
+用户已确认并修订：Run Dialog 是从 Issue 启动 Agent Session 的轻量确认弹窗，不承担 Agent 配置诊断职责。
+
+**Run Dialog 结构：**
+
+1. Agent 选择区
+   - 选择 Agent Profile。
+
+2. Prompt 预览 / 编辑区
+   - 显示最终 prompt。
+   - 最终 prompt 默认可编辑。
+   - prompt 来源可以折叠查看，例如 issue description、default skill、prompt template、app instructions。
+
+3. 启动选项区
+   - working directory 默认当前 Workspace repo path。
+   - default args 可展示。
+   - MVP 不放复杂高级参数。
+
+4. 底部操作区
+   - `Cancel`
+   - `Start`
+
+**确认后的设计口径：**
+
+- Run Dialog 不显示 command 是否可用。
+- Run Dialog 不显示当前配置是继承全局配置还是 Workspace 覆盖配置。
+- command 可用性和配置继承/覆盖关系属于 Settings / Agent Profile 配置层，不进入运行时弹窗。
+- 本确认修订并覆盖早期 #24 中“Run Dialog 展示配置来源”的说法；最终 Run Dialog 只展示运行所需内容。
+- 点击 `Start` 后，只有 Rust Core 成功启动 Agent 进程，Issue 才从 `backlog` 变成 `running`。
+- 启动失败时 Issue 保持 `backlog`，Run Dialog 显示错误。
+- 最终 prompt、Agent Profile、command snapshot、default args snapshot 保存到 AgentSession。
