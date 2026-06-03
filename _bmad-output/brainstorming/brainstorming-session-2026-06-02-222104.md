@@ -596,7 +596,7 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #38-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Pending Confirmation：** #39-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
 
 **Confirmed #35：Command/Event 同步模型**
 
@@ -631,4 +631,15 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 该 Spike 先以 macOS 通过为主，Windows/Linux 兼容性风险记录下来，但不阻塞 MVP 主路径设计。
 - 如果内嵌 Codex TUI 体验不成立，需要优先调整 Agent Session 方案，再继续 Issue/Review/Completion 的业务闭环。
 
-**Pending Confirmation：** #38-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Confirmed #38：Codex Session Resume 与 completion prompt 注入 Spike**
+
+用户已确认认可：第二优先级验证 Codex Session 的继续交互、completion prompt 注入和异常退出后的 resume 能力。
+
+**确认后的设计口径：**
+
+- review 阶段继续修正必须优先复用同一个 Codex Session 上下文。
+- `Complete with Agent Commit` 应向当前 Codex Session 注入 completion prompt，而不是启动一个无上下文的新 Codex 进程。
+- AgentSession 需要保存可用于恢复的 `codex_session_id` 或等价上下文标识。
+- Codex 进程异常退出后，优先通过 `codex resume <session_id>` 或等价方式恢复；若无法稳定恢复，则保留日志、提示用户手动处理，Issue 保持 `review` 或 `running`，不自动完成。
+
+**Pending Confirmation：** #39-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
