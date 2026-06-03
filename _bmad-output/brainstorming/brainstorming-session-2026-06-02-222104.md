@@ -908,3 +908,14 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - `Completed` 分组默认只展示最近 20 条。
 - 该规则同时适用于关联 Issue 的 Session 和不关联 Issue 的临时 Session。
 - MVP 暂不扩展搜索、归档或完整历史列表；后续如需要再单独设计。
+
+### Confirmed IA #52：Running Session 按最近活跃时间排序
+
+用户已确认：Agents 左侧 Session 列表中的 `Running` 分组按最近活跃时间排序。
+
+**确认后的设计口径：**
+
+- 最近有输出或用户输入的 Running Session 排在最上方。
+- `last_active_at` 可由用户输入、Agent 输出或关键 SessionEvent 更新。
+- 该规则同时适用于关联 Issue 的 Session 和不关联 Issue 的临时 Session。
+- `Completed` 分组仍按最近完成时间排序，并只显示最近 20 条。
