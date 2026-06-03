@@ -596,8 +596,6 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #41 仍视为 AI 草案，需要后续交互确认或修订。
-
 **Confirmed #35：Command/Event 同步模型**
 
 用户已确认认可：React 前端不直接把 Issue 或 Session 写成 `running`、`review`、`completed`、`closed` 等核心状态，而是通过 Tauri command 请求 `Rust Core` 执行动作。`Rust Core` 负责校验条件、执行本地动作、写入 SQLite，并通过事件通知前端刷新。
@@ -667,4 +665,19 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的设计口径：** 第一阶段先证明 Codex 能在内嵌终端中稳定运行，再补 Issue 驱动、Review Loop 和 Completion Loop；不先投入完整代码浏览、完整 Diff、PR/MR、插件系统或多窗口工作区。
 
-**Pending Confirmation：** #41 仍视为 AI 草案，需要后续交互确认或修订。
+**Confirmed #41：MVP 最大风险是用户信任断裂**
+
+用户已确认认可：MVP 最大风险不是功能缺失，而是用户对 Issue、Session、Agent Commit 和完成状态的信任断裂。
+
+**确认后的设计口径：**
+
+- Issue 与 AgentSession 的绑定关系必须清晰可见且可追溯。
+- `Complete with Agent Commit` 必须通过 CompletionAttempt、Git HEAD 前后检测、commit hash 和日志建立信任。
+- 未检测到 commit 时不能自动 completed。
+- Session crashed 不能伪装成 completed。
+- 所有改变 Issue 状态的动作都必须写入 IssueAction。
+- 所有 Agent 启动、退出、关闭和 completion prompt 注入都必须写入 SessionEvent 或 CompletionAttempt。
+- completed 后必须提供 Summary 和 Open Log，帮助用户复盘。
+- 禁用状态、失败提示和确认面板属于 MVP 核心体验，不是后期 polish。
+
+**Confirmation Complete：** #34-#41 已完成逐条交互确认。后续可以继续细化 CodexAdapter 接口、Rust Core 状态机、SQLite schema、React 信息架构、completion prompt 模板或 Worktree 是否进入 MVP。
