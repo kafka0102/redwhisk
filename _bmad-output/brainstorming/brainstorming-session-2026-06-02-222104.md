@@ -596,4 +596,17 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #35-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Pending Confirmation：** #36-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+
+**Confirmed #35：Command/Event 同步模型**
+
+用户已确认认可：React 前端不直接把 Issue 或 Session 写成 `running`、`review`、`completed`、`closed` 等核心状态，而是通过 Tauri command 请求 `Rust Core` 执行动作。`Rust Core` 负责校验条件、执行本地动作、写入 SQLite，并通过事件通知前端刷新。
+
+**确认后的设计口径：**
+
+- 前端负责展示、输入收集、loading 状态和用户反馈。
+- 核心状态变化必须经过 Rust Core。
+- 进程启动失败、Git 检测失败、completion 未检测到 commit 等失败路径由 Rust Core 返回明确结果。
+- 前端可以做临时 loading，但最终状态以 Rust Core 返回值和 Core 事件为准。
+
+**Pending Confirmation：** #36-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
