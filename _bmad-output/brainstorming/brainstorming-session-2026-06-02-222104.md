@@ -953,3 +953,14 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 - Header 不放 `Run`，因为进入 Agent 页面时 Session 已经存在；`Run` 属于 Issue 详情或 Issues 看板。
 - Header 的 Issue 操作不改变 Session 分组规则；Session 仍按 Running / Completed 展示。
+
+### Scope Freeze #54：当前 MVP 功能已具备设计和开发条件
+
+用户已确认：目前已确认的功能范围已经具备进入设计和开发的条件，后续功能可以延后。
+
+**确认后的设计口径：**
+
+- 不继续向 MVP 增加新的一级功能。
+- 当前 MVP 范围以已确认的 Workspace、Issues、Agents、Workspace Settings、Global Settings、Run Dialog、Session Dialog、Issue Inspector、Completion Policy、Session 展示规则为准。
+- 后续代码浏览、完整 Diff、Git History、Workspace 终端恢复、插件系统、PR/MR、多 Session Attempt、搜索/归档、完整历史列表等能力进入后续 backlog。
+- 下一步应从头脑风暴转入设计规格、技术设计或开发计划，而不是继续扩大功能范围。
