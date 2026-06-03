@@ -769,3 +769,36 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - Session 列表的 `Running` / `Completed` 是 Session 展示分组。
 - 通过 Issue 启动的 Session 与 Issue 关联；通过顶部小按钮创建的 Session 不关联 Issue。
 - 不关联 Issue 的临时 Session 不参与 Issue completion policy，也不触发 Issue 状态流转。
+
+### Confirmed IA #46：Settings 分为 Workspace Settings 与 Global Settings
+
+用户已确认并修订：MVP 存在两个设置层级，不能混在同一个入口里。
+
+**Workspace Settings：**
+
+- 位于左侧 Activity Bar，与 `Issues`、`Agents` 同级。
+- 只影响当前打开的 Workspace。
+- 包含 Workspace 名称、`repo_path`、Workspace 级 `completion_policy`。
+- 包含当前 Workspace 默认 Agent Profile。
+- 包含当前 Workspace 对全局 Agent Profile 的覆盖，例如 `default_args`、`default_skill`、`prompt_template`、enabled。
+- 包含当前 Workspace 的项目级 instructions / prompt 补充说明。
+- 包含当前 Workspace 的日志 / Session 存储信息。
+
+**Global Settings：**
+
+- 不放在当前 Workspace 的 Activity Bar 主入口中。
+- 通过左下角 gear 打开。
+- 原生顶部菜单也可以提供 `Settings...`，打开同一个 Global Settings 窗口。
+- 包含 UI language，例如 `zh-CN` / `en-US`。
+- 包含全局 Agent Profiles，例如 Codex command、default args、default skill、prompt template。
+- 包含全局默认 `completion_policy`。
+- 包含全局数据目录 / 日志目录。
+- 包含 About / Diagnostics，例如版本、诊断信息、打开日志目录。
+
+**确认后的设计口径：**
+
+- Activity Bar 中的 Settings 应理解为 `Workspace Settings`，不是全局应用设置。
+- 左下角 gear 与顶部菜单中的 Settings 打开 `Global Settings`。
+- Workspace Settings 通过 `Inherit global default` / `Override for this workspace` 与 Global Settings 连接。
+- UI language 是全局设置，不属于 Workspace Settings。
+- 若未来需要 Workspace 级语言偏好，应命名为 `Agent response language` 或 `Prompt language preference`，避免与 UI language 混淆；MVP 暂不加入。
