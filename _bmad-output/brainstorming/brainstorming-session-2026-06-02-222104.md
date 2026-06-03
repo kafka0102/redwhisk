@@ -596,7 +596,7 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #39-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Pending Confirmation：** #40-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
 
 **Confirmed #35：Command/Event 同步模型**
 
@@ -642,4 +642,16 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - AgentSession 需要保存可用于恢复的 `codex_session_id` 或等价上下文标识。
 - Codex 进程异常退出后，优先通过 `codex resume <session_id>` 或等价方式恢复；若无法稳定恢复，则保留日志、提示用户手动处理，Issue 保持 `review` 或 `running`，不自动完成。
 
-**Pending Confirmation：** #39-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Confirmed #39：Git Commit Detection Spike**
+
+用户已确认认可：第三优先级验证 Git commit detection，作为 `Complete with Agent Commit` 的可信收尾机制。
+
+**确认后的设计口径：**
+
+- completion 前记录 `HEAD`、`git status --porcelain` 和 changed files 摘要。
+- completion 后重新读取 `HEAD` 和 status。
+- 若 `HEAD` 改变，记录新 commit hash，并把该 hash 写入 CompletionAttempt / IssueAction。
+- 若用户选择 Agent Commit 但 `HEAD` 未改变，Issue 保持 `review`，记录 `no_commit_detected`，不自动 completed。
+- 若仓库处于 merge、rebase、cherry-pick 等中间态，MVP 不自动完成，提示用户手动处理。
+
+**Pending Confirmation：** #40-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
