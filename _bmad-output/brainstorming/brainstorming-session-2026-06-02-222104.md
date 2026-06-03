@@ -1,6 +1,8 @@
 ---
 stepsCompleted: [1, 2]
 inputDocuments: []
+session_continued: true
+continuation_date: '2026-06-03'
 session_topic: '跨平台桌面开发工作台：以 Git 仓库 Workspace 为入口，整合任务看板、本地 AI Agent 执行、Worktree 隔离、代码浏览、Git 历史查看、可恢复终端和插件扩展'
 session_goals: '逐步分析市场情况、可参考开源项目、技术栈与技术选型；随后拆解功能需求文档为用户故事，并规划分阶段开发路线'
 selected_approach: 'Progressive Technique Flow'
@@ -205,3 +207,248 @@ _Novelty_: 自动提交不是应用层 Git 脚本，而是 Agent 工作流的一
 2. 设计第一阶段技术架构图和模块边界。
 3. 拆出 Spike 任务：Embedded Codex Terminal、Codex Session State、Issue-Session Binding。
 4. 形成第一版开发计划。
+
+## Continuation - 2026-06-03
+
+### Phase 4 - Action Planning
+
+**[Story #19]：Workspace 必须绑定 Git 仓库**
+_Concept_: MVP 创建 Workspace 时必须选择本地 Git 仓库目录。系统校验目录是否为 Git 仓库；非 Git 目录不允许创建 Workspace。创建成功后保存 `workspace_id`、`name`、`repo_path`、`created_at`、`last_opened_at`，进入 Workspace 后默认显示 Issue 看板。
+_Novelty_: 这让 Completion Policy、Codex 执行、后续 GitHub/GitLab 同步都拥有明确 Git 上下文。
+
+**[Story #20]：MVP Issue 字段保持极简**
+_Concept_: 本地 Issue 只包含 `title`、`description`、`status`、`created_at`、`updated_at` 等必要字段。新 Issue 默认进入 `backlog`。暂不做 priority、label、assignee、milestone，避免第一阶段滑向完整项目管理工具。
+_Novelty_: Issue 的目标是驱动 Agent 工作流，而不是复刻 Jira/Linear。
+
+**[Story #21]：Issue 详情弹窗与基础国际化**
+_Concept_: 点击 Issue 卡片打开详情弹窗，支持查看和编辑 `title`、`description`、`status`、`updated_at`，显示关联 Session 信息和操作按钮。`backlog` 状态显示 `Run`，`running/review` 且存在 Session 时显示 `Open Session`，`running` 状态显示 `Mark Review`，`review` 状态按 completion policy 显示 `Complete Manually` 或 `Complete with Agent Commit`。MVP 不实现 `Reopen`。应用 UI 支持 `zh-CN` 与 `en-US`，中文状态文案为：`backlog=待办`、`running=运行中`、`review=待验收`、`completed=已完成`。
+_Novelty_: UI 命令不把 Codex 写死，保留多 Agent 语义；从 MVP 开始建立 i18n 约束，避免后续大规模替换硬编码文案。
+
+**[Story #22]：Agent Profile 管理与 Run Prompt 编排**
+_Concept_: 用户可以创建 Agent Profile，例如 Codex Agent。Profile 包含 `name`、`agent_type`、`command`、`default_skill`、`default_args`、`prompt_template`。点击 Issue 的 `Run` 后，用户选择 Agent Profile，系统基于 Issue 内容、默认 skill、prompt template 和应用补充说明生成最终 prompt，并在 Run Dialog 中展示一个可编辑的最终 prompt 文本框。组成来源通过可展开区域展示。
+_Novelty_: `Run` 不直接硬编码 Codex，而是通过可管理 Agent 配置驱动；用户始终能看到并修改真正发送给 Agent 的 prompt。
+
+**[Prompt #23]：prompt_template 用于生成初始 prompt，并保存来源快照**
+_Concept_: `prompt_template` 是 Agent Profile 的默认任务包装器，用模板变量组合 `{{skill}}`、`{{issue.title}}`、`{{issue.description}}`、`{{workspace.name}}`、`{{workspace.repo_path}}`、`{{app.instructions}}` 等内容。若 `default_skill = openspec-proposal`，模板可生成 `$openspec-proposal <issue内容>` 形式的 prompt。Run Dialog 显示一个最终 prompt 文本框，用户确认后保存最终 prompt、Agent Profile ID、启动命令和来源快照。
+_Novelty_: 历史 Session 不只引用当前 Agent Profile，而是保存当时的 prompt 快照，保证可追溯性。
+
+**[Story #24]：Agent Profile 支持全局配置与 Workspace 覆盖**
+_Concept_: Agent 配置分为全局 AgentProfile 和 WorkspaceAgentOverride。全局配置保存 `name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled`；Workspace 可覆盖 `default_args`、`default_skill`、`prompt_template`、`enabled`。Run Dialog 使用 Workspace 覆盖后的生效配置，并可展开展示配置来源。
+_Novelty_: 用户可以复用同一个本地 Codex 命令，同时让不同仓库使用不同默认 skill 和 prompt 模板。
+
+**[Story #25]：Agent command 自动检测与手动路径兜底**
+_Concept_: 创建 Codex Agent Profile 时，系统通过用户 login shell 检测 `codex`，例如执行 `command -v codex`，以贴近用户真实终端环境。若自动检测失败，用户可以手动填写 command path，并通过 Test 验证命令可执行。保存时 command 不可用则阻止保存或提示错误。
+_Novelty_: 这解决 macOS GUI App 的 PATH 与用户终端 PATH 不一致问题，兼容 nvm、brew、私有安装路径等环境。
+
+**[Story #26]：Run Dialog 在进程成功启动后才切换 Issue 状态**
+_Concept_: 点击 Issue 的 `Run` 后打开 Run Dialog，用户选择 Agent Profile 并确认最终 prompt。默认 prompt 不包含 Issue title，只使用 Issue description、skill 和 app instructions；只有 `prompt_template` 显式引用 `{{issue.title}}` 时，title 才进入 prompt。用户点击 Start 后，系统尝试启动 Agent 进程；只有进程成功启动后，才创建/激活 Session 并将 Issue 状态改为 `running`。启动失败时 Issue 保持 `backlog`。
+_Novelty_: 这避免启动失败导致 Issue 错误进入运行中状态，同时保持 prompt 对用户透明。
+
+**[Story #27]：Agent Session 三栏工作区与 Codex Native Session View**
+_Concept_: Agent 页面采用三栏布局：左侧 Issue Panel，中间 Session Panel，右侧可折叠 Diff Panel。左侧显示当前 Session 关联 Issue 的基本信息和状态操作；中间是 Codex Native Session View，通过嵌入式 PTY 运行 Codex CLI，呈现 Codex 原生 TUI，不额外实现底部输入框；右侧预留未来展示 changed files、diff preview 和 commit 信息。
+_Novelty_: 应用做 Codex 原生 TUI 的容器和工作流外壳，而不是重做 Codex 的聊天/终端 UI；Issue 操作、Agent 交互、代码变更各自有清晰区域。
+
+**[State #28]：Session completed 只由进程结束决定，等待用户输入用 attention 标记**
+_Concept_: Session 主状态保持 `running | completed`。只要 Codex 进程仍在运行，即使它停下来等待用户确认设计、审批命令或继续输入，Session 仍为 `running`。运行期增加 `attention = none | requested` 标记，用于表达需要用户关注。`completed` 的硬条件是 Codex 进程结束；Session result 只有在 completed 后才记录为 `success`、`failed`、`cancelled` 或 `unknown`。Agents 列表可提供 `Needs Attention` 分组或过滤，但它不是 Session 主状态。
+_Novelty_: 这同时保持状态模型简单，并能表达 Codex 中途需要用户交互的真实场景，避免把“等待确认”误判为完成。
+
+**Implementation Note:** MVP 的 attention 识别可先采用用户手动标记 + 启发式输出识别，后续通过 CodexAdapter Spike 验证是否可从 Codex JSONL 或结构化事件中稳定识别。
+
+**[State #29]：修订 - Session 不因 Codex 告一段落而关闭，Issue 完成后才关闭 Session**
+_Concept_: 对内嵌 Codex 原生 TUI 来说，Codex 执行“告一段落”不等于 Session 关闭。Session 应持续存在，方便用户在 review 后继续回到同一个 Codex TUI 中交互。Session 状态修订为 `running`、`closed`、`crashed`，可选 `stopped`；只要 Codex 进程仍然活着，Session 就是 `running`。Issue 状态仍为 `backlog`、`running`、`review`、`completed`。`review` 表示 Codex 当前结果等待用户验收，但 Session 仍可保持 running。只有用户点击完成 Issue，系统执行 completion policy 后，才关闭 Session 并将 Issue 标记为 completed。
+_Novelty_: 这把“Agent 执行过程”和“Issue 验收完成”彻底分离，避免用户 review 发现问题后丢失原有 Codex 上下文。
+
+**Flow Update:** MVP 中 Issue 从 `running` 进入 `review` 优先由用户手动点击 `Mark Review` 触发。后续可通过 Codex 输出或结构化事件提示“可能可以验收”，但不自动关闭 Session。若用户在 `review` 状态继续向 Codex 输入修正需求，Issue 保持 `review`，不自动回到 `running`。
+
+**[Review #30]：review 阶段允许继续让 Codex 修正，不退回 running**
+_Concept_: `review` 表示 Issue 已进入验收阶段，不表示禁止继续修改。用户在 review 中发现问题时，可以继续在当前 Codex Session 中要求修正，Issue 仍保持 `review`，不自动退回 `running`，也不要求用户再次点击 `Mark Review`。`running` 只表示首次开发阶段；`completed` 只在用户确认验收通过并完成收尾后进入。
+_Novelty_: 这匹配真实验收流程：验收、修正、再验收都属于 review 阶段，避免反复切换状态造成额外操作。
+
+**[Completion #31]：Complete with Agent Commit 使用轻量确认面板，确认后直接交给 Codex 执行**
+_Concept_: 当 `completion_policy = agent_auto_commit` 时，review 状态显示 `Complete with Agent Commit`。用户点击后，应用自动检测当前 Issue、Session、Workspace、Git status、HEAD commit、changed files 和策略配置，弹出轻量确认面板让用户选择：让 Agent 只提交本 Issue 相关改动、不提交直接完成、或取消保持待验收。若有未提交改动，默认选中“让 Agent 只提交本 Issue 相关改动”；若无未提交改动，显示“直接完成”。发送给 Codex 的 completion prompt 默认隐藏，可展开查看，但不要求用户编辑。用户确认后，应用直接把整理好的指令发送给当前 Codex Session。
+_Novelty_: 完成动作保持顺滑：用户做策略选择，应用整理上下文和提示词，Codex 执行实际提交，应用负责检测 commit hash 并决定是否关闭 Issue。
+
+**Completion Result:** 若检测到新 commit，记录 commit hash，关闭 Codex Session，Issue 进入 `completed`，AgentSession 进入 `closed`。若未检测到新 commit 且用户选择 Agent 提交，Issue 保持 `review` 并提示未检测到提交；若用户选择不提交直接完成，则跳过提交检测并关闭 Issue/Session。
+
+**[UI #32]：左侧 Issue Panel 是当前 Session 的任务控制面板**
+_Concept_: Agent 页面左侧 Issue Panel 不承担完整看板职责，而是围绕当前 Agent Session 展示关联 Issue 的最小控制面板：Issue 标题、状态、更新时间、Session 状态、attention 标记、Completion Policy、Git 摘要和当前可执行按钮。全量 Issue 管理仍在 Issues Activity 中完成。
+_Novelty_: 左侧面板不是又一个详情页，而是 Agent 工作区中的任务驾驶舱，让用户在不离开 Codex Native Session View 的情况下完成状态切换、验收和完成收尾。
+
+**Issue Panel Button State Table - MVP**
+
+| Issue 状态 | Session 状态 | 条件 | 主按钮 | 次按钮 | 禁用/提示规则 | 状态变化 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `backlog` | 无 Session | 至少有一个 enabled Agent Profile | `Run` | `Edit Issue` | 若无可用 Agent Profile，`Run` 禁用并提示先配置 Agent | 启动成功后 Issue -> `running`，Session -> `running` |
+| `backlog` | 无 Session | Agent command 检测失败 | `Run` 禁用 | `Configure Agent` | 显示 command 不可用原因和 Test 入口 | 无状态变化 |
+| `backlog` | 已有关联 Session | 异常历史数据或恢复场景 | `Open Session` | `Run` 禁用 | 提示该 Issue 已有关联 Session，MVP 不允许创建第二个 Session | 无状态变化 |
+| `running` | `running` | Codex 进程仍活着，attention=`none` | `Open Session` | `Mark Review` | `Open Session` 在当前 Agent 页时可显示为当前态；`Mark Review` 需要用户手动判断可验收 | 点击 `Mark Review` 后 Issue -> `review`，Session 保持 `running` |
+| `running` | `running` | attention=`requested` | `Open Session` | `Mark Review` | 面板显示 `Needs Attention` 标记；不改变主按钮排序 | 用户处理 Codex 交互后 attention -> `none` |
+| `running` | `crashed` | Codex 进程异常退出 | `Resume Session` | `Mark Review` | `Resume Session` 使用 Codex resume 同一 session id；若用户不继续，可手动编辑 Issue 或保留当前状态 | resume 成功后 Session -> `running`；`Mark Review` 后 Issue -> `review` |
+| `review` | `running` | `completion_policy=manual` | `Complete Manually` | `Open Session` | `Complete Manually` 弹确认面板，不要求 commit 检测 | 确认后关闭 Session，Issue -> `completed`，Session -> `closed` |
+| `review` | `running` | `completion_policy=agent_auto_commit` 且有未提交改动 | `Complete with Agent Commit` | `Complete without Commit`、`Open Session` | 默认建议 Agent Commit；completion prompt 默认隐藏，可展开查看 | 检测到新 commit 后 Issue -> `completed`，Session -> `closed`；未检测到 commit 则 Issue 保持 `review` |
+| `review` | `running` | `completion_policy=agent_auto_commit` 且无未提交改动 | `Complete` | `Open Session` | 说明当前无未提交改动，将直接完成并关闭 Session | Issue -> `completed`，Session -> `closed` |
+| `review` | `crashed` | Codex 异常退出但 Issue 待验收 | `Resume Session` | `Complete Manually` | 若选择完成，需提示 Session 已异常退出且可能无法继续 Agent Commit | resume 成功后 Session -> `running`，Issue 保持 `review`；手动完成后 Issue -> `completed` |
+| `completed` | `closed` | 正常完成 | `View Summary` | `Open Log` | MVP 不提供 `Reopen`；所有编辑和运行按钮禁用 | 无状态变化 |
+| `completed` | `crashed` 或 `running` | 异常数据不一致 | `View Summary` | `Open Log` | 显示状态不一致警告，提供诊断信息，不在 MVP 中自动修复 | 无状态变化 |
+
+**Button Copy - zh-CN / en-US**
+
+| 命令语义 | zh-CN | en-US |
+| --- | --- | --- |
+| run_issue | 运行 | Run |
+| open_session | 打开会话 | Open Session |
+| mark_review | 标记待验收 | Mark Review |
+| resume_session | 继续会话 | Resume Session |
+| complete_manual | 手动完成 | Complete Manually |
+| complete_agent_commit | Agent 提交并完成 | Complete with Agent Commit |
+| complete_without_commit | 不提交直接完成 | Complete without Commit |
+| view_summary | 查看总结 | View Summary |
+| open_log | 打开日志 | Open Log |
+| configure_agent | 配置 Agent | Configure Agent |
+
+**Interaction Rules**
+
+1. Issue Panel 中同一时间最多突出一个主按钮，避免用户在 Agent 工作区里被多个完成路径干扰。
+2. `Open Session` 在当前 Session 已经打开时不是跳转按钮，而是当前态提示；仍保留在表中是为了 Issue 详情弹窗和 Agents 列表复用同一命令模型。
+3. `review` 阶段继续向 Codex 输入修正需求时，Issue 不退回 `running`；左侧面板仍显示完成类按钮。
+4. `Complete with Agent Commit` 不直接执行 Git 命令，只向当前 Codex Session 发送 completion prompt，并由应用在前后检测 `git status`、HEAD 和新 commit。
+5. MVP 不实现 `Reopen`、多 Session Attempt、PR/MR 创建和完整 Diff 操作；这些能力只作为后续阶段入口保留。
+
+**[Stories #33]：MVP 用户故事按 Issue 到 Session 闭环组织**
+_Concept_: MVP 用户故事不按技术模块拆，而按用户完成一次 Agent 开发任务的路径拆：打开 Git Workspace、配置 Agent、创建 Issue、运行 Agent、在内嵌 Codex 中交互、进入 review、继续修正、完成并关闭。每个故事都必须能被本地应用状态、SQLite 记录、进程状态或 Git 状态验证。
+_Novelty_: 用户故事直接服务最短闭环，避免把第一阶段扩散成“做一个 IDE”。
+
+### MVP 用户故事与验收标准
+
+**US-01：创建并打开 Git Workspace**
+作为用户，我希望选择一个本地 Git 仓库创建 Workspace，以便所有 Issue、Agent Session 和完成策略都有明确仓库上下文。
+
+**验收标准：**
+
+- 用户选择目录后，系统校验该目录是 Git 仓库。
+- 非 Git 目录不能创建 Workspace，并显示明确错误。
+- 创建成功后保存 `workspace_id`、`name`、`repo_path`、`created_at`、`last_opened_at`。
+- 打开 Workspace 后默认进入 Issues Activity。
+
+**US-02：配置 Codex Agent Profile**
+作为用户，我希望应用能检测本机 `codex` 命令并保存 Agent Profile，以便后续 Issue 可以选择 Codex 执行。
+
+**验收标准：**
+
+- 系统通过 login shell 检测 `command -v codex`。
+- 检测失败时允许用户手动填写 command path 并执行 Test。
+- command 不可执行时不能保存 enabled Profile。
+- Profile 至少保存 `name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled`。
+
+**US-03：创建和编辑本地 Issue**
+作为用户，我希望在 Workspace 内创建极简 Issue，以便把待完成工作交给 Agent。
+
+**验收标准：**
+
+- Issue 至少包含 `title`、`description`、`status`、`created_at`、`updated_at`。
+- 新 Issue 默认状态为 `backlog`。
+- 用户可以在 Issue 详情弹窗中编辑 `title` 和 `description`。
+- MVP 不提供 priority、label、assignee、milestone。
+
+**US-04：从 Issue 运行 Agent**
+作为用户，我希望从 backlog Issue 点击 `Run`，选择 Agent Profile，并确认最终 prompt 后启动 Codex。
+
+**验收标准：**
+
+- 点击 `Run` 打开 Run Dialog。
+- Run Dialog 显示生效 Agent Profile、prompt 来源和可编辑最终 prompt。
+- 默认 prompt 不包含 Issue title，除非 `prompt_template` 显式引用 `{{issue.title}}`。
+- 只有 Agent 进程成功启动后，才创建/激活 AgentSession 并把 Issue 改为 `running`。
+- 启动失败时 Issue 保持 `backlog`，并记录失败原因。
+
+**US-05：在内嵌 Codex Native Session View 中交互**
+作为用户，我希望在 Agent 页面中看到接近原生 Codex CLI 的内嵌终端，以便不中断 Codex 的原有交互体验。
+
+**验收标准：**
+
+- Agent 页面采用左 Issue Panel、中 Session Panel、右可折叠 Diff Panel 的布局。
+- Session Panel 使用 xterm.js 承载 PTY 输出和输入。
+- Codex 进程由 Rust Core 通过 PTY 启动，工作目录为 Workspace repo path 或后续 worktree path。
+- 用户输入直接进入 Codex TUI，不额外实现独立聊天输入框。
+- Session 保存 `codex_session_id`、启动命令、最终 prompt 快照、日志文件路径和关键事件。
+
+**US-06：识别需要用户关注的运行中 Session**
+作为用户，我希望当 Codex 需要确认或输入时能被提醒，以便及时回到对应 Session。
+
+**验收标准：**
+
+- Session 主状态保持 `running`，不因等待输入而变成 completed。
+- 系统支持 `attention = none | requested`。
+- MVP 可以通过手动标记和启发式输出识别设置 attention。
+- Issues、Agents 列表和 Issue Panel 能显示 Needs Attention。
+
+**US-07：手动将 Issue 标记为 review**
+作为用户，我希望在认为 Codex 已经产出可验收结果时手动点击 `Mark Review`，以便进入验收阶段但保留当前 Codex 上下文。
+
+**验收标准：**
+
+- 只有 `running` Issue 且存在关联 Session 时显示 `Mark Review`。
+- 点击后 Issue 状态变为 `review`。
+- AgentSession 仍保持 `running`，Codex 进程不关闭。
+- 系统记录 IssueAction，包含触发时间和操作者。
+
+**US-08：review 阶段继续修正**
+作为用户，我希望在 review 中发现问题后继续让 Codex 修正，以便无需重新创建 Session 或回退状态。
+
+**验收标准：**
+
+- `review` Issue 仍可打开当前 Codex Session。
+- 用户继续输入修正请求后，Issue 仍保持 `review`。
+- 左侧 Issue Panel 仍显示完成类按钮。
+- 所有修正交互继续写入同一个 Session 日志和事件流。
+
+**US-09：使用 Agent Commit 完成 Issue**
+作为用户，我希望在 review 通过后点击 `Complete with Agent Commit`，让当前 Codex 只提交本 Issue 相关改动并完成 Issue。
+
+**验收标准：**
+
+- 仅当 Issue 为 `review`、Session 为 `running`、`completion_policy=agent_auto_commit` 时显示。
+- 点击后应用检测 Git status、HEAD、changed files、Issue 和 Session 上下文。
+- 应用弹出轻量确认面板，默认隐藏 completion prompt，但允许展开查看。
+- 用户确认后，completion prompt 发送给当前 Codex Session。
+- 应用检测到新 commit 后记录 commit hash，关闭 Session，并将 Issue 改为 `completed`。
+- 若未检测到新 commit，Issue 保持 `review` 并提示用户处理。
+
+**US-10：无提交或手动策略下完成 Issue**
+作为用户，我希望在没有未提交改动或选择手动完成时，也能关闭 Issue 和 Session。
+
+**验收标准：**
+
+- `completion_policy=manual` 时 review 状态显示 `Complete Manually`。
+- `agent_auto_commit` 且无未提交改动时显示 `Complete`。
+- 用户确认后关闭 Codex Session，将 AgentSession 标记为 `closed`，Issue 标记为 `completed`。
+- 完成动作写入 IssueAction/AuditLog。
+
+**US-11：查看已完成 Issue 的摘要和日志**
+作为用户，我希望完成后还能查看 Issue 摘要、关联 Session 和日志，以便复盘 Agent 做了什么。
+
+**验收标准：**
+
+- completed Issue 不显示 Run、Mark Review、Complete 类按钮。
+- Issue Panel 或详情弹窗显示 `View Summary` 和 `Open Log`。
+- Summary 至少展示 Issue 信息、Session 时间、result、commit hash 和日志路径。
+- MVP 不支持 Reopen。
+
+**US-12：本地持久化和恢复基础状态**
+作为用户，我希望关闭并重新打开应用后能恢复 Workspace、Issue、Session 元数据和日志索引。
+
+**验收标准：**
+
+- SQLite 保存 Workspace、Issue、AgentSession、SessionEvent、IssueAction/AuditLog。
+- 原始终端日志保存为文件，数据库只保存路径和摘要事件。
+- 应用重启后能打开最近 Workspace 并展示 Issue 看板。
+- 对仍在运行的 PTY 进程，MVP 可以标记为 `crashed` 或 `stopped`，不要求跨应用重启恢复活进程。
+
+### MVP 开发切片建议
+
+1. **Slice A - Workspace + Issue 基础闭环**：Git Workspace 校验、Issue CRUD、Issues Activity、Issue 详情弹窗。
+2. **Slice B - Agent Profile + Run Dialog**：Codex command 检测、Profile 保存、prompt_template 渲染、启动前确认。
+3. **Slice C - Embedded Codex Session Spike**：Tauri/Rust PTY、xterm.js、resize/input/output、日志文件写入。
+4. **Slice D - Issue-Session 状态联动**：Run 成功后进入 running、Issue Panel、Mark Review、attention 标记。
+5. **Slice E - Completion Policy**：manual 完成、agent_auto_commit 确认面板、completion prompt 注入、commit hash 检测、Session 关闭。
+6. **Slice F - 恢复与复盘**：应用重启后的 Workspace/Issue/Session 元数据恢复、completed Summary、Open Log。
