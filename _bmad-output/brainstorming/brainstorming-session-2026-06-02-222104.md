@@ -835,3 +835,31 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 点击 `Start` 后，只有 Rust Core 成功启动 Agent 进程，Issue 才从 `backlog` 变成 `running`。
 - 启动失败时 Issue 保持 `backlog`，Run Dialog 显示错误。
 - 最终 prompt、Agent Profile、command snapshot、default args snapshot 保存到 AgentSession。
+
+### Confirmed IA #48：Agent Session 右侧 Header 显示 Issue 上下文，Issue 详情用 Inspector
+
+用户已确认并修订：Agent 界面仍为左右两栏。左侧展示当前 Agent 仓库工作区相关的最近 Session；点击某个 Session 后，左侧栏保留显示该 Session 的标题、Agent 类型和运行状态，因此右侧无需重复展示这些 Session 信息。
+
+**右侧 Header：**
+
+- 右侧 Header 展示与当前 Session 关联的 Issue 信息。
+- 若有关联 Issue，Header 显示关联 Issue 标题。
+- 若无关联 Issue，Header 可显示 `No linked issue` 或隐藏 Issue 区。
+- `Mark Review`、`Complete...` 等 Issue 操作可以放置在 Header 上。
+- 点击 Issue 标题不跳转页面，而是打开 Issue 详情面板。
+
+**Issue Inspector / Details Panel：**
+
+- 该面板更接近桌面端 Inspector / Details Panel，不按移动端页面 Drawer 理解。
+- 不改变当前页面路由。
+- 不需要返回按钮。
+- 可通过 `X`、`Esc`、再次点击 Issue 标题或点击面板外关闭。
+- 打开和关闭 Inspector 不影响当前 Codex Session，不卸载 xterm。
+- 内容可复用 Issue 详情页的信息原则：标题和描述可编辑，Session 关联和操作放在辅助区域。
+
+**确认后的设计口径：**
+
+- Agents 页面一直保持当前上下文；Issue Inspector 只是当前 Session 上的临时详情层。
+- 不通过左侧 Activity Bar 或 icon 菜单来“返回”关闭 Inspector。
+- 右侧不重复显示 Session 标题、Agent 类型和运行状态；这些信息属于左侧 Session 列表。
+- 本确认修订 #45 中“右侧保留当前 Session 上下文信息”的泛化说法：右侧 Header 优先承载 Issue 上下文，Session 基本信息保留在左侧栏。
