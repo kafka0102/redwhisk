@@ -844,7 +844,7 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 - 右侧 Header 展示与当前 Session 关联的 Issue 信息。
 - 若有关联 Issue，Header 显示关联 Issue 标题。
-- 若无关联 Issue，Header 可显示 `No linked issue` 或隐藏 Issue 区。
+- 若无关联 Issue，Header 隐藏 Issue 区。
 - `Mark Review`、`Complete...` 等 Issue 操作可以放置在 Header 上。
 - 点击 Issue 标题不跳转页面，而是打开 Issue 详情面板。
 
@@ -919,3 +919,37 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - `last_active_at` 可由用户输入、Agent 输出或关键 SessionEvent 更新。
 - 该规则同时适用于关联 Issue 的 Session 和不关联 Issue 的临时 Session。
 - `Completed` 分组仍按最近完成时间排序，并只显示最近 20 条。
+
+### Confirmed IA #53：Agent 右侧 Header 的 Issue 操作按钮按 Issue 状态显示
+
+用户已确认并修订：Agent 右侧 Header 只在当前 Session 关联 Issue 时显示 Issue 信息和操作。无关联 Issue 时，Header 不显示 Issue 区域，也不显示 `No linked issue`。
+
+**有关联 Issue 时：**
+
+- Issue 为 `running`：
+  - 显示 Issue 标题。
+  - 主按钮显示 `Mark Review`。
+  - 可打开 `Issue Inspector`。
+
+- Issue 为 `review`：
+  - 显示 Issue 标题。
+  - 若 `completion_policy = agent_auto_commit`，主按钮显示 `Complete with Agent Commit`。
+  - 若 `completion_policy = manual`，主按钮显示 `Complete Manually`。
+  - 可打开 `Issue Inspector`。
+  - 用户仍可继续在 Codex TUI 中输入修正，Issue 保持 `review`。
+
+- Issue 为 `completed`：
+  - 显示 Issue 标题。
+  - 不显示完成类主按钮。
+  - 可显示 `View Summary`、`Open Log` 或打开 `Issue Inspector`。
+
+**无关联 Issue 时：**
+
+- Header 不显示 Issue 标题。
+- Header 不显示 `No linked issue`。
+- Header 不显示 `Mark Review`、`Complete...`、`View Summary`、`Open Log` 等 Issue 操作。
+
+**确认后的设计口径：**
+
+- Header 不放 `Run`，因为进入 Agent 页面时 Session 已经存在；`Run` 属于 Issue 详情或 Issues 看板。
+- Header 的 Issue 操作不改变 Session 分组规则；Session 仍按 Running / Completed 展示。
