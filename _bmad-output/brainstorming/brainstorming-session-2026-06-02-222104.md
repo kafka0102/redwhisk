@@ -896,3 +896,15 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - Session Dialog 不显示配置来源或继承/覆盖关系。
 - 点击 `Start` 后，只有 Rust Core 成功启动 Agent 进程，才创建 AgentSession 并加入左侧列表。
 - 启动失败时不创建 AgentSession，Dialog 显示错误。
+
+### Confirmed IA #51：左侧 Completed Session 只显示最近 20 条
+
+用户已确认：Agents 左侧 Session 列表中的 `Completed` 分组只显示最近 20 条 Session。
+
+**确认后的设计口径：**
+
+- `Running` 分组显示当前仍在运行的 Session。
+- `Completed` 分组按最近完成时间排序。
+- `Completed` 分组默认只展示最近 20 条。
+- 该规则同时适用于关联 Issue 的 Session 和不关联 Issue 的临时 Session。
+- MVP 暂不扩展搜索、归档或完整历史列表；后续如需要再单独设计。
