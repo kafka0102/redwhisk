@@ -2,13 +2,15 @@
 
 ## 目标
 
-本文档定义本项目 TypeScript 与 monorepo 工程层的通用规则，适用于前端、后端、共享包、构建脚本与工具链配置。
+本文档定义本项目后续引入 TypeScript 与 monorepo 工程层时的通用规则，适用于前端、后端、共享包、构建脚本与工具链配置。
 
 本文档只负责“全局 TypeScript 工程基线”，不负责通用编码风格或某一端的业务实现约束。通用编码风格以 [编码风格](./coding-style.md) 为准。
 
+当前仓库尚未包含 `package.json`、`tsconfig.base.json`、workspace 配置或 TypeScript 应用源码。因此，本规范是新增工程代码时的准入约束，不表示这些文件当前已经存在。
+
 ## 适用范围
 
-适用于以下内容：
+引入 TypeScript 工程后，适用于以下内容：
 
 - `tsconfig.base.json`
 - 各 workspace 的 `tsconfig*.json`
@@ -20,7 +22,7 @@
 
 ### 1. 根配置优先
 
-必须遵守：
+引入 TypeScript workspace 后必须遵守：
 
 - 所有 workspace `tsconfig` 默认继承根级 `tsconfig.base.json`
 - 跨项目共享的 TypeScript 编译基线统一在根级维护
@@ -33,7 +35,7 @@
 
 ### 2. 路径解析显式一致
 
-必须遵守：
+引入路径别名或多 workspace 后必须遵守：
 
 - 禁止新增 `compilerOptions.baseUrl`
 - 如需路径别名，统一在根级 `tsconfig.base.json` 维护 `paths`
@@ -48,12 +50,11 @@
 
 说明：
 
-- `baseUrl` 已在 TypeScript 6.0 弃用，并将在 TypeScript 7.0 停止工作
-- 本项目采用 ESM + `paths` 管理 workspace 内部别名，不依赖 `baseUrl` 作为根目录查找机制
+- 后续如采用 ESM + `paths` 管理 workspace 内部别名，不依赖 `baseUrl` 作为根目录查找机制
 
 ### 3. ESM 与构建方式统一
 
-必须遵守：
+引入 TypeScript app 或 package 后必须遵守：
 
 - app 与 package 默认使用 bundler 风格的 ESM 配置
 - Node 侧运行时代码应通过 bundler 构建产出，不依赖 `tsc` 直接输出可执行 JS
@@ -67,7 +68,7 @@
 
 ## 推荐检查项
 
-新增 app、package 或独立工具模块时，至少检查以下项目：
+新增 TypeScript app、package 或独立工具模块时，至少检查以下项目：
 
 1. 是否继承根级 `tsconfig.base.json`
 2. 是否重新引入了 `baseUrl`

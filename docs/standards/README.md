@@ -2,8 +2,9 @@
 
 ## 共享规范（shared/）
 
-适用于前后端均需遵守的基础约定：
+适用于本仓库协作、文档维护，以及后续新增应用代码时需遵守的基础约定：
 
 - [TypeScript 工程规范](./shared/engineering-spec.md)
 - [编码风格](./shared/coding-style.md)
 - [API 约定](./shared/api-conventions.md)
+- [Git 工作流规范](./shared/git-workflow.md)
