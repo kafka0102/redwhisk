@@ -596,7 +596,7 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 
 **确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
 
-**Pending Confirmation：** #40-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Pending Confirmation：** #41 仍视为 AI 草案，需要后续交互确认或修订。
 
 **Confirmed #35：Command/Event 同步模型**
 
@@ -654,4 +654,17 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 若用户选择 Agent Commit 但 `HEAD` 未改变，Issue 保持 `review`，记录 `no_commit_detected`，不自动 completed。
 - 若仓库处于 merge、rebase、cherry-pick 等中间态，MVP 不自动完成，提示用户手动处理。
 
-**Pending Confirmation：** #40-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
+**Confirmed #40：第一阶段开发路线按“先可跑，再可追踪，再可完成”推进**
+
+用户已确认认可第一阶段开发路线：
+
+1. `M0 - Shell Spike`：Tauri 窗口里能跑 Codex TUI。
+2. `M1 - Local Workspace Issues`：能创建 Git Workspace 和本地 Issue。
+3. `M2 - Run Issue with Codex`：能从 Issue 启动 Codex Session。
+4. `M3 - Review Loop`：能 Mark Review 并继续在同一 Codex 修正。
+5. `M4 - Complete Loop`：能通过 manual 或 agent_auto_commit 完成 Issue。
+6. `M5 - Recovery Polish`：重启后能复盘已完成任务和异常 Session。
+
+**确认后的设计口径：** 第一阶段先证明 Codex 能在内嵌终端中稳定运行，再补 Issue 驱动、Review Loop 和 Completion Loop；不先投入完整代码浏览、完整 Diff、PR/MR、插件系统或多窗口工作区。
+
+**Pending Confirmation：** #41 仍视为 AI 草案，需要后续交互确认或修订。
