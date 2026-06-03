@@ -581,3 +581,19 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 3. React 页面信息架构：Issues Activity、Agents Activity、Settings 的最小界面。
 4. Completion prompt 的具体模板和失败兜底文案。
 5. Worktree 是否进入 MVP，或作为 M6 独立能力。
+
+## Interactive Confirmation Log - 2026-06-03
+
+**Confirmed #34：MVP 五层模块边界**
+
+用户已确认认可 MVP 五层模块边界：
+
+1. `Tauri Shell`：桌面应用外壳，负责窗口、系统能力、文件夹选择和前后端连接。
+2. `React Workbench`：用户可见工作台，负责 Activity Bar、Issues、Agents、Run Dialog、Issue Panel 和 xterm 容器。
+3. `Rust Core`：本地执行和业务状态核心，负责 Workspace 校验、Codex command 检测、PTY、AgentAdapter、Git 检测、状态变化和 SQLite 写入。
+4. `SQLite Store`：结构化事实存储，保存 Workspace、Issue、AgentProfile、AgentSession、SessionEvent、IssueAction、CompletionAttempt 等。
+5. `Log Files`：原始终端日志存储，按 Session 保存 Codex TUI 输出，SQLite 仅保存路径和摘要事件。
+
+**确认后的解释口径：** `React Workbench` 负责展示和交互，`Rust Core` 负责真实动作和状态变化，`SQLite Store` 负责结构化事实，`Log Files` 负责大文本日志，`Tauri Shell` 负责将这些能力包成桌面应用。
+
+**Pending Confirmation：** #35-#41 仍视为 AI 草案，需要后续逐条交互确认或修订。
