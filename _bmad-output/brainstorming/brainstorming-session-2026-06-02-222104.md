@@ -716,3 +716,27 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 若有关联 AgentSession，卡片显示小型 Agent / Session 标记。
 - 若 Session 需要用户关注，卡片显示 attention 标记。
 - 点击 Issue 卡片打开 Issue 详情弹窗；看板卡片本身不展开复杂内容。
+
+### Confirmed IA #44：Issue 详情页采用左右两栏布局
+
+用户已确认并修订：Issue 详情页不是三块式信息面板，而是左右两栏布局。
+
+**左侧主要区域：**
+
+- 显示 `title`。
+- 显示 `description`。
+- `title` 和 `description` 均支持随时编辑。
+- 修改后即刻保存至数据库。
+
+**右侧辅助区域：**
+
+- Session 关联区。
+- 当前 Issue 可执行操作按钮。
+
+**确认后的设计口径：**
+
+- Issue 详情页不展示 `status` 字段。
+- Issue 详情页不展示 `updated_at` 字段。
+- 状态信息可以通过右侧操作按钮、Session 关联区或看板泳道间接表达，不作为详情页主要字段。
+- MVP 不在详情页中展示完整日志、完整 Diff 或 Git 历史。
+- 即刻保存需要由前端调用 Rust Core command 写入 SQLite，遵守已确认的 Command/Event 同步模型。
