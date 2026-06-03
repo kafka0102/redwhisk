@@ -876,3 +876,23 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 不关联 Issue 的 Session 仍展示运行状态：`Running` 或 `Completed`。
 - 不关联 Issue 的 Session 不触发 Issue 状态流转，不参与 completion policy。
 - `Session Dialog` 的具体字段和交互另行确认。
+
+### Confirmed IA #50：Session Dialog 字段保持极简，不展示 working directory
+
+用户已确认并修订：`Session Dialog` 用于创建不关联 Issue 的临时 Session，字段保持极简。
+
+**Session Dialog 字段：**
+
+- `title`：默认生成，例如 `Untitled Session`，用户可修改。
+- `agent_profile`：选择 Agent Profile。
+- `prompt`：用户初始输入。
+- 底部操作：`Cancel` / `Start`。
+
+**确认后的设计口径：**
+
+- Session Dialog 不展示 `working_directory`。
+- 不关联 Issue 的临时 Session 默认使用当前 Workspace repo path 作为 working directory。
+- Session Dialog 不显示 command 是否可用。
+- Session Dialog 不显示配置来源或继承/覆盖关系。
+- 点击 `Start` 后，只有 Rust Core 成功启动 Agent 进程，才创建 AgentSession 并加入左侧列表。
+- 启动失败时不创建 AgentSession，Dialog 显示错误。
