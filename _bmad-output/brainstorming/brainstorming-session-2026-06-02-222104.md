@@ -681,3 +681,20 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 禁用状态、失败提示和确认面板属于 MVP 核心体验，不是后期 polish。
 
 **Confirmation Complete：** #34-#41 已完成逐条交互确认。后续可以继续细化 CodexAdapter 接口、Rust Core 状态机、SQLite schema、React 信息架构、completion prompt 模板或 Worktree 是否进入 MVP。
+
+## React Information Architecture - 2026-06-03
+
+### Confirmed IA #42：MVP Activity Bar 只保留 Issues / Agents / Settings
+
+用户已确认认可：MVP 左侧 Activity Bar 只保留三个一级入口：
+
+1. `Issues`：本地 Issue 看板和 Issue 详情入口。
+2. `Agents`：Agent Session 列表和 Codex Native Session View。
+3. `Settings`：Workspace 设置、Agent Profile、Completion Policy、语言等配置。
+
+**确认后的设计口径：**
+
+- MVP 不把 `Code`、`Diff`、`Git History`、`Terminal` 做成 Activity Bar 一级入口。
+- 右侧 Diff Panel 可以在 Agent 页面中预留，但不作为独立一级页面。
+- 第一阶段一级导航只服务核心闭环：`Issue -> Run -> Agent Session -> Review -> Complete`。
+- 后续代码浏览、完整 Diff、Git 历史、Workspace 终端恢复可以作为 M6+ 能力或插件化方向再进入导航。
