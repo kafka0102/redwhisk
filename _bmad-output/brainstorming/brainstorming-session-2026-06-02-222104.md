@@ -452,3 +452,132 @@ _Novelty_: 用户故事直接服务最短闭环，避免把第一阶段扩散成
 4. **Slice D - Issue-Session 状态联动**：Run 成功后进入 running、Issue Panel、Mark Review、attention 标记。
 5. **Slice E - Completion Policy**：manual 完成、agent_auto_commit 确认面板、completion prompt 注入、commit hash 检测、Session 关闭。
 6. **Slice F - 恢复与复盘**：应用重启后的 Workspace/Issue/Session 元数据恢复、completed Summary、Open Log。
+
+## Continuation - 2026-06-03 - Architecture and Spike Planning
+
+### Phase 4 - Action Planning Continued
+
+**[Architecture #34]：MVP 模块边界按“桌面壳、前端工作台、Rust Core、SQLite、文件日志”分层**
+_Concept_: MVP 不先设计插件平台或完整 IDE 内核，而是把第一阶段拆成五个稳定边界：Tauri 桌面壳负责窗口、权限和系统集成；React Workbench 负责 Activity Bar、Issues、Agents、Run Dialog 和 Issue Panel；Rust Core 负责 PTY、进程、AgentAdapter、Git 查询和命令检测；SQLite 负责结构化状态；文件日志负责高频终端输出。
+_Novelty_: 这让复杂度集中在真正的风险点：内嵌 Codex Session 和 Issue-Session 状态联动，而不是过早把产品做成通用平台。
+
+**MVP 模块职责表**
+
+| 模块 | MVP 职责 | 明确不做 |
+| --- | --- | --- |
+| Desktop Shell | Tauri v2 app、窗口生命周期、文件夹选择、基础设置入口 | 多窗口工作区、插件宿主、云同步 |
+| React Workbench | Activity Bar、Issues Activity、Agents Activity、Run Dialog、Issue Panel、xterm 容器 | 完整代码编辑器、完整 Git GUI、复杂看板字段 |
+| Rust Core | Workspace 校验、Agent command 检测、PTY 进程管理、AgentAdapter、Git status/HEAD 检测、SQLite 命令接口 | 直接自动提交、复杂 merge/rebase、长期后台 daemon |
+| SQLite Store | Workspace、Issue、AgentProfile、AgentSession、SessionEvent、IssueAction/AuditLog | 逐字符终端日志、跨设备同步 |
+| Log Files | 保存原始终端输出、按 session_id 组织日志路径 | 结构化查询、富文本渲染 |
+| CodexAdapter | 启动 Codex、写入 prompt、resume、注入 completion prompt、解析基础事件 | 重写 Codex UI、完全可靠理解 TUI 所有状态 |
+
+**[Architecture #35]：前端状态不直接等于数据库状态，使用 Command/Event 同步模型**
+_Concept_: React UI 不应直接拼装业务状态并写库，而是调用 Tauri command，例如 `create_issue`、`start_agent_session`、`mark_issue_review`、`complete_issue_with_policy`。Rust Core 执行动作后写 SQLite，并通过事件通知前端刷新。前端可以做乐观 loading，但最终以 Core 返回状态和订阅事件为准。
+_Novelty_: 这避免前端、PTY 进程和数据库三方各自维护状态，尤其降低 Agent 进程启动失败但 Issue 已变 running 的风险。
+
+**Command/Event 草案**
+
+| UI 动作 | Tauri command | Core 输出事件 | 持久化记录 |
+| --- | --- | --- | --- |
+| 创建 Workspace | `create_workspace(repo_path)` | `workspace_created` | Workspace |
+| 创建 Issue | `create_issue(workspace_id, input)` | `issue_created` | Issue、IssueAction |
+| 保存 Agent Profile | `save_agent_profile(input)` | `agent_profile_saved` | AgentProfile |
+| 测试 command | `test_agent_command(command)` | `agent_command_tested` | 可选 AuditLog |
+| 启动 Session | `start_agent_session(issue_id, profile_id, prompt)` | `session_started` / `session_start_failed` | AgentSession、SessionEvent、IssueAction |
+| 标记 review | `mark_issue_review(issue_id)` | `issue_review_marked` | Issue、IssueAction |
+| 注入完成 prompt | `complete_issue_with_policy(issue_id, option)` | `completion_prompt_sent` / `issue_completed` / `completion_failed` | SessionEvent、IssueAction |
+| 关闭 Session | `close_agent_session(session_id)` | `session_closed` | AgentSession、SessionEvent |
+
+**[Architecture #36]：数据模型增加 WorkspaceSettings 与 CompletionAttempt**
+_Concept_: 前面已确认核心实体，但 completion policy 的可追溯性需要单独记录每次完成尝试。MVP 可以增加 `WorkspaceSettings` 保存 workspace 级 completion_policy、默认 AgentProfile、语言等设置；增加 `CompletionAttempt` 或用 IssueAction 子类型记录完成前 HEAD、完成后 HEAD、changed files 摘要、用户选择、是否检测到新 commit、commit hash 和失败原因。
+_Novelty_: 自动完成最容易造成“到底提交了什么”的信任问题；把每次 completion attempt 结构化保存，比只在日志里留下 Codex 输出更可审计。
+
+**MVP 数据表草案**
+
+| 表 | 关键字段 | 说明 |
+| --- | --- | --- |
+| `workspaces` | `id`、`name`、`repo_path`、`created_at`、`last_opened_at` | Git 仓库入口 |
+| `workspace_settings` | `workspace_id`、`completion_policy`、`default_agent_profile_id`、`locale` | Workspace 级覆盖 |
+| `issues` | `id`、`workspace_id`、`title`、`description`、`status`、`created_at`、`updated_at` | 极简本地 Issue |
+| `agent_profiles` | `id`、`name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled` | 全局 Agent 配置 |
+| `workspace_agent_overrides` | `workspace_id`、`agent_profile_id`、覆盖字段 | Workspace Profile 覆盖 |
+| `agent_sessions` | `id`、`issue_id`、`agent_profile_id`、`codex_session_id`、`status`、`attention`、`working_dir`、`command_snapshot`、`prompt_snapshot`、`log_path`、`started_at`、`closed_at` | 一 Issue 一 Session |
+| `session_events` | `id`、`session_id`、`event_type`、`payload_json`、`created_at` | 关键事件 |
+| `issue_actions` | `id`、`issue_id`、`action_type`、`payload_json`、`created_at` | 状态流转和审计 |
+| `completion_attempts` | `id`、`issue_id`、`session_id`、`option`、`head_before`、`head_after`、`changed_files_json`、`commit_hash`、`result`、`error`、`created_at` | 完成策略审计 |
+
+**[Spike #37]：第一优先级是 Embedded Codex Terminal Spike**
+_Concept_: 最大未知不是 React 布局，也不是 SQLite，而是 Codex CLI 在 Tauri + xterm.js + Rust PTY 中是否有足够接近原生终端的体验。因此第一 Spike 只做一个可丢弃原型：打开一个窗口、启动 `codex`、xterm 输入输出、resize、Ctrl+C、退出检测、日志写入。
+_Novelty_: 先验证产品体验的“硬核地基”，避免先写大量业务 UI 后发现内嵌 Codex TUI 无法接受。
+
+**Spike 验收清单：**
+
+- 能从 GUI 启动 `codex`，并继承用户 login shell 下可用的 PATH。
+- xterm.js 能显示 Codex TUI 的主要界面、颜色和交互。
+- 键盘输入、Enter、方向键、Ctrl+C、粘贴可用。
+- 窗口 resize 后 PTY size 同步，Codex TUI 不严重错位。
+- Codex 退出后 Rust Core 能获得 exit code。
+- 原始输出能写入 session log 文件。
+- macOS 先通过；Windows/Linux 记录兼容性风险，不阻塞 MVP 设计。
+
+**[Spike #38]：第二优先级是 Codex Session Resume 与 completion prompt 注入 Spike**
+_Concept_: MVP 的核心承诺是 review 后继续修正和完成时交给当前 Codex 执行，因此必须验证两件事：当前内嵌 TUI 中能否持续写入新 prompt；如果进程异常退出，能否用 `codex resume` 回到同一上下文。这个 Spike 不做 UI，只在 Rust Core 或脚本层验证命令、session id 捕获和 prompt 注入路径。
+_Novelty_: 它验证“Session 不随 Codex 告一段落关闭”的技术可行性，而不是只验证 Codex 能跑一次。
+
+**Spike 验收清单：**
+
+- 能捕获或推断 Codex session id，并保存到 AgentSession。
+- 在同一个 PTY 进程中能向 Codex 发送后续修正 prompt。
+- 能向当前 Session 注入 completion prompt，而不是启动一个无上下文的新进程。
+- Codex 异常退出后，能通过 `codex resume <session_id>` 或等价方式恢复上下文。
+- 无法稳定恢复时，明确降级策略：保留日志、提示用户手动 resume、Issue 保持 review/running。
+
+**[Spike #39]：第三优先级是 Git Commit Detection Spike**
+_Concept_: 因为应用不直接 `git add .`，所以完成策略的可靠性来自提交前后检测。Spike 需要验证在普通仓库中读取 HEAD、changed files、untracked files、新 commit hash 的方式，并定义“检测到新 commit”的准确条件。
+_Novelty_: 这把 Agent Commit 从“信任 Agent 说已提交”改成“应用用 Git 状态验证结果”，形成用户可相信的完成闭环。
+
+**Spike 验收清单：**
+
+- completion 前记录 `HEAD`、`git status --porcelain`、changed files。
+- completion 后重新读取 `HEAD` 和 status。
+- 若 `HEAD` 改变，记录新 commit hash。
+- 若 `HEAD` 未变但用户选择 Agent Commit，Issue 保持 `review` 并记录 `no_commit_detected`。
+- 若出现 merge/rebase/cherry-pick 进行中状态，MVP 提示用户手动处理，不自动完成。
+
+**[Roadmap #40]：第一阶段开发路线按“先可跑，再可追踪，再可完成”推进**
+_Concept_: MVP 不应该先把所有页面都画完，而应先做最短可运行路径：Workspace -> Issue -> Run -> Codex TUI。之后补状态追踪、review、completion policy、恢复与复盘。每个里程碑都要求有可演示的用户路径。
+_Novelty_: 这条路线用可运行 Agent Session 作为中轴，避免开发前几周产出很多静态 UI 但没有产品核心体验。
+
+**Milestone 建议**
+
+| Milestone | 用户可见结果 | 必须完成 | 暂不包含 |
+| --- | --- | --- | --- |
+| M0 - Shell Spike | Tauri 窗口里能跑 Codex TUI | xterm、PTY、resize、输入输出、日志 | Issue、数据库、completion |
+| M1 - Local Workspace Issues | 能创建 Git Workspace 和本地 Issue | SQLite、Workspace 校验、Issue CRUD、Issues Activity | Agent Profile 覆盖、review |
+| M2 - Run Issue with Codex | 能从 Issue 启动 Codex Session | Agent Profile、Run Dialog、Session 创建、Issue -> running | completion、resume |
+| M3 - Review Loop | 能 Mark Review 并继续在同一 Codex 修正 | Issue Panel、attention、review 保持、Session 日志 | auto commit |
+| M4 - Complete Loop | 能通过 manual 或 agent_auto_commit 完成 Issue | completion prompt、Git 检测、commit hash、Session closed | PR/MR、完整 Diff |
+| M5 - Recovery Polish | 重启后能复盘已完成任务和异常 Session | Summary、Open Log、crashed/stopped 标记 | 活进程跨重启恢复 |
+
+**[Risk #41]：MVP 最大风险不是功能缺失，而是用户信任断裂**
+_Concept_: 这个产品的核心信任链是：用户相信 Issue 对应的 Session 是同一上下文；相信 completion 只处理本 Issue；相信应用没有误关 Session；相信日志和 commit hash 可追溯。任何一个环节不清楚，用户都会退回裸终端和手动 Git。
+_Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记录、禁用状态和失败路径当作产品能力设计。
+
+**Trust Checklist**
+
+- 所有会改变 Issue 状态的动作都写入 IssueAction。
+- 所有 Agent 启动和关闭都写入 SessionEvent。
+- Run Dialog 展示最终 prompt，completion prompt 至少可展开查看。
+- Complete with Agent Commit 前展示 Git 摘要和 changed files 数量。
+- 未检测到 commit 时绝不自动 completed。
+- Session crashed 时不伪装成 completed。
+- completed 后提供 Summary 和 Open Log。
+
+### 下一轮可继续细化的问题
+
+1. CodexAdapter 的接口定义和 Rust Core 内部状态机。
+2. SQLite schema 的字段类型、索引和迁移策略。
+3. React 页面信息架构：Issues Activity、Agents Activity、Settings 的最小界面。
+4. Completion prompt 的具体模板和失败兜底文案。
+5. Worktree 是否进入 MVP，或作为 M6 独立能力。
