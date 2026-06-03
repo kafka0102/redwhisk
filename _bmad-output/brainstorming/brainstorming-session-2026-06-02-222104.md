@@ -740,3 +740,32 @@ _Novelty_: 风险管理不只是技术 Spike，也要把 UI 文案、审计记�
 - 状态信息可以通过右侧操作按钮、Session 关联区或看板泳道间接表达，不作为详情页主要字段。
 - MVP 不在详情页中展示完整日志、完整 Diff 或 Git 历史。
 - 即刻保存需要由前端调用 Rust Core command 写入 SQLite，遵守已确认的 Command/Event 同步模型。
+
+### Confirmed IA #45：Agents Activity 采用左右两栏，Session 与 Review 无关
+
+用户已确认并修订：`Agents Activity` 采用左右两栏布局。
+
+**左侧 Session 列表栏：**
+
+- 左侧栏顶部有一行小 icon，用于切换不同的 Session 展示形态。
+- MVP 默认固定提供按状态展示的形态。
+- 状态展示至少包含 `Running` 和 `Completed`。
+- 顶部 icon 区域包含一个小按钮，用于新建不与任何 Issue 关联的 Session。
+- 不关联 Issue 的 Session 可以设置默认标题，供用户临时输入问题或手动操作。
+- 不关联 Issue 的 Session 仍在左侧栏可见，并展示其运行状态：`Running` 或 `Completed`。
+- Session 列表项展示信息包括 Issue title、类型、Session 标记等。
+- 若 Session 不关联 Issue，则展示该 Session 的默认标题。
+
+**右侧 Session 工作区：**
+
+- 展示当前选中的 Codex Native Session View。
+- 保留当前 Session 的上下文信息。
+- 后续可在右侧或可折叠区域扩展 Diff / changed files 信息，但不进入 MVP 主路径。
+
+**确认后的设计口径：**
+
+- Session 与 review 无关；`review` 是 Issue 状态，不是 Session 状态或 Session 分组。
+- Agents Activity 不按 `Review` 分组。
+- Session 列表的 `Running` / `Completed` 是 Session 展示分组。
+- 通过 Issue 启动的 Session 与 Issue 关联；通过顶部小按钮创建的 Session 不关联 Issue。
+- 不关联 Issue 的临时 Session 不参与 Issue completion policy，也不触发 Issue 状态流转。
