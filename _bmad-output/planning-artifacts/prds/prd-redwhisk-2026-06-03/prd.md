@@ -39,7 +39,7 @@ MVP 的核心赌注是：AI 编程任务不是一次聊天，而是一段可管�
 ### 2.3 关键用户旅程
 
 - **UJ-1. 林航从本地 Issue 跑起一次 Codex 任务并完成验收。**
-  林航是独立开发者，正在一个本地 Git 仓库里修复功能问题。他打开 RedWhisk，选择该仓库创建 Project，进入 Issues Activity 创建一个 backlog Issue。林航点击 `Run`，选择 Codex Agent Profile，在 Run Dialog 中检查并编辑最终 prompt。Codex 进程成功启动后，Issue 进入 `running`，Agents Activity 打开关联 Agent Session。林航在 Codex Native Session View 中交互，认为结果可验收后点击 `Mark Review`。他检查结果并点击完成；系统关闭 Session，Issue 进入 `completed`，并保留摘要和日志。
+  林航是独立开发者，正在一个本地 Git 仓库里修复功能问题。他打开 RedWhisk，首先看到本机已保存 Project 的卡片列表，最后一个卡片是 `+` 创建 Project 入口。他点击已有 Project 卡片，或通过 `+` 选择该仓库创建 Project 后，才进入带 Activity Bar 的 Project 工作台，并在 Issues Activity 创建一个 backlog Issue。林航点击 `Run`，选择 Codex Agent Profile，在 Run Dialog 中检查并编辑最终 prompt。Codex 进程成功启动后，Issue 进入 `running`，Agents Activity 打开关联 Agent Session。林航在 Codex Native Session View 中交互，认为结果可验收后点击 `Mark Review`。他检查结果并点击完成；系统关闭 Session，Issue 进入 `completed`，并保留摘要和日志。
 
 - **UJ-2. 周宁为不同仓库复用同一个 Codex Agent 配置。**
   周宁是 AI Coding 重度用户，多个仓库都使用本机 Codex CLI。她在全局设置中创建 Codex Agent Profile，系统通过 login shell 检测 `codex` 命令；某个仓库需要额外默认 skill，于是她在 Project 级覆盖 `default_skill` 和 `prompt_template`。以后从该 Project 的 Issue 运行 Agent 时，Run Dialog 使用覆盖后的生效配置，并展示 prompt 来源。
@@ -48,20 +48,21 @@ MVP 的核心赌注是：AI 编程任务不是一次聊天，而是一段可管�
   陈悦把一个 Issue 标记为 `review` 后发现验收失败。她不希望重新创建 Session，也不希望 Issue 状态来回切换。她继续在当前 Codex Native Session View 中输入修正要求，Issue 保持 `review`，Agent Session 仍为 `running`。修正完成后，她再次验收并执行完成动作。
 
 - **UJ-4. 马骁复盘已完成任务和异常 Session。**
-  马骁第二天重新打开应用，最近 Project 自动恢复到 Issues Activity。他打开一个 completed Issue，查看 Summary、commit hash、Session 时间和日志路径。另一个曾经运行中的 Session 因应用重启被标记为 `crashed` 或 `stopped`；系统不把它伪装成 completed，而是保留日志和诊断信息。
+  马骁第二天重新打开应用，Project Home 展示本机已保存 Project 卡片，并按最近打开时间优先排序。他点击目标 Project 后进入 Issues Activity，打开一个 completed Issue，查看 Summary、commit hash、Session 时间和日志路径。另一个曾经运行中的 Session 因应用重启被标记为 `crashed` 或 `stopped`；系统不把它伪装成 completed，而是保留日志和诊断信息。
 
 - **UJ-5. 何岚在当前仓库里启动一个不关联 Issue 的临时 Codex Session。**
   何岚在当前 Project 中想临时问 Codex 一个问题，但这个操作还不值得创建 Issue。她进入 Agents Activity，点击左侧 Session 列表顶部的新建按钮，打开 Session Dialog。她确认默认标题、选择 Agent Profile、填写初始 prompt 并点击 `Start`。进程成功启动后，这个临时 Agent Session 出现在 Running 分组；它不触发任何 Issue 状态变化，也不参与 Completion Policy。
 
 ## 3. 术语表
 
-- **Activity Bar** — 工作台左侧一级导航。MVP 只包含 `Issues`、`Agents`、`Settings`，其中 `Settings` 指当前 Project Settings。
+- **Project Home** — RedWhisk 打开后的首屏。展示本机已保存 Project 卡片，最后一个卡片是 `+` 创建 Project 入口；未选择 Project 时不显示 Activity Bar。
+- **Activity Bar** — Project 内工作台左侧一级导航。MVP 只包含 `Issues`、`Agents`、`Settings`，其中 `Settings` 指当前 Project Settings。
 - **Project** — RedWhisk 中的项目入口。MVP 中一个 Project 必须绑定一个本地 Git Repository。
 - **Git Repository** — 用户选择的本地 Git 仓库目录。非 Git 目录不能创建 Project。
 - **Issues Activity** — 展示本地 Issue 四泳道看板和 Issue 详情入口的一级页面。
 - **Agents Activity** — 展示 Agent Session 列表和当前 Codex Native Session View 的一级页面。
 - **Project Settings** — 当前 Project 的设置入口，位于 Activity Bar 中，只影响当前 Project。
-- **Global Settings** — 全局应用设置，通过左下角 gear 或原生顶部菜单打开，不属于 Activity Bar 主入口。
+- **Global Settings** — 全局应用设置，在 Project Home 通过原生顶部菜单打开；进入 Project 工作台后也可通过左下角 gear 打开，不属于 Activity Bar 主入口。
 - **Issue** — Project 内的本地任务实体。MVP 只包含 `title`、`description`、`status`、`created_at`、`updated_at` 等极简字段。
 - **Issue 状态** — Issue 的业务阶段，取值为 `backlog`、`running`、`review`、`completed`。
 - **Agent Profile** — 用户配置的本地 Agent 启动配置，包括名称、Agent 类型、command、默认参数、默认 skill、prompt 模板和 enabled 状态。
@@ -84,7 +85,7 @@ MVP 的核心赌注是：AI 编程任务不是一次聊天，而是一段可管�
 
 ## 4. 产品形态与信息架构
 
-MVP 是桌面应用，目标形态为 VS Code 式一窗口工作台。左侧 Activity Bar 只包含 `Issues`、`Agents`、`Settings` 三个一级入口；`Settings` 是当前 Project Settings。全局应用设置通过左下角 gear 或原生顶部菜单打开，不作为 Activity Bar 一级入口。
+MVP 是桌面应用，目标形态为 VS Code 式一窗口工作台。应用打开后先进入 Project Home：页面展示本机已保存 Project 的卡片列表，最后一个卡片是 `+` 创建 Project 入口。用户点击某个 Project 卡片后，才进入该 Project 的工作台并显示左侧 Activity Bar。Activity Bar 只包含 `Issues`、`Agents`、`Settings` 三个一级入口；`Settings` 是当前 Project Settings。全局应用设置通过原生顶部菜单打开；进入 Project 工作台后也可以通过左下角 gear 打开，不作为 Activity Bar 一级入口。
 
 Issues Activity 使用四个常驻泳道：`Backlog`、`Running`、`Review`、`Completed`。Issue 卡片字段保持极简，只展示 `title`、`status`、`updated_at`，以及可选 Agent Session 标记和 attention 标记。点击 Issue 卡片打开 Issue 详情弹窗。
 
@@ -103,18 +104,21 @@ Agents Activity 采用左右两栏。左侧是 Agent Session 列表，默认按 
 用户可以选择本地目录创建 Project；系统必须校验该目录是 Git Repository。
 
 **可测试结果：**
+- 用户点击 Project Home 的 `+` 卡片后可以选择 Git Repository。
 - 选择 Git Repository 时，系统创建 Project 并保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`。
 - 选择非 Git 目录时，系统拒绝创建 Project，并展示明确错误。
-- 创建成功后，应用进入该 Project 的 Issues Activity。
+- 创建成功后，应用进入该 Project 工作台的 Issues Activity，并显示 Activity Bar。
 
-#### FR-2：打开最近 Project
+#### FR-2：展示本地 Project 列表并打开选中 Project
 
-用户重新打开应用时，可以回到最近打开的 Project。
+用户重新打开应用时，先看到本机已保存 Project 的卡片列表，并可以选择要进入的 Project。
 
 **可测试结果：**
-- 系统更新并持久化 Project 的 `last_opened_at`。
-- 应用重启后能展示最近 Project 的 Issues Activity。
-- 若 `repo_path` 不存在或不可访问，系统展示错误，不删除 Project 记录。
+- Project Home 展示本机所有已保存 Project 卡片，按 `last_opened_at` 优先排序。
+- Project Home 最后一个卡片固定为 `+` 创建 Project 入口。
+- 用户点击某个 Project 卡片后，系统更新并持久化该 Project 的 `last_opened_at`，再进入该 Project 的 Issues Activity。
+- 未选择 Project 前不显示 Activity Bar。
+- 若 `repo_path` 不存在或不可访问，Project 卡片展示明确错误状态；用户点击该卡片时系统展示错误，不删除 Project 记录。
 
 #### FR-3：提供 Project Settings 与 Global Settings
 
@@ -123,7 +127,7 @@ Agents Activity 采用左右两栏。左侧是 Agent Session 列表，默认按 
 **可测试结果：**
 - Project Settings 位于 Activity Bar 的 `Settings`，只影响当前 Project。
 - Project Settings 至少包含 Project 名称、`repo_path`、Project 级 `completion_policy`、默认 Agent Profile、ProjectAgentOverride、项目级 instructions、日志和 Agent Session 存储信息。
-- Global Settings 通过左下角 gear 或原生顶部菜单打开。
+- Global Settings 在 Project Home 中通过原生顶部菜单打开；进入 Project 工作台后也可通过左下角 gear 打开。
 - Global Settings 至少包含 UI language、全局 Agent Profiles、全局默认 `completion_policy`、全局数据目录、全局日志目录、About 和 Diagnostics。
 - Project Settings 通过 `Inherit global default` 或 `Override for this project` 与 Global Settings 连接。
 - `completion_policy` 只能是 `manual` 或 `agent_auto_commit`。
@@ -478,7 +482,7 @@ completed Issue 不提供重新打开或重新运行能力。
 **Secondary**
 
 - **SM-4：Run 失败不污染状态。** 10 次故意 command 失败测试中，Issue 均保持 `backlog`，并展示失败原因。[ASSUMPTION: 10 次故意失败测试作为启动失败路径验收阈值。] 验证 FR-7、FR-10。
-- **SM-5：重启后可复盘。** 应用重启后能打开最近 Project，展示 Issue 列表、completed Summary、日志路径，并把不可恢复的运行中 Session 标记为异常状态。验证 FR-2、FR-19、FR-24。
+- **SM-5：重启后可复盘。** 应用重启后先展示 Project Home，用户进入选中 Project 后能查看 Issue 列表、completed Summary、日志路径，并把不可恢复的运行中 Session 标记为异常状态。验证 FR-2、FR-19、FR-24。
 
 **Counter-metrics**
 
