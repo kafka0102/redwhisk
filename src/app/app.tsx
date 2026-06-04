@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AppShell } from "./app-shell";
 import "./app.css";
 import { ProjectHome } from "../features/project/project-home";
+import { initializeLocalData } from "../features/project/project-commands";
+import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
   id: string;
@@ -33,13 +35,39 @@ export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(
     null,
   );
+  const [localDataError, setLocalDataError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    initializeLocalData().catch((error: unknown) => {
+      if (isMounted) {
+        setLocalDataError(toCommandError(error).message);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (!selectedProject) {
     return (
-      <ProjectHome
-        projects={MOCK_PROJECTS}
-        onProjectOpen={setSelectedProject}
-      />
+      <>
+        {localDataError ? (
+          <div
+            className="local-data-status"
+            role="status"
+            aria-label="Local data status"
+          >
+            {localDataError}
+          </div>
+        ) : null}
+        <ProjectHome
+          projects={MOCK_PROJECTS}
+          onProjectOpen={setSelectedProject}
+        />
+      </>
     );
   }
 
