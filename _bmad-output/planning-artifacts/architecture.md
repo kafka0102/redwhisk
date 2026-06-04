@@ -234,6 +234,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 - TypeScript 变量/函数使用 `camelCase`；类型/interface/class 使用 `PascalCase`。
 - Rust module/file 使用 `snake_case`；Rust struct/enum 使用 `PascalCase`；Rust function 使用 `snake_case`。
 - 状态枚举值跨边界统一使用 PRD 字面量：`backlog`、`running`、`review`、`completed`、`closed`、`crashed`、`stopped`、`none`、`requested`。
+- `stopped` 是正式 Agent Session 状态，用于应用重启后无法恢复活 PTY 的场景；`crashed` 用于 Codex/PT​Y 进程异常退出。
 
 ### Structure Patterns
 
@@ -694,12 +695,11 @@ FR-1 至 FR-26 均已有结构和架构支撑。Workspace、Issue、Agent Profil
 
 **Important Gaps:**
 - Embedded Codex Terminal Spike 仍需真实验证。
-- Codex resume 与 completion prompt 注入仍需 Spike 验证。
-- Git commit detection 仍需真实仓库场景验证。
+- Codex resume 与 completion prompt 注入仍需 Spike 验证；Epic 5 的 `agent_auto_commit` stories 必须等待对应 Spike gate 结论。
+- Git commit detection 仍需真实仓库场景验证；Epic 5 的 `agent_auto_commit` stories 必须等待对应 Spike gate 结论。
 
 **Nice-to-Have Gaps:**
 - UX key-screen mockups 可在实现前补充。
-- `stopped` 是否保留为正式状态可在状态机实现前最终确认。
 - Turbo 暂不引入；后续拆 monorepo package 后再评估。
 
 ### Validation Issues Addressed

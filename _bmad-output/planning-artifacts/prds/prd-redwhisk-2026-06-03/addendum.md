@@ -17,7 +17,7 @@
 - MVP 保持一 Issue 一 Agent Session。
 - Agent Session 可以不关联 Issue，用于当前 Workspace 下的临时 Codex 交互；临时 Agent Session 不参与 Issue 状态流转和 Completion Policy。
 - Issue 状态：`backlog`、`running`、`review`、`completed`。
-- Agent Session 状态：`running`、`closed`、`crashed`，`stopped` 为可选降级状态。
+- Agent Session 状态：`running`、`closed`、`crashed`、`stopped`。`crashed` 表示 Codex 进程异常退出；`stopped` 表示应用生命周期中断后原 `running` PTY 无法恢复。
 - Agents Activity 左侧 Session 展示分组固定包含 `Running` 和 `Completed`，不按 `Review` 分组。
 - 等待用户输入不是 Agent Session 主状态，用 `attention=none|requested` 表示。
 - `review` 阶段允许继续让 Codex 修正，Issue 不退回 `running`。
@@ -74,11 +74,11 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 | `backlog` | 已有关联 Agent Session | 异常历史数据或恢复场景 | `Open Session` | `Run` 禁用 | 无状态变化 |
 | `running` | `running` | Header 显示关联 Issue | `Mark Review` | 打开 Issue Inspector | `Mark Review` 后 Issue -> `review`，Agent Session 保持 `running` |
 | `running` | `running` | `attention=requested` | `Mark Review` | 打开 Issue Inspector | 用户处理后 attention -> `none` |
-| `running` | `crashed` | Codex 进程异常退出 | `Resume Session` | `Mark Review` | resume 成功后 Agent Session -> `running`；Mark Review 后 Issue -> `review` |
+| `running` | `crashed` | Codex 进程异常退出 | `Open Log` | 打开 Issue Inspector | Issue 不自动 completed；resume 能力仅在 Spike 或后续故事明确实现后显示 |
 | `review` | `running` | `completion_policy=manual` | `Complete Manually` | 打开 Issue Inspector | 确认后 Agent Session -> `closed`，Issue -> `completed` |
 | `review` | `running` | `agent_auto_commit` 且有未提交改动 | `Complete with Agent Commit` | `Complete without Commit`、打开 Issue Inspector | 检测到新 commit 后 Agent Session -> `closed`，Issue -> `completed`；未检测到 commit 则 Issue 保持 `review` |
 | `review` | `running` | `agent_auto_commit` 且无未提交改动 | `Complete` | 打开 Issue Inspector | Issue -> `completed`，Agent Session -> `closed` |
-| `review` | `crashed` | Codex 异常退出但 Issue 待验收 | `Resume Session` | `Complete Manually` | resume 成功后 Agent Session -> `running`，Issue 保持 `review` |
+| `review` | `crashed` | Codex 异常退出但 Issue 待验收 | `Open Log` | 打开 Issue Inspector | Issue 保持 `review`；不显示会导致 completed 的完成确认；resume 能力仅在 Spike 或后续故事明确实现后显示 |
 | `completed` | `closed` | 正常完成 | 无完成类主按钮 | `View Summary`、`Open Log`、打开 Issue Inspector | 无状态变化 |
 | `completed` | `crashed` 或 `running` | 异常数据不一致 | `View Summary` | `Open Log` | 显示状态不一致警告，不自动修复 |
 | 无关联 Issue | `running` 或 `closed` | 临时 Agent Session | 不显示 Issue 区域 | 无 Issue 操作 | 不触发 Issue 状态流转 |
@@ -138,7 +138,7 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 - 在同一个 PTY 进程中能向 Codex 发送后续修正 prompt。
 - 能向当前 Agent Session 注入 completion prompt，而不是启动一个无上下文的新进程。
 - Codex 异常退出后，能通过 `codex resume <session_id>` 或等价方式恢复上下文。
-- 无法稳定恢复时，降级为保留日志、提示用户手动 resume、Issue 保持 `review` 或 `running`。
+- 无法稳定恢复时，降级为保留日志、提示用户手动处理，Issue 保持 `review` 或 `running`；UI 不显示不可执行的继续会话入口。
 
 ### Spike 3：Git Commit Detection
 

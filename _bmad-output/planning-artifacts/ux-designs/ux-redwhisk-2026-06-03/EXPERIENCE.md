@@ -85,8 +85,8 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 | Needs Attention | Issues + Agents | 用小型 attention 标记和事实文案 `Codex 需要确认`。不改变 Session 主状态。 |
 | Issue review | Agents Header / Issue Detail | 显示完成类按钮；用户仍可继续在 Codex TUI 输入修正，Issue 不退回 `running`。 |
 | Agent Commit no commit detected | Completion Confirmation / Issue | 记录 CompletionAttempt，提示 `未检测到 commit，Issue 保持待验收。` Issue 保持 `review`。 |
-| Session crashed | Agents List / Header | Session 进入 Completed 展示分组，标记 `crashed`。关联 Issue 不自动 completed，提供 `继续会话` 或日志入口。 |
-| App restart with live process lost | Agents List | Agent Session 可标记 `stopped` 或 `crashed`。[ASSUMPTION] 当前 UX 文案使用 `stopped=已停止`，具体状态名待架构确认。 |
+| Session crashed | Agents List / Header | Session 进入 Completed 展示分组，标记 `crashed`。关联 Issue 不自动 completed，提供日志入口或诊断入口；不显示不可执行的继续会话入口。 |
+| App restart with live process lost | Agents List | Agent Session 标记为 `stopped=已停止`。`stopped` 表示应用生命周期中断后原运行中 PTY 无法恢复。 |
 | Completed Issue | Issues / Header / Inspector | 不显示 Run / Mark Review / Complete。显示 `查看总结`、`打开日志`。 |
 | Log missing | Summary / Log View | 显示 `日志文件不存在或无法访问。` 保留日志路径和诊断入口。 |
 
@@ -157,7 +157,6 @@ macOS 上保留桌面窗口质感；Windows / Linux 不复制 macOS chrome，但
 - `[ASSUMPTION]` Command Palette 快捷键存在，但 MVP PRD 未要求实现；任何核心流程都不能依赖 Command Palette。
 - `[ASSUMPTION]` `Cmd/Ctrl+1` / `2` / `3` 与 `Cmd/Ctrl+N` 是建议快捷键，需在实现前确认是否与平台或 Codex TUI 冲突。
 - `[ASSUMPTION]` `< 960px` 窗口下 Sidebar 可折叠；MVP 最小可用宽度需要在前端实现时确认。
-- `[ASSUMPTION]` `stopped=已停止` 是 UX 文案占位；Agent Session 是否保留 `stopped` 状态以架构最终决策为准。
 - `[NOTE FOR UX]` 本次 Fast path 未生成 key-screen mockups。若后续需要视觉校准，优先补 `Issues Activity`、`Agents Activity with linked Issue`、`Run Dialog`、`Completion Confirmation` 四个 mockups。
 
 ## Key Flows
@@ -183,7 +182,7 @@ Failure: Run 启动失败 -> Run Dialog 显示失败原因，Issue 保持 `backl
 4. Issue 状态保持 `review`，Session 保持 `running`，新的交互写入同一个日志。
 5. **Climax:** 修正完成后，她无需重新 Mark Review，也无需创建新 Session；同一 Header 上完成动作仍可用。
 
-Failure: Codex 进程 crashed -> Session 移到 Completed 分组并标记 crashed，Issue 不自动 completed，提供 `继续会话` 或日志入口。
+Failure: Codex 进程 crashed -> Session 移到 Completed 分组并标记 crashed，Issue 不自动 completed，提供日志入口或诊断入口。
 
 ### Flow 3 — 何岚创建不关联 Issue 的临时 Session
 
