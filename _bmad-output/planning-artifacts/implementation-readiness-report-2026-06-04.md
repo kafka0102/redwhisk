@@ -102,20 +102,20 @@ filesIncluded:
 
 ### Functional Requirements
 
-FR-1：创建 Git Workspace
-用户可以选择本地目录创建 Workspace；系统必须校验该目录是 Git Repository。
-可测试结果：选择 Git Repository 时，系统创建 Workspace 并保存 `workspace_id`、`name`、`repo_path`、`created_at`、`last_opened_at`；选择非 Git 目录时拒绝创建并展示明确错误；创建成功后进入该 Workspace 的 Issues Activity。
+FR-1：创建 Git Project
+用户可以选择本地目录创建 Project；系统必须校验该目录是 Git Repository。
+可测试结果：选择 Git Repository 时，系统创建 Project 并保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`；选择非 Git 目录时拒绝创建并展示明确错误；创建成功后进入该 Project 的 Issues Activity。
 
-FR-2：打开最近 Workspace
-用户重新打开应用时，可以回到最近打开的 Workspace。
-可测试结果：系统更新并持久化 Workspace 的 `last_opened_at`；应用重启后能展示最近 Workspace 的 Issues Activity；若 `repo_path` 不存在或不可访问，系统展示错误，不删除 Workspace 记录。
+FR-2：打开最近 Project
+用户重新打开应用时，可以回到最近打开的 Project。
+可测试结果：系统更新并持久化 Project 的 `last_opened_at`；应用重启后能展示最近 Project 的 Issues Activity；若 `repo_path` 不存在或不可访问，系统展示错误，不删除 Project 记录。
 
-FR-3：提供 Workspace Settings 与 Global Settings
-系统必须区分当前 Workspace Settings 和全局应用级 Global Settings。
-可测试结果：Workspace Settings 位于 Activity Bar 的 `Settings`，只影响当前 Workspace；至少包含 Workspace 名称、`repo_path`、Workspace 级 `completion_policy`、默认 Agent Profile、WorkspaceAgentOverride、项目级 instructions、日志和 Agent Session 存储信息；Global Settings 通过左下角 gear 或原生顶部菜单打开；至少包含 UI language、全局 Agent Profiles、全局默认 `completion_policy`、全局数据目录、全局日志目录、About 和 Diagnostics；Workspace Settings 通过 `Inherit global default` 或 `Override for this workspace` 与 Global Settings 连接；`completion_policy` 只能是 `manual` 或 `agent_auto_commit`；[ASSUMPTION: 新 Workspace 的默认 Completion Policy 为 `manual`，降低误提交风险。]
+FR-3：提供 Project Settings 与 Global Settings
+系统必须区分当前 Project Settings 和全局应用级 Global Settings。
+可测试结果：Project Settings 位于 Activity Bar 的 `Settings`，只影响当前 Project；至少包含 Project 名称、`repo_path`、Project 级 `completion_policy`、默认 Agent Profile、ProjectAgentOverride、项目级 instructions、日志和 Agent Session 存储信息；Global Settings 通过左下角 gear 或原生顶部菜单打开；至少包含 UI language、全局 Agent Profiles、全局默认 `completion_policy`、全局数据目录、全局日志目录、About 和 Diagnostics；Project Settings 通过 `Inherit global default` 或 `Override for this project` 与 Global Settings 连接；`completion_policy` 只能是 `manual` 或 `agent_auto_commit`；[ASSUMPTION: 新 Project 的默认 Completion Policy 为 `manual`，降低误提交风险。]
 
 FR-4：创建和编辑 Issue
-用户可以在 Workspace 内创建和编辑本地 Issue。
+用户可以在 Project 内创建和编辑本地 Issue。
 可测试结果：Issue 至少保存 `title`、`description`、`status`、`created_at`、`updated_at`；新 Issue 默认状态为 `backlog`；用户可以在 Issue 详情弹窗中编辑 `title` 和 `description`；MVP 不提供 priority、label、assignee、milestone。
 
 FR-5：展示 Issue 详情弹窗
@@ -130,13 +130,13 @@ FR-7：检测 Codex command
 系统可以检测本机 `codex` 命令，并允许手动路径兜底。
 可测试结果：创建 Codex Agent Profile 时，系统通过用户 login shell 执行 `command -v codex`；检测失败时，用户可以手动填写 command path 并运行 Test；command 不可执行时，系统不得保存 enabled Agent Profile。
 
-FR-8：保存 Agent Profile 与 WorkspaceAgentOverride
-用户可以创建全局 Agent Profile，并为 Workspace 设置覆盖项。
-可测试结果：Agent Profile 至少保存 `name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled`；WorkspaceAgentOverride 可以覆盖 `default_args`、`default_skill`、`prompt_template`、`enabled`；Run Dialog 使用覆盖后的生效配置；配置来源和 command 可用性属于 Settings / Agent Profile 配置层，不进入 Run Dialog。
+FR-8：保存 Agent Profile 与 ProjectAgentOverride
+用户可以创建全局 Agent Profile，并为 Project 设置覆盖项。
+可测试结果：Agent Profile 至少保存 `name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled`；ProjectAgentOverride 可以覆盖 `default_args`、`default_skill`、`prompt_template`、`enabled`；Run Dialog 使用覆盖后的生效配置；配置来源和 command 可用性属于 Settings / Agent Profile 配置层，不进入 Run Dialog。
 
 FR-9：生成并确认最终 prompt
 用户从 Issue 点击 `Run` 后，Run Dialog 必须展示可编辑最终 prompt。
-可测试结果：最终 prompt 由 Issue、Workspace、Agent Profile、WorkspaceAgentOverride、默认 skill、prompt 模板和应用补充说明组成；Run Dialog 显示最终 prompt，默认可编辑；Run Dialog 可以折叠查看 prompt 来源，例如 Issue description、default skill、prompt template、app instructions；Run Dialog 显示 Agent Profile 选择、working directory、default args、`Cancel` 和 `Start`；Run Dialog 不展示 command 是否可用，不展示配置继承或覆盖来源；默认 prompt 不包含 Issue `title`；只有 `prompt_template` 显式引用 `{{issue.title}}` 时，Issue `title` 才进入 prompt；用户确认后，系统保存最终 prompt 快照。
+可测试结果：最终 prompt 由 Issue、Project、Agent Profile、ProjectAgentOverride、默认 skill、prompt 模板和应用补充说明组成；Run Dialog 显示最终 prompt，默认可编辑；Run Dialog 可以折叠查看 prompt 来源，例如 Issue description、default skill、prompt template、app instructions；Run Dialog 显示 Agent Profile 选择、working directory、default args、`Cancel` 和 `Start`；Run Dialog 不展示 command 是否可用，不展示配置继承或覆盖来源；默认 prompt 不包含 Issue `title`；只有 `prompt_template` 显式引用 `{{issue.title}}` 时，Issue `title` 才进入 prompt；用户确认后，系统保存最终 prompt 快照。
 
 FR-10：成功启动后才进入 running
 用户确认 Run Dialog 后，系统尝试启动 Agent 进程；只有进程成功启动后，才创建或激活 Agent Session，并将 Issue 改为 `running`。
@@ -152,7 +152,7 @@ MVP 中一个 Issue 最多关联一个 Agent Session。
 
 FR-13：提供 Agents Activity 左右两栏工作区
 Agents Activity 必须展示 Agent Session 列表和当前 Codex Native Session View。
-可测试结果：左侧栏展示当前 Workspace 的最近 Agent Session；默认按 `Running` 和 `Completed` 分组展示；`Running` 分组按 `last_active_at` 排序；`Completed` 分组展示 `closed`、`crashed` 或 `stopped` Agent Session，按最近完成或结束时间排序，默认只展示最近 20 条；左侧栏顶部提供展示形态 icon，并提供新建不关联 Issue 的临时 Agent Session 按钮；左侧 Agent Session 列表项展示 Issue title 或临时 Session title、Agent 类型和运行状态；右侧展示当前选中的 Codex Native Session View；Session 与 `review` 无关。
+可测试结果：左侧栏展示当前 Project 的最近 Agent Session；默认按 `Running` 和 `Completed` 分组展示；`Running` 分组按 `last_active_at` 排序；`Completed` 分组展示 `closed`、`crashed` 或 `stopped` Agent Session，按最近完成或结束时间排序，默认只展示最近 20 条；左侧栏顶部提供展示形态 icon，并提供新建不关联 Issue 的临时 Agent Session 按钮；左侧 Agent Session 列表项展示 Issue title 或临时 Session title、Agent 类型和运行状态；右侧展示当前选中的 Codex Native Session View；Session 与 `review` 无关。
 
 FR-14：通过内嵌 PTY 运行 Codex
 系统必须通过内嵌 PTY 和 xterm.js 运行 Codex CLI。
@@ -164,7 +164,7 @@ FR-15：展示 Needs Attention
 
 FR-16：创建不关联 Issue 的临时 Agent Session
 用户可以在 Agents Activity 中创建不关联 Issue 的临时 Agent Session。
-可测试结果：点击 Agents 左侧栏顶部的新建按钮后，系统打开 Session Dialog，而不是直接创建 Agent Session；Session Dialog 字段保持极简，只包含 `title`、`agent_profile`、`prompt`、`Cancel` 和 `Start`；`title` 默认生成，例如 `Untitled Session`，用户可修改；Session Dialog 不展示 `working_directory`，默认使用当前 Workspace `repo_path`；Session Dialog 不展示 command 是否可用，不展示配置来源或继承/覆盖关系；点击 `Start` 后，只有 Rust Core 成功启动 Agent 进程，才创建 Agent Session 并加入左侧列表；启动失败时不创建 Agent Session，Session Dialog 显示错误；不关联 Issue 的 Agent Session 不触发 Issue 状态流转，不参与 Completion Policy。
+可测试结果：点击 Agents 左侧栏顶部的新建按钮后，系统打开 Session Dialog，而不是直接创建 Agent Session；Session Dialog 字段保持极简，只包含 `title`、`agent_profile`、`prompt`、`Cancel` 和 `Start`；`title` 默认生成，例如 `Untitled Session`，用户可修改；Session Dialog 不展示 `working_directory`，默认使用当前 Project `repo_path`；Session Dialog 不展示 command 是否可用，不展示配置来源或继承/覆盖关系；点击 `Start` 后，只有 Rust Core 成功启动 Agent 进程，才创建 Agent Session 并加入左侧列表；启动失败时不创建 Agent Session，Session Dialog 显示错误；不关联 Issue 的 Agent Session 不触发 Issue 状态流转，不参与 Completion Policy。
 
 FR-17：手动 Mark Review
 用户可以手动将 `running` Issue 标记为 `review`。
@@ -184,7 +184,7 @@ FR-20：手动完成或无提交完成
 
 FR-21：Agent Commit 完成
 用户可以在 `agent_auto_commit` 策略下让当前 Codex 只提交本 Issue 相关改动并完成 Issue。
-可测试结果：仅当 Issue 为 `review`、Agent Session 为 `running`、`completion_policy=agent_auto_commit` 且存在未提交改动时显示 `Complete with Agent Commit`；点击后，系统检测当前 Issue、Agent Session、Workspace、Git status、HEAD、changed files 和策略配置；系统弹出轻量确认面板，默认隐藏 completion prompt，但允许展开查看；用户确认后，系统把 completion prompt 发送给当前 Codex Agent Session；检测到新 commit 后，系统记录 commit hash，关闭 Agent Session，并将 Issue 标记为 `completed`；未检测到新 commit 时，Issue 保持 `review` 并提示用户处理。
+可测试结果：仅当 Issue 为 `review`、Agent Session 为 `running`、`completion_policy=agent_auto_commit` 且存在未提交改动时显示 `Complete with Agent Commit`；点击后，系统检测当前 Issue、Agent Session、Project、Git status、HEAD、changed files 和策略配置；系统弹出轻量确认面板，默认隐藏 completion prompt，但允许展开查看；用户确认后，系统把 completion prompt 发送给当前 Codex Agent Session；检测到新 commit 后，系统记录 commit hash，关闭 Agent Session，并将 Issue 标记为 `completed`；未检测到新 commit 时，Issue 保持 `review` 并提示用户处理。
 
 FR-22：记录 CompletionAttempt
 每次完成尝试必须写入 CompletionAttempt。
@@ -237,7 +237,7 @@ Total NFRs: 7
 
 - MVP 范围冻结：第一阶段只验证本地闭环，不包含 GitHub/GitLab、云协作、插件系统、完整代码浏览、完整 Diff、Git 历史、Worktree 自动化、多 Agent 并行、多 Session Attempt、completed Issue Reopen。
 - 术语和状态模型固定：Issue 状态为 `backlog`、`running`、`review`、`completed`；Agent Session 状态为 `running`、`closed`、`crashed`、`stopped`；`review` 是 Issue 状态，不是 Session 状态或分组。
-- Settings 分层固定：Activity Bar 的 `Settings` 是 Workspace Settings；Global Settings 通过左下角 gear 或原生顶部菜单打开。
+- Settings 分层固定：Activity Bar 的 `Settings` 是 Project Settings；Global Settings 通过左下角 gear 或原生顶部菜单打开。
 - UI 信息架构固定：Activity Bar 只包含 `Issues`、`Agents`、`Settings`；Issues Activity 四泳道；Agents Activity 左右两栏；Session Header 只在有关联 Issue 时展示 Issue 上下文。
 - Completion Policy 固定为 `manual | agent_auto_commit`；`agent_auto_commit` 必须向当前 Codex Session 注入 completion prompt，并通过 Git 检测验证结果，不能由应用直接 `git add .`。
 - Spike 约束：Embedded Codex Terminal、Codex Session Resume 与 completion prompt 注入、Git Commit Detection 是关键可行性验证。
@@ -252,14 +252,14 @@ PRD 完整度较高，FR 编号连续且每项均包含可测试结果；NFR 覆
 
 ### Epic FR Coverage Extracted
 
-- FR1：Covered in Epic 1 - 创建 Git Workspace
-- FR2：Covered in Epic 1 - 打开最近 Workspace
-- FR3：Covered in Epic 1 - Workspace Settings 与 Global Settings
+- FR1：Covered in Epic 1 - 创建 Git Project
+- FR2：Covered in Epic 1 - 打开最近 Project
+- FR3：Covered in Epic 1 - Project Settings 与 Global Settings
 - FR4：Covered in Epic 1 - 创建和编辑 Issue
 - FR5：Covered in Epic 1 - Issue 详情弹窗
 - FR6：Covered in Epic 1 - IssueAction 审计记录
 - FR7：Covered in Epic 1 - Codex command 检测
-- FR8：Covered in Epic 1 - Agent Profile 与 WorkspaceAgentOverride
+- FR8：Covered in Epic 1 - Agent Profile 与 ProjectAgentOverride
 - FR9：Covered in Epic 2 - 最终 prompt 生成与确认
 - FR10：Covered in Epic 2 - 成功启动后才进入 running
 - FR11：Covered in Epic 2 - Agent Session 快照和日志索引
@@ -285,14 +285,14 @@ Total FRs in epics: 26
 
 | FR Number | PRD Requirement | Epic Coverage | Status |
 | --- | --- | --- | --- |
-| FR1 | 创建 Git Workspace | Epic 1 / Story 1.3 | Covered |
-| FR2 | 打开最近 Workspace | Epic 1 / Story 1.4 | Covered |
-| FR3 | 提供 Workspace Settings 与 Global Settings | Epic 1 / Story 1.9 | Covered |
+| FR1 | 创建 Git Project | Epic 1 / Story 1.3 | Covered |
+| FR2 | 打开最近 Project | Epic 1 / Story 1.4 | Covered |
+| FR3 | 提供 Project Settings 与 Global Settings | Epic 1 / Story 1.9 | Covered |
 | FR4 | 创建和编辑 Issue | Epic 1 / Story 1.5 | Covered |
 | FR5 | 展示 Issue 详情弹窗 | Epic 1 / Story 1.6 | Covered |
 | FR6 | 记录 IssueAction | Epic 1 / Story 1.7，并贯穿后续状态故事 | Covered |
 | FR7 | 检测 Codex command | Epic 1 / Story 1.8 | Covered |
-| FR8 | 保存 Agent Profile 与 WorkspaceAgentOverride | Epic 1 / Story 1.8 | Covered |
+| FR8 | 保存 Agent Profile 与 ProjectAgentOverride | Epic 1 / Story 1.8 | Covered |
 | FR9 | 生成并确认最终 prompt | Epic 2 / Story 2.1、2.2 | Covered |
 | FR10 | 成功启动后才进入 running | Epic 2 / Story 2.3 | Covered |
 | FR11 | 保存 Agent Session 快照和日志索引 | Epic 2 / Story 2.3、2.7 | Covered |
@@ -356,7 +356,7 @@ No UX requirements were found that contradict the PRD. UX adds non-conflicting i
 Architecture supports the UX requirements.
 
 - React Workbench is organized around `Issues`、`Agents`、`Settings`, matching UX IA.
-- Frontend project structure includes `issue-detail-dialog.tsx`、`run-dialog.tsx`、`agents-activity.tsx`、`agent-session-list.tsx`、`session-header.tsx`、`issue-inspector.tsx`、`codex-terminal.tsx`、`completion-confirmation.tsx`、`workspace-settings-activity.tsx`、`global-settings-dialog.tsx`, matching UX surfaces.
+- Frontend project structure includes `issue-detail-dialog.tsx`、`run-dialog.tsx`、`agents-activity.tsx`、`agent-session-list.tsx`、`session-header.tsx`、`issue-inspector.tsx`、`codex-terminal.tsx`、`completion-confirmation.tsx`、`project-settings-activity.tsx`、`global-settings-dialog.tsx`, matching UX surfaces.
 - Architecture explicitly states Dialog / Inspector operations must not unload xterm, satisfying UX trust and Session continuity rules.
 - Rust PTY + xterm.js boundary supports Codex Native Session View; terminal output is written to logs, while SQLite only stores structured events and paths.
 - Architecture includes `shared/styles/tokens.css`、`themes.css` and self-built `shared/ui` primitives, supporting DESIGN.md token and anti-management-SaaS constraints.
@@ -380,7 +380,7 @@ No blocking UX / PRD / Architecture misalignment was found.
 
 ### Overall Assessment
 
-Epic structure is mostly implementation-ready. All five epics are framed around user-visible outcomes rather than pure technical milestones, and FR traceability is preserved. The decomposition generally follows progressive delivery: Epic 1 establishes Workspace / Issue / Settings foundations; Epic 2 starts Codex Sessions; Epic 3 adds Session management and temporary Sessions; Epic 4 adds review and abnormal Session handling; Epic 5 closes the loop with completion and review.
+Epic structure is mostly implementation-ready. All five epics are framed around user-visible outcomes rather than pure technical milestones, and FR traceability is preserved. The decomposition generally follows progressive delivery: Epic 1 establishes Project / Issue / Settings foundations; Epic 2 starts Codex Sessions; Epic 3 adds Session management and temporary Sessions; Epic 4 adds review and abnormal Session handling; Epic 5 closes the loop with completion and review.
 
 However, several story-level sequencing and readiness issues should be corrected before Phase 4 execution. The main concern is not missing scope, but dependency hygiene: a few stories reference capabilities that are only introduced later, and the greenfield project lacks an explicit early CI / quality gate story.
 
@@ -388,7 +388,7 @@ However, several story-level sequencing and readiness issues should be corrected
 
 | Epic | User Value Focus | Independence | Traceability | Assessment |
 | --- | --- | --- | --- | --- |
-| Epic 1: 本地 Workspace、Issue 与配置基础 | Strong | Strong | FR1-FR8, FR26 | Pass. Delivers a usable local Workspace / Issue / Settings base. Contains necessary greenfield setup and data boundary stories. |
+| Epic 1: 本地 Project、Issue 与配置基础 | Strong | Strong | FR1-FR8, FR26 | Pass. Delivers a usable local Project / Issue / Settings base. Contains necessary greenfield setup and data boundary stories. |
 | Epic 2: 从 Issue 可靠启动 Codex Session | Strong | Mostly strong | FR9-FR14 plus Spike support | Needs sequencing correction. PTY/xterm Spike appears after stories that depend on real Codex process startup. |
 | Epic 3: Agent Session 管理与临时 Codex 会话 | Strong | Mostly strong | FR15-FR16, partial FR13 | Needs dependency cleanup. Some Completed/crashed/stopped display criteria depend on Epic 4 abnormal status implementation. |
 | Epic 4: Review 循环、Issue Inspector 与异常 Session | Strong | Strong | FR17-FR19, FR25 | Pass with one minor wording issue around completion buttons before Epic 5. |
@@ -443,10 +443,10 @@ m-3: “预留展示能力” is weaker than a testable acceptance criterion.
 Database creation timing mostly follows best practice.
 
 - Story 1.2 creates database and migration infrastructure, not all domain tables upfront.
-- Story 1.3 creates `workspaces` when Workspace creation first needs it.
+- Story 1.3 creates `projects` when Project creation first needs it.
 - Story 1.5 creates `issues` when Issue CRUD first needs it.
 - Story 1.7 creates `issue_actions` when audit first needs it.
-- Story 1.8 creates `agent_profiles` and `workspace_agent_overrides` when profile configuration first needs them.
+- Story 1.8 creates `agent_profiles` and `project_agent_overrides` when profile configuration first needs them.
 - Story 2.3 creates `agent_sessions` and `session_events` when Session startup first needs them.
 - Story 5.2 creates `completion_attempts` when completion audit first needs it.
 

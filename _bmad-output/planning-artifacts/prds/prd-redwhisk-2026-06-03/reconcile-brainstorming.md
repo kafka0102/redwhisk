@@ -10,9 +10,9 @@
 | --- | --- |
 | 产品定位：VS Code 形态 Agent 工作台 | `prd.md` §1、§4 |
 | MVP 最短闭环 | `prd.md` §1、§2.3、§5、§8 |
-| Workspace 必须绑定 Git 仓库 | `prd.md` FR-1、FR-2 |
+| Project 必须绑定 Git 仓库 | `prd.md` FR-1、FR-2 |
 | 极简 Issue | `prd.md` FR-4、FR-5、非目标 |
-| Agent Profile、Workspace override、command 检测 | `prd.md` FR-7、FR-8、FR-9 |
+| Agent Profile、Project override、command 检测 | `prd.md` FR-7、FR-8、FR-9 |
 | Run Dialog 轻量化，不展示 command 可用性和配置来源 | `prd.md` FR-8、FR-9、FR-10 |
 | 内嵌 Codex Native Session View | `prd.md` FR-13、FR-14；`addendum.md` Spike 1 |
 | attention 模型 | `prd.md` FR-15 |
@@ -24,7 +24,7 @@
 | Issues Activity 四泳道 | `prd.md` §4、FR-5；`addendum.md` §7 |
 | Issue 详情左右两栏 | `prd.md` FR-5；`addendum.md` §7 |
 | Agents Activity 左右两栏，Session 与 Review 无关 | `prd.md` §4、FR-13；`addendum.md` §7 |
-| Workspace Settings / Global Settings 分层 | `prd.md` FR-3 |
+| Project Settings / Global Settings 分层 | `prd.md` FR-3 |
 | 不关联 Issue 的临时 Session | `prd.md` UJ-5、FR-16 |
 | Session Dialog 极简字段 | `prd.md` FR-16 |
 | Running / Completed Session 排序和最近 20 条规则 | `prd.md` FR-13 |
@@ -43,7 +43,7 @@
 这些问题不阻塞当前 PRD 进入 UX / 架构 / 故事拆分，但需要在对应阶段复核：
 
 1. 产品正式名称是否确认使用 RedWhisk。
-2. 新 Workspace 默认 Completion Policy 是否固定为 `manual`。
+2. 新 Project 默认 Completion Policy 是否固定为 `manual`。
 3. `attention=requested` 的启发式识别可靠性目标。
 4. Windows / Linux 兼容性进入哪个里程碑。
 5. completion prompt 的具体模板和失败兜底文案。

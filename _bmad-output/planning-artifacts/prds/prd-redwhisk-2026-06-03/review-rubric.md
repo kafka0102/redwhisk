@@ -10,7 +10,7 @@ PRD 已达到可进入 UX、架构和故事拆分的水平。它的强项是 MVP
 
 ### Findings
 
-- **[low] 默认策略仍是假设（§5.1 FR-3）** — 新 Workspace 默认 `manual` 是合理安全默认，但仍是未确认产品决策。*Fix:* 保留 Open Question，并在 UX 或架构启动前确认默认值。
+- **[low] 默认策略仍是假设（§5.1 FR-3）** — 新 Project 默认 `manual` 是合理安全默认，但仍是未确认产品决策。*Fix:* 保留 Open Question，并在 UX 或架构启动前确认默认值。
 
 ## Substance over theater — strong
 
@@ -22,7 +22,7 @@ PRD 没有堆砌泛化 AI 编辑器功能，而是围绕 Issue 到 Agent Session
 
 ## Strategic coherence — strong
 
-文档的核心 thesis 是“AI 编程任务是可管理、可验收、可追溯的本地开发工作流”，功能组织从 Workspace、Issue、Agent Session、Review 到 Completion 逐层服务该 thesis。Counter-metrics 明确阻止用功能面数量、Issue 字段数量或自动完成率误导 MVP。
+文档的核心 thesis 是“AI 编程任务是可管理、可验收、可追溯的本地开发工作流”，功能组织从 Project、Issue、Agent Session、Review 到 Completion 逐层服务该 thesis。Counter-metrics 明确阻止用功能面数量、Issue 字段数量或自动完成率误导 MVP。
 
 ### Findings
 
@@ -38,7 +38,7 @@ FR-1 至 FR-26 均包含可测试结果，尤其对启动失败不污染状态�
 
 ## Scope honesty — strong
 
-非目标和 Out of Scope for MVP 覆盖了输入文档中容易滑入 MVP 的功能，包括 Worktree、完整 Diff、GitHub/GitLab、云协作、插件、多 Session Attempt、Workspace 终端恢复。假设索引和开放问题也保持可见。
+非目标和 Out of Scope for MVP 覆盖了输入文档中容易滑入 MVP 的功能，包括 Worktree、完整 Diff、GitHub/GitLab、云协作、插件、多 Session Attempt、Project 终端恢复。假设索引和开放问题也保持可见。
 
 ### Findings
 

@@ -45,13 +45,13 @@ development_status:
   epic-1: backlog
   1-1-initialize-redwhisk-desktop-workbench: backlog
   1-2-establish-local-data-storage-and-core-command-boundary: backlog
-  1-3-create-git-workspace: backlog
-  1-4-open-recent-workspace-and-handle-path-errors: backlog
+  1-3-create-git-project: backlog
+  1-4-open-recent-project-and-handle-path-errors: backlog
   1-5-create-and-edit-local-issue: backlog
   1-6-show-issues-kanban-and-issue-detail-dialog: backlog
   1-7-record-issue-action-audit: backlog
-  1-8-configure-codex-agent-profile-and-workspace-override: backlog
-  1-9-implement-workspace-settings-global-settings-and-basic-i18n: backlog
+  1-8-configure-codex-agent-profile-and-project-override: backlog
+  1-9-implement-project-settings-global-settings-and-basic-i18n: backlog
   1-10-implement-desktop-visual-tokens-and-basic-accessibility: backlog
   epic-1-retrospective: optional
 

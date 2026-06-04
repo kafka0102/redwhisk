@@ -14,7 +14,7 @@
 
 ## EXPERIENCE.md — strong
 
-IA 覆盖 Workspace Picker、Issues、Issue Detail、Run Dialog、Agents、Session Dialog、Issue Inspector、Completion Confirmation、Settings、Summary / Log。State Patterns 覆盖启动失败、attention、review、no commit detected、crashed、stopped、日志缺失等关键失败路径。Key Flows 有命名主角和 climax beat。
+IA 覆盖 Project Picker、Issues、Issue Detail、Run Dialog、Agents、Session Dialog、Issue Inspector、Completion Confirmation、Settings、Summary / Log。State Patterns 覆盖启动失败、attention、review、no commit detected、crashed、stopped、日志缺失等关键失败路径。Key Flows 有命名主角和 climax beat。
 
 ### Findings
 
