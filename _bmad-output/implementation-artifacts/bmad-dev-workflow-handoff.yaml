@@ -1,0 +1,52 @@
+workflow: bmad-dev-workflow
+phase: complete
+story_file: _bmad-output/implementation-artifacts/1-2-establish-local-data-storage-and-core-command-boundary.md
+story_key: 1-2-establish-local-data-storage-and-core-command-boundary
+story_status: done
+baseline_commit: 4a33c85
+changed_files:
+  - _bmad-output/implementation-artifacts/1-2-establish-local-data-storage-and-core-command-boundary.md
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - src-tauri/Cargo.lock
+  - src-tauri/Cargo.toml
+  - src-tauri/migrations/0001_core.sql
+  - src-tauri/src/app_state.rs
+  - src-tauri/src/commands/core_commands.rs
+  - src-tauri/src/commands/mod.rs
+  - src-tauri/src/core/local_data_service.rs
+  - src-tauri/src/core/mod.rs
+  - src-tauri/src/db/connection.rs
+  - src-tauri/src/db/migrations.rs
+  - src-tauri/src/db/mod.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/errors.rs
+  - src-tauri/src/types/local_data.rs
+  - src-tauri/src/types/mod.rs
+  - src-tauri/tests/local_data.rs
+  - src/app/app.css
+  - src/app/app.test.tsx
+  - src/app/app.tsx
+  - src/features/project/project-commands.ts
+  - src/shared/commands/command-client.test.ts
+  - src/shared/commands/command-client.ts
+  - src/shared/commands/command-error.ts
+validation_commands:
+  - pnpm format
+  - cargo fmt
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - pnpm build
+  - cd src-tauri && cargo test
+validation_results:
+  - "PASS: pnpm format"
+  - "PASS: cargo fmt"
+  - "PASS: pnpm lint"
+  - "PASS: pnpm typecheck"
+  - "PASS: pnpm test"
+  - "PASS: pnpm build"
+  - "PASS: cd src-tauri && cargo test"
+review_summary: "Code review found 6 patch findings; all were applied and revalidated. Story marked done."
+blocking_reason:
+updated_at: 2026-06-04T22:03:58+0800
