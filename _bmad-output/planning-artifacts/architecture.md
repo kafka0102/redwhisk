@@ -34,9 +34,9 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 ### Requirements Overview
 
 **Functional Requirements:**
-RedWhisk MVP 的功能核心是本地 Git Workspace 内的 Agent 开发闭环：创建 Workspace，管理极简本地 Issue，从 Issue 启动 Codex Agent Session，在内嵌 PTY/xterm 的 Codex Native Session View 中交互，手动进入 review，继续修正或完成 Issue，并保留 Summary、日志、IssueAction、SessionEvent 与 CompletionAttempt。
+RedWhisk MVP 的功能核心是本地 Git Project 内的 Agent 开发闭环：创建 Project，管理极简本地 Issue，从 Issue 启动 Codex Agent Session，在内嵌 PTY/xterm 的 Codex Native Session View 中交互，手动进入 review，继续修正或完成 Issue，并保留 Summary、日志、IssueAction、SessionEvent 与 CompletionAttempt。
 
-功能需求可归为 10 类：Workspace 与本地恢复、Issue 管理、Agent Profile 与 prompt 编排、Agent Session 启动、Codex Native Session View、Review 循环、Completion Policy、完成后复盘、Session Header / Issue Inspector、基础国际化。架构必须明确前端不能直接写核心业务状态，状态变化应由核心层校验、持久化并通知 UI。
+功能需求可归为 10 类：Project 与本地恢复、Issue 管理、Agent Profile 与 prompt 编排、Agent Session 启动、Codex Native Session View、Review 循环、Completion Policy、完成后复盘、Session Header / Issue Inspector、基础国际化。架构必须明确前端不能直接写核心业务状态，状态变化应由核心层校验、持久化并通知 UI。
 
 **Non-Functional Requirements:**
 关键 NFR 是本地优先与隐私、状态可靠性、审计性、终端性能、完成安全、失败可见性和跨平台目标。MVP 不上传 Issue、prompt、日志、Git 状态或代码内容；终端高频输出写入日志文件，SQLite 只保存结构化事件和索引；应用不得直接执行 `git add .` 或自行提交全部改动；crashed、no commit detected、日志缺失等失败路径必须显式可见。
@@ -52,7 +52,7 @@ RedWhisk MVP 的功能核心是本地 Git Workspace 内的 Agent 开发闭环：
 
 输入文档已经给出若干架构倾向或约束：桌面壳为 Tauri，前端为 React + TypeScript，核心状态和本地动作由 Rust Core 或等价核心层负责，Codex CLI 通过内嵌 PTY 与 xterm.js 展示，结构化事实保存在 SQLite，原始终端输出保存在日志文件中。
 
-MVP 首个 Agent 是 Codex，但 Agent Profile / WorkspaceAgentOverride / Run Dialog 不应把 Codex 写死为唯一 UI 语义。Workspace 必须绑定本地 Git Repository。macOS 上的 Embedded Codex Terminal Spike 是进入完整业务实现前的关键验证点，Windows/Linux 兼容性需要记录风险但不扩大 MVP 范围。
+MVP 首个 Agent 是 Codex，但 Agent Profile / ProjectAgentOverride / Run Dialog 不应把 Codex 写死为唯一 UI 语义。Project 必须绑定本地 Git Repository。macOS 上的 Embedded Codex Terminal Spike 是进入完整业务实现前的关键验证点，Windows/Linux 兼容性需要记录风险但不扩大 MVP 范围。
 
 ### Cross-Cutting Concerns Identified
 
@@ -61,7 +61,7 @@ MVP 首个 Agent 是 Codex，但 Agent Profile / WorkspaceAgentOverride / Run Di
 - 本地进程生命周期：Codex 启动、退出、crash、resize、输入、日志写入和可能的 resume 需要统一管理。
 - Git 安全边界：Completion Policy 只能通过 completion prompt 与 Git 检测闭环，不允许应用层静默提交。
 - UI 不卸载终端：Issue Inspector、Dialog、Header 操作不能破坏当前 xterm/PTY 会话。
-- 配置继承与 prompt 快照：Global Agent Profile、Workspace override、最终 prompt 来源和快照需要可追溯。
+- 配置继承与 prompt 快照：Global Agent Profile、Project override、最终 prompt 来源和快照需要可追溯。
 - 失败路径可见：启动失败、command 不可用、crashed/stopped、no commit detected、日志缺失都不能被伪装成成功。
 - i18n 与文案一致性：核心状态和命令文案必须支持 zh-CN / en-US，不能散落硬编码。
 
@@ -153,7 +153,7 @@ starter 提供前端目录与 `src-tauri` Rust 目录。后续应在此基础上
 
 选择本地 SQLite 作为结构化存储，但不使用前端可直接调用的 SQL 插件作为业务写入路径。Rust Core 通过 `rusqlite` 访问 SQLite，并封装 repository/service 层。这样能保证状态机、审计记录和事务边界集中在核心层。
 
-迁移策略使用 Rust 侧 migration runner，迁移文件随应用打包。首次启动或打开 Workspace 时运行迁移。表结构优先覆盖 PRD addendum 中的 `workspaces`、`workspace_settings`、`issues`、`agent_profiles`、`workspace_agent_overrides`、`agent_sessions`、`session_events`、`issue_actions`、`completion_attempts`。
+迁移策略使用 Rust 侧 migration runner，迁移文件随应用打包。首次启动或打开 Project 时运行迁移。表结构优先覆盖 PRD addendum 中的 `projects`、`project_settings`、`issues`、`agent_profiles`、`project_agent_overrides`、`agent_sessions`、`session_events`、`issue_actions`、`completion_attempts`。
 
 版本核验：`rusqlite` 当前 registry 查询为 `0.40.0`；`tauri-plugin-sql` 当前为 `2.4.0`，但仅作为参考，不作为业务状态写入方案。
 
@@ -191,7 +191,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 2. 建立 TypeScript/Rust lint、typecheck、test、format 脚本。
 3. 建立 Rust Core 模块边界和 Tauri command/error/event 类型合同。
 4. 接入 SQLite migration 与 repository 层。
-5. 实现 Workspace / Issue 状态机基础。
+5. 实现 Project / Issue 状态机基础。
 6. 做 PTY + xterm + Codex Spike。
 7. 接入 AgentSession、SessionEvent、日志文件。
 8. 实现 Review 和 CompletionAttempt / Git 检测闭环。
@@ -213,18 +213,18 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 ### Naming Patterns
 
 **Database Naming Conventions:**
-- SQLite table 使用 `snake_case` 复数名词：`workspaces`、`issues`、`agent_sessions`、`completion_attempts`。
-- SQLite column 使用 `snake_case`：`workspace_id`、`created_at`、`prompt_snapshot`。
+- SQLite table 使用 `snake_case` 复数名词：`projects`、`issues`、`agent_sessions`、`completion_attempts`。
+- SQLite column 使用 `snake_case`：`project_id`、`created_at`、`prompt_snapshot`。
 - 主键统一为 `id`；外键统一为 `{entity}_id`。
 - JSON payload 列统一以 `_json` 结尾：`payload_json`、`changed_files_json`。
 - timestamp 列统一以 `_at` 结尾，保存 ISO 8601 UTC 字符串。
-- index 命名使用 `idx_{table}_{columns}`：`idx_issues_workspace_id_status`。
+- index 命名使用 `idx_{table}_{columns}`：`idx_issues_project_id_status`。
 - unique index 命名使用 `uidx_{table}_{columns}`。
 
 **API / Command Naming Conventions:**
-- 不引入 HTTP API；Tauri command 使用 `snake_case` 动词短语：`create_workspace`、`start_agent_session`、`mark_issue_review`。
-- 前端 command wrapper 使用 `camelCase`：`createWorkspace`、`startAgentSession`。
-- Event name 使用 kebab-case domain event：`workspace-created`、`session-started`、`issue-review-marked`、`completion-failed`。
+- 不引入 HTTP API；Tauri command 使用 `snake_case` 动词短语：`create_project`、`start_agent_session`、`mark_issue_review`。
+- 前端 command wrapper 使用 `camelCase`：`createProject`、`startAgentSession`。
+- Event name 使用 kebab-case domain event：`project-created`、`session-started`、`issue-review-marked`、`completion-failed`。
 - Event payload TypeScript 字段使用 `camelCase`；Rust 内部字段可用 `snake_case`，跨边界序列化必须输出 `camelCase`。
 - 错误码使用 `SCREAMING_SNAKE_CASE`：`AGENT_COMMAND_NOT_EXECUTABLE`、`NO_COMMIT_DETECTED`。
 
@@ -242,7 +242,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 - 前端按 feature + workbench surface 组织，不按纯组件类型堆叠。
 - `src/features/issues/` 放 Issue 看板、卡片、详情弹窗和相关 hooks/store。
 - `src/features/agents/` 放 Session list、Session Header、xterm 容器、Issue Inspector。
-- `src/features/settings/` 放 Workspace Settings 和 Global Settings。
+- `src/features/settings/` 放 Project Settings 和 Global Settings。
 - `src/shared/` 只放跨 feature 复用的 UI primitives、types、i18n、command client、error helpers。
 - 禁止把业务逻辑塞进泛化 `utils`；共享逻辑必须有明确领域名。
 
@@ -293,7 +293,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 **Event System Patterns:**
 - Event 只通知“事实已发生”或“状态已改变”，不发起业务写入。
 - Event name 使用过去式或结果语义：`session-started`、`session-start-failed`、`issue-completed`。
-- Event payload 必须包含可定位实体 ID：`workspaceId`、`issueId`、`sessionId`。
+- Event payload 必须包含可定位实体 ID：`projectId`、`issueId`、`sessionId`。
 - 高频终端输出不逐字符发结构化业务事件；xterm 数据流走专门 PTY channel，SQLite 只记录关键 SessionEvent。
 - Event handler 只刷新相关 core state，不在前端推导业务状态。
 
@@ -347,7 +347,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 
 **Good Examples:**
 - `start_agent_session(issue_id, profile_id, prompt)` 只在 Rust Core 成功启动 PTY 后创建 `agent_sessions` 并把 Issue 改为 `running`。
-- `session-started` event payload 包含 `workspaceId`、`issueId`、`sessionId`，前端收到后刷新对应 Session。
+- `session-started` event payload 包含 `projectId`、`issueId`、`sessionId`，前端收到后刷新对应 Session。
 - `completion_attempts.changed_files_json` 保存 changed files 摘要；原始终端输出写入 Session log 文件。
 - `IssueInspector` 打开时只改变 view state，不卸载 `CodexTerminal`。
 
@@ -395,11 +395,11 @@ redwhisk/
 │   │   ├── activity-router.tsx
 │   │   └── app.css
 │   ├── features/
-│   │   ├── workspace/
-│   │   │   ├── workspace-picker.tsx
-│   │   │   ├── recent-workspaces.tsx
-│   │   │   ├── workspace-store.ts
-│   │   │   └── workspace-commands.ts
+│   │   ├── project/
+│   │   │   ├── project-picker.tsx
+│   │   │   ├── recent-projects.tsx
+│   │   │   ├── project-store.ts
+│   │   │   └── project-commands.ts
 │   │   ├── issues/
 │   │   │   ├── issues-activity.tsx
 │   │   │   ├── issue-board.tsx
@@ -423,10 +423,10 @@ redwhisk/
 │   │   │   ├── terminal-store.ts
 │   │   │   └── codex-terminal.test.tsx
 │   │   └── settings/
-│   │       ├── workspace-settings-activity.tsx
+│   │       ├── project-settings-activity.tsx
 │   │       ├── global-settings-dialog.tsx
 │   │       ├── agent-profile-form.tsx
-│   │       ├── workspace-agent-override-form.tsx
+│   │       ├── project-agent-override-form.tsx
 │   │       ├── diagnostics-panel.tsx
 │   │       └── settings-store.ts
 │   ├── shared/
@@ -473,14 +473,14 @@ redwhisk/
 │   │   ├── app_state.rs
 │   │   ├── commands/
 │   │   │   ├── mod.rs
-│   │   │   ├── workspace_commands.rs
+│   │   │   ├── project_commands.rs
 │   │   │   ├── issue_commands.rs
 │   │   │   ├── agent_commands.rs
 │   │   │   ├── settings_commands.rs
 │   │   │   └── completion_commands.rs
 │   │   ├── core/
 │   │   │   ├── mod.rs
-│   │   │   ├── workspace_service.rs
+│   │   │   ├── project_service.rs
 │   │   │   ├── issue_service.rs
 │   │   │   ├── agent_session_service.rs
 │   │   │   ├── completion_service.rs
@@ -490,7 +490,7 @@ redwhisk/
 │   │   │   ├── mod.rs
 │   │   │   ├── connection.rs
 │   │   │   ├── migrations.rs
-│   │   │   ├── workspace_repository.rs
+│   │   │   ├── project_repository.rs
 │   │   │   ├── issue_repository.rs
 │   │   │   ├── agent_profile_repository.rs
 │   │   │   ├── agent_session_repository.rs
@@ -518,23 +518,23 @@ redwhisk/
 │   │   │   └── event_emitter.rs
 │   │   ├── types/
 │   │   │   ├── mod.rs
-│   │   │   ├── workspace.rs
+│   │   │   ├── project.rs
 │   │   │   ├── issue.rs
 │   │   │   ├── agent.rs
 │   │   │   ├── completion.rs
 │   │   │   └── errors.rs
 │   │   └── testsupport/
 │   │       ├── mod.rs
-│   │       ├── temp_workspace.rs
+│   │       ├── temp_project.rs
 │   │       └── db_fixture.rs
 │   └── tests/
-│       ├── workspace_lifecycle.rs
+│       ├── project_lifecycle.rs
 │       ├── issue_state_machine.rs
 │       ├── agent_session_start.rs
 │       ├── completion_policy.rs
 │       └── git_detection.rs
 ├── e2e/
-│   ├── workspace-open.spec.ts
+│   ├── project-open.spec.ts
 │   ├── issue-run-review.spec.ts
 │   └── completion-summary.spec.ts
 ├── spikes/
@@ -558,7 +558,7 @@ MVP 不提供 HTTP API。前后端边界是 Tauri command/event：
 **Component Boundaries:**
 - `features/issues` 管 Issue 看板、Issue Detail、Run Dialog 和 completed Summary。
 - `features/agents` 管 Agent Session list、Codex terminal、Session Header、Issue Inspector 和 completion confirmation。
-- `features/settings` 管 Workspace Settings、Global Settings、Agent Profile 和 Diagnostics。
+- `features/settings` 管 Project Settings、Global Settings、Agent Profile 和 Diagnostics。
 - `shared/ui` 只能放无业务语义的基础桌面控件。
 - `shared/commands` 和 `shared/events` 是前端接入 Rust Core 的唯一通道。
 
@@ -578,7 +578,7 @@ MVP 不提供 HTTP API。前后端边界是 Tauri command/event：
 ### Requirements to Structure Mapping
 
 **Feature / FR Mapping:**
-- FR-1 至 FR-3 Workspace / Settings：`features/workspace/`、`features/settings/`、`core/workspace_service.rs`、`core/settings_service.rs`、`db/workspace_repository.rs`
+- FR-1 至 FR-3 Project / Settings：`features/project/`、`features/settings/`、`core/project_service.rs`、`core/settings_service.rs`、`db/project_repository.rs`
 - FR-4 至 FR-6 Issue 管理与 IssueAction：`features/issues/`、`core/issue_service.rs`、`core/state_machine.rs`、`db/issue_repository.rs`、`db/event_repository.rs`
 - FR-7 至 FR-9 Agent Profile / prompt：`features/settings/agent-profile-form.tsx`、`features/issues/run-dialog.tsx`、`agent/command_detector.rs`、`db/agent_profile_repository.rs`
 - FR-10 至 FR-12 从 Issue 启动 Session：`features/issues/run-dialog.tsx`、`features/agents/agents-activity.tsx`、`core/agent_session_service.rs`、`agent/pty_manager.rs`
@@ -632,7 +632,7 @@ React Activity -> command client -> Tauri command -> Rust Core service -> reposi
 - 单组件测试 co-located。
 - 跨 feature React 行为测试放 `src/__tests__/`。
 - Rust core/db/git 集成测试放 `src-tauri/tests/`。
-- E2E 测试放 `e2e/`，覆盖 Workspace、Issue Run/Review、Completion Summary。
+- E2E 测试放 `e2e/`，覆盖 Project、Issue Run/Review、Completion Summary。
 - Spike 文档和验证记录放 `spikes/`。
 
 **Asset Organization:**
@@ -673,7 +673,7 @@ Tauri、React、TypeScript、Rust Core、SQLite、PTY/xterm、Git 检测和本�
 ### Requirements Coverage Validation ✅
 
 **Functional Requirements Coverage:**
-FR-1 至 FR-26 均已有结构和架构支撑。Workspace、Issue、Agent Profile、Run Dialog、Agent Session、Codex Native Session、Review、Completion、Summary/Log、Header/Inspector、i18n 都映射到具体模块。
+FR-1 至 FR-26 均已有结构和架构支撑。Project、Issue、Agent Profile、Run Dialog、Agent Session、Codex Native Session、Review、Completion、Summary/Log、Header/Inspector、i18n 都映射到具体模块。
 
 **Non-Functional Requirements Coverage:**
 本地优先、隐私、状态可靠性、审计性、终端性能、完成安全、失败可见性和跨平台目标均已纳入架构。高频终端输出写日志文件，SQLite 保存结构化事实。

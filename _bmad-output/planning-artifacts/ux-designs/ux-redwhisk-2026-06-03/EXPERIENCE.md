@@ -15,25 +15,25 @@ RedWhisk 是跨平台桌面应用，MVP 以 macOS 体验优先验证，同时为
 
 `DESIGN.md` 是视觉身份 reference，本文件只定义信息架构、行为、状态、交互、可访问性和关键流程。体验优先级是：本地工作流可信、Codex 原生交互不中断、状态不误导、界面简洁清新且不像管理后台。
 
-MVP 形态是单窗口桌面工作台。窗口内一级导航为 Activity Bar；所有核心流程围绕一个打开的 Workspace 进行。`DESIGN.md` 中 `{spacing.activity-bar-width}`、`{spacing.sidebar-width}`、`{spacing.header-height}` 和 `{spacing.inspector-width}` 是布局默认尺寸。
+MVP 形态是单窗口桌面工作台。窗口内一级导航为 Activity Bar；所有核心流程围绕一个打开的 Project 进行。`DESIGN.md` 中 `{spacing.activity-bar-width}`、`{spacing.sidebar-width}`、`{spacing.header-height}` 和 `{spacing.inspector-width}` 是布局默认尺寸。
 
 ## Information Architecture
 
 | Surface | Reached from | Purpose |
 | --- | --- | --- |
-| Workspace Picker / Recent Workspace | App cold open / no Workspace loaded | 选择本地 Git Repository，打开最近 Workspace，处理 repo path 不可访问错误 |
-| Issues Activity | Activity Bar `Issues` / Workspace open default | 四泳道本地 Issue 看板，创建 Issue，打开 Issue 详情，启动 Agent |
+| Project Picker / Recent Project | App cold open / no Project loaded | 选择本地 Git Repository，打开最近 Project，处理 repo path 不可访问错误 |
+| Issues Activity | Activity Bar `Issues` / Project open default | 四泳道本地 Issue 看板，创建 Issue，打开 Issue 详情，启动 Agent |
 | Issue Detail Dialog | Issue card click | 编辑 `title` / `description`，查看 Session 关联，执行 Issue 当前可用操作 |
 | Run Dialog | Issue Detail `Run` | 选择 Agent Profile，预览和编辑最终 prompt，确认启动 |
 | Agents Activity | Activity Bar `Agents` / Run success | 查看 Agent Session 列表，使用 Codex Native Session View，执行关联 Issue 操作 |
 | Session Dialog | Agents left sidebar new button | 创建不关联 Issue 的临时 Agent Session |
 | Issue Inspector | Agents Session Header Issue title click | 在不中断 Codex Session 的情况下查看和编辑关联 Issue |
 | Completion Confirmation | Session Header complete action | 展示 Git 摘要、completion option 和可展开 prompt，确认完成尝试 |
-| Workspace Settings | Activity Bar `Settings` | 当前 Workspace 名称、repo path、completion policy、默认 Agent、Workspace override、instructions、日志存储 |
+| Project Settings | Activity Bar `Settings` | 当前 Project 名称、repo path、completion policy、默认 Agent、Project override、instructions、日志存储 |
 | Global Settings | Left-bottom gear / native menu `Settings...` | UI language、全局 Agent Profiles、全局 completion policy、数据目录、日志目录、About / Diagnostics |
 | Summary / Log View | completed Issue / Header / Inspector | 复盘 Issue、Agent Session、CompletionAttempt、commit hash 和日志路径 |
 
-Activity Bar 只包含 `Issues`、`Agents`、`Settings`。不要加入 `Code`、`Diff`、`Git History`、`Terminal` 作为 MVP 一级入口。Global Settings 不在 Activity Bar 中，避免把 Workspace 设置和应用设置混在一起。
+Activity Bar 只包含 `Issues`、`Agents`、`Settings`。不要加入 `Code`、`Diff`、`Git History`、`Terminal` 作为 MVP 一级入口。Global Settings 不在 Activity Bar 中，避免把 Project 设置和应用设置混在一起。
 
 Issues Activity 使用四个常驻泳道：`Backlog`、`Running`、`Review`、`Completed`。四泳道直接对应 Issue 状态，不用彩色状态柱表达。每张 Issue card 只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。
 
@@ -45,7 +45,7 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 
 | Do | Don't |
 | --- | --- |
-| `选择一个 Git 仓库。` | `让我们开始搭建你的高效工作空间！` |
+| `选择一个 Git 仓库。` | `让我们开始搭建你的高效项目空间！` |
 | `未检测到 commit，Issue 保持待验收。` | `完成失败，请重试。` |
 | `Codex 需要你的确认。` | `你的 Agent 正在等待你的协作～` |
 | `Session 已异常退出。` | `出了点小问题。` |
@@ -60,7 +60,7 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 
 | Component | Use | Behavioral rules |
 | --- | --- | --- |
-| Activity Bar | 一级导航 | 固定左侧。点击切换 Issues / Agents / Workspace Settings。当前项保持选中，不自动打开弹窗。左下角 gear 打开 Global Settings。 |
+| Activity Bar | 一级导航 | 固定左侧。点击切换 Issues / Agents / Project Settings。当前项保持选中，不自动打开弹窗。左下角 gear 打开 Global Settings。 |
 | Issue Card | Issues Activity 四泳道 | 点击打开 Issue Detail Dialog。卡片不内联展开。若有关联 Agent Session，显示小型 Agent/Session 标记；若 `attention=requested`，显示 Needs Attention 标记。 |
 | Issue Detail Dialog | Issue 查看/编辑 | 左侧编辑 `title` / `description`，修改即保存。右侧展示 Session 关联和操作。Dialog 关闭不改变 Issue 状态。 |
 | Run Dialog | 从 Issue 启动 Agent | 选择 Agent Profile；显示可编辑最终 prompt；可折叠查看 prompt 来源；显示 working directory 和 default args；不显示 command 可用性或配置继承来源。`Start` 成功后关闭并进入 Agents Activity；失败时留在 Dialog。 |
@@ -76,8 +76,8 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 
 | State | Surface | Treatment |
 | --- | --- | --- |
-| No Workspace | App cold open | 显示最近 Workspace 列表和 `Open Git Repository`。非 Git 目录选择后显示错误，不创建 Workspace。 |
-| Workspace path missing | App open / Workspace Picker | 保留 Workspace 记录，提示 repo path 不可访问，提供重新选择目录和从最近列表移除入口。 |
+| No Project | App cold open | 显示最近 Project 列表和 `Open Git Repository`。非 Git 目录选择后显示错误，不创建 Project。 |
+| Project path missing | App open / Project Picker | 保留 Project 记录，提示 repo path 不可访问，提供重新选择目录和从最近列表移除入口。 |
 | Empty Backlog | Issues Activity | 泳道内显示轻量 empty row：`暂无待办 Issue。` 单一动作 `新建 Issue`。不要大插画。 |
 | Issue backlog | Issue Detail | 显示 `Run`；若无 enabled Agent Profile，`Run` 禁用并提供 `配置 Agent`。 |
 | Run start failed | Run Dialog | Issue 保持 `backlog`。Dialog 内显示失败原因和 `重新尝试` / `取消`。 |
@@ -95,7 +95,7 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 **Keyboard-first but not shortcut-dependent.** RedWhisk 面向开发者，必须支持键盘高效操作，但每个关键动作都要有可见入口。
 
 - `Cmd/Ctrl+K` — [ASSUMPTION] 打开命令面板。MVP PRD 未要求 Command Palette；若不实现，不得让其它流程依赖它。
-- `Cmd/Ctrl+1` / `2` / `3` — [ASSUMPTION] 切换 Issues / Agents / Workspace Settings。
+- `Cmd/Ctrl+1` / `2` / `3` — [ASSUMPTION] 切换 Issues / Agents / Project Settings。
 - `Esc` — 关闭最上层 Dialog / Inspector，不关闭或重启 Codex Session。
 - `Enter` — 在 Dialog 中提交当前主动作；在 Codex Native Session View 中原样传给 Codex。
 - `Cmd/Ctrl+N` — [ASSUMPTION] 在当前 surface 创建对应对象：Issues 中新建 Issue，Agents 中打开 Session Dialog。
@@ -163,8 +163,8 @@ macOS 上保留桌面窗口质感；Windows / Linux 不复制 macOS chrome，但
 
 ### Flow 1 — 林航从本地 Issue 跑起一次 Codex 任务并完成验收
 
-1. 林航打开 RedWhisk，选择一个本地 Git Repository 创建 Workspace。
-2. Workspace 打开后默认进入 Issues Activity，四泳道为空或显示已有 Issue。
+1. 林航打开 RedWhisk，选择一个本地 Git Repository 创建 Project。
+2. Project 打开后默认进入 Issues Activity，四泳道为空或显示已有 Issue。
 3. 他在 `Backlog` 新建 Issue，只填写标题和描述。
 4. 点击 Issue card 打开 Issue Detail Dialog，确认描述后点击 `运行`。
 5. Run Dialog 打开，林航选择 Codex Agent Profile，检查最终 prompt，点击 `Start`。
@@ -196,7 +196,7 @@ Failure: 启动失败 -> Session Dialog 显示错误，不创建 Session，不�
 
 ### Flow 4 — 马骁复盘 completed Issue 和异常 Session
 
-1. 马骁重新打开 RedWhisk，最近 Workspace 自动恢复。
+1. 马骁重新打开 RedWhisk，最近 Project 自动恢复。
 2. Issues Activity 的 Completed 泳道显示已完成 Issue。
 3. 他打开 completed Issue，选择 `查看总结`。
 4. Summary 显示 Issue 信息、Session 时间、CompletionAttempt、commit hash 和日志路径。

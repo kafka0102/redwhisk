@@ -24,13 +24,13 @@ This document provides the complete epic and story breakdown for redwhisk, decom
 
 ### Functional Requirements
 
-FR1: 用户可以选择本地 Git Repository 创建 Workspace；系统必须校验目录是 Git Repository，保存 `workspace_id`、`name`、`repo_path`、`created_at`、`last_opened_at`，创建成功后进入 Issues Activity；非 Git 目录必须被拒绝并展示明确错误。
+FR1: 用户可以选择本地 Git Repository 创建 Project；系统必须校验目录是 Git Repository，保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`，创建成功后进入 Issues Activity；非 Git 目录必须被拒绝并展示明确错误。
 
-FR2: 用户重新打开应用时可以回到最近打开的 Workspace；系统必须更新并持久化 `last_opened_at`，应用重启后展示最近 Workspace 的 Issues Activity；若 `repo_path` 不存在或不可访问，必须展示错误且不删除 Workspace 记录。
+FR2: 用户重新打开应用时可以回到最近打开的 Project；系统必须更新并持久化 `last_opened_at`，应用重启后展示最近 Project 的 Issues Activity；若 `repo_path` 不存在或不可访问，必须展示错误且不删除 Project 记录。
 
-FR3: 系统必须区分当前 Workspace Settings 与 Global Settings；Workspace Settings 位于 Activity Bar 的 `Settings` 并只影响当前 Workspace；Global Settings 通过左下角 gear 或原生顶部菜单打开；两者必须支持 Completion Policy、Agent Profile/Override、日志/数据目录、UI language、About 与 Diagnostics 等配置边界。
+FR3: 系统必须区分当前 Project Settings 与 Global Settings；Project Settings 位于 Activity Bar 的 `Settings` 并只影响当前 Project；Global Settings 通过左下角 gear 或原生顶部菜单打开；两者必须支持 Completion Policy、Agent Profile/Override、日志/数据目录、UI language、About 与 Diagnostics 等配置边界。
 
-FR4: 用户可以在 Workspace 内创建和编辑本地 Issue；Issue 至少保存 `title`、`description`、`status`、`created_at`、`updated_at`；新 Issue 默认为 `backlog`；MVP 不提供 priority、label、assignee、milestone。
+FR4: 用户可以在 Project 内创建和编辑本地 Issue；Issue 至少保存 `title`、`description`、`status`、`created_at`、`updated_at`；新 Issue 默认为 `backlog`；MVP 不提供 priority、label、assignee、milestone。
 
 FR5: 用户点击 Issue 卡片后，系统打开左右两栏 Issue 详情弹窗；左侧展示并可编辑 `title` 和 `description`，右侧展示 Session 关联区和当前 Issue 可执行操作；弹窗不展示 `status` 和 `updated_at` 字段，并按 Issue 状态显示 `Run`、`Open Session` 或无操作。
 
@@ -38,9 +38,9 @@ FR6: 所有改变 Issue 状态的动作必须写入 IssueAction；创建 Issue�
 
 FR7: 系统可以检测本机 `codex` command，并允许手动路径兜底；创建 Codex Agent Profile 时通过用户 login shell 执行 `command -v codex`；command 不可执行时不得保存 enabled Agent Profile。
 
-FR8: 用户可以创建全局 Agent Profile，并为 Workspace 设置 WorkspaceAgentOverride；Agent Profile 至少保存 `name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled`；Workspace override 可覆盖默认参数、默认 skill、prompt 模板和 enabled 状态；Run Dialog 使用覆盖后的生效配置。
+FR8: 用户可以创建全局 Agent Profile，并为 Project 设置 ProjectAgentOverride；Agent Profile 至少保存 `name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled`；Project override 可覆盖默认参数、默认 skill、prompt 模板和 enabled 状态；Run Dialog 使用覆盖后的生效配置。
 
-FR9: 用户从 Issue 点击 `Run` 后，Run Dialog 必须展示可编辑最终 prompt；最终 prompt 由 Issue、Workspace、Agent Profile、WorkspaceAgentOverride、默认 skill、prompt 模板和应用补充说明组成；Run Dialog 支持折叠查看 prompt 来源并保存最终 prompt 快照。
+FR9: 用户从 Issue 点击 `Run` 后，Run Dialog 必须展示可编辑最终 prompt；最终 prompt 由 Issue、Project、Agent Profile、ProjectAgentOverride、默认 skill、prompt 模板和应用补充说明组成；Run Dialog 支持折叠查看 prompt 来源并保存最终 prompt 快照。
 
 FR10: 用户确认 Run Dialog 后，系统尝试启动 Agent 进程；只有进程成功启动后，才创建 Agent Session、写入 SessionEvent，并将 Issue 改为 `running`；启动失败时 Issue 保持 `backlog`，失败原因展示在 Run Dialog 中。
 
@@ -48,7 +48,7 @@ FR11: 系统必须保存 Agent Session 关键元数据和日志索引；Agent Se
 
 FR12: MVP 中一个 Issue 最多关联一个 Agent Session；已有关联 Agent Session 的 Issue 不允许创建第二个并列 Agent Session；异常退出后优先提供 resume 或日志复盘路径，多 Session Attempt 不进入 MVP。
 
-FR13: Agents Activity 必须展示当前 Workspace 的 Agent Session 列表和当前 Codex Native Session View；左侧按 `Running` 和 `Completed` 分组，`Running` 按 `last_active_at` 排序，`Completed` 展示 `closed`、`crashed` 或 `stopped` 的最近 20 条；列表项展示 Issue title 或临时 Session title、Agent 类型和运行状态。
+FR13: Agents Activity 必须展示当前 Project 的 Agent Session 列表和当前 Codex Native Session View；左侧按 `Running` 和 `Completed` 分组，`Running` 按 `last_active_at` 排序，`Completed` 展示 `closed`、`crashed` 或 `stopped` 的最近 20 条；列表项展示 Issue title 或临时 Session title、Agent 类型和运行状态。
 
 FR14: 系统必须通过内嵌 PTY 和 xterm.js 运行 Codex CLI；用户输入直接进入 Codex TUI；右侧工作区能显示 Codex TUI 的主要界面、颜色和交互；Enter、方向键、Ctrl+C、粘贴、resize 和退出检测必须在 Spike 中验证。
 
@@ -64,7 +64,7 @@ FR19: 系统必须显式展示异常 Agent Session，而不是伪装成完成；
 
 FR20: 用户可以在 `manual` 策略下手动完成 Issue，也可以在 `agent_auto_commit` 且无未提交改动时直接完成；确认后系统关闭 Agent Session，将 Agent Session 标记为 `closed`，将 Issue 标记为 `completed`，并写入 IssueAction。
 
-FR21: 用户可以在 `agent_auto_commit` 策略下让当前 Codex 只提交本 Issue 相关改动并完成 Issue；系统必须检测 Issue、Session、Workspace、Git status、HEAD、changed files 和策略配置；用户确认后把 completion prompt 发送给当前 Codex Agent Session；检测到新 commit 后记录 hash 并完成 Issue，未检测到 commit 时保持 `review`。
+FR21: 用户可以在 `agent_auto_commit` 策略下让当前 Codex 只提交本 Issue 相关改动并完成 Issue；系统必须检测 Issue、Session、Project、Git status、HEAD、changed files 和策略配置；用户确认后把 completion prompt 发送给当前 Codex Agent Session；检测到新 commit 后记录 hash 并完成 Issue，未检测到 commit 时保持 `review`。
 
 FR22: 每次完成尝试必须写入 CompletionAttempt；至少记录 `issue_id`、`session_id`、`option`、`head_before`、`head_after`、`changed_files_json`、`commit_hash`、`result`、`error`、`created_at`；遇到 merge/rebase/cherry-pick 进行中状态时提示手动处理，不自动完成。
 
@@ -103,7 +103,7 @@ NFR10: 范围控制。MVP 不实现完整代码浏览、完整 Diff、Git 历史
 - 使用官方 `create-tauri-app` 的 `react-ts` starter 初始化项目；首个 implementation story 应执行 `pnpm create tauri-app@latest . --template react-ts`，并补齐 lint、typecheck、format、test 脚本。
 - 前端使用 React + TypeScript；桌面核心使用 Rust；Vite 负责前端开发服务器和构建；Tauri CLI 负责桌面应用开发、打包和 Rust 集成。
 - SQLite 只能由 Rust Core 读写，React 不直接访问数据库；Rust Core 通过 repository/service 层封装数据访问和状态机事务。
-- 迁移文件随应用打包，首次启动或打开 Workspace 时运行 migration；表结构至少覆盖 Workspace、WorkspaceSettings、Issue、AgentProfile、WorkspaceAgentOverride、AgentSession、SessionEvent、IssueAction、CompletionAttempt。
+- 迁移文件随应用打包，首次启动或打开 Project 时运行 migration；表结构至少覆盖 Project、ProjectSettings、Issue、AgentProfile、ProjectAgentOverride、AgentSession、SessionEvent、IssueAction、CompletionAttempt。
 - Tauri command/event 是唯一前后端通信边界；不引入 HTTP REST/GraphQL；command 用于请求动作，event 用于通知状态变化和 Session 输出索引更新。
 - Command 错误结构必须包含 `code`、`message`，可选 `details`；错误码使用 `SCREAMING_SNAKE_CASE`。
 - 前后端类型合同由 Rust `serde` 模型生成 TypeScript 类型，避免手写漂移；跨边界 DTO 显式建模。
@@ -112,9 +112,9 @@ NFR10: 范围控制。MVP 不实现完整代码浏览、完整 Diff、Git 历史
 - 原始终端输出按 Session 写入日志文件；SQLite 只保存关键 SessionEvent、摘要和日志路径。
 - Agent command 检测、Codex 启动、PTY 输入、Git status/HEAD 检测、日志路径创建都由 Rust Core 校验后执行；React 不能直接调用 shell 执行任意命令。
 - Completion Policy 只能通过 completion prompt 与 Git 检测闭环；应用层不得静默提交。
-- Event name 使用 kebab-case domain event，例如 `workspace-created`、`session-started`、`issue-review-marked`、`completion-failed`；event payload 必须包含可定位实体 ID。
+- Event name 使用 kebab-case domain event，例如 `project-created`、`session-started`、`issue-review-marked`、`completion-failed`；event payload 必须包含可定位实体 ID。
 - SQLite 表名使用 `snake_case` 复数名词，列名使用 `snake_case`，timestamp 列以 `_at` 结尾并保存 ISO 8601 UTC 字符串。
-- 前端按 Activity/feature 组织：`features/workspace`、`features/issues`、`features/agents`、`features/settings`；Rust 按 `commands/core/db/agent/git/logs/events/types` 分层组织。
+- 前端按 Activity/feature 组织：`features/project`、`features/issues`、`features/agents`、`features/settings`；Rust 按 `commands/core/db/agent/git/logs/events/types` 分层组织。
 - Spike 1 必须验证 Embedded Codex Terminal：启动 Codex、继承 login shell PATH、xterm 显示、键盘输入、Ctrl+C、粘贴、resize、退出检测和日志写入。
 - Spike 2 必须验证 Codex Session Resume 与 completion prompt 注入：保存或推断 Codex session id、同 PTY 后续 prompt、completion prompt 注入、异常后的 resume 或降级。
 - Spike 3 必须验证 Git Commit Detection：completion 前后记录 HEAD/status/changed files，HEAD 改变时记录 commit hash，未改变时保持 `review` 并记录 `no_commit_detected`。
@@ -180,14 +180,14 @@ UX-DR28: Command Palette 和快捷键属于 UX 假设，核心流程不得依赖
 
 ### FR Coverage Map
 
-FR1: Epic 1 - 创建 Git Workspace
-FR2: Epic 1 - 打开最近 Workspace
-FR3: Epic 1 - Workspace Settings 与 Global Settings
+FR1: Epic 1 - 创建 Git Project
+FR2: Epic 1 - 打开最近 Project
+FR3: Epic 1 - Project Settings 与 Global Settings
 FR4: Epic 1 - 创建和编辑 Issue
 FR5: Epic 1 - Issue 详情弹窗
 FR6: Epic 1 - IssueAction 审计记录
 FR7: Epic 1 - Codex command 检测
-FR8: Epic 1 - Agent Profile 与 WorkspaceAgentOverride
+FR8: Epic 1 - Agent Profile 与 ProjectAgentOverride
 FR9: Epic 2 - 最终 prompt 生成与确认
 FR10: Epic 2 - 成功启动后才进入 running
 FR11: Epic 2 - Agent Session 快照和日志索引
@@ -209,8 +209,8 @@ FR26: Epic 1 - zh-CN / en-US 核心文案
 
 ## Epic List
 
-### Epic 1: 本地 Workspace、Issue 与配置基础
-用户可以打开一个本地 Git Repository 作为 Workspace，管理极简本地 Issue，并配置 Workspace / Global Settings、Codex Agent Profile 和基础双语文案，为后续 Agent 工作流建立可信本地基础。
+### Epic 1: 本地 Project、Issue 与配置基础
+用户可以打开一个本地 Git Repository 作为 Project，管理极简本地 Issue，并配置 Project / Global Settings、Codex Agent Profile 和基础双语文案，为后续 Agent 工作流建立可信本地基础。
 **FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR7, FR8, FR26
 
 ### Epic 2: 从 Issue 可靠启动 Codex Session
@@ -229,15 +229,15 @@ FR26: Epic 1 - zh-CN / en-US 核心文案
 用户可以按 manual 或 agent_auto_commit 策略完成 Issue；系统记录 CompletionAttempt、检测 commit hash、避免误完成，并在 completed 后提供 Summary 和 Open Log。
 **FRs covered:** FR20, FR21, FR22, FR23, FR24
 
-## Epic 1: 本地 Workspace、Issue 与配置基础
+## Epic 1: 本地 Project、Issue 与配置基础
 
-用户可以打开一个本地 Git Repository 作为 Workspace，管理极简本地 Issue，并配置 Workspace / Global Settings、Codex Agent Profile 和基础双语文案，为后续 Agent 工作流建立可信本地基础。
+用户可以打开一个本地 Git Repository 作为 Project，管理极简本地 Issue，并配置 Project / Global Settings、Codex Agent Profile 和基础双语文案，为后续 Agent 工作流建立可信本地基础。
 
 ### Story 1.1: 初始化 RedWhisk 桌面工作台骨架
 
 As a 本地开发者,
 I want 能启动 RedWhisk 桌面应用并看到基础工作台壳,
-So that 我可以在一个可信的本地桌面入口中继续配置 Workspace 和 Issue.
+So that 我可以在一个可信的本地桌面入口中继续配置 Project 和 Issue.
 
 **Requirements:** 架构 starter template、pnpm/no Turbo；UX-DR5、UX-DR9、NFR7
 
@@ -261,7 +261,7 @@ So that 我可以在一个可信的本地桌面入口中继续配置 Workspace �
 ### Story 1.2: 建立本地数据存储和核心命令边界
 
 As a RedWhisk 用户,
-I want 应用把本地 Workspace 和 Issue 数据可靠保存在本机,
+I want 应用把本地 Project 和 Issue 数据可靠保存在本机,
 So that 我重新打开应用时能继续之前的工作流.
 
 **Requirements:** NFR1、NFR2、NFR3；架构 SQLite/Rust Core、Tauri command/event、错误结构、migration 边界
@@ -283,59 +283,59 @@ So that 我重新打开应用时能继续之前的工作流.
 **Then** 错误结构包含 `code`、`message` 和可选 `details`
 **And** 错误码使用 `SCREAMING_SNAKE_CASE`
 
-### Story 1.3: 创建 Git Workspace
+### Story 1.3: 创建 Git Project
 
 As a 本地开发者,
-I want 选择一个本地 Git Repository 创建 Workspace,
+I want 选择一个本地 Git Repository 创建 Project,
 So that RedWhisk 能以该仓库作为 Issue 和 Agent 工作流边界.
 
-**Requirements:** FR1、NFR1、NFR2；架构 `workspaces` 表、Rust Core Git 校验
+**Requirements:** FR1、NFR1、NFR2；架构 `projects` 表、Rust Core Git 校验
 
 **Acceptance Criteria:**
 
-**Given** 用户没有打开 Workspace
+**Given** 用户没有打开 Project
 **When** 用户选择一个本地 Git Repository
 **Then** Rust Core 校验该目录是 Git Repository
-**And** 如 schema 尚未存在则通过 migration 创建 `workspaces` 表，并保存 `workspace_id`、`name`、`repo_path`、`created_at`、`last_opened_at`
+**And** 如 schema 尚未存在则通过 migration 创建 `projects` 表，并保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`
 
 **Given** 用户选择非 Git 目录
 **When** Rust Core 校验失败
-**Then** 系统拒绝创建 Workspace
-**And** UI 显示明确错误，且不写入有效 Workspace 记录
+**Then** 系统拒绝创建 Project
+**And** UI 显示明确错误，且不写入有效 Project 记录
 
-**Given** Workspace 创建成功
+**Given** Project 创建成功
 **When** command 返回成功
-**Then** 应用进入该 Workspace 的 Issues Activity
+**Then** 应用进入该 Project 的 Issues Activity
 **And** Activity Bar 中 `Issues` 处于选中状态
 
-### Story 1.4: 打开最近 Workspace 并处理路径异常
+### Story 1.4: 打开最近 Project 并处理路径异常
 
 As a 本地开发者,
-I want 重新打开 RedWhisk 时回到最近 Workspace,
+I want 重新打开 RedWhisk 时回到最近 Project,
 So that 我可以继续之前的本地任务流而不用重新选择仓库.
 
 **Requirements:** FR2、NFR1、NFR6
 
 **Acceptance Criteria:**
 
-**Given** 用户曾成功打开 Workspace
+**Given** 用户曾成功打开 Project
 **When** 应用重启
-**Then** 系统读取最近 Workspace
-**And** 展示该 Workspace 的 Issues Activity
+**Then** 系统读取最近 Project
+**And** 展示该 Project 的 Issues Activity
 
-**Given** 最近 Workspace 的 `repo_path` 不存在或不可访问
-**When** 应用尝试恢复 Workspace
+**Given** 最近 Project 的 `repo_path` 不存在或不可访问
+**When** 应用尝试恢复 Project
 **Then** UI 显示明确错误
-**And** 不删除 Workspace 记录
+**And** 不删除 Project 记录
 
-**Given** 用户重新打开某个 Workspace
+**Given** 用户重新打开某个 Project
 **When** 打开成功
 **Then** 系统更新并持久化 `last_opened_at`
 
 ### Story 1.5: 创建和编辑本地 Issue
 
 As a 本地开发者,
-I want 在 Workspace 内创建和编辑极简 Issue,
+I want 在 Project 内创建和编辑极简 Issue,
 So that 我可以把本地开发任务作为 Agent 工作流入口.
 
 **Requirements:** FR4、NFR1、NFR2；架构 `issues` 表
@@ -366,7 +366,7 @@ So that 我可以快速理解本地任务状态并编辑任务内容.
 
 **Acceptance Criteria:**
 
-**Given** Workspace 已打开
+**Given** Project 已打开
 **When** 用户进入 Issues Activity
 **Then** UI 显示 `Backlog`、`Running`、`Review`、`Completed` 四个常驻泳道
 **And** Issue card 只展示 `title`、`status`、`updated_at` 和可选 Session/attention 标记
@@ -406,13 +406,13 @@ So that 我能复盘本地任务发生过什么.
 **Then** 不写入成功类 IssueAction
 **And** UI 显示失败原因
 
-### Story 1.8: 配置 Codex Agent Profile 和 Workspace Override
+### Story 1.8: 配置 Codex Agent Profile 和 Project Override
 
 As a AI Coding 用户,
-I want 配置全局 Codex Agent Profile 并在 Workspace 中覆盖部分配置,
+I want 配置全局 Codex Agent Profile 并在 Project 中覆盖部分配置,
 So that 不同仓库可以复用或调整 Codex 启动方式.
 
-**Requirements:** FR7、FR8、NFR2、NFR6；架构 `agent_profiles` 和 `workspace_agent_overrides` 表、login shell command 检测
+**Requirements:** FR7、FR8、NFR2、NFR6；架构 `agent_profiles` 和 `project_agent_overrides` 表、login shell command 检测
 
 **Acceptance Criteria:**
 
@@ -426,25 +426,25 @@ So that 不同仓库可以复用或调整 Codex 启动方式.
 **Then** command 可执行时允许保存 enabled Agent Profile
 **And** command 不可执行时不得保存 enabled Agent Profile
 
-**Given** Workspace 已打开
-**When** 用户设置 WorkspaceAgentOverride
-**Then** 如 schema 尚未存在则通过 migration 创建 `workspace_agent_overrides` 表，并可以覆盖 `default_args`、`default_skill`、`prompt_template`、`enabled`
-**And** override 只影响当前 Workspace
+**Given** Project 已打开
+**When** 用户设置 ProjectAgentOverride
+**Then** 如 schema 尚未存在则通过 migration 创建 `project_agent_overrides` 表，并可以覆盖 `default_args`、`default_skill`、`prompt_template`、`enabled`
+**And** override 只影响当前 Project
 
-### Story 1.9: 实现 Workspace Settings、Global Settings 与基础 i18n
+### Story 1.9: 实现 Project Settings、Global Settings 与基础 i18n
 
 As a RedWhisk 用户,
-I want 区分 Workspace 设置和全局设置，并能切换核心 UI 文案语言,
+I want 区分 Project 设置和全局设置，并能切换核心 UI 文案语言,
 So that 我可以清楚知道配置作用范围并使用熟悉语言.
 
-**Requirements:** FR3、FR26、NFR8；UX-DR5、UX-DR18；架构 `workspace_settings` 表
+**Requirements:** FR3、FR26、NFR8；UX-DR5、UX-DR18；架构 `project_settings` 表
 
 **Acceptance Criteria:**
 
-**Given** Workspace 已打开
+**Given** Project 已打开
 **When** 用户点击 Activity Bar 的 `Settings`
-**Then** 如 schema 尚未存在则通过 migration 创建 `workspace_settings` 表，并打开 Workspace Settings
-**And** 只显示影响当前 Workspace 的名称、`repo_path`、completion policy、默认 Agent Profile、WorkspaceAgentOverride、项目 instructions、日志和 Session 存储信息
+**Then** 如 schema 尚未存在则通过 migration 创建 `project_settings` 表，并打开 Project Settings
+**And** 只显示影响当前 Project 的名称、`repo_path`、completion policy、默认 Agent Profile、ProjectAgentOverride、项目 instructions、日志和 Session 存储信息
 
 **Given** 用户点击左下角 gear 或原生菜单 Settings
 **When** Global Settings 打开
@@ -500,7 +500,7 @@ So that 我可以在启动 Agent 前确认 Codex 将收到的任务上下文.
 **Then** 系统打开 Run Dialog
 **And** Dialog 显示 Agent Profile 选择、working directory、default args、`Cancel` 和 `Start`
 
-**Given** Workspace 存在 Agent Profile 和 WorkspaceAgentOverride
+**Given** Project 存在 Agent Profile 和 ProjectAgentOverride
 **When** Run Dialog 打开
 **Then** 系统使用覆盖后的生效配置生成最终 prompt
 **And** 可折叠查看 prompt 来源，包括 Issue description、default skill、prompt template、app instructions
@@ -738,7 +738,7 @@ So that 我可以快速回到当前正在运行或最近结束的 Agent 工作.
 
 **Acceptance Criteria:**
 
-**Given** Workspace 中存在多个 AgentSession
+**Given** Project 中存在多个 AgentSession
 **When** 用户打开 Agents Activity
 **Then** 左侧 Session list 显示 `Running` 和 `Completed` 分组
 **And** `Running` 只展示 `status=running` 的 Session
@@ -832,7 +832,7 @@ So that 我可以临时询问或操作当前仓库而不创建 Issue.
 
 As a 本地开发者,
 I want 从 Session Dialog 启动临时 Codex Session,
-So that 我可以在当前 Workspace 中使用 Codex 而不影响任何 Issue.
+So that 我可以在当前 Project 中使用 Codex 而不影响任何 Issue.
 
 **Requirements:** FR16、FR11、NFR2、NFR6
 
@@ -840,7 +840,7 @@ So that 我可以在当前 Workspace 中使用 Codex 而不影响任何 Issue.
 
 **Given** Session Dialog 已填写 `title`、`agent_profile` 和 `prompt`
 **When** 用户点击 `Start`
-**Then** Rust Core 使用当前 Workspace `repo_path` 作为 working directory 启动 Agent 进程
+**Then** Rust Core 使用当前 Project `repo_path` 作为 working directory 启动 Agent 进程
 **And** 只有进程成功启动后才创建 AgentSession
 
 **Given** 临时 AgentSession 创建成功
@@ -1074,7 +1074,7 @@ So that 我可以明确结束一个已经人工确认的任务.
 **Acceptance Criteria:**
 
 **Given** Issue 状态为 `review` 且 AgentSession 为 `running`
-**When** Workspace 或 Global completion policy 生效值为 `manual`
+**When** Project 或 Global completion policy 生效值为 `manual`
 **Then** Session Header 显示 `Complete Manually`
 
 **Given** 用户点击 `Complete Manually` 并确认
@@ -1126,7 +1126,7 @@ So that 我能在提交前看到 Git 摘要并避免误提交.
 **Then** Session Header 显示 `Complete with Agent Commit`
 
 **Given** 用户点击 `Complete with Agent Commit`
-**When** Rust Core 检测当前 Issue、AgentSession、Workspace、HEAD、Git status 和 changed files
+**When** Rust Core 检测当前 Issue、AgentSession、Project、HEAD、Git status 和 changed files
 **Then** 系统打开 Completion Confirmation
 **And** 面板展示 Git 摘要、changed files 数量、当前 HEAD 和完成选项
 
@@ -1297,8 +1297,8 @@ So that MVP 的核心信任链路可演示.
 
 **Acceptance Criteria:**
 
-**Given** 一个本地 Git Repository Workspace
-**When** 验证者连续执行 5 次 Workspace、Issue、Run、Codex 交互、Mark Review、completed 流程
+**Given** 一个本地 Git Repository Project
+**When** 验证者连续执行 5 次 Project、Issue、Run、Codex 交互、Mark Review、completed 流程
 **Then** 不出现 Issue 状态与 AgentSession 状态不一致导致无法继续的情况
 **And** 每次完成均可找到 IssueAction 和 SessionEvent
 

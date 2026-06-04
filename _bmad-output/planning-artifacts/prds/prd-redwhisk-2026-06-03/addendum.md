@@ -10,12 +10,12 @@
 ## 2. 已冻结的 MVP 判断
 
 - 产品定位：VS Code 形态的 Agent 工作台，不是桌面版 Agent Kanban。
-- 核心闭环：Git Workspace -> 本地 Issue -> Run Codex -> 内嵌 Codex Session -> Mark Review -> 继续修正或完成 -> Summary/Log。
+- 核心闭环：Git Project -> 本地 Issue -> Run Codex -> 内嵌 Codex Session -> Mark Review -> 继续修正或完成 -> Summary/Log。
 - 首个 Agent：Codex。
 - MVP 必须内嵌终端，不接受外部终端作为主路径。
 - Issue 与 Agent Session 是分离的一等实体，通过关联关系和跳转联动。
 - MVP 保持一 Issue 一 Agent Session。
-- Agent Session 可以不关联 Issue，用于当前 Workspace 下的临时 Codex 交互；临时 Agent Session 不参与 Issue 状态流转和 Completion Policy。
+- Agent Session 可以不关联 Issue，用于当前 Project 下的临时 Codex 交互；临时 Agent Session 不参与 Issue 状态流转和 Completion Policy。
 - Issue 状态：`backlog`、`running`、`review`、`completed`。
 - Agent Session 状态：`running`、`closed`、`crashed`、`stopped`。`crashed` 表示 Codex 进程异常退出；`stopped` 表示应用生命周期中断后原 `running` PTY 无法恢复。
 - Agents Activity 左侧 Session 展示分组固定包含 `Running` 和 `Completed`，不按 `Review` 分组。
@@ -29,9 +29,9 @@
 | 模块 | MVP 职责 | 明确不做 |
 | --- | --- | --- |
 | Tauri Shell | 桌面应用外壳、窗口生命周期、文件夹选择、基础设置入口、前后端连接 | 多窗口工作区、插件宿主、云同步 |
-| React Workbench | Activity Bar、Issues Activity、Agents Activity、Workspace Settings、Run Dialog、Session Dialog、Issue Inspector、xterm 容器 | 完整代码编辑器、完整 Git GUI、复杂看板字段 |
-| Rust Core | Workspace 校验、Agent command 检测、PTY 进程管理、AgentAdapter、Git status/HEAD 检测、状态变化、SQLite 写入 | 直接自动提交、复杂 merge/rebase、长期后台 daemon |
-| SQLite Store | Workspace、Issue、AgentProfile、AgentSession、SessionEvent、IssueAction、CompletionAttempt 等结构化事实 | 逐字符终端日志、跨设备同步 |
+| React Workbench | Activity Bar、Issues Activity、Agents Activity、Project Settings、Run Dialog、Session Dialog、Issue Inspector、xterm 容器 | 完整代码编辑器、完整 Git GUI、复杂看板字段 |
+| Rust Core | Project 校验、Agent command 检测、PTY 进程管理、AgentAdapter、Git status/HEAD 检测、状态变化、SQLite 写入 | 直接自动提交、复杂 merge/rebase、长期后台 daemon |
+| SQLite Store | Project、Issue、AgentProfile、AgentSession、SessionEvent、IssueAction、CompletionAttempt 等结构化事实 | 逐字符终端日志、跨设备同步 |
 | Log Files | 保存原始终端输出，按 Agent Session 组织日志路径 | 结构化查询、富文本渲染 |
 | CodexAdapter | 启动 Codex、写入 prompt、resume、注入 completion prompt、解析基础事件 | 重写 Codex UI、完全可靠理解 TUI 所有状态 |
 
@@ -41,8 +41,8 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 
 | UI 动作 | Tauri command | Core 输出事件 | 持久化记录 |
 | --- | --- | --- | --- |
-| 创建 Workspace | `create_workspace(repo_path)` | `workspace_created` | Workspace、WorkspaceSettings |
-| 创建 Issue | `create_issue(workspace_id, input)` | `issue_created` | Issue、IssueAction |
+| 创建 Project | `create_project(repo_path)` | `project_created` | Project、ProjectSettings |
+| 创建 Issue | `create_issue(project_id, input)` | `issue_created` | Issue、IssueAction |
 | 保存 Agent Profile | `save_agent_profile(input)` | `agent_profile_saved` | AgentProfile |
 | 测试 command | `test_agent_command(command)` | `agent_command_tested` | 可选 IssueAction 或 AuditLog |
 | 启动 Agent Session | `start_agent_session(issue_id, profile_id, prompt)` | `session_started` 或 `session_start_failed` | AgentSession、SessionEvent、IssueAction |
@@ -55,11 +55,11 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 
 | 表 | 关键字段 | 说明 |
 | --- | --- | --- |
-| `workspaces` | `id`、`name`、`repo_path`、`created_at`、`last_opened_at` | Git Repository 入口 |
-| `workspace_settings` | `workspace_id`、`completion_policy`、`default_agent_profile_id`、`locale` | Workspace 级设置 |
-| `issues` | `id`、`workspace_id`、`title`、`description`、`status`、`created_at`、`updated_at` | 极简本地 Issue |
+| `projects` | `id`、`name`、`repo_path`、`created_at`、`last_opened_at` | Git Repository 入口 |
+| `project_settings` | `project_id`、`completion_policy`、`default_agent_profile_id`、`locale` | Project 级设置 |
+| `issues` | `id`、`project_id`、`title`、`description`、`status`、`created_at`、`updated_at` | 极简本地 Issue |
 | `agent_profiles` | `id`、`name`、`agent_type`、`command`、`default_args`、`default_skill`、`prompt_template`、`enabled` | 全局 Agent 配置 |
-| `workspace_agent_overrides` | `workspace_id`、`agent_profile_id`、覆盖字段 | Workspace 级覆盖 |
+| `project_agent_overrides` | `project_id`、`agent_profile_id`、覆盖字段 | Project 级覆盖 |
 | `agent_sessions` | `id`、`issue_id`、`title`、`agent_profile_id`、`codex_session_id`、`status`、`attention`、`working_dir`、`command_snapshot`、`prompt_snapshot`、`log_path`、`last_active_at`、`started_at`、`closed_at` | 一 Issue 一 Agent Session；`issue_id` 可为空表示临时 Agent Session |
 | `session_events` | `id`、`session_id`、`event_type`、`payload_json`、`created_at` | Agent Session 关键事件 |
 | `issue_actions` | `id`、`issue_id`、`action_type`、`payload_json`、`created_at` | Issue 状态和用户动作审计 |
@@ -85,7 +85,7 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 
 ## 7. React IA 冻结口径
 
-- Activity Bar 只包含 `Issues`、`Agents`、`Settings`；`Settings` 指 Workspace Settings。
+- Activity Bar 只包含 `Issues`、`Agents`、`Settings`；`Settings` 指 Project Settings。
 - Global Settings 通过左下角 gear 或原生顶部菜单打开。
 - Issues Activity 使用 `Backlog`、`Running`、`Review`、`Completed` 四泳道。
 - Issue 卡片只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。
@@ -157,7 +157,7 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 | Milestone | 用户可见结果 | 必须完成 | 暂不包含 |
 | --- | --- | --- | --- |
 | M0 - Shell Spike | Tauri 窗口里能跑 Codex TUI | xterm、PTY、resize、输入输出、日志 | Issue、数据库、completion |
-| M1 - Local Workspace Issues | 能创建 Git Workspace 和本地 Issue | SQLite、Workspace 校验、Issue CRUD、Issues Activity | Agent Profile 覆盖、review |
+| M1 - Local Project Issues | 能创建 Git Project 和本地 Issue | SQLite、Project 校验、Issue CRUD、Issues Activity | Agent Profile 覆盖、review |
 | M2 - Run Issue with Codex | 能从 Issue 启动 Codex Session | Agent Profile、Run Dialog、Agent Session 创建、Issue -> `running` | completion、resume |
 | M3 - Review Loop | 能 Mark Review 并继续在同一 Codex 修正 | Session Header、Issue Inspector、attention、review 保持、Session 日志 | auto commit |
 | M4 - Complete Loop | 能通过 manual 或 agent_auto_commit 完成 Issue | completion prompt、Git 检测、commit hash、Agent Session closed | PR/MR、完整 Diff |
