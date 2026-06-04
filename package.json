@@ -1,0 +1,44 @@
+{
+  "name": "redwhisk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm typecheck && vite build",
+    "format": "prettier --write .vscode/extensions.json index.html package.json pnpm-lock.yaml prettier.config.mjs eslint.config.js vite.config.ts vitest.config.ts tsconfig.json tsconfig.node.json \"src/**/*.{ts,tsx,css}\" src-tauri/tauri.conf.json \"src-tauri/capabilities/**/*.json\"",
+    "lint": "eslint src eslint.config.js vite.config.ts vitest.config.ts",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "lucide-react": "^1.17.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.8.3",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.60.1",
+    "vite": "^7.0.4",
+    "vitest": "^4.1.8"
+  }
+}
