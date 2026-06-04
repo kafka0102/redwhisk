@@ -1,6 +1,10 @@
+---
+baseline_commit: d40a9d56a916a27b2e8696d9f1937d103c9245ee
+---
+
 # Story 1.1: 初始化 RedWhisk 桌面工作台骨架
 
-Status: ready-for-dev
+Status: review
 
 <!-- 说明：可在 dev-story 前运行 validate-create-story 做质量检查。 -->
 
@@ -22,38 +26,38 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 初始化 Tauri + React + TypeScript 骨架 (AC: 1)
-  - [ ] 在仓库根目录运行 `pnpm create tauri-app@latest . --template react-ts`.
-  - [ ] 保留 Tauri starter 的 `src-tauri/` Rust 桌面壳和 Vite React 前端结构.
-  - [ ] 不引入 Turbo, monorepo 拆分或云端框架.
-- [ ] 补齐基础工程脚本和配置 (AC: 7)
-  - [ ] 在 `package.json` 提供 `format`、`lint`、`typecheck`、`test`、`build`、`tauri`/`dev` 类脚本.
-  - [ ] 添加或确认 `eslint.config.js`、`prettier.config.mjs`、`vitest.config.ts`、`tsconfig*.json` 可支撑脚本运行.
-  - [ ] 若 starter 默认脚本不足, 只补当前 story 所需最小工具链.
-- [ ] 建立 Project Home 首屏 (AC: 2, 3, 4)
-  - [ ] 新建 `src/features/project/project-home.tsx`.
-  - [ ] 新建 `src/features/project/project-card-grid.tsx`.
-  - [ ] 新建 `src/features/project/project-card.tsx`.
-  - [ ] 新建 `src/features/project/create-project-card.tsx`.
-  - [ ] Project Home 渲染 mock/静态 Project cards 和最后一个 `+` 创建 card.
-  - [ ] 未选择 Project 前不得渲染 Activity Bar.
-- [ ] 建立 Project 工作台壳 (AC: 5, 6)
-  - [ ] 新建或整理 `src/app/app.tsx`、`src/app/app-shell.tsx`、`src/app/activity-router.tsx`、`src/app/app.css`.
-  - [ ] 通过本地 React state 模拟选择 Project 后进入工作台.
-  - [ ] Activity Bar 只显示 `Issues`、`Agents`、`Settings`.
-  - [ ] 默认选中 `Issues`, 业务区域显示克制空态.
-- [ ] 建立基础样式和可访问性底线 (AC: 2-6)
-  - [ ] 使用自建 CSS/token 层, 不引入大型管理后台组件库.
-  - [ ] Project card 和 Activity Bar 控件支持键盘 focus.
-  - [ ] Activity Bar 图标 hit target 不小于 40px; 普通控件 hit target 不小于 28px.
-  - [ ] 使用克制圆角: 小控件 3px, 按钮和 card 5px, 不做大圆角 pill 文本.
-- [ ] 验证 (AC: 1-7)
-  - [ ] 运行 `pnpm format`.
-  - [ ] 运行 `pnpm lint`.
-  - [ ] 运行 `pnpm typecheck`.
-  - [ ] 运行 `pnpm test`.
-  - [ ] 运行 `pnpm build`.
-  - [ ] 若 Rust/Tauri 初始化后提供可用 Rust 检查, 运行 `cd src-tauri && cargo test`.
+- [x] 初始化 Tauri + React + TypeScript 骨架 (AC: 1)
+  - [x] 在仓库根目录运行 `pnpm create tauri-app@latest . --template react-ts`.
+  - [x] 保留 Tauri starter 的 `src-tauri/` Rust 桌面壳和 Vite React 前端结构.
+  - [x] 不引入 Turbo, monorepo 拆分或云端框架.
+- [x] 补齐基础工程脚本和配置 (AC: 7)
+  - [x] 在 `package.json` 提供 `format`、`lint`、`typecheck`、`test`、`build`、`tauri`/`dev` 类脚本.
+  - [x] 添加或确认 `eslint.config.js`、`prettier.config.mjs`、`vitest.config.ts`、`tsconfig*.json` 可支撑脚本运行.
+  - [x] 若 starter 默认脚本不足, 只补当前 story 所需最小工具链.
+- [x] 建立 Project Home 首屏 (AC: 2, 3, 4)
+  - [x] 新建 `src/features/project/project-home.tsx`.
+  - [x] 新建 `src/features/project/project-card-grid.tsx`.
+  - [x] 新建 `src/features/project/project-card.tsx`.
+  - [x] 新建 `src/features/project/create-project-card.tsx`.
+  - [x] Project Home 渲染 mock/静态 Project cards 和最后一个 `+` 创建 card.
+  - [x] 未选择 Project 前不得渲染 Activity Bar.
+- [x] 建立 Project 工作台壳 (AC: 5, 6)
+  - [x] 新建或整理 `src/app/app.tsx`、`src/app/app-shell.tsx`、`src/app/activity-router.tsx`、`src/app/app.css`.
+  - [x] 通过本地 React state 模拟选择 Project 后进入工作台.
+  - [x] Activity Bar 只显示 `Issues`、`Agents`、`Settings`.
+  - [x] 默认选中 `Issues`, 业务区域显示克制空态.
+- [x] 建立基础样式和可访问性底线 (AC: 2-6)
+  - [x] 使用自建 CSS/token 层, 不引入大型管理后台组件库.
+  - [x] Project card 和 Activity Bar 控件支持键盘 focus.
+  - [x] Activity Bar 图标 hit target 不小于 40px; 普通控件 hit target 不小于 28px.
+  - [x] 使用克制圆角: 小控件 3px, 按钮和 card 5px, 不做大圆角 pill 文本.
+- [x] 验证 (AC: 1-7)
+  - [x] 运行 `pnpm format`.
+  - [x] 运行 `pnpm lint`.
+  - [x] 运行 `pnpm typecheck`.
+  - [x] 运行 `pnpm test`.
+  - [x] 运行 `pnpm build`.
+  - [x] 若 Rust/Tauri 初始化后提供可用 Rust 检查, 运行 `cd src-tauri && cargo test`.
 
 ## Dev Notes
 
@@ -180,12 +184,79 @@ cd src-tauri && cargo test
 
 ### Agent Model Used
 
-由 dev agent 填写。
+GPT-5 Codex
 
 ### Debug Log References
+
+- 2026-06-04: 使用 `pnpm create tauri-app@latest . --template react-ts --manager pnpm --identifier com.redwhisk.app --yes --force` 初始化骨架；因 `--force` 清空既有项目资产，已恢复 `.agents`、`_bmad`、`docs`、`AGENTS.md` 等非本 story 文件。
+- 2026-06-04: 先添加 `src/app/app.test.tsx` 红灯测试，初次 `pnpm test` 失败于 `src/app/app.tsx` 尚不存在，随后实现 Project Home 和 Project workbench 壳。
+- 2026-06-04: 初次 `cargo test` 因本机 Cargo 1.79 无法解析依赖的 Rust 2024 edition 失败；执行 `rustup update stable` 更新到 Rust 1.96 后通过。
+- 2026-06-04: 将 `format` 和 `lint` 脚本范围限定到当前应用骨架与配置文件，避免扫描 BMAD/WDS 资产和 Tauri/Cargo 生成目录。
 
 ### Completion Notes List
 
 - 已完成 create-story 上下文分析，并生成开发实现指南。
+- 已初始化 RedWhisk 的 Tauri 2 + React 19 + TypeScript + Vite 单应用骨架，未引入 Turbo、Redux、路由框架或大型 UI/admin 组件库。
+- 已实现 Project Home 作为冷启动首屏，静态展示本地 Project cards，并保证最后一个 card 为 `+` 创建 Project。
+- 已通过本地 React state 模拟选择 Project 后进入工作台；未选择 Project 前不渲染 Activity Bar，进入工作台后 Activity Bar 仅包含 `Issues`、`Agents`、`Settings`，默认选中 `Issues`。
+- 已建立 light/dark capable CSS tokens、5px card 圆角、48px Activity Bar、40px Activity Bar hit target、键盘 focus 可见状态。
+- 已添加 Vitest + Testing Library 测试覆盖 Project Home 首屏、创建 card 顺序、点击 Project 后默认 Issues 工作台。
+- 已执行并通过验证：`pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`cd src-tauri && cargo test`。
 
 ### File List
+
+- `.gitignore`
+- `.vscode/extensions.json`
+- `eslint.config.js`
+- `index.html`
+- `package.json`
+- `pnpm-lock.yaml`
+- `prettier.config.mjs`
+- `src-tauri/.gitignore`
+- `src-tauri/Cargo.lock`
+- `src-tauri/Cargo.toml`
+- `src-tauri/build.rs`
+- `src-tauri/capabilities/default.json`
+- `src-tauri/icons/128x128.png`
+- `src-tauri/icons/128x128@2x.png`
+- `src-tauri/icons/32x32.png`
+- `src-tauri/icons/Square107x107Logo.png`
+- `src-tauri/icons/Square142x142Logo.png`
+- `src-tauri/icons/Square150x150Logo.png`
+- `src-tauri/icons/Square284x284Logo.png`
+- `src-tauri/icons/Square30x30Logo.png`
+- `src-tauri/icons/Square310x310Logo.png`
+- `src-tauri/icons/Square44x44Logo.png`
+- `src-tauri/icons/Square71x71Logo.png`
+- `src-tauri/icons/Square89x89Logo.png`
+- `src-tauri/icons/StoreLogo.png`
+- `src-tauri/icons/icon.icns`
+- `src-tauri/icons/icon.ico`
+- `src-tauri/icons/icon.png`
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/main.rs`
+- `src-tauri/tauri.conf.json`
+- `src/app/activity-router.tsx`
+- `src/app/app-shell.tsx`
+- `src/app/app.css`
+- `src/app/app.test.tsx`
+- `src/app/app.tsx`
+- `src/features/agents/agents-activity.tsx`
+- `src/features/issues/issues-activity.tsx`
+- `src/features/project/create-project-card.tsx`
+- `src/features/project/project-card-grid.tsx`
+- `src/features/project/project-card.tsx`
+- `src/features/project/project-home.tsx`
+- `src/features/settings/project-settings-activity.tsx`
+- `src/main.tsx`
+- `src/shared/styles/tokens.css`
+- `src/test/setup.ts`
+- `src/vite-env.d.ts`
+- `tsconfig.json`
+- `tsconfig.node.json`
+- `vite.config.ts`
+- `vitest.config.ts`
+
+### Change Log
+
+- 2026-06-04: 初始化 RedWhisk 桌面应用骨架，建立 Project Home 首屏、Project 工作台壳、基础脚本、测试和验证配置。
