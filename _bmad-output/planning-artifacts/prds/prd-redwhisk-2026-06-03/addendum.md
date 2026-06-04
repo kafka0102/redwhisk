@@ -29,7 +29,7 @@
 | 模块 | MVP 职责 | 明确不做 |
 | --- | --- | --- |
 | Tauri Shell | 桌面应用外壳、窗口生命周期、文件夹选择、基础设置入口、前后端连接 | 多窗口工作区、插件宿主、云同步 |
-| React Workbench | Activity Bar、Issues Activity、Agents Activity、Project Settings、Run Dialog、Session Dialog、Issue Inspector、xterm 容器 | 完整代码编辑器、完整 Git GUI、复杂看板字段 |
+| React Workbench | Project Home、Project Card Grid、Activity Bar、Issues Activity、Agents Activity、Project Settings、Run Dialog、Session Dialog、Issue Inspector、xterm 容器 | 完整代码编辑器、完整 Git GUI、复杂看板字段 |
 | Rust Core | Project 校验、Agent command 检测、PTY 进程管理、AgentAdapter、Git status/HEAD 检测、状态变化、SQLite 写入 | 直接自动提交、复杂 merge/rebase、长期后台 daemon |
 | SQLite Store | Project、Issue、AgentProfile、AgentSession、SessionEvent、IssueAction、CompletionAttempt 等结构化事实 | 逐字符终端日志、跨设备同步 |
 | Log Files | 保存原始终端输出，按 Agent Session 组织日志路径 | 结构化查询、富文本渲染 |
@@ -85,7 +85,9 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 
 ## 7. React IA 冻结口径
 
-- Activity Bar 只包含 `Issues`、`Agents`、`Settings`；`Settings` 指 Project Settings。
+- 应用打开后先显示 Project Home：本机 Project card 网格，最后一个 card 是 `+` 创建 Project 入口。
+- 未选择 Project 时不显示 Activity Bar；点击 Project card 后进入 Project 工作台。
+- Project 工作台中的 Activity Bar 只包含 `Issues`、`Agents`、`Settings`；`Settings` 指 Project Settings。
 - Global Settings 通过左下角 gear 或原生顶部菜单打开。
 - Issues Activity 使用 `Backlog`、`Running`、`Review`、`Completed` 四泳道。
 - Issue 卡片只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。

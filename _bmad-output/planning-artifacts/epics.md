@@ -24,11 +24,11 @@ This document provides the complete epic and story breakdown for redwhisk, decom
 
 ### Functional Requirements
 
-FR1: 用户可以选择本地 Git Repository 创建 Project；系统必须校验目录是 Git Repository，保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`，创建成功后进入 Issues Activity；非 Git 目录必须被拒绝并展示明确错误。
+FR1: 用户可以从 Project Home 的 `+` card 选择本地 Git Repository 创建 Project；系统必须校验目录是 Git Repository，保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`，创建成功后进入带 Activity Bar 的 Issues Activity；非 Git 目录必须被拒绝并展示明确错误。
 
-FR2: 用户重新打开应用时可以回到最近打开的 Project；系统必须更新并持久化 `last_opened_at`，应用重启后展示最近 Project 的 Issues Activity；若 `repo_path` 不存在或不可访问，必须展示错误且不删除 Project 记录。
+FR2: 用户重新打开应用时先看到 Project Home；Project Home 必须展示本机所有 Project card，按 `last_opened_at` 优先排序，最后一个 card 是 `+` 创建 Project；用户点击 Project card 后系统更新并持久化 `last_opened_at`，再进入该 Project 的 Issues Activity；未选择 Project 前不得显示 Activity Bar；若 `repo_path` 不存在或不可访问，必须在 Project card 和点击后的错误中明确展示且不删除 Project 记录。
 
-FR3: 系统必须区分当前 Project Settings 与 Global Settings；Project Settings 位于 Activity Bar 的 `Settings` 并只影响当前 Project；Global Settings 通过左下角 gear 或原生顶部菜单打开；两者必须支持 Completion Policy、Agent Profile/Override、日志/数据目录、UI language、About 与 Diagnostics 等配置边界。
+FR3: 系统必须区分当前 Project Settings 与 Global Settings；Project Settings 位于 Project 工作台 Activity Bar 的 `Settings` 并只影响当前 Project；Global Settings 在 Project Home 通过原生顶部菜单打开，在 Project 工作台也可通过左下角 gear 打开；两者必须支持 Completion Policy、Agent Profile/Override、日志/数据目录、UI language、About 与 Diagnostics 等配置边界。
 
 FR4: 用户可以在 Project 内创建和编辑本地 Issue；Issue 至少保存 `title`、`description`、`status`、`created_at`、`updated_at`；新 Issue 默认为 `backlog`；MVP 不提供 priority、label、assignee、milestone。
 
@@ -130,7 +130,7 @@ UX-DR3: 实现桌面布局尺寸 token：Activity Bar 48px、Sidebar 280px、Ses
 
 UX-DR4: 实现克制圆角规则：小控件 3px，按钮和卡片 5px，Dialog 和 Inspector 7px；不得使用大圆角 pill 承载普通文本。
 
-UX-DR5: Activity Bar 固定在左侧，只包含 Issues、Agents、Settings；当前入口用细竖线或细底色表示，左下角 gear 打开 Global Settings。
+UX-DR5: Project Home 是应用首屏，展示本机 Project card 网格，最后一个 card 是 `+` 创建 Project；未选择 Project 前不显示 Activity Bar。Project 工作台内 Activity Bar 固定在左侧，只包含 Issues、Agents、Settings；当前入口用细竖线或细底色表示，左下角 gear 打开 Global Settings。
 
 UX-DR6: Issues Activity 使用 Backlog、Running、Review、Completed 四个常驻泳道；Issue card 只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。
 
@@ -181,7 +181,7 @@ UX-DR28: Command Palette 和快捷键属于 UX 假设，核心流程不得依赖
 ### FR Coverage Map
 
 FR1: Epic 1 - 创建 Git Project
-FR2: Epic 1 - 打开最近 Project
+FR2: Epic 1 - 展示 Project Home 并打开选中 Project
 FR3: Epic 1 - Project Settings 与 Global Settings
 FR4: Epic 1 - 创建和编辑 Issue
 FR5: Epic 1 - Issue 详情弹窗
@@ -250,8 +250,14 @@ So that 我可以在一个可信的本地桌面入口中继续配置 Project 和
 
 **Given** 应用启动成功
 **When** 用户打开 RedWhisk
+**Then** UI 首屏显示 Project Home，而不是直接显示 Activity Bar
+**And** Project Home 预留本机 Project card 网格，最后一个 card 是 `+` 创建 Project
+**And** 在 Project 未被选择前不显示 Activity Bar
+
+**Given** 用户在 Project Home 选择一个 Project
+**When** Project 工作台打开
 **Then** UI 显示桌面工作台壳，包含 Activity Bar 的 `Issues`、`Agents`、`Settings` 入口
-**And** 当前入口状态可见，但未实现的业务区域可以显示空态
+**And** `Issues` 为默认当前入口，但未实现的业务区域可以显示空态
 
 **Given** 项目已初始化
 **When** 开发者运行质量脚本
@@ -286,15 +292,15 @@ So that 我重新打开应用时能继续之前的工作流.
 ### Story 1.3: 创建 Git Project
 
 As a 本地开发者,
-I want 选择一个本地 Git Repository 创建 Project,
+I want 从 Project Home 的 `+` card 选择一个本地 Git Repository 创建 Project,
 So that RedWhisk 能以该仓库作为 Issue 和 Agent 工作流边界.
 
 **Requirements:** FR1、NFR1、NFR2；架构 `projects` 表、Rust Core Git 校验
 
 **Acceptance Criteria:**
 
-**Given** 用户没有打开 Project
-**When** 用户选择一个本地 Git Repository
+**Given** 用户停留在 Project Home
+**When** 用户点击 `+` card 并选择一个本地 Git Repository
 **Then** Rust Core 校验该目录是 Git Repository
 **And** 如 schema 尚未存在则通过 migration 创建 `projects` 表，并保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`
 
@@ -308,29 +314,32 @@ So that RedWhisk 能以该仓库作为 Issue 和 Agent 工作流边界.
 **Then** 应用进入该 Project 的 Issues Activity
 **And** Activity Bar 中 `Issues` 处于选中状态
 
-### Story 1.4: 打开最近 Project 并处理路径异常
+### Story 1.4: 展示 Project Home 并处理路径异常
 
 As a 本地开发者,
-I want 重新打开 RedWhisk 时回到最近 Project,
-So that 我可以继续之前的本地任务流而不用重新选择仓库.
+I want 打开 RedWhisk 时先看到本机所有 Project card,
+So that 我可以明确选择要进入的项目，或从 `+` card 创建新项目.
 
 **Requirements:** FR2、NFR1、NFR6
 
 **Acceptance Criteria:**
 
-**Given** 用户曾成功打开 Project
+**Given** 用户曾成功创建多个 Project
 **When** 应用重启
-**Then** 系统读取最近 Project
-**And** 展示该 Project 的 Issues Activity
+**Then** 系统展示 Project Home
+**And** Project Home 按 `last_opened_at` 优先排序展示所有 Project card
+**And** 最后一个 card 固定为 `+` 创建 Project
+**And** 未点击 Project card 前不显示 Activity Bar
 
 **Given** 最近 Project 的 `repo_path` 不存在或不可访问
-**When** 应用尝试恢复 Project
-**Then** UI 显示明确错误
+**When** Project Home 渲染或用户点击该 Project card
+**Then** UI 在 card 上展示路径异常状态，并在点击后显示明确错误
 **And** 不删除 Project 记录
 
 **Given** 用户重新打开某个 Project
-**When** 打开成功
+**When** 用户点击 Project card 且路径可访问
 **Then** 系统更新并持久化 `last_opened_at`
+**And** 应用进入该 Project 的 Issues Activity
 
 ### Story 1.5: 创建和编辑本地 Issue
 

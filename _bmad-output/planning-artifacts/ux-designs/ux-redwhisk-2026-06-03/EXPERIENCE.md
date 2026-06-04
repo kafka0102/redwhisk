@@ -15,13 +15,13 @@ RedWhisk 是跨平台桌面应用，MVP 以 macOS 体验优先验证，同时为
 
 `DESIGN.md` 是视觉身份 reference，本文件只定义信息架构、行为、状态、交互、可访问性和关键流程。体验优先级是：本地工作流可信、Codex 原生交互不中断、状态不误导、界面简洁清新且不像管理后台。
 
-MVP 形态是单窗口桌面工作台。窗口内一级导航为 Activity Bar；所有核心流程围绕一个打开的 Project 进行。`DESIGN.md` 中 `{spacing.activity-bar-width}`、`{spacing.sidebar-width}`、`{spacing.header-height}` 和 `{spacing.inspector-width}` 是布局默认尺寸。
+MVP 形态是单窗口桌面工作台。应用打开后的首屏是 Project Home，展示本机 Project card 网格，最后一个 card 是 `+` 创建 Project 入口。用户点击某个 Project 后才进入 Project 工作台；此时窗口内一级导航为 Activity Bar。所有核心 Issue / Agent 流程围绕一个已打开的 Project 进行。`DESIGN.md` 中 `{spacing.activity-bar-width}`、`{spacing.sidebar-width}`、`{spacing.header-height}` 和 `{spacing.inspector-width}` 是 Project 工作台布局默认尺寸。
 
 ## Information Architecture
 
 | Surface | Reached from | Purpose |
 | --- | --- | --- |
-| Project Picker / Recent Project | App cold open / no Project loaded | 选择本地 Git Repository，打开最近 Project，处理 repo path 不可访问错误 |
+| Project Home / Project Grid | App cold open / no Project loaded | 展示本机所有 Project card，按最近打开优先排序；最后一个 `+` card 创建新 Project；处理 repo path 不可访问错误 |
 | Issues Activity | Activity Bar `Issues` / Project open default | 四泳道本地 Issue 看板，创建 Issue，打开 Issue 详情，启动 Agent |
 | Issue Detail Dialog | Issue card click | 编辑 `title` / `description`，查看 Session 关联，执行 Issue 当前可用操作 |
 | Run Dialog | Issue Detail `Run` | 选择 Agent Profile，预览和编辑最终 prompt，确认启动 |
@@ -33,7 +33,7 @@ MVP 形态是单窗口桌面工作台。窗口内一级导航为 Activity Bar；
 | Global Settings | Left-bottom gear / native menu `Settings...` | UI language、全局 Agent Profiles、全局 completion policy、数据目录、日志目录、About / Diagnostics |
 | Summary / Log View | completed Issue / Header / Inspector | 复盘 Issue、Agent Session、CompletionAttempt、commit hash 和日志路径 |
 
-Activity Bar 只包含 `Issues`、`Agents`、`Settings`。不要加入 `Code`、`Diff`、`Git History`、`Terminal` 作为 MVP 一级入口。Global Settings 不在 Activity Bar 中，避免把 Project 设置和应用设置混在一起。
+Project Home 不显示 Activity Bar。Activity Bar 只在某个 Project 打开后显示，并且只包含 `Issues`、`Agents`、`Settings`。不要加入 `Code`、`Diff`、`Git History`、`Terminal` 作为 MVP 一级入口。Global Settings 不在 Activity Bar 中，避免把 Project 设置和应用设置混在一起；Project Home 只能通过原生菜单进入 Global Settings。
 
 Issues Activity 使用四个常驻泳道：`Backlog`、`Running`、`Review`、`Completed`。四泳道直接对应 Issue 状态，不用彩色状态柱表达。每张 Issue card 只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。
 
@@ -60,7 +60,8 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 
 | Component | Use | Behavioral rules |
 | --- | --- | --- |
-| Activity Bar | 一级导航 | 固定左侧。点击切换 Issues / Agents / Project Settings。当前项保持选中，不自动打开弹窗。左下角 gear 打开 Global Settings。 |
+| Project Card Grid | Project Home | 展示本机 Project card。每张 card 展示 Project 名称、repo path、最近打开时间和路径异常状态。最后一个 card 固定为 `+` 创建 Project。点击 Project card 后进入 Project 工作台；未进入 Project 前不显示 Activity Bar。 |
+| Activity Bar | Project 工作台一级导航 | 固定左侧。点击切换 Issues / Agents / Project Settings。当前项保持选中，不自动打开弹窗。左下角 gear 打开 Global Settings。 |
 | Issue Card | Issues Activity 四泳道 | 点击打开 Issue Detail Dialog。卡片不内联展开。若有关联 Agent Session，显示小型 Agent/Session 标记；若 `attention=requested`，显示 Needs Attention 标记。 |
 | Issue Detail Dialog | Issue 查看/编辑 | 左侧编辑 `title` / `description`，修改即保存。右侧展示 Session 关联和操作。Dialog 关闭不改变 Issue 状态。 |
 | Run Dialog | 从 Issue 启动 Agent | 选择 Agent Profile；显示可编辑最终 prompt；可折叠查看 prompt 来源；显示 working directory 和 default args；不显示 command 可用性或配置继承来源。`Start` 成功后关闭并进入 Agents Activity；失败时留在 Dialog。 |
@@ -76,8 +77,8 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 
 | State | Surface | Treatment |
 | --- | --- | --- |
-| No Project | App cold open | 显示最近 Project 列表和 `Open Git Repository`。非 Git 目录选择后显示错误，不创建 Project。 |
-| Project path missing | App open / Project Picker | 保留 Project 记录，提示 repo path 不可访问，提供重新选择目录和从最近列表移除入口。 |
+| No Project | App cold open | 显示 Project Home。若没有任何 Project 记录，只显示 `+` 创建 Project card；非 Git 目录选择后显示错误，不创建 Project。 |
+| Project path missing | App open / Project Home | 保留 Project card，显示 repo path 不可访问状态；点击后展示明确错误，提供重新选择目录和从最近列表移除入口。 |
 | Empty Backlog | Issues Activity | 泳道内显示轻量 empty row：`暂无待办 Issue。` 单一动作 `新建 Issue`。不要大插画。 |
 | Issue backlog | Issue Detail | 显示 `Run`；若无 enabled Agent Profile，`Run` 禁用并提供 `配置 Agent`。 |
 | Run start failed | Run Dialog | Issue 保持 `backlog`。Dialog 内显示失败原因和 `重新尝试` / `取消`。 |
@@ -163,14 +164,15 @@ macOS 上保留桌面窗口质感；Windows / Linux 不复制 macOS chrome，但
 
 ### Flow 1 — 林航从本地 Issue 跑起一次 Codex 任务并完成验收
 
-1. 林航打开 RedWhisk，选择一个本地 Git Repository 创建 Project。
-2. Project 打开后默认进入 Issues Activity，四泳道为空或显示已有 Issue。
-3. 他在 `Backlog` 新建 Issue，只填写标题和描述。
-4. 点击 Issue card 打开 Issue Detail Dialog，确认描述后点击 `运行`。
-5. Run Dialog 打开，林航选择 Codex Agent Profile，检查最终 prompt，点击 `Start`。
-6. **Climax:** Codex 进程启动成功，界面切到 Agents Activity；左侧 Running 分组出现该 Session，右侧 Codex Native Session View 保持原生终端体验，Header 显示关联 Issue 和 `标记待验收`。
-7. 林航在 Codex TUI 中交互，认为结果可验收后点击 `标记待验收`。
-8. Issue 保持 `review`，Session 继续 running。林航验收后按 Completion Policy 完成，系统关闭 Session 并提供 Summary / Log。
+1. 林航打开 RedWhisk，看到本机 Project card 网格，最后一个 card 是 `+` 创建 Project。
+2. 林航点击已有 Project card，或点击 `+` 选择一个本地 Git Repository 创建 Project。
+3. Project 打开后默认进入带 Activity Bar 的 Issues Activity，四泳道为空或显示已有 Issue。
+4. 他在 `Backlog` 新建 Issue，只填写标题和描述。
+5. 点击 Issue card 打开 Issue Detail Dialog，确认描述后点击 `运行`。
+6. Run Dialog 打开，林航选择 Codex Agent Profile，检查最终 prompt，点击 `Start`。
+7. **Climax:** Codex 进程启动成功，界面切到 Agents Activity；左侧 Running 分组出现该 Session，右侧 Codex Native Session View 保持原生终端体验，Header 显示关联 Issue 和 `标记待验收`。
+8. 林航在 Codex TUI 中交互，认为结果可验收后点击 `标记待验收`。
+9. Issue 保持 `review`，Session 继续 running。林航验收后按 Completion Policy 完成，系统关闭 Session 并提供 Summary / Log。
 
 Failure: Run 启动失败 -> Run Dialog 显示失败原因，Issue 保持 `backlog`，不创建 Agent Session。
 
@@ -196,11 +198,12 @@ Failure: 启动失败 -> Session Dialog 显示错误，不创建 Session，不�
 
 ### Flow 4 — 马骁复盘 completed Issue 和异常 Session
 
-1. 马骁重新打开 RedWhisk，最近 Project 自动恢复。
-2. Issues Activity 的 Completed 泳道显示已完成 Issue。
-3. 他打开 completed Issue，选择 `查看总结`。
-4. Summary 显示 Issue 信息、Session 时间、CompletionAttempt、commit hash 和日志路径。
-5. **Climax:** 马骁能确认 Agent 做过什么、是否提交、日志在哪里。
-6. 他看到另一个 Session 标记为 crashed；系统没有把它伪装成 completed，并提供日志入口。
+1. 马骁重新打开 RedWhisk，Project Home 按最近打开时间展示 Project cards。
+2. 他点击目标 Project card 进入 Issues Activity。
+3. Issues Activity 的 Completed 泳道显示已完成 Issue。
+4. 他打开 completed Issue，选择 `查看总结`。
+5. Summary 显示 Issue 信息、Session 时间、CompletionAttempt、commit hash 和日志路径。
+6. **Climax:** 马骁能确认 Agent 做过什么、是否提交、日志在哪里。
+7. 他看到另一个 Session 标记为 crashed；系统没有把它伪装成 completed，并提供日志入口。
 
 Failure: 日志文件缺失 -> Summary 显示日志路径和 `日志文件不存在或无法访问。`，保留诊断入口。

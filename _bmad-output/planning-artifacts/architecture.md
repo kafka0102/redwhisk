@@ -191,7 +191,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 2. 建立 TypeScript/Rust lint、typecheck、test、format 脚本。
 3. 建立 Rust Core 模块边界和 Tauri command/error/event 类型合同。
 4. 接入 SQLite migration 与 repository 层。
-5. 实现 Project / Issue 状态机基础。
+5. 实现 Project Home / Project card 入口和 Project / Issue 状态机基础。
 6. 做 PTY + xterm + Codex Spike。
 7. 接入 AgentSession、SessionEvent、日志文件。
 8. 实现 Review 和 CompletionAttempt / Git 检测闭环。
@@ -240,6 +240,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 
 **Project Organization:**
 - 前端按 feature + workbench surface 组织，不按纯组件类型堆叠。
+- `src/features/project/` 放 Project Home、Project card grid、Project 创建入口、最近 Project 数据和相关 command wrapper。
 - `src/features/issues/` 放 Issue 看板、卡片、详情弹窗和相关 hooks/store。
 - `src/features/agents/` 放 Session list、Session Header、xterm 容器、Issue Inspector。
 - `src/features/settings/` 放 Project Settings 和 Global Settings。
@@ -396,7 +397,10 @@ redwhisk/
 │   │   └── app.css
 │   ├── features/
 │   │   ├── project/
-│   │   │   ├── project-picker.tsx
+│   │   │   ├── project-home.tsx
+│   │   │   ├── project-card-grid.tsx
+│   │   │   ├── project-card.tsx
+│   │   │   ├── create-project-card.tsx
 │   │   │   ├── recent-projects.tsx
 │   │   │   ├── project-store.ts
 │   │   │   └── project-commands.ts
