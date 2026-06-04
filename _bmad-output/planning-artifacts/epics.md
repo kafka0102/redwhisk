@@ -60,7 +60,7 @@ FR17: 用户可以手动将 `running` Issue 标记为 `review`；只有 `running
 
 FR18: 用户在 `review` Issue 中继续向 Codex 输入修正需求时，Issue 不退回 `running`；同一个 Agent Session 继续记录日志和事件流；Header 仍显示完成类按钮。
 
-FR19: 系统必须显式展示异常 Agent Session，而不是伪装成完成；Codex 进程异常退出时 Agent Session 进入 `crashed`；应用重启后不可恢复的活进程可标记为 `crashed` 或 `stopped`；关联 Issue 不自动进入 `completed`。
+FR19: 系统必须显式展示异常 Agent Session，而不是伪装成完成；Codex 进程异常退出时 Agent Session 进入 `crashed`；应用重启后不可恢复的活进程必须标记为 `stopped`；关联 Issue 不自动进入 `completed`；异常 Session 默认提供日志或诊断入口，继续会话入口仅在 Codex resume 能力由 Spike 或后续 story 明确实现后显示。
 
 FR20: 用户可以在 `manual` 策略下手动完成 Issue，也可以在 `agent_auto_commit` 且无未提交改动时直接完成；确认后系统关闭 Agent Session，将 Agent Session 标记为 `closed`，将 Issue 标记为 `completed`，并写入 IssueAction。
 
@@ -471,9 +471,10 @@ So that 我可以长时间使用工作台而不被网页化或管理后台式 UI
 **And** token 值遵守 UX Design Requirements 中的桌面视觉约束
 
 **Given** 用户使用基础控件
-**When** Button、Dialog、Inspector、Toolbar、Tooltip、Activity Bar 图标渲染
+**When** Button、Dialog、Toolbar、Tooltip、Activity Bar 图标渲染
 **Then** 控件使用自建桌面工作台组件层和 CSS/token 层
 **And** 不引入大型管理后台组件库作为视觉基底
+**And** Issue Inspector、Completion Confirmation 等 feature-specific 组件在对应 feature story 中验证
 
 **Given** 用户通过键盘操作应用
 **When** 焦点移动到可操作控件
@@ -658,6 +659,70 @@ So that 后续可以复盘 Codex 执行过程.
 **When** Rust Core 收到 exit 信息
 **Then** 系统记录退出相关 SessionEvent
 **And** 后续状态处理留给 Epic 4 的 crashed/stopped 故事完善
+
+### Story 2.8: Spike - 验证 Codex Resume 与 Completion Prompt 注入
+
+As a RedWhisk 实现者,
+I want 验证当前 Codex Session 能否接收后续修正 prompt 和 completion prompt,
+So that Epic 5 不会依赖未经验证的 Agent 提交流程。
+
+**Requirements:** FR18、FR21、NFR5；架构 Spike 2
+
+**Acceptance Criteria:**
+
+**Given** Codex AgentSession 已通过 PTY 启动
+**When** 实现者向同一个 Codex Session 发送后续 prompt
+**Then** prompt 进入当前 Codex TUI / Session
+**And** 不启动新的无上下文 Codex 进程
+
+**Given** review 或 completion 场景需要发送 completion prompt
+**When** 实现者向当前 Codex Session 注入 completion prompt
+**Then** 系统记录是否可稳定注入
+**And** 记录必要的前置条件、限制和失败模式
+
+**Given** Codex Session 异常退出或应用重启后需要恢复上下文
+**When** 实现者测试 `codex resume <session_id>` 或等价方式
+**Then** 记录是否可恢复
+**And** 如果无法稳定恢复，明确降级路径为保留日志、提示用户手动处理，Issue 保持 `review` 或 `running`
+
+**Given** Spike 完成
+**When** 结果归档
+**Then** 在 `spikes/codex-resume-completion-prompt.md` 记录结论
+**And** Epic 5 story 必须引用该结论或采用记录的降级路径
+
+### Story 2.9: Spike - 验证 Git Commit Detection
+
+As a RedWhisk 实现者,
+I want 在真实 Git 仓库中验证 completion 前后 HEAD/status/changed files 检测,
+So that Agent Commit 完成不会只相信 Agent 输出文本。
+
+**Requirements:** FR21、FR22、NFR5、NFR6；架构 Spike 3
+
+**Acceptance Criteria:**
+
+**Given** 一个本地 Git Repository 有未提交改动
+**When** 系统在 completion 前记录 Git 状态
+**Then** 记录 `HEAD`、`git status --porcelain` 和 changed files 摘要
+
+**Given** completion prompt 发送后仓库产生新 commit
+**When** 系统重新读取 Git 状态
+**Then** 检测到 `HEAD` 改变
+**And** 记录新 commit hash
+
+**Given** completion prompt 发送后未产生新 commit
+**When** 系统重新读取 Git 状态
+**Then** 结果记录为 `no_commit_detected`
+**And** Issue 保持 `review`
+
+**Given** 仓库处于 merge、rebase、cherry-pick 等进行中状态
+**When** 用户尝试完成 Issue
+**Then** 系统能识别该状态
+**And** 记录降级行为：提示用户手动处理，不自动 completed
+
+**Given** Spike 完成
+**When** 结果归档
+**Then** 在 `spikes/git-commit-detection.md` 记录结论
+**And** Epic 5 story 必须引用该结论或采用记录的降级路径
 
 ## Epic 3: Agent Session 管理与临时 Codex 会话
 
@@ -908,8 +973,9 @@ So that 我不会误触不该出现的 Run、Review 或 Completion 操作.
 
 **Given** 当前 AgentSession 关联 `review` Issue
 **When** Header 渲染
-**Then** Header 显示完成类按钮占位或入口
-**And** 具体 completion 行为由 Epic 5 实现
+**Then** Header 显示 Issue title 和打开 Issue Inspector 的入口
+**And** 不显示 `Mark Review`
+**And** 不显示任何未实现的完成类按钮、占位入口或不可用完成控件
 
 **Given** 当前 AgentSession 不关联 Issue
 **When** Header 渲染
@@ -939,7 +1005,9 @@ So that 我不会把失败的 Agent Session 误认为已完成.
 **Given** Agents Activity 左侧列表渲染
 **When** Session 状态为 `crashed`
 **Then** Session 出现在 Completed 展示分组
-**And** 标记 `crashed`，并提供日志入口或继续会话入口占位
+**And** 标记 `crashed`
+**And** 提供日志入口或诊断入口
+**And** 不显示不可执行的继续会话入口
 
 ### Story 4.6: 应用重启后标记不可恢复 Session
 
@@ -953,7 +1021,7 @@ So that 我可以复盘异常而不是被误导为仍在运行.
 
 **Given** 应用关闭前存在 `running` AgentSession
 **When** 应用重启且无法恢复活 PTY 进程
-**Then** Rust Core 将该 AgentSession 标记为 `stopped` 或 `crashed`
+**Then** Rust Core 将该 AgentSession 标记为 `stopped`
 **And** 写入 SessionEvent 说明恢复失败原因
 
 **Given** stopped/crashed AgentSession 关联 Issue
@@ -961,10 +1029,10 @@ So that 我可以复盘异常而不是被误导为仍在运行.
 **Then** 关联 Issue 不自动变为 `completed`
 **And** UI 显示异常状态和日志入口
 
-**Given** `stopped` 是否保留为正式状态仍是开放项
-**When** 实现状态机
-**Then** 必须在实现前选择 `stopped` 或统一用 `crashed`
-**And** 选择结果应更新架构或 ADR
+**Given** AgentSession 状态为 `stopped`
+**When** UI、事件和持久化记录渲染或保存该状态
+**Then** `stopped` 使用正式状态枚举和 i18n 文案
+**And** Completed 分组包含该 Session
 
 ### Story 4.7: 异常 Session 的日志复盘入口
 
@@ -988,11 +1056,12 @@ So that 我可以判断 Agent 到底执行到了哪里.
 **Given** 异常 Session 仍关联 Issue
 **When** 用户查看 Header 或 Inspector
 **Then** 不显示会导致 completed 的完成确认
-**And** 可提供继续会话入口占位，实际 resume 能力以后续 story 或 Spike 结果为准
+**And** 显示日志入口或诊断入口
+**And** 不显示继续会话入口，除非 Codex resume 能力已由 Spike 或后续 story 明确实现
 
 ## Epic 5: 完成策略、Agent Commit 与复盘
 
-用户可以按 manual 或 agent_auto_commit 策略完成 Issue；系统记录 CompletionAttempt、检测 commit hash、避免误完成，并在 completed 后提供 Summary 和 Open Log。
+用户可以按 manual 或 agent_auto_commit 策略完成 Issue；系统记录 CompletionAttempt、检测 commit hash、避免误完成，并在 completed 后提供 Summary 和 Open Log。Epic 5 的 `agent_auto_commit` stories 必须在 Story 2.8 和 Story 2.9 的 Spike 结论可用后实施。
 
 ### Story 5.1: 手动完成 Review Issue
 
@@ -1216,11 +1285,13 @@ So that 我可以查看 Agent Session 的完整输出.
 **Then** 不显示 `Run`、`Mark Review`、`Complete Manually`、`Complete with Agent Commit`
 **And** MVP 不提供 `Reopen`
 
-### Story 5.10: 完成闭环端到端验收
+### Gate 5.10: 完成闭环端到端验收
 
 As a RedWhisk 产品验证者,
 I want 连续验证从 Issue 到 Agent Session 完成的本地闭环,
 So that MVP 的核心信任链路可演示.
+
+**Note:** This is an E2E Validation Gate, not a regular implementation story. It must run after the preceding Epic 5 implementation stories are complete.
 
 **Requirements:** FR1-FR24、FR26、NFR2、NFR3、NFR5、NFR6；UX-DR27、UX-DR28；核心端到端验收
 

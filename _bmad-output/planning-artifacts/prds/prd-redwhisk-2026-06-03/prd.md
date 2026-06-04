@@ -69,7 +69,7 @@ MVP 的核心赌注是：AI 编程任务不是一次聊天，而是一段可管�
 - **Run Dialog** — 从 Issue 启动 Agent 前的确认界面，展示生效 Agent Profile、prompt 来源和可编辑最终 prompt。
 - **Session Dialog** — 在 Agents Activity 中创建不关联 Issue 的临时 Agent Session 的轻量弹窗。
 - **Agent Session** — 一次本地 Agent 执行上下文。Agent Session 可以关联 Issue，也可以是不关联 Issue 的临时 Session；MVP 中一个 Issue 最多关联一个 Agent Session。
-- **Agent Session 状态** — Agent Session 的进程/会话状态，取值为 `running`、`closed`、`crashed`；`stopped` 作为可选降级状态。
+- **Agent Session 状态** — Agent Session 的进程/会话状态，取值为 `running`、`closed`、`crashed`、`stopped`。`crashed` 表示 Codex 进程异常退出；`stopped` 表示应用生命周期中断后原 `running` PTY 无法恢复。
 - **Session 展示分组** — Agents Activity 左侧列表的展示分组，MVP 固定提供 `Running` 和 `Completed`。`Running` 展示 `status=running` 的 Agent Session；`Completed` 展示 `status=closed`、`crashed` 或 `stopped` 的最近 Agent Session。
 - **Codex Native Session View** — 通过内嵌 PTY 和 xterm.js 呈现的 Codex CLI 原生交互视图。
 - **PTY** — 伪终端，用于让 GUI 应用内的 xterm.js 与本地 Codex CLI 交互。
@@ -316,8 +316,8 @@ Agents Activity 必须展示 Agent Session 列表和当前 Codex Native Session 
 
 **可测试结果：**
 - Codex 进程异常退出时，Agent Session 进入 `crashed`。
-- 应用重启后无法恢复活进程时，Agent Session 可以标记为 `crashed` 或 `stopped`。[ASSUMPTION: MVP 可以使用 `stopped` 表示应用重启导致活进程不可恢复的降级状态。]
-- `running` 或 `review` Issue 关联 `crashed` Agent Session 时，系统提供 `Resume Session` 或日志复盘入口。
+- 应用重启后无法恢复活进程时，Agent Session 必须标记为 `stopped`；`stopped` 表示应用生命周期中断导致原 `running` PTY 无法恢复。
+- `running` 或 `review` Issue 关联异常 Agent Session 时，系统默认提供日志复盘或诊断入口；`Resume Session` 入口只有在 Codex resume 能力由 Spike 或后续 story 明确实现后才显示。
 - `crashed` Agent Session 不会让 Issue 自动进入 `completed`。
 
 ### 5.7 Completion Policy 与完成闭环
@@ -465,7 +465,7 @@ completed Issue 不提供重新打开或重新运行能力。
 - 云端用户、同步和多人协作：第三阶段再验证。
 - 插件系统：等本地闭环稳定后再开放扩展。
 - 多 Session Attempt：MVP 保持一 Issue 一 Agent Session。
-- 活进程跨应用重启恢复：MVP 可以标记为 `crashed` 或 `stopped`，不要求恢复仍在运行的 PTY 进程。
+- 活进程跨应用重启恢复：MVP 将应用重启后无法恢复的运行中 Session 标记为 `stopped`，不要求恢复仍在运行的 PTY 进程。
 
 ## 9. 成功指标
 
@@ -493,13 +493,10 @@ completed Issue 不提供重新打开或重新运行能力。
 3. `attention=requested` 的启发式识别规则在 MVP 中需要达到什么可靠性，哪些场景只允许手动标记？
 4. macOS 通过是否足以作为 MVP 内部验收，Windows/Linux 兼容性应进入哪个里程碑？
 5. Completion prompt 的具体模板、失败兜底文案和只提交本 Issue 相关改动的措辞需要在实现前确认。
-6. `stopped` 是否作为正式 Agent Session 状态保留，还是只使用 `crashed` 覆盖应用重启后的不可恢复状态？
-
 ## 11. 假设索引
 
 - §1 — 产品名沿用当前项目名 RedWhisk。
 - §5.1 FR-3 — 新 Workspace 的默认 Completion Policy 为 `manual`，降低误提交风险。
-- §5.6 FR-19 — MVP 可以使用 `stopped` 表示应用重启导致活进程不可恢复的降级状态。
 - §6 — MVP 验收以 macOS 先通过为主，Windows/Linux 兼容性风险在 Spike 中记录但不阻塞 MVP PRD。
 - §9 SM-1 — 5 次连续成功作为 MVP 内部验收阈值。
 - §9 SM-2 — macOS Spike 通过是进入完整业务实现前的硬门槛。
