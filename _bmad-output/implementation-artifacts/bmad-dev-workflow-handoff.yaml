@@ -2,35 +2,41 @@ workflow: bmad-dev-workflow
 phase: complete
 story_file: _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
 story_key: 1-5-create-and-edit-local-issue
-story_status: ready-for-dev
-baseline_commit: 0fe189a
+story_status: done
+baseline_commit: adc21ae
 changed_files:
   - _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - _bmad-output/planning-artifacts/architecture.md
-  - _bmad-output/planning-artifacts/prds/prd-redwhisk-2026-06-03/addendum.md
-  - _bmad-output/planning-artifacts/sprint-change-proposal-integer-ids-and-epoch-ms-2026-06-05.md
-  - src-tauri/migrations/0002_projects.sql
-  - src-tauri/migrations/0003_project_integer_ids.sql
-  - src-tauri/src/commands/project_commands.rs
-  - src-tauri/src/core/project_service.rs
+  - _bmad-output/implementation-artifacts/deferred-work.md
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - src-tauri/migrations/0004_issues.sql
+  - src-tauri/src/commands/issue_commands.rs
+  - src-tauri/src/commands/mod.rs
+  - src-tauri/src/core/issue_service.rs
+  - src-tauri/src/core/mod.rs
+  - src-tauri/src/db/connection.rs
+  - src-tauri/src/db/issue_repository.rs
   - src-tauri/src/db/migrations.rs
-  - src-tauri/src/db/project_repository.rs
-  - src-tauri/src/types/project.rs
+  - src-tauri/src/db/mod.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/errors.rs
+  - src-tauri/src/types/issue.rs
+  - src-tauri/src/types/mod.rs
+  - src-tauri/tests/issue.rs
   - src-tauri/tests/local_data.rs
-  - src-tauri/tests/project.rs
+  - src/app/activity-router.tsx
+  - src/app/app-shell.tsx
+  - src/app/app.css
   - src/app/app.test.tsx
-  - src/app/app.tsx
-  - src/features/project/project-commands.ts
-  - src/features/project/project-switcher.tsx
-  - src/shared/commands/command-client.test.ts
+  - src/features/issues/issue-commands.ts
+  - src/features/issues/issues-activity.test.tsx
+  - src/features/issues/issues-activity.tsx
 validation_commands:
-  - cargo test --manifest-path src-tauri/Cargo.toml --test project --no-run
-  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data --no-run
-  - pnpm typecheck
-  - cargo test --manifest-path src-tauri/Cargo.toml --test project
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue --no-run
+  - pnpm test -- --run src/app/app.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
   - cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pnpm test -- --run src/app/app.test.tsx src/shared/commands/command-client.test.ts
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
@@ -39,19 +45,20 @@ validation_commands:
   - pnpm build
   - cargo test --manifest-path src-tauri/Cargo.toml
 validation_results:
-  - passed: Rust project test compile
-  - passed: Rust local_data test compile
-  - passed: TypeScript typecheck
-  - passed: Rust project tests, 15 tests
+  - passed: RED failures confirmed for missing Issue modules/wrapper before implementation
+  - passed: Rust issue test compile
+  - passed: targeted app Vitest before review fixes, 27 tests
+  - passed: Rust issue tests before review fixes, 6 tests
   - passed: Rust local_data tests, 5 tests
-  - passed: targeted Vitest, 25 tests
-  - passed: Prettier format command
+  - passed: Review patch RED failures confirmed for scoped update and IssuesActivity stale/async/cancel behavior
+  - passed: targeted review patch Vitest, 32 tests
+  - passed: Prettier format
   - passed: cargo fmt
   - passed: ESLint
-  - passed: full TypeScript typecheck
-  - passed: full Vitest, 25 tests
+  - passed: TypeScript typecheck
+  - passed: full Vitest, 32 tests
   - passed: Vite production build
-  - passed: full Cargo tests, 20 integration tests plus crates/doc tests
-review_summary: 架构调整已完成并验证；Story 1.5 仍保持 ready-for-dev，已更新为 INTEGER id 与 epoch ms schema 前提。
+  - passed: full Cargo tests, 30 integration tests plus crate/doc tests
+review_summary: Code review found 9 patch items and 2 deferred items; all 9 patch items were fixed and verified. Deferred i18n/generated DTO work is recorded in deferred-work.md.
 blocking_reason:
-updated_at: 2026-06-05T15:16:42+0800
+updated_at: 2026-06-05T16:22:04+0800

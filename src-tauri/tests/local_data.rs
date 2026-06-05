@@ -18,12 +18,14 @@ fn local_data_initialization_creates_database_and_records_migration() {
     assert!(database.path.exists());
     assert_eq!(
         status.applied_versions,
-        vec!["0001_core", "0002_projects", "0003_project_integer_ids"]
+        vec![
+            "0001_core",
+            "0002_projects",
+            "0003_project_integer_ids",
+            "0004_issues"
+        ]
     );
-    assert_eq!(
-        status.current_version,
-        Some("0003_project_integer_ids".to_string())
-    );
+    assert_eq!(status.current_version, Some("0004_issues".to_string()));
 
     let schema_migrations_count: i64 = database
         .connection
@@ -49,12 +51,17 @@ fn migrations_are_idempotent_after_first_run() {
 
     assert_eq!(
         first_status.applied_versions,
-        vec!["0001_core", "0002_projects", "0003_project_integer_ids"]
+        vec![
+            "0001_core",
+            "0002_projects",
+            "0003_project_integer_ids",
+            "0004_issues"
+        ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0003_project_integer_ids".to_string())
+        Some("0004_issues".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -63,7 +70,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 3);
+    assert_eq!(schema_migrations_count, 4);
 }
 
 #[test]

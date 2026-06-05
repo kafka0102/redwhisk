@@ -6,9 +6,13 @@ export type ActivityKey = "issues" | "agents" | "settings";
 
 interface ActivityRouterProps {
   activeActivity: ActivityKey;
+  projectId: number;
 }
 
-export function ActivityRouter({ activeActivity }: ActivityRouterProps) {
+export function ActivityRouter({
+  activeActivity,
+  projectId,
+}: ActivityRouterProps) {
   if (activeActivity === "agents") {
     return <AgentsActivity />;
   }
@@ -17,5 +21,5 @@ export function ActivityRouter({ activeActivity }: ActivityRouterProps) {
     return <ProjectSettingsActivity />;
   }
 
-  return <IssuesActivity />;
+  return <IssuesActivity projectId={projectId} />;
 }
