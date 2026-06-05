@@ -3,6 +3,9 @@ diff_output: '' # set at runtime
 spec_file: '' # set at runtime (path or empty)
 review_mode: '' # set at runtime: "full" or "no-spec"
 story_key: '' # set at runtime when discovered from sprint status
+review_policy: 'interactive' # set at runtime: "interactive" or "automatic"
+diff_base: '' # set at runtime when a parent workflow supplies a baseline commit
+changed_files: [] # set at runtime when a parent workflow supplies a scoped file list
 ---
 
 # Step 1: Gather Context
@@ -17,8 +20,11 @@ story_key: '' # set at runtime when discovered from sprint status
 
 1. **Find the review target.** The conversation context before this skill was triggered IS your starting point — not a blank slate. Check in this order — stop as soon as the review target is identified:
 
+   If the triggering intent says `mode: automatic`, `review_policy: automatic`, or `automatic same-session workflow handoff`, set `{review_policy}` = `"automatic"` before target discovery. Automatic policy means the workflow must use supplied review target, diff base, and spec context without asking confirmation questions.
+
    **Tier 1 — Explicit argument.**
    Did the user pass a PR, commit SHA, branch, spec file, or diff source this message?
+   - Automatic parent workflow handoff with `story_file`, `baseline_commit`, and changed file list → set `{spec_file}` to `story_file`, `{diff_base}` to `baseline_commit`, `{changed_files}` to the supplied changed file list, and use a file-list diff from `{diff_base}`. If `baseline_commit` is missing, use `HEAD` as the baseline for uncommitted changes scoped to the supplied changed file list.
    - PR reference → resolve to branch/commit via `gh pr view`. If resolution fails, ask for a SHA or branch.
    - Commit or branch → use directly.
    - Spec file → set `{spec_file}` to the provided path. Check its frontmatter for `baseline_commit`. If found, use as diff baseline. If not found, continue the cascade (a spec alone does not identify a diff source).
@@ -47,6 +53,8 @@ story_key: '' # set at runtime when discovered from sprint status
 
    Never ask extra questions beyond what the cascade prescribes. If a tier above already identified the target, skip the remaining tiers and proceed to instruction 3 (construct diff).
 
+   If `{review_policy}` = `"automatic"` and no tier identified a target, HALT with a concise error that automatic review requires a supplied review target, diff base, or changed file list.
+
 2. HALT. Ask the user: **What do you want to review?** Present these options:
    - **Uncommitted changes** (staged + unstaged)
    - **Staged changes only**
@@ -55,6 +63,7 @@ story_key: '' # set at runtime when discovered from sprint status
    - **Provided diff or file list** (user pastes or provides a path)
 
 3. Construct `{diff_output}` from the chosen source.
+   - For **automatic parent workflow file-list diff**: validate each `{changed_files}` path exists in the working tree or is an untracked new file. If `{diff_base}` is set, run `git diff {diff_base} -- <path1> <path2> ...`. If `{diff_base}` is empty, run `git diff HEAD -- <path1> <path2> ...`. If any supplied paths are untracked, include them with `git diff --no-index /dev/null <path>`. Do not ask for confirmation.
    - For **staged changes only**: run `git diff --cached`.
    - For **uncommitted changes** (staged + unstaged): run `git diff HEAD`.
    - For **branch diff**: verify the base branch exists before running `git diff`. If it does not exist, HALT and ask the user for a valid branch.
@@ -65,6 +74,7 @@ story_key: '' # set at runtime when discovered from sprint status
 
 4. **Set the spec context.**
    - If `{spec_file}` is already set (from Tier 1 or Tier 2): verify the file exists and is readable, then set `{review_mode}` = `"full"`.
+   - If `{review_policy}` = `"automatic"` and `{spec_file}` is empty: set `{review_mode}` = `"no-spec"` and continue without asking. Note that Acceptance Auditor will be skipped because no spec file was supplied.
    - Otherwise, ask the user: **Is there a spec or story file that provides context for these changes?**
      - If yes: set `{spec_file}` to the path provided, verify the file exists and is readable, then set `{review_mode}` = `"full"`.
      - If no: set `{review_mode}` = `"no-spec"`.
@@ -78,6 +88,8 @@ story_key: '' # set at runtime when discovered from sprint status
 ### CHECKPOINT
 
 Present a summary before proceeding: diff stats (files changed, lines added/removed), `{review_mode}`, and loaded spec/context docs (if any). HALT and wait for user confirmation to proceed.
+
+If `{review_policy}` = `"automatic"`, present the same summary, state that automatic review policy is proceeding without confirmation, and continue to the next step without HALT.
 
 
 ## NEXT

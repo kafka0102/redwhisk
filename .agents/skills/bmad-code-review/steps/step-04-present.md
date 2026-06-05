@@ -48,9 +48,17 @@ If the user chooses to defer, ask: Quick one-line reason for deferring this item
 
 **HALT** — I am waiting for your numbered choice. Reply with only the number. Do not proceed until you select an option.
 
+If `{review_policy}` = `"automatic"`, this HALT still applies. Decision-needed findings require human intent and must not be auto-resolved.
+
 ### 5. Handle `patch` findings
 
-If `patch` findings exist (including any resolved from step 4), HALT. Ask the user:
+If `patch` findings exist (including any resolved from step 4), handle them as follows:
+
+If `{review_policy}` = `"automatic"` and `{spec_file}` is set, do not ask. Choose **Leave as action items** automatically because findings were already written to the story file. Do not apply code changes inside the review phase. Continue to section 6.
+
+If `{review_policy}` = `"automatic"` and `{spec_file}` is not set, HALT and ask because there is no story file where action items can be persisted safely.
+
+Otherwise, HALT. Ask the user:
 
 If `{spec_file}` is set, present all three options:
 
@@ -115,6 +123,8 @@ If `{sprint_status}` file does not exist, note that story status was updated in 
 > **Dismissed:** <R>
 
 ### 7. Next steps
+
+If `{review_policy}` = `"automatic"`, skip this menu. Return control to the calling workflow after the completion summary.
 
 Present the user with follow-up options:
 

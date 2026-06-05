@@ -11,6 +11,7 @@ This skill orchestrates one BMad story through `bmad-create-story`, `bmad-dev-st
 
 - Do not use subagents or child sessions for phase isolation or context cleanup.
 - If a delegated child skill has its own reviewer/subprocess mechanism, follow that child skill's rules. If the user forbids that mechanism, let the child skill's fallback or HALT condition control the run.
+- When review policy is `automatic`, do not ask the user to confirm the review target, diff summary, patch handling menu, or next-step menu; use the automatic handoff defaults defined below.
 - Do not copy or rewrite the child skills' internal workflows; execute them by name and respect their HALT conditions.
 - Soft cleanup does not remove tokens already in the session. It means detailed phase context is written to disk, then ignored unless the next phase explicitly reloads a needed file.
 - Scope is exactly one story unless the user explicitly starts another workflow run.
@@ -139,9 +140,21 @@ Execute `bmad-code-review` with this review intent:
 - review target: changes for `story_file`
 - spec/context file: `story_file`
 - diff base: `baseline_commit` from the story frontmatter or handoff file when available
+- changed files: changed file list extracted from the Dev Agent Record or handoff file
 - mode: `{workflow.review_policy}` same-session workflow handoff; present the review result to the user
 
+If `{workflow.review_policy}` is `automatic`, pass these defaults to `bmad-code-review`:
+
+- construct the diff without asking, using `baseline_commit` and the story's changed file list when available
+- set review mode to `full` with `story_file` as the spec/context file
+- skip review-target, checkpoint, patch-handling, and next-step confirmations
+- write review findings to the story file
+- leave patch findings as story action items instead of applying code changes inside the review phase
+- continue without asking when the review is clean
+
 When `{workflow.review_policy}` is `interactive`, respect every checkpoint inside `bmad-code-review`. This workflow may pre-fill target, spec, and diff base, but it must not bypass required human confirmations unless the child skill itself supports that mode.
+
+Even in `automatic` mode, HALT if `bmad-code-review` reports a `decision-needed` finding, cannot construct a non-empty diff, cannot read `story_file`, or cannot run its required review layers without external input.
 
 After review completes, update `{handoff_file}` with `phase: review-complete`, `story_status`, and `review_summary`.
 
