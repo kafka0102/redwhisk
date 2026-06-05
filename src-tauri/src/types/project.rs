@@ -9,17 +9,17 @@ pub struct CreateProjectInput {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenProjectInput {
-    pub project_id: String,
+    pub project_id: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSummary {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     pub repo_path: String,
-    pub created_at: String,
-    pub last_opened_at: String,
+    pub created_at: i64,
+    pub last_opened_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -31,11 +31,11 @@ pub struct ProjectListResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectListItem {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     pub repo_path: String,
-    pub created_at: String,
-    pub last_opened_at: String,
+    pub created_at: i64,
+    pub last_opened_at: i64,
     pub path_status: ProjectPathStatus,
 }
 
@@ -49,6 +49,6 @@ pub enum ProjectPathStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenProjectWindowResponse {
-    pub project_id: String,
+    pub project_id: i64,
     pub window_label: String,
 }

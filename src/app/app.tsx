@@ -15,7 +15,7 @@ import {
 import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
-  id: string;
+  id: number;
   name: string;
   path: string;
   recentOpenedAt: string;
@@ -185,9 +185,13 @@ function toProjectSummary(
     id: project.id,
     name: project.name,
     path: project.repoPath,
-    recentOpenedAt: `Opened ${project.lastOpenedAt}`,
+    recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,
     status: "pathStatus" in project ? project.pathStatus : "available",
   };
+}
+
+function formatLocalTimestamp(epochMilliseconds: number): string {
+  return new Date(epochMilliseconds).toLocaleString();
 }
 
 function mergeProject(
@@ -202,12 +206,20 @@ function mergeProject(
 }
 
 function openInitialProjectFromUrl(): Promise<ProjectRecord | null> {
-  const projectId = new URLSearchParams(window.location.search).get(
+  const projectIdParam = new URLSearchParams(window.location.search).get(
     "projectId",
   );
 
-  if (!projectId) {
+  if (!projectIdParam) {
     return Promise.resolve(null);
+  }
+
+  const projectId = Number(projectIdParam);
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) {
+    return Promise.reject({
+      code: "PROJECT_NOT_FOUND",
+      message: "Project 不存在。",
+    });
   }
 
   return openProject({ projectId });

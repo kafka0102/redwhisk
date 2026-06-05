@@ -215,9 +215,9 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 **Database Naming Conventions:**
 - SQLite table 使用 `snake_case` 复数名词：`projects`、`issues`、`agent_sessions`、`completion_attempts`。
 - SQLite column 使用 `snake_case`：`project_id`、`created_at`、`prompt_snapshot`。
-- 主键统一为 `id`；外键统一为 `{entity}_id`。
+- 主键统一为 `id INTEGER PRIMARY KEY`，依赖 SQLite rowid 自动分配；外键统一为 `{entity}_id INTEGER` 并引用对应实体整数 id。
 - JSON payload 列统一以 `_json` 结尾：`payload_json`、`changed_files_json`。
-- timestamp 列统一以 `_at` 结尾，保存 ISO 8601 UTC 字符串。
+- timestamp 列统一以 `_at` 结尾，使用 `INTEGER NOT NULL` 保存 Unix epoch milliseconds；UI 展示时按本机本地时区格式化。
 - index 命名使用 `idx_{table}_{columns}`：`idx_issues_project_id_status`。
 - unique index 命名使用 `uidx_{table}_{columns}`。
 

@@ -23,10 +23,11 @@ Status: ready-for-dev
 ## Tasks / Subtasks
 
 - [ ] 增量创建 `issues` 持久化 schema (AC: 1)
-  - [ ] 新增 `src-tauri/migrations/0003_issues.sql`，创建 `issues` 表，字段至少包含 `id`、`project_id`、`title`、`description`、`status`、`created_at`、`updated_at`。
-  - [ ] `project_id` 必须引用 `projects(id)`；为当前 Project 查询添加索引，例如 `idx_issues_project_id_status` 或 `idx_issues_project_id_updated_at`。
-  - [ ] 更新 `src-tauri/src/db/migrations.rs` 的静态 migration 列表，确保 `0001_core`、`0002_projects` 后执行 `0003_issues`，并保持现有事务、幂等和失败回滚行为。
-  - [ ] 更新 `src-tauri/tests/local_data.rs` 对 migration 版本的预期，从 `0002_projects` 扩展到 `0003_issues`。
+  - [ ] 新增 `src-tauri/migrations/0004_issues.sql`，创建 `issues` 表，字段至少包含 `id`、`project_id`、`title`、`description`、`status`、`created_at`、`updated_at`。
+  - [ ] `id` 使用 `INTEGER PRIMARY KEY`；`project_id` 使用 INTEGER 并引用 `projects(id)`；`created_at` / `updated_at` 使用 Unix epoch milliseconds 的 `INTEGER NOT NULL`。
+  - [ ] 为当前 Project 查询添加索引，例如 `idx_issues_project_id_status` 或 `idx_issues_project_id_updated_at`。
+  - [ ] 更新 `src-tauri/src/db/migrations.rs` 的静态 migration 列表，确保 `0001_core`、`0002_projects`、`0003_project_integer_ids` 后执行 `0004_issues`，并保持现有事务、幂等和失败回滚行为。
+  - [ ] 更新 `src-tauri/tests/local_data.rs` 对 migration 版本的预期，从 `0003_project_integer_ids` 扩展到 `0004_issues`。
 - [ ] 建立 Issue DTO、repository 和 service 边界 (AC: 1, 2)
   - [ ] 新增 `src-tauri/src/types/issue.rs`，定义 `IssueStatus`、`IssueRecord`、`IssueListResponse`、`CreateIssueInput`、`UpdateIssueInput` 等跨边界 DTO，JSON 字段使用 `camelCase`。
   - [ ] `IssueStatus` 目前只需支持 `backlog` 的创建默认值，但类型必须保留 PRD 状态字面量：`backlog`、`running`、`review`、`completed`。
@@ -76,7 +77,7 @@ Status: ready-for-dev
 - Issue / AgentSession / CompletionAttempt 状态变化只通过 Rust Core command 完成；React store 只保存 view state、选中项、Dialog 可见性和缓存查询结果。[Source: `_bmad-output/planning-artifacts/architecture.md` §State Management Patterns]
 - Tauri command 使用 `snake_case`，前端 wrapper 使用 `camelCase`；跨边界 DTO 显式建模，JSON 字段使用 `camelCase`。[Source: `_bmad-output/planning-artifacts/architecture.md` §API / Command Naming Conventions]
 - `commands/*_commands.rs` 只做边界适配；`core/*_service.rs` 执行业务校验和状态动作；`db/*_repository.rs` 只做持久化。[Source: `_bmad-output/planning-artifacts/architecture.md` §Service Boundaries]
-- SQLite 表名使用 `snake_case` 复数名词，列名使用 `snake_case`，timestamp 列以 `_at` 结尾并保存 ISO 8601 UTC 字符串。[Source: `_bmad-output/planning-artifacts/architecture.md` §Database Naming Conventions]
+- SQLite 表名使用 `snake_case` 复数名词，列名使用 `snake_case`；主键使用 `INTEGER PRIMARY KEY`；外键字段使用 INTEGER；timestamp 列以 `_at` 结尾并保存 Unix epoch milliseconds。[Source: `_bmad-output/planning-artifacts/architecture.md` §Database Naming Conventions]
 - 新增 command 时必须有统一错误 code、command wrapper 和至少一个失败路径测试。[Source: `_bmad-output/planning-artifacts/architecture.md` §Enforcement Guidelines]
 
 ### 当前代码状态与修改指引
@@ -86,7 +87,7 @@ Status: ready-for-dev
 - `src/app/app-shell.tsx` 已有 Project Switcher 和默认 `activeActivity = "issues"`；修改时不要破坏 Project Switcher 的新窗口行为和 Activity Bar 入口。
 - `src/features/project/project-commands.ts` 展示了 command wrapper 模式；Issue wrapper 应放在 `src/features/issues/issue-commands.ts`，继续通过 `invokeCommand`。
 - Rust 侧当前只有 Project 模块：`types/project.rs`、`db/project_repository.rs`、`core/project_service.rs`、`commands/project_commands.rs`。Issue 模块应平行新增，不要把 Issue 逻辑塞进 Project service。
-- `src-tauri/src/db/migrations.rs` 当前内联注册 `0001_core` 和 `0002_projects`；新增 `0003_issues` 时按现有常量和 `include_str!` 风格扩展。
+- `src-tauri/src/db/migrations.rs` 当前内联注册 Project 相关 migrations；本轮 course correction 已为 Project 整数 id / epoch ms 预留 `0003_project_integer_ids`，因此 Issue schema 应新增为 `0004_issues`。
 - `src-tauri/tests/project.rs` 已覆盖 Project repository/service 行为。Issue 测试可以新建 `src-tauri/tests/issue.rs`，保持测试职责清晰。
 
 ### 数据与行为细节
@@ -95,25 +96,24 @@ Status: ready-for-dev
 
 ```sql
 CREATE TABLE IF NOT EXISTS issues (
-  id TEXT PRIMARY KEY NOT NULL,
-  project_id TEXT NOT NULL,
-  title TEXT NOT NULL,
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL,
+  title TEXT NOT NULL CHECK (length(trim(title)) > 0),
   description TEXT NOT NULL,
-  status TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CHECK (status IN ('backlog', 'running', 'review', 'completed'))
+  status TEXT NOT NULL CHECK (status IN ('backlog', 'running', 'review', 'completed')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 ```
 
 - 为查询添加索引，例如 `CREATE INDEX IF NOT EXISTS idx_issues_project_id_status ON issues (project_id, status, updated_at);`。如果实现按 `updated_at DESC` 列表排序，也可使用 `idx_issues_project_id_updated_at`。
-- Issue id 可沿用 Project 的 SQLite 随机 id 模式，例如 `issue-` + `lower(hex(randomblob(16)))`，避免额外依赖。
+- Issue id 使用 SQLite 自动分配的整数 id；不要再使用 `issue-` + 随机 hex 字符串。
 - `list_issues` 只返回当前 Project 的 Issues，建议按 `updated_at DESC, created_at DESC` 排序。
 - `create_issue` 输入只接受 `projectId`、`title`、`description`；Rust Core trim 后持久化。`title` 为空时返回 `ISSUE_VALIDATION_FAILED`，不插入记录。
 - `description` 可以为空字符串；不要为了“完整任务描述”强制前端或 Rust Core 拒绝空描述，除非后续需求明确要求。
 - `update_issue` 只允许更新 `title` 和 `description`；不得从前端传入或修改 `status`、`createdAt`、`updatedAt`、`projectId`。
-- 更新时必须设置新的 `updated_at`；如果 SQLite 时间精度导致测试偶发相等，测试可先把旧值手动改成较早固定值再调用 service。
+- 更新时必须设置新的 `updated_at` epoch milliseconds；如果测试偶发相等，测试可先把旧值手动改成较早固定值再调用 service。
 - Project 不存在时，创建/list 应返回结构化错误，不自动创建 Project，也不跨 Project 泄漏 Issue。
 
 ### UX 与可访问性要求
@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS issues (
 - Story 1.2 建立了 `LocalDataService`、SQLite 连接、migration runner、`initialize_local_data` command、统一 `CommandError` 和前端 `invokeCommand` wrapper。
 - Story 1.3 建立了 `projects` migration、Project DTO/repository/service、Git repo 最小检测、`create_project` command、Tauri dialog 创建流程；review 已修复 canonical path、duplicate insert、dialog pending/reject、最小 dialog 权限、路径错误区分、SQLite 随机 Project id。
 - Story 1.4 建立了 `list_projects`、`open_project`、`open_project_window`、Project Home 持久化列表恢复、路径异常展示、Project Switcher 和跨窗口 Project 打开行为；review 已修复重复窗口聚焦、URL 项目打开错误归因、Activity Project 名称去重和 Switcher `Esc` 关闭。
+- 2026-06-05 course correction：Project id 和未来实体 id 统一改为 SQLite INTEGER；`created_at`、`updated_at`、`last_opened_at` 等时间列统一改为 epoch milliseconds，UI 展示时按本机本地时区格式化。
 - 最近提交 `adc21ae Set macOS traffic light y position to 22` 只调整 titlebar/窗口 chrome；本 story 不需要继续修改 titlebar 行为。
 
 ### Git Intelligence

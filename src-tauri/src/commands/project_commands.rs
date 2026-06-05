@@ -49,10 +49,10 @@ pub async fn open_project_window(
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {
         existing_window.show().map_err(|error| {
-            project_window_error(&project.id, "Project 窗口显示失败。", error.to_string())
+            project_window_error(project.id, "Project 窗口显示失败。", error.to_string())
         })?;
         existing_window.set_focus().map_err(|error| {
-            project_window_error(&project.id, "Project 窗口聚焦失败。", error.to_string())
+            project_window_error(project.id, "Project 窗口聚焦失败。", error.to_string())
         })?;
     } else {
         tauri::WebviewWindowBuilder::new(
@@ -67,11 +67,11 @@ pub async fn open_project_window(
         .traffic_light_position(tauri::LogicalPosition::new(16.0, 22.0))
         .build()
         .map_err(|error| {
-            project_window_error(&project.id, "Project 窗口打开失败。", error.to_string())
+            project_window_error(project.id, "Project 窗口打开失败。", error.to_string())
         })?;
     }
 
-    ProjectService::record_project_opened_in_data_dir(data_dir, &project.id)?;
+    ProjectService::record_project_opened_in_data_dir(data_dir, project.id)?;
 
     Ok(OpenProjectWindowResponse {
         project_id: project.id,
@@ -79,9 +79,9 @@ pub async fn open_project_window(
     })
 }
 
-fn project_window_error(project_id: &str, message: &str, cause: String) -> CommandError {
+fn project_window_error(project_id: i64, message: &str, cause: String) -> CommandError {
     CommandError::new(CommandErrorCode::ProjectPersistenceFailed, message)
-        .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id.to_string()))
+        .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
         .with_detail(ErrorDetail::new("Cause").with_value("message", cause))
 }
 

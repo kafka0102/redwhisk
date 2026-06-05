@@ -1,15 +1,57 @@
 workflow: bmad-dev-workflow
-phase: story-created
+phase: complete
 story_file: _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
 story_key: 1-5-create-and-edit-local-issue
 story_status: ready-for-dev
-baseline_commit: adc21ae
+baseline_commit: 0fe189a
 changed_files:
   - _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-validation_commands: []
-validation_results: []
-review_summary:
+  - _bmad-output/planning-artifacts/architecture.md
+  - _bmad-output/planning-artifacts/prds/prd-redwhisk-2026-06-03/addendum.md
+  - _bmad-output/planning-artifacts/sprint-change-proposal-integer-ids-and-epoch-ms-2026-06-05.md
+  - src-tauri/migrations/0002_projects.sql
+  - src-tauri/migrations/0003_project_integer_ids.sql
+  - src-tauri/src/commands/project_commands.rs
+  - src-tauri/src/core/project_service.rs
+  - src-tauri/src/db/migrations.rs
+  - src-tauri/src/db/project_repository.rs
+  - src-tauri/src/types/project.rs
+  - src-tauri/tests/local_data.rs
+  - src-tauri/tests/project.rs
+  - src/app/app.test.tsx
+  - src/app/app.tsx
+  - src/features/project/project-commands.ts
+  - src/features/project/project-switcher.tsx
+  - src/shared/commands/command-client.test.ts
+validation_commands:
+  - cargo test --manifest-path src-tauri/Cargo.toml --test project --no-run
+  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data --no-run
+  - pnpm typecheck
+  - cargo test --manifest-path src-tauri/Cargo.toml --test project
+  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data
+  - pnpm test -- --run src/app/app.test.tsx src/shared/commands/command-client.test.ts
+  - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - pnpm build
+  - cargo test --manifest-path src-tauri/Cargo.toml
+validation_results:
+  - passed: Rust project test compile
+  - passed: Rust local_data test compile
+  - passed: TypeScript typecheck
+  - passed: Rust project tests, 15 tests
+  - passed: Rust local_data tests, 5 tests
+  - passed: targeted Vitest, 25 tests
+  - passed: Prettier format command
+  - passed: cargo fmt
+  - passed: ESLint
+  - passed: full TypeScript typecheck
+  - passed: full Vitest, 25 tests
+  - passed: Vite production build
+  - passed: full Cargo tests, 20 integration tests plus crates/doc tests
+review_summary: 架构调整已完成并验证；Story 1.5 仍保持 ready-for-dev，已更新为 INTEGER id 与 epoch ms schema 前提。
 blocking_reason:
-updated_at: 2026-06-05T14:37:15+0800
+updated_at: 2026-06-05T15:16:42+0800

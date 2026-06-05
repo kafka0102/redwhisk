@@ -178,7 +178,7 @@ function projectInitial(name: string): string {
 }
 
 function projectIconColor(project: ProjectSummary): string {
-  const source = project.id || project.name;
+  const source = project.id > 0 ? String(project.id) : project.name;
   let hash = 0;
 
   for (const character of source) {

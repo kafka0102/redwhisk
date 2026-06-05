@@ -38,11 +38,11 @@ describe("command client", () => {
 
   it("invokes Rust Core through the create project command", async () => {
     invokeMock.mockResolvedValue({
-      id: "project-123",
+      id: 1,
       name: "redwhisk",
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-      createdAt: "2026-06-04T14:00:00.000Z",
-      lastOpenedAt: "2026-06-04T14:00:00.000Z",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_581_600_000,
     });
 
     await expect(
@@ -50,11 +50,11 @@ describe("command client", () => {
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       }),
     ).resolves.toEqual({
-      id: "project-123",
+      id: 1,
       name: "redwhisk",
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-      createdAt: "2026-06-04T14:00:00.000Z",
-      lastOpenedAt: "2026-06-04T14:00:00.000Z",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_581_600_000,
     });
     expect(invokeMock).toHaveBeenCalledWith("create_project", {
       input: {
@@ -67,11 +67,11 @@ describe("command client", () => {
     invokeMock.mockResolvedValue({
       projects: [
         {
-          id: "project-123",
+          id: 1,
           name: "redwhisk",
           repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-          createdAt: "2026-06-04T14:00:00.000Z",
-          lastOpenedAt: "2026-06-04T14:00:00.000Z",
+          createdAt: 1_780_581_600_000,
+          lastOpenedAt: 1_780_581_600_000,
           pathStatus: "available",
         },
       ],
@@ -80,11 +80,11 @@ describe("command client", () => {
     await expect(listProjects()).resolves.toEqual({
       projects: [
         {
-          id: "project-123",
+          id: 1,
           name: "redwhisk",
           repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-          createdAt: "2026-06-04T14:00:00.000Z",
-          lastOpenedAt: "2026-06-04T14:00:00.000Z",
+          createdAt: 1_780_581_600_000,
+          lastOpenedAt: 1_780_581_600_000,
           pathStatus: "available",
         },
       ],
@@ -94,39 +94,37 @@ describe("command client", () => {
 
   it("invokes Rust Core through the open project command", async () => {
     invokeMock.mockResolvedValue({
-      id: "project-123",
+      id: 1,
       name: "redwhisk",
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-      createdAt: "2026-06-04T14:00:00.000Z",
-      lastOpenedAt: "2026-06-05T02:00:00.000Z",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_624_800_000,
     });
 
-    await expect(openProject({ projectId: "project-123" })).resolves.toEqual({
-      id: "project-123",
+    await expect(openProject({ projectId: 1 })).resolves.toEqual({
+      id: 1,
       name: "redwhisk",
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-      createdAt: "2026-06-04T14:00:00.000Z",
-      lastOpenedAt: "2026-06-05T02:00:00.000Z",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_624_800_000,
     });
     expect(invokeMock).toHaveBeenCalledWith("open_project", {
-      input: { projectId: "project-123" },
+      input: { projectId: 1 },
     });
   });
 
   it("invokes Rust Core through the open project window command", async () => {
     invokeMock.mockResolvedValue({
-      projectId: "project-123",
-      windowLabel: "project-project-123",
+      projectId: 1,
+      windowLabel: "project-1",
     });
 
-    await expect(
-      openProjectWindow({ projectId: "project-123" }),
-    ).resolves.toEqual({
-      projectId: "project-123",
-      windowLabel: "project-project-123",
+    await expect(openProjectWindow({ projectId: 1 })).resolves.toEqual({
+      projectId: 1,
+      windowLabel: "project-1",
     });
     expect(invokeMock).toHaveBeenCalledWith("open_project_window", {
-      input: { projectId: "project-123" },
+      input: { projectId: 1 },
     });
   });
 

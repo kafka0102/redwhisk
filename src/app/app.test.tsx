@@ -52,19 +52,19 @@ describe("App project entry", () => {
     currentProjectList = {
       projects: [
         {
-          id: "redwhisk",
+          id: 1,
           name: "RedWhisk",
           repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-          createdAt: "2026-06-04T14:00:00.000Z",
-          lastOpenedAt: "2026-06-05T02:00:00.000Z",
+          createdAt: 1_780_581_600_000,
+          lastOpenedAt: 1_780_624_800_000,
           pathStatus: "available",
         },
         {
-          id: "local-agents",
+          id: 2,
           name: "Local Agents Lab",
           repoPath: "/Users/kafka0102/workspace/local-agents",
-          createdAt: "2026-06-04T13:00:00.000Z",
-          lastOpenedAt: "2026-06-05T01:00:00.000Z",
+          createdAt: 1_780_578_000_000,
+          lastOpenedAt: 1_780_621_200_000,
           pathStatus: "missing",
         },
       ],
@@ -87,12 +87,12 @@ describe("App project entry", () => {
         name: project.name,
         repoPath: project.repoPath,
         createdAt: project.createdAt,
-        lastOpenedAt: "2026-06-05T03:00:00.000Z",
+        lastOpenedAt: 1_780_628_400_000,
       };
     });
     openProjectWindowMock.mockResolvedValue({
-      projectId: "other-project",
-      windowLabel: "project-other-project",
+      projectId: 3,
+      windowLabel: "project-3",
     });
   });
 
@@ -132,7 +132,7 @@ describe("App project entry", () => {
   });
 
   it("opens directly to a project workbench when the window URL carries a project id", async () => {
-    window.history.replaceState(null, "", "/?projectId=redwhisk");
+    window.history.replaceState(null, "", "/?projectId=1");
 
     render(<App />);
 
@@ -156,7 +156,7 @@ describe("App project entry", () => {
   });
 
   it("shows URL project open failures as project open errors", async () => {
-    window.history.replaceState(null, "", "/?projectId=local-agents");
+    window.history.replaceState(null, "", "/?projectId=2");
 
     render(<App />);
 
@@ -179,7 +179,7 @@ describe("App project entry", () => {
       await screen.findByRole("button", { name: "Open project RedWhisk" }),
     );
 
-    expect(openProjectMock).toHaveBeenCalledWith({ projectId: "redwhisk" });
+    expect(openProjectMock).toHaveBeenCalledWith({ projectId: 1 });
     const activityBar = screen.getByRole("navigation", {
       name: "Activity Bar",
     });
@@ -232,7 +232,7 @@ describe("App project entry", () => {
     );
 
     expect(openProjectMock).toHaveBeenCalledWith({
-      projectId: "local-agents",
+      projectId: 2,
     });
     expect(
       await screen.findByRole("status", { name: "Project open status" }),
@@ -247,11 +247,11 @@ describe("App project entry", () => {
     const user = userEvent.setup();
     openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/new-repo");
     createProjectMock.mockResolvedValue({
-      id: "project-123",
+      id: 3,
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
-      createdAt: "2026-06-04T14:00:00.000Z",
-      lastOpenedAt: "2026-06-04T14:00:00.000Z",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_581_600_000,
     });
 
     render(<App />);
@@ -395,19 +395,19 @@ describe("App project entry", () => {
     currentProjectList = {
       projects: [
         {
-          id: "redwhisk",
+          id: 1,
           name: "RedWhisk",
           repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-          createdAt: "2026-06-04T14:00:00.000Z",
-          lastOpenedAt: "2026-06-05T02:00:00.000Z",
+          createdAt: 1_780_581_600_000,
+          lastOpenedAt: 1_780_624_800_000,
           pathStatus: "available",
         },
         {
-          id: "other-project",
+          id: 3,
           name: "Other Project",
           repoPath: "/Users/kafka0102/workspace/other-project",
-          createdAt: "2026-06-04T13:00:00.000Z",
-          lastOpenedAt: "2026-06-05T01:00:00.000Z",
+          createdAt: 1_780_578_000_000,
+          lastOpenedAt: 1_780_621_200_000,
           pathStatus: "available",
         },
       ],
@@ -423,7 +423,7 @@ describe("App project entry", () => {
     await user.click(screen.getByRole("menuitem", { name: /Other Project/ }));
 
     expect(openProjectWindowMock).toHaveBeenCalledWith({
-      projectId: "other-project",
+      projectId: 3,
     });
     expect(
       screen.getByRole("button", { name: "Current project RedWhisk" }),
