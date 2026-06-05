@@ -211,8 +211,9 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
         }
         setIssues((currentIssues) => mergeIssue(currentIssues, createdIssue));
         setSelectedIssueId(createdIssue.id);
-        setDialogMode("edit");
-        setForm(issueToForm(createdIssue));
+        setDialogMode(null);
+        setForm(EMPTY_FORM);
+        restoreDialogTriggerFocus(createdIssue);
       } else if (selectedIssue) {
         const updatedIssue = await updateIssue({
           projectId: requestProjectId,
@@ -423,11 +424,15 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
             </div>
             <div className="issue-dialog__body">
               <div className="issue-dialog__editor">
-                <label className="issue-field">
-                  <span>Title</span>
+                <div className="issue-field">
                   <input
                     ref={titleInputRef}
+                    aria-label="Title"
+                    autoCapitalize="none"
+                    autoCorrect="off"
                     name="title"
+                    placeholder="Issue title"
+                    spellCheck={false}
                     value={form.title}
                     onChange={(event) =>
                       setForm((currentForm) => ({
@@ -436,12 +441,16 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                       }))
                     }
                   />
-                </label>
-                <label className="issue-field">
-                  <span>Description</span>
+                </div>
+                <div className="issue-field">
                   <textarea
+                    aria-label="Description"
+                    autoCapitalize="none"
+                    autoCorrect="off"
                     name="description"
+                    placeholder="Describe the task"
                     rows={10}
+                    spellCheck={false}
                     value={form.description}
                     onChange={(event) =>
                       setForm((currentForm) => ({
@@ -450,7 +459,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                       }))
                     }
                   />
-                </label>
+                </div>
               </div>
               <aside className="issue-dialog__side" aria-label="Issue actions">
                 <section className="issue-dialog__panel">
