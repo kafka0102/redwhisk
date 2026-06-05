@@ -49,6 +49,12 @@ impl DatabaseConfig {
             path: path.clone(),
             source,
         })?;
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .map_err(|source| DatabaseError::OpenDatabase {
+                path: path.clone(),
+                source,
+            })?;
 
         Ok(Database { path, connection })
     }

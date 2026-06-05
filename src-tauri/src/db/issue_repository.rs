@@ -1,0 +1,112 @@
+use rusqlite::{params, Connection, OptionalExtension};
+
+use crate::types::issue::{IssueRecord, IssueStatus};
+
+pub struct IssueRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+impl<'connection> IssueRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn list_by_project_id(&self, project_id: i64) -> rusqlite::Result<Vec<IssueRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, project_id, title, description, status, created_at, updated_at
+             FROM issues
+             WHERE project_id = ?1
+             ORDER BY updated_at DESC, created_at DESC, id DESC",
+        )?;
+
+        let issues = statement
+            .query_map(params![project_id], issue_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(issues)
+    }
+
+    pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<IssueRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, project_id, title, description, status, created_at, updated_at
+                 FROM issues
+                 WHERE id = ?1",
+                params![id],
+                issue_from_row,
+            )
+            .optional()
+    }
+
+    pub fn insert(
+        &self,
+        project_id: i64,
+        title: &str,
+        description: &str,
+    ) -> rusqlite::Result<IssueRecord> {
+        self.connection.execute(
+            "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+             VALUES (
+               ?1,
+               ?2,
+               ?3,
+               'backlog',
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+             )",
+            params![project_id, title, description],
+        )?;
+
+        let id = self.connection.last_insert_rowid();
+        self.find_by_id(id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    pub fn update_title_and_description(
+        &self,
+        project_id: i64,
+        issue_id: i64,
+        title: &str,
+        description: &str,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        let changed = self.connection.execute(
+            "UPDATE issues
+             SET title = ?1,
+                 description = ?2,
+                 updated_at = MAX(
+                   updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 )
+             WHERE id = ?3 AND project_id = ?4",
+            params![title, description, issue_id, project_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        self.find_by_id(issue_id)
+    }
+}
+
+fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
+    Ok(IssueRecord {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        title: row.get(2)?,
+        description: row.get(3)?,
+        status: issue_status_from_str(&row.get::<_, String>(4)?)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
+
+fn issue_status_from_str(value: &str) -> rusqlite::Result<IssueStatus> {
+    match value {
+        "backlog" => Ok(IssueStatus::Backlog),
+        "running" => Ok(IssueStatus::Running),
+        "review" => Ok(IssueStatus::Review),
+        "completed" => Ok(IssueStatus::Completed),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}

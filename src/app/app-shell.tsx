@@ -53,7 +53,10 @@ export function AppShell({
           />
         </header>
         <div className="workbench__content">
-          <ActivityRouter activeActivity={activeActivity} />
+          <ActivityRouter
+            activeActivity={activeActivity}
+            projectId={project.id}
+          />
         </div>
       </section>
     </div>

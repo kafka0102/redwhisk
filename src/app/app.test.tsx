@@ -5,6 +5,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
 import {
+  createIssue,
+  listIssues,
+  updateIssue,
+  type IssueRecord,
+} from "../features/issues/issue-commands";
+import {
   createProject,
   initializeLocalData,
   listProjects,
@@ -25,8 +31,17 @@ vi.mock("../features/project/project-commands", () => ({
   openProjectWindow: vi.fn(),
 }));
 
+vi.mock("../features/issues/issue-commands", () => ({
+  createIssue: vi.fn(),
+  listIssues: vi.fn(),
+  updateIssue: vi.fn(),
+}));
+
 const { open } = await import("@tauri-apps/plugin-dialog");
 const openDialogMock = vi.mocked(open);
+const createIssueMock = vi.mocked(createIssue);
+const listIssuesMock = vi.mocked(listIssues);
+const updateIssueMock = vi.mocked(updateIssue);
 const createProjectMock = vi.mocked(createProject);
 const initializeLocalDataMock = vi.mocked(initializeLocalData);
 const listProjectsMock = vi.mocked(listProjects);
@@ -35,6 +50,7 @@ const openProjectWindowMock = vi.mocked(openProjectWindow);
 
 describe("App project entry", () => {
   let currentProjectList: ProjectListResponse;
+  let currentIssues: IssueRecord[];
 
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
@@ -44,6 +60,9 @@ describe("App project entry", () => {
     listProjectsMock.mockReset();
     openProjectMock.mockReset();
     openProjectWindowMock.mockReset();
+    createIssueMock.mockReset();
+    listIssuesMock.mockReset();
+    updateIssueMock.mockReset();
     initializeLocalDataMock.mockResolvedValue({
       databaseExists: true,
       currentVersion: "0001_core",
@@ -70,6 +89,43 @@ describe("App project entry", () => {
       ],
     };
     listProjectsMock.mockImplementation(async () => currentProjectList);
+    currentIssues = [];
+    listIssuesMock.mockImplementation(async ({ projectId }) => {
+      expect(projectId).toBe(1);
+      return { issues: currentIssues };
+    });
+    createIssueMock.mockImplementation(
+      async ({ projectId, title, description }) => {
+        const createdIssue = {
+          id: 10,
+          projectId,
+          title,
+          description,
+          status: "backlog" as const,
+          createdAt: 1_780_632_000_000,
+          updatedAt: 1_780_632_000_000,
+        };
+        currentIssues = [createdIssue, ...currentIssues];
+        return createdIssue;
+      },
+    );
+    updateIssueMock.mockImplementation(
+      async ({ projectId, issueId, title, description }) => {
+        const updatedIssue = {
+          id: issueId,
+          projectId,
+          title,
+          description,
+          status: "backlog" as const,
+          createdAt: 1_780_632_000_000,
+          updatedAt: 1_780_635_600_000,
+        };
+        currentIssues = currentIssues.map((issue) =>
+          issue.id === issueId ? updatedIssue : issue,
+        );
+        return updatedIssue;
+      },
+    );
     openProjectMock.mockImplementation(async ({ projectId }) => {
       const project = currentProjectList.projects.find(
         (item) => item.id === projectId,
@@ -153,6 +209,9 @@ describe("App project entry", () => {
         .getByRole("button", { name: "Current project RedWhisk" })
         .closest(".workbench__header"),
     ).toHaveAttribute("data-tauri-drag-region");
+    await waitFor(() =>
+      expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
+    );
   });
 
   it("shows URL project open failures as project open errors", async () => {
@@ -204,6 +263,84 @@ describe("App project entry", () => {
     expect(
       within(screen.getByRole("main")).queryByText("RedWhisk"),
     ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
+    );
+  });
+
+  it("creates a minimal issue with title and description only", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "New Issue" }));
+    await user.type(screen.getByLabelText("Title"), "Draft local issue");
+    await user.type(screen.getByLabelText("Description"), "Small task shape");
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    expect(createIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      title: "Draft local issue",
+      description: "Small task shape",
+    });
+    expect(
+      await screen.findByRole("button", { name: "Draft local issue" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByDisplayValue("Draft local issue")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Small task shape")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/priority/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/label/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/assignee/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/milestone/i)).not.toBeInTheDocument();
+  });
+
+  it("edits an issue by updating only title and description", async () => {
+    const user = userEvent.setup();
+    currentIssues = [
+      {
+        id: 20,
+        projectId: 1,
+        title: "Existing issue",
+        description: "Existing description",
+        status: "backlog",
+        createdAt: 1_780_632_000_000,
+        updatedAt: 1_780_632_000_000,
+      },
+    ];
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Updated issue");
+    await user.clear(screen.getByLabelText("Description"));
+    await user.type(
+      screen.getByLabelText("Description"),
+      "Updated description",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 20,
+      title: "Updated issue",
+      description: "Updated description",
+    });
+    expect(
+      await screen.findByRole("button", { name: "Updated issue" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByDisplayValue("Updated issue")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Updated description")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/priority/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/label/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/assignee/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/milestone/i)).not.toBeInTheDocument();
   });
 
   it("shows only the create card when there are no saved projects", async () => {

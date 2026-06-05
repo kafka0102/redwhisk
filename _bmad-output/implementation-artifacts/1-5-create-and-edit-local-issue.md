@@ -4,7 +4,7 @@ baseline_commit: adc21ae
 
 # Story 1.5: 创建和编辑本地 Issue
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -22,45 +22,59 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 增量创建 `issues` 持久化 schema (AC: 1)
-  - [ ] 新增 `src-tauri/migrations/0004_issues.sql`，创建 `issues` 表，字段至少包含 `id`、`project_id`、`title`、`description`、`status`、`created_at`、`updated_at`。
-  - [ ] `id` 使用 `INTEGER PRIMARY KEY`；`project_id` 使用 INTEGER 并引用 `projects(id)`；`created_at` / `updated_at` 使用 Unix epoch milliseconds 的 `INTEGER NOT NULL`。
-  - [ ] 为当前 Project 查询添加索引，例如 `idx_issues_project_id_status` 或 `idx_issues_project_id_updated_at`。
-  - [ ] 更新 `src-tauri/src/db/migrations.rs` 的静态 migration 列表，确保 `0001_core`、`0002_projects`、`0003_project_integer_ids` 后执行 `0004_issues`，并保持现有事务、幂等和失败回滚行为。
-  - [ ] 更新 `src-tauri/tests/local_data.rs` 对 migration 版本的预期，从 `0003_project_integer_ids` 扩展到 `0004_issues`。
-- [ ] 建立 Issue DTO、repository 和 service 边界 (AC: 1, 2)
-  - [ ] 新增 `src-tauri/src/types/issue.rs`，定义 `IssueStatus`、`IssueRecord`、`IssueListResponse`、`CreateIssueInput`、`UpdateIssueInput` 等跨边界 DTO，JSON 字段使用 `camelCase`。
-  - [ ] `IssueStatus` 目前只需支持 `backlog` 的创建默认值，但类型必须保留 PRD 状态字面量：`backlog`、`running`、`review`、`completed`。
-  - [ ] 新增 `src-tauri/src/db/issue_repository.rs`，只负责 `issues` 表读写：按 Project 查询、按 id 查询、insert、更新 `title`/`description` 和 `updated_at`。
-  - [ ] 新增 `src-tauri/src/core/issue_service.rs`，负责业务校验：Project 必须存在；Issue 创建默认 `status=backlog`；创建和更新输入要 trim；空 `title` 返回结构化错误；前端校验不能替代 Rust Core 校验。
-  - [ ] 更新 `src-tauri/src/types/mod.rs`、`src-tauri/src/db/mod.rs`、`src-tauri/src/core/mod.rs` 暴露新增模块。
-- [ ] 暴露 Issue Tauri commands 和前端 command wrapper (AC: 1, 2)
-  - [ ] 新增 `src-tauri/src/commands/issue_commands.rs`，只做 Tauri 参数适配、data dir 初始化、调用 `IssueService` 和错误映射。
-  - [ ] 注册 commands：`list_issues`、`create_issue`、`update_issue`；command 使用 `snake_case`，前端 wrapper 使用 `camelCase`。
-  - [ ] 新增或扩展错误码，例如 `ISSUE_PERSISTENCE_FAILED`、`ISSUE_NOT_FOUND`、`ISSUE_VALIDATION_FAILED`；错误结构继续包含 `code`、`message`、可选 `details[].@type`。
-  - [ ] 新增 `src/features/issues/issue-commands.ts`，通过 `invokeCommand` 调用 Rust Core；不要在 feature 组件里直接调用 `invoke`。
-- [ ] 将 `IssuesActivity` 从占位切换为最小 Issue 创建/编辑界面 (AC: 1, 2, 3)
-  - [ ] 让 `AppShell` / `ActivityRouter` 把当前 `project.id` 传给 `IssuesActivity`；不要让 `IssuesActivity` 猜测当前 Project。
-  - [ ] `IssuesActivity` 初次渲染时调用 `listIssues({ projectId })`，展示当前 Project 的 Issue 列表；空状态显示轻量提示和 `New Issue` 动作。
-  - [ ] 提供最小创建表单，只包含 `title`、`description`、`Cancel`、`Create Issue`；成功后刷新/合并列表并选中新 Issue。
-  - [ ] 提供最小编辑表单，只包含 `title`、`description`、`Save` 或失焦保存；保存成功后更新列表和当前选中 Issue。
-  - [ ] UI 不提供 priority、label、assignee、milestone，不显示完整 Git/Diff/Agent/Run 能力，不新增 Story 1.6 的右侧 Session 操作区。
-  - [ ] 对失败显示事实性错误并保留原业务状态，例如创建失败不插入 Issue，更新失败不把本地缓存伪装成已保存。
-- [ ] 保留前置 story 行为并控制范围 (AC: 1-3)
-  - [ ] 保留 Project Home、Project Switcher、路径异常、Activity Bar 和默认 Issues Activity 行为。
-  - [ ] 不提前实现 `issue_actions`；Story 1.7 专门负责 IssueAction 审计。若本 story 实现创建 Issue command event，可只作为 UI refresh 辅助，不写审计表。
-  - [ ] 不实现 Story 1.6 的完整四泳道和 Issue Detail Dialog 右侧操作；最小列表/表单可以为后续四泳道重构保留清晰组件边界。
-  - [ ] 不实现 Run Dialog、Agent Profile、Agent Session、Mark Review、Completion、Summary/Log、Git history 或 cloud sync。
-- [ ] 测试与验证 (AC: 1-3)
-  - [ ] 添加 Rust 测试覆盖：`0003_issues` migration 创建字段、外键/索引；创建 Issue 默认 `backlog` 并保存 timestamps；更新 `title`/`description` 会推进 `updated_at`；空标题失败且不插入；跨 Project 查询不会泄漏其它 Project 的 Issue。
-  - [ ] 添加或更新 Vitest 覆盖：进入 Project 后 `IssuesActivity` 调用 `listIssues`；空状态能打开创建表单；创建只提交 `title`/`description` 并渲染返回 Issue；编辑只更新 `title`/`description`；表单中不存在 priority、label、assignee、milestone。
-  - [ ] 运行 `pnpm format`。
-  - [ ] 运行 `cargo fmt --manifest-path src-tauri/Cargo.toml`。
-  - [ ] 运行 `pnpm lint`。
-  - [ ] 运行 `pnpm typecheck`。
-  - [ ] 运行 `pnpm test`。
-  - [ ] 运行 `pnpm build`。
-  - [ ] 运行 `cd src-tauri && cargo test`。
+- [x] 增量创建 `issues` 持久化 schema (AC: 1)
+  - [x] 新增 `src-tauri/migrations/0004_issues.sql`，创建 `issues` 表，字段至少包含 `id`、`project_id`、`title`、`description`、`status`、`created_at`、`updated_at`。
+  - [x] `id` 使用 `INTEGER PRIMARY KEY`；`project_id` 使用 INTEGER 并引用 `projects(id)`；`created_at` / `updated_at` 使用 Unix epoch milliseconds 的 `INTEGER NOT NULL`。
+  - [x] 为当前 Project 查询添加索引，例如 `idx_issues_project_id_status` 或 `idx_issues_project_id_updated_at`。
+  - [x] 更新 `src-tauri/src/db/migrations.rs` 的静态 migration 列表，确保 `0001_core`、`0002_projects`、`0003_project_integer_ids` 后执行 `0004_issues`，并保持现有事务、幂等和失败回滚行为。
+  - [x] 更新 `src-tauri/tests/local_data.rs` 对 migration 版本的预期，从 `0003_project_integer_ids` 扩展到 `0004_issues`。
+- [x] 建立 Issue DTO、repository 和 service 边界 (AC: 1, 2)
+  - [x] 新增 `src-tauri/src/types/issue.rs`，定义 `IssueStatus`、`IssueRecord`、`IssueListResponse`、`CreateIssueInput`、`UpdateIssueInput` 等跨边界 DTO，JSON 字段使用 `camelCase`。
+  - [x] `IssueStatus` 目前只需支持 `backlog` 的创建默认值，但类型必须保留 PRD 状态字面量：`backlog`、`running`、`review`、`completed`。
+  - [x] 新增 `src-tauri/src/db/issue_repository.rs`，只负责 `issues` 表读写：按 Project 查询、按 id 查询、insert、更新 `title`/`description` 和 `updated_at`。
+  - [x] 新增 `src-tauri/src/core/issue_service.rs`，负责业务校验：Project 必须存在；Issue 创建默认 `status=backlog`；创建和更新输入要 trim；空 `title` 返回结构化错误；前端校验不能替代 Rust Core 校验。
+  - [x] 更新 `src-tauri/src/types/mod.rs`、`src-tauri/src/db/mod.rs`、`src-tauri/src/core/mod.rs` 暴露新增模块。
+- [x] 暴露 Issue Tauri commands 和前端 command wrapper (AC: 1, 2)
+  - [x] 新增 `src-tauri/src/commands/issue_commands.rs`，只做 Tauri 参数适配、data dir 初始化、调用 `IssueService` 和错误映射。
+  - [x] 注册 commands：`list_issues`、`create_issue`、`update_issue`；command 使用 `snake_case`，前端 wrapper 使用 `camelCase`。
+  - [x] 新增或扩展错误码，例如 `ISSUE_PERSISTENCE_FAILED`、`ISSUE_NOT_FOUND`、`ISSUE_VALIDATION_FAILED`；错误结构继续包含 `code`、`message`、可选 `details[].@type`。
+  - [x] 新增 `src/features/issues/issue-commands.ts`，通过 `invokeCommand` 调用 Rust Core；不要在 feature 组件里直接调用 `invoke`。
+- [x] 将 `IssuesActivity` 从占位切换为最小 Issue 创建/编辑界面 (AC: 1, 2, 3)
+  - [x] 让 `AppShell` / `ActivityRouter` 把当前 `project.id` 传给 `IssuesActivity`；不要让 `IssuesActivity` 猜测当前 Project。
+  - [x] `IssuesActivity` 初次渲染时调用 `listIssues({ projectId })`，展示当前 Project 的 Issue 列表；空状态显示轻量提示和 `New Issue` 动作。
+  - [x] 提供最小创建表单，只包含 `title`、`description`、`Cancel`、`Create Issue`；成功后刷新/合并列表并选中新 Issue。
+  - [x] 提供最小编辑表单，只包含 `title`、`description`、`Save` 或失焦保存；保存成功后更新列表和当前选中 Issue。
+  - [x] UI 不提供 priority、label、assignee、milestone，不显示完整 Git/Diff/Agent/Run 能力，不新增 Story 1.6 的右侧 Session 操作区。
+  - [x] 对失败显示事实性错误并保留原业务状态，例如创建失败不插入 Issue，更新失败不把本地缓存伪装成已保存。
+- [x] 保留前置 story 行为并控制范围 (AC: 1-3)
+  - [x] 保留 Project Home、Project Switcher、路径异常、Activity Bar 和默认 Issues Activity 行为。
+  - [x] 不提前实现 `issue_actions`；Story 1.7 专门负责 IssueAction 审计。若本 story 实现创建 Issue command event，可只作为 UI refresh 辅助，不写审计表。
+  - [x] 不实现 Story 1.6 的完整四泳道和 Issue Detail Dialog 右侧操作；最小列表/表单可以为后续四泳道重构保留清晰组件边界。
+  - [x] 不实现 Run Dialog、Agent Profile、Agent Session、Mark Review、Completion、Summary/Log、Git history 或 cloud sync。
+- [x] 测试与验证 (AC: 1-3)
+  - [x] 添加 Rust 测试覆盖：`0003_issues` migration 创建字段、外键/索引；创建 Issue 默认 `backlog` 并保存 timestamps；更新 `title`/`description` 会推进 `updated_at`；空标题失败且不插入；跨 Project 查询不会泄漏其它 Project 的 Issue。
+  - [x] 添加或更新 Vitest 覆盖：进入 Project 后 `IssuesActivity` 调用 `listIssues`；空状态能打开创建表单；创建只提交 `title`/`description` 并渲染返回 Issue；编辑只更新 `title`/`description`；表单中不存在 priority、label、assignee、milestone。
+  - [x] 运行 `pnpm format`。
+  - [x] 运行 `cargo fmt --manifest-path src-tauri/Cargo.toml`。
+  - [x] 运行 `pnpm lint`。
+  - [x] 运行 `pnpm typecheck`。
+  - [x] 运行 `pnpm test`。
+  - [x] 运行 `pnpm build`。
+  - [x] 运行 `cd src-tauri && cargo test`。
+
+### Review Findings (AI)
+
+- [x] [Review][Patch] 更新 Issue 缺少 Project 作用域，可能跨 Project 修改 Issue [src-tauri/src/core/issue_service.rs:46]
+- [x] [Review][Patch] `updated_at` 不保证单调推进，连续更新可能不重排 [src-tauri/src/db/issue_repository.rs:71]
+- [x] [Review][Patch] Project 切换后 `listIssues` 失败会保留旧 Project 的 Issue 状态 [src/features/issues/issues-activity.tsx:37]
+- [x] [Review][Patch] 创建/更新异步结果缺少 Project 请求防护，可能污染切换后的 UI [src/features/issues/issues-activity.tsx:116]
+- [x] [Review][Patch] 从已选 Issue 进入创建后取消无法恢复原选择 [src/features/issues/issues-activity.tsx:80]
+- [x] [Review][Patch] 前端缺少 create 失败路径测试，未验证失败时不伪造本地 Issue [src/app/app.test.tsx:263]
+- [x] [Review][Patch] 前端缺少 update 失败路径测试，未验证失败时保留原业务状态 [src/app/app.test.tsx:299]
+- [x] [Review][Patch] Rust 缺少 `update_issue` not-found / cross-project 测试覆盖 [src-tauri/tests/issue.rs:93]
+- [x] [Review][Patch] SQLite 外键未在连接初始化启用且未测试级联生效 [src-tauri/src/db/connection.rs:47]
+- [x] [Review][Defer] 新增 Issue UI 文案绕过 i18n 字典 [src/features/issues/issues-activity.tsx:147] — deferred, Story 1.9 owns base i18n infrastructure
+- [x] [Review][Defer] 新增跨边界 Issue TypeScript DTO 仍为手写副本 [src/features/issues/issue-commands.ts:3] — deferred, repository has no generated TypeScript contract pipeline yet
 
 ## Dev Notes
 
@@ -184,14 +198,56 @@ cd src-tauri && cargo test
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
 
 ### Debug Log References
+
+- 2026-06-05T15:40+0800：RED，`cargo test --manifest-path src-tauri/Cargo.toml --test issue --no-run` 因缺少 Issue DTO/repository/service/错误码失败。
+- 2026-06-05T15:40+0800：RED，`pnpm test -- --run src/app/app.test.tsx` 因缺少 `src/features/issues/issue-commands.ts` 失败。
+- 2026-06-05T15:44+0800：GREEN 首轮，Rust 暴露 `tauri::Manager` 导入和 repository borrow 细节；Vitest 暴露重复 `New Issue` 与列表按钮可访问名称问题。
+- 2026-06-05T15:46+0800：完整验证首轮，`pnpm lint` / `pnpm typecheck` / `pnpm build` 因测试未使用 `IssueListResponse` 导入失败；已移除后重跑通过。
+- 2026-06-05T15:48+0800：最终验证通过：`pnpm format`、`cargo fmt --manifest-path src-tauri/Cargo.toml`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`cargo test --manifest-path src-tauri/Cargo.toml`。
+- 2026-06-05T16:18+0800：Review patch RED，`cargo test --manifest-path src-tauri/Cargo.toml --test issue` 因 `UpdateIssueInput.project_id` 缺失失败；`pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx` 暴露 update payload、Project 切换 stale state、晚返回 create、Cancel 恢复问题。
+- 2026-06-05T16:22+0800：Review patch 修复后验证通过：`pnpm format`、`cargo fmt --manifest-path src-tauri/Cargo.toml`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`cargo test --manifest-path src-tauri/Cargo.toml`。
 
 ### Completion Notes List
 
 - create-story 上下文分析已完成，已生成 Story 1.5 的开发实现指南。
+- 新增 `0004_issues` migration，并接入静态 migration runner；`issues` 使用 INTEGER 主键、INTEGER `project_id` 外键、epoch ms 时间戳和 Project 更新时间排序索引。
+- 新增 Issue DTO、repository、service 与 Tauri commands；Rust Core 负责 Project 存在性校验、`title` trim/空值校验、默认 `backlog`、创建/更新持久化和结构化错误。
+- 新增前端 Issue command wrapper，`IssuesActivity` 改为最小列表、创建表单和编辑表单；只展示/提交 `title`、`description`，保留 Project Home、Switcher、Activity Bar 和现有 Project 打开行为。
+- 新增 Rust 与 Vitest 覆盖 migration schema、CRUD 业务规则、跨 Project 隔离、Issues Activity list/create/edit 交互和禁止字段不存在性。
+- 解决 code review patch findings：`update_issue` 增加 Project 作用域，`updated_at` 单调推进，SQLite 连接启用 foreign keys，前端清空 Project 切换 stale state、忽略跨 Project 晚返回保存结果、Cancel 恢复原选择，并补失败路径测试。
 
 ### File List
 
+- _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
+- _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- src-tauri/migrations/0004_issues.sql
+- src-tauri/src/commands/issue_commands.rs
+- src-tauri/src/commands/mod.rs
+- src-tauri/src/core/issue_service.rs
+- src-tauri/src/core/mod.rs
+- src-tauri/src/db/issue_repository.rs
+- src-tauri/src/db/connection.rs
+- src-tauri/src/db/migrations.rs
+- src-tauri/src/db/mod.rs
+- src-tauri/src/lib.rs
+- src-tauri/src/types/errors.rs
+- src-tauri/src/types/issue.rs
+- src-tauri/src/types/mod.rs
+- src-tauri/tests/issue.rs
+- src-tauri/tests/local_data.rs
+- src/app/activity-router.tsx
+- src/app/app-shell.tsx
+- src/app/app.css
+- src/app/app.test.tsx
+- src/features/issues/issue-commands.ts
+- src/features/issues/issues-activity.test.tsx
+- src/features/issues/issues-activity.tsx
+
 ### Change Log
+
+- 2026-06-05: 实现 Story 1.5 本地 Issue 创建/编辑最小工作流，补齐 Issue persistence、commands、前端 UI 与验证覆盖；状态推进到 review。
+- 2026-06-05: 解决 code review patch findings，补齐 Project 作用域更新、单调时间戳、SQLite 外键、前端 stale state/竞态防护和失败路径测试；状态推进到 done。
