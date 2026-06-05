@@ -1,39 +1,46 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/1-2-establish-local-data-storage-and-core-command-boundary.md
-story_key: 1-2-establish-local-data-storage-and-core-command-boundary
+story_file: _bmad-output/implementation-artifacts/1-3-create-git-project.md
+story_key: 1-3-create-git-project
 story_status: done
-baseline_commit: 4a33c85
+baseline_commit: aba494e
 changed_files:
-  - _bmad-output/implementation-artifacts/1-2-establish-local-data-storage-and-core-command-boundary.md
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - _bmad-output/implementation-artifacts/1-3-create-git-project.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - package.json
+  - pnpm-lock.yaml
   - src-tauri/Cargo.lock
   - src-tauri/Cargo.toml
-  - src-tauri/migrations/0001_core.sql
-  - src-tauri/src/app_state.rs
-  - src-tauri/src/commands/core_commands.rs
+  - src-tauri/capabilities/default.json
+  - src-tauri/migrations/0002_projects.sql
   - src-tauri/src/commands/mod.rs
-  - src-tauri/src/core/local_data_service.rs
+  - src-tauri/src/commands/project_commands.rs
   - src-tauri/src/core/mod.rs
-  - src-tauri/src/db/connection.rs
+  - src-tauri/src/core/project_service.rs
   - src-tauri/src/db/migrations.rs
   - src-tauri/src/db/mod.rs
+  - src-tauri/src/db/project_repository.rs
+  - src-tauri/src/git/mod.rs
+  - src-tauri/src/git/repository.rs
   - src-tauri/src/lib.rs
   - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/local_data.rs
   - src-tauri/src/types/mod.rs
+  - src-tauri/src/types/project.rs
   - src-tauri/tests/local_data.rs
-  - src/app/app.css
+  - src-tauri/tests/project.rs
   - src/app/app.test.tsx
   - src/app/app.tsx
+  - src/features/project/create-project-card.tsx
+  - src/features/project/project-card-grid.tsx
   - src/features/project/project-commands.ts
+  - src/features/project/project-home.tsx
   - src/shared/commands/command-client.test.ts
-  - src/shared/commands/command-client.ts
-  - src/shared/commands/command-error.ts
 validation_commands:
   - pnpm format
-  - cargo fmt
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo test --manifest-path src-tauri/Cargo.toml --test project
+  - pnpm test -- src/app/app.test.tsx
   - pnpm lint
   - pnpm typecheck
   - pnpm test
@@ -41,12 +48,14 @@ validation_commands:
   - cd src-tauri && cargo test
 validation_results:
   - "PASS: pnpm format"
-  - "PASS: cargo fmt"
+  - "PASS: cargo fmt --manifest-path src-tauri/Cargo.toml"
+  - "PASS: cargo test --manifest-path src-tauri/Cargo.toml --test project"
+  - "PASS: pnpm test -- src/app/app.test.tsx"
   - "PASS: pnpm lint"
   - "PASS: pnpm typecheck"
   - "PASS: pnpm test"
   - "PASS: pnpm build"
   - "PASS: cd src-tauri && cargo test"
-review_summary: "Code review found 6 patch findings; all were applied and revalidated. Story marked done."
+review_summary: "Done: 6/6 review findings fixed and verified."
 blocking_reason:
-updated_at: 2026-06-04T22:03:58+0800
+updated_at: 2026-06-05T09:14:03+0800
