@@ -130,33 +130,38 @@ export function App() {
   }, []);
 
   if (!selectedProject) {
+    const statusMessages = [
+      {
+        label: "Local data status",
+        message: localDataError,
+      },
+      {
+        label: "Project creation status",
+        message: projectCreationError,
+      },
+      {
+        label: "Project open status",
+        message: projectOpenError,
+      },
+    ].filter(
+      (status): status is { label: string; message: string } =>
+        status.message !== null,
+    );
+
     return (
       <>
-        {localDataError ? (
-          <div
-            className="local-data-status"
-            role="status"
-            aria-label="Local data status"
-          >
-            {localDataError}
-          </div>
-        ) : null}
-        {projectCreationError ? (
-          <div
-            className="local-data-status"
-            role="status"
-            aria-label="Project creation status"
-          >
-            {projectCreationError}
-          </div>
-        ) : null}
-        {projectOpenError ? (
-          <div
-            className="local-data-status"
-            role="status"
-            aria-label="Project open status"
-          >
-            {projectOpenError}
+        {statusMessages.length > 0 ? (
+          <div className="local-data-status-stack">
+            {statusMessages.map((status) => (
+              <div
+                className="local-data-status"
+                key={status.label}
+                role="status"
+                aria-label={status.label}
+              >
+                {status.message}
+              </div>
+            ))}
           </div>
         ) : null}
         <ProjectHome

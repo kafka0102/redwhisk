@@ -20,6 +20,10 @@ export function ProjectHome({
         <div>
           <p className="eyebrow">RedWhisk</p>
           <h1>Projects</h1>
+          <p className="project-home__lede">
+            Open a local Git repository to manage issues, agent sessions, and
+            completion checks from one workbench.
+          </p>
         </div>
       </header>
       <ProjectCardGrid
