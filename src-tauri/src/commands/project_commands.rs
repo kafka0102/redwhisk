@@ -62,6 +62,8 @@ pub async fn open_project_window(
         )
         .title(format!("RedWhisk - {}", project.name))
         .inner_size(800.0, 600.0)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
         .build()
         .map_err(|error| {
             project_window_error(&project.id, "Project 窗口打开失败。", error.to_string())

@@ -52,7 +52,9 @@ export function AppShell({
             onProjectsRefresh={onProjectsRefresh}
           />
         </header>
-        <ActivityRouter activeActivity={activeActivity} />
+        <div className="workbench__content">
+          <ActivityRouter activeActivity={activeActivity} />
+        </div>
       </section>
     </div>
   );
