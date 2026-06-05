@@ -148,6 +148,10 @@ describe("IssuesActivity", () => {
     expect(within(dialog).getByLabelText("Description")).toHaveValue(
       "Existing description",
     );
+    expect(within(dialog).getByPlaceholderText("Issue title")).toBeInTheDocument();
+    expect(
+      within(dialog).getByPlaceholderText("Describe the task"),
+    ).toBeInTheDocument();
     expect(
       within(dialog).queryByLabelText(/status|updated/i, {
         selector: "input, textarea, select",
@@ -217,7 +221,7 @@ describe("IssuesActivity", () => {
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
-    await user.type(screen.getByLabelText("Title"), "Draft local issue");
+    await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     const dialog = screen.getByRole("dialog", { name: "New Issue" });
@@ -225,9 +229,9 @@ describe("IssuesActivity", () => {
       await within(dialog).findByRole("status", { name: "Dialog status" }),
     ).toHaveTextContent("Issue title 不能为空。");
     expect(
-      screen.queryByRole("button", { name: "Draft local issue" }),
+      screen.queryByRole("button", { name: "draft local issue" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Draft local issue")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("draft local issue")).toBeInTheDocument();
   });
 
   it("keeps the create dialog open while a create request is pending", async () => {
@@ -251,6 +255,49 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  });
+
+  it("keeps lowercase input and closes the create dialog after save", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    createIssueMock.mockResolvedValue({
+      id: 24,
+      projectId: 1,
+      title: "draft local issue",
+      description: "small task shape",
+      status: "backlog",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_632_000_000,
+    });
+
+    render(<IssuesActivity projectId={1} />);
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    const titleInput = screen.getByLabelText("Title");
+    const descriptionInput = screen.getByLabelText("Description");
+    await user.type(titleInput, "draft local issue");
+    await user.type(descriptionInput, "small task shape");
+
+    expect(titleInput).toHaveValue("draft local issue");
+    expect(descriptionInput).toHaveValue("small task shape");
+
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    await waitFor(() =>
+      expect(createIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        title: "draft local issue",
+        description: "small task shape",
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "New Issue" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "draft local issue" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("keeps the stored issue card when update fails", async () => {

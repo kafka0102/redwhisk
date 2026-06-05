@@ -512,6 +512,7 @@ button:focus-visible {
   font: inherit;
   font-size: 13px;
   letter-spacing: 0;
+  text-transform: none;
 }
 
 .issue-field input {

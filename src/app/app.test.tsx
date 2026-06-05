@@ -276,20 +276,23 @@ describe("App project entry", () => {
       await screen.findByRole("button", { name: "Open project RedWhisk" }),
     );
     await user.click(await screen.findByRole("button", { name: "New Issue" }));
-    await user.type(screen.getByLabelText("Title"), "Draft local issue");
-    await user.type(screen.getByLabelText("Description"), "Small task shape");
+    expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Describe the task")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Title"), "draft local issue");
+    await user.type(screen.getByLabelText("Description"), "small task shape");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
       projectId: 1,
-      title: "Draft local issue",
-      description: "Small task shape",
+      title: "draft local issue",
+      description: "small task shape",
     });
     expect(
-      await screen.findByRole("button", { name: "Draft local issue" }),
+      await screen.findByRole("button", { name: "draft local issue" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByDisplayValue("Draft local issue")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Small task shape")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "New Issue" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/priority/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/label/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/assignee/i)).not.toBeInTheDocument();
