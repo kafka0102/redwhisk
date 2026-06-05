@@ -143,6 +143,11 @@ describe("App project entry", () => {
     expect(
       screen.queryByRole("heading", { name: "Projects" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: "Current project RedWhisk" })
+        .closest(".workbench__header")?.parentElement,
+    ).toHaveClass("workbench");
   });
 
   it("shows URL project open failures as project open errors", async () => {

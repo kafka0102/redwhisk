@@ -167,11 +167,13 @@ button:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
   min-height: 100vh;
   background: var(--color-app);
 }
 
 .activity-bar {
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -210,20 +212,29 @@ button:focus-visible {
 }
 
 .workbench {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-width: 0;
+  display: contents;
 }
 
 .workbench__header {
   position: relative;
   display: flex;
+  grid-column: 1 / -1;
+  grid-row: 1;
   align-items: center;
   gap: 16px;
-  min-height: 44px;
-  padding: 6px 12px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 16px 8px 92px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
+}
+
+.workbench__content {
+  display: grid;
+  grid-column: 2;
+  grid-row: 2;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
 }
 
 .activity-surface {
@@ -378,5 +389,6 @@ button:focus-visible {
 
   .workbench__header {
     align-items: center;
+    padding-left: 86px;
   }
 }
