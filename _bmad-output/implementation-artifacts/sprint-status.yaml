@@ -1,5 +1,5 @@
 # generated: 2026-06-04T15:27:13+0800
-# last_updated: 2026-06-05T20:33:41+0800
+# last_updated: 2026-06-05T22:25:52+0800
 # project: redwhisk
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-05T20:33:41+0800
+last_updated: 2026-06-05T22:25:52+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -48,7 +48,7 @@ development_status:
   1-3-create-git-project: done
   1-4-show-project-home-and-handle-path-errors: done
   1-5-create-and-edit-local-issue: done
-  1-6-show-issues-kanban-and-issue-detail-dialog: ready-for-dev
+  1-6-show-issues-kanban-and-issue-detail-dialog: done
   1-7-record-issue-action-audit: backlog
   1-8-configure-codex-agent-profile-and-project-override: backlog
   1-9-implement-project-settings-global-settings-and-basic-i18n: backlog

@@ -1,15 +1,38 @@
 workflow: bmad-dev-workflow
-phase: story-created
+phase: complete
 story_file: _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
 story_key: 1-6-show-issues-kanban-and-issue-detail-dialog
-story_status: ready-for-dev
+story_status: done
 baseline_commit: d6ae47e
 changed_files:
   - _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-validation_commands: []
-validation_results: []
-review_summary:
+  - src/app/app.css
+  - src/features/issues/issues-activity.test.tsx
+  - src/features/issues/issues-activity.tsx
+validation_commands:
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx
+  - git diff --check
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - pnpm build
+validation_results:
+  - passed: review patch targeted IssuesActivity Vitest, 40 tests
+  - passed: review patch targeted IssuesActivity/App Vitest, 40 tests
+  - passed: whitespace diff check
+  - passed: RED failures confirmed missing kanban lanes, status label, detail dialog, and focus discipline
+  - passed: targeted IssuesActivity/App Vitest, 36 tests
+  - passed: Prettier format
+  - passed: ESLint
+  - passed: TypeScript typecheck
+  - passed: full Vitest, 36 tests
+  - passed: Vite production build
+review_summary: Applied all 7 patch findings for Run placeholder, pending-save close guard, dialog-local errors, focus trap, kanban grid fill, responsive/dark-mode styles, and acceptance-test coverage.
 blocking_reason:
-updated_at: 2026-06-05T20:33:41+0800
+updated_at: 2026-06-05T22:25:52+0800
