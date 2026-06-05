@@ -165,10 +165,9 @@ button:focus-visible {
 }
 
 .app-shell {
-  --window-titlebar-offset: 28px;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
-  grid-template-rows: calc(56px - var(--window-titlebar-offset)) minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
   min-height: 100vh;
   background: var(--color-app);
 }
@@ -226,7 +225,6 @@ button:focus-visible {
   min-width: 0;
   min-height: 56px;
   padding: 8px 16px 8px 92px;
-  transform: translateY(calc(-1 * var(--window-titlebar-offset)));
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
@@ -237,7 +235,6 @@ button:focus-visible {
   grid-row: 2;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
-  padding-top: var(--window-titlebar-offset);
 }
 
 .activity-surface {
