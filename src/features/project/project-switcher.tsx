@@ -113,14 +113,6 @@ export function ProjectSwitcher({
       </button>
       {isOpen ? (
         <div className="project-switcher__popover">
-          <div className="project-switcher__popover-header">
-            <span className="project-switcher__popover-title">
-              Switch Project
-            </span>
-            <span className="project-switcher__popover-count">
-              {projects.length}
-            </span>
-          </div>
           <div
             className="project-switcher__list"
             role="menu"
@@ -146,7 +138,7 @@ export function ProjectSwitcher({
                   <span className="project-switcher__item-name">
                     {project.name}
                   </span>
-                  <span className="project-switcher__item-path" translate="no">
+                  <span className="project-switcher__item-path">
                     {project.path}
                   </span>
                   {project.status === "missing" ? (

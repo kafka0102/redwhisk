@@ -46,16 +46,11 @@ export function AppShell({
       </nav>
       <section className="workbench" aria-label={`${project.name} workbench`}>
         <header className="workbench__header" data-tauri-drag-region>
-          <div className="workbench__header-main">
-            <ProjectSwitcher
-              currentProject={project}
-              projects={projects}
-              onProjectsRefresh={onProjectsRefresh}
-            />
-            <p className="workbench__path" translate="no">
-              {project.path}
-            </p>
-          </div>
+          <ProjectSwitcher
+            currentProject={project}
+            projects={projects}
+            onProjectsRefresh={onProjectsRefresh}
+          />
         </header>
         <div className="workbench__content">
           <ActivityRouter
