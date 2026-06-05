@@ -26,7 +26,7 @@ This document provides the complete epic and story breakdown for redwhisk, decom
 
 FR1: 用户可以从 Project Home 的 `+` card 选择本地 Git Repository 创建 Project；系统必须校验目录是 Git Repository，保存 `project_id`、`name`、`repo_path`、`created_at`、`last_opened_at`，创建成功后进入带 Activity Bar 的 Issues Activity；非 Git 目录必须被拒绝并展示明确错误。
 
-FR2: 用户重新打开应用时先看到 Project Home；Project Home 必须展示本机所有 Project card，按 `last_opened_at` 优先排序，最后一个 card 是 `+` 创建 Project；用户点击 Project card 后系统更新并持久化 `last_opened_at`，再进入该 Project 的 Issues Activity；未选择 Project 前不得显示 Activity Bar；若 `repo_path` 不存在或不可访问，必须在 Project card 和点击后的错误中明确展示且不删除 Project 记录。
+FR2: 用户重新打开应用时先看到 Project Home；Project Home 必须展示本机所有 Project card，按 `last_opened_at` 优先排序，最后一个 card 是 `+` 创建 Project；用户点击 Project card 后系统更新并持久化 `last_opened_at`，再进入该 Project 的 Issues Activity；进入 Project 工作台后，窗口顶部与关闭/最小化/缩放控件同一行显示 Project Switcher，折叠态显示当前 Project 名称并替代静态 `RedWhisk` 标题；Project Switcher 展开后展示本机 Project 列表，每项包含稳定色块 icon、Project 名称、repo path 和当前选中对钩；用户从 Project Switcher 选择另一个可访问 Project 时，系统更新目标 Project 的 `last_opened_at` 并打开新窗口显示该 Project；未选择 Project 前不得显示 Activity Bar；若 `repo_path` 不存在或不可访问，必须在 Project card、Project Switcher item 和点击后的错误中明确展示且不删除 Project 记录。
 
 FR3: 系统必须区分当前 Project Settings 与 Global Settings；Project Settings 位于 Project 工作台 Activity Bar 的 `Settings` 并只影响当前 Project；Global Settings 在 Project Home 通过原生顶部菜单打开，在 Project 工作台也可通过左下角 gear 打开；两者必须支持 Completion Policy、Agent Profile/Override、日志/数据目录、UI language、About 与 Diagnostics 等配置边界。
 
@@ -130,7 +130,7 @@ UX-DR3: 实现桌面布局尺寸 token：Activity Bar 48px、Sidebar 280px、Ses
 
 UX-DR4: 实现克制圆角规则：小控件 3px，按钮和卡片 5px，Dialog 和 Inspector 7px；不得使用大圆角 pill 承载普通文本。
 
-UX-DR5: Project Home 是应用首屏，展示本机 Project card 网格，最后一个 card 是 `+` 创建 Project；未选择 Project 前不显示 Activity Bar。Project 工作台内 Activity Bar 固定在左侧，只包含 Issues、Agents、Settings；当前入口用细竖线或细底色表示，左下角 gear 打开 Global Settings。
+UX-DR5: Project Home 是应用首屏，展示本机 Project card 网格，最后一个 card 是 `+` 创建 Project；未选择 Project 前不显示 Activity Bar。Project 工作台内 Activity Bar 固定在左侧，只包含 Issues、Agents、Settings；当前入口用细竖线或细底色表示，左下角 gear 打开 Global Settings。Project 工作台顶部与系统窗口控件同一行显示 Project Switcher，折叠态只显示当前 Project 名称；展开态为 light 模式下拉列表，每项显示稳定色块 icon、Project 名称、repo path 和当前选中对钩。
 
 UX-DR6: Issues Activity 使用 Backlog、Running、Review、Completed 四个常驻泳道；Issue card 只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。
 
@@ -317,8 +317,8 @@ So that RedWhisk 能以该仓库作为 Issue 和 Agent 工作流边界.
 ### Story 1.4: 展示 Project Home 并处理路径异常
 
 As a 本地开发者,
-I want 打开 RedWhisk 时先看到本机所有 Project card,
-So that 我可以明确选择要进入的项目，或从 `+` card 创建新项目.
+I want 打开 RedWhisk 时能从 Project Home 或工作台顶部 Project Switcher 选择 Project,
+So that 我可以明确进入当前项目，并在需要切换项目时打开另一个项目窗口.
 
 **Requirements:** FR2、NFR1、NFR6
 
@@ -331,15 +331,35 @@ So that 我可以明确选择要进入的项目，或从 `+` card 创建新项�
 **And** 最后一个 card 固定为 `+` 创建 Project
 **And** 未点击 Project card 前不显示 Activity Bar
 
+**Given** 用户已经进入某个 Project 工作台
+**When** 工作台窗口渲染
+**Then** 窗口顶部与关闭/最小化/缩放控件同一行显示 Project Switcher
+**And** Project Switcher 折叠态显示当前 Project 名称，不显示静态 `RedWhisk` 标题
+**And** 工作台内容顶部不再重复展示 `PROJECT` 标识、Project 名称或 repo path
+
 **Given** 最近 Project 的 `repo_path` 不存在或不可访问
-**When** Project Home 渲染或用户点击该 Project card
-**Then** UI 在 card 上展示路径异常状态，并在点击后显示明确错误
+**When** Project Home 或 Project Switcher 渲染该 Project
+**Then** UI 在对应 Project card 或 switcher item 上展示路径异常状态
+**And** 用户点击后显示明确错误
 **And** 不删除 Project 记录
 
 **Given** 用户重新打开某个 Project
 **When** 用户点击 Project card 且路径可访问
 **Then** 系统更新并持久化 `last_opened_at`
 **And** 应用进入该 Project 的 Issues Activity
+
+**Given** 用户在 Project 工作台中打开 Project Switcher
+**When** 下拉列表展开
+**Then** 列表按 `last_opened_at` 优先排序展示本机所有 Project
+**And** 每项左侧显示项目 icon，icon 文案默认取 Project 名称首字符，背景色从固定色板按 `project_id` 或名称稳定派生
+**And** 每项中间上下两行显示 Project 名称和 repo path
+**And** 当前 Project 项最右侧显示对钩
+
+**Given** 用户在 Project Switcher 中选择另一个路径可访问的 Project
+**When** 用户点击该 Project item
+**Then** 系统更新并持久化目标 Project 的 `last_opened_at`
+**And** 打开一个新的 RedWhisk 窗口显示目标 Project 的 Issues Activity
+**And** 当前窗口保持在原 Project，不原地切换 Project
 
 ### Story 1.5: 创建和编辑本地 Issue
 
