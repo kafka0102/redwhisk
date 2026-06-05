@@ -108,9 +108,9 @@ describe("IssuesActivity", () => {
     const completedLane = screen.getByRole("region", { name: "Completed" });
 
     expect(runningLane).toHaveTextContent("0");
-    expect(runningLane).toHaveTextContent("No running issues.");
-    expect(reviewLane).toHaveTextContent("No issues in review.");
-    expect(completedLane).toHaveTextContent("No completed issues.");
+    expect(runningLane).toHaveTextContent("no issues");
+    expect(reviewLane).toHaveTextContent("no issues");
+    expect(completedLane).toHaveTextContent("no issues");
   });
 
   it("keeps card content limited to title, status, and updated time", async () => {
@@ -366,18 +366,26 @@ describe("IssuesActivity", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("uses a visible-label matching accessible name for the backlog create action", async () => {
+  it("uses the backlog lane header plus action to create issues", async () => {
     listIssuesMock.mockResolvedValue({ issues: [] });
 
     render(<IssuesActivity projectId={1} />);
 
+    const header = screen.getByRole("heading", {
+      name: "Issues",
+    }).parentElement;
     const backlogLane = await screen.findByRole("region", { name: "Backlog" });
+    const createButton = within(backlogLane).getByRole("button", {
+      name: "New Issue",
+    });
 
+    expect(header).not.toHaveTextContent("New Issue");
     expect(
-      within(backlogLane).getByRole("button", {
+      within(backlogLane).queryByRole("button", {
         name: "New Issue for backlog",
       }),
-    ).toHaveTextContent("New Issue");
+    ).not.toBeInTheDocument();
+    expect(createButton).toBeInTheDocument();
   });
 });
 

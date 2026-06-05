@@ -1,6 +1,6 @@
 :root {
   color: #17181a;
-  background: #f7f8fa;
+  background: #ffffff;
   font-family:
     Inter,
     ui-sans-serif,
@@ -17,7 +17,7 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
 
-  --color-app: #f7f8fa;
+  --color-app: #ffffff;
   --color-surface: #ffffff;
   --color-surface-muted: #eef1f4;
   --color-border: #d9dde3;

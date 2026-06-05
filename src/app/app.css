@@ -253,6 +253,7 @@ button:focus-visible {
   height: 100%;
   min-height: 0;
   gap: 12px;
+  padding-bottom: 8px;
   overflow: hidden;
 }
 
@@ -262,6 +263,13 @@ button:focus-visible {
   justify-content: space-between;
   grid-area: header;
   gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.issues-header h2 {
+  font-size: 16px;
+  line-height: 1.25;
 }
 
 .issues-kanban {
@@ -273,7 +281,7 @@ button:focus-visible {
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 4px;
+  padding-bottom: 0;
 }
 
 .issues-loading {
@@ -291,6 +299,7 @@ button:focus-visible {
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 240px;
   min-height: 0;
+  height: 100%;
   padding: 10px;
   border: 1px solid rgb(217 221 227 / 70%);
   border-radius: var(--radius-card);
@@ -351,6 +360,25 @@ button:focus-visible {
 .issue-lane__count {
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+.issue-lane__create {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.issue-lane__create:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .issue-lane__cards {
@@ -416,16 +444,7 @@ button:focus-visible {
 }
 
 .issue-lane__empty {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-card);
-  background: rgb(255 255 255 / 58%);
-}
-
-.issue-lane__empty p {
-  margin: 0;
+  margin: 30px 0 0;
   color: var(--color-text-muted);
   font-size: 12px;
 }
@@ -775,10 +794,6 @@ button:focus-visible {
 
   .issue-lane--completed {
     background: rgb(15 30 44 / 88%);
-  }
-
-  .issue-lane__empty {
-    background: rgb(11 11 12 / 64%);
   }
 
   .issue-dialog-overlay {
