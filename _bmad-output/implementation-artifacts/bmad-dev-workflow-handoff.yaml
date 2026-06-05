@@ -1,64 +1,15 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
-story_key: 1-5-create-and-edit-local-issue
-story_status: done
-baseline_commit: adc21ae
+phase: story-created
+story_file: _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
+story_key: 1-6-show-issues-kanban-and-issue-detail-dialog
+story_status: ready-for-dev
+baseline_commit: d6ae47e
 changed_files:
-  - _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - _bmad-output/implementation-artifacts/deferred-work.md
+  - _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src-tauri/migrations/0004_issues.sql
-  - src-tauri/src/commands/issue_commands.rs
-  - src-tauri/src/commands/mod.rs
-  - src-tauri/src/core/issue_service.rs
-  - src-tauri/src/core/mod.rs
-  - src-tauri/src/db/connection.rs
-  - src-tauri/src/db/issue_repository.rs
-  - src-tauri/src/db/migrations.rs
-  - src-tauri/src/db/mod.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/issue.rs
-  - src-tauri/src/types/mod.rs
-  - src-tauri/tests/issue.rs
-  - src-tauri/tests/local_data.rs
-  - src/app/activity-router.tsx
-  - src/app/app-shell.tsx
-  - src/app/app.css
-  - src/app/app.test.tsx
-  - src/features/issues/issue-commands.ts
-  - src/features/issues/issues-activity.test.tsx
-  - src/features/issues/issues-activity.tsx
-validation_commands:
-  - cargo test --manifest-path src-tauri/Cargo.toml --test issue --no-run
-  - pnpm test -- --run src/app/app.test.tsx
-  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - pnpm build
-  - cargo test --manifest-path src-tauri/Cargo.toml
-validation_results:
-  - passed: RED failures confirmed for missing Issue modules/wrapper before implementation
-  - passed: Rust issue test compile
-  - passed: targeted app Vitest before review fixes, 27 tests
-  - passed: Rust issue tests before review fixes, 6 tests
-  - passed: Rust local_data tests, 5 tests
-  - passed: Review patch RED failures confirmed for scoped update and IssuesActivity stale/async/cancel behavior
-  - passed: targeted review patch Vitest, 32 tests
-  - passed: Prettier format
-  - passed: cargo fmt
-  - passed: ESLint
-  - passed: TypeScript typecheck
-  - passed: full Vitest, 32 tests
-  - passed: Vite production build
-  - passed: full Cargo tests, 30 integration tests plus crate/doc tests
-review_summary: Code review found 9 patch items and 2 deferred items; all 9 patch items were fixed and verified. Deferred i18n/generated DTO work is recorded in deferred-work.md.
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+validation_commands: []
+validation_results: []
+review_summary:
 blocking_reason:
-updated_at: 2026-06-05T16:22:04+0800
+updated_at: 2026-06-05T20:33:41+0800
