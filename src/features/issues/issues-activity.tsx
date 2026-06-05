@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -21,7 +22,6 @@ interface IssueFormState {
 interface LaneDefinition {
   status: IssueStatus;
   label: string;
-  emptyText: string;
 }
 
 const EMPTY_FORM: IssueFormState = {
@@ -33,22 +33,18 @@ const ISSUE_LANES: LaneDefinition[] = [
   {
     status: "backlog",
     label: "Backlog",
-    emptyText: "No backlog issues.",
   },
   {
     status: "running",
     label: "Running",
-    emptyText: "No running issues.",
   },
   {
     status: "review",
     label: "Review",
-    emptyText: "No issues in review.",
   },
   {
     status: "completed",
     label: "Completed",
-    emptyText: "No completed issues.",
   },
 ];
 
@@ -313,14 +309,6 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     <main className="activity-surface activity-surface--issues">
       <div className="issues-header">
         <h2>Issues</h2>
-        <button
-          ref={createButtonRef}
-          className="issues-button issues-button--primary"
-          type="button"
-          onClick={(event) => openCreateDialog(event.currentTarget)}
-        >
-          New Issue
-        </button>
       </div>
       {errorMessage ? (
         <p className="issues-status" role="status" aria-label="Issues status">
@@ -344,6 +332,18 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                 <span className="issue-lane__status-dot" aria-hidden="true" />
                 <h3>{lane.label}</h3>
                 <span className="issue-lane__count">{lane.issues.length}</span>
+                {lane.status === "backlog" ? (
+                  <button
+                    ref={createButtonRef}
+                    aria-label="New Issue"
+                    className="issue-lane__create"
+                    title="New Issue"
+                    type="button"
+                    onClick={(event) => openCreateDialog(event.currentTarget)}
+                  >
+                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className="issue-lane__cards" role="list">
@@ -383,19 +383,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                 );
               })}
               {!isLoading && lane.issues.length === 0 ? (
-                <div className="issue-lane__empty">
-                  <p>{lane.emptyText}</p>
-                  {lane.status === "backlog" ? (
-                    <button
-                      aria-label="New Issue for backlog"
-                      className="issues-button"
-                      type="button"
-                      onClick={(event) => openCreateDialog(event.currentTarget)}
-                    >
-                      New Issue
-                    </button>
-                  ) : null}
-                </div>
+                <p className="issue-lane__empty">no issues</p>
               ) : null}
             </div>
           </section>
