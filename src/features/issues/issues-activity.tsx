@@ -1,14 +1,7 @@
-import type { ProjectSummary } from "../../app/app";
-
-interface IssuesActivityProps {
-  project: ProjectSummary;
-}
-
-export function IssuesActivity({ project }: IssuesActivityProps) {
+export function IssuesActivity() {
   return (
     <main className="activity-surface">
       <div>
-        <p className="eyebrow">{project.name}</p>
         <h2>Issues</h2>
       </div>
       <p className="empty-state">

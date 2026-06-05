@@ -16,7 +16,10 @@ pub fn run() {
         .manage(AppState::new(LocalDataService::new()))
         .invoke_handler(tauri::generate_handler![
             commands::core_commands::initialize_local_data,
-            commands::project_commands::create_project
+            commands::project_commands::create_project,
+            commands::project_commands::list_projects,
+            commands::project_commands::open_project,
+            commands::project_commands::open_project_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

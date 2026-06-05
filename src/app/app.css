@@ -216,23 +216,14 @@ button:focus-visible {
 }
 
 .workbench__header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  min-height: 64px;
-  padding: 12px 18px;
+  min-height: 44px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
-}
-
-.workbench__path {
-  overflow: hidden;
-  max-width: 50%;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .activity-surface {
@@ -251,6 +242,127 @@ button:focus-visible {
   background: var(--color-surface);
 }
 
+.project-switcher {
+  position: relative;
+  min-width: 0;
+}
+
+.project-switcher__trigger {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(360px, calc(100vw - 96px));
+  min-height: 32px;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.project-switcher__trigger:hover,
+.project-switcher__trigger[aria-expanded="true"] {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.project-switcher__trigger-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  width: min(600px, calc(100vw - 80px));
+  border: 1px solid var(--color-border-strong);
+  border-radius: 7px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 22px rgb(15 23 42 / 12%);
+}
+
+.project-switcher__list {
+  display: grid;
+  padding: 6px;
+}
+
+.project-switcher__item {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 24px;
+  align-items: center;
+  min-height: 72px;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-switcher__item:hover {
+  background: var(--color-surface-muted);
+}
+
+.project-switcher__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 7px;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.project-switcher__item-body {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.project-switcher__item-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher__item-path {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher__item-status,
+.project-switcher__error {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.project-switcher__check {
+  color: var(--color-accent);
+  justify-self: end;
+}
+
+.project-switcher__error {
+  margin: 0;
+  padding: 0 14px 12px;
+}
+
 @media (max-width: 640px) {
   body {
     overflow: auto;
@@ -265,11 +377,6 @@ button:focus-visible {
   }
 
   .workbench__header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .workbench__path {
-    max-width: 100%;
+    align-items: center;
   }
 }

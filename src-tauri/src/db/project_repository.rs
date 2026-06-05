@@ -25,6 +25,30 @@ impl<'connection> ProjectRepository<'connection> {
             .optional()
     }
 
+    pub fn find_by_id(&self, id: &str) -> rusqlite::Result<Option<ProjectSummary>> {
+        self.connection
+            .query_row(
+                "SELECT id, name, repo_path, created_at, last_opened_at FROM projects WHERE id = ?1",
+                params![id],
+                project_from_row,
+            )
+            .optional()
+    }
+
+    pub fn list_recent(&self) -> rusqlite::Result<Vec<ProjectSummary>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, name, repo_path, created_at, last_opened_at
+             FROM projects
+             ORDER BY last_opened_at DESC, created_at DESC, name ASC",
+        )?;
+
+        let projects = statement
+            .query_map([], project_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(projects)
+    }
+
     pub fn insert(
         &self,
         id: &str,
@@ -82,6 +106,18 @@ impl<'connection> ProjectRepository<'connection> {
         }
 
         Err(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    pub fn update_last_opened_at(&self, id: &str) -> rusqlite::Result<ProjectSummary> {
+        self.connection.execute(
+            "UPDATE projects
+             SET last_opened_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![id],
+        )?;
+
+        self.find_by_id(id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 }
 

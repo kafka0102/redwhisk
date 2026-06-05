@@ -3,7 +3,10 @@ use tauri::{Manager, State};
 use crate::app_state::AppState;
 use crate::core::project_service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
-use crate::types::project::{CreateProjectInput, ProjectSummary};
+use crate::types::project::{
+    CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,
+    ProjectSummary,
+};
 
 #[tauri::command]
 pub fn create_project(
@@ -11,6 +14,78 @@ pub fn create_project(
     state: State<'_, AppState>,
     input: CreateProjectInput,
 ) -> Result<ProjectSummary, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    ProjectService::create_project_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn list_projects(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ProjectListResponse, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    ProjectService::list_projects_in_data_dir(data_dir)
+}
+
+#[tauri::command]
+pub fn open_project(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: OpenProjectInput,
+) -> Result<ProjectSummary, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    ProjectService::open_project_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub async fn open_project_window(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: OpenProjectInput,
+) -> Result<OpenProjectWindowResponse, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    let project = ProjectService::open_project_for_window_in_data_dir(&data_dir, input)?;
+    let window_label = format!("project-{}", project.id);
+
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        existing_window.show().map_err(|error| {
+            project_window_error(&project.id, "Project 窗口显示失败。", error.to_string())
+        })?;
+        existing_window.set_focus().map_err(|error| {
+            project_window_error(&project.id, "Project 窗口聚焦失败。", error.to_string())
+        })?;
+    } else {
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            window_label.clone(),
+            tauri::WebviewUrl::App(format!("index.html?projectId={}", project.id).into()),
+        )
+        .title(format!("RedWhisk - {}", project.name))
+        .inner_size(800.0, 600.0)
+        .build()
+        .map_err(|error| {
+            project_window_error(&project.id, "Project 窗口打开失败。", error.to_string())
+        })?;
+    }
+
+    ProjectService::record_project_opened_in_data_dir(data_dir, &project.id)?;
+
+    Ok(OpenProjectWindowResponse {
+        project_id: project.id,
+        window_label,
+    })
+}
+
+fn project_window_error(project_id: &str, message: &str, cause: String) -> CommandError {
+    CommandError::new(CommandErrorCode::ProjectPersistenceFailed, message)
+        .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id.to_string()))
+        .with_detail(ErrorDetail::new("Cause").with_value("message", cause))
+}
+
+fn prepare_project_data_dir(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+) -> Result<std::path::PathBuf, CommandError> {
     let data_dir = app.path().app_data_dir().map_err(|error| {
         CommandError::new(
             CommandErrorCode::ProjectPersistenceFailed,
@@ -31,5 +106,5 @@ pub fn create_project(
             .map_err(CommandError::from)?;
     }
 
-    ProjectService::create_project_in_data_dir(data_dir, input)
+    Ok(data_dir)
 }

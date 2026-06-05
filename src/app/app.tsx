@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { AppShell } from "./app-shell";
@@ -7,7 +7,10 @@ import { ProjectHome } from "../features/project/project-home";
 import {
   createProject,
   initializeLocalData,
+  listProjects,
+  openProject,
   type ProjectRecord,
+  type ProjectListItem,
 } from "../features/project/project-commands";
 import { toCommandError } from "../shared/commands/command-error";
 
@@ -19,41 +22,53 @@ export interface ProjectSummary {
   status: "available" | "missing";
 }
 
-const MOCK_PROJECTS: ProjectSummary[] = [
-  {
-    id: "redwhisk",
-    name: "RedWhisk",
-    path: "/Users/kafka0102/workspace/kafka/redwhisk",
-    recentOpenedAt: "Opened today",
-    status: "available",
-  },
-  {
-    id: "local-agents",
-    name: "Local Agents Lab",
-    path: "/Users/kafka0102/workspace/local-agents",
-    recentOpenedAt: "Opened yesterday",
-    status: "missing",
-  },
-];
-
 export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(
     null,
   );
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [localDataError, setLocalDataError] = useState<string | null>(null);
   const [projectCreationError, setProjectCreationError] = useState<
     string | null
   >(null);
+  const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    initializeLocalData().catch((error: unknown) => {
-      if (isMounted) {
-        setLocalDataError(toCommandError(error).message);
+    async function initializeApp() {
+      try {
+        await initializeLocalData();
+        const response = await listProjects();
+        if (isMounted) {
+          setProjects(response.projects.map(toProjectSummary));
+        }
+      } catch (error: unknown) {
+        if (isMounted) {
+          setLocalDataError(toCommandError(error).message);
+        }
+
+        return;
       }
-    });
+
+      try {
+        const project = await openInitialProjectFromUrl();
+        if (isMounted && project) {
+          const projectSummary = toProjectSummary(project);
+          setProjects((currentProjects) =>
+            mergeProject(currentProjects, projectSummary),
+          );
+          setSelectedProject(projectSummary);
+        }
+      } catch (error: unknown) {
+        if (isMounted) {
+          setProjectOpenError(toCommandError(error).message);
+        }
+      }
+    }
+
+    void initializeApp();
 
     return () => {
       isMounted = false;
@@ -66,6 +81,7 @@ export function App() {
     }
 
     setProjectCreationError(null);
+    setProjectOpenError(null);
     setIsCreatingProject(true);
 
     try {
@@ -80,13 +96,38 @@ export function App() {
       }
 
       const project = await createProject({ repoPath: selectedPath });
-      setSelectedProject(toProjectSummary(project));
+      const projectSummary = toProjectSummary(project);
+      setProjects((currentProjects) =>
+        mergeProject(currentProjects, projectSummary),
+      );
+      setSelectedProject(projectSummary);
     } catch (error) {
       setProjectCreationError(toCommandError(error).message);
     } finally {
       setIsCreatingProject(false);
     }
   }
+
+  async function handleProjectOpen(project: ProjectSummary) {
+    setProjectCreationError(null);
+    setProjectOpenError(null);
+
+    try {
+      const openedProject = await openProject({ projectId: project.id });
+      const projectSummary = toProjectSummary(openedProject);
+      setProjects((currentProjects) =>
+        mergeProject(currentProjects, projectSummary),
+      );
+      setSelectedProject(projectSummary);
+    } catch (error) {
+      setProjectOpenError(toCommandError(error).message);
+    }
+  }
+
+  const refreshProjects = useCallback(async () => {
+    const response = await listProjects();
+    setProjects(response.projects.map(toProjectSummary));
+  }, []);
 
   if (!selectedProject) {
     return (
@@ -109,25 +150,65 @@ export function App() {
             {projectCreationError}
           </div>
         ) : null}
+        {projectOpenError ? (
+          <div
+            className="local-data-status"
+            role="status"
+            aria-label="Project open status"
+          >
+            {projectOpenError}
+          </div>
+        ) : null}
         <ProjectHome
           isCreatingProject={isCreatingProject}
-          projects={MOCK_PROJECTS}
+          projects={projects}
           onCreateProject={handleCreateProject}
-          onProjectOpen={setSelectedProject}
+          onProjectOpen={handleProjectOpen}
         />
       </>
     );
   }
 
-  return <AppShell project={selectedProject} />;
+  return (
+    <AppShell
+      project={selectedProject}
+      projects={projects}
+      onProjectsRefresh={refreshProjects}
+    />
+  );
 }
 
-function toProjectSummary(project: ProjectRecord): ProjectSummary {
+function toProjectSummary(
+  project: ProjectRecord | ProjectListItem,
+): ProjectSummary {
   return {
     id: project.id,
     name: project.name,
     path: project.repoPath,
     recentOpenedAt: `Opened ${project.lastOpenedAt}`,
-    status: "available",
+    status: "pathStatus" in project ? project.pathStatus : "available",
   };
+}
+
+function mergeProject(
+  currentProjects: ProjectSummary[],
+  nextProject: ProjectSummary,
+): ProjectSummary[] {
+  const remainingProjects = currentProjects.filter(
+    (project) => project.id !== nextProject.id,
+  );
+
+  return [nextProject, ...remainingProjects];
+}
+
+function openInitialProjectFromUrl(): Promise<ProjectRecord | null> {
+  const projectId = new URLSearchParams(window.location.search).get(
+    "projectId",
+  );
+
+  if (!projectId) {
+    return Promise.resolve(null);
+  }
+
+  return openProject({ projectId });
 }

@@ -10,6 +10,8 @@ pub enum CommandErrorCode {
     ProjectPersistenceFailed,
     ProjectRepoNotGitRepository,
     ProjectRepoPathInvalid,
+    ProjectRepoPathUnavailable,
+    ProjectNotFound,
     UnknownCommandError,
 }
 
