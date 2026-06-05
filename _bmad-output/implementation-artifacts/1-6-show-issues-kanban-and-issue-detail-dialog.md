@@ -4,7 +4,7 @@ baseline_commit: d6ae47e
 
 # Story 1.6: 展示 Issues 四泳道和 Issue Detail Dialog
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -25,41 +25,51 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 将 `IssuesActivity` 从最小列表/表单重构为四泳道看板 (AC: 1, 2, 6)
-  - [ ] 保留 `listIssues({ projectId })` 的 Rust Core 查询边界，不新增前端直连数据库或本地文件读取。
-  - [ ] 在前端按 `IssueStatus` 派生 `Backlog`、`Running`、`Review`、`Completed` 四个固定泳道；即使某泳道为空也必须常驻显示。
-  - [ ] 每个泳道 header 显示状态文案和数量；当前 Story 1.9 尚未实现 i18n 基础设施，文案可暂时沿用英文状态名或本 story 内部常量，但需集中定义，避免散落硬编码。
-  - [ ] Issue card 使用 `<button>` 或等价可聚焦控件打开详情 Dialog；卡片字段严格限制为 `title`、状态文案、`updated_at`，并预留但不虚构 Session/attention 小标记位置。
-  - [ ] 空泳道显示轻量 empty row；空 Backlog 泳道保留 `New Issue` 动作，不使用大插画或整页空态。
-- [ ] 实现 Issue Detail Dialog 的左右两栏编辑体验 (AC: 3, 4, 5)
-  - [ ] 点击 Issue card 后打开 Dialog，而不是在看板旁边继续使用 Story 1.5 的内联编辑表单。
-  - [ ] Dialog 左侧只包含 `title` 和 `description` 编辑控件；保存仍通过 `updateIssue({ projectId, issueId, title, description })`，不得允许前端修改 `status`。
-  - [ ] Dialog 右侧显示 Session 关联区占位和当前可用操作区；对于 `backlog` 且无 Agent Session 的 Issue 显示 `Run`，但 Run Dialog、Agent Profile、Agent Session 启动不在本 story 实现。
-  - [ ] Dialog 内不得展示 `status` 表单字段、`updated_at` 字段、priority、label、assignee、milestone。
-  - [ ] 保存失败时保留用户当前输入并展示事实性错误；不得把本地缓存伪装成已保存。
-- [ ] 补齐键盘、焦点和关闭行为 (AC: 5)
-  - [ ] Dialog 打开时保存触发卡片引用，关闭后把焦点还给该卡片；如果触发卡片已不存在，则回退到 `New Issue` 或看板容器。
-  - [ ] `Esc` 关闭最上层 Dialog；点击遮罩或关闭按钮也关闭 Dialog，且不改变 Issue 状态。
-  - [ ] `Enter` 在 Dialog 表单中提交当前主动作；`Tab` 顺序先左侧编辑字段，再右侧 Session/操作区，再底部动作。
-  - [ ] 新建 Issue 入口仍可键盘访问；若创建也使用 Dialog，应复用相同焦点纪律。
-- [ ] 视觉样式对齐截图和设计系统 (AC: 1, 2, 3, 6)
-  - [ ] 看板使用四列常驻布局，列宽稳定，容器高度填满工作区；在可用宽度不足时允许水平滚动，不把四泳道压缩到不可读。
-  - [ ] 列背景使用非常浅的中性色或轻微状态 tint，卡片使用白底、1px 细边线、无重阴影、约 5px 圆角。
-  - [ ] 卡片内部文本使用桌面工具密度：标题 13px/600 左右，元信息 11px；长标题单行或两行截断，不撑开卡片宽度。
-  - [ ] 不引入大型管理后台组件库，不新增渐变装饰、彩色状态柱、拖拽排序、hover-only 关键操作或 celebration animation。
-- [ ] 保留前置 story 行为并控制范围 (AC: 1-6)
-  - [ ] 保留 Project Home、Project Switcher、路径异常、Activity Bar、Project 打开和 Issue CRUD 持久化行为。
-  - [ ] 不新增 `issue_actions`；Story 1.7 专门负责 IssueAction 审计。
-  - [ ] 不实现 Run Dialog、Agent Profile、Agent Session、Mark Review、Completion、Summary/Log、Git history、拖拽排序或 cloud sync。
-  - [ ] 不修改 Rust `IssueStatus` 状态机语义；如需测试非 backlog 状态，可通过测试数据/mock 数据构造，不新增本 story 不拥有的状态流转 command。
-- [ ] 测试与验证 (AC: 1-6)
-  - [ ] 更新或新增 Vitest 覆盖四泳道常驻渲染、按状态分组、卡片字段限制、点击卡片打开 Dialog、Dialog 不展示 `status`/`updated_at` 字段、`backlog` Issue 显示 `Run`、`Esc` 关闭与焦点恢复、保存失败不伪造成功。
-  - [ ] 保留 Story 1.5 已有 create/update 失败路径测试，必要时迁移到 Dialog 交互。
-  - [ ] 运行 `pnpm format`。
-  - [ ] 运行 `pnpm lint`。
-  - [ ] 运行 `pnpm typecheck`。
-  - [ ] 运行 `pnpm test`。
-  - [ ] 运行 `pnpm build`。
+- [x] 将 `IssuesActivity` 从最小列表/表单重构为四泳道看板 (AC: 1, 2, 6)
+  - [x] 保留 `listIssues({ projectId })` 的 Rust Core 查询边界，不新增前端直连数据库或本地文件读取。
+  - [x] 在前端按 `IssueStatus` 派生 `Backlog`、`Running`、`Review`、`Completed` 四个固定泳道；即使某泳道为空也必须常驻显示。
+  - [x] 每个泳道 header 显示状态文案和数量；当前 Story 1.9 尚未实现 i18n 基础设施，文案可暂时沿用英文状态名或本 story 内部常量，但需集中定义，避免散落硬编码。
+  - [x] Issue card 使用 `<button>` 或等价可聚焦控件打开详情 Dialog；卡片字段严格限制为 `title`、状态文案、`updated_at`，并预留但不虚构 Session/attention 小标记位置。
+  - [x] 空泳道显示轻量 empty row；空 Backlog 泳道保留 `New Issue` 动作，不使用大插画或整页空态。
+- [x] 实现 Issue Detail Dialog 的左右两栏编辑体验 (AC: 3, 4, 5)
+  - [x] 点击 Issue card 后打开 Dialog，而不是在看板旁边继续使用 Story 1.5 的内联编辑表单。
+  - [x] Dialog 左侧只包含 `title` 和 `description` 编辑控件；保存仍通过 `updateIssue({ projectId, issueId, title, description })`，不得允许前端修改 `status`。
+  - [x] Dialog 右侧显示 Session 关联区占位和当前可用操作区；对于 `backlog` 且无 Agent Session 的 Issue 显示 `Run`，但 Run Dialog、Agent Profile、Agent Session 启动不在本 story 实现。
+  - [x] Dialog 内不得展示 `status` 表单字段、`updated_at` 字段、priority、label、assignee、milestone。
+  - [x] 保存失败时保留用户当前输入并展示事实性错误；不得把本地缓存伪装成已保存。
+- [x] 补齐键盘、焦点和关闭行为 (AC: 5)
+  - [x] Dialog 打开时保存触发卡片引用，关闭后把焦点还给该卡片；如果触发卡片已不存在，则回退到 `New Issue` 或看板容器。
+  - [x] `Esc` 关闭最上层 Dialog；点击遮罩或关闭按钮也关闭 Dialog，且不改变 Issue 状态。
+  - [x] `Enter` 在 Dialog 表单中提交当前主动作；`Tab` 顺序先左侧编辑字段，再右侧 Session/操作区，再底部动作。
+  - [x] 新建 Issue 入口仍可键盘访问；若创建也使用 Dialog，应复用相同焦点纪律。
+- [x] 视觉样式对齐截图和设计系统 (AC: 1, 2, 3, 6)
+  - [x] 看板使用四列常驻布局，列宽稳定，容器高度填满工作区；在可用宽度不足时允许水平滚动，不把四泳道压缩到不可读。
+  - [x] 列背景使用非常浅的中性色或轻微状态 tint，卡片使用白底、1px 细边线、无重阴影、约 5px 圆角。
+  - [x] 卡片内部文本使用桌面工具密度：标题 13px/600 左右，元信息 11px；长标题单行或两行截断，不撑开卡片宽度。
+  - [x] 不引入大型管理后台组件库，不新增渐变装饰、彩色状态柱、拖拽排序、hover-only 关键操作或 celebration animation。
+- [x] 保留前置 story 行为并控制范围 (AC: 1-6)
+  - [x] 保留 Project Home、Project Switcher、路径异常、Activity Bar、Project 打开和 Issue CRUD 持久化行为。
+  - [x] 不新增 `issue_actions`；Story 1.7 专门负责 IssueAction 审计。
+  - [x] 不实现 Run Dialog、Agent Profile、Agent Session、Mark Review、Completion、Summary/Log、Git history、拖拽排序或 cloud sync。
+  - [x] 不修改 Rust `IssueStatus` 状态机语义；如需测试非 backlog 状态，可通过测试数据/mock 数据构造，不新增本 story 不拥有的状态流转 command。
+- [x] 测试与验证 (AC: 1-6)
+  - [x] 更新或新增 Vitest 覆盖四泳道常驻渲染、按状态分组、卡片字段限制、点击卡片打开 Dialog、Dialog 不展示 `status`/`updated_at` 字段、`backlog` Issue 显示 `Run`、`Esc` 关闭与焦点恢复、保存失败不伪造成功。
+  - [x] 保留 Story 1.5 已有 create/update 失败路径测试，必要时迁移到 Dialog 交互。
+  - [x] 运行 `pnpm format`。
+  - [x] 运行 `pnpm lint`。
+  - [x] 运行 `pnpm typecheck`。
+  - [x] 运行 `pnpm test`。
+  - [x] 运行 `pnpm build`。
+
+### Review Findings
+
+- [x] [Review][Patch] `Run` 按钮是可点击空操作 [src/features/issues/issues-activity.tsx:408]
+- [x] [Review][Patch] 保存中关闭 Dialog 会让晚到 create/update 结果重新打开或覆盖状态 [src/features/issues/issues-activity.tsx:160]
+- [x] [Review][Patch] Dialog 保存失败提示渲染在 modal 外部 [src/features/issues/issues-activity.tsx:261]
+- [x] [Review][Patch] Dialog 缺少 `Tab` 焦点约束，焦点可逃出弹窗 [src/features/issues/issues-activity.tsx:345]
+- [x] [Review][Patch] 无错误状态时 kanban 没有稳定占用填满工作区的 grid 行 [src/app/app.css:247]
+- [x] [Review][Patch] 新增看板和 Dialog 样式在小视口和 dark mode 下存在布局/对比风险 [src/app/app.css:291]
+- [x] [Review][Patch] 关键验收测试覆盖不足：空泳道常驻、Dialog 字段禁显和卡片可访问描述不够严格 [src/features/issues/issues-activity.test.tsx:70]
 
 ## Dev Notes
 
@@ -146,11 +156,34 @@ GPT-5 Codex
 
 ### Debug Log References
 
+- 2026-06-05T20:57+0800：进入 dev-story 阶段，保留既有 `baseline_commit: d6ae47e`，开始按 TDD 改造 Issues Activity。
+- 2026-06-05T21:01+0800：RED，`pnpm test -- --run src/features/issues/issues-activity.test.tsx` 暴露缺少四泳道、状态文案、详情 Dialog 和焦点纪律。
+- 2026-06-05T21:07+0800：实现后 targeted 验证通过：`pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx`，3 个文件 36 个测试通过。
+- 2026-06-05T21:12+0800：最终验证通过：`pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`。
+- 2026-06-05T22:23+0800：Review patch RED 覆盖已补齐，`pnpm test -- --run src/features/issues/issues-activity.test.tsx` 暴露卡片可访问描述、`Run` 禁用、Dialog 内错误状态、保存中关闭和 Backlog 空态按钮命名问题。
+- 2026-06-05T22:25+0800：Review patch targeted 验证通过：`pnpm test -- --run src/features/issues/issues-activity.test.tsx` 与 `pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx` 均通过，`git diff --check` 无 whitespace 问题。
+
 ### Completion Notes List
 
 - create-story 上下文分析已完成，已生成 Story 1.6 的开发实现指南。
 - 用户提供截图中的浅色 kanban 风格已纳入验收标准和视觉实现约束。
+- `IssuesActivity` 已重构为 Backlog / Running / Review / Completed 四个常驻泳道，按 `IssueStatus` 派生分组，不新增拖拽库或状态流转 command。
+- Issue card 仅展示标题、状态文案和更新时间；点击打开左右两栏 Issue Detail Dialog。
+- 新建和编辑复用 Dialog；左侧只编辑 `title` / `description`，右侧显示 Session 占位和 backlog Issue 的 `Run` 占位按钮。
+- Dialog 支持初始焦点进入 title、`Esc` / 遮罩 / 关闭按钮关闭、关闭后回到触发卡片或创建按钮；创建/更新失败保留用户输入且不伪造本地成功。
+- Review patch 已全部处理：`Run` 改为禁用占位；保存中禁用关闭、取消和提交；Dialog 保存失败错误改为 Dialog 内状态行；补齐 Tab 焦点约束、卡片 `aria-describedby`、空泳道常驻和 Backlog 空态按钮可访问命名。
+- Issues kanban 样式补齐工作区填充 grid area、小视口横向泳道滚动与 Dialog 单栏布局，并为 dark mode 覆盖新增泳道和空态背景。
 
 ### File List
 
+- _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
+- _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- src/app/app.css
+- src/features/issues/issues-activity.test.tsx
+- src/features/issues/issues-activity.tsx
+
 ### Change Log
+
+- 2026-06-05: 实现 Story 1.6 Issues 四泳道看板和 Issue Detail Dialog，补齐前端行为测试与验证；状态推进到 review。
+- 2026-06-05: 应用 Story 1.6 code review 的 7 项 patch finding，补齐行为、防竞态、可访问性、响应式和 dark mode 风险；状态推进到 done。

@@ -5,6 +5,7 @@ import {
   listIssues,
   updateIssue,
   type IssueRecord,
+  type IssueStatus,
 } from "./issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
@@ -17,21 +18,71 @@ interface IssueFormState {
   description: string;
 }
 
+interface LaneDefinition {
+  status: IssueStatus;
+  label: string;
+  emptyText: string;
+}
+
 const EMPTY_FORM: IssueFormState = {
   title: "",
   description: "",
 };
 
+const ISSUE_LANES: LaneDefinition[] = [
+  {
+    status: "backlog",
+    label: "Backlog",
+    emptyText: "No backlog issues.",
+  },
+  {
+    status: "running",
+    label: "Running",
+    emptyText: "No running issues.",
+  },
+  {
+    status: "review",
+    label: "Review",
+    emptyText: "No issues in review.",
+  },
+  {
+    status: "completed",
+    label: "Completed",
+    emptyText: "No completed issues.",
+  },
+];
+
+const STATUS_LABELS: Record<IssueStatus, string> = ISSUE_LANES.reduce(
+  (labels, lane) => ({
+    ...labels,
+    [lane.status]: lane.label,
+  }),
+  {} as Record<IssueStatus, string>,
+);
+
+type DialogMode = "create" | "edit";
+
 export function IssuesActivity({ projectId }: IssuesActivityProps) {
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
-  const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
+  const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
+    null,
+  );
   const activeProjectIdRef = useRef(projectId);
   const previousSelectedIssueIdRef = useRef<number | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const dialogFormRef = useRef<HTMLFormElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const saveButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cardRefs = useRef(new Map<number, HTMLButtonElement>());
+  const createButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -45,9 +96,10 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
       setErrorMessage(null);
       setIssues([]);
       setSelectedIssueId(null);
-      setMode("idle");
+      setDialogMode(null);
       setForm(EMPTY_FORM);
       setIsSaving(false);
+      setDialogErrorMessage(null);
 
       try {
         const response = await listIssues({ projectId });
@@ -56,15 +108,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
         }
 
         setIssues(response.issues);
-        const firstIssue = response.issues[0] ?? null;
-        setSelectedIssueId(firstIssue?.id ?? null);
-        if (firstIssue) {
-          setMode("edit");
-          setForm(issueToForm(firstIssue));
-        } else {
-          setMode("idle");
-          setForm(EMPTY_FORM);
-        }
+        setSelectedIssueId(response.issues[0]?.id ?? null);
       } catch (error) {
         if (isMounted) {
           setErrorMessage(toCommandError(error).message);
@@ -83,55 +127,84 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!dialogMode) {
+      return;
+    }
+
+    titleInputRef.current?.focus();
+  }, [dialogMode]);
+
   const selectedIssue = useMemo(
     () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
     [issues, selectedIssueId],
   );
 
-  function handleNewIssue() {
+  const lanes = useMemo(
+    () =>
+      ISSUE_LANES.map((lane) => ({
+        ...lane,
+        issues: issues.filter((issue) => issue.status === lane.status),
+      })),
+    [issues],
+  );
+
+  function openCreateDialog(trigger: HTMLElement | null) {
     setErrorMessage(null);
+    setDialogErrorMessage(null);
     previousSelectedIssueIdRef.current = selectedIssueId;
-    setMode("create");
+    dialogTriggerRef.current = trigger;
+    setDialogMode("create");
     setForm(EMPTY_FORM);
   }
 
-  function handleCancelCreate() {
+  function openIssueDialog(issue: IssueRecord, trigger: HTMLElement | null) {
     setErrorMessage(null);
+    setDialogErrorMessage(null);
+    setSelectedIssueId(issue.id);
+    dialogTriggerRef.current = trigger;
+    setDialogMode("edit");
+    setForm(issueToForm(issue));
+  }
+
+  function closeDialog() {
+    if (isSaving) {
+      return;
+    }
+
+    setDialogErrorMessage(null);
+    const closingMode = dialogMode;
     const previousSelectedIssue =
       issues.find((issue) => issue.id === previousSelectedIssueIdRef.current) ??
       selectedIssue;
 
-    if (previousSelectedIssue) {
-      setSelectedIssueId(previousSelectedIssue.id);
-      setMode("edit");
-      setForm(issueToForm(previousSelectedIssue));
-      return;
+    if (closingMode === "create") {
+      if (previousSelectedIssue) {
+        setSelectedIssueId(previousSelectedIssue.id);
+      } else {
+        setSelectedIssueId(null);
+      }
     }
 
-    setMode("idle");
+    setDialogMode(null);
     setForm(EMPTY_FORM);
-  }
-
-  function handleIssueSelect(issue: IssueRecord) {
-    setErrorMessage(null);
-    setSelectedIssueId(issue.id);
-    setMode("edit");
-    setForm(issueToForm(issue));
+    setIsSaving(false);
+    restoreDialogTriggerFocus(previousSelectedIssue);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isSaving) {
+    if (isSaving || !dialogMode) {
       return;
     }
 
-    setErrorMessage(null);
+    setDialogErrorMessage(null);
     setIsSaving(true);
     const requestProjectId = projectId;
 
     try {
-      if (mode === "create") {
+      if (dialogMode === "create") {
         const createdIssue = await createIssue({
           projectId: requestProjectId,
           title: form.title,
@@ -142,9 +215,9 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
         }
         setIssues((currentIssues) => mergeIssue(currentIssues, createdIssue));
         setSelectedIssueId(createdIssue.id);
-        setMode("edit");
+        setDialogMode("edit");
         setForm(issueToForm(createdIssue));
-      } else if (mode === "edit" && selectedIssue) {
+      } else if (selectedIssue) {
         const updatedIssue = await updateIssue({
           projectId: requestProjectId,
           issueId: selectedIssue.id,
@@ -160,7 +233,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
       }
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
-        setErrorMessage(toCommandError(error).message);
+        setDialogErrorMessage(toCommandError(error).message);
       }
     } finally {
       if (activeProjectIdRef.current === requestProjectId) {
@@ -169,112 +242,275 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     }
   }
 
+  function restoreDialogTriggerFocus(fallbackIssue: IssueRecord | null) {
+    const trigger = dialogTriggerRef.current;
+    if (trigger?.isConnected) {
+      trigger.focus();
+      return;
+    }
+
+    if (fallbackIssue) {
+      cardRefs.current.get(fallbackIssue.id)?.focus();
+      return;
+    }
+
+    createButtonRef.current?.focus();
+  }
+
+  function handleDialogKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDialog();
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    const closeButton = closeButtonRef.current;
+    const cancelButton = cancelButtonRef.current;
+    const saveButton = saveButtonRef.current;
+
+    if (
+      event.shiftKey &&
+      activeElement === titleInputRef.current &&
+      cancelButton &&
+      !cancelButton.disabled
+    ) {
+      event.preventDefault();
+      cancelButton.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === saveButton && closeButton) {
+      event.preventDefault();
+      closeButton.focus();
+      return;
+    }
+
+    const focusableElements = getFocusableDialogElements(dialogFormRef.current);
+    if (focusableElements.length === 0) {
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (event.shiftKey && activeElement === firstElement) {
+      event.preventDefault();
+      lastElement.focus();
+    } else if (!event.shiftKey && activeElement === lastElement) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  }
+
+  const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Detail";
+
   return (
-    <main className="activity-surface">
+    <main className="activity-surface activity-surface--issues">
       <div className="issues-header">
         <h2>Issues</h2>
-        {issues.length > 0 ? (
-          <button
-            className="issues-button issues-button--primary"
-            type="button"
-            onClick={handleNewIssue}
-          >
-            New Issue
-          </button>
-        ) : null}
+        <button
+          ref={createButtonRef}
+          className="issues-button issues-button--primary"
+          type="button"
+          onClick={(event) => openCreateDialog(event.currentTarget)}
+        >
+          New Issue
+        </button>
       </div>
       {errorMessage ? (
         <p className="issues-status" role="status" aria-label="Issues status">
           {errorMessage}
         </p>
       ) : null}
-      <section className="issues-workspace" aria-label="Issues workspace">
-        {isLoading ? <p className="empty-state">Loading issues...</p> : null}
-        {!isLoading && issues.length === 0 ? (
-          <div className="empty-state">
-            <p>No issues yet.</p>
-            {mode === "idle" ? (
-              <button
-                className="issues-button issues-button--primary"
-                type="button"
-                onClick={handleNewIssue}
-              >
-                New Issue
-              </button>
-            ) : null}
-          </div>
+      <section className="issues-kanban" aria-label="Issues kanban">
+        {isLoading ? (
+          <p className="issues-loading" role="status">
+            Loading issues...
+          </p>
         ) : null}
-        {issues.length > 0 ? (
-          <div className="issues-list" aria-label="Project issues" role="list">
-            {issues.map((issue) => (
-              <div key={issue.id} role="listitem">
-                <button
-                  aria-label={issue.title}
-                  aria-pressed={issue.id === selectedIssueId}
-                  className="issue-list-item"
-                  type="button"
-                  onClick={() => handleIssueSelect(issue)}
-                >
-                  <span className="issue-list-item__title">{issue.title}</span>
-                  <span className="issue-list-item__meta">
-                    {issue.status} · {formatLocalTimestamp(issue.updatedAt)}
-                  </span>
-                </button>
+        {lanes.map((lane) => (
+          <section
+            key={lane.status}
+            aria-label={lane.label}
+            className={`issue-lane issue-lane--${lane.status}`}
+          >
+            <div className="issue-lane__header">
+              <div className="issue-lane__title-row">
+                <span className="issue-lane__status-dot" aria-hidden="true" />
+                <h3>{lane.label}</h3>
+                <span className="issue-lane__count">{lane.issues.length}</span>
               </div>
-            ))}
-          </div>
-        ) : null}
+            </div>
+            <div className="issue-lane__cards" role="list">
+              {lane.issues.map((issue) => {
+                const metaId = `issue-card-meta-${issue.id}`;
 
-        {mode === "create" || (mode === "edit" && selectedIssue) ? (
-          <form className="issue-form" onSubmit={handleSubmit}>
-            <label className="issue-field">
-              <span>Title</span>
-              <input
-                name="title"
-                value={form.title}
-                onChange={(event) =>
-                  setForm((currentForm) => ({
-                    ...currentForm,
-                    title: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="issue-field">
-              <span>Description</span>
-              <textarea
-                name="description"
-                rows={8}
-                value={form.description}
-                onChange={(event) =>
-                  setForm((currentForm) => ({
-                    ...currentForm,
-                    description: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <div className="issue-form__actions">
-              {mode === "create" ? (
-                <button
-                  className="issues-button"
-                  type="button"
-                  onClick={handleCancelCreate}
-                >
-                  Cancel
-                </button>
+                return (
+                  <div key={issue.id} role="listitem">
+                    <button
+                      ref={(element) => {
+                        if (element) {
+                          cardRefs.current.set(issue.id, element);
+                        } else {
+                          cardRefs.current.delete(issue.id);
+                        }
+                      }}
+                      aria-describedby={metaId}
+                      aria-label={issue.title}
+                      aria-pressed={issue.id === selectedIssueId}
+                      className="issue-card"
+                      type="button"
+                      onClick={(event) =>
+                        openIssueDialog(issue, event.currentTarget)
+                      }
+                    >
+                      <span id={metaId} className="issue-card__meta-row">
+                        <span className="issue-card__status">
+                          {STATUS_LABELS[issue.status]}
+                        </span>
+                        <span className="issue-card__updated">
+                          {formatLocalTimestamp(issue.updatedAt)}
+                        </span>
+                      </span>
+                      <span className="issue-card__title">{issue.title}</span>
+                    </button>
+                  </div>
+                );
+              })}
+              {!isLoading && lane.issues.length === 0 ? (
+                <div className="issue-lane__empty">
+                  <p>{lane.emptyText}</p>
+                  {lane.status === "backlog" ? (
+                    <button
+                      aria-label="New Issue for backlog"
+                      className="issues-button"
+                      type="button"
+                      onClick={(event) => openCreateDialog(event.currentTarget)}
+                    >
+                      New Issue
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
+            </div>
+          </section>
+        ))}
+      </section>
+
+      {dialogMode ? (
+        <div
+          className="issue-dialog-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeDialog();
+            }
+          }}
+        >
+          <form
+            ref={dialogFormRef}
+            aria-label={dialogTitle}
+            aria-modal="true"
+            className="issue-dialog"
+            role="dialog"
+            onKeyDown={handleDialogKeyDown}
+            onSubmit={handleSubmit}
+          >
+            <div className="issue-dialog__header">
+              <h3>{dialogTitle}</h3>
               <button
+                ref={closeButtonRef}
+                aria-label="Close issue dialog"
+                className="issue-dialog__close"
+                type="button"
+                disabled={isSaving}
+                onClick={closeDialog}
+              >
+                x
+              </button>
+            </div>
+            <div className="issue-dialog__body">
+              <div className="issue-dialog__editor">
+                <label className="issue-field">
+                  <span>Title</span>
+                  <input
+                    ref={titleInputRef}
+                    name="title"
+                    value={form.title}
+                    onChange={(event) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        title: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="issue-field">
+                  <span>Description</span>
+                  <textarea
+                    name="description"
+                    rows={10}
+                    value={form.description}
+                    onChange={(event) =>
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        description: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <aside className="issue-dialog__side" aria-label="Issue actions">
+                <section className="issue-dialog__panel">
+                  <h4>Session</h4>
+                  <p>No session linked.</p>
+                </section>
+                <section className="issue-dialog__panel">
+                  <h4>Actions</h4>
+                  {dialogMode === "edit" &&
+                  selectedIssue?.status === "backlog" ? (
+                    <button className="issues-button" type="button" disabled>
+                      Run
+                    </button>
+                  ) : (
+                    <p>No actions available.</p>
+                  )}
+                </section>
+              </aside>
+            </div>
+            <p
+              className="issue-dialog__status"
+              role="status"
+              aria-label="Dialog status"
+            >
+              {dialogErrorMessage}
+            </p>
+            <div className="issue-dialog__footer">
+              <button
+                ref={cancelButtonRef}
+                className="issues-button"
+                type="button"
+                disabled={isSaving}
+                onClick={closeDialog}
+              >
+                Cancel
+              </button>
+              <button
+                ref={saveButtonRef}
                 className="issues-button issues-button--primary"
                 type="submit"
                 disabled={isSaving}
               >
-                {mode === "create" ? "Create Issue" : "Save"}
+                {dialogMode === "create" ? "Create Issue" : "Save"}
               </button>
             </div>
           </form>
-        ) : null}
-      </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -299,4 +535,18 @@ function mergeIssue(
 
 function formatLocalTimestamp(epochMilliseconds: number): string {
   return new Date(epochMilliseconds).toLocaleString();
+}
+
+function getFocusableDialogElements(
+  dialogElement: HTMLFormElement | null,
+): HTMLElement[] {
+  if (!dialogElement) {
+    return [];
+  }
+
+  return Array.from(
+    dialogElement.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => element.tabIndex >= 0);
 }
