@@ -1,0 +1,4 @@
+[workflow]
+
+# Project default: dev workflow should enter code review automatically after dev-story.
+review_policy = "automatic"
