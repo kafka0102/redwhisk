@@ -1,51 +1,15 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: _bmad-output/implementation-artifacts/1-4-show-project-home-and-handle-path-errors.md
-story_key: 1-4-show-project-home-and-handle-path-errors
-story_status: done
-baseline_commit: 5cdfe9b
+phase: story-created
+story_file: _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
+story_key: 1-5-create-and-edit-local-issue
+story_status: ready-for-dev
+baseline_commit: adc21ae
 changed_files:
-  - _bmad-output/implementation-artifacts/1-4-show-project-home-and-handle-path-errors.md
+  - _bmad-output/implementation-artifacts/1-5-create-and-edit-local-issue.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src-tauri/src/commands/project_commands.rs
-  - src-tauri/src/core/project_service.rs
-  - src-tauri/src/db/project_repository.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/project.rs
-  - src-tauri/tests/project.rs
-  - src/app/activity-router.tsx
-  - src/app/app-shell.tsx
-  - src/app/app.css
-  - src/app/app.test.tsx
-  - src/app/app.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/issues/issues-activity.tsx
-  - src/features/project/project-commands.ts
-  - src/features/project/project-switcher.tsx
-  - src/features/settings/project-settings-activity.tsx
-  - src/shared/commands/command-client.test.ts
-validation_commands:
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - cargo test --manifest-path src-tauri/Cargo.toml --test project
-  - pnpm test -- src/app/app.test.tsx src/shared/commands/command-client.test.ts
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - pnpm build
-  - cd src-tauri && cargo test
-validation_results:
-  - "PASS: pnpm format"
-  - "PASS: cargo fmt --manifest-path src-tauri/Cargo.toml"
-  - "PASS: cargo test --manifest-path src-tauri/Cargo.toml --test project"
-  - "PASS: pnpm test -- src/app/app.test.tsx src/shared/commands/command-client.test.ts"
-  - "PASS: pnpm lint"
-  - "PASS: pnpm typecheck"
-  - "PASS: pnpm test"
-  - "PASS: pnpm build"
-  - "PASS: cd src-tauri && cargo test"
-review_summary: "Code review completed with 4 patch findings; all fixed and verified. Dismissed 1 minor URL-encoding finding because generated Project ids are URL-safe."
+validation_commands: []
+validation_results: []
+review_summary:
 blocking_reason:
-updated_at: 2026-06-05T10:55:46+0800
+updated_at: 2026-06-05T14:37:15+0800
