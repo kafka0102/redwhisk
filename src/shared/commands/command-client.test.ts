@@ -1,7 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initializeLocalData } from "../../features/project/project-commands";
+import {
+  createProject,
+  initializeLocalData,
+} from "../../features/project/project-commands";
 import { isCommandError, toCommandError } from "./command-error";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -28,6 +31,33 @@ describe("command client", () => {
       appliedVersions: ["0001_core"],
     });
     expect(invokeMock).toHaveBeenCalledWith("initialize_local_data", undefined);
+  });
+
+  it("invokes Rust Core through the create project command", async () => {
+    invokeMock.mockResolvedValue({
+      id: "project-123",
+      name: "redwhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      createdAt: "2026-06-04T14:00:00.000Z",
+      lastOpenedAt: "2026-06-04T14:00:00.000Z",
+    });
+
+    await expect(
+      createProject({
+        repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      }),
+    ).resolves.toEqual({
+      id: "project-123",
+      name: "redwhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      createdAt: "2026-06-04T14:00:00.000Z",
+      lastOpenedAt: "2026-06-04T14:00:00.000Z",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("create_project", {
+      input: {
+        repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      },
+    });
   });
 
   it("normalizes structured command errors", () => {

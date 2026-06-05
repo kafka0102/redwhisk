@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import { AppShell } from "./app-shell";
 import "./app.css";
 import { ProjectHome } from "../features/project/project-home";
-import { initializeLocalData } from "../features/project/project-commands";
+import {
+  createProject,
+  initializeLocalData,
+  type ProjectRecord,
+} from "../features/project/project-commands";
 import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
@@ -35,7 +40,11 @@ export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(
     null,
   );
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [localDataError, setLocalDataError] = useState<string | null>(null);
+  const [projectCreationError, setProjectCreationError] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,6 +60,34 @@ export function App() {
     };
   }, []);
 
+  async function handleCreateProject() {
+    if (isCreatingProject) {
+      return;
+    }
+
+    setProjectCreationError(null);
+    setIsCreatingProject(true);
+
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Git Repository",
+      });
+
+      if (typeof selectedPath !== "string") {
+        return;
+      }
+
+      const project = await createProject({ repoPath: selectedPath });
+      setSelectedProject(toProjectSummary(project));
+    } catch (error) {
+      setProjectCreationError(toCommandError(error).message);
+    } finally {
+      setIsCreatingProject(false);
+    }
+  }
+
   if (!selectedProject) {
     return (
       <>
@@ -63,8 +100,19 @@ export function App() {
             {localDataError}
           </div>
         ) : null}
+        {projectCreationError ? (
+          <div
+            className="local-data-status"
+            role="status"
+            aria-label="Project creation status"
+          >
+            {projectCreationError}
+          </div>
+        ) : null}
         <ProjectHome
+          isCreatingProject={isCreatingProject}
           projects={MOCK_PROJECTS}
+          onCreateProject={handleCreateProject}
           onProjectOpen={setSelectedProject}
         />
       </>
@@ -72,4 +120,14 @@ export function App() {
   }
 
   return <AppShell project={selectedProject} />;
+}
+
+function toProjectSummary(project: ProjectRecord): ProjectSummary {
+  return {
+    id: project.id,
+    name: project.name,
+    path: project.repoPath,
+    recentOpenedAt: `Opened ${project.lastOpenedAt}`,
+    status: "available",
+  };
 }

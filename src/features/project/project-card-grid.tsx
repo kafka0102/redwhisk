@@ -4,10 +4,14 @@ import { ProjectCard } from "./project-card";
 
 interface ProjectCardGridProps {
   projects: ProjectSummary[];
+  isCreatingProject: boolean;
+  onCreateProject: () => void;
   onProjectOpen: (project: ProjectSummary) => void;
 }
 
 export function ProjectCardGrid({
+  isCreatingProject,
+  onCreateProject,
   projects,
   onProjectOpen,
 }: ProjectCardGridProps) {
@@ -22,7 +26,10 @@ export function ProjectCardGrid({
         </li>
       ))}
       <li>
-        <CreateProjectCard />
+        <CreateProjectCard
+          isCreating={isCreatingProject}
+          onCreate={onCreateProject}
+        />
       </li>
     </ul>
   );

@@ -5,6 +5,8 @@ use serde::Serialize;
 
 const CORE_MIGRATION_VERSION: &str = "0001_core";
 const CORE_MIGRATION_SQL: &str = include_str!("../../migrations/0001_core.sql");
+const PROJECTS_MIGRATION_VERSION: &str = "0002_projects";
+const PROJECTS_MIGRATION_SQL: &str = include_str!("../../migrations/0002_projects.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -74,10 +76,16 @@ impl MigrationRunner {
 
     fn migrations(&self) -> Vec<Migration> {
         if self.migrations.is_empty() {
-            return vec![Migration {
-                version: CORE_MIGRATION_VERSION,
-                sql: CORE_MIGRATION_SQL,
-            }];
+            return vec![
+                Migration {
+                    version: CORE_MIGRATION_VERSION,
+                    sql: CORE_MIGRATION_SQL,
+                },
+                Migration {
+                    version: PROJECTS_MIGRATION_VERSION,
+                    sql: PROJECTS_MIGRATION_SQL,
+                },
+            ];
         }
 
         self.migrations.clone()

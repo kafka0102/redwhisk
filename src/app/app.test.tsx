@@ -3,16 +3,29 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
-import { initializeLocalData } from "../features/project/project-commands";
+import {
+  createProject,
+  initializeLocalData,
+} from "../features/project/project-commands";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+}));
 
 vi.mock("../features/project/project-commands", () => ({
+  createProject: vi.fn(),
   initializeLocalData: vi.fn(),
 }));
 
+const { open } = await import("@tauri-apps/plugin-dialog");
+const openDialogMock = vi.mocked(open);
+const createProjectMock = vi.mocked(createProject);
 const initializeLocalDataMock = vi.mocked(initializeLocalData);
 
 describe("App project entry", () => {
   beforeEach(() => {
+    openDialogMock.mockReset();
+    createProjectMock.mockReset();
     initializeLocalDataMock.mockReset();
     initializeLocalDataMock.mockResolvedValue({
       databaseExists: true,
@@ -72,6 +85,106 @@ describe("App project entry", () => {
       within(activityBar).getByRole("button", { name: "Issues" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
+  });
+
+  it("creates a project from the create card and opens Issues", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/new-repo");
+    createProjectMock.mockResolvedValue({
+      id: "project-123",
+      name: "new-repo",
+      repoPath: "/Users/kafka0102/workspace/new-repo",
+      createdAt: "2026-06-04T14:00:00.000Z",
+      lastOpenedAt: "2026-06-04T14:00:00.000Z",
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Create Project" }));
+
+    expect(openDialogMock).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      title: "Select Git Repository",
+    });
+    expect(createProjectMock).toHaveBeenCalledWith({
+      repoPath: "/Users/kafka0102/workspace/new-repo",
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Issues" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("/Users/kafka0102/workspace/new-repo"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows project creation failure without opening the Activity Bar", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/plain-dir");
+    createProjectMock.mockRejectedValue({
+      code: "PROJECT_REPO_NOT_GIT_REPOSITORY",
+      message: "所选目录不是 Git Repository。",
+      details: [
+        {
+          "@type": "RepoPath",
+          path: "/Users/kafka0102/workspace/plain-dir",
+        },
+      ],
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Create Project" }));
+
+    expect(
+      await screen.findByRole("status", { name: "Project creation status" }),
+    ).toHaveTextContent("所选目录不是 Git Repository。");
+    expect(
+      screen.queryByRole("navigation", { name: "Activity Bar" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Projects" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows dialog failures without opening the Activity Bar", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockRejectedValue(new Error("dialog unavailable"));
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Create Project" }));
+
+    expect(
+      await screen.findByRole("status", { name: "Project creation status" }),
+    ).toHaveTextContent("dialog unavailable");
+    expect(createProjectMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("navigation", { name: "Activity Bar" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables create while the directory dialog is pending", async () => {
+    const user = userEvent.setup();
+    let resolveDialog: (path: string | null) => void = () => {};
+    openDialogMock.mockImplementation(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolveDialog = resolve;
+        }),
+    );
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Create Project" }));
+    await user.click(screen.getByRole("button", { name: "Creating Project" }));
+
+    expect(openDialogMock).toHaveBeenCalledTimes(1);
+
+    resolveDialog(null);
+    expect(
+      await screen.findByRole("button", { name: "Create Project" }),
+    ).toBeEnabled();
   });
 
   it("shows a local data initialization failure without hiding Project Home", async () => {

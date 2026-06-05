@@ -16,8 +16,8 @@ fn local_data_initialization_creates_database_and_records_migration() {
 
     assert!(database.path.ends_with("redwhisk.sqlite3"));
     assert!(database.path.exists());
-    assert_eq!(status.applied_versions, vec!["0001_core"]);
-    assert_eq!(status.current_version, Some("0001_core".to_string()));
+    assert_eq!(status.applied_versions, vec!["0001_core", "0002_projects"]);
+    assert_eq!(status.current_version, Some("0002_projects".to_string()));
 
     let schema_migrations_count: i64 = database
         .connection
@@ -41,9 +41,15 @@ fn migrations_are_idempotent_after_first_run() {
     let first_status = runner.run(&database.connection).expect("first run");
     let second_status = runner.run(&database.connection).expect("second run");
 
-    assert_eq!(first_status.applied_versions, vec!["0001_core"]);
+    assert_eq!(
+        first_status.applied_versions,
+        vec!["0001_core", "0002_projects"]
+    );
     assert!(second_status.applied_versions.is_empty());
-    assert_eq!(second_status.current_version, Some("0001_core".to_string()));
+    assert_eq!(
+        second_status.current_version,
+        Some("0002_projects".to_string())
+    );
 
     let schema_migrations_count: i64 = database
         .connection
@@ -51,7 +57,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 1);
+    assert_eq!(schema_migrations_count, 2);
 }
 
 #[test]

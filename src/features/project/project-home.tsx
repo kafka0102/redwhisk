@@ -2,11 +2,18 @@ import type { ProjectSummary } from "../../app/app";
 import { ProjectCardGrid } from "./project-card-grid";
 
 interface ProjectHomeProps {
+  isCreatingProject: boolean;
   projects: ProjectSummary[];
+  onCreateProject: () => void;
   onProjectOpen: (project: ProjectSummary) => void;
 }
 
-export function ProjectHome({ projects, onProjectOpen }: ProjectHomeProps) {
+export function ProjectHome({
+  isCreatingProject,
+  onCreateProject,
+  projects,
+  onProjectOpen,
+}: ProjectHomeProps) {
   return (
     <main className="project-home">
       <header className="project-home__header">
@@ -15,7 +22,12 @@ export function ProjectHome({ projects, onProjectOpen }: ProjectHomeProps) {
           <h1>Projects</h1>
         </div>
       </header>
-      <ProjectCardGrid projects={projects} onProjectOpen={onProjectOpen} />
+      <ProjectCardGrid
+        isCreatingProject={isCreatingProject}
+        projects={projects}
+        onCreateProject={onCreateProject}
+        onProjectOpen={onProjectOpen}
+      />
     </main>
   );
 }
