@@ -56,6 +56,7 @@ MVP 的核心赌注是：AI 编程任务不是一次聊天，而是一段可管�
 ## 3. 术语表
 
 - **Project Home** — RedWhisk 打开后的首屏。展示本机已保存 Project 卡片，最后一个卡片是 `+` 创建 Project 入口；未选择 Project 时不显示 Activity Bar。
+- **Project Switcher** — Project 工作台顶部、与窗口关闭/最小化/缩放控件同一行的当前 Project 下拉入口。入口显示当前 Project 名称；展开后展示本机 Project 列表，每项包含稳定色块 icon、Project 名称、repo path 和当前选中对钩。
 - **Activity Bar** — Project 内工作台左侧一级导航。MVP 只包含 `Issues`、`Agents`、`Settings`，其中 `Settings` 指当前 Project Settings。
 - **Project** — RedWhisk 中的项目入口。MVP 中一个 Project 必须绑定一个本地 Git Repository。
 - **Git Repository** — 用户选择的本地 Git 仓库目录。非 Git 目录不能创建 Project。
@@ -85,7 +86,7 @@ MVP 的核心赌注是：AI 编程任务不是一次聊天，而是一段可管�
 
 ## 4. 产品形态与信息架构
 
-MVP 是桌面应用，目标形态为 VS Code 式一窗口工作台。应用打开后先进入 Project Home：页面展示本机已保存 Project 的卡片列表，最后一个卡片是 `+` 创建 Project 入口。用户点击某个 Project 卡片后，才进入该 Project 的工作台并显示左侧 Activity Bar。Activity Bar 只包含 `Issues`、`Agents`、`Settings` 三个一级入口；`Settings` 是当前 Project Settings。全局应用设置通过原生顶部菜单打开；进入 Project 工作台后也可以通过左下角 gear 打开，不作为 Activity Bar 一级入口。
+MVP 是桌面应用，目标形态为 VS Code 式桌面工作台。应用打开后先进入 Project Home：页面展示本机已保存 Project 的卡片列表，最后一个卡片是 `+` 创建 Project 入口。用户点击某个 Project 卡片后，才进入该 Project 的工作台并显示左侧 Activity Bar。Project 工作台顶部、与窗口关闭/最小化/缩放控件同一行的位置显示 Project Switcher；它替代静态产品名展示当前 Project 名称，不在工作台内容顶部重复展示 `PROJECT` 标识、Project 名称和 repo path。Activity Bar 只包含 `Issues`、`Agents`、`Settings` 三个一级入口；`Settings` 是当前 Project Settings。全局应用设置通过原生顶部菜单打开；进入 Project 工作台后也可以通过左下角 gear 打开，不作为 Activity Bar 一级入口。
 
 Issues Activity 使用四个常驻泳道：`Backlog`、`Running`、`Review`、`Completed`。Issue 卡片字段保持极简，只展示 `title`、`status`、`updated_at`，以及可选 Agent Session 标记和 attention 标记。点击 Issue 卡片打开 Issue 详情弹窗。
 
@@ -117,6 +118,9 @@ Agents Activity 采用左右两栏。左侧是 Agent Session 列表，默认按 
 - Project Home 展示本机所有已保存 Project 卡片，按 `last_opened_at` 优先排序。
 - Project Home 最后一个卡片固定为 `+` 创建 Project 入口。
 - 用户点击某个 Project 卡片后，系统更新并持久化该 Project 的 `last_opened_at`，再进入该 Project 的 Issues Activity。
+- 进入 Project 工作台后，窗口顶部与关闭/最小化/缩放控件同一行显示 Project Switcher；默认折叠状态只显示当前 Project 名称，不显示静态 `RedWhisk` 标题。
+- Project Switcher 展开后以 light 模式浮层展示本机 Project 列表；每项左侧显示项目 icon，icon 文案默认取 Project 名称首字符，背景色从固定色板按 `project_id` 或名称稳定派生；中间上下两行显示 Project 名称和 repo path；右侧用对钩标记当前 Project。
+- 用户在 Project Switcher 中选择另一个路径可访问的 Project 时，系统更新并持久化目标 Project 的 `last_opened_at`，并打开一个新的 RedWhisk 窗口显示该 Project 的 Issues Activity；当前窗口不原地切换。
 - 未选择 Project 前不显示 Activity Bar。
 - 若 `repo_path` 不存在或不可访问，Project 卡片展示明确错误状态；用户点击该卡片时系统展示错误，不删除 Project 记录。
 

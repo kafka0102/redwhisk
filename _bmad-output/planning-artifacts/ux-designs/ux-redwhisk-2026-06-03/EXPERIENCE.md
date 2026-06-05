@@ -15,13 +15,14 @@ RedWhisk 是跨平台桌面应用，MVP 以 macOS 体验优先验证，同时为
 
 `DESIGN.md` 是视觉身份 reference，本文件只定义信息架构、行为、状态、交互、可访问性和关键流程。体验优先级是：本地工作流可信、Codex 原生交互不中断、状态不误导、界面简洁清新且不像管理后台。
 
-MVP 形态是单窗口桌面工作台。应用打开后的首屏是 Project Home，展示本机 Project card 网格，最后一个 card 是 `+` 创建 Project 入口。用户点击某个 Project 后才进入 Project 工作台；此时窗口内一级导航为 Activity Bar。所有核心 Issue / Agent 流程围绕一个已打开的 Project 进行。`DESIGN.md` 中 `{spacing.activity-bar-width}`、`{spacing.sidebar-width}`、`{spacing.header-height}` 和 `{spacing.inspector-width}` 是 Project 工作台布局默认尺寸。
+MVP 形态是 VS Code 式桌面工作台。应用打开后的首屏是 Project Home，展示本机 Project card 网格，最后一个 card 是 `+` 创建 Project 入口。用户点击某个 Project 后才进入 Project 工作台；此时窗口内一级导航为 Activity Bar。Project 工作台顶部与系统窗口控件同一行显示 Project Switcher，折叠态显示当前 Project 名称，替代静态应用标题；工作台内容顶部不再重复展示 `PROJECT` 标识、Project 名称或 repo path。所有核心 Issue / Agent 流程围绕一个已打开的 Project 进行。`DESIGN.md` 中 `{spacing.activity-bar-width}`、`{spacing.sidebar-width}`、`{spacing.header-height}` 和 `{spacing.inspector-width}` 是 Project 工作台布局默认尺寸。
 
 ## Information Architecture
 
 | Surface | Reached from | Purpose |
 | --- | --- | --- |
 | Project Home / Project Grid | App cold open / no Project loaded | 展示本机所有 Project card，按最近打开优先排序；最后一个 `+` card 创建新 Project；处理 repo path 不可访问错误 |
+| Project Switcher | Project 工作台顶部当前 Project 名称 | 展示当前 Project；展开后列出本机 Projects，每项显示 icon、名称、repo path 和当前选中对钩；选择其它可访问 Project 时打开新窗口 |
 | Issues Activity | Activity Bar `Issues` / Project open default | 四泳道本地 Issue 看板，创建 Issue，打开 Issue 详情，启动 Agent |
 | Issue Detail Dialog | Issue card click | 编辑 `title` / `description`，查看 Session 关联，执行 Issue 当前可用操作 |
 | Run Dialog | Issue Detail `Run` | 选择 Agent Profile，预览和编辑最终 prompt，确认启动 |
@@ -33,7 +34,7 @@ MVP 形态是单窗口桌面工作台。应用打开后的首屏是 Project Home
 | Global Settings | Left-bottom gear / native menu `Settings...` | UI language、全局 Agent Profiles、全局 completion policy、数据目录、日志目录、About / Diagnostics |
 | Summary / Log View | completed Issue / Header / Inspector | 复盘 Issue、Agent Session、CompletionAttempt、commit hash 和日志路径 |
 
-Project Home 不显示 Activity Bar。Activity Bar 只在某个 Project 打开后显示，并且只包含 `Issues`、`Agents`、`Settings`。不要加入 `Code`、`Diff`、`Git History`、`Terminal` 作为 MVP 一级入口。Global Settings 不在 Activity Bar 中，避免把 Project 设置和应用设置混在一起；Project Home 只能通过原生菜单进入 Global Settings。
+Project Home 不显示 Activity Bar。Activity Bar 只在某个 Project 打开后显示，并且只包含 `Issues`、`Agents`、`Settings`。Project Switcher 属于窗口顶部 chrome，不属于 Activity Bar 或内容 Header；它展开为 light 模式浮层，参考 VS Code Project/Window 切换列表的密度和层级。不要加入 `Code`、`Diff`、`Git History`、`Terminal` 作为 MVP 一级入口。Global Settings 不在 Activity Bar 中，避免把 Project 设置和应用设置混在一起；Project Home 只能通过原生菜单进入 Global Settings。
 
 Issues Activity 使用四个常驻泳道：`Backlog`、`Running`、`Review`、`Completed`。四泳道直接对应 Issue 状态，不用彩色状态柱表达。每张 Issue card 只展示 `title`、`status`、`updated_at`，可显示 Agent Session 标记和 attention 标记。
 
@@ -61,6 +62,7 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 | Component | Use | Behavioral rules |
 | --- | --- | --- |
 | Project Card Grid | Project Home | 展示本机 Project card。每张 card 展示 Project 名称、repo path、最近打开时间和路径异常状态。最后一个 card 固定为 `+` 创建 Project。点击 Project card 后进入 Project 工作台；未进入 Project 前不显示 Activity Bar。 |
+| Project Switcher | Project 工作台顶部 chrome | 折叠态只显示当前 Project 名称和下拉 affordance，不显示静态 `RedWhisk` 标题。展开后按 `last_opened_at` 优先展示 Projects；每项左侧 icon 默认取 Project 名称首字符，背景色从固定色板按 `project_id` 或名称稳定派生；中间两行显示 Project 名称和 repo path；右侧对钩表示当前 Project。选择当前 Project 只关闭浮层；选择其它路径可访问 Project 时打开新窗口显示目标 Project，当前窗口不原地切换。路径不可访问项显示异常状态，点击后展示明确错误，不删除记录。 |
 | Activity Bar | Project 工作台一级导航 | 固定左侧。点击切换 Issues / Agents / Project Settings。当前项保持选中，不自动打开弹窗。左下角 gear 打开 Global Settings。 |
 | Issue Card | Issues Activity 四泳道 | 点击打开 Issue Detail Dialog。卡片不内联展开。若有关联 Agent Session，显示小型 Agent/Session 标记；若 `attention=requested`，显示 Needs Attention 标记。 |
 | Issue Detail Dialog | Issue 查看/编辑 | 左侧编辑 `title` / `description`，修改即保存。右侧展示 Session 关联和操作。Dialog 关闭不改变 Issue 状态。 |
@@ -79,6 +81,8 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 | --- | --- | --- |
 | No Project | App cold open | 显示 Project Home。若没有任何 Project 记录，只显示 `+` 创建 Project card；非 Git 目录选择后显示错误，不创建 Project。 |
 | Project path missing | App open / Project Home | 保留 Project card，显示 repo path 不可访问状态；点击后展示明确错误，提供重新选择目录和从最近列表移除入口。 |
+| Project switcher open | Project 工作台顶部 | 浮层展示本机 Project 列表，当前 Project 用对钩标记；Project 名称和路径按两行排版，路径长文本截断并提供 tooltip。 |
+| Project switch target missing | Project Switcher | item 显示路径异常状态；点击后显示明确错误，不打开新窗口，不删除 Project 记录。 |
 | Empty Backlog | Issues Activity | 泳道内显示轻量 empty row：`暂无待办 Issue。` 单一动作 `新建 Issue`。不要大插画。 |
 | Issue backlog | Issue Detail | 显示 `Run`；若无 enabled Agent Profile，`Run` 禁用并提供 `配置 Agent`。 |
 | Run start failed | Run Dialog | Issue 保持 `backlog`。Dialog 内显示失败原因和 `重新尝试` / `取消`。 |
@@ -101,8 +105,9 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 - `Enter` — 在 Dialog 中提交当前主动作；在 Codex Native Session View 中原样传给 Codex。
 - `Cmd/Ctrl+N` — [ASSUMPTION] 在当前 surface 创建对应对象：Issues 中新建 Issue，Agents 中打开 Session Dialog。
 - `Tab` — 按视觉阅读顺序移动焦点。
+- `ArrowUp` / `ArrowDown` — Project Switcher 展开时在 Project item 之间移动焦点；`Enter` 选择当前焦点 item；`Esc` 关闭浮层。
 
-**Mouse / pointer:** 点击 Issue card 打开 Dialog；点击 Session list item 切换右侧 Session；点击 Header Issue title 打开 Inspector。不要使用拖拽作为 MVP 主路径。
+**Mouse / pointer:** 点击 Project Switcher 展开或关闭项目列表；点击其它 Project item 打开新窗口；点击 Issue card 打开 Dialog；点击 Session list item 切换右侧 Session；点击 Header Issue title 打开 Inspector。不要使用拖拽作为 MVP 主路径。
 
 **Modal discipline:** 同一时间最多一个 Dialog。Issue Inspector 可与 Codex Native Session View 共存，但不应再打开第二层 Inspector。Completion Confirmation 是 Dialog，打开时不卸载 xterm。
 
@@ -113,7 +118,7 @@ Agents Activity 采用左右两栏。左侧为 Agent Session list，默认分组
 行为层可访问性。视觉对比由 `DESIGN.md` color tokens 负责。
 
 - 所有操作按钮必须可键盘聚焦，focus ring 使用 `{colors.accent-blue}` / `{colors.accent-blue-dark}`。
-- `Tab` 顺序遵循：Activity Bar -> 左侧栏 -> Header -> 主内容 -> Inspector / Dialog。
+- `Tab` 顺序遵循：Project Switcher -> Activity Bar -> 左侧栏 -> Header -> 主内容 -> Inspector / Dialog。
 - Dialog 打开时焦点进入 Dialog；关闭后回到触发控件。
 - Issue Inspector 打开时不强制抢走 Codex TUI 焦点，除非用户通过键盘打开 Inspector。
 - xterm 区域必须有可读 label，例如 `Codex Session terminal`；进入后键盘输入原样传递给终端。

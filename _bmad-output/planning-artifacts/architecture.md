@@ -240,7 +240,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 
 **Project Organization:**
 - 前端按 feature + workbench surface 组织，不按纯组件类型堆叠。
-- `src/features/project/` 放 Project Home、Project card grid、Project 创建入口、最近 Project 数据和相关 command wrapper。
+- `src/features/project/` 放 Project Home、Project card grid、Project Switcher、Project 创建入口、最近 Project 数据和相关 command wrapper。
 - `src/features/issues/` 放 Issue 看板、卡片、详情弹窗和相关 hooks/store。
 - `src/features/agents/` 放 Session list、Session Header、xterm 容器、Issue Inspector。
 - `src/features/settings/` 放 Project Settings 和 Global Settings。
@@ -267,6 +267,8 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 
 **API / Command Response Formats:**
 - Command 成功返回直接业务 DTO；列表 DTO 必须显式包含数组字段，不返回裸数组给复杂 surface。
+- Project 列表查询返回 DTO 必须支持 Project Home 和 Project Switcher 复用，至少包含 `projectId`、`name`、`repoPath`、`lastOpenedAt` 和路径可访问性状态；前端不得用假数据补齐最近 Project 列表。
+- 打开其它 Project 的动作必须通过 Rust/Tauri command 完成，例如 `open_project_window` / `openProjectWindow`。该 command 负责校验目标 `repo_path`、更新目标 Project 的 `last_opened_at`，并创建显示目标 Project 的新 Tauri window；当前窗口不在前端原地替换 Project context。
 - Command 失败统一映射为：
   ```json
   {
@@ -302,6 +304,7 @@ MVP 是本地桌面应用，不设计云 hosting。开发环境以 `pnpm tauri d
 - Rust Core 是业务状态 source of truth。
 - React store 只保存 view state、选中项、Dialog/Inspector 可见性和缓存的查询结果。
 - `running`、`review`、`completed`、`closed` 等核心状态不得由前端直接 set。
+- 当前 Project context 由窗口启动参数或 Rust Core command 返回建立；Project Switcher 选择其它 Project 时通过新窗口承载目标 Project，不复用当前窗口 store 直接切换。
 - Issue 与 AgentSession 状态更新必须来自 command 返回或 core event。
 - xterm 实例生命周期独立于 Issue Inspector 和 Dialog；打开/关闭 Inspector 不重新创建 terminal。
 
@@ -560,6 +563,7 @@ MVP 不提供 HTTP API。前后端边界是 Tauri command/event：
 - event 从 `src-tauri/src/events/` 发出，前端在 `src/shared/events/` 订阅。
 
 **Component Boundaries:**
+- `features/project` 管 Project Home、Project card grid、Project Switcher、Project 创建入口、最近 Project 查询和打开 Project 窗口流程。
 - `features/issues` 管 Issue 看板、Issue Detail、Run Dialog 和 completed Summary。
 - `features/agents` 管 Agent Session list、Codex terminal、Session Header、Issue Inspector 和 completion confirmation。
 - `features/settings` 管 Project Settings、Global Settings、Agent Profile 和 Diagnostics。

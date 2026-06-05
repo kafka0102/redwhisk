@@ -169,7 +169,7 @@ RedWhisk 的基础色是黑、白、灰。色彩只用于焦点、attention、�
 
 ## Layout & Spacing
 
-布局以桌面窗口为基准。Activity Bar 固定 48px；左侧列表栏默认 280px；Session Header 44px；Issue Inspector 默认 360px。主工作区应铺满窗口，不把核心体验放进浮动卡片。
+布局以桌面窗口为基准。Activity Bar 固定 48px；左侧列表栏默认 280px；Session Header 44px；Issue Inspector 默认 360px。Project Switcher 位于窗口顶部 chrome，和系统关闭/最小化/缩放控件同一行；它占用标题区域左侧到中部的紧凑宽度，不能把内容区顶出一个重复 header。主工作区应铺满窗口，不把核心体验放进浮动卡片。
 
 间距采用 4px 基础尺度。列表和工具栏密度高，主内容区域留出足够呼吸。面板之间优先使用 1px hairline border，而不是投影或卡片阴影。
 
@@ -190,6 +190,7 @@ Activity Bar 图标按钮可以是方形 hover target，图标本身居中。状
 ## Components
 
 - **Activity Bar** — 48px 固定宽度。Light 使用 `{colors.light-window}`，dark 使用 `{colors.dark-window}`。当前入口用 2px 竖线或细底色表示，不用彩色大块。
+- **Project Switcher** — 放在窗口顶部 chrome。折叠态是紧凑文本按钮，显示当前 Project 名称和下拉 affordance；不要显示静态 `RedWhisk` 标题。展开态使用 light surface 浮层、1px 边线和极轻阴影，宽度约 520-620px，item 高度约 72px。每项左侧 40px 方形 icon，半径 7px，文案默认取 Project 名称首字符；icon 背景从固定色板稳定派生，可使用 green、blue、violet、slate、lime 等少量颜色，但不要每次渲染随机变化。中间两行分别是 Project 名称和 repo path，路径使用 muted/mono 风格并截断。当前 Project 的对钩放在 item 最右侧。工作台内容顶部不得再展示 `PROJECT` 标识、Project 名称和 repo path。
 - **Sidebar / Session List** — 宽 280px，密度高，行高稳定。选中行使用 selection 色阶；attention 用小点或短标记，不能改变整行底色。
 - **Issue Card** — 只用于 Issues 四泳道内的 Issue 项。卡片半径 `{rounded.md}`，1px 边线，少量内边距。不要加阴影，不要放过多字段。
 - **Dialog** — Run Dialog、Session Dialog、completion 确认面板使用 `{components.dialog}`。内容以表单和预览为主，底部按钮固定右侧。
