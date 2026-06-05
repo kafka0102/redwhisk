@@ -1,4 +1,4 @@
-import { ChevronRight, Folder } from "lucide-react";
+import { Folder } from "lucide-react";
 
 import type { ProjectSummary } from "../../app/app";
 
@@ -21,25 +21,11 @@ export function ProjectCard({ project, onOpen }: ProjectCardProps) {
         <Folder size={18} strokeWidth={1.8} />
       </span>
       <span className="project-card__body">
-        <span className="project-card__name-row">
-          <span className="project-card__name">{project.name}</span>
-          <ChevronRight
-            aria-hidden="true"
-            className="project-card__chevron"
-            size={16}
-            strokeWidth={1.8}
-          />
-        </span>
-        <span className="project-card__path" translate="no">
-          {project.path}
-        </span>
-        <span className="project-card__meta-row">
-          <span className="project-card__meta">{project.recentOpenedAt}</span>
-          {isMissing ? (
-            <span className="project-card__status project-card__status--missing">
-              Path unavailable
-            </span>
-          ) : null}
+        <span className="project-card__name">{project.name}</span>
+        <span className="project-card__path">{project.path}</span>
+        <span className="project-card__meta">
+          {project.recentOpenedAt}
+          {isMissing ? " - path unavailable" : ""}
         </span>
       </span>
     </button>

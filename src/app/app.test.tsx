@@ -275,17 +275,10 @@ describe("App project entry", () => {
     await user.click(
       await screen.findByRole("button", { name: "Open project RedWhisk" }),
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Create Issue" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New Issue" }));
     await user.type(screen.getByLabelText("Title"), "Draft local issue");
     await user.type(screen.getByLabelText("Description"), "Small task shape");
-    await user.click(
-      within(screen.getByRole("dialog", { name: "New Issue" })).getByRole(
-        "button",
-        { name: "Create Issue" },
-      ),
-    );
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -331,7 +324,7 @@ describe("App project entry", () => {
       screen.getByLabelText("Description"),
       "Updated description",
     );
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -485,9 +478,7 @@ describe("App project entry", () => {
     await user.click(
       await screen.findByRole("button", { name: "Create Project" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Creating Project…" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Creating Project" }));
 
     expect(openDialogMock).toHaveBeenCalledTimes(1);
 

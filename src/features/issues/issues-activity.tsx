@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -303,31 +303,13 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     }
   }
 
-  const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Details";
-  const submitLabel =
-    dialogMode === "create" ? "Create Issue" : "Save Changes";
+  const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Detail";
 
   return (
     <main className="activity-surface activity-surface--issues">
-      <header className="surface-header issues-header">
-        <div className="surface-header__copy">
-          <h2>Issues</h2>
-          <p className="surface-header__description">
-            Keep backlog, active runs, review, and completion in one board.
-          </p>
-        </div>
-        <div className="surface-header__actions">
-          <button
-            ref={createButtonRef}
-            className="app-button app-button--primary"
-            type="button"
-            onClick={(event) => openCreateDialog(event.currentTarget)}
-          >
-            <Plus aria-hidden="true" size={14} strokeWidth={2} />
-            <span>Create Issue</span>
-          </button>
-        </div>
-      </header>
+      <div className="issues-header">
+        <h2>Issues</h2>
+      </div>
       {errorMessage ? (
         <p className="issues-status" role="status" aria-label="Issues status">
           {errorMessage}
@@ -335,8 +317,8 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
       ) : null}
       <section className="issues-kanban" aria-label="Issues kanban">
         {isLoading ? (
-          <p className="issues-loading sr-only" role="status">
-            Loading issues…
+          <p className="issues-loading" role="status">
+            Loading issues...
           </p>
         ) : null}
         {lanes.map((lane) => (
@@ -350,6 +332,18 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                 <span className="issue-lane__status-dot" aria-hidden="true" />
                 <h3>{lane.label}</h3>
                 <span className="issue-lane__count">{lane.issues.length}</span>
+                {lane.status === "backlog" ? (
+                  <button
+                    ref={createButtonRef}
+                    aria-label="New Issue"
+                    className="issue-lane__create"
+                    title="New Issue"
+                    type="button"
+                    onClick={(event) => openCreateDialog(event.currentTarget)}
+                  >
+                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className="issue-lane__cards" role="list">
@@ -388,26 +382,8 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   </div>
                 );
               })}
-              {isLoading
-                ? Array.from({ length: lane.status === "backlog" ? 2 : 1 }).map(
-                    (_, index) => (
-                      <div
-                        key={`${lane.status}-skeleton-${index}`}
-                        aria-hidden="true"
-                        className="issue-card issue-card--skeleton"
-                      >
-                        <span className="issue-card__skeleton issue-card__skeleton--meta" />
-                        <span className="issue-card__skeleton issue-card__skeleton--title" />
-                      </div>
-                    ),
-                  )
-                : null}
               {!isLoading && lane.issues.length === 0 ? (
-                <p className="issue-lane__empty">
-                  {lane.status === "backlog"
-                    ? "Create the first issue to start a run."
-                    : "No issues yet."}
-                </p>
+                <p className="issue-lane__empty">no issues</p>
               ) : null}
             </div>
           </section>
@@ -442,7 +418,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                 disabled={isSaving}
                 onClick={closeDialog}
               >
-                <X aria-hidden="true" size={14} strokeWidth={2} />
+                x
               </button>
             </div>
             <div className="issue-dialog__body">
@@ -452,7 +428,6 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   <input
                     ref={titleInputRef}
                     name="title"
-                    placeholder="Issue title…"
                     value={form.title}
                     onChange={(event) =>
                       setForm((currentForm) => ({
@@ -466,7 +441,6 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   <span>Description</span>
                   <textarea
                     name="description"
-                    placeholder="Describe the task, acceptance criteria, or follow-up…"
                     rows={10}
                     value={form.description}
                     onChange={(event) =>
@@ -480,45 +454,18 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
               </div>
               <aside className="issue-dialog__side" aria-label="Issue actions">
                 <section className="issue-dialog__panel">
-                  <h4>Issue</h4>
-                  <dl className="issue-dialog__meta-list">
-                    <div className="issue-dialog__meta-item">
-                      <dt>Status</dt>
-                      <dd>
-                        {dialogMode === "create"
-                          ? "Draft"
-                          : selectedIssue
-                            ? STATUS_LABELS[selectedIssue.status]
-                            : "Unavailable"}
-                      </dd>
-                    </div>
-                    <div className="issue-dialog__meta-item">
-                      <dt>Updated</dt>
-                      <dd>
-                        {dialogMode === "create"
-                          ? "Not saved yet"
-                          : selectedIssue
-                            ? formatLocalTimestamp(selectedIssue.updatedAt)
-                            : "Unavailable"}
-                      </dd>
-                    </div>
-                  </dl>
-                </section>
-                <section className="issue-dialog__panel">
                   <h4>Session</h4>
-                  <p>Save the issue, then start a run from Actions.</p>
+                  <p>No session linked.</p>
                 </section>
                 <section className="issue-dialog__panel">
                   <h4>Actions</h4>
                   {dialogMode === "edit" &&
                   selectedIssue?.status === "backlog" ? (
-                    <button className="app-button" type="button" disabled>
-                      Run Issue
+                    <button className="issues-button" type="button" disabled>
+                      Run
                     </button>
-                  ) : dialogMode === "create" ? (
-                    <p>Actions become available after the issue is created.</p>
                   ) : (
-                    <p>No actions are available for this state.</p>
+                    <p>No actions available.</p>
                   )}
                 </section>
               </aside>
@@ -533,7 +480,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
             <div className="issue-dialog__footer">
               <button
                 ref={cancelButtonRef}
-                className="app-button"
+                className="issues-button"
                 type="button"
                 disabled={isSaving}
                 onClick={closeDialog}
@@ -542,13 +489,11 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
               </button>
               <button
                 ref={saveButtonRef}
-                aria-busy={isSaving}
-                className="app-button app-button--primary"
+                className="issues-button issues-button--primary"
                 type="submit"
                 disabled={isSaving}
               >
-                {isSaving ? <span className="button-spinner" /> : null}
-                <span>{submitLabel}</span>
+                {dialogMode === "create" ? "Create Issue" : "Save"}
               </button>
             </div>
           </form>

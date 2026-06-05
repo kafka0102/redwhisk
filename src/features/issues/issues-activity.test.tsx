@@ -108,9 +108,9 @@ describe("IssuesActivity", () => {
     const completedLane = screen.getByRole("region", { name: "Completed" });
 
     expect(runningLane).toHaveTextContent("0");
-    expect(runningLane).toHaveTextContent("No issues yet.");
-    expect(reviewLane).toHaveTextContent("No issues yet.");
-    expect(completedLane).toHaveTextContent("No issues yet.");
+    expect(runningLane).toHaveTextContent("no issues");
+    expect(reviewLane).toHaveTextContent("no issues");
+    expect(completedLane).toHaveTextContent("no issues");
   });
 
   it("keeps card content limited to title, status, and updated time", async () => {
@@ -129,7 +129,7 @@ describe("IssuesActivity", () => {
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
   });
 
-  it("opens an issue details dialog with read-only metadata", async () => {
+  it("opens an issue detail dialog without status or updated-at fields", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -140,7 +140,7 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", {
-      name: "Issue Details",
+      name: "Issue Detail",
     });
     expect(within(dialog).getByLabelText("Title")).toHaveValue(
       "Existing issue",
@@ -153,13 +153,11 @@ describe("IssuesActivity", () => {
         selector: "input, textarea, select",
       }),
     ).not.toBeInTheDocument();
-    expect(within(dialog).getByText("Backlog")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Backlog")).not.toBeInTheDocument();
     expect(
-      within(dialog).getByText(formatTestTimestamp(existingIssue.updatedAt)),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("button", { name: "Run Issue" }),
-    ).toBeDisabled();
+      within(dialog).queryByText(formatTestTimestamp(existingIssue.updatedAt)),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Run" })).toBeDisabled();
   });
 
   it("closes the detail dialog with Escape and restores focus to the triggering card", async () => {
@@ -189,7 +187,7 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Details" });
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
     expect(within(dialog).getByLabelText("Title")).toHaveFocus();
 
     await user.tab({ shift: true });
@@ -198,9 +196,7 @@ describe("IssuesActivity", () => {
     ).toHaveFocus();
 
     await user.tab();
-    expect(
-      within(dialog).getByRole("button", { name: "Save Changes" }),
-    ).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toHaveFocus();
 
     await user.tab();
     expect(
@@ -218,13 +214,13 @@ describe("IssuesActivity", () => {
 
     render(<IssuesActivity projectId={1} />);
 
-    await user.click(await screen.findByRole("button", { name: "Create Issue" }));
-    await user.type(screen.getByLabelText("Title"), "Draft local issue");
-    const dialog = screen.getByRole("dialog", { name: "New Issue" });
     await user.click(
-      within(dialog).getByRole("button", { name: "Create Issue" }),
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
+    await user.type(screen.getByLabelText("Title"), "Draft local issue");
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
+    const dialog = screen.getByRole("dialog", { name: "New Issue" });
     expect(
       await within(dialog).findByRole("status", { name: "Dialog status" }),
     ).toHaveTextContent("Issue title 不能为空。");
@@ -243,19 +239,18 @@ describe("IssuesActivity", () => {
 
     render(<IssuesActivity projectId={1} />);
 
-    await user.click(await screen.findByRole("button", { name: "Create Issue" }));
-    await user.type(screen.getByLabelText("Title"), "Pending issue");
-    const dialog = screen.getByRole("dialog", { name: "New Issue" });
     await user.click(
-      within(dialog).getByRole("button", { name: "Create Issue" }),
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
+    await user.type(screen.getByLabelText("Title"), "Pending issue");
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
     await user.keyboard("{Escape}");
 
-    expect(dialog).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "Create Issue" }),
-    ).toBeDisabled();
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
+      screen.getByRole("dialog", { name: "New Issue" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
   it("keeps the stored issue card when update fails", async () => {
@@ -273,7 +268,7 @@ describe("IssuesActivity", () => {
     );
     await user.clear(screen.getByLabelText("Title"));
     await user.type(screen.getByLabelText("Title"), "Failed update");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -281,7 +276,7 @@ describe("IssuesActivity", () => {
       title: "Failed update",
       description: "Existing description",
     });
-    const dialog = screen.getByRole("dialog", { name: "Issue Details" });
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
     expect(
       await within(dialog).findByRole("status", { name: "Dialog status" }),
     ).toHaveTextContent("Issue 不存在。");
@@ -331,14 +326,11 @@ describe("IssuesActivity", () => {
     );
     const { rerender } = render(<IssuesActivity projectId={1} />);
 
-    await user.click(await screen.findByRole("button", { name: "Create Issue" }));
-    await user.type(screen.getByLabelText("Title"), "Late issue");
     await user.click(
-      within(screen.getByRole("dialog", { name: "New Issue" })).getByRole(
-        "button",
-        { name: "Create Issue" },
-      ),
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
+    await user.type(screen.getByLabelText("Title"), "Late issue");
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
     rerender(<IssuesActivity projectId={2} />);
     resolveCreate({
       id: 24,
@@ -365,7 +357,7 @@ describe("IssuesActivity", () => {
     expect(
       await screen.findByRole("button", { name: "Existing issue" }),
     ).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+    await user.click(screen.getByRole("button", { name: "New Issue" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
@@ -374,28 +366,23 @@ describe("IssuesActivity", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("uses the page header action to create issues", async () => {
+  it("uses the backlog lane header plus action to create issues", async () => {
     listIssuesMock.mockResolvedValue({ issues: [] });
 
     render(<IssuesActivity projectId={1} />);
 
-    const header = screen
-      .getByRole("heading", {
-        name: "Issues",
-      })
-      .closest(".surface-header");
+    const header = screen.getByRole("heading", {
+      name: "Issues",
+    }).parentElement;
     const backlogLane = await screen.findByRole("region", { name: "Backlog" });
-    expect(header).not.toBeNull();
-    const createButton = within(header as HTMLElement).getByRole("button", {
-      name: "Create Issue",
+    const createButton = within(backlogLane).getByRole("button", {
+      name: "New Issue",
     });
 
-    expect(header).toHaveTextContent(
-      "Keep backlog, active runs, review, and completion in one board.",
-    );
+    expect(header).not.toHaveTextContent("New Issue");
     expect(
       within(backlogLane).queryByRole("button", {
-        name: "Create Issue",
+        name: "New Issue for backlog",
       }),
     ).not.toBeInTheDocument();
     expect(createButton).toBeInTheDocument();
