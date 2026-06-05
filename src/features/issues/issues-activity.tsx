@@ -48,14 +48,6 @@ const ISSUE_LANES: LaneDefinition[] = [
   },
 ];
 
-const STATUS_LABELS: Record<IssueStatus, string> = ISSUE_LANES.reduce(
-  (labels, lane) => ({
-    ...labels,
-    [lane.status]: lane.label,
-  }),
-  {} as Record<IssueStatus, string>,
-);
-
 type DialogMode = "create" | "edit";
 
 export function IssuesActivity({ projectId }: IssuesActivityProps) {
@@ -226,7 +218,9 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
         }
         setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
         setSelectedIssueId(updatedIssue.id);
-        setForm(issueToForm(updatedIssue));
+        setDialogMode(null);
+        setForm(EMPTY_FORM);
+        restoreDialogTriggerFocus(updatedIssue);
       }
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
@@ -350,6 +344,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
             <div className="issue-lane__cards" role="list">
               {lane.issues.map((issue) => {
                 const metaId = `issue-card-meta-${issue.id}`;
+                const descriptionId = `issue-card-description-${issue.id}`;
 
                 return (
                   <div key={issue.id} role="listitem">
@@ -361,7 +356,9 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                           cardRefs.current.delete(issue.id);
                         }
                       }}
-                      aria-describedby={metaId}
+                      aria-describedby={
+                        issue.description ? `${metaId} ${descriptionId}` : metaId
+                      }
                       aria-label={issue.title}
                       aria-pressed={issue.id === selectedIssueId}
                       className="issue-card"
@@ -371,14 +368,20 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                       }
                     >
                       <span id={metaId} className="issue-card__meta-row">
-                        <span className="issue-card__status">
-                          {STATUS_LABELS[issue.status]}
-                        </span>
+                        <span className="issue-card__id">#{issue.id}</span>
                         <span className="issue-card__updated">
                           {formatLocalTimestamp(issue.updatedAt)}
                         </span>
                       </span>
                       <span className="issue-card__title">{issue.title}</span>
+                      {issue.description ? (
+                        <span
+                          id={descriptionId}
+                          className="issue-card__description"
+                        >
+                          {issue.description}
+                        </span>
+                      ) : null}
                     </button>
                   </div>
                 );
