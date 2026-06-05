@@ -17,13 +17,19 @@ export function ProjectHome({
   return (
     <main className="project-home">
       <header className="project-home__header">
-        <div>
-          <p className="eyebrow">RedWhisk</p>
+        <div className="project-home__title-block">
           <h1>Projects</h1>
           <p className="project-home__lede">
-            Open a local Git repository to manage issues, agent sessions, and
-            completion checks from one workbench.
+            Open a local Git repository to keep issues, runs, review, and
+            completion checks in one workbench.
           </p>
+          <div className="project-home__meta" aria-label="Project summary">
+            <span>
+              {projects.length} local{" "}
+              {projects.length === 1 ? "repository" : "repositories"}
+            </span>
+            <span>Git-first desktop flow</span>
+          </div>
         </div>
       </header>
       <ProjectCardGrid
