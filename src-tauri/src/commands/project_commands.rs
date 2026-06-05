@@ -64,7 +64,7 @@ pub async fn open_project_window(
         .inner_size(800.0, 600.0)
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true)
-        .traffic_light_position(tauri::LogicalPosition::new(16.0, 11.0))
+        .traffic_light_position(tauri::LogicalPosition::new(16.0, 13.0))
         .build()
         .map_err(|error| {
             project_window_error(&project.id, "Project 窗口打开失败。", error.to_string())
