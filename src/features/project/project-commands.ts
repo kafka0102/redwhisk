@@ -11,15 +11,15 @@ export interface CreateProjectInput {
 }
 
 export interface OpenProjectInput {
-  projectId: string;
+  projectId: number;
 }
 
 export interface ProjectRecord {
-  id: string;
+  id: number;
   name: string;
   repoPath: string;
-  createdAt: string;
-  lastOpenedAt: string;
+  createdAt: number;
+  lastOpenedAt: number;
 }
 
 export interface ProjectListItem extends ProjectRecord {
@@ -31,7 +31,7 @@ export interface ProjectListResponse {
 }
 
 export interface OpenProjectWindowResponse {
-  projectId: string;
+  projectId: number;
   windowLabel: string;
 }
 

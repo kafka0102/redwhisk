@@ -52,7 +52,7 @@ impl<'connection> ProjectService<'connection> {
             })?;
 
         self.repository
-            .insert_or_get_existing_generated_id(name, &repo_path)
+            .insert_or_get_existing_for_path(name, &repo_path)
             .map_err(project_database_error)
     }
 
@@ -69,10 +69,10 @@ impl<'connection> ProjectService<'connection> {
     }
 
     pub fn open_project(&self, input: OpenProjectInput) -> Result<ProjectSummary, CommandError> {
-        self.project_available_for_open(&input.project_id)?;
+        self.project_available_for_open(input.project_id)?;
 
         self.repository
-            .update_last_opened_at(&input.project_id)
+            .update_last_opened_at(input.project_id)
             .map_err(project_database_error)
     }
 
@@ -80,10 +80,10 @@ impl<'connection> ProjectService<'connection> {
         &self,
         input: OpenProjectInput,
     ) -> Result<ProjectSummary, CommandError> {
-        self.project_available_for_open(&input.project_id)
+        self.project_available_for_open(input.project_id)
     }
 
-    pub fn record_project_opened(&self, project_id: &str) -> Result<ProjectSummary, CommandError> {
+    pub fn record_project_opened(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
         self.repository
             .update_last_opened_at(project_id)
             .map_err(project_database_error)
@@ -138,14 +138,14 @@ impl<'connection> ProjectService<'connection> {
 
     pub fn record_project_opened_in_data_dir(
         data_dir: impl AsRef<Path>,
-        project_id: &str,
+        project_id: i64,
     ) -> Result<ProjectSummary, CommandError> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).record_project_opened(project_id)
     }
 
-    fn project_by_id(&self, project_id: &str) -> Result<ProjectSummary, CommandError> {
+    fn project_by_id(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
         self.repository
             .find_by_id(project_id)
             .map_err(project_database_error)?
@@ -155,7 +155,7 @@ impl<'connection> ProjectService<'connection> {
             })
     }
 
-    fn project_available_for_open(&self, project_id: &str) -> Result<ProjectSummary, CommandError> {
+    fn project_available_for_open(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
         let project = self.project_by_id(project_id)?;
         ensure_project_path_available(&project)?;
         Ok(project)
@@ -239,7 +239,7 @@ fn ensure_project_path_available(project: &ProjectSummary) -> Result<(), Command
         CommandErrorCode::ProjectRepoPathUnavailable,
         "Project 路径不存在或不可访问。",
     )
-    .with_detail(ErrorDetail::new("Project").with_value("projectId", project.id.clone()))
+    .with_detail(ErrorDetail::new("Project").with_value("projectId", project.id))
     .with_detail(ErrorDetail::new("RepoPath").with_value("path", project.repo_path.clone())))
 }
 

@@ -1,10 +1,6 @@
-use std::path::Path;
-
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::types::project::ProjectSummary;
-
-const GENERATED_ID_ATTEMPTS: usize = 3;
 
 pub struct ProjectRepository<'connection> {
     connection: &'connection Connection,
@@ -25,7 +21,7 @@ impl<'connection> ProjectRepository<'connection> {
             .optional()
     }
 
-    pub fn find_by_id(&self, id: &str) -> rusqlite::Result<Option<ProjectSummary>> {
+    pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
                 "SELECT id, name, repo_path, created_at, last_opened_at FROM projects WHERE id = ?1",
@@ -49,16 +45,11 @@ impl<'connection> ProjectRepository<'connection> {
         Ok(projects)
     }
 
-    pub fn insert(
-        &self,
-        id: &str,
-        name: &str,
-        repo_path: &str,
-    ) -> rusqlite::Result<ProjectSummary> {
+    pub fn insert(&self, name: &str, repo_path: &str) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
-            "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
-             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            params![id, name, repo_path],
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))",
+            params![name, repo_path],
         )?;
 
         self.find_by_repo_path(repo_path)?
@@ -67,24 +58,23 @@ impl<'connection> ProjectRepository<'connection> {
 
     pub fn insert_or_get_existing(
         &self,
-        id: &str,
         name: &str,
         repo_path: &str,
     ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
-            "INSERT OR IGNORE INTO projects (id, name, repo_path, created_at, last_opened_at)
-             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            params![id, name, repo_path],
+            "INSERT OR IGNORE INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))",
+            params![name, repo_path],
         )?;
 
         self.find_by_repo_path(repo_path)?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
-    pub fn insert_or_get_existing_generated_id(
+    pub fn insert_or_get_existing_for_path(
         &self,
         name: &str,
-        repo_path: &Path,
+        repo_path: &std::path::Path,
     ) -> rusqlite::Result<ProjectSummary> {
         let repo_path = repo_path.to_string_lossy().to_string();
 
@@ -92,26 +82,13 @@ impl<'connection> ProjectRepository<'connection> {
             return Ok(project);
         }
 
-        for _ in 0..GENERATED_ID_ATTEMPTS {
-            let id: String = self.connection.query_row(
-                "SELECT 'project-' || lower(hex(randomblob(16)))",
-                [],
-                |row| row.get(0),
-            )?;
-            self.insert_or_get_existing(&id, name, &repo_path)?;
-
-            if let Some(project) = self.find_by_repo_path(&repo_path)? {
-                return Ok(project);
-            }
-        }
-
-        Err(rusqlite::Error::QueryReturnedNoRows)
+        self.insert_or_get_existing(name, &repo_path)
     }
 
-    pub fn update_last_opened_at(&self, id: &str) -> rusqlite::Result<ProjectSummary> {
+    pub fn update_last_opened_at(&self, id: i64) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
             "UPDATE projects
-             SET last_opened_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             SET last_opened_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              WHERE id = ?1",
             params![id],
         )?;

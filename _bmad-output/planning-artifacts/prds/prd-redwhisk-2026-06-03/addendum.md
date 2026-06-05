@@ -53,6 +53,8 @@ React Workbench 不直接写核心业务状态。前端通过 Tauri command 请�
 
 ## 5. 数据表草案
 
+数据表示约束：所有实体主键 `id` 使用 SQLite `INTEGER PRIMARY KEY`；外键字段使用 INTEGER；所有 `*_at` 时间列使用 Unix epoch milliseconds 的 `INTEGER NOT NULL`，展示时按本机本地时区格式化。
+
 | 表 | 关键字段 | 说明 |
 | --- | --- | --- |
 | `projects` | `id`、`name`、`repo_path`、`created_at`、`last_opened_at` | Git Repository 入口 |
