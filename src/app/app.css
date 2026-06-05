@@ -167,7 +167,7 @@ button:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
-  grid-template-rows: 56px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
   min-height: 100vh;
   background: var(--color-app);
 }
@@ -223,8 +223,8 @@ button:focus-visible {
   align-items: center;
   gap: 16px;
   min-width: 0;
-  min-height: 56px;
-  padding: 8px 16px 8px 92px;
+  min-height: 40px;
+  padding: 4px 16px 4px 92px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
