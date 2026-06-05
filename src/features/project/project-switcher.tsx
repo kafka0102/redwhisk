@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ProjectSummary } from "../../app/app";
 import { openProjectWindow } from "./project-commands";
@@ -25,6 +25,7 @@ export function ProjectSwitcher({
   onProjectsRefresh,
   projects,
 }: ProjectSwitcherProps) {
+  const switcherRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +57,29 @@ export function ProjectSwitcher({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        switcherRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+
+      setIsOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isOpen]);
+
   async function handleProjectSelect(project: ProjectSummary) {
     setError(null);
 
@@ -73,7 +97,7 @@ export function ProjectSwitcher({
   }
 
   return (
-    <div className="project-switcher">
+    <div className="project-switcher" ref={switcherRef}>
       <button
         className="project-switcher__trigger"
         type="button"

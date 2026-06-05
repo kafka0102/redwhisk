@@ -148,6 +148,11 @@ describe("App project entry", () => {
         .getByRole("button", { name: "Current project RedWhisk" })
         .closest(".workbench__header")?.parentElement,
     ).toHaveClass("workbench");
+    expect(
+      screen
+        .getByRole("button", { name: "Current project RedWhisk" })
+        .closest(".workbench__header"),
+    ).toHaveAttribute("data-tauri-drag-region");
   });
 
   it("shows URL project open failures as project open errors", async () => {
@@ -465,6 +470,28 @@ describe("App project entry", () => {
     ).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("menu", { name: "Project Switcher" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("closes the project switcher when clicking outside it", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Current project RedWhisk" }),
+    );
+
+    expect(
+      screen.getByRole("menu", { name: "Project Switcher" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("heading", { name: "Issues" }));
 
     expect(
       screen.queryByRole("menu", { name: "Project Switcher" }),

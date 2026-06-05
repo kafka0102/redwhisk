@@ -45,7 +45,7 @@ export function AppShell({
         ))}
       </nav>
       <section className="workbench" aria-label={`${project.name} workbench`}>
-        <header className="workbench__header">
+        <header className="workbench__header" data-tauri-drag-region>
           <ProjectSwitcher
             currentProject={project}
             projects={projects}
