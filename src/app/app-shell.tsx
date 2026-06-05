@@ -3,9 +3,12 @@ import { useState } from "react";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
+import { ProjectSwitcher } from "../features/project/project-switcher";
 
 interface AppShellProps {
   project: ProjectSummary;
+  projects: ProjectSummary[];
+  onProjectsRefresh: () => Promise<void>;
 }
 
 const ACTIVITIES: Array<{
@@ -18,7 +21,11 @@ const ACTIVITIES: Array<{
   { key: "settings", label: "Settings", Icon: Settings },
 ];
 
-export function AppShell({ project }: AppShellProps) {
+export function AppShell({
+  onProjectsRefresh,
+  project,
+  projects,
+}: AppShellProps) {
   const [activeActivity, setActiveActivity] = useState<ActivityKey>("issues");
 
   return (
@@ -39,13 +46,13 @@ export function AppShell({ project }: AppShellProps) {
       </nav>
       <section className="workbench" aria-label={`${project.name} workbench`}>
         <header className="workbench__header">
-          <div>
-            <p className="eyebrow">Project</p>
-            <h1>{project.name}</h1>
-          </div>
-          <p className="workbench__path">{project.path}</p>
+          <ProjectSwitcher
+            currentProject={project}
+            projects={projects}
+            onProjectsRefresh={onProjectsRefresh}
+          />
         </header>
-        <ActivityRouter activeActivity={activeActivity} project={project} />
+        <ActivityRouter activeActivity={activeActivity} />
       </section>
     </div>
   );

@@ -6,7 +6,7 @@ use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::errors::CommandErrorCode;
-use redwhisk_lib::types::project::CreateProjectInput;
+use redwhisk_lib::types::project::{CreateProjectInput, OpenProjectInput, ProjectPathStatus};
 
 #[test]
 fn project_migration_creates_projects_schema_with_unique_repo_path() {
@@ -260,6 +260,198 @@ fn repository_generates_unique_project_ids_for_multiple_repos() {
         .expect("second insert");
 
     assert_ne!(first_project.id, second_project.id);
+}
+
+#[test]
+fn list_projects_returns_all_projects_with_path_status_in_recent_order() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let available_repo = temp_dir.path().join("available-repo");
+    fs::create_dir_all(available_repo.join(".git")).expect("git dir");
+    let missing_repo = temp_dir.path().join("missing-repo");
+    let repository = ProjectRepository::new(&database.connection);
+    repository
+        .insert(
+            "project-old",
+            "available-repo",
+            available_repo.to_str().unwrap(),
+        )
+        .expect("insert available project");
+    repository
+        .insert(
+            "project-new",
+            "missing-repo",
+            missing_repo.to_str().unwrap(),
+        )
+        .expect("insert missing project");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET last_opened_at = '2026-06-05T02:00:00.000Z' WHERE id = 'project-old'",
+            [],
+        )
+        .expect("older timestamp");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET last_opened_at = '2026-06-05T03:00:00.000Z' WHERE id = 'project-new'",
+            [],
+        )
+        .expect("newer timestamp");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let projects = service.list_projects().expect("project list");
+
+    assert_eq!(projects.projects.len(), 2);
+    assert_eq!(projects.projects[0].id, "project-new");
+    assert_eq!(projects.projects[0].path_status, ProjectPathStatus::Missing);
+    assert_eq!(projects.projects[1].id, "project-old");
+    assert_eq!(
+        projects.projects[1].path_status,
+        ProjectPathStatus::Available
+    );
+}
+
+#[test]
+fn open_project_updates_last_opened_at_for_available_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let repository = ProjectRepository::new(&database.connection);
+    repository
+        .insert("project-1", "sample-repo", repo_dir.to_str().unwrap())
+        .expect("insert project");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET last_opened_at = '2026-06-05T02:00:00.000Z' WHERE id = 'project-1'",
+            [],
+        )
+        .expect("older timestamp");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let opened = service
+        .open_project(OpenProjectInput {
+            project_id: "project-1".to_string(),
+        })
+        .expect("open project");
+
+    assert_eq!(opened.id, "project-1");
+    assert!(opened.last_opened_at > "2026-06-05T02:00:00.000Z".to_string());
+}
+
+#[test]
+fn open_project_rejects_missing_path_without_deleting_or_updating_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let missing_repo = temp_dir.path().join("missing-repo");
+    let repository = ProjectRepository::new(&database.connection);
+    repository
+        .insert("project-1", "missing-repo", missing_repo.to_str().unwrap())
+        .expect("insert project");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET last_opened_at = '2026-06-05T02:00:00.000Z' WHERE id = 'project-1'",
+            [],
+        )
+        .expect("older timestamp");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let error = service
+        .open_project(OpenProjectInput {
+            project_id: "project-1".to_string(),
+        })
+        .expect_err("missing project path should fail");
+
+    assert_eq!(error.code, CommandErrorCode::ProjectRepoPathUnavailable);
+    let stored = ProjectRepository::new(&database.connection)
+        .find_by_id("project-1")
+        .expect("query project")
+        .expect("project kept");
+    assert_eq!(stored.last_opened_at, "2026-06-05T02:00:00.000Z");
+}
+
+#[test]
+fn prepare_project_window_open_validates_target_without_updating_last_opened_at() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("target-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let repository = ProjectRepository::new(&database.connection);
+    repository
+        .insert("project-target", "target-repo", repo_dir.to_str().unwrap())
+        .expect("insert project");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET last_opened_at = '2026-06-05T02:00:00.000Z' WHERE id = 'project-target'",
+            [],
+        )
+        .expect("older timestamp");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let project = service
+        .open_project_for_window(OpenProjectInput {
+            project_id: "project-target".to_string(),
+        })
+        .expect("prepare target project");
+
+    assert_eq!(project.id, "project-target");
+    assert_eq!(project.last_opened_at, "2026-06-05T02:00:00.000Z");
+}
+
+#[test]
+fn record_project_opened_updates_last_opened_at_after_window_success() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("target-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let repository = ProjectRepository::new(&database.connection);
+    repository
+        .insert("project-target", "target-repo", repo_dir.to_str().unwrap())
+        .expect("insert project");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET last_opened_at = '2026-06-05T02:00:00.000Z' WHERE id = 'project-target'",
+            [],
+        )
+        .expect("older timestamp");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let project = service
+        .record_project_opened("project-target")
+        .expect("record open project");
+
+    assert_eq!(project.id, "project-target");
+    assert!(project.last_opened_at > "2026-06-05T02:00:00.000Z".to_string());
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {

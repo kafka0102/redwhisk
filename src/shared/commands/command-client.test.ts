@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createProject,
   initializeLocalData,
+  listProjects,
+  openProject,
+  openProjectWindow,
 } from "../../features/project/project-commands";
 import { isCommandError, toCommandError } from "./command-error";
 
@@ -57,6 +60,73 @@ describe("command client", () => {
       input: {
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       },
+    });
+  });
+
+  it("invokes Rust Core through the list projects command", async () => {
+    invokeMock.mockResolvedValue({
+      projects: [
+        {
+          id: "project-123",
+          name: "redwhisk",
+          repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+          createdAt: "2026-06-04T14:00:00.000Z",
+          lastOpenedAt: "2026-06-04T14:00:00.000Z",
+          pathStatus: "available",
+        },
+      ],
+    });
+
+    await expect(listProjects()).resolves.toEqual({
+      projects: [
+        {
+          id: "project-123",
+          name: "redwhisk",
+          repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+          createdAt: "2026-06-04T14:00:00.000Z",
+          lastOpenedAt: "2026-06-04T14:00:00.000Z",
+          pathStatus: "available",
+        },
+      ],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("list_projects", undefined);
+  });
+
+  it("invokes Rust Core through the open project command", async () => {
+    invokeMock.mockResolvedValue({
+      id: "project-123",
+      name: "redwhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      createdAt: "2026-06-04T14:00:00.000Z",
+      lastOpenedAt: "2026-06-05T02:00:00.000Z",
+    });
+
+    await expect(openProject({ projectId: "project-123" })).resolves.toEqual({
+      id: "project-123",
+      name: "redwhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      createdAt: "2026-06-04T14:00:00.000Z",
+      lastOpenedAt: "2026-06-05T02:00:00.000Z",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("open_project", {
+      input: { projectId: "project-123" },
+    });
+  });
+
+  it("invokes Rust Core through the open project window command", async () => {
+    invokeMock.mockResolvedValue({
+      projectId: "project-123",
+      windowLabel: "project-project-123",
+    });
+
+    await expect(
+      openProjectWindow({ projectId: "project-123" }),
+    ).resolves.toEqual({
+      projectId: "project-123",
+      windowLabel: "project-project-123",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("open_project_window", {
+      input: { projectId: "project-123" },
     });
   });
 

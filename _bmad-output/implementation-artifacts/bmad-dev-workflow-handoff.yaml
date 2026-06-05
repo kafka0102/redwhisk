@@ -1,46 +1,36 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/1-3-create-git-project.md
-story_key: 1-3-create-git-project
+story_file: _bmad-output/implementation-artifacts/1-4-show-project-home-and-handle-path-errors.md
+story_key: 1-4-show-project-home-and-handle-path-errors
 story_status: done
-baseline_commit: aba494e
+baseline_commit: 5cdfe9b
 changed_files:
-  - _bmad-output/implementation-artifacts/1-3-create-git-project.md
+  - _bmad-output/implementation-artifacts/1-4-show-project-home-and-handle-path-errors.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - package.json
-  - pnpm-lock.yaml
-  - src-tauri/Cargo.lock
-  - src-tauri/Cargo.toml
-  - src-tauri/capabilities/default.json
-  - src-tauri/migrations/0002_projects.sql
-  - src-tauri/src/commands/mod.rs
   - src-tauri/src/commands/project_commands.rs
-  - src-tauri/src/core/mod.rs
   - src-tauri/src/core/project_service.rs
-  - src-tauri/src/db/migrations.rs
-  - src-tauri/src/db/mod.rs
   - src-tauri/src/db/project_repository.rs
-  - src-tauri/src/git/mod.rs
-  - src-tauri/src/git/repository.rs
   - src-tauri/src/lib.rs
   - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/mod.rs
   - src-tauri/src/types/project.rs
-  - src-tauri/tests/local_data.rs
   - src-tauri/tests/project.rs
+  - src/app/activity-router.tsx
+  - src/app/app-shell.tsx
+  - src/app/app.css
   - src/app/app.test.tsx
   - src/app/app.tsx
-  - src/features/project/create-project-card.tsx
-  - src/features/project/project-card-grid.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/issues/issues-activity.tsx
   - src/features/project/project-commands.ts
-  - src/features/project/project-home.tsx
+  - src/features/project/project-switcher.tsx
+  - src/features/settings/project-settings-activity.tsx
   - src/shared/commands/command-client.test.ts
 validation_commands:
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
   - cargo test --manifest-path src-tauri/Cargo.toml --test project
-  - pnpm test -- src/app/app.test.tsx
+  - pnpm test -- src/app/app.test.tsx src/shared/commands/command-client.test.ts
   - pnpm lint
   - pnpm typecheck
   - pnpm test
@@ -50,12 +40,12 @@ validation_results:
   - "PASS: pnpm format"
   - "PASS: cargo fmt --manifest-path src-tauri/Cargo.toml"
   - "PASS: cargo test --manifest-path src-tauri/Cargo.toml --test project"
-  - "PASS: pnpm test -- src/app/app.test.tsx"
+  - "PASS: pnpm test -- src/app/app.test.tsx src/shared/commands/command-client.test.ts"
   - "PASS: pnpm lint"
   - "PASS: pnpm typecheck"
   - "PASS: pnpm test"
   - "PASS: pnpm build"
   - "PASS: cd src-tauri && cargo test"
-review_summary: "Done: 6/6 review findings fixed and verified."
+review_summary: "Code review completed with 4 patch findings; all fixed and verified. Dismissed 1 minor URL-encoding finding because generated Project ids are URL-safe."
 blocking_reason:
-updated_at: 2026-06-05T09:14:03+0800
+updated_at: 2026-06-05T10:55:46+0800
