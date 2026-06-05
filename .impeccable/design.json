@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-05T15:14:26Z",
+  "title": "Design System: RedWhisk",
+  "extensions": {
+    "colorMeta": {
+      "app-light": {
+        "role": "neutral",
+        "displayName": "App White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#17181a",
+          "#2b2d31",
+          "#484c54",
+          "#79808a",
+          "#a8aeb8",
+          "#d9dde3",
+          "#eef1f4",
+          "#ffffff"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Workbench Black Surface",
+        "canonical": "#0b0b0c",
+        "tonalRamp": [
+          "#000000",
+          "#0b0b0c",
+          "#141416",
+          "#242426",
+          "#2b2d31",
+          "#484c54",
+          "#79808a",
+          "#f2f3f5"
+        ]
+      },
+      "accent-light": {
+        "role": "primary",
+        "displayName": "Workbench Ink",
+        "canonical": "#111111",
+        "tonalRamp": [
+          "#000000",
+          "#111111",
+          "#242426",
+          "#484c54",
+          "#79808a",
+          "#a8aeb8",
+          "#f0f0f0",
+          "#ffffff"
+        ]
+      },
+      "lane-running": {
+        "role": "state",
+        "displayName": "Running Amber",
+        "canonical": "#c89000",
+        "tonalRamp": [
+          "#2b1f00",
+          "#5f4300",
+          "#916800",
+          "#c89000",
+          "#e7b732",
+          "#f3d27a",
+          "#fff3c4",
+          "#fffbea"
+        ]
+      },
+      "lane-review": {
+        "role": "state",
+        "displayName": "Review Green",
+        "canonical": "#249447",
+        "tonalRamp": [
+          "#092613",
+          "#10401f",
+          "#17632f",
+          "#249447",
+          "#45b867",
+          "#7bd895",
+          "#c8f5d3",
+          "#f0fdf4"
+        ]
+      },
+      "lane-completed": {
+        "role": "state",
+        "displayName": "Completed Blue",
+        "canonical": "#1681d9",
+        "tonalRamp": [
+          "#061f36",
+          "#0b3b63",
+          "#105c9b",
+          "#1681d9",
+          "#4aa3ea",
+          "#8ac9f6",
+          "#cdeafe",
+          "#eff6ff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "只用于 Project Home title。"
+      },
+      "title": {
+        "displayName": "Activity Title",
+        "purpose": "用于 activity 级标题。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "用于默认 UI copy、button 和 input。"
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "用于 repo path、command、log、hash 和 file path。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "focus-ring-light",
+        "value": "0 0 0 2px #ffffff, 0 0 0 4px #111111",
+        "purpose": "Light 模式下 button 和 field 的键盘焦点。"
+      },
+      {
+        "name": "focus-ring-dark",
+        "value": "0 0 0 2px #000000, 0 0 0 4px #ffffff",
+        "purpose": "Dark 模式下 button 和 field 的键盘焦点。"
+      },
+      {
+        "name": "popover-lift",
+        "value": "0 8px 22px rgb(15 23 42 / 12%)",
+        "purpose": "只用于 Project Switcher popover。"
+      },
+      {
+        "name": "dialog-lift",
+        "value": "0 18px 50px rgb(15 23 42 / 16%)",
+        "purpose": "只用于 modal dialog。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-only",
+        "value": "instant or browser-default state feedback",
+        "purpose": "当前 UI 避免装饰性 choreography；只在状态变化需要解释时增加 transition。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-dialog-collapse",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "当前最强动作，Light 模式为黑底白字，Dark 模式反相。",
+      "html": "<button class=\"ds-btn-primary\">Save</button>",
+      "css": ".ds-btn-primary { min-height: 30px; padding: 5px 10px; border: 1px solid var(--color-accent, #111111); border-radius: var(--radius-control, 3px); background: var(--color-accent, #111111); color: #fff; cursor: pointer; font: inherit; font-size: 13px; letter-spacing: 0; } .ds-btn-primary:hover { background: var(--color-accent, #111111); } .ds-btn-primary:focus-visible { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-btn-primary:disabled { cursor: not-allowed; opacity: 0.65; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "用于 Cancel、Configure 和被禁用的后续 workflow button 等中性动作。",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { min-height: 30px; padding: 5px 10px; border: 1px solid var(--color-border, #d9dde3); border-radius: var(--radius-control, 3px); background: var(--color-surface, #fff); color: var(--color-text, #17181a); cursor: pointer; font: inherit; font-size: 13px; letter-spacing: 0; } .ds-btn-secondary:hover { border-color: var(--color-border-strong, #aeb6c2); background: var(--color-surface-muted, #eef1f4); } .ds-btn-secondary:focus-visible { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-btn-secondary:disabled { cursor: not-allowed; opacity: 0.65; }"
+    },
+    {
+      "name": "Issue Card",
+      "kind": "card",
+      "refersTo": "issue-card",
+      "description": "Issue lane 内的紧凑任务项，包含 meta row 和两行 title。",
+      "html": "<button class=\"ds-issue-card\" aria-pressed=\"false\"><span class=\"ds-issue-card-meta\"><span>Backlog</span><span>Opened 6/5/2026</span></span><span class=\"ds-issue-card-title\">Create local issue workflow</span></button>",
+      "css": ".ds-issue-card { display: grid; width: 100%; min-height: 92px; gap: 9px; padding: 10px; border: 1px solid var(--color-border, #d9dde3); border-radius: var(--radius-card, 5px); background: var(--color-surface, #fff); color: var(--color-text, #17181a); cursor: pointer; text-align: left; font: inherit; } .ds-issue-card:hover { border-color: var(--color-border-strong, #aeb6c2); } .ds-issue-card[aria-pressed=\"true\"] { border-color: var(--color-accent, #111111); } .ds-issue-card:focus-visible { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-issue-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; color: var(--color-text-muted, #5d6470); font-size: 11px; line-height: 1.35; } .ds-issue-card-title { color: var(--color-text, #17181a); font-size: 13px; font-weight: 650; line-height: 1.32; }"
+    },
+    {
+      "name": "Project Card",
+      "kind": "card",
+      "refersTo": "project-card",
+      "description": "Project Home 中用于打开本地 Git Project 的卡片。",
+      "html": "<button class=\"ds-project-card\"><span class=\"ds-project-card-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path d=\"M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.2a2 2 0 0 1-1.4-.6L9.6 3.6A2 2 0 0 0 8.2 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/></svg></span><span class=\"ds-project-card-body\"><span class=\"ds-project-card-name\">redwhisk</span><span class=\"ds-project-card-path\">/Users/project/redwhisk</span><span class=\"ds-project-card-meta\">Opened 6/5/2026</span></span></button>",
+      "css": ".ds-project-card { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: start; width: 100%; min-height: 128px; padding: 14px; border: 1px solid var(--color-border, #d9dde3); border-radius: var(--radius-card, 5px); background: var(--color-surface, #fff); color: var(--color-text, #17181a); cursor: pointer; text-align: left; font: inherit; } .ds-project-card:hover { border-color: var(--color-border-strong, #aeb6c2); background: var(--color-surface-muted, #eef1f4); } .ds-project-card:focus-visible { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-project-card-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-control, 3px); background: var(--color-accent-muted, #f0f0f0); color: var(--color-accent, #111111); } .ds-project-card-body { display: grid; min-width: 0; gap: 7px; } .ds-project-card-name { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; } .ds-project-card-path { overflow: hidden; color: var(--color-text-muted, #5d6470); font-family: \"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo, monospace; font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; } .ds-project-card-meta { color: var(--color-text-muted, #5d6470); font-size: 11px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "text-field",
+      "description": "Issue title 和表单输入使用的紧凑 field 样式。",
+      "html": "<label class=\"ds-field\"><span>Title</span><input value=\"Create local issue workflow\" /></label>",
+      "css": ".ds-field { display: grid; gap: 5px; color: var(--color-text, #17181a); font: inherit; font-size: 12px; font-weight: 600; } .ds-field input { width: 100%; min-width: 0; height: 32px; padding: 6px 8px; border: 1px solid var(--color-border, #d9dde3); border-radius: var(--radius-control, 3px); background: var(--color-surface, #fff); color: var(--color-text, #17181a); font: inherit; font-size: 13px; letter-spacing: 0; } .ds-field input:focus { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-field input:disabled { opacity: 0.65; }"
+    },
+    {
+      "name": "Activity Bar Button",
+      "kind": "nav",
+      "refersTo": "activity-bar-button",
+      "description": "固定 rail navigation target，包含 icon 和紧凑文本 label。",
+      "html": "<button class=\"ds-activity-button\" aria-pressed=\"true\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg><span>Issues</span></button>",
+      "css": ".ds-activity-button { display: grid; place-items: center; width: 40px; min-height: 40px; padding: 4px 0; border: 0; border-radius: var(--radius-control, 3px); background: transparent; color: var(--color-text-muted, #5d6470); cursor: pointer; font: inherit; } .ds-activity-button[aria-pressed=\"true\"] { background: var(--color-accent-muted, #f0f0f0); color: var(--color-accent, #111111); } .ds-activity-button:hover { color: var(--color-text, #17181a); } .ds-activity-button:focus-visible { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-activity-button span { overflow: hidden; max-width: 40px; font-size: 10px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }"
+    },
+    {
+      "name": "Project Switcher Item",
+      "kind": "custom",
+      "refersTo": "project-switcher-item",
+      "description": "密集 Project picker row，包含稳定色身份、mono path 和当前 check。",
+      "html": "<button class=\"ds-project-switcher-item\"><span class=\"ds-project-switcher-icon\">R</span><span class=\"ds-project-switcher-body\"><span class=\"ds-project-switcher-name\">redwhisk</span><span class=\"ds-project-switcher-path\">/Users/project/redwhisk</span></span><svg class=\"ds-project-switcher-check\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path d=\"m20 6-11 11-5-5\"/></svg></button>",
+      "css": ".ds-project-switcher-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) 24px; align-items: center; min-height: 72px; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: var(--radius-control, 3px); background: transparent; color: var(--color-text, #17181a); cursor: pointer; text-align: left; font: inherit; } .ds-project-switcher-item:hover { background: var(--color-surface-muted, #eef1f4); } .ds-project-switcher-item:focus-visible { outline: none; box-shadow: var(--shadow-focus, 0 0 0 2px #fff, 0 0 0 4px #111); } .ds-project-switcher-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 7px; background: #2563eb; color: #fff; font-size: 13px; font-weight: 700; } .ds-project-switcher-body { display: grid; min-width: 0; gap: 3px; } .ds-project-switcher-name { overflow: hidden; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; } .ds-project-switcher-path { overflow: hidden; color: var(--color-text-muted, #5d6470); font-family: \"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo, monospace; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; } .ds-project-switcher-check { color: var(--color-accent, #111111); justify-self: end; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Local Workbench",
+    "overview": "RedWhisk 应该像一个精确的本地 Agent 开发工作台：安静的窗口 chrome、紧凑的面板、清晰的边线，以及不会打断 Codex Session 的控件。视觉系统服务的是任务可信度，不是品牌表演；用户应该能直接判断自己正在操作哪个 Project、Issue、Session、状态和动作。\n\n界面默认克制。Light 模式使用白色和冷灰，Dark 模式使用真黑和细微色阶；颜色只有在承载状态、焦点或 Project 识别时才出现。系统明确拒绝营销页面、Web SaaS dashboard、项目管理后台、彩色阶段柱看板、KPI 式统计页面和过度设计的 AI Chat UI。",
+    "keyCharacteristics": [
+      "桌面优先的面板结构：固定 chrome、hairline border、紧凑控件。",
+      "黑、白、灰是默认语法；状态色必须小而明确。",
+      "13px body scale 的系统字体，不使用 display type 或 fluid heading。",
+      "状态可信优先于愉悦感：focus、error、attention、missing path、disabled action 都必须清楚、事实化。"
+    ],
+    "rules": [
+      {
+        "name": "The Rarity Rule",
+        "body": "颜色必须稀缺。如果用户先感受到“这个屏幕很彩色”，再去读 label，说明颜色已经从状态语言滑成了装饰。",
+        "section": "colors"
+      },
+      {
+        "name": "The No Stripe Rule",
+        "body": "不要在 card、lane、callout 或 alert 上使用彩色 border-left / border-right 作为强调。使用完整边框、小点、文本或小图标。",
+        "section": "colors"
+      },
+      {
+        "name": "The No Display Rule",
+        "body": "RedWhisk 没有 hero type。不要引入 display font、clamp-based heading、负 letter spacing 或营销式大标题。",
+        "section": "typography"
+      },
+      {
+        "name": "The Zero Tracking Rule",
+        "body": "letter-spacing 保持 0。uppercase 只允许用于现有紧凑 RedWhisk eyebrow 和短 label。",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Workbench Rule",
+        "body": "普通 surface 在静止状态下是 flat。如果一个普通 card 需要 shadow 才像可点击，说明 border、background 或 affordance 错了。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Overlay-Only Shadow Rule",
+        "body": "Shadow 属于 dialog 和 popover，不属于 Issue Card、Project Card、lane 或 empty state。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 使用黑、白、灰、边线和紧凑 spacing，让界面像桌面开发工具。",
+      "Do 只把颜色用于 focus、attention、success、danger、Project identity 或 lane state。",
+      "Do 在实现 Agent workflow 时保留 Codex Native Session View 作为主工作面。",
+      "Do 一致使用 lucide icon，并给 Activity Bar 40px target 和事实化 accessible label。",
+      "Do 让状态文本化：missing path、error、attention、crashed、stopped、no commit detected 和 completed 不能只靠颜色表达。",
+      "Do 让 Project、Issue、Agent Session、Project Settings 和 Global Settings 在视觉上保持清楚边界。"
+    ],
+    "donts": [
+      "Don't 把 RedWhisk 做成营销页面、Web SaaS dashboard、项目管理后台、彩色阶段柱看板、KPI 式统计页面或过度设计的 AI Chat UI。",
+      "Don't 使用大圆角卡片墙、渐变装饰、网页 section、hero 文案、彩色状态胶囊墙、hover-only 关键操作、拖拽作为主路径、庆祝动画或把 Codex CLI 重做成单独聊天框。",
+      "Don't 引入 side-stripe border、gradient text、glassmorphism、diagonal stripe background、ghost-card shadow 或 nested card。",
+      "Don't 给普通 Project Card、Issue Card、lane 或 empty state 添加 card shadow。",
+      "Don't 通过放大字体或拉大 spacing 制造虚假的高级感；密度是产品能力的一部分。",
+      "Don't 使用 blue-black gradient、purple-blue theme、neon accent 或装饰性的 inactive full-saturation state。"
+    ]
+  }
+}
