@@ -336,10 +336,11 @@ describe("App project entry", () => {
       description: "Updated description",
     });
     expect(
+      screen.queryByRole("dialog", { name: "Issue Detail" }),
+    ).not.toBeInTheDocument();
+    expect(
       await screen.findByRole("button", { name: "Updated issue" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByDisplayValue("Updated issue")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Updated description")).toBeInTheDocument();
     expect(screen.queryByLabelText(/priority/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/label/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/assignee/i)).not.toBeInTheDocument();

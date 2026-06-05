@@ -113,7 +113,7 @@ describe("IssuesActivity", () => {
     expect(completedLane).toHaveTextContent("no issues");
   });
 
-  it("keeps card content limited to title, status, and updated time", async () => {
+  it("shows issue id, updated time, full title, and a single-line description excerpt", async () => {
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
     render(<IssuesActivity projectId={1} />);
@@ -123,9 +123,9 @@ describe("IssuesActivity", () => {
     });
 
     expect(card).toHaveTextContent("Existing issue");
-    expect(card).toHaveTextContent("Backlog");
-    expect(card).toHaveAccessibleDescription(/Backlog/);
-    expect(card).not.toHaveTextContent("Existing description");
+    expect(card).toHaveTextContent("#20");
+    expect(card).toHaveTextContent(formatTestTimestamp(existingIssue.updatedAt));
+    expect(card).toHaveTextContent("Existing description");
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
   });
 
@@ -297,6 +297,41 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "draft local issue" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("closes the edit dialog after save", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    updateIssueMock.mockResolvedValue({
+      ...existingIssue,
+      title: "Updated issue",
+      description: "Updated description",
+      updatedAt: 1_780_635_600_000,
+    });
+
+    render(<IssuesActivity projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Updated issue");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: 20,
+        title: "Updated issue",
+        description: "Existing description",
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Issue Detail" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Updated issue" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 

@@ -316,8 +316,9 @@ button:focus-visible {
   grid-template-columns: repeat(4, minmax(248px, 1fr));
   gap: 14px;
   min-height: 0;
+  height: 100%;
   overflow: auto hidden;
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 
 .issues-loading {
@@ -337,7 +338,6 @@ button:focus-visible {
   min-height: 0;
   height: 100%;
   padding: 10px;
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-lane-backlog);
 }
@@ -423,33 +423,32 @@ button:focus-visible {
   align-content: start;
   gap: 8px;
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
 }
 
 .issue-card {
   display: grid;
   width: 100%;
-  min-height: 92px;
-  gap: 9px;
-  padding: 10px;
-  border: 1px solid var(--color-border);
+  min-height: 78px;
+  gap: 4px;
+  padding: 10px 10px 9px;
+  border: 0;
   border-radius: var(--radius-card);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
   transition:
-    background-color 160ms ease-out,
-    border-color 160ms ease-out;
+    background-color 160ms ease-out;
 }
 
 .issue-card:hover {
-  border-color: var(--color-border-strong);
   background: var(--color-surface);
 }
 
 .issue-card[aria-pressed="true"] {
-  border-color: var(--color-accent);
+  background: var(--color-surface);
 }
 
 .issue-card__meta-row {
@@ -460,10 +459,10 @@ button:focus-visible {
   min-width: 0;
   color: var(--color-text-muted);
   font-size: 11px;
-  line-height: 1.35;
+  line-height: 1.2;
 }
 
-.issue-card__status,
+.issue-card__id,
 .issue-card__updated {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -471,16 +470,26 @@ button:focus-visible {
 }
 
 .issue-card__title {
-  display: -webkit-box;
-  overflow: hidden;
+  display: block;
   min-width: 0;
   color: var(--color-text);
   font-size: 13px;
   font-weight: 650;
-  line-height: 1.32;
+  line-height: 1.24;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.issue-card__description {
+  display: -webkit-box;
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.2;
   text-overflow: ellipsis;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .issue-lane__empty {
@@ -505,7 +514,7 @@ button:focus-visible {
 .issue-field textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
@@ -530,7 +539,8 @@ button:focus-visible {
 .issue-field input:focus,
 .issue-field textarea:focus {
   outline: none;
-  box-shadow: var(--shadow-focus);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .issue-form__actions {
