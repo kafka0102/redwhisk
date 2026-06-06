@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,12 +6,9 @@ import { ProjectSettingsActivity } from "./project-settings-activity";
 import {
   detectCodexCommand,
   listAgentProfiles,
-  listProjectAgentOverrides,
   saveAgentProfile,
-  saveProjectAgentOverride,
   testAgentCommand,
   type AgentProfileRecord,
-  type ProjectAgentOverrideRecord,
 } from "./settings-commands";
 
 vi.mock("./settings-commands", () => ({
@@ -19,36 +16,37 @@ vi.mock("./settings-commands", () => ({
   testAgentCommand: vi.fn(),
   listAgentProfiles: vi.fn(),
   saveAgentProfile: vi.fn(),
-  listProjectAgentOverrides: vi.fn(),
-  saveProjectAgentOverride: vi.fn(),
 }));
 
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
-const listProjectAgentOverridesMock = vi.mocked(listProjectAgentOverrides);
-const saveProjectAgentOverrideMock = vi.mocked(saveProjectAgentOverride);
 
-const profile: AgentProfileRecord = {
+const projectProfile: AgentProfileRecord = {
   id: 1,
-  name: "Codex",
+  name: "Project Codex",
   agentType: "codex",
   command: "/usr/local/bin/codex",
-  defaultArgs: ["exec"],
-  defaultSkill: "global-skill",
-  promptTemplate: "Global prompt",
-  enabled: true,
+  scope: "project",
+  projectId: 1,
+  mode: "full-auto",
+  dangerous: true,
+  defaultSkill: "",
+  promptTemplate: "",
 };
 
-const override: ProjectAgentOverrideRecord = {
-  id: 10,
-  projectId: 1,
-  agentProfileId: 1,
-  defaultArgs: ["exec", "--sandbox"],
-  defaultSkill: "project-skill",
-  promptTemplate: "Project prompt",
-  enabled: true,
+const globalProfile: AgentProfileRecord = {
+  id: 2,
+  name: "Global Codex",
+  agentType: "codex",
+  command: "/usr/local/bin/codex",
+  scope: "global",
+  projectId: null,
+  mode: "full-auto",
+  dangerous: true,
+  defaultSkill: "",
+  promptTemplate: "",
 };
 
 describe("ProjectSettingsActivity", () => {
@@ -57,32 +55,50 @@ describe("ProjectSettingsActivity", () => {
     testAgentCommandMock.mockReset();
     listAgentProfilesMock.mockReset();
     saveAgentProfileMock.mockReset();
-    listProjectAgentOverridesMock.mockReset();
-    saveProjectAgentOverrideMock.mockReset();
-    listAgentProfilesMock.mockResolvedValue({ profiles: [profile] });
-    listProjectAgentOverridesMock.mockResolvedValue({ overrides: [override] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [projectProfile] };
+      return { profiles: [globalProfile] };
+    });
   });
 
-  it("renders current project overrides separately from global settings", async () => {
+  it("renders two-column layout with agents menu active by default", async () => {
     render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
 
     expect(
-      await screen.findByRole("heading", { name: "Settings" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Current project:")).toBeInTheDocument();
-    expect(screen.getAllByText("RedWhisk")).toHaveLength(2);
-    expect(
-      await screen.findByDisplayValue("project-skill"),
+      await screen.findByRole("navigation", { name: "Settings menu" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("dialog", { name: "Global Settings" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "基本信息" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("region", { name: "Project Agents" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Global Agents" }),
+    ).toBeInTheDocument();
   });
 
-  it("opens global settings and shows codex detection failure while save stays disabled without a command", async () => {
-    const user = userEvent.setup();
+  it("shows project and global agents in separate sections", async () => {
+    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+
+    expect(await screen.findByText("Project Codex")).toBeInTheDocument();
+    expect(screen.getByText("Global Codex")).toBeInTheDocument();
+  });
+
+  it("shows No agents for empty project and global lists", async () => {
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
-    listProjectAgentOverridesMock.mockResolvedValue({ overrides: [] });
+
+    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+
+    expect(await screen.findAllByText("No agents")).toHaveLength(2);
+  });
+
+  it("opens the add form for project scope when clicking the project add button", async () => {
+    const user = userEvent.setup();
     detectCodexCommandMock.mockRejectedValue({
       code: "AGENT_COMMAND_UNAVAILABLE",
       message: "Agent command 不可用。",
@@ -91,20 +107,18 @@ describe("ProjectSettingsActivity", () => {
     render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open Global Settings" }),
+      await screen.findByRole("button", { name: "Add project agent" }),
     );
-    await user.click(screen.getByRole("button", { name: "New Codex Profile" }));
 
     expect(
-      await screen.findByRole("status", { name: "Global profile status" }),
-    ).toHaveTextContent("Agent command 不可用。");
-    expect(screen.getByRole("button", { name: "Save profile" })).toBeDisabled();
+      screen.getByRole("heading", { name: "Add Project Agent" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("saves a global agent profile after manual command test succeeds", async () => {
+  it("saves a new global agent after manual command test", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
-    listProjectAgentOverridesMock.mockResolvedValue({ overrides: [] });
     detectCodexCommandMock.mockRejectedValue({
       code: "AGENT_COMMAND_UNAVAILABLE",
       message: "Agent command 不可用。",
@@ -113,126 +127,62 @@ describe("ProjectSettingsActivity", () => {
       command: "/opt/codex/bin/codex",
     });
     saveAgentProfileMock.mockResolvedValue({
-      ...profile,
+      ...globalProfile,
+      name: "My Codex",
       command: "/opt/codex/bin/codex",
     });
 
     render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open Global Settings" }),
+      await screen.findByRole("button", { name: "Add global agent" }),
     );
-    await user.click(screen.getByRole("button", { name: "New Codex Profile" }));
+    await user.type(screen.getByLabelText("Agent profile name"), "My Codex");
     await user.clear(screen.getByLabelText("Agent command"));
     await user.type(
       screen.getByLabelText("Agent command"),
       "/opt/codex/bin/codex",
     );
-    await user.click(screen.getByRole("button", { name: "Test command" }));
-    await user.click(screen.getByRole("button", { name: "Save profile" }));
+    await user.click(screen.getByRole("button", { name: "Test" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(saveAgentProfileMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          name: "My Codex",
           command: "/opt/codex/bin/codex",
-          name: "Codex",
+          scope: "global",
+          projectId: null,
         }),
       ),
     );
-    expect(screen.getAllByText("/opt/codex/bin/codex")).toHaveLength(2);
   });
 
-  it("keeps overrides scoped to the current project when project id changes", async () => {
-    listProjectAgentOverridesMock
-      .mockResolvedValueOnce({ overrides: [override] })
-      .mockResolvedValueOnce({ overrides: [] });
-
+  it("reloads agents when project id changes", async () => {
     const { rerender } = render(
       <ProjectSettingsActivity projectId={1} projectName="RedWhisk" />,
     );
 
-    expect(
-      await screen.findByDisplayValue("Project prompt"),
-    ).toBeInTheDocument();
+    await screen.findByText("Project Codex");
+    expect(listAgentProfilesMock).toHaveBeenCalledWith({
+      scope: "project",
+      projectId: 1,
+    });
+
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [] };
+      return { profiles: [globalProfile] };
+    });
 
     rerender(
       <ProjectSettingsActivity projectId={2} projectName="Agents Lab" />,
     );
 
-    expect(
-      await screen.findByDisplayValue("Global prompt"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByDisplayValue("Project prompt"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("saves project overrides for the current project only", async () => {
-    const user = userEvent.setup();
-    saveProjectAgentOverrideMock.mockResolvedValue({
-      ...override,
-      promptTemplate: "Updated project prompt",
-    });
-
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
-
-    const promptField = await screen.findByLabelText(
-      "Prompt template for Codex",
-    );
-    await user.clear(promptField);
-    await user.type(promptField, "Updated project prompt");
     await waitFor(() =>
-      expect(screen.getByLabelText("Prompt template for Codex")).toHaveValue(
-        "Updated project prompt",
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: "Save override" }));
-
-    await waitFor(() =>
-      expect(saveProjectAgentOverrideMock).toHaveBeenCalledWith({
-        projectId: 1,
-        agentProfileId: 1,
-        defaultArgs: ["exec", "--sandbox"],
-        defaultSkill: "project-skill",
-        promptTemplate: "Updated project prompt",
-        enabled: true,
+      expect(listAgentProfilesMock).toHaveBeenCalledWith({
+        scope: "project",
+        projectId: 2,
       }),
-    );
-  });
-
-  it("refreshes inherited project values after editing the global profile", async () => {
-    const user = userEvent.setup();
-    listProjectAgentOverridesMock.mockResolvedValue({ overrides: [] });
-    detectCodexCommandMock.mockResolvedValue({
-      command: "/usr/local/bin/codex",
-    });
-    saveAgentProfileMock.mockResolvedValue({
-      ...profile,
-      defaultSkill: "updated-global-skill",
-      promptTemplate: "Updated global prompt",
-    });
-
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
-
-    expect(await screen.findByDisplayValue("global-skill")).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Open Global Settings" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Edit" }));
-    const globalSettingsDialog = screen.getByRole("dialog", {
-      name: "Global Settings",
-    });
-    const defaultSkillInput =
-      within(globalSettingsDialog).getByLabelText("Default skill");
-    await user.clear(defaultSkillInput);
-    await user.type(defaultSkillInput, "updated-global-skill");
-    await user.click(screen.getByRole("button", { name: "Save profile" }));
-
-    await waitFor(() =>
-      expect(screen.getByLabelText("Default skill for Codex")).toHaveValue(
-        "updated-global-skill",
-      ),
     );
   });
 });

@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { AgentProfileForm } from "./agent-profile-form";
-import { ProjectAgentOverrideForm } from "./project-agent-override-form";
 import {
   listAgentProfiles,
-  listProjectAgentOverrides,
   type AgentProfileRecord,
-  type ProjectAgentOverrideRecord,
+  type AgentScope,
 } from "./settings-commands";
+import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
+
+type SettingsMenu = "general" | "agents";
 
 interface ProjectSettingsActivityProps {
   projectId: number;
@@ -20,37 +20,36 @@ export function ProjectSettingsActivity({
   projectId,
   projectName,
 }: ProjectSettingsActivityProps) {
-  const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
-  const [overrides, setOverrides] = useState<ProjectAgentOverrideRecord[]>([]);
+  const [activeMenu, setActiveMenu] = useState<SettingsMenu>("agents");
+  const [projectProfiles, setProjectProfiles] = useState<AgentProfileRecord[]>(
+    [],
+  );
+  const [globalProfiles, setGlobalProfiles] = useState<AgentProfileRecord[]>(
+    [],
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
   );
-  const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
-  const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
-  const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
+  const [addFormScope, setAddFormScope] = useState<AgentScope | null>(null);
+  const [editingProfile, setEditingProfile] =
+    useState<AgentProfileRecord | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     void Promise.all([
-      listAgentProfiles(),
-      listProjectAgentOverrides({ projectId }),
+      listAgentProfiles({ scope: "project", projectId }),
+      listAgentProfiles({ scope: "global", projectId: null }),
     ])
-      .then(([profileResponse, overrideResponse]) => {
-        if (!isMounted) {
-          return;
-        }
-
-        setProfiles(profileResponse.profiles);
-        setOverrides(overrideResponse.overrides);
+      .then(([projectResponse, globalResponse]) => {
+        if (!isMounted) return;
+        setProjectProfiles(projectResponse.profiles);
+        setGlobalProfiles(globalResponse.profiles);
         setLoadState("ready");
       })
       .catch((error: unknown) => {
-        if (!isMounted) {
-          return;
-        }
-
+        if (!isMounted) return;
         setErrorMessage(toCommandError(error).message);
         setLoadState("error");
       });
@@ -60,207 +59,191 @@ export function ProjectSettingsActivity({
     };
   }, [projectId]);
 
-  const editingProfile = useMemo(
-    () => profiles.find((profile) => profile.id === editingProfileId) ?? null,
-    [editingProfileId, profiles],
-  );
+  function handleProfileSaved(savedProfile: AgentProfileRecord) {
+    if (savedProfile.scope === "project") {
+      setProjectProfiles((current) => mergeProfile(current, savedProfile));
+    } else {
+      setGlobalProfiles((current) => mergeProfile(current, savedProfile));
+    }
+    setAddFormScope(null);
+    setEditingProfile(null);
+  }
 
   return (
     <main className="activity-surface activity-surface--settings">
-      <div className="settings-header">
-        <div>
-          <h2>Settings</h2>
-          <p className="settings-header__lede">
-            Current project: <strong>{projectName}</strong>
-          </p>
-        </div>
-        <Button
-          className="issues-button"
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setIsGlobalSettingsOpen(true);
-            setEditorMode(null);
-            setEditingProfileId(null);
-          }}
-        >
-          Open Global Settings
-        </Button>
-      </div>
-
-      {errorMessage ? (
-        <p
-          className="settings-status"
-          role="status"
-          aria-label="Settings status"
-        >
-          {errorMessage}
-        </p>
-      ) : null}
-
-      <section className="settings-panel" aria-label="Current Project settings">
-        <div className="settings-panel__header">
-          <div>
-            <h3>Current Project</h3>
-            <p>
-              These overrides only affect <strong>{projectName}</strong>.
-            </p>
-          </div>
-        </div>
-
-        {loadState === "loading" ? (
-          <p className="empty-state">Loading settings...</p>
-        ) : null}
-        {loadState !== "loading" && profiles.length === 0 ? (
-          <p className="empty-state">
-            Create a global Codex Agent Profile first, then return here to
-            override it for this project.
-          </p>
-        ) : null}
-
-        {loadState !== "loading" ? (
-          <div className="settings-grid">
-            {profiles.map((profile) => {
-              const override =
-                overrides.find(
-                  (currentOverride) =>
-                    currentOverride.agentProfileId === profile.id,
-                ) ?? undefined;
-
-              return (
-                <ProjectAgentOverrideForm
-                  key={overrideFormKey(projectId, profile, override)}
-                  override={override}
-                  profile={profile}
-                  projectId={projectId}
-                  onSaved={(savedOverride) =>
-                    setOverrides((currentOverrides) =>
-                      mergeOverride(currentOverrides, savedOverride),
-                    )
-                  }
-                />
-              );
-            })}
-          </div>
-        ) : null}
-      </section>
-
-      {isGlobalSettingsOpen ? (
-        <div
-          className="global-settings-overlay"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setIsGlobalSettingsOpen(false);
-            }
-          }}
-        >
-          <div
-            aria-label="Global Settings"
-            aria-modal="true"
-            className="global-settings-dialog"
-            role="dialog"
+      <div className="settings-layout">
+        <nav className="settings-menu" aria-label="Settings menu">
+          <button
+            className="settings-menu__item"
+            type="button"
+            aria-pressed={activeMenu === "general"}
+            onClick={() => setActiveMenu("general")}
           >
-            <div className="global-settings-dialog__header">
-              <div>
-                <h3>Global Settings</h3>
-                <p>
-                  Manage reusable Codex Agent Profiles shared across projects.
-                </p>
-              </div>
-              <button
-                aria-label="Close global settings"
-                className="issue-dialog__close"
-                type="button"
-                onClick={() => setIsGlobalSettingsOpen(false)}
-              >
-                x
-              </button>
-            </div>
+            基本信息
+          </button>
+          <button
+            className="settings-menu__item"
+            type="button"
+            aria-pressed={activeMenu === "agents"}
+            onClick={() => setActiveMenu("agents")}
+          >
+            Agents
+          </button>
+        </nav>
 
-            <div className="global-settings-dialog__body">
-              <section className="settings-panel settings-panel--global">
-                <div className="settings-panel__header">
-                  <div>
-                    <h4>Global Agent Profiles</h4>
-                    <p>
-                      Global profiles define the base command and prompt
-                      defaults.
-                    </p>
-                  </div>
-                  <Button
-                    className="issues-button"
+        <div className="settings-content">
+          {activeMenu === "general" ? (
+            <section className="settings-section" aria-label="基本信息">
+              <div className="settings-section__header">
+                <h3>基本信息</h3>
+              </div>
+              <div className="settings-basic-info">
+                <span className="settings-basic-info__label">Project</span>
+                <p>{projectName}</p>
+              </div>
+            </section>
+          ) : null}
+
+          {activeMenu === "agents" ? (
+            <>
+              {errorMessage ? (
+                <p
+                  className="settings-status"
+                  role="status"
+                  aria-label="Settings status"
+                >
+                  {errorMessage}
+                </p>
+              ) : null}
+
+              <section
+                className="settings-agent-section"
+                aria-label="Project Agents"
+              >
+                <div className="settings-agent-section__header">
+                  <h3>Project Agents</h3>
+                  <button
+                    className="settings-agent-section__add"
                     type="button"
-                    variant="outline"
+                    aria-label="Add project agent"
                     onClick={() => {
-                      setEditorMode("create");
-                      setEditingProfileId(null);
+                      setAddFormScope("project");
+                      setEditingProfile(null);
                     }}
                   >
-                    New Codex Profile
-                  </Button>
+                    <Plus size={14} strokeWidth={2} />
+                  </button>
                 </div>
-
-                {profiles.length === 0 ? (
-                  <p className="empty-state">No Agent Profiles saved yet.</p>
+                {loadState === "loading" ? (
+                  <p className="settings-agent-section__loading">Loading...</p>
+                ) : projectProfiles.length === 0 ? (
+                  <div className="settings-agent-list settings-agent-list--empty">
+                    <p>No agents</p>
+                  </div>
                 ) : (
-                  <div
-                    className="settings-list"
-                    role="list"
-                    aria-label="Global Agent Profiles"
-                  >
-                    {profiles.map((profile) => (
-                      <div
+                  <div className="settings-agent-list">
+                    {projectProfiles.map((profile) => (
+                      <button
                         key={profile.id}
-                        className="settings-list__item"
-                        role="listitem"
+                        className="settings-agent-row"
+                        type="button"
+                        onClick={() => {
+                          setEditingProfile(profile);
+                          setAddFormScope(null);
+                        }}
                       >
-                        <div>
-                          <h5>{profile.name}</h5>
-                          <p>{profile.command}</p>
-                        </div>
-                        <Button
-                          className="issues-button"
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setEditorMode("edit");
-                            setEditingProfileId(profile.id);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </div>
+                        <span className="settings-agent-row__name">
+                          {profile.name}
+                        </span>
+                        <span className="settings-agent-row__command">
+                          {profile.command}
+                        </span>
+                        <span className="settings-agent-row__mode">
+                          {profile.mode}
+                        </span>
+                      </button>
                     ))}
                   </div>
                 )}
               </section>
 
-              {editorMode ? (
+              <section
+                className="settings-agent-section"
+                aria-label="Global Agents"
+              >
+                <div className="settings-agent-section__header">
+                  <h3>Global Agents</h3>
+                  <button
+                    className="settings-agent-section__add"
+                    type="button"
+                    aria-label="Add global agent"
+                    onClick={() => {
+                      setAddFormScope("global");
+                      setEditingProfile(null);
+                    }}
+                  >
+                    <Plus size={14} strokeWidth={2} />
+                  </button>
+                </div>
+                {loadState === "loading" ? (
+                  <p className="settings-agent-section__loading">Loading...</p>
+                ) : globalProfiles.length === 0 ? (
+                  <div className="settings-agent-list settings-agent-list--empty">
+                    <p>No agents</p>
+                  </div>
+                ) : (
+                  <div className="settings-agent-list">
+                    {globalProfiles.map((profile) => (
+                      <button
+                        key={profile.id}
+                        className="settings-agent-row"
+                        type="button"
+                        onClick={() => {
+                          setEditingProfile(profile);
+                          setAddFormScope(null);
+                        }}
+                      >
+                        <span className="settings-agent-row__name">
+                          {profile.name}
+                        </span>
+                        <span className="settings-agent-row__command">
+                          {profile.command}
+                        </span>
+                        <span className="settings-agent-row__mode">
+                          {profile.mode}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {addFormScope ? (
                 <AgentProfileForm
-                  key={
-                    editorMode === "create"
-                      ? "create"
-                      : `edit-${editingProfile?.id ?? "missing"}`
-                  }
-                  mode={editorMode}
-                  profile={editingProfile}
-                  onCancel={() => {
-                    setEditorMode(null);
-                    setEditingProfileId(null);
-                  }}
-                  onSaved={(savedProfile) => {
-                    setProfiles((currentProfiles) =>
-                      mergeProfile(currentProfiles, savedProfile),
-                    );
-                    setEditorMode(null);
-                    setEditingProfileId(savedProfile.id);
-                  }}
+                  key={`create-${addFormScope}`}
+                  mode="create"
+                  scope={addFormScope}
+                  projectId={addFormScope === "project" ? projectId : null}
+                  onCancel={() => setAddFormScope(null)}
+                  onSaved={handleProfileSaved}
                 />
               ) : null}
-            </div>
-          </div>
+
+              {editingProfile ? (
+                <AgentProfileForm
+                  key={`edit-${editingProfile.id}`}
+                  mode="edit"
+                  scope={editingProfile.scope}
+                  projectId={editingProfile.projectId}
+                  profile={editingProfile}
+                  onCancel={() => setEditingProfile(null)}
+                  onSaved={handleProfileSaved}
+                />
+              ) : null}
+            </>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </main>
   );
 }
@@ -269,43 +252,8 @@ function mergeProfile(
   currentProfiles: AgentProfileRecord[],
   savedProfile: AgentProfileRecord,
 ): AgentProfileRecord[] {
-  const remainingProfiles = currentProfiles.filter(
+  const remaining = currentProfiles.filter(
     (profile) => profile.id !== savedProfile.id,
   );
-  return [...remainingProfiles, savedProfile].sort(
-    (left, right) => left.id - right.id,
-  );
-}
-
-function mergeOverride(
-  currentOverrides: ProjectAgentOverrideRecord[],
-  savedOverride: ProjectAgentOverrideRecord,
-): ProjectAgentOverrideRecord[] {
-  const remainingOverrides = currentOverrides.filter(
-    (override) => override.id !== savedOverride.id,
-  );
-  return [...remainingOverrides, savedOverride].sort(
-    (left, right) => left.id - right.id,
-  );
-}
-
-function overrideFormKey(
-  projectId: number,
-  profile: AgentProfileRecord,
-  override: ProjectAgentOverrideRecord | undefined,
-): string {
-  if (override) {
-    return `${projectId}-${profile.id}-override-${override.id}`;
-  }
-
-  return [
-    projectId,
-    profile.id,
-    "inherited",
-    profile.command,
-    profile.defaultArgs.join("\n"),
-    profile.defaultSkill,
-    profile.promptTemplate,
-    profile.enabled ? "enabled" : "disabled",
-  ].join("|");
+  return [...remaining, savedProfile].sort((left, right) => left.id - right.id);
 }
