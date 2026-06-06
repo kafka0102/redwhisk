@@ -21,7 +21,6 @@ body {
   overflow: hidden;
   background: var(--color-app);
   color: var(--color-text);
-  font-family: var(--font-sans);
 }
 
 button {
@@ -46,9 +45,9 @@ button:focus-visible {
 .project-home {
   display: grid;
   align-content: start;
-  gap: 24px;
+  gap: 16px;
   min-height: 100vh;
-  padding: 28px 32px 32px;
+  padding: 32px;
   background: var(--color-app);
 }
 
@@ -76,10 +75,10 @@ button:focus-visible {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  max-width: 1120px;
+  max-width: 980px;
   width: 100%;
-  margin: 0 auto;
-  padding-bottom: 18px;
+  margin: 0 auto 4px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -88,15 +87,15 @@ button:focus-visible {
 .activity-surface h2 {
   margin: 0;
   color: var(--color-text);
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 650;
   letter-spacing: 0;
   line-height: 1.2;
 }
 
 .project-home__lede {
-  max-width: 46ch;
-  margin: 6px 0 0;
+  max-width: 58ch;
+  margin: 8px 0 0;
   color: var(--color-text-muted);
   font-size: 13px;
   line-height: 1.5;
@@ -105,9 +104,9 @@ button:focus-visible {
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 10px;
-  width: min(1120px, 100%);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  width: min(980px, 100%);
   margin: 0 auto;
   padding: 0;
   list-style: none;
@@ -115,32 +114,25 @@ button:focus-visible {
 
 .project-card {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: start;
   width: 100%;
-  min-height: 124px;
-  padding: 12px;
+  min-height: 132px;
+  padding: 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--color-surface-panel) 78%, transparent);
   transition:
     background-color 160ms ease-out,
-    border-color 160ms ease-out,
-    box-shadow 160ms ease-out;
+    border-color 160ms ease-out;
 }
 
 .project-card:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-surface);
-  box-shadow:
-    inset 0 1px 0
-      color-mix(in srgb, var(--color-surface-panel) 88%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--color-border-strong) 32%, transparent);
+  background: var(--color-surface-muted);
 }
 
 .project-card__icon,
@@ -148,23 +140,21 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--color-border);
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-icon);
-  background: var(--color-surface-panel);
+  background: var(--color-accent-muted);
   color: var(--color-accent);
 }
 
 .project-card__body {
   display: grid;
   min-width: 0;
-  gap: 6px;
+  gap: 8px;
 }
 
 .project-card__name {
   overflow: hidden;
-  font-size: 13px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -194,7 +184,7 @@ button:focus-visible {
 .project-card--create {
   grid-template-columns: 1fr;
   place-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -206,7 +196,7 @@ button:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
   height: 100vh;
   min-height: 100vh;
   background: var(--color-app);
@@ -217,50 +207,37 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   width: 48px;
-  padding: 8px 4px 10px;
+  padding: 8px 4px;
   border-right: 1px solid var(--color-border);
-  background: var(--color-app);
+  background: var(--color-surface);
 }
 
 .activity-bar__button {
-  position: relative;
   display: grid;
   place-items: center;
   width: 40px;
   min-height: 40px;
   padding: 4px 0;
   border: 0;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   transition:
     background-color 160ms ease-out,
-    color 160ms ease-out,
-    transform 160ms ease-out;
+    color 160ms ease-out;
 }
 
 .activity-bar__button:hover {
-  background: color-mix(in srgb, var(--color-accent-muted) 72%, transparent);
+  background: var(--color-surface-muted);
   color: var(--color-text);
 }
 
 .activity-bar__button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--color-accent-muted) 88%, transparent);
+  background: var(--color-accent-muted);
   color: var(--color-accent);
-}
-
-.activity-bar__button[aria-pressed="true"]::before {
-  content: "";
-  position: absolute;
-  left: -4px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--color-accent);
 }
 
 .activity-bar__button span {
@@ -282,12 +259,12 @@ button:focus-visible {
   grid-column: 1 / -1;
   grid-row: 1;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
-  min-height: 44px;
+  min-height: 40px;
   padding: 4px 16px 4px 92px;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-app);
+  background: var(--color-surface);
 }
 
 .workbench__header-settings {
@@ -297,7 +274,7 @@ button:focus-visible {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--radius-card);
+  border-radius: 6px;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -305,7 +282,7 @@ button:focus-visible {
 }
 
 .workbench__header-settings:hover {
-  background: color-mix(in srgb, var(--color-accent-muted) 72%, transparent);
+  background: var(--color-surface-muted);
   color: var(--color-text);
 }
 
@@ -321,7 +298,6 @@ button:focus-visible {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  background: var(--color-surface);
 }
 
 .activity-surface {
@@ -331,7 +307,6 @@ button:focus-visible {
   padding: 22px;
   min-height: 0;
   overflow: auto;
-  background: var(--color-surface);
 }
 
 .activity-surface--issues {
@@ -348,44 +323,34 @@ button:focus-visible {
 }
 
 .activity-surface--settings {
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
+  gap: 18px;
 }
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  height: 100%;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-content: start;
+  gap: 16px;
   min-height: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  overflow: hidden;
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--color-surface-panel) 78%, transparent);
 }
 
 .settings-menu {
   display: grid;
   align-content: start;
   gap: 6px;
-  padding: 14px;
-  border-right: 1px solid var(--color-border);
-  background: color-mix(
-    in srgb,
-    var(--color-surface-panel) 54%,
-    var(--color-surface)
-  );
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
 }
 
 .settings-menu__item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -395,56 +360,34 @@ button:focus-visible {
   transition:
     border-color 160ms ease-out,
     background-color 160ms ease-out,
-    color 160ms ease-out,
-    box-shadow 160ms ease-out;
+    color 160ms ease-out;
 }
 
 .settings-menu__item:hover {
-  border-color: color-mix(in srgb, var(--color-border) 82%, transparent);
-  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
   color: var(--color-text);
 }
 
 .settings-menu__item[aria-pressed="true"] {
-  border-color: color-mix(
-    in srgb,
-    var(--color-accent) 20%,
-    var(--color-border)
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-accent-muted) 88%,
-    var(--color-surface)
-  );
+  border-color: var(--color-border-strong);
+  background: var(--color-accent-muted);
   color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .settings-content {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 16px;
   min-width: 0;
   min-height: 0;
-  padding: 18px;
-  overflow: auto;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-surface-panel) 36%, var(--color-surface)) 0%,
-    var(--color-surface) 100%
-  );
 }
 
 .settings-content__empty {
-  min-height: 260px;
-  border: 1px dashed color-mix(in srgb, var(--color-border) 76%, transparent);
+  min-height: 220px;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-surface-panel) 72%, transparent),
-    color-mix(in srgb, var(--color-surface) 92%, transparent)
-  );
+  background: var(--color-surface-panel);
 }
 
 .settings-agent-section {
@@ -454,8 +397,6 @@ button:focus-visible {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--color-surface-panel) 80%, transparent);
 }
 
 .settings-agent-section__header {
@@ -478,7 +419,7 @@ button:focus-visible {
   height: 28px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
-  background: var(--color-surface-panel);
+  background: var(--color-surface);
   color: var(--color-text-muted);
   cursor: pointer;
   transition:
@@ -489,8 +430,8 @@ button:focus-visible {
 
 .settings-agent-section__add:hover {
   border-color: var(--color-border-strong);
-  background: color-mix(in srgb, var(--color-accent-muted) 72%, transparent);
-  color: var(--color-accent);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
 }
 
 .settings-agent-section__loading {
@@ -512,23 +453,20 @@ button:focus-visible {
   gap: 12px;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
+  background: var(--color-surface-muted);
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
   transition:
     border-color 160ms ease-out,
-    background-color 160ms ease-out,
-    box-shadow 160ms ease-out;
+    background-color 160ms ease-out;
 }
 
 .settings-agent-row:hover {
   border-color: var(--color-border-strong);
   background: var(--color-surface);
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--color-surface-panel) 84%, transparent);
 }
 
 .settings-agent-row__name,
@@ -553,7 +491,7 @@ button:focus-visible {
 .settings-agent-row__mode {
   justify-self: end;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-muted);
@@ -611,8 +549,6 @@ button:focus-visible {
   display: grid;
   gap: 16px;
   padding: 16px;
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--color-surface-panel) 78%, transparent);
 }
 
 .settings-grid {
@@ -663,11 +599,10 @@ button:focus-visible {
 .settings-textarea {
   width: 100%;
   min-width: 0;
-  min-height: 32px;
-  padding: 8px 10px;
+  padding: 10px 11px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
   line-height: 1.5;
@@ -677,17 +612,6 @@ button:focus-visible {
   resize: vertical;
 }
 
-.settings-input:focus-visible,
-.settings-textarea:focus-visible {
-  outline: none;
-  border-color: color-mix(
-    in srgb,
-    var(--color-focus-ring) 36%,
-    var(--color-border)
-  );
-  box-shadow: var(--shadow-focus);
-}
-
 .settings-checkbox {
   display: flex;
   align-items: center;
@@ -695,10 +619,6 @@ button:focus-visible {
   color: var(--color-text);
   font-size: 12px;
   font-weight: 600;
-}
-
-.settings-checkbox input {
-  accent-color: var(--color-focus-ring);
 }
 
 .settings-status {
@@ -816,7 +736,6 @@ button:focus-visible {
   min-height: 0;
   height: 100%;
   padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 90%, transparent);
   border-radius: var(--radius-card);
   background: var(--color-lane-backlog);
 }
@@ -912,30 +831,21 @@ button:focus-visible {
   min-height: 78px;
   gap: 4px;
   padding: 10px 10px 9px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
   border-radius: var(--radius-card);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition:
-    background-color 160ms ease-out,
-    border-color 160ms ease-out,
-    box-shadow 160ms ease-out;
+  transition: background-color 160ms ease-out;
 }
 
 .issue-card:hover {
   background: var(--color-surface);
-  border-color: var(--color-border-strong);
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--color-surface-panel) 82%, transparent);
 }
 
 .issue-card[aria-pressed="true"] {
   background: var(--color-surface);
-  border-color: var(--color-border-strong);
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 .issue-card__meta-row {
@@ -1001,9 +911,9 @@ button:focus-visible {
 .issue-description-editor {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
@@ -1013,7 +923,7 @@ button:focus-visible {
 
 .issue-field input {
   height: 32px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   font-size: 15px;
 }
 
@@ -1076,12 +986,8 @@ button:focus-visible {
 .issue-description-editor:focus-within,
 .issue-description-editor__content:focus {
   outline: none;
-  border-color: color-mix(
-    in srgb,
-    var(--color-focus-ring) 36%,
-    var(--color-border)
-  );
-  box-shadow: var(--shadow-focus);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .issue-form__actions {
@@ -1091,10 +997,10 @@ button:focus-visible {
 }
 
 .issues-button {
-  min-height: 32px;
-  padding: 5px 12px;
+  min-height: 30px;
+  padding: 5px 10px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
@@ -1107,7 +1013,7 @@ button:focus-visible {
 
 .issues-button:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-surface-panel);
+  background: var(--color-surface-muted);
 }
 
 .issues-button--primary {
@@ -1272,11 +1178,11 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   max-width: min(360px, calc(100vw - 96px));
-  min-height: 28px;
+  min-height: 32px;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 5px 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
@@ -1288,7 +1194,7 @@ button:focus-visible {
 .project-switcher__trigger:hover,
 .project-switcher__trigger[aria-expanded="true"] {
   border-color: var(--color-border);
-  background: color-mix(in srgb, var(--color-accent-muted) 72%, transparent);
+  background: var(--color-surface-muted);
 }
 
 .project-switcher__trigger-name {
@@ -1308,7 +1214,7 @@ button:focus-visible {
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-dialog);
   background: var(--color-surface);
-  box-shadow: 0 12px 32px var(--color-popover-shadow);
+  box-shadow: 0 8px 22px var(--color-popover-shadow);
 }
 
 .project-switcher__list {
@@ -1325,22 +1231,16 @@ button:focus-visible {
   width: 100%;
   padding: 8px;
   border: 0;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition:
-    background-color 160ms ease-out,
-    border-color 160ms ease-out;
+  transition: background-color 160ms ease-out;
 }
 
 .project-switcher__item:hover {
-  background: var(--color-surface-panel);
-}
-
-.project-switcher__item[data-current="true"] {
-  background: color-mix(in srgb, var(--color-accent-muted) 88%, transparent);
+  background: var(--color-surface-muted);
 }
 
 .project-switcher__icon {
@@ -1350,7 +1250,6 @@ button:focus-visible {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-icon);
-  border: 1px solid color-mix(in srgb, white 16%, transparent);
   color: white;
   font-size: 13px;
   font-weight: 700;
@@ -1458,13 +1357,7 @@ button:focus-visible {
   .settings-menu {
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
-    border-right: 0;
-    border-bottom: 1px solid var(--color-border);
-    padding: 12px;
-  }
-
-  .settings-content {
-    padding: 16px;
+    padding: 10px;
   }
 
   .settings-agent-row {
