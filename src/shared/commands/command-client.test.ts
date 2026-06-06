@@ -8,7 +8,12 @@ import {
   openProject,
   openProjectWindow,
 } from "../../features/project/project-commands";
-import { listAgentSessions } from "../../features/agents/agent-session-commands";
+import {
+  listAgentSessions,
+  readAgentSessionTerminal,
+  resizeAgentSessionTerminal,
+  writeAgentSessionTerminal,
+} from "../../features/agents/agent-session-commands";
 import { startAgentSession } from "../../features/issues/issue-commands";
 import {
   detectCodexCommand,
@@ -172,6 +177,73 @@ describe("command client", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("list_agent_sessions", {
       projectId: 1,
+    });
+  });
+
+  it("invokes Rust Core through the read agent session terminal command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: 301,
+      snapshot: "codex> ready",
+      isActive: true,
+    });
+
+    await expect(
+      readAgentSessionTerminal({
+        projectId: 1,
+        sessionId: 301,
+        maxBytes: 4096,
+      }),
+    ).resolves.toEqual({
+      sessionId: 301,
+      snapshot: "codex> ready",
+      isActive: true,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("read_agent_session_terminal", {
+      input: {
+        projectId: 1,
+        sessionId: 301,
+        maxBytes: 4096,
+      },
+    });
+  });
+
+  it("invokes Rust Core through the write agent session terminal command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(
+      writeAgentSessionTerminal({
+        projectId: 1,
+        sessionId: 301,
+        data: "status\r",
+      }),
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("write_agent_session_terminal", {
+      input: {
+        projectId: 1,
+        sessionId: 301,
+        data: "status\r",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the resize agent session terminal command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(
+      resizeAgentSessionTerminal({
+        projectId: 1,
+        sessionId: 301,
+        rows: 38,
+        cols: 120,
+      }),
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("resize_agent_session_terminal", {
+      input: {
+        projectId: 1,
+        sessionId: 301,
+        rows: 38,
+        cols: 120,
+      },
     });
   });
 

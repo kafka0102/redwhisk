@@ -21,10 +21,56 @@ export interface AgentSessionListResponse {
   sessions: AgentSessionListItem[];
 }
 
+export interface ReadAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+  maxBytes?: number;
+}
+
+export interface ReadAgentSessionTerminalResult {
+  sessionId: number;
+  snapshot: string;
+  isActive: boolean;
+}
+
+export interface WriteAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+  data: string;
+}
+
+export interface ResizeAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+  rows: number;
+  cols: number;
+}
+
 export function listAgentSessions(
   projectId: number,
 ): Promise<AgentSessionListResponse> {
   return invokeCommand<AgentSessionListResponse>("list_agent_sessions", {
     projectId,
   });
+}
+
+export function readAgentSessionTerminal(
+  input: ReadAgentSessionTerminalInput,
+): Promise<ReadAgentSessionTerminalResult> {
+  return invokeCommand<ReadAgentSessionTerminalResult>(
+    "read_agent_session_terminal",
+    { input },
+  );
+}
+
+export function writeAgentSessionTerminal(
+  input: WriteAgentSessionTerminalInput,
+): Promise<void> {
+  return invokeCommand("write_agent_session_terminal", { input });
+}
+
+export function resizeAgentSessionTerminal(
+  input: ResizeAgentSessionTerminalInput,
+): Promise<void> {
+  return invokeCommand("resize_agent_session_terminal", { input });
 }

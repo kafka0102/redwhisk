@@ -3,7 +3,9 @@ use tauri::{Manager, State};
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::types::agent_session::{
-    AgentSessionListResponse, StartAgentSessionInput, StartAgentSessionResult,
+    AgentSessionListResponse, ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
+    ResizeAgentSessionTerminalInput, StartAgentSessionInput, StartAgentSessionResult,
+    WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -62,5 +64,81 @@ pub fn start_agent_session(
             .map_err(CommandError::from)?;
     }
 
-    AgentSessionService::start_agent_session_in_data_dir(data_dir, input)
+    let database = crate::db::connection::DatabaseConfig::new(&data_dir)
+        .open()
+        .map_err(CommandError::from)?;
+    crate::db::migrations::MigrationRunner::default()
+        .run(&database.connection)
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 启动失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+
+    AgentSessionService::new(
+        crate::db::issue_repository::IssueRepository::new(&database.connection),
+        crate::db::project_repository::ProjectRepository::new(&database.connection),
+        crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
+        crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
+    )
+    .start_agent_session_with_pty(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn read_agent_session_terminal(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ReadAgentSessionTerminalInput,
+) -> Result<ReadAgentSessionTerminalResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 终端读取失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    AgentSessionService::read_terminal_snapshot_in_data_dir(
+        data_dir,
+        input.project_id,
+        input.session_id,
+        input.max_bytes.unwrap_or(32_768),
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn write_agent_session_terminal(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: WriteAgentSessionTerminalInput,
+) -> Result<(), CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 终端写入失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    AgentSessionService::write_terminal_input_in_data_dir(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn resize_agent_session_terminal(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ResizeAgentSessionTerminalInput,
+) -> Result<(), CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 终端调整失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    AgentSessionService::resize_terminal_in_data_dir(data_dir, input, &state.pty_sessions)
 }

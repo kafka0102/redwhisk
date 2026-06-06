@@ -62,7 +62,7 @@ development_status:
   2-3-create-agent-session-and-update-issue-after-successful-start: done
   2-4-enforce-one-agent-session-per-issue: done
   2-5-show-agents-activity-session-list-and-basic-header: done
-  2-6-spike-codex-native-session-view-with-pty-xterm: backlog
+  2-6-spike-codex-native-session-view-with-pty-xterm: done
   2-7-record-session-logs-and-exit-events: backlog
   2-8-spike-codex-resume-and-completion-prompt-injection: backlog
   2-9-spike-git-commit-detection: backlog
