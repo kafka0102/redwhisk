@@ -1,3 +1,4 @@
+pub mod agent_profile_repository;
 pub mod connection;
 pub mod event_repository;
 pub mod issue_repository;

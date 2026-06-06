@@ -1,0 +1,314 @@
+use std::collections::HashMap;
+
+use redwhisk_lib::agent::command_detector::AgentCommandDetector;
+use redwhisk_lib::core::settings_service::SettingsService;
+use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
+use redwhisk_lib::db::connection::DatabaseConfig;
+use redwhisk_lib::db::migrations::MigrationRunner;
+use redwhisk_lib::db::project_repository::ProjectRepository;
+use redwhisk_lib::types::agent_profile::{
+    AgentType, ListProjectAgentOverridesInput, SaveAgentProfileInput,
+    SaveProjectAgentOverrideInput, TestAgentCommandInput,
+};
+use redwhisk_lib::types::errors::CommandErrorCode;
+
+#[test]
+fn settings_migration_creates_agent_profile_tables_and_unique_override_index() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let profile_columns = table_columns(&database.connection, "agent_profiles");
+    assert_eq!(
+        profile_columns,
+        vec![
+            "id",
+            "name",
+            "agent_type",
+            "command",
+            "default_args",
+            "default_skill",
+            "prompt_template",
+            "enabled"
+        ],
+    );
+
+    let override_columns = table_columns(&database.connection, "project_agent_overrides");
+    assert_eq!(
+        override_columns,
+        vec![
+            "id",
+            "project_id",
+            "agent_profile_id",
+            "default_args",
+            "default_skill",
+            "prompt_template",
+            "enabled"
+        ],
+    );
+
+    let unique_index_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('project_agent_overrides')
+             WHERE name = 'uidx_project_agent_overrides_project_profile' AND [unique] = 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("unique override index count");
+    assert_eq!(unique_index_count, 1);
+
+    let project_foreign_key_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_foreign_key_list('project_agent_overrides')
+             WHERE [table] = 'projects' AND [from] = 'project_id' AND [to] = 'id'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("project foreign key count");
+    assert_eq!(project_foreign_key_count, 1);
+
+    let profile_foreign_key_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_foreign_key_list('project_agent_overrides')
+             WHERE [table] = 'agent_profiles' AND [from] = 'agent_profile_id' AND [to] = 'id'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("profile foreign key count");
+    assert_eq!(profile_foreign_key_count, 1);
+}
+
+#[test]
+fn save_enabled_agent_profile_resolves_command_and_persists_defaults() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("codex", Ok("/usr/local/bin/codex")),
+    );
+
+    let profile = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "  Codex Default  ".to_string(),
+            agent_type: AgentType::Codex,
+            command: " codex ".to_string(),
+            default_args: vec![
+                "exec".to_string(),
+                "--model".to_string(),
+                "gpt-5".to_string(),
+            ],
+            default_skill: "bmad-dev-workflow".to_string(),
+            prompt_template: "Implement {{issue.description}}".to_string(),
+            enabled: true,
+        })
+        .expect("saved agent profile");
+
+    assert!(profile.id > 0);
+    assert_eq!(profile.name, "Codex Default");
+    assert_eq!(profile.command, "/usr/local/bin/codex");
+    assert_eq!(
+        profile.default_args,
+        vec![
+            "exec".to_string(),
+            "--model".to_string(),
+            "gpt-5".to_string()
+        ]
+    );
+    assert!(profile.enabled);
+
+    let stored_profile = service
+        .list_agent_profiles()
+        .expect("list profiles")
+        .profiles;
+    assert_eq!(stored_profile, vec![profile]);
+}
+
+#[test]
+fn save_enabled_agent_profile_rejects_unavailable_command_without_persisting() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("codex", Err("codex not found")),
+    );
+
+    let error = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "Codex".to_string(),
+            agent_type: AgentType::Codex,
+            command: "codex".to_string(),
+            default_args: vec![],
+            default_skill: "".to_string(),
+            prompt_template: "".to_string(),
+            enabled: true,
+        })
+        .expect_err("enabled profile should fail without executable command");
+
+    assert_eq!(error.code, CommandErrorCode::AgentCommandUnavailable);
+
+    let count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM agent_profiles", [], |row| row.get(0))
+        .expect("profile count");
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn test_agent_command_supports_manual_path_validation() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("/opt/codex/bin/codex", Ok("/opt/codex/bin/codex")),
+    );
+
+    let result = service
+        .test_agent_command(TestAgentCommandInput {
+            command: "/opt/codex/bin/codex".to_string(),
+        })
+        .expect("manual command should validate");
+
+    assert_eq!(result.command, "/opt/codex/bin/codex");
+}
+
+#[test]
+fn project_agent_override_only_applies_to_the_target_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "redwhisk");
+    let other_project_id = insert_project(&database.connection, "agents-lab");
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("/usr/local/bin/codex", Ok("/usr/local/bin/codex")),
+    );
+    let profile = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "Codex".to_string(),
+            agent_type: AgentType::Codex,
+            command: "/usr/local/bin/codex".to_string(),
+            default_args: vec!["exec".to_string()],
+            default_skill: "default-skill".to_string(),
+            prompt_template: "Global prompt".to_string(),
+            enabled: true,
+        })
+        .expect("saved profile");
+
+    let override_record = service
+        .save_project_agent_override(SaveProjectAgentOverrideInput {
+            project_id,
+            agent_profile_id: profile.id,
+            default_args: vec!["exec".to_string(), "--sandbox".to_string()],
+            default_skill: "project-skill".to_string(),
+            prompt_template: "Project prompt".to_string(),
+            enabled: true,
+        })
+        .expect("saved override");
+
+    assert_eq!(override_record.project_id, project_id);
+    assert_eq!(override_record.agent_profile_id, profile.id);
+    assert_eq!(
+        override_record.default_args,
+        vec!["exec".to_string(), "--sandbox".to_string()]
+    );
+
+    let project_overrides = service
+        .list_project_agent_overrides(ListProjectAgentOverridesInput { project_id })
+        .expect("project overrides")
+        .overrides;
+    assert_eq!(project_overrides, vec![override_record]);
+
+    let other_project_overrides = service
+        .list_project_agent_overrides(ListProjectAgentOverridesInput {
+            project_id: other_project_id,
+        })
+        .expect("other project overrides")
+        .overrides;
+    assert!(other_project_overrides.is_empty());
+}
+
+struct StubCommandDetector {
+    detect_result: Result<String, String>,
+    test_results: HashMap<String, Result<String, String>>,
+}
+
+impl StubCommandDetector {
+    fn with_test_result(command: &str, result: Result<&str, &str>) -> Self {
+        let mut test_results = HashMap::new();
+        test_results.insert(
+            command.to_string(),
+            result
+                .map(|value| value.to_string())
+                .map_err(|value| value.to_string()),
+        );
+
+        Self {
+            detect_result: Err("unused detect result".to_string()),
+            test_results,
+        }
+    }
+}
+
+impl AgentCommandDetector for StubCommandDetector {
+    fn detect_codex_command(&self) -> Result<String, String> {
+        self.detect_result.clone()
+    }
+
+    fn test_command(&self, command: &str) -> Result<String, String> {
+        self.test_results
+            .get(command)
+            .cloned()
+            .unwrap_or_else(|| Err(format!("unexpected command: {}", command)))
+    }
+}
+
+fn settings_service<'connection>(
+    connection: &'connection rusqlite::Connection,
+    detector: StubCommandDetector,
+) -> SettingsService<'connection, StubCommandDetector> {
+    SettingsService::new(
+        AgentProfileRepository::new(connection),
+        ProjectRepository::new(connection),
+        detector,
+    )
+}
+
+fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection::Database {
+    let database = DatabaseConfig::new(data_dir).open().expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    database
+}
+
+fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
+    connection
+        .execute(
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES (?1, ?2, 1780624800000, 1780624800000)",
+            rusqlite::params![name, format!("/tmp/{}", name)],
+        )
+        .expect("insert project");
+    connection.last_insert_rowid()
+}
+
+fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({})", table_name))
+        .expect("table info");
+    statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("query columns")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect columns")
+}

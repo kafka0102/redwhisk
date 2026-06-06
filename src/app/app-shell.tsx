@@ -56,6 +56,7 @@ export function AppShell({
           <ActivityRouter
             activeActivity={activeActivity}
             projectId={project.id}
+            projectName={project.name}
           />
         </div>
       </section>

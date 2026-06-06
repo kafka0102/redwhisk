@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod app_state;
 pub mod commands;
 pub mod core;
@@ -22,7 +23,13 @@ pub fn run() {
             commands::project_commands::open_project_window,
             commands::issue_commands::list_issues,
             commands::issue_commands::create_issue,
-            commands::issue_commands::update_issue
+            commands::issue_commands::update_issue,
+            commands::settings_commands::detect_codex_command,
+            commands::settings_commands::test_agent_command,
+            commands::settings_commands::list_agent_profiles,
+            commands::settings_commands::save_agent_profile,
+            commands::settings_commands::list_project_agent_overrides,
+            commands::settings_commands::save_project_agent_override
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,6 +14,10 @@ const ISSUES_MIGRATION_VERSION: &str = "0004_issues";
 const ISSUES_MIGRATION_SQL: &str = include_str!("../../migrations/0004_issues.sql");
 const ISSUE_ACTIONS_MIGRATION_VERSION: &str = "0005_issue_actions";
 const ISSUE_ACTIONS_MIGRATION_SQL: &str = include_str!("../../migrations/0005_issue_actions.sql");
+const AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_VERSION: &str =
+    "0006_agent_profiles_and_project_overrides";
+const AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0006_agent_profiles_and_project_overrides.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -103,6 +107,10 @@ impl MigrationRunner {
                 Migration {
                     version: ISSUE_ACTIONS_MIGRATION_VERSION,
                     sql: ISSUE_ACTIONS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_VERSION,
+                    sql: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_SQL,
                 },
             ];
         }

@@ -23,12 +23,13 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0002_projects",
             "0003_project_integer_ids",
             "0004_issues",
-            "0005_issue_actions"
+            "0005_issue_actions",
+            "0006_agent_profiles_and_project_overrides"
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0005_issue_actions".to_string())
+        Some("0006_agent_profiles_and_project_overrides".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -60,13 +61,14 @@ fn migrations_are_idempotent_after_first_run() {
             "0002_projects",
             "0003_project_integer_ids",
             "0004_issues",
-            "0005_issue_actions"
+            "0005_issue_actions",
+            "0006_agent_profiles_and_project_overrides"
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0005_issue_actions".to_string())
+        Some("0006_agent_profiles_and_project_overrides".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -75,7 +77,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 5);
+    assert_eq!(schema_migrations_count, 6);
 }
 
 #[test]

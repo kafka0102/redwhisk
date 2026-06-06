@@ -15,6 +15,9 @@ pub enum CommandErrorCode {
     IssuePersistenceFailed,
     IssueNotFound,
     IssueValidationFailed,
+    SettingsPersistenceFailed,
+    AgentProfileValidationFailed,
+    AgentCommandUnavailable,
     UnknownCommandError,
 }
 
