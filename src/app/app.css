@@ -324,6 +324,8 @@ button:focus-visible {
 
 .activity-surface--settings {
   gap: 18px;
+  height: 100%;
+  min-height: 0;
 }
 
 .settings-layout {
@@ -331,7 +333,7 @@ button:focus-visible {
   grid-template-columns: 104px minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .settings-menu {
@@ -354,8 +356,7 @@ button:focus-visible {
   font-size: 13px;
   font-weight: 600;
   text-align: left;
-  transition:
-    color 160ms ease-out;
+  transition: color 160ms ease-out;
 }
 
 .settings-menu__item:hover {
@@ -370,10 +371,9 @@ button:focus-visible {
   display: grid;
   align-content: start;
   gap: 0;
-  padding-left: 24px;
   border-left: 1px solid var(--color-border);
   min-width: 0;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .settings-section {
@@ -386,20 +386,21 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 12px;
+  padding: 0 24px 12px;
   border-bottom: 1px solid var(--color-border);
 }
 
 .settings-section__header h3 {
   margin: 0;
   font-size: 14px;
+  font-weight: 700;
   line-height: 1.3;
 }
 
 .settings-basic-info {
   display: grid;
   gap: 6px;
-  padding: 18px 0 0;
+  padding: 18px 24px 0;
 }
 
 .settings-basic-info__label {
@@ -437,13 +438,14 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 12px;
+  padding: 0 24px 12px;
   border-bottom: 1px solid var(--color-border);
 }
 
 .settings-agent-section__header h3 {
   margin: 0;
   font-size: 14px;
+  font-weight: 700;
   line-height: 1.3;
 }
 
@@ -469,7 +471,7 @@ button:focus-visible {
   place-items: center;
   min-height: 96px;
   margin: 0;
-  padding-top: 8px;
+  padding: 8px 24px 0;
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.4;
@@ -487,6 +489,7 @@ button:focus-visible {
 
 .settings-agent-list--empty p {
   margin: 0;
+  padding: 0 24px;
   color: var(--color-text-muted);
   font-size: 13px;
 }
@@ -497,7 +500,7 @@ button:focus-visible {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px 0;
+  padding: 12px 24px;
   border: 0;
   border-bottom: 1px solid var(--color-border);
   border-radius: 0;
@@ -1412,7 +1415,6 @@ button:focus-visible {
   }
 
   .settings-content {
-    padding-left: 0;
     padding-top: 20px;
     border-left: 0;
     border-top: 1px solid var(--color-border);
