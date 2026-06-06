@@ -531,12 +531,14 @@ button:focus-visible {
 .issue-field input {
   height: 32px;
   padding: 6px 8px;
+  font-size: 15px;
 }
 
 .issue-description-editor {
   position: relative;
   min-height: 120px;
   padding: 0;
+  font-weight: 400;
 }
 
 .issue-description-editor__placeholder {
@@ -545,6 +547,7 @@ button:focus-visible {
   left: 8px;
   color: var(--color-text-muted);
   font-size: 13px;
+  font-weight: 400;
   line-height: 1.45;
   pointer-events: none;
 }
@@ -569,6 +572,7 @@ button:focus-visible {
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
+  font-weight: 400;
   letter-spacing: 0;
   line-height: 1.45;
   text-transform: none;
