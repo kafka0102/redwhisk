@@ -29,7 +29,7 @@
 
 :root {
   color: #17181a;
-  background: #f7f8fa;
+  background: #eef1f4;
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-size: 13px;
@@ -40,17 +40,17 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
 
-  --color-app: #f7f8fa;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f1f2f4;
-  --color-surface-panel: #fbfbfc;
+  --color-app: #eef1f4;
+  --color-surface: #f6f7f9;
+  --color-surface-muted: #eceff3;
+  --color-surface-panel: #f2f4f7;
   --color-border: #e3e5e8;
   --color-border-strong: #d1d5db;
   --color-text: #17181a;
   --color-text-muted: #5f6368;
   --color-text-subtle: #8a8f98;
   --color-accent: #111111;
-  --color-accent-muted: #e9eaee;
+  --color-accent-muted: #e4e7ec;
   --color-focus-ring: #4d84ff;
   --color-focus-offset: #ffffff;
   --color-danger: #b42318;
@@ -72,19 +72,19 @@
   --radius-icon: 7px;
   --shadow-focus:
     0 0 0 2px var(--color-focus-offset), 0 0 0 4px var(--color-focus-ring);
-  --background: #ffffff;
+  --background: #f6f7f9;
   --foreground: #17181a;
-  --card: #ffffff;
+  --card: #fbfbfc;
   --card-foreground: #17181a;
-  --popover: #ffffff;
+  --popover: #fbfbfc;
   --popover-foreground: #17181a;
   --primary: #111111;
   --primary-foreground: #ffffff;
-  --secondary: #f1f2f4;
+  --secondary: #eceff3;
   --secondary-foreground: #17181a;
-  --muted: #f1f2f4;
+  --muted: #eceff3;
   --muted-foreground: #5f6368;
-  --accent: #e9eaee;
+  --accent: #e4e7ec;
   --accent-foreground: #17181a;
   --destructive: #b42318;
   --border: #e3e5e8;
