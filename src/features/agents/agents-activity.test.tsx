@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,6 +66,13 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Agents" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Running and completed sessions for this project."),
+    ).not.toBeInTheDocument();
+
     const runningGroup = await screen.findByRole("region", {
       name: "Running sessions",
     });
@@ -67,6 +80,10 @@ describe("AgentsActivity", () => {
       name: "Completed sessions",
     });
 
+    expect(within(runningGroup).getByText("Running(2)")).toBeInTheDocument();
+    expect(
+      within(completedGroup).getByText("Completed(1)"),
+    ).toBeInTheDocument();
     expect(
       within(runningGroup).getByRole("button", { name: /Running issue/i }),
     ).toBeInTheDocument();
@@ -79,6 +96,74 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("button", { name: "Open in Issues" }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("separator", { name: "Resize session list" }),
+    ).toHaveAttribute("aria-valuenow", "248");
+  });
+
+  it("resizes the session list with the keyboard separator control", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Running issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const separator = await screen.findByRole("separator", {
+      name: "Resize session list",
+    });
+
+    separator.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(separator).toHaveAttribute("aria-valuenow", "264");
+
+    await user.keyboard("{ArrowLeft}");
+    expect(separator).toHaveAttribute("aria-valuenow", "248");
+  });
+
+  it("resizes the session list when dragging the separator", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Running issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const separator = await screen.findByRole("separator", {
+      name: "Resize session list",
+    });
+
+    fireEvent.mouseDown(separator, { clientX: 248 });
+    fireEvent.mouseMove(window, { clientX: 296 });
+
+    expect(separator).toHaveAttribute("aria-valuenow", "296");
+
+    fireEvent.mouseUp(window);
   });
 
   it("falls back to the first running session when no session is explicitly selected", async () => {

@@ -1,5 +1,5 @@
 import { LayoutGrid, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,11 @@ export function AgentsActivity({
   const [manuallySelectedSessionId, setManuallySelectedSessionId] = useState<
     number | null
   >(null);
+  const [sidebarWidth, setSidebarWidth] = useState(248);
+  const dragStateRef = useRef<{
+    startWidth: number;
+    startX: number;
+  } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -80,13 +85,48 @@ export function AgentsActivity({
   const selectedSession =
     sessions.find((session) => session.sessionId === selectedSessionId) ?? null;
 
+  useEffect(() => {
+    function handleMouseMove(event: MouseEvent) {
+      const dragState = dragStateRef.current;
+      if (!dragState) {
+        return;
+      }
+
+      const deltaX = event.clientX - dragState.startX;
+      const nextWidth = Math.max(200, Math.min(420, dragState.startWidth + deltaX));
+      setSidebarWidth(nextWidth);
+    }
+
+    function handleMouseUp() {
+      dragStateRef.current = null;
+      window.document.body.style.cursor = "";
+      window.document.body.style.userSelect = "";
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.document.body.style.cursor = "";
+      window.document.body.style.userSelect = "";
+    };
+  }, []);
+
   return (
-    <main className="activity-surface activity-surface--agents">
+    <main
+      className="activity-surface activity-surface--agents"
+      style={
+        {
+          "--agents-sidebar-width": `${sidebarWidth}px`,
+        } as CSSProperties
+      }
+    >
       <aside className="agents-sidebar" aria-label="Agent sessions">
         <div className="agents-sidebar__header">
-          <div>
+          <div className="agents-sidebar__header-main">
             <h2>Agents</h2>
-            <p>Running and completed sessions for this project.</p>
           </div>
           <div
             className="agents-sidebar__toolbar"
@@ -126,6 +166,7 @@ export function AgentsActivity({
           <div className="agents-groups">
             <SessionGroup
               emptyCopy="No running sessions."
+              count={runningSessions.length}
               label="Running"
               onSelect={setManuallySelectedSessionId}
               selectedSessionId={selectedSession?.sessionId ?? null}
@@ -133,6 +174,7 @@ export function AgentsActivity({
             />
             <SessionGroup
               emptyCopy="No completed sessions."
+              count={completedSessions.length}
               label="Completed"
               onSelect={setManuallySelectedSessionId}
               selectedSessionId={selectedSession?.sessionId ?? null}
@@ -141,6 +183,36 @@ export function AgentsActivity({
           </div>
         ) : null}
       </aside>
+
+      <div
+        aria-label="Resize session list"
+        aria-orientation="vertical"
+        aria-valuemax={420}
+        aria-valuemin={200}
+        aria-valuenow={sidebarWidth}
+        className="agents-splitter"
+        role="separator"
+        tabIndex={0}
+        onMouseDown={(event) => {
+          dragStateRef.current = {
+            startWidth: sidebarWidth,
+            startX: event.clientX,
+          };
+          window.document.body.style.cursor = "col-resize";
+          window.document.body.style.userSelect = "none";
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            setSidebarWidth((currentWidth) => Math.max(200, currentWidth - 16));
+          }
+
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            setSidebarWidth((currentWidth) => Math.min(420, currentWidth + 16));
+          }
+        }}
+      />
 
       <section className="agents-workspace" aria-label="Session workspace">
         {selectedSession &&
@@ -201,6 +273,7 @@ export function AgentsActivity({
 }
 
 interface SessionGroupProps {
+  count: number;
   emptyCopy: string;
   label: string;
   onSelect: (sessionId: number) => void;
@@ -209,6 +282,7 @@ interface SessionGroupProps {
 }
 
 function SessionGroup({
+  count,
   emptyCopy,
   label,
   onSelect,
@@ -218,8 +292,7 @@ function SessionGroup({
   return (
     <section aria-label={`${label} sessions`} className="agents-group">
       <div className="agents-group__header">
-        <h3>{label}</h3>
-        <span>{sessions.length}</span>
+        <h3>{`${label}(${count})`}</h3>
       </div>
       {sessions.length === 0 ? (
         <p className="agents-group__empty">{emptyCopy}</p>
