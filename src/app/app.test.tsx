@@ -268,6 +268,7 @@ describe("App project entry", () => {
     expect(activityButtons.map((button) => button.textContent)).toEqual([
       "Issues",
       "Agents",
+      "Settings",
     ]);
     expect(
       within(activityBar).getByRole("button", { name: "Issues" }),

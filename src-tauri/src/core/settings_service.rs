@@ -1,16 +1,13 @@
 use std::path::Path;
 
 use crate::agent::command_detector::{AgentCommandDetector, ShellAgentCommandDetector};
-use crate::db::agent_profile_repository::{
-    AgentProfileRepository, AgentProfileRow, ProjectAgentOverrideRow,
-};
+use crate::db::agent_profile_repository::AgentProfileRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::{
-    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord,
-    ListProjectAgentOverridesInput, ProjectAgentOverrideListResponse, ProjectAgentOverrideRecord,
-    SaveAgentProfileInput, SaveProjectAgentOverrideInput, TestAgentCommandInput,
+    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
+    ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -57,14 +54,23 @@ where
             .map_err(agent_command_error)
     }
 
-    pub fn list_agent_profiles(&self) -> Result<AgentProfileListResponse, CommandError> {
+    pub fn list_agent_profiles(
+        &self,
+        input: ListAgentProfilesInput,
+    ) -> Result<AgentProfileListResponse, CommandError> {
+        if input.scope == AgentScope::Project {
+            if let Some(project_id) = input.project_id {
+                self.ensure_project_exists(project_id)?;
+            }
+        }
+
         let profiles = self
             .repository
-            .list_profiles()
+            .list_profiles_by_scope(&input.scope, input.project_id)
             .map_err(settings_database_error)?
             .into_iter()
             .map(agent_profile_record_from_row)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect();
 
         Ok(AgentProfileListResponse { profiles })
     }
@@ -75,16 +81,21 @@ where
     ) -> Result<AgentProfileRecord, CommandError> {
         let name = validate_name(&input.name)?;
         let command = validate_command(&input.command)?;
-        let default_skill = input.default_skill.trim().to_string();
-        let prompt_template = input.prompt_template.trim().to_string();
-        let default_args_json = serialize_default_args(&input.default_args)?;
-        let command_to_save = if input.enabled {
-            self.detector
-                .test_command(&command)
-                .map_err(agent_command_error)?
-        } else {
-            command
-        };
+
+        if input.scope == AgentScope::Project {
+            let project_id = input.project_id.ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "项目级 Agent 必须指定 project_id。",
+                )
+            })?;
+            self.ensure_project_exists(project_id)?;
+        }
+
+        let command_to_save = self
+            .detector
+            .test_command(&command)
+            .map_err(agent_command_error)?;
 
         let row = self
             .repository
@@ -93,71 +104,16 @@ where
                 &name,
                 input.agent_type,
                 &command_to_save,
-                &default_args_json,
-                &default_skill,
-                &prompt_template,
-                input.enabled,
-            )
-            .map_err(settings_database_error)?;
-
-        agent_profile_record_from_row(row)
-    }
-
-    pub fn list_project_agent_overrides(
-        &self,
-        input: ListProjectAgentOverridesInput,
-    ) -> Result<ProjectAgentOverrideListResponse, CommandError> {
-        self.ensure_project_exists(input.project_id)?;
-        let overrides = self
-            .repository
-            .list_project_agent_overrides(input.project_id)
-            .map_err(settings_database_error)?
-            .into_iter()
-            .map(project_override_record_from_row)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(ProjectAgentOverrideListResponse { overrides })
-    }
-
-    pub fn save_project_agent_override(
-        &self,
-        input: SaveProjectAgentOverrideInput,
-    ) -> Result<ProjectAgentOverrideRecord, CommandError> {
-        self.ensure_project_exists(input.project_id)?;
-        let profile = self
-            .repository
-            .find_profile_by_id(input.agent_profile_id)
-            .map_err(settings_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentProfileValidationFailed,
-                    "Agent Profile 不存在。",
-                )
-                .with_detail(
-                    ErrorDetail::new("AgentProfile")
-                        .with_value("agentProfileId", input.agent_profile_id),
-                )
-            })?;
-
-        if input.enabled {
-            self.detector
-                .test_command(&profile.command)
-                .map_err(agent_command_error)?;
-        }
-
-        let row = self
-            .repository
-            .save_project_agent_override(
+                &input.scope,
                 input.project_id,
-                input.agent_profile_id,
-                &serialize_default_args(&input.default_args)?,
+                &input.mode,
+                input.dangerous,
                 input.default_skill.trim(),
                 input.prompt_template.trim(),
-                input.enabled,
             )
             .map_err(settings_database_error)?;
 
-        project_override_record_from_row(row)
+        Ok(agent_profile_record_from_row(row))
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
@@ -204,6 +160,7 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
 
     pub fn list_agent_profiles_in_data_dir(
         data_dir: impl AsRef<Path>,
+        input: ListAgentProfilesInput,
     ) -> Result<AgentProfileListResponse, CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
@@ -213,7 +170,7 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
             project_repository,
             ShellAgentCommandDetector::new(),
         )
-        .list_agent_profiles()
+        .list_agent_profiles(input)
     }
 
     pub fn save_agent_profile_in_data_dir(
@@ -229,36 +186,6 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
             ShellAgentCommandDetector::new(),
         )
         .save_agent_profile(input)
-    }
-
-    pub fn list_project_agent_overrides_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: ListProjectAgentOverridesInput,
-    ) -> Result<ProjectAgentOverrideListResponse, CommandError> {
-        let database = open_settings_database(data_dir)?;
-        let repository = AgentProfileRepository::new(&database.connection);
-        let project_repository = ProjectRepository::new(&database.connection);
-        SettingsService::new(
-            repository,
-            project_repository,
-            ShellAgentCommandDetector::new(),
-        )
-        .list_project_agent_overrides(input)
-    }
-
-    pub fn save_project_agent_override_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: SaveProjectAgentOverrideInput,
-    ) -> Result<ProjectAgentOverrideRecord, CommandError> {
-        let database = open_settings_database(data_dir)?;
-        let repository = AgentProfileRepository::new(&database.connection);
-        let project_repository = ProjectRepository::new(&database.connection);
-        SettingsService::new(
-            repository,
-            project_repository,
-            ShellAgentCommandDetector::new(),
-        )
-        .save_project_agent_override(input)
     }
 }
 
@@ -281,31 +208,21 @@ fn open_settings_database(
     Ok(database)
 }
 
-fn agent_profile_record_from_row(row: AgentProfileRow) -> Result<AgentProfileRecord, CommandError> {
-    Ok(AgentProfileRecord {
+fn agent_profile_record_from_row(
+    row: crate::db::agent_profile_repository::AgentProfileRow,
+) -> AgentProfileRecord {
+    AgentProfileRecord {
         id: row.id,
         name: row.name,
         agent_type: row.agent_type,
         command: row.command,
-        default_args: parse_default_args(&row.default_args)?,
-        default_skill: row.default_skill,
-        prompt_template: row.prompt_template,
-        enabled: row.enabled,
-    })
-}
-
-fn project_override_record_from_row(
-    row: ProjectAgentOverrideRow,
-) -> Result<ProjectAgentOverrideRecord, CommandError> {
-    Ok(ProjectAgentOverrideRecord {
-        id: row.id,
+        scope: row.scope,
         project_id: row.project_id,
-        agent_profile_id: row.agent_profile_id,
-        default_args: parse_default_args(&row.default_args)?,
+        mode: row.mode,
+        dangerous: row.dangerous,
         default_skill: row.default_skill,
         prompt_template: row.prompt_template,
-        enabled: row.enabled,
-    })
+    }
 }
 
 fn validate_name(name: &str) -> Result<String, CommandError> {
@@ -332,26 +249,6 @@ fn validate_command(command: &str) -> Result<String, CommandError> {
     }
 
     Ok(trimmed.to_string())
-}
-
-fn serialize_default_args(default_args: &[String]) -> Result<String, CommandError> {
-    serde_json::to_string(default_args).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentProfileValidationFailed,
-            "默认参数格式无效。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
-}
-
-fn parse_default_args(default_args: &str) -> Result<Vec<String>, CommandError> {
-    serde_json::from_str(default_args).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::SettingsPersistenceFailed,
-            "设置保存失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
 }
 
 fn agent_command_error(message: String) -> CommandError {

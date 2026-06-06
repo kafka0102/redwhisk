@@ -18,6 +18,10 @@ const AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_VERSION: &str =
     "0006_agent_profiles_and_project_overrides";
 const AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_SQL: &str =
     include_str!("../../migrations/0006_agent_profiles_and_project_overrides.sql");
+const RESTRUCTURE_AGENT_PROFILES_MIGRATION_VERSION: &str =
+    "0007_restructure_agent_profiles";
+const RESTRUCTURE_AGENT_PROFILES_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0007_restructure_agent_profiles.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -111,6 +115,10 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_VERSION,
                     sql: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_SQL,
+                },
+                Migration {
+                    version: RESTRUCTURE_AGENT_PROFILES_MIGRATION_VERSION,
+                    sql: RESTRUCTURE_AGENT_PROFILES_MIGRATION_SQL,
                 },
             ];
         }

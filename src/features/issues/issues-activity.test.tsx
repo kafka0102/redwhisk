@@ -145,7 +145,9 @@ describe("IssuesActivity", () => {
 
     expect(card).toHaveTextContent("Existing issue");
     expect(card).toHaveTextContent("#20");
-    expect(card).toHaveTextContent(formatTestTimestamp(existingIssue.updatedAt));
+    expect(card).toHaveTextContent(
+      formatTestTimestamp(existingIssue.updatedAt),
+    );
     expect(card).toHaveTextContent("Existing description");
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
   });
@@ -169,7 +171,9 @@ describe("IssuesActivity", () => {
     expect(within(dialog).getByLabelText("Description")).toHaveValue(
       "Existing description",
     );
-    expect(within(dialog).getByPlaceholderText("Issue title")).toBeInTheDocument();
+    expect(
+      within(dialog).getByPlaceholderText("Issue title"),
+    ).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Description")).toBeInTheDocument();
     expect(
       within(dialog).queryByLabelText(/status|updated/i, {
@@ -337,7 +341,10 @@ describe("IssuesActivity", () => {
     await user.clear(screen.getByLabelText("Title"));
     await user.type(screen.getByLabelText("Title"), "Updated issue");
     await user.clear(screen.getByLabelText("Description"));
-    await user.type(screen.getByLabelText("Description"), "Updated description");
+    await user.type(
+      screen.getByLabelText("Description"),
+      "Updated description",
+    );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>

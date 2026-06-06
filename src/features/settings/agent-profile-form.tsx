@@ -1,18 +1,19 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   detectCodexCommand,
   saveAgentProfile,
   testAgentCommand,
   type AgentProfileRecord,
+  type AgentScope,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
 interface AgentProfileFormProps {
   mode: "create" | "edit";
+  scope: AgentScope;
+  projectId: number | null;
   profile?: AgentProfileRecord | null;
   onCancel: () => void;
   onSaved: (profile: AgentProfileRecord) => void;
@@ -20,22 +21,24 @@ interface AgentProfileFormProps {
 
 export function AgentProfileForm({
   mode,
+  scope,
+  projectId,
   profile,
   onCancel,
   onSaved,
 }: AgentProfileFormProps) {
-  const [name, setName] = useState(() => profile?.name ?? "Codex");
+  const [name, setName] = useState(() => profile?.name ?? "");
   const [command, setCommand] = useState(() => profile?.command ?? "");
-  const [defaultArgsText, setDefaultArgsText] = useState(
-    () => profile?.defaultArgs.join("\n") ?? "",
+  const [modeValue, setModeValue] = useState(
+    () => profile?.mode ?? "full-auto",
   );
+  const [dangerous, setDangerous] = useState(() => profile?.dangerous ?? true);
   const [defaultSkill, setDefaultSkill] = useState(
     () => profile?.defaultSkill ?? "",
   );
   const [promptTemplate, setPromptTemplate] = useState(
     () => profile?.promptTemplate ?? "",
   );
-  const [enabled, setEnabled] = useState(() => profile?.enabled ?? false);
   const [statusMessage, setStatusMessage] = useState<string | null>(() =>
     mode === "create" && !profile ? "Detecting codex command..." : null,
   );
@@ -44,32 +47,22 @@ export function AgentProfileForm({
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
 
   useEffect(() => {
-    if (mode !== "create" || profile) {
-      return;
-    }
+    if (mode !== "create" || profile) return;
 
     let isMounted = true;
 
     void detectCodexCommand()
       .then((result) => {
-        if (!isMounted) {
-          return;
-        }
-
+        if (!isMounted) return;
         setCommand(result.command);
-        setStatusMessage(`Detected codex command: ${result.command}`);
+        setStatusMessage(`Detected: ${result.command}`);
       })
       .catch((error: unknown) => {
-        if (!isMounted) {
-          return;
-        }
-
+        if (!isMounted) return;
         setStatusMessage(toCommandError(error).message);
       })
       .finally(() => {
-        if (isMounted) {
-          setIsDetecting(false);
-        }
+        if (isMounted) setIsDetecting(false);
       });
 
     return () => {
@@ -84,7 +77,7 @@ export function AgentProfileForm({
     try {
       const result = await testAgentCommand({ command });
       setCommand(result.command);
-      setStatusMessage(`Command is available: ${result.command}`);
+      setStatusMessage(`Command available: ${result.command}`);
     } catch (error: unknown) {
       setStatusMessage(toCommandError(error).message);
     } finally {
@@ -103,10 +96,12 @@ export function AgentProfileForm({
         name,
         agentType: "codex",
         command,
-        defaultArgs: toArgsArray(defaultArgsText),
+        scope,
+        projectId,
+        mode: modeValue,
+        dangerous,
         defaultSkill,
         promptTemplate,
-        enabled,
       });
       onSaved(savedProfile);
     } catch (error: unknown) {
@@ -119,147 +114,165 @@ export function AgentProfileForm({
   const isSubmitDisabled =
     isSaving || name.trim().length === 0 || command.trim().length === 0;
 
+  const dialogTitle =
+    mode === "create"
+      ? `Add ${scope === "project" ? "Project" : "Global"} Agent`
+      : "Edit Agent";
+
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
-      <div className="settings-form__header">
-        <div>
-          <h4>
-            {mode === "create" ? "New Codex Profile" : "Edit Agent Profile"}
-          </h4>
-          <p>
-            Global profile settings apply across projects unless a project
-            override replaces them.
-          </p>
-        </div>
-      </div>
-
-      <label className="settings-field">
-        <span>Name</span>
-        <Input
-          aria-label="Agent profile name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
-
-      <label className="settings-field">
-        <span>Command</span>
-        <Input
-          aria-label="Agent command"
-          value={command}
-          onChange={(event) => setCommand(event.target.value)}
-        />
-      </label>
-
-      <div className="settings-form__actions-row">
-        <Button
-          className="issues-button"
-          type="button"
-          variant="outline"
-          disabled={isDetecting || isSaving}
-          onClick={() => {
-            setStatusMessage(null);
-            setIsDetecting(true);
-            void detectCodexCommand()
-              .then((result) => {
-                setCommand(result.command);
-                setStatusMessage(`Detected codex command: ${result.command}`);
-              })
-              .catch((error: unknown) => {
-                setStatusMessage(toCommandError(error).message);
-              })
-              .finally(() => {
-                setIsDetecting(false);
-              });
-          }}
-        >
-          {isDetecting ? "Detecting..." : "Detect codex"}
-        </Button>
-        <Button
-          className="issues-button"
-          type="button"
-          variant="outline"
-          disabled={isTesting || isSaving}
-          onClick={handleTestCommand}
-        >
-          {isTesting ? "Testing..." : "Test command"}
-        </Button>
-      </div>
-
-      <label className="settings-field">
-        <span>Default args</span>
-        <textarea
-          aria-label="Default args"
-          className="settings-textarea"
-          rows={4}
-          value={defaultArgsText}
-          onChange={(event) => setDefaultArgsText(event.target.value)}
-        />
-      </label>
-
-      <label className="settings-field">
-        <span>Default skill</span>
-        <Input
-          aria-label="Default skill"
-          value={defaultSkill}
-          onChange={(event) => setDefaultSkill(event.target.value)}
-        />
-      </label>
-
-      <label className="settings-field">
-        <span>Prompt template</span>
-        <textarea
-          aria-label="Prompt template"
-          className="settings-textarea"
-          rows={6}
-          value={promptTemplate}
-          onChange={(event) => setPromptTemplate(event.target.value)}
-        />
-      </label>
-
-      <label className="settings-checkbox">
-        <input
-          aria-label="Enabled"
-          checked={enabled}
-          type="checkbox"
-          onChange={(event) => setEnabled(event.target.checked)}
-        />
-        <span>Enabled</span>
-      </label>
-
-      <p
-        className="settings-status"
-        role="status"
-        aria-label="Global profile status"
+    <div
+      className="issue-dialog-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
+      <form
+        className="issue-dialog"
+        aria-label={dialogTitle}
+        aria-modal="true"
+        role="dialog"
+        onSubmit={handleSubmit}
       >
-        {statusMessage}
-      </p>
+        <div className="issue-dialog__header">
+          <h3>{dialogTitle}</h3>
+          <button
+            aria-label="Close"
+            className="issue-dialog__close"
+            type="button"
+            onClick={onCancel}
+          >
+            &times;
+          </button>
+        </div>
 
-      <div className="settings-form__actions-row settings-form__actions-row--footer">
-        <Button
-          className="issues-button"
-          type="button"
-          variant="outline"
-          disabled={isSaving}
-          onClick={onCancel}
+        <div className="agent-dialog__body">
+          <label className="settings-field">
+            <span>Name</span>
+            <input
+              aria-label="Agent profile name"
+              className="settings-input"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+
+          <label className="settings-field">
+            <span>Command</span>
+            <input
+              aria-label="Agent command"
+              className="settings-input"
+              value={command}
+              onChange={(event) => setCommand(event.target.value)}
+            />
+          </label>
+
+          <div className="settings-form__actions-row">
+            <button
+              className="issues-button"
+              type="button"
+              disabled={isDetecting || isSaving}
+              onClick={() => {
+                setStatusMessage(null);
+                setIsDetecting(true);
+                void detectCodexCommand()
+                  .then((result) => {
+                    setCommand(result.command);
+                    setStatusMessage(`Detected: ${result.command}`);
+                  })
+                  .catch((error: unknown) => {
+                    setStatusMessage(toCommandError(error).message);
+                  })
+                  .finally(() => {
+                    setIsDetecting(false);
+                  });
+              }}
+            >
+              {isDetecting ? "Detecting..." : "Detect"}
+            </button>
+            <button
+              className="issues-button"
+              type="button"
+              disabled={isTesting || isSaving}
+              onClick={handleTestCommand}
+            >
+              {isTesting ? "Testing..." : "Test"}
+            </button>
+          </div>
+
+          <label className="settings-field">
+            <span>Skill</span>
+            <select
+              aria-label="Default skill"
+              className="settings-input"
+              value={defaultSkill}
+              onChange={(event) => setDefaultSkill(event.target.value)}
+            >
+              <option value="">—</option>
+            </select>
+          </label>
+
+          <label className="settings-field">
+            <span>使用模式</span>
+            <select
+              aria-label="Mode"
+              className="settings-input"
+              value={modeValue}
+              onChange={(event) => setModeValue(event.target.value)}
+            >
+              <option value="full-auto">Full Auto</option>
+            </select>
+          </label>
+
+          <label className="settings-checkbox">
+            <input
+              aria-label="Dangerous"
+              checked={dangerous}
+              type="checkbox"
+              onChange={(event) => setDangerous(event.target.checked)}
+            />
+            <span>启用 Dangerous 参数</span>
+          </label>
+
+          <label className="settings-field">
+            <span>Prompt template</span>
+            <textarea
+              aria-label="Prompt template"
+              className="settings-textarea"
+              rows={4}
+              value={promptTemplate}
+              onChange={(event) => setPromptTemplate(event.target.value)}
+            />
+          </label>
+        </div>
+
+        <p
+          className="issue-dialog__status"
+          role="status"
+          aria-label="Agent profile status"
         >
-          Cancel
-        </Button>
-        <Button
-          className="issues-button issues-button--primary"
-          type="submit"
-          disabled={isSubmitDisabled}
-        >
-          {isSaving ? "Saving..." : "Save profile"}
-        </Button>
-      </div>
-    </form>
+          {statusMessage}
+        </p>
+
+        <div className="issue-dialog__footer">
+          <button
+            className="issues-button"
+            type="button"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            className="issues-button issues-button--primary"
+            type="submit"
+            disabled={isSubmitDisabled}
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
-}
-
-function toArgsArray(value: string): string[] {
-  return value
-    .split("\n")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
 }

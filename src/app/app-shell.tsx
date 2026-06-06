@@ -18,6 +18,7 @@ const ACTIVITIES: Array<{
 }> = [
   { key: "issues", label: "Issues", Icon: CircleDot },
   { key: "agents", label: "Agents", Icon: Bot },
+  { key: "settings", label: "Settings", Icon: Settings },
 ];
 
 export function AppShell({
@@ -50,15 +51,6 @@ export function AppShell({
             projects={projects}
             onProjectsRefresh={onProjectsRefresh}
           />
-          <button
-            className="workbench__header-settings"
-            type="button"
-            aria-label="Project Settings"
-            aria-pressed={activeActivity === "settings"}
-            onClick={() => setActiveActivity("settings")}
-          >
-            <Settings aria-hidden="true" size={16} strokeWidth={1.8} />
-          </button>
         </header>
         <div className="workbench__content">
           <ActivityRouter
