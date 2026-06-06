@@ -1,26 +1,26 @@
 installation:
   version: 6.8.0
   installDate: 2026-06-02T14:19:47.564Z
-  lastUpdated: 2026-06-02T14:19:47.564Z
+  lastUpdated: 2026-06-06T00:09:03.535Z
 modules:
   - name: core
     version: 6.8.0
     installDate: 2026-06-02T14:19:45.733Z
-    lastUpdated: 2026-06-02T14:19:47.552Z
+    lastUpdated: 2026-06-06T00:09:03.530Z
     source: built-in
     npmPackage: null
     repoUrl: null
   - name: bmm
     version: 6.8.0
     installDate: 2026-06-02T14:19:45.682Z
-    lastUpdated: 2026-06-02T14:19:47.553Z
+    lastUpdated: 2026-06-06T00:09:03.531Z
     source: built-in
     npmPackage: null
     repoUrl: null
   - name: tea
     version: v1.19.0
     installDate: 2026-06-02T14:19:46.403Z
-    lastUpdated: 2026-06-02T14:19:47.555Z
+    lastUpdated: 2026-06-06T00:09:03.531Z
     source: external
     npmPackage: bmad-method-test-architecture-enterprise
     repoUrl: https://github.com/bmad-code-org/bmad-method-test-architecture-enterprise
@@ -29,7 +29,7 @@ modules:
   - name: bmb
     version: v1.8.1
     installDate: 2026-06-02T14:19:46.538Z
-    lastUpdated: 2026-06-02T14:19:47.557Z
+    lastUpdated: 2026-06-06T00:09:03.532Z
     source: external
     npmPackage: bmad-builder
     repoUrl: https://github.com/bmad-code-org/bmad-builder
@@ -38,16 +38,16 @@ modules:
   - name: automator
     version: main
     installDate: 2026-06-02T14:19:46.666Z
-    lastUpdated: 2026-06-02T14:19:47.559Z
+    lastUpdated: 2026-06-06T00:09:03.533Z
     source: external
     npmPackage: bmad-story-automator
     repoUrl: https://github.com/bmad-code-org/bmad-automator
     channel: next
-    sha: 51a3cbce4a15ca84df7ac8ab9b9113cc185ca101
+    sha: f332173a692ffbabb24734c31dedadfcf78b9ed1
   - name: cis
     version: v0.2.1
     installDate: 2026-06-02T14:19:46.714Z
-    lastUpdated: 2026-06-02T14:19:47.560Z
+    lastUpdated: 2026-06-06T00:09:03.534Z
     source: external
     npmPackage: bmad-creative-intelligence-suite
     repoUrl: https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite
@@ -56,7 +56,7 @@ modules:
   - name: wds
     version: v0.4.3
     installDate: 2026-06-02T14:19:47.307Z
-    lastUpdated: 2026-06-02T14:19:47.564Z
+    lastUpdated: 2026-06-06T00:09:03.535Z
     source: external
     npmPackage: bmad-wds
     repoUrl: https://github.com/bmad-code-org/bmad-method-wds-expansion
@@ -64,3 +64,4 @@ modules:
     sha: cc16f09fcfab26d35635af1491f36a38a8431c8d
 ides:
   - codex
+  - claude-code
