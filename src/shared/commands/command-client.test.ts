@@ -11,9 +11,7 @@ import {
 import {
   detectCodexCommand,
   listAgentProfiles,
-  listProjectAgentOverrides,
   saveAgentProfile,
-  saveProjectAgentOverride,
   testAgentCommand,
 } from "../../features/settings/settings-commands";
 import { isCommandError, toCommandError } from "./command-error";
@@ -208,29 +206,37 @@ describe("command client", () => {
           name: "Codex",
           agentType: "codex",
           command: "/usr/local/bin/codex",
-          defaultArgs: ["exec"],
+          scope: "global",
+          projectId: null,
+          mode: "full-auto",
+          dangerous: true,
           defaultSkill: "",
           promptTemplate: "",
-          enabled: true,
         },
       ],
     });
 
-    await expect(listAgentProfiles()).resolves.toEqual({
+    await expect(
+      listAgentProfiles({ scope: "global", projectId: null }),
+    ).resolves.toEqual({
       profiles: [
         {
           id: 1,
           name: "Codex",
           agentType: "codex",
           command: "/usr/local/bin/codex",
-          defaultArgs: ["exec"],
+          scope: "global",
+          projectId: null,
+          mode: "full-auto",
+          dangerous: true,
           defaultSkill: "",
           promptTemplate: "",
-          enabled: true,
         },
       ],
     });
-    expect(invokeMock).toHaveBeenCalledWith("list_agent_profiles", undefined);
+    expect(invokeMock).toHaveBeenCalledWith("list_agent_profiles", {
+      input: { scope: "global", projectId: null },
+    });
   });
 
   it("invokes Rust Core through the save agent profile command", async () => {
@@ -239,10 +245,12 @@ describe("command client", () => {
       name: "Codex",
       agentType: "codex",
       command: "/usr/local/bin/codex",
-      defaultArgs: ["exec"],
+      scope: "global",
+      projectId: null,
+      mode: "full-auto",
+      dangerous: true,
       defaultSkill: "",
       promptTemplate: "",
-      enabled: true,
     });
 
     await expect(
@@ -250,104 +258,36 @@ describe("command client", () => {
         name: "Codex",
         agentType: "codex",
         command: "/usr/local/bin/codex",
-        defaultArgs: ["exec"],
+        scope: "global",
+        projectId: null,
+        mode: "full-auto",
+        dangerous: true,
         defaultSkill: "",
         promptTemplate: "",
-        enabled: true,
       }),
     ).resolves.toEqual({
       id: 1,
       name: "Codex",
       agentType: "codex",
       command: "/usr/local/bin/codex",
-      defaultArgs: ["exec"],
+      scope: "global",
+      projectId: null,
+      mode: "full-auto",
+      dangerous: true,
       defaultSkill: "",
       promptTemplate: "",
-      enabled: true,
     });
     expect(invokeMock).toHaveBeenCalledWith("save_agent_profile", {
       input: {
         name: "Codex",
         agentType: "codex",
         command: "/usr/local/bin/codex",
-        defaultArgs: ["exec"],
+        scope: "global",
+        projectId: null,
+        mode: "full-auto",
+        dangerous: true,
         defaultSkill: "",
         promptTemplate: "",
-        enabled: true,
-      },
-    });
-  });
-
-  it("invokes Rust Core through the list project agent overrides command", async () => {
-    invokeMock.mockResolvedValue({
-      overrides: [
-        {
-          id: 10,
-          projectId: 1,
-          agentProfileId: 1,
-          defaultArgs: ["exec"],
-          defaultSkill: "project-skill",
-          promptTemplate: "Project prompt",
-          enabled: true,
-        },
-      ],
-    });
-
-    await expect(listProjectAgentOverrides({ projectId: 1 })).resolves.toEqual({
-      overrides: [
-        {
-          id: 10,
-          projectId: 1,
-          agentProfileId: 1,
-          defaultArgs: ["exec"],
-          defaultSkill: "project-skill",
-          promptTemplate: "Project prompt",
-          enabled: true,
-        },
-      ],
-    });
-    expect(invokeMock).toHaveBeenCalledWith("list_project_agent_overrides", {
-      input: { projectId: 1 },
-    });
-  });
-
-  it("invokes Rust Core through the save project agent override command", async () => {
-    invokeMock.mockResolvedValue({
-      id: 10,
-      projectId: 1,
-      agentProfileId: 1,
-      defaultArgs: ["exec"],
-      defaultSkill: "project-skill",
-      promptTemplate: "Project prompt",
-      enabled: true,
-    });
-
-    await expect(
-      saveProjectAgentOverride({
-        projectId: 1,
-        agentProfileId: 1,
-        defaultArgs: ["exec"],
-        defaultSkill: "project-skill",
-        promptTemplate: "Project prompt",
-        enabled: true,
-      }),
-    ).resolves.toEqual({
-      id: 10,
-      projectId: 1,
-      agentProfileId: 1,
-      defaultArgs: ["exec"],
-      defaultSkill: "project-skill",
-      promptTemplate: "Project prompt",
-      enabled: true,
-    });
-    expect(invokeMock).toHaveBeenCalledWith("save_project_agent_override", {
-      input: {
-        projectId: 1,
-        agentProfileId: 1,
-        defaultArgs: ["exec"],
-        defaultSkill: "project-skill",
-        promptTemplate: "Project prompt",
-        enabled: true,
       },
     });
   });

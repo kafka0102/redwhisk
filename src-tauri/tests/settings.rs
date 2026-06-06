@@ -7,13 +7,12 @@ use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{
-    AgentType, ListProjectAgentOverridesInput, SaveAgentProfileInput,
-    SaveProjectAgentOverrideInput, TestAgentCommandInput,
+    AgentScope, AgentType, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
 
 #[test]
-fn settings_migration_creates_agent_profile_tables_and_unique_override_index() {
+fn settings_migration_creates_restructured_agent_profiles_table() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = DatabaseConfig::new(temp_dir.path())
         .open()
@@ -31,63 +30,29 @@ fn settings_migration_creates_agent_profile_tables_and_unique_override_index() {
             "name",
             "agent_type",
             "command",
-            "default_args",
-            "default_skill",
-            "prompt_template",
-            "enabled"
-        ],
-    );
-
-    let override_columns = table_columns(&database.connection, "project_agent_overrides");
-    assert_eq!(
-        override_columns,
-        vec![
-            "id",
+            "scope",
             "project_id",
-            "agent_profile_id",
-            "default_args",
+            "mode",
+            "dangerous",
             "default_skill",
-            "prompt_template",
-            "enabled"
+            "prompt_template"
         ],
     );
 
-    let unique_index_count: i64 = database
+    let override_exists: bool = database
         .connection
         .query_row(
-            "SELECT COUNT(*) FROM pragma_index_list('project_agent_overrides')
-             WHERE name = 'uidx_project_agent_overrides_project_profile' AND [unique] = 1",
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='project_agent_overrides'",
             [],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0),
         )
-        .expect("unique override index count");
-    assert_eq!(unique_index_count, 1);
-
-    let project_foreign_key_count: i64 = database
-        .connection
-        .query_row(
-            "SELECT COUNT(*) FROM pragma_foreign_key_list('project_agent_overrides')
-             WHERE [table] = 'projects' AND [from] = 'project_id' AND [to] = 'id'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("project foreign key count");
-    assert_eq!(project_foreign_key_count, 1);
-
-    let profile_foreign_key_count: i64 = database
-        .connection
-        .query_row(
-            "SELECT COUNT(*) FROM pragma_foreign_key_list('project_agent_overrides')
-             WHERE [table] = 'agent_profiles' AND [from] = 'agent_profile_id' AND [to] = 'id'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("profile foreign key count");
-    assert_eq!(profile_foreign_key_count, 1);
+        .map(|count| count > 0)
+        .unwrap_or(false);
+    assert!(!override_exists, "project_agent_overrides should be dropped");
 }
 
 #[test]
-fn save_enabled_agent_profile_resolves_command_and_persists_defaults() {
+fn save_global_agent_profile_resolves_command() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let service = settings_service(
@@ -101,39 +66,34 @@ fn save_enabled_agent_profile_resolves_command_and_persists_defaults() {
             name: "  Codex Default  ".to_string(),
             agent_type: AgentType::Codex,
             command: " codex ".to_string(),
-            default_args: vec![
-                "exec".to_string(),
-                "--model".to_string(),
-                "gpt-5".to_string(),
-            ],
-            default_skill: "bmad-dev-workflow".to_string(),
-            prompt_template: "Implement {{issue.description}}".to_string(),
-            enabled: true,
+            scope: AgentScope::Global,
+            project_id: None,
+            mode: "full-auto".to_string(),
+            dangerous: true,
+            default_skill: "".to_string(),
+            prompt_template: "".to_string(),
         })
         .expect("saved agent profile");
 
     assert!(profile.id > 0);
     assert_eq!(profile.name, "Codex Default");
     assert_eq!(profile.command, "/usr/local/bin/codex");
-    assert_eq!(
-        profile.default_args,
-        vec![
-            "exec".to_string(),
-            "--model".to_string(),
-            "gpt-5".to_string()
-        ]
-    );
-    assert!(profile.enabled);
+    assert_eq!(profile.scope, AgentScope::Global);
+    assert_eq!(profile.mode, "full-auto");
+    assert!(profile.dangerous);
 
-    let stored_profile = service
-        .list_agent_profiles()
+    let stored_profiles = service
+        .list_agent_profiles(ListAgentProfilesInput {
+            scope: AgentScope::Global,
+            project_id: None,
+        })
         .expect("list profiles")
         .profiles;
-    assert_eq!(stored_profile, vec![profile]);
+    assert_eq!(stored_profiles, vec![profile]);
 }
 
 #[test]
-fn save_enabled_agent_profile_rejects_unavailable_command_without_persisting() {
+fn save_agent_profile_rejects_unavailable_command_without_persisting() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let service = settings_service(
@@ -147,12 +107,14 @@ fn save_enabled_agent_profile_rejects_unavailable_command_without_persisting() {
             name: "Codex".to_string(),
             agent_type: AgentType::Codex,
             command: "codex".to_string(),
-            default_args: vec![],
+            scope: AgentScope::Global,
+            project_id: None,
+            mode: "full-auto".to_string(),
+            dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
-            enabled: true,
         })
-        .expect_err("enabled profile should fail without executable command");
+        .expect_err("should fail without executable command");
 
     assert_eq!(error.code, CommandErrorCode::AgentCommandUnavailable);
 
@@ -182,7 +144,7 @@ fn test_agent_command_supports_manual_path_validation() {
 }
 
 #[test]
-fn project_agent_override_only_applies_to_the_target_project() {
+fn project_scope_agent_only_visible_to_target_project() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project(&database.connection, "redwhisk");
@@ -191,50 +153,42 @@ fn project_agent_override_only_applies_to_the_target_project() {
         &database.connection,
         StubCommandDetector::with_test_result("/usr/local/bin/codex", Ok("/usr/local/bin/codex")),
     );
+
     let profile = service
         .save_agent_profile(SaveAgentProfileInput {
             id: None,
-            name: "Codex".to_string(),
+            name: "Project Codex".to_string(),
             agent_type: AgentType::Codex,
             command: "/usr/local/bin/codex".to_string(),
-            default_args: vec!["exec".to_string()],
-            default_skill: "default-skill".to_string(),
-            prompt_template: "Global prompt".to_string(),
-            enabled: true,
+            scope: AgentScope::Project,
+            project_id: Some(project_id),
+            mode: "full-auto".to_string(),
+            dangerous: false,
+            default_skill: "".to_string(),
+            prompt_template: "".to_string(),
         })
-        .expect("saved profile");
+        .expect("saved project profile");
 
-    let override_record = service
-        .save_project_agent_override(SaveProjectAgentOverrideInput {
-            project_id,
-            agent_profile_id: profile.id,
-            default_args: vec!["exec".to_string(), "--sandbox".to_string()],
-            default_skill: "project-skill".to_string(),
-            prompt_template: "Project prompt".to_string(),
-            enabled: true,
+    assert_eq!(profile.scope, AgentScope::Project);
+    assert_eq!(profile.project_id, Some(project_id));
+
+    let project_profiles = service
+        .list_agent_profiles(ListAgentProfilesInput {
+            scope: AgentScope::Project,
+            project_id: Some(project_id),
         })
-        .expect("saved override");
+        .expect("project profiles")
+        .profiles;
+    assert_eq!(project_profiles, vec![profile]);
 
-    assert_eq!(override_record.project_id, project_id);
-    assert_eq!(override_record.agent_profile_id, profile.id);
-    assert_eq!(
-        override_record.default_args,
-        vec!["exec".to_string(), "--sandbox".to_string()]
-    );
-
-    let project_overrides = service
-        .list_project_agent_overrides(ListProjectAgentOverridesInput { project_id })
-        .expect("project overrides")
-        .overrides;
-    assert_eq!(project_overrides, vec![override_record]);
-
-    let other_project_overrides = service
-        .list_project_agent_overrides(ListProjectAgentOverridesInput {
-            project_id: other_project_id,
+    let other_profiles = service
+        .list_agent_profiles(ListAgentProfilesInput {
+            scope: AgentScope::Project,
+            project_id: Some(other_project_id),
         })
-        .expect("other project overrides")
-        .overrides;
-    assert!(other_project_overrides.is_empty());
+        .expect("other project profiles")
+        .profiles;
+    assert!(other_profiles.is_empty());
 }
 
 struct StubCommandDetector {

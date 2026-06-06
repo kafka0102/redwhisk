@@ -4,8 +4,7 @@ use crate::app_state::AppState;
 use crate::core::settings_service::SettingsService;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord,
-    ListProjectAgentOverridesInput, ProjectAgentOverrideListResponse, ProjectAgentOverrideRecord,
-    SaveAgentProfileInput, SaveProjectAgentOverrideInput, TestAgentCommandInput,
+    ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -32,9 +31,10 @@ pub fn test_agent_command(
 pub fn list_agent_profiles(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
+    input: ListAgentProfilesInput,
 ) -> Result<AgentProfileListResponse, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
-    SettingsService::list_agent_profiles_in_data_dir(data_dir)
+    SettingsService::list_agent_profiles_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]
@@ -45,26 +45,6 @@ pub fn save_agent_profile(
 ) -> Result<AgentProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::save_agent_profile_in_data_dir(data_dir, input)
-}
-
-#[tauri::command]
-pub fn list_project_agent_overrides(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: ListProjectAgentOverridesInput,
-) -> Result<ProjectAgentOverrideListResponse, CommandError> {
-    let data_dir = prepare_settings_data_dir(&app, &state)?;
-    SettingsService::list_project_agent_overrides_in_data_dir(data_dir, input)
-}
-
-#[tauri::command]
-pub fn save_project_agent_override(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: SaveProjectAgentOverrideInput,
-) -> Result<ProjectAgentOverrideRecord, CommandError> {
-    let data_dir = prepare_settings_data_dir(&app, &state)?;
-    SettingsService::save_project_agent_override_in_data_dir(data_dir, input)
 }
 
 fn prepare_settings_data_dir(

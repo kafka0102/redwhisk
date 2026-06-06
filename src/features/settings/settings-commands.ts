@@ -1,16 +1,24 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
 export type AgentType = "codex";
+export type AgentScope = "project" | "global";
 
 export interface AgentProfileRecord {
   id: number;
   name: string;
   agentType: AgentType;
   command: string;
-  defaultArgs: string[];
+  scope: AgentScope;
+  projectId: number | null;
+  mode: string;
+  dangerous: boolean;
   defaultSkill: string;
   promptTemplate: string;
-  enabled: boolean;
+}
+
+export interface ListAgentProfilesInput {
+  scope: AgentScope;
+  projectId: number | null;
 }
 
 export interface SaveAgentProfileInput {
@@ -18,10 +26,12 @@ export interface SaveAgentProfileInput {
   name: string;
   agentType: AgentType;
   command: string;
-  defaultArgs: string[];
+  scope: AgentScope;
+  projectId: number | null;
+  mode: string;
+  dangerous: boolean;
   defaultSkill: string;
   promptTemplate: string;
-  enabled: boolean;
 }
 
 export interface AgentProfileListResponse {
@@ -36,33 +46,6 @@ export interface TestAgentCommandInput {
   command: string;
 }
 
-export interface ProjectAgentOverrideRecord {
-  id: number;
-  projectId: number;
-  agentProfileId: number;
-  defaultArgs: string[];
-  defaultSkill: string;
-  promptTemplate: string;
-  enabled: boolean;
-}
-
-export interface ProjectAgentOverrideListResponse {
-  overrides: ProjectAgentOverrideRecord[];
-}
-
-export interface ListProjectAgentOverridesInput {
-  projectId: number;
-}
-
-export interface SaveProjectAgentOverrideInput {
-  projectId: number;
-  agentProfileId: number;
-  defaultArgs: string[];
-  defaultSkill: string;
-  promptTemplate: string;
-  enabled: boolean;
-}
-
 export function detectCodexCommand(): Promise<AgentCommandCheckResult> {
   return invokeCommand<AgentCommandCheckResult>("detect_codex_command");
 }
@@ -75,8 +58,12 @@ export function testAgentCommand(
   });
 }
 
-export function listAgentProfiles(): Promise<AgentProfileListResponse> {
-  return invokeCommand<AgentProfileListResponse>("list_agent_profiles");
+export function listAgentProfiles(
+  input: ListAgentProfilesInput,
+): Promise<AgentProfileListResponse> {
+  return invokeCommand<AgentProfileListResponse>("list_agent_profiles", {
+    input,
+  });
 }
 
 export function saveAgentProfile(
@@ -85,26 +72,4 @@ export function saveAgentProfile(
   return invokeCommand<AgentProfileRecord>("save_agent_profile", {
     input,
   });
-}
-
-export function listProjectAgentOverrides(
-  input: ListProjectAgentOverridesInput,
-): Promise<ProjectAgentOverrideListResponse> {
-  return invokeCommand<ProjectAgentOverrideListResponse>(
-    "list_project_agent_overrides",
-    {
-      input,
-    },
-  );
-}
-
-export function saveProjectAgentOverride(
-  input: SaveProjectAgentOverrideInput,
-): Promise<ProjectAgentOverrideRecord> {
-  return invokeCommand<ProjectAgentOverrideRecord>(
-    "save_project_agent_override",
-    {
-      input,
-    },
-  );
 }
