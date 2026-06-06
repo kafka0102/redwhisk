@@ -57,7 +57,6 @@ export function AppShell({
             activeActivity={activeActivity}
             projectId={project.id}
             projectName={project.name}
-            projectPath={project.path}
           />
         </div>
       </section>
