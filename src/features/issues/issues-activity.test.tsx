@@ -551,6 +551,18 @@ describe("IssuesActivity", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("uses the requested issue as the initial selection when provided", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [existingIssue, runningIssue, reviewIssue],
+    });
+
+    renderIssuesActivity({ requestedIssueId: reviewIssue.id });
+
+    expect(
+      await screen.findByRole("button", { name: "Review issue" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("uses the backlog lane header plus action to create issues", async () => {
     listIssuesMock.mockResolvedValue({ issues: [] });
 
@@ -701,6 +713,7 @@ describe("IssuesActivity", () => {
       ).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
     expect(screen.getByRole("button", { name: "Open Session" })).toBeEnabled();
   });
 
@@ -858,6 +871,7 @@ describe("IssuesActivity", () => {
         screen.queryByRole("dialog", { name: "Run Dialog" }),
       ).not.toBeInTheDocument(),
     );
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
     expect(screen.getByRole("button", { name: "Open Session" })).toBeEnabled();
   });
 

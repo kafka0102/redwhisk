@@ -1,6 +1,21 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
+use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionRecord, AgentSessionStatus};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentSessionListRow {
+    pub session_id: i64,
+    pub issue_id: Option<i64>,
+    pub issue_title: Option<String>,
+    pub title: Option<String>,
+    pub agent_type: AgentType,
+    pub status: AgentSessionStatus,
+    pub attention: AgentSessionAttention,
+    pub last_active_at: i64,
+    pub started_at: i64,
+    pub closed_at: Option<i64>,
+}
 
 pub struct AgentSessionRepository<'connection> {
     connection: &'connection Connection,
@@ -33,6 +48,35 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_session_from_row,
             )
             .optional()
+    }
+
+    pub fn list_by_project_id(
+        &self,
+        project_id: i64,
+    ) -> rusqlite::Result<Vec<AgentSessionListRow>> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                agent_sessions.id,
+                agent_sessions.issue_id,
+                issues.title,
+                agent_sessions.title,
+                agent_profiles.agent_type,
+                agent_sessions.status,
+                agent_sessions.attention,
+                agent_sessions.last_active_at,
+                agent_sessions.started_at,
+                agent_sessions.closed_at
+             FROM agent_sessions
+             INNER JOIN issues ON issues.id = agent_sessions.issue_id
+             INNER JOIN agent_profiles ON agent_profiles.id = agent_sessions.agent_profile_id
+             WHERE issues.project_id = ?1",
+        )?;
+
+        let sessions = statement
+            .query_map(params![project_id], agent_session_list_row_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(sessions)
     }
 
     pub fn insert_in_transaction(
@@ -106,6 +150,30 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSess
         started_at: row.get(12)?,
         closed_at: row.get(13)?,
     })
+}
+
+fn agent_session_list_row_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<AgentSessionListRow> {
+    Ok(AgentSessionListRow {
+        session_id: row.get(0)?,
+        issue_id: row.get(1)?,
+        issue_title: row.get(2)?,
+        title: row.get(3)?,
+        agent_type: agent_type_from_str(&row.get::<_, String>(4)?)?,
+        status: agent_session_status_from_str(&row.get::<_, String>(5)?)?,
+        attention: agent_session_attention_from_str(&row.get::<_, String>(6)?)?,
+        last_active_at: row.get(7)?,
+        started_at: row.get(8)?,
+        closed_at: row.get(9)?,
+    })
+}
+
+fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
+    match value {
+        "codex" => Ok(AgentType::Codex),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
 }
 
 fn agent_session_status_from_str(value: &str) -> rusqlite::Result<AgentSessionStatus> {

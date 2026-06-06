@@ -1,60 +1,42 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/2-4-enforce-one-agent-session-per-issue.md
-story_key: 2-4-enforce-one-agent-session-per-issue
+story_file: _bmad-output/implementation-artifacts/2-5-show-agents-activity-session-list-and-basic-header.md
+story_key: 2-5-show-agents-activity-session-list-and-basic-header
 story_status: done
-baseline_commit: 3cfdb03
+baseline_commit: b35687b
 changed_files:
-  - _bmad-output/implementation-artifacts/2-4-enforce-one-agent-session-per-issue.md
+  - _bmad-output/implementation-artifacts/2-5-show-agents-activity-session-list-and-basic-header.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - src/app/activity-router.tsx
   - src/app/app-shell.tsx
+  - src/app/app.css
+  - src/features/agents/agent-session-commands.ts
   - src/features/agents/agents-activity.tsx
-  - src/features/issues/issue-commands.ts
-  - src/features/issues/issue-run-dialog.tsx
+  - src/features/agents/agents-activity.test.tsx
   - src/features/issues/issues-activity.tsx
   - src/features/issues/issues-activity.test.tsx
+  - src/shared/commands/command-client.test.ts
+  - src-tauri/src/commands/agent_session_commands.rs
   - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/db/issue_repository.rs
-  - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/issue.rs
+  - src-tauri/src/db/agent_session_repository.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/agent_session.rs
   - src-tauri/tests/agent_session.rs
-  - src-tauri/tests/issue.rs
 validation_commands:
   - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
   - pnpm typecheck
   - pnpm test
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
   - cargo test --manifest-path src-tauri/Cargo.toml
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - cargo test --manifest-path src-tauri/Cargo.toml
-  - pnpm format
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - cargo test --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
 validation_results:
   - pass: pnpm format
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
   - pass: pnpm lint
   - pass: pnpm typecheck
   - pass: pnpm test
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
-  - fail_then_fixed: cargo test --manifest-path src-tauri/Cargo.toml
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
   - pass: cargo test --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm format
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-  - fail_then_fixed: pnpm test
-  - fail_then_fixed: cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-review_summary: blind hunter, edge case hunter, and acceptance auditor findings triaged; four patch findings fixed and remaining noisy subquery concern dismissed because unique index already guarantees one non-null issue session
+review_summary: review clean; no blocking findings, and remaining PTY/xterm or temporary-session work stays scoped to stories 2.6 and 3.x
 blocking_reason:
-updated_at: 2026-06-06T21:14:00+08:00
+updated_at: 2026-06-06T21:40:02+08:00

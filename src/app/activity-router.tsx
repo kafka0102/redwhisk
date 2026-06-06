@@ -8,19 +8,29 @@ interface ActivityRouterProps {
   activeActivity: ActivityKey;
   activeAgentSessionId: number | null;
   onOpenAgentsActivity: (sessionId: number) => void;
+  onOpenIssuesActivity: (issueId: number) => void;
   projectId: number;
   projectName: string;
+  requestedIssueId: number | null;
 }
 
 export function ActivityRouter({
   activeActivity,
   activeAgentSessionId,
   onOpenAgentsActivity,
+  onOpenIssuesActivity,
   projectId,
   projectName,
+  requestedIssueId,
 }: ActivityRouterProps) {
   if (activeActivity === "agents") {
-    return <AgentsActivity activeSessionId={activeAgentSessionId} />;
+    return (
+      <AgentsActivity
+        activeSessionId={activeAgentSessionId}
+        projectId={projectId}
+        onOpenIssuesActivity={onOpenIssuesActivity}
+      />
+    );
   }
 
   if (activeActivity === "settings") {
@@ -37,6 +47,7 @@ export function ActivityRouter({
     <IssuesActivity
       onOpenAgentsActivity={onOpenAgentsActivity}
       projectId={projectId}
+      requestedIssueId={requestedIssueId}
     />
   );
 }
