@@ -1,39 +1,38 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
-story_key: 1-10-implement-desktop-visual-tokens-and-basic-accessibility
+story_file: _bmad-output/implementation-artifacts/2-1-generate-and-preview-issue-run-prompt.md
+story_key: 2-1-generate-and-preview-issue-run-prompt
 story_status: done
-baseline_commit: cbf97fb
+baseline_commit: c009ee5
 changed_files:
-  - _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
+  - _bmad-output/implementation-artifacts/2-1-generate-and-preview-issue-run-prompt.md
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src/app/app.css
-  - src/components/ui/button.tsx
-  - src/components/ui/desktop-primitives.test.tsx
-  - src/components/ui/dropdown-menu.tsx
-  - src/components/ui/input.tsx
-  - src/components/ui/textarea.tsx
-  - src/features/project/project-home.tsx
-  - src/features/project/project-switcher.tsx
-  - src/shared/styles/tokens.css
+  - src/app/activity-router.tsx
+  - src/app/app-shell.tsx
+  - src/features/issues/issue-run-dialog.tsx
+  - src/features/issues/issues-activity.test.tsx
+  - src/features/issues/issues-activity.tsx
+  - src/features/issues/run-prompt-builder.test.ts
+  - src/features/issues/run-prompt-builder.ts
 validation_commands:
-  - pnpm test -- --run src/components/ui/desktop-primitives.test.tsx
-  - pnpm test -- --run src/components/ui/desktop-primitives.test.tsx
-  - pnpm test -- --run src/app/app.test.tsx src/features/settings/project-settings-activity.test.tsx src/components/ui/desktop-primitives.test.tsx
+  - pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx
+  - pnpm typecheck
+  - pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx
   - pnpm format
   - pnpm lint
   - pnpm typecheck
   - pnpm test
   - pnpm build
 validation_results:
-  - fail: pnpm test -- --run src/components/ui/desktop-primitives.test.tsx (3 个 primitive 测试红灯)
-  - pass: pnpm test -- --run src/components/ui/desktop-primitives.test.tsx
-  - pass: pnpm test -- --run src/app/app.test.tsx src/features/settings/project-settings-activity.test.tsx src/components/ui/desktop-primitives.test.tsx
+  - fail: pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx (2 个新用例断言与 mock 初版有误)
+  - pass: pnpm typecheck
+  - pass: pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx
   - pass: pnpm format
   - pass: pnpm lint
   - pass: pnpm typecheck
-  - pass: pnpm test (54 个测试通过，包含既有 CSS stylesheet 警告)
+  - pass: pnpm test (61 个测试通过，包含既有 CSS stylesheet 警告)
   - pass: pnpm build (保留既有 CSS minify / chunk size warning)
-review_summary: clean - Epic 1 已收口，未发现阻塞性遗留问题
+review_summary: clean - Run Dialog 预览范围符合 Story 2.1 边界，未发现阻塞性问题
 blocking_reason:
-updated_at: 2026-06-06T16:00:48+08:00
+updated_at: 2026-06-06T17:49:00+08:00
