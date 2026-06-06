@@ -6,6 +6,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
+use crate::agent::pty_session_manager::{
+    read_terminal_snapshot, PtySessionManager, PtySpawnRequest,
+};
 use crate::db::agent_profile_repository::{AgentProfileRepository, AgentProfileRow};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -15,7 +18,9 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
-    AgentSessionListItem, AgentSessionListResponse, StartAgentSessionInput, StartAgentSessionResult,
+    AgentSessionListItem, AgentSessionListResponse, ReadAgentSessionTerminalResult,
+    ResizeAgentSessionTerminalInput, StartAgentSessionInput, StartAgentSessionResult,
+    WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
@@ -52,6 +57,24 @@ impl<'connection> AgentSessionService<'connection> {
         &self,
         data_dir: impl AsRef<Path>,
         input: StartAgentSessionInput,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        self.start_agent_session_internal(data_dir, input, None)
+    }
+
+    pub fn start_agent_session_with_pty(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartAgentSessionInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        self.start_agent_session_internal(data_dir, input, Some(pty_sessions))
+    }
+
+    fn start_agent_session_internal(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartAgentSessionInput,
+        pty_sessions: Option<&PtySessionManager>,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
 
@@ -143,8 +166,30 @@ impl<'connection> AgentSessionService<'connection> {
         )?;
         let command_snapshot = profile.command.clone();
 
-        let mut child = spawn_agent_process(&profile, &working_dir, &log_path)?;
-        ensure_process_started(&mut child, &profile.command)?;
+        let pending_pty = if let Some(pty_sessions) = pty_sessions {
+            Some(
+                pty_sessions
+                    .spawn_pending(&PtySpawnRequest {
+                        command: profile.command.clone(),
+                        working_dir: working_dir.clone(),
+                        log_path: log_path.clone(),
+                        rows: 32,
+                        cols: 120,
+                        startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+                        startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+                    })
+                    .map_err(agent_session_start_error)?,
+            )
+        } else {
+            None
+        };
+        let mut child = if pending_pty.is_none() {
+            let mut child = spawn_agent_process(&profile, &working_dir, &log_path)?;
+            ensure_process_started(&mut child, &profile.command)?;
+            Some(child)
+        } else {
+            None
+        };
 
         let transaction = self
             .issue_repository
@@ -213,14 +258,26 @@ impl<'connection> AgentSessionService<'connection> {
 
         match transaction_result {
             Ok(result) => {
-                thread::spawn(move || {
-                    let _ = child.wait();
-                });
+                if let Some(pty_sessions) = pty_sessions {
+                    if let Some(pending_pty) = pending_pty {
+                        pty_sessions.register(result.session_id, pending_pty);
+                    }
+                } else if let Some(child) = child.take() {
+                    thread::spawn(move || {
+                        let mut child = child;
+                        let _ = child.wait();
+                    });
+                }
                 Ok(result)
             }
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                if let Some(pending_pty) = pending_pty {
+                    pending_pty.terminate();
+                }
+                if let Some(mut child) = child.take() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
                 Err(agent_session_transaction_error(error, input.issue_id))
             }
         }
@@ -298,6 +355,95 @@ impl<'connection> AgentSessionService<'connection> {
                     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             })
     }
+
+    pub fn read_terminal_snapshot(
+        &self,
+        project_id: i64,
+        session_id: i64,
+        max_bytes: usize,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ReadAgentSessionTerminalResult, CommandError> {
+        let session = self.find_project_session(project_id, session_id)?;
+        let snapshot = read_terminal_snapshot(Path::new(&session.log_path), max_bytes)
+            .map_err(agent_session_start_error)?;
+
+        Ok(ReadAgentSessionTerminalResult {
+            session_id,
+            snapshot,
+            is_active: pty_sessions.contains(session_id),
+        })
+    }
+
+    pub fn write_terminal_input(
+        &self,
+        input: WriteAgentSessionTerminalInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        self.find_project_session(input.project_id, input.session_id)?;
+        if input.data.is_empty() {
+            return Ok(());
+        }
+
+        pty_sessions
+            .write_input(input.session_id, &input.data)
+            .map_err(inactive_terminal_error)
+    }
+
+    pub fn resize_terminal(
+        &self,
+        input: ResizeAgentSessionTerminalInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        self.find_project_session(input.project_id, input.session_id)?;
+        pty_sessions
+            .resize(input.session_id, input.rows, input.cols)
+            .map_err(inactive_terminal_error)
+    }
+
+    fn find_project_session(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<crate::types::agent_session::AgentSessionRecord, CommandError> {
+        self.ensure_project_exists(project_id)?;
+        let session = self
+            .agent_session_repository
+            .find_by_id(session_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。")
+                    .with_detail(
+                        ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
+                    )
+            })?;
+
+        let issue_id = session.issue_id.ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "当前 Session 尚未关联到可交互 Issue。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+        })?;
+        let issue = self
+            .issue_repository
+            .find_by_id(issue_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+            })?;
+
+        if issue.project_id != project_id {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "Agent Session 不属于当前 Project。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+            .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id)));
+        }
+
+        Ok(session)
+    }
 }
 
 impl AgentSessionService<'_> {
@@ -339,6 +485,71 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .list_agent_sessions(project_id)
+    }
+
+    pub fn read_terminal_snapshot_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+        session_id: i64,
+        max_bytes: usize,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ReadAgentSessionTerminalResult, CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .read_terminal_snapshot(project_id, session_id, max_bytes, pty_sessions)
+    }
+
+    pub fn write_terminal_input_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: WriteAgentSessionTerminalInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .write_terminal_input(input, pty_sessions)
+    }
+
+    pub fn resize_terminal_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ResizeAgentSessionTerminalInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .resize_terminal(input, pty_sessions)
     }
 }
 
@@ -479,4 +690,12 @@ fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {
         "Agent 进程启动失败。",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+fn inactive_terminal_error(error: String) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::AgentSessionValidationFailed,
+        "当前 Session 没有活跃终端。",
+    )
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error))
 }

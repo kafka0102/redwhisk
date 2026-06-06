@@ -1,25 +1,30 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/2-5-show-agents-activity-session-list-and-basic-header.md
-story_key: 2-5-show-agents-activity-session-list-and-basic-header
+story_file: _bmad-output/implementation-artifacts/2-6-spike-codex-native-session-view-with-pty-xterm.md
+story_key: 2-6-spike-codex-native-session-view-with-pty-xterm
 story_status: done
-baseline_commit: b35687b
+baseline_commit: bf81423
 changed_files:
-  - _bmad-output/implementation-artifacts/2-5-show-agents-activity-session-list-and-basic-header.md
+  - _bmad-output/implementation-artifacts/2-6-spike-codex-native-session-view-with-pty-xterm.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src/app/activity-router.tsx
-  - src/app/app-shell.tsx
+  - package.json
+  - pnpm-lock.yaml
+  - spikes/embedded-codex-terminal.md
   - src/app/app.css
   - src/features/agents/agent-session-commands.ts
-  - src/features/agents/agents-activity.tsx
   - src/features/agents/agents-activity.test.tsx
-  - src/features/issues/issues-activity.tsx
-  - src/features/issues/issues-activity.test.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/codex-terminal.test.tsx
+  - src/features/agents/codex-terminal.tsx
   - src/shared/commands/command-client.test.ts
+  - src-tauri/Cargo.lock
+  - src-tauri/Cargo.toml
+  - src-tauri/src/agent/mod.rs
+  - src-tauri/src/agent/pty_session_manager.rs
+  - src-tauri/src/app_state.rs
   - src-tauri/src/commands/agent_session_commands.rs
   - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/db/agent_session_repository.rs
   - src-tauri/src/lib.rs
   - src-tauri/src/types/agent_session.rs
   - src-tauri/tests/agent_session.rs
@@ -37,6 +42,6 @@ validation_results:
   - pass: pnpm typecheck
   - pass: pnpm test
   - pass: cargo test --manifest-path src-tauri/Cargo.toml
-review_summary: review clean; no blocking findings, and remaining PTY/xterm or temporary-session work stays scoped to stories 2.6 and 3.x
+review_summary: review clean; no blocking findings, and remaining cross-restart recovery or lower-latency terminal streaming stays deferred to stories 2.7, 2.8 and Epic 4
 blocking_reason:
-updated_at: 2026-06-06T21:40:02+08:00
+updated_at: 2026-06-06T22:58:00+08:00

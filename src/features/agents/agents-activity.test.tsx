@@ -9,17 +9,38 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentsActivity } from "./agents-activity";
-import { listAgentSessions } from "./agent-session-commands";
+import {
+  listAgentSessions,
+  readAgentSessionTerminal,
+  resizeAgentSessionTerminal,
+  writeAgentSessionTerminal,
+} from "./agent-session-commands";
 
 vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
+  readAgentSessionTerminal: vi.fn(),
+  resizeAgentSessionTerminal: vi.fn(),
+  writeAgentSessionTerminal: vi.fn(),
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const readAgentSessionTerminalMock = vi.mocked(readAgentSessionTerminal);
+const resizeAgentSessionTerminalMock = vi.mocked(resizeAgentSessionTerminal);
+const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 
 describe("AgentsActivity", () => {
   beforeEach(() => {
     listAgentSessionsMock.mockReset();
+    readAgentSessionTerminalMock.mockReset();
+    resizeAgentSessionTerminalMock.mockReset();
+    writeAgentSessionTerminalMock.mockReset();
+    readAgentSessionTerminalMock.mockResolvedValue({
+      sessionId: 301,
+      snapshot: "",
+      isActive: true,
+    });
+    resizeAgentSessionTerminalMock.mockResolvedValue();
+    writeAgentSessionTerminalMock.mockResolvedValue();
   });
 
   it("renders running and completed groups and highlights the requested session", async () => {

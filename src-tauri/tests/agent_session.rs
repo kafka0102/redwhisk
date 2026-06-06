@@ -1,3 +1,6 @@
+use redwhisk_lib::agent::pty_session_manager::{
+    read_terminal_snapshot, PtySessionManager, PtySpawnRequest,
+};
 use redwhisk_lib::core::agent_session_service::AgentSessionService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
@@ -553,6 +556,44 @@ fn list_agent_sessions_rejects_missing_project() {
     assert_eq!(error.code, CommandErrorCode::ProjectNotFound);
 }
 
+#[test]
+fn pty_session_manager_forwards_input_resizes_and_persists_output() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let command = echo_stdin_command(temp_dir.path());
+    let log_path = temp_dir.path().join("pty-session.log");
+    let manager = PtySessionManager::new();
+
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register(77, pending);
+
+    manager
+        .write_input(77, "hello from pty\r")
+        .expect("write input");
+    manager.resize(77, 32, 120).expect("resize");
+
+    let mut snapshot = String::new();
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
+        if snapshot.contains("hello from pty") {
+            break;
+        }
+    }
+
+    assert!(snapshot.contains("hello from pty"));
+    manager.kill(77).expect("kill session");
+}
+
 fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection::Database {
     let database = DatabaseConfig::new(data_dir).open().expect("database");
     MigrationRunner::default()
@@ -677,6 +718,13 @@ fn insert_agent_profile_with_command(
 fn success_command(base_dir: &std::path::Path) -> std::path::PathBuf {
     let path = base_dir.join("success-agent.sh");
     std::fs::write(&path, "#!/bin/sh\nsleep 1\n").expect("write success script");
+    set_executable(&path);
+    path
+}
+
+fn echo_stdin_command(base_dir: &std::path::Path) -> std::path::PathBuf {
+    let path = base_dir.join("echo-stdin.sh");
+    std::fs::write(&path, "#!/bin/sh\ncat\n").expect("write echo stdin script");
     set_executable(&path);
     path
 }

@@ -1340,6 +1340,42 @@ button:focus-visible {
   line-height: 1.35;
 }
 
+.codex-terminal-shell {
+  display: grid;
+  gap: 10px;
+  min-height: 320px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(39, 93, 173, 0.08),
+      transparent 34%
+    ),
+    linear-gradient(180deg, #faf8f2 0%, #f4f1ea 100%);
+}
+
+.codex-terminal-shell__status {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-terminal {
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  background: #f8f6f1;
+}
+
+.codex-terminal .xterm {
+  height: 100%;
+  padding: 8px 10px;
+}
+
 .issue-dialog-overlay {
   position: fixed;
   inset: 0;
@@ -1642,7 +1678,9 @@ button:focus-visible {
   }
 
   .activity-surface--agents {
-    grid-template-columns: minmax(220px, var(--agents-sidebar-width, 248px)) 8px minmax(0, 1fr);
+    grid-template-columns:
+      minmax(220px, var(--agents-sidebar-width, 248px))
+      8px minmax(0, 1fr);
   }
 
   .issues-kanban {

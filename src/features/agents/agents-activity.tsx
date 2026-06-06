@@ -6,6 +6,7 @@ import {
   listAgentSessions,
   type AgentSessionListItem,
 } from "./agent-session-commands";
+import { CodexTerminal } from "./codex-terminal";
 import { toCommandError } from "../../shared/commands/command-error";
 
 interface AgentsActivityProps {
@@ -93,7 +94,10 @@ export function AgentsActivity({
       }
 
       const deltaX = event.clientX - dragState.startX;
-      const nextWidth = Math.max(200, Math.min(420, dragState.startWidth + deltaX));
+      const nextWidth = Math.max(
+        200,
+        Math.min(420, dragState.startWidth + deltaX),
+      );
       setSidebarWidth(nextWidth);
     }
 
@@ -256,9 +260,10 @@ export function AgentsActivity({
                   <dd>{formatLocalTimestamp(selectedSession.lastActiveAt)}</dd>
                 </div>
               </dl>
-              <p className="empty-state">
-                Codex Session terminal for this session arrives in Story 2.6.
-              </p>
+              <CodexTerminal
+                projectId={projectId}
+                sessionId={selectedSession.sessionId}
+              />
             </>
           ) : (
             <p className="empty-state">
