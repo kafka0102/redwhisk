@@ -17,8 +17,6 @@ import { toCommandError } from "../../shared/commands/command-error";
 
 interface IssuesActivityProps {
   projectId: number;
-  projectName: string;
-  projectPath: string;
 }
 
 interface IssueFormState {
@@ -57,11 +55,7 @@ const ISSUE_LANES: LaneDefinition[] = [
 
 type DialogMode = "create" | "edit";
 
-export function IssuesActivity({
-  projectId,
-  projectName,
-  projectPath,
-}: IssuesActivityProps) {
+export function IssuesActivity({ projectId }: IssuesActivityProps) {
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
@@ -614,11 +608,7 @@ export function IssuesActivity({
       {isRunDialogOpen && issueForRunPreview ? (
         <IssueRunDialog
           issue={issueForRunPreview}
-          project={{
-            id: projectId,
-            name: projectName,
-            path: projectPath,
-          }}
+          projectId={projectId}
           onClose={closeRunDialog}
         />
       ) : null}

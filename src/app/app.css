@@ -642,9 +642,9 @@ button:focus-visible {
 .settings-field {
   display: grid;
   gap: 6px;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .settings-input,
@@ -668,9 +668,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .settings-status {

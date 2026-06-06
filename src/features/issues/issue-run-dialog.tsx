@@ -7,20 +7,17 @@ import {
 } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import type { IssueRecord } from "./issue-commands";
-import {
-  buildRunPromptPreview,
-  type RunPromptProjectContext,
-} from "./run-prompt-builder";
+import { buildRunPromptPreview } from "./run-prompt-builder";
 
 interface IssueRunDialogProps {
   issue: Pick<IssueRecord, "id" | "title" | "description">;
-  project: RunPromptProjectContext & { id: number };
+  projectId: number;
   onClose: () => void;
 }
 
 export function IssueRunDialog({
   issue,
-  project,
+  projectId,
   onClose,
 }: IssueRunDialogProps) {
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
@@ -41,7 +38,7 @@ export function IssueRunDialog({
 
       try {
         const [projectResponse, globalResponse] = await Promise.all([
-          listAgentProfiles({ scope: "project", projectId: project.id }),
+          listAgentProfiles({ scope: "project", projectId }),
           listAgentProfiles({ scope: "global", projectId: null }),
         ]);
 
@@ -79,7 +76,7 @@ export function IssueRunDialog({
     return () => {
       isMounted = false;
     };
-  }, [project.id]);
+  }, [projectId]);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -98,11 +95,8 @@ export function IssueRunDialog({
     return buildRunPromptPreview({
       issue,
       profile: selectedProfile,
-      project,
     });
-  }, [issue, project, selectedProfile]);
-
-  const defaultArgsPreview = preview?.defaultArgs.join(" ") ?? "—";
+  }, [issue, selectedProfile]);
   const isStartDisabled =
     isLoadingProfiles || selectedProfile === null || preview === null;
 
@@ -187,26 +181,6 @@ export function IssueRunDialog({
                   </option>
                 ))}
               </select>
-            </label>
-
-            <label className="settings-field">
-              <span>Working directory</span>
-              <input
-                aria-label="Working directory"
-                className="settings-input"
-                readOnly
-                value={project.path}
-              />
-            </label>
-
-            <label className="settings-field">
-              <span>Default args</span>
-              <input
-                aria-label="Default args"
-                className="settings-input"
-                readOnly
-                value={defaultArgsPreview}
-              />
             </label>
 
             <label className="settings-field">

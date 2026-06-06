@@ -8,14 +8,12 @@ interface ActivityRouterProps {
   activeActivity: ActivityKey;
   projectId: number;
   projectName: string;
-  projectPath: string;
 }
 
 export function ActivityRouter({
   activeActivity,
   projectId,
   projectName,
-  projectPath,
 }: ActivityRouterProps) {
   if (activeActivity === "agents") {
     return <AgentsActivity />;
@@ -31,11 +29,5 @@ export function ActivityRouter({
     );
   }
 
-  return (
-    <IssuesActivity
-      projectId={projectId}
-      projectName={projectName}
-      projectPath={projectPath}
-    />
-  );
+  return <IssuesActivity projectId={projectId} />;
 }

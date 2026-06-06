@@ -445,13 +445,7 @@ describe("IssuesActivity", () => {
       code: "PROJECT_NOT_FOUND",
       message: "Project 不存在。",
     });
-    rerender(
-      <IssuesActivity
-        projectId={2}
-        projectName="Agents Lab"
-        projectPath="/workspace/agents-lab"
-      />,
-    );
+    rerender(<IssuesActivity projectId={2} />);
 
     expect(
       await screen.findByRole("status", { name: "Issues status" }),
@@ -481,13 +475,7 @@ describe("IssuesActivity", () => {
     );
     await user.type(screen.getByLabelText("Title"), "Late issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
-    rerender(
-      <IssuesActivity
-        projectId={2}
-        projectName="Agents Lab"
-        projectPath="/workspace/agents-lab"
-      />,
-    );
+    rerender(<IssuesActivity projectId={2} />);
     resolveCreate({
       id: 24,
       projectId: 1,
@@ -568,19 +556,19 @@ describe("IssuesActivity", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Run Dialog" });
     expect(within(dialog).getByLabelText("Agent profile")).toHaveValue("100");
-    expect(within(dialog).getByLabelText("Working directory")).toHaveValue(
-      "/workspace/redwhisk",
-    );
-    expect(within(dialog).getByLabelText("Default args")).toHaveValue(
-      "--full-auto --dangerous",
-    );
+    expect(
+      within(dialog).queryByLabelText("Working directory"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText("Default args"),
+    ).not.toBeInTheDocument();
     expect(
       (
         within(dialog).getByLabelText(
           "Final prompt preview",
         ) as HTMLTextAreaElement
       ).value,
-    ).toContain("Existing description");
+    ).toBe("Existing description");
     expect(within(dialog).getByText("Prompt sources")).toBeInTheDocument();
   });
 
@@ -636,13 +624,7 @@ describe("IssuesActivity", () => {
 });
 
 function renderIssuesActivity() {
-  return render(
-    <IssuesActivity
-      projectId={1}
-      projectName="RedWhisk"
-      projectPath="/workspace/redwhisk"
-    />,
-  );
+  return render(<IssuesActivity projectId={1} />);
 }
 
 function formatTestTimestamp(epochMilliseconds: number): string {
