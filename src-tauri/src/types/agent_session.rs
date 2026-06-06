@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::types::agent_profile::AgentType;
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartAgentSessionInput {
@@ -14,6 +16,27 @@ pub struct StartAgentSessionInput {
 pub struct StartAgentSessionResult {
     pub session_id: i64,
     pub issue_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionListResponse {
+    pub sessions: Vec<AgentSessionListItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionListItem {
+    pub session_id: i64,
+    pub issue_id: Option<i64>,
+    pub issue_title: Option<String>,
+    pub title: Option<String>,
+    pub agent_type: AgentType,
+    pub status: AgentSessionStatus,
+    pub attention: AgentSessionAttention,
+    pub last_active_at: i64,
+    pub started_at: i64,
+    pub closed_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -14,7 +14,9 @@ use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::AgentScope;
-use crate::types::agent_session::{StartAgentSessionInput, StartAgentSessionResult};
+use crate::types::agent_session::{
+    AgentSessionListItem, AgentSessionListResponse, StartAgentSessionInput, StartAgentSessionResult,
+};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
 use crate::types::issue_action::IssueActionType;
@@ -223,6 +225,79 @@ impl<'connection> AgentSessionService<'connection> {
             }
         }
     }
+
+    pub fn list_agent_sessions(
+        &self,
+        project_id: i64,
+    ) -> Result<AgentSessionListResponse, CommandError> {
+        self.ensure_project_exists(project_id)?;
+
+        let rows = self
+            .agent_session_repository
+            .list_by_project_id(project_id)
+            .map_err(agent_session_database_error)?;
+
+        let mut running_sessions = Vec::new();
+        let mut completed_sessions = Vec::new();
+
+        for row in rows {
+            match row.status {
+                crate::types::agent_session::AgentSessionStatus::Running => {
+                    running_sessions.push(row);
+                }
+                crate::types::agent_session::AgentSessionStatus::Closed
+                | crate::types::agent_session::AgentSessionStatus::Crashed
+                | crate::types::agent_session::AgentSessionStatus::Stopped => {
+                    completed_sessions.push(row);
+                }
+            }
+        }
+
+        running_sessions.sort_by(|left, right| {
+            right
+                .last_active_at
+                .cmp(&left.last_active_at)
+                .then_with(|| right.session_id.cmp(&left.session_id))
+        });
+        completed_sessions.sort_by(|left, right| {
+            right
+                .closed_at
+                .unwrap_or(right.last_active_at)
+                .cmp(&left.closed_at.unwrap_or(left.last_active_at))
+                .then_with(|| right.session_id.cmp(&left.session_id))
+        });
+        completed_sessions.truncate(20);
+
+        let sessions = running_sessions
+            .into_iter()
+            .chain(completed_sessions)
+            .map(|row| AgentSessionListItem {
+                session_id: row.session_id,
+                issue_id: row.issue_id,
+                issue_title: row.issue_title,
+                title: row.title,
+                agent_type: row.agent_type,
+                status: row.status,
+                attention: row.attention,
+                last_active_at: row.last_active_at,
+                started_at: row.started_at,
+                closed_at: row.closed_at,
+            })
+            .collect();
+
+        Ok(AgentSessionListResponse { sessions })
+    }
+
+    fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
+        self.project_repository
+            .find_by_id(project_id)
+            .map_err(agent_session_database_error)?
+            .map(|_| ())
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
+            })
+    }
 }
 
 impl AgentSessionService<'_> {
@@ -244,6 +319,26 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .start_agent_session(data_dir, input)
+    }
+
+    pub fn list_agent_sessions_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+    ) -> Result<AgentSessionListResponse, CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .list_agent_sessions(project_id)
     }
 }
 

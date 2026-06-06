@@ -19,6 +19,7 @@ import { toCommandError } from "../../shared/commands/command-error";
 interface IssuesActivityProps {
   projectId: number;
   onOpenAgentsActivity?: (sessionId: number) => void;
+  requestedIssueId?: number | null;
 }
 
 interface IssueFormState {
@@ -60,9 +61,12 @@ type DialogMode = "create" | "edit";
 export function IssuesActivity({
   projectId,
   onOpenAgentsActivity,
+  requestedIssueId = null,
 }: IssuesActivityProps) {
   const [issues, setIssues] = useState<IssueRecord[]>([]);
-  const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
+  const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
+    requestedIssueId,
+  );
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
   const [isRunDialogOpen, setIsRunDialogOpen] = useState(false);
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
@@ -114,7 +118,11 @@ export function IssuesActivity({
         }
 
         setIssues(response.issues);
-        setSelectedIssueId(response.issues[0]?.id ?? null);
+        setSelectedIssueId(
+          response.issues.find((issue) => issue.id === requestedIssueId)?.id ??
+            response.issues[0]?.id ??
+            null,
+        );
       } catch (error) {
         if (isMounted) {
           setErrorMessage(toCommandError(error).message);
@@ -131,7 +139,7 @@ export function IssuesActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, requestedIssueId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -385,7 +393,10 @@ export function IssuesActivity({
     runButtonRef.current?.focus();
   }
 
-  async function handleRunStarted(result: { issueId: number }) {
+  async function handleRunStarted(result: {
+    issueId: number;
+    sessionId?: number | null;
+  }) {
     setIsRunDialogOpen(false);
 
     try {
@@ -399,6 +410,13 @@ export function IssuesActivity({
     } catch (error) {
       if (activeProjectIdRef.current === projectId) {
         setErrorMessage(toCommandError(error).message);
+      }
+    } finally {
+      if (
+        activeProjectIdRef.current === projectId &&
+        result.sessionId != null
+      ) {
+        onOpenAgentsActivity?.(result.sessionId);
       }
     }
   }

@@ -8,6 +8,7 @@ import {
   openProject,
   openProjectWindow,
 } from "../../features/project/project-commands";
+import { listAgentSessions } from "../../features/agents/agent-session-commands";
 import { startAgentSession } from "../../features/issues/issue-commands";
 import {
   detectCodexCommand,
@@ -132,6 +133,45 @@ describe("command client", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("open_project_window", {
       input: { projectId: 1 },
+    });
+  });
+
+  it("invokes Rust Core through the list agent sessions command", async () => {
+    invokeMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_624_800_000,
+          startedAt: 1_780_624_800_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    await expect(listAgentSessions(1)).resolves.toEqual({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_624_800_000,
+          startedAt: 1_780_624_800_000,
+          closedAt: null,
+        },
+      ],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("list_agent_sessions", {
+      projectId: 1,
     });
   });
 

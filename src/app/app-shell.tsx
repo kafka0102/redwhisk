@@ -30,6 +30,7 @@ export function AppShell({
   const [activeAgentSessionId, setActiveAgentSessionId] = useState<
     number | null
   >(null);
+  const [requestedIssueId, setRequestedIssueId] = useState<number | null>(null);
 
   return (
     <div className="app-shell">
@@ -61,10 +62,16 @@ export function AppShell({
             activeAgentSessionId={activeAgentSessionId}
             onOpenAgentsActivity={(sessionId) => {
               setActiveAgentSessionId(sessionId);
+              setRequestedIssueId(null);
               setActiveActivity("agents");
+            }}
+            onOpenIssuesActivity={(issueId) => {
+              setRequestedIssueId(issueId);
+              setActiveActivity("issues");
             }}
             projectId={project.id}
             projectName={project.name}
+            requestedIssueId={requestedIssueId}
           />
         </div>
       </section>
