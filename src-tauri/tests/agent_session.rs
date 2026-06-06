@@ -233,6 +233,77 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
 }
 
 #[test]
+fn start_agent_session_rejects_second_session_for_same_issue() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo-duplicate");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        success_command(temp_dir.path()).to_string_lossy().as_ref(),
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let first_result = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+            },
+        )
+        .expect("first start should succeed");
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Retry snapshot".to_string(),
+            },
+        )
+        .expect_err("second start should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionAlreadyExists);
+    assert_eq!(error.message, "当前 Issue 已存在关联 Agent Session。");
+
+    let details = error.details.expect("details should exist");
+    assert!(details.iter().any(|detail| {
+        detail
+            == &redwhisk_lib::types::errors::ErrorDetail::new("Issue")
+                .with_value("issueId", issue_id)
+    }));
+    assert!(details.iter().any(|detail| {
+        detail
+            == &redwhisk_lib::types::errors::ErrorDetail::new("AgentSession")
+                .with_value("sessionId", first_result.session_id)
+                .with_value("status", "running")
+    }));
+
+    let issue_actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions");
+    assert_eq!(issue_actions.len(), 2);
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_issue_id(issue_id)
+        .expect("find session by issue")
+        .expect("session should still exist");
+    assert_eq!(session.id, first_result.session_id);
+}
+
+#[test]
 fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_start() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -284,6 +355,56 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
         .list_session_events(1)
         .expect("list session events");
     assert!(session_event_count.is_empty());
+}
+
+#[test]
+fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_error() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo-race");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        success_command(temp_dir.path()).to_string_lossy().as_ref(),
+    );
+    database
+        .connection
+        .execute_batch(
+            "CREATE TRIGGER force_agent_session_unique_violation
+             BEFORE INSERT ON agent_sessions
+             BEGIN
+               SELECT RAISE(FAIL, 'UNIQUE constraint failed: agent_sessions.issue_id');
+             END;",
+        )
+        .expect("create trigger");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+            },
+        )
+        .expect_err("insert-time unique violation should map to existing-session error");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionAlreadyExists);
+    assert_eq!(error.message, "当前 Issue 已存在关联 Agent Session。");
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue should exist");
+    assert_eq!(issue.status, IssueStatus::Backlog);
 }
 
 fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection::Database {

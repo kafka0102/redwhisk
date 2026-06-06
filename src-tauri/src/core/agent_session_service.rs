@@ -82,6 +82,26 @@ impl<'connection> AgentSessionService<'connection> {
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
         }
 
+        if let Some(existing_session) = self
+            .agent_session_repository
+            .find_by_issue_id(input.issue_id)
+            .map_err(agent_session_database_error)?
+        {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionAlreadyExists,
+                "当前 Issue 已存在关联 Agent Session。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+            .with_detail(
+                ErrorDetail::new("AgentSession")
+                    .with_value("sessionId", existing_session.id)
+                    .with_value(
+                        "status",
+                        format!("{:?}", existing_session.status).to_lowercase(),
+                    ),
+            ));
+        }
+
         if issue.status != IssueStatus::Backlog {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
@@ -92,19 +112,6 @@ impl<'connection> AgentSessionService<'connection> {
                 ErrorDetail::new("IssueStatus")
                     .with_value("status", format!("{:?}", issue.status).to_lowercase()),
             ));
-        }
-
-        if self
-            .agent_session_repository
-            .find_by_issue_id(input.issue_id)
-            .map_err(agent_session_database_error)?
-            .is_some()
-        {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "当前 Issue 已存在关联 Agent Session。",
-            )
-            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
         }
 
         let profile = self
@@ -212,7 +219,7 @@ impl<'connection> AgentSessionService<'connection> {
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                Err(agent_session_database_error(error))
+                Err(agent_session_transaction_error(error, input.issue_id))
             }
         }
     }
@@ -354,6 +361,21 @@ fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
         "Agent Session 启动失败。",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+fn agent_session_transaction_error(error: rusqlite::Error, issue_id: i64) -> CommandError {
+    if let rusqlite::Error::SqliteFailure(_, Some(message)) = &error {
+        if message.contains("UNIQUE constraint failed: agent_sessions.issue_id") {
+            return CommandError::new(
+                CommandErrorCode::AgentSessionAlreadyExists,
+                "当前 Issue 已存在关联 Agent Session。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+            .with_detail(ErrorDetail::new("Cause").with_value("message", message.clone()));
+        }
+    }
+
+    agent_session_database_error(error)
 }
 
 fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {

@@ -27,6 +27,9 @@ export function AppShell({
   projects,
 }: AppShellProps) {
   const [activeActivity, setActiveActivity] = useState<ActivityKey>("issues");
+  const [activeAgentSessionId, setActiveAgentSessionId] = useState<
+    number | null
+  >(null);
 
   return (
     <div className="app-shell">
@@ -55,6 +58,11 @@ export function AppShell({
         <div className="workbench__content">
           <ActivityRouter
             activeActivity={activeActivity}
+            activeAgentSessionId={activeAgentSessionId}
+            onOpenAgentsActivity={(sessionId) => {
+              setActiveAgentSessionId(sessionId);
+              setActiveActivity("agents");
+            }}
             projectId={project.id}
             projectName={project.name}
           />

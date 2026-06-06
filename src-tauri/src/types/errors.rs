@@ -16,6 +16,7 @@ pub enum CommandErrorCode {
     IssueNotFound,
     IssueValidationFailed,
     AgentSessionPersistenceFailed,
+    AgentSessionAlreadyExists,
     AgentSessionValidationFailed,
     AgentSessionStartFailed,
     AgentSessionStartNotReady,

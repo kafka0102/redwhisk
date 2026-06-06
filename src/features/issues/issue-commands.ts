@@ -1,6 +1,7 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
+export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 
 export interface IssueRecord {
   id: number;
@@ -8,6 +9,8 @@ export interface IssueRecord {
   title: string;
   description: string;
   status: IssueStatus;
+  linkedSessionId?: number | null;
+  linkedSessionStatus?: AgentSessionStatus | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -41,7 +44,7 @@ export interface StartAgentSessionInput {
 }
 
 export interface StartAgentSessionResult {
-  sessionId: number;
+  sessionId?: number | null;
   issueId: number;
 }
 

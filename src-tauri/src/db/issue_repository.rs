@@ -2,6 +2,28 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::types::issue::{IssueRecord, IssueStatus};
 
+const ISSUE_SELECT_COLUMNS: &str = "SELECT
+    issues.id,
+    issues.project_id,
+    issues.title,
+    issues.description,
+    issues.status,
+    (
+        SELECT agent_sessions.id
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+        LIMIT 1
+    ) AS linked_session_id,
+    (
+        SELECT agent_sessions.status
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+        LIMIT 1
+    ) AS linked_session_status,
+    issues.created_at,
+    issues.updated_at
+ FROM issues";
+
 pub struct IssueRepository<'connection> {
     connection: &'connection Connection,
 }
@@ -16,12 +38,11 @@ impl<'connection> IssueRepository<'connection> {
     }
 
     pub fn list_by_project_id(&self, project_id: i64) -> rusqlite::Result<Vec<IssueRecord>> {
-        let mut statement = self.connection.prepare(
-            "SELECT id, project_id, title, description, status, created_at, updated_at
-             FROM issues
-             WHERE project_id = ?1
-             ORDER BY updated_at DESC, created_at DESC, id DESC",
-        )?;
+        let mut statement = self.connection.prepare(&format!(
+            "{ISSUE_SELECT_COLUMNS}
+             WHERE issues.project_id = ?1
+             ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC"
+        ))?;
 
         let issues = statement
             .query_map(params![project_id], issue_from_row)?
@@ -33,9 +54,7 @@ impl<'connection> IssueRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<IssueRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, title, description, status, created_at, updated_at
-                 FROM issues
-                 WHERE id = ?1",
+                &format!("{ISSUE_SELECT_COLUMNS} WHERE issues.id = ?1"),
                 params![id],
                 issue_from_row,
             )
@@ -146,9 +165,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<IssueRecord>> {
     connection
         .query_row(
-            "SELECT id, project_id, title, description, status, created_at, updated_at
-             FROM issues
-             WHERE id = ?1",
+            &format!("{ISSUE_SELECT_COLUMNS} WHERE issues.id = ?1"),
             params![id],
             issue_from_row,
         )
@@ -162,9 +179,26 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
         title: row.get(2)?,
         description: row.get(3)?,
         status: issue_status_from_str(&row.get::<_, String>(4)?)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
+        linked_session_id: row.get(5)?,
+        linked_session_status: row
+            .get::<_, Option<String>>(6)?
+            .map(|value| agent_session_status_from_str(&value))
+            .transpose()?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
+}
+
+fn agent_session_status_from_str(
+    value: &str,
+) -> rusqlite::Result<crate::types::agent_session::AgentSessionStatus> {
+    match value {
+        "running" => Ok(crate::types::agent_session::AgentSessionStatus::Running),
+        "closed" => Ok(crate::types::agent_session::AgentSessionStatus::Closed),
+        "crashed" => Ok(crate::types::agent_session::AgentSessionStatus::Crashed),
+        "stopped" => Ok(crate::types::agent_session::AgentSessionStatus::Stopped),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
 }
 
 fn issue_status_from_str(value: &str) -> rusqlite::Result<IssueStatus> {
