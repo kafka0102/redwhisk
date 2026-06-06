@@ -1,7 +1,6 @@
-import { LayoutGrid, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutGrid, Plus } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   listAgentSessions,
   type AgentSessionListItem,
@@ -15,11 +14,15 @@ interface AgentsActivityProps {
   projectId: number;
 }
 
+type DragPane = "info" | "sidebar";
+
 export function AgentsActivity({
   activeSessionId,
   onOpenIssuesActivity,
   projectId,
 }: AgentsActivityProps) {
+  const infoPaneMinWidth = 40;
+  const infoPaneMaxWidth = 220;
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
@@ -27,7 +30,10 @@ export function AgentsActivity({
     number | null
   >(null);
   const [sidebarWidth, setSidebarWidth] = useState(248);
+  const [infoPaneWidth, setInfoPaneWidth] = useState(infoPaneMinWidth);
+  const [isInfoPaneCollapsed, setIsInfoPaneCollapsed] = useState(false);
   const dragStateRef = useRef<{
+    pane: DragPane;
     startWidth: number;
     startX: number;
   } | null>(null);
@@ -85,6 +91,13 @@ export function AgentsActivity({
 
   const selectedSession =
     sessions.find((session) => session.sessionId === selectedSessionId) ?? null;
+  const linkedIssue =
+    selectedSession?.issueId != null && selectedSession.issueTitle
+      ? {
+          issueId: selectedSession.issueId,
+          issueTitle: selectedSession.issueTitle,
+        }
+      : null;
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
@@ -93,12 +106,26 @@ export function AgentsActivity({
         return;
       }
 
-      const deltaX = event.clientX - dragState.startX;
-      const nextWidth = Math.max(
-        200,
-        Math.min(420, dragState.startWidth + deltaX),
+      if (dragState.pane === "sidebar") {
+        const deltaX = event.clientX - dragState.startX;
+        const nextWidth = Math.max(
+          200,
+          Math.min(420, dragState.startWidth + deltaX),
+        );
+        setSidebarWidth(nextWidth);
+        return;
+      }
+
+      const nextWidth = dragState.startWidth + dragState.startX - event.clientX;
+      if (nextWidth <= 0) {
+        setIsInfoPaneCollapsed(true);
+        return;
+      }
+
+      setIsInfoPaneCollapsed(false);
+      setInfoPaneWidth(
+        Math.max(infoPaneMinWidth, Math.min(infoPaneMaxWidth, nextWidth)),
       );
-      setSidebarWidth(nextWidth);
     }
 
     function handleMouseUp() {
@@ -124,6 +151,9 @@ export function AgentsActivity({
       style={
         {
           "--agents-sidebar-width": `${sidebarWidth}px`,
+          "--agents-info-pane-width":
+            linkedIssue && !isInfoPaneCollapsed ? `${infoPaneWidth}px` : "0px",
+          "--agents-info-splitter-width": linkedIssue ? "8px" : "0px",
         } as CSSProperties
       }
     >
@@ -199,6 +229,7 @@ export function AgentsActivity({
         tabIndex={0}
         onMouseDown={(event) => {
           dragStateRef.current = {
+            pane: "sidebar",
             startWidth: sidebarWidth,
             startX: event.clientX,
           };
@@ -219,52 +250,12 @@ export function AgentsActivity({
       />
 
       <section className="agents-workspace" aria-label="Session workspace">
-        {selectedSession &&
-        selectedSession.issueId != null &&
-        selectedSession.issueTitle ? (
-          <header className="agents-header">
-            <div>
-              <p className="eyebrow">Linked Issue</p>
-              <h3>{selectedSession.issueTitle}</h3>
-            </div>
-            <Button
-              className="issues-button"
-              type="button"
-              variant="outline"
-              disabled={!onOpenIssuesActivity}
-              onClick={() => onOpenIssuesActivity?.(selectedSession.issueId!)}
-            >
-              Open in Issues
-            </Button>
-          </header>
-        ) : null}
-
-        <div className="agents-terminal-placeholder">
+        <div className="agents-terminal-pane">
           {selectedSession ? (
-            <>
-              <div className="agents-terminal-placeholder__meta">
-                <p className="eyebrow">Selected Session</p>
-                <h3>{formatSessionTitle(selectedSession)}</h3>
-              </div>
-              <dl className="agents-terminal-placeholder__facts">
-                <div>
-                  <dt>Agent</dt>
-                  <dd>{formatAgentType(selectedSession.agentType)}</dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{formatSessionStatus(selectedSession.status)}</dd>
-                </div>
-                <div>
-                  <dt>Last active</dt>
-                  <dd>{formatLocalTimestamp(selectedSession.lastActiveAt)}</dd>
-                </div>
-              </dl>
-              <CodexTerminal
-                projectId={projectId}
-                sessionId={selectedSession.sessionId}
-              />
-            </>
+            <CodexTerminal
+              projectId={projectId}
+              sessionId={selectedSession.sessionId}
+            />
           ) : (
             <p className="empty-state">
               Agent sessions will appear here after a session has been started
@@ -272,6 +263,105 @@ export function AgentsActivity({
             </p>
           )}
         </div>
+
+        {linkedIssue ? (
+          <>
+            <div
+              aria-label="Resize session info"
+              aria-orientation="vertical"
+              aria-valuemax={infoPaneMaxWidth}
+              aria-valuemin={0}
+              aria-valuenow={isInfoPaneCollapsed ? 0 : infoPaneWidth}
+              className="agents-info-splitter"
+              role="separator"
+              tabIndex={0}
+              onMouseDown={(event) => {
+                dragStateRef.current = {
+                  pane: "info",
+                  startWidth: isInfoPaneCollapsed ? 0 : infoPaneWidth,
+                  startX: event.clientX,
+                };
+                window.document.body.style.cursor = "col-resize";
+                window.document.body.style.userSelect = "none";
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  setIsInfoPaneCollapsed(false);
+                  setInfoPaneWidth((currentWidth) =>
+                    Math.min(infoPaneMaxWidth, currentWidth + 16),
+                  );
+                }
+
+                if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  if (isInfoPaneCollapsed) {
+                    return;
+                  }
+
+                  setInfoPaneWidth((currentWidth) => {
+                    if (currentWidth <= infoPaneMinWidth) {
+                      setIsInfoPaneCollapsed(true);
+                      return infoPaneMinWidth;
+                    }
+
+                    const nextWidth = Math.max(0, currentWidth - 16);
+                    if (nextWidth === 0) {
+                      setIsInfoPaneCollapsed(true);
+                      return infoPaneMinWidth;
+                    }
+
+                    return Math.max(infoPaneMinWidth, nextWidth);
+                  });
+                }
+              }}
+            >
+              <button
+                aria-label={
+                  isInfoPaneCollapsed
+                    ? "Expand session info"
+                    : "Collapse session info"
+                }
+                className="agents-info-toggle"
+                type="button"
+                onClick={() =>
+                  setIsInfoPaneCollapsed((currentState) => !currentState)
+                }
+              >
+                {isInfoPaneCollapsed ? (
+                  <ChevronLeft aria-hidden="true" size={14} strokeWidth={1.8} />
+                ) : (
+                  <ChevronRight
+                    aria-hidden="true"
+                    size={14}
+                    strokeWidth={1.8}
+                  />
+                )}
+              </button>
+            </div>
+
+            {!isInfoPaneCollapsed ? (
+              <aside className="agents-info-pane" aria-label="Session links">
+                <button
+                  className="agents-info-link"
+                  disabled={!onOpenIssuesActivity}
+                  type="button"
+                  onClick={() => onOpenIssuesActivity?.(linkedIssue.issueId)}
+                >
+                  Link
+                </button>
+                <button
+                  className="agents-info-link"
+                  disabled={!onOpenIssuesActivity}
+                  type="button"
+                  onClick={() => onOpenIssuesActivity?.(linkedIssue.issueId)}
+                >
+                  {linkedIssue.issueTitle}
+                </button>
+              </aside>
+            ) : null}
+          </>
+        ) : null}
       </section>
     </main>
   );
@@ -351,8 +441,4 @@ function formatSessionStatus(status: AgentSessionListItem["status"]): string {
     default:
       return status;
   }
-}
-
-function formatLocalTimestamp(epochMilliseconds: number): string {
-  return new Date(epochMilliseconds).toLocaleString();
 }

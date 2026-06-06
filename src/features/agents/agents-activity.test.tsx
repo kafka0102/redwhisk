@@ -43,7 +43,7 @@ describe("AgentsActivity", () => {
     writeAgentSessionTerminalMock.mockResolvedValue();
   });
 
-  it("renders running and completed groups and highlights the requested session", async () => {
+  it("renders groups, terminal workspace and info pane for the selected session", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -90,9 +90,6 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Agents" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Running and completed sessions for this project."),
-    ).not.toBeInTheDocument();
 
     const runningGroup = await screen.findByRole("region", {
       name: "Running sessions",
@@ -106,20 +103,24 @@ describe("AgentsActivity", () => {
       within(completedGroup).getByText("Completed(1)"),
     ).toBeInTheDocument();
     expect(
-      within(runningGroup).getByRole("button", { name: /Running issue/i }),
-    ).toBeInTheDocument();
-    expect(
       within(runningGroup).getByRole("button", { name: /Existing issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      within(completedGroup).getByRole("button", { name: /Closed issue/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Open in Issues" }),
-    ).toBeDisabled();
+    expect(screen.queryByText("Linked Issue")).not.toBeInTheDocument();
+    expect(screen.queryByText("Selected Session")).not.toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize session list" }),
     ).toHaveAttribute("aria-valuenow", "248");
+    expect(
+      screen.getByRole("separator", { name: "Resize session info" }),
+    ).toHaveAttribute("aria-valuenow", "40");
+    expect(
+      screen.getByRole("complementary", { name: "Session links" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Existing issue" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
   it("resizes the session list with the keyboard separator control", async () => {
@@ -219,15 +220,18 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={null} projectId={1} />);
 
+    const runningGroup = await screen.findByRole("region", {
+      name: "Running sessions",
+    });
     expect(
-      await screen.findByRole("button", { name: "Open in Issues" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: /Newest running issue/i }),
+      within(runningGroup).getByRole("button", {
+        name: /Newest running issue/i,
+      }),
     ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Link" })).toBeDisabled();
   });
 
-  it("hides the linked issue header when the selected session has no issue", async () => {
+  it("hides the info pane when the selected session has no linked issue", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -250,13 +254,15 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("button", { name: /Temporary session/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Linked Issue")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Open in Issues" }),
+      screen.queryByRole("separator", { name: "Resize session info" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Session links" }),
     ).not.toBeInTheDocument();
   });
 
-  it("opens the linked issue context through the header action", async () => {
+  it("opens the linked issue context through the info pane actions", async () => {
     const user = userEvent.setup();
     const onOpenIssuesActivity = vi.fn();
     listAgentSessionsMock.mockResolvedValue({
@@ -284,11 +290,107 @@ describe("AgentsActivity", () => {
       />,
     );
 
+    await user.click(await screen.findByRole("button", { name: "Link" }));
+    await user.click(screen.getByRole("button", { name: "Existing issue" }));
+
+    expect(onOpenIssuesActivity).toHaveBeenNthCalledWith(1, 20);
+    expect(onOpenIssuesActivity).toHaveBeenNthCalledWith(2, 20);
+  });
+
+  it("collapses and expands the info pane from the splitter toggle", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    const toggle = await screen.findByRole("button", {
+      name: "Collapse session info",
+    });
+    const separator = screen.getByRole("separator", {
+      name: "Resize session info",
+    });
+
+    await user.click(toggle);
+
+    expect(
+      screen.queryByRole("complementary", { name: "Session links" }),
+    ).not.toBeInTheDocument();
+    expect(separator).toHaveAttribute("aria-valuenow", "0");
+    expect(
+      screen.getByRole("button", { name: "Expand session info" }),
+    ).toBeInTheDocument();
+
     await user.click(
-      await screen.findByRole("button", { name: "Open in Issues" }),
+      screen.getByRole("button", { name: "Expand session info" }),
     );
 
-    expect(onOpenIssuesActivity).toHaveBeenCalledWith(20);
+    expect(
+      screen.getByRole("complementary", { name: "Session links" }),
+    ).toBeInTheDocument();
+    expect(separator).toHaveAttribute("aria-valuenow", "40");
+  });
+
+  it("resizes the info pane with keyboard and dragging interactions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    const separator = await screen.findByRole("separator", {
+      name: "Resize session info",
+    });
+
+    separator.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(separator).toHaveAttribute("aria-valuenow", "56");
+
+    await user.keyboard("{ArrowRight}");
+    expect(separator).toHaveAttribute("aria-valuenow", "40");
+
+    await user.keyboard("{ArrowRight}");
+    expect(separator).toHaveAttribute("aria-valuenow", "0");
+    expect(
+      screen.queryByRole("complementary", { name: "Session links" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(separator, { clientX: 300 });
+    fireEvent.mouseMove(window, { clientX: 220 });
+    expect(separator).toHaveAttribute("aria-valuenow", "80");
+    expect(
+      screen.getByRole("complementary", { name: "Session links" }),
+    ).toBeInTheDocument();
+
+    fireEvent.mouseUp(window);
   });
 
   it("shows a factual empty state when no sessions exist", async () => {
