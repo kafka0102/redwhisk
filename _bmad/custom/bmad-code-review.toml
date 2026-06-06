@@ -1,8 +1,5 @@
 [workflow]
 
-# Project default: dev workflow should enter code review automatically after dev-story.
-review_policy = "automatic"
-
 persistent_facts = [
   "file:{project-root}/AGENTS.md",
   "file:{project-root}/docs/standards/shared/git-workflow.md",
