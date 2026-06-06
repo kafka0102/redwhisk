@@ -16,6 +16,27 @@ vi.mock("./issue-commands", () => ({
   updateIssue: vi.fn(),
 }));
 
+vi.mock("./issue-description-editor", () => ({
+  IssueDescriptionEditor: ({
+    ariaLabel,
+    onChange,
+    placeholder,
+    value,
+  }: {
+    ariaLabel: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    value: string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
 const updateIssueMock = vi.mocked(updateIssue);
@@ -149,9 +170,7 @@ describe("IssuesActivity", () => {
       "Existing description",
     );
     expect(within(dialog).getByPlaceholderText("Issue title")).toBeInTheDocument();
-    expect(
-      within(dialog).getByPlaceholderText("Describe the task"),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Description")).toBeInTheDocument();
     expect(
       within(dialog).queryByLabelText(/status|updated/i, {
         selector: "input, textarea, select",
@@ -317,6 +336,8 @@ describe("IssuesActivity", () => {
     );
     await user.clear(screen.getByLabelText("Title"));
     await user.type(screen.getByLabelText("Title"), "Updated issue");
+    await user.clear(screen.getByLabelText("Description"));
+    await user.type(screen.getByLabelText("Description"), "Updated description");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -324,7 +345,7 @@ describe("IssuesActivity", () => {
         projectId: 1,
         issueId: 20,
         title: "Updated issue",
-        description: "Existing description",
+        description: "Updated description",
       }),
     );
     expect(

@@ -515,7 +515,7 @@ button:focus-visible {
 }
 
 .issue-field input,
-.issue-field textarea {
+.issue-description-editor {
   width: 100%;
   min-width: 0;
   border: 1px solid transparent;
@@ -533,15 +533,61 @@ button:focus-visible {
   padding: 6px 8px;
 }
 
-.issue-field textarea {
-  resize: vertical;
+.issue-description-editor {
+  position: relative;
+  min-height: 120px;
+  padding: 0;
+}
+
+.issue-description-editor__placeholder {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.issue-description-editor[data-empty="true"]:focus-within
+  .issue-description-editor__placeholder,
+.issue-description-editor[data-empty="true"] .issue-description-editor__content,
+.issue-description-editor[data-empty="true"] .ProseMirror {
+  position: relative;
+  z-index: 1;
+}
+
+.issue-description-editor:not([data-empty="true"])
+  .issue-description-editor__placeholder {
+  display: none;
+}
+
+.issue-description-editor__content {
+  min-width: 0;
   min-height: 120px;
   padding: 8px;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
   line-height: 1.45;
+  text-transform: none;
+}
+
+.issue-description-editor__content {
+  min-height: 104px;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.issue-description-editor__content p {
+  margin: 0;
 }
 
 .issue-field input:focus,
-.issue-field textarea:focus {
+.issue-description-editor:focus-within,
+.issue-description-editor__content:focus {
   outline: none;
   border-color: transparent;
   box-shadow: none;

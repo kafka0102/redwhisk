@@ -37,6 +37,27 @@ vi.mock("../features/issues/issue-commands", () => ({
   updateIssue: vi.fn(),
 }));
 
+vi.mock("../features/issues/issue-description-editor", () => ({
+  IssueDescriptionEditor: ({
+    ariaLabel,
+    onChange,
+    placeholder,
+    value,
+  }: {
+    ariaLabel: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    value: string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
 const { open } = await import("@tauri-apps/plugin-dialog");
 const openDialogMock = vi.mocked(open);
 const createIssueMock = vi.mocked(createIssue);
@@ -277,7 +298,7 @@ describe("App project entry", () => {
     );
     await user.click(await screen.findByRole("button", { name: "New Issue" }));
     expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Describe the task")).toBeInTheDocument();
+    expect(screen.getByLabelText("Description")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.type(screen.getByLabelText("Description"), "small task shape");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
