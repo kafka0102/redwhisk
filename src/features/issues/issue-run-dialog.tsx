@@ -6,7 +6,7 @@ import {
   type AgentProfileRecord,
 } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
-import type { IssueRecord } from "./issue-commands";
+import { startAgentSession, type IssueRecord } from "./issue-commands";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
 interface IssueRunDialogProps {
@@ -25,6 +25,9 @@ export function IssueRunDialog({
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
     null,
   );
+  const [promptDraft, setPromptDraft] = useState("");
+  const [hasEditedPrompt, setHasEditedPrompt] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -50,8 +53,18 @@ export function IssueRunDialog({
           ...projectResponse.profiles,
           ...globalResponse.profiles,
         ];
+        const initialProfile = mergedProfiles[0] ?? null;
         setProfiles(mergedProfiles);
-        setSelectedProfileId(mergedProfiles[0]?.id ?? null);
+        setSelectedProfileId(initialProfile?.id ?? null);
+        setHasEditedPrompt(false);
+        setPromptDraft(
+          initialProfile
+            ? buildRunPromptPreview({
+                issue,
+                profile: initialProfile,
+              }).finalPrompt
+            : "",
+        );
 
         if (mergedProfiles.length === 0) {
           setStatusMessage(
@@ -76,7 +89,7 @@ export function IssueRunDialog({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [issue, projectId]);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -97,8 +110,13 @@ export function IssueRunDialog({
       profile: selectedProfile,
     });
   }, [issue, selectedProfile]);
+
   const isStartDisabled =
-    isLoadingProfiles || selectedProfile === null || preview === null;
+    isLoadingProfiles ||
+    isStarting ||
+    selectedProfile === null ||
+    preview === null ||
+    promptDraft.trim().length === 0;
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -129,6 +147,28 @@ export function IssueRunDialog({
     if (!event.shiftKey && activeElement === lastElement) {
       event.preventDefault();
       firstElement.focus();
+    }
+  }
+
+  async function handleStart() {
+    if (!selectedProfile) {
+      return;
+    }
+
+    setIsStarting(true);
+    setStatusMessage(null);
+
+    try {
+      await startAgentSession({
+        projectId,
+        issueId: issue.id,
+        agentProfileId: selectedProfile.id,
+        promptSnapshot: promptDraft,
+      });
+    } catch (error) {
+      setStatusMessage(toCommandError(error).message);
+    } finally {
+      setIsStarting(false);
     }
   }
 
@@ -168,11 +208,28 @@ export function IssueRunDialog({
               <select
                 aria-label="Agent profile"
                 className="settings-input"
-                disabled={isLoadingProfiles || profiles.length === 0}
-                value={selectedProfileId ?? ""}
-                onChange={(event) =>
-                  setSelectedProfileId(Number(event.target.value))
+                disabled={
+                  isLoadingProfiles || isStarting || profiles.length === 0
                 }
+                value={selectedProfileId ?? ""}
+                onChange={(event) => {
+                  const nextProfileId = Number(event.target.value);
+                  const nextProfile =
+                    profiles.find((profile) => profile.id === nextProfileId) ??
+                    null;
+
+                  setSelectedProfileId(nextProfileId);
+                  if (!hasEditedPrompt) {
+                    setPromptDraft(
+                      nextProfile
+                        ? buildRunPromptPreview({
+                            issue,
+                            profile: nextProfile,
+                          }).finalPrompt
+                        : "",
+                    );
+                  }
+                }}
               >
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -184,13 +241,16 @@ export function IssueRunDialog({
             </label>
 
             <label className="settings-field">
-              <span>Final prompt preview</span>
+              <span>Final prompt</span>
               <textarea
-                aria-label="Final prompt preview"
+                aria-label="Final prompt"
                 className="settings-textarea"
-                readOnly
                 rows={12}
-                value={preview?.finalPrompt ?? ""}
+                value={promptDraft}
+                onChange={(event) => {
+                  setPromptDraft(event.target.value);
+                  setHasEditedPrompt(true);
+                }}
               />
             </label>
 
@@ -239,6 +299,7 @@ export function IssueRunDialog({
             className="issues-button"
             type="button"
             variant="outline"
+            disabled={isStarting}
             onClick={onClose}
           >
             Cancel
@@ -247,11 +308,7 @@ export function IssueRunDialog({
             className="issues-button issues-button--primary"
             type="button"
             disabled={isStartDisabled}
-            onClick={() =>
-              setStatusMessage(
-                "Start will be connected in Story 2.2 / 2.3. This story only previews the final prompt.",
-              )
-            }
+            onClick={() => void handleStart()}
           >
             Start
           </Button>
