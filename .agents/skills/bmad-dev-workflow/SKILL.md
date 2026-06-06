@@ -93,6 +93,13 @@ At every phase boundary:
 
 To execute a child skill, load that skill's `SKILL.md` and follow its activation and workflow exactly as if the user invoked it directly. The parent workflow supplies the target story, handoff fields, and intent; the child skill remains authoritative for implementation, validation, review menus, and HALT conditions.
 
+Project-level rules loaded from `AGENTS.md` and `docs/standards/shared/git-workflow.md` override any weaker default in a child skill. In this workflow that override is mandatory for:
+
+- communication language in delegation and workflow-generated notes
+- validation minimums and required command recording
+- git staging scope and pre-commit verification order
+- commit message format and issue trailers
+
 ## Workflow
 
 ### 1. Preflight
@@ -104,7 +111,7 @@ Inspect `sprint_status` if it exists and determine the target story:
 - Else if a `backlog` story exists and `{workflow.auto_create_story}` is true, run story creation.
 - Else HALT and ask the user to choose a story or run sprint planning.
 
-Record initial git state and current `HEAD` short SHA if git is available. If unrelated dirty changes are visible, note them and continue; final commit staging must include only files directly related to this workflow.
+Record initial git state and current `HEAD` short SHA if git is available. If unrelated dirty changes are visible, note them and continue; final commit staging must include only files directly related to this workflow. Capture enough detail to distinguish workflow-related files from unrelated dirty files during Finalize.
 
 Write `{handoff_file}` with `phase: preflight`.
 
@@ -128,6 +135,8 @@ After it finishes, reload only the story file metadata and Dev Agent Record sect
 - `baseline_commit`
 - changed file list
 - validation commands and pass/fail results
+
+Require `validation_commands` to contain the exact commands actually run, one command per entry. Require `validation_results` to state pass/fail or skipped with reason for each command. If the child skill reported only prose such as "validated" or "tests passed" without command strings, treat the phase as blocked and do not continue to review or commit.
 
 Update `{handoff_file}` with `phase: dev-complete`. If story status is not `review`, set `phase: blocked`, record `blocking_reason`, and HALT.
 
@@ -180,6 +189,30 @@ Verify story status and sprint status agree. Summarize:
 - review result
 - unresolved findings or deferred work
 
-If `{workflow.auto_commit}` is true, create one git commit after required validation using only files directly related to this workflow. If required validation cannot be run, do not claim it ran; record what was skipped, why, and the risk. If unrelated dirty changes prevent safe staging, HALT and ask the user how to proceed.
+Before any git commit, enforce this exact order with no reordering:
+
+1. confirm implementation and review work for the story are complete
+2. verify required validation already ran, or run the missing required validation now
+3. inspect `git status --short` and the changed file list from the story artifacts
+4. stage only files directly related to this workflow
+5. inspect staged diff to confirm no unrelated changes are included
+6. create one git commit
+
+Required validation must follow project rules, not child-skill defaults:
+
+- if TypeScript or JavaScript source changed, run the affected package `lint` and `typecheck`
+- if runtime behavior, branch logic, data flow, rendering logic, or test-dependent implementation changed, also run the affected `test`
+- if formatting is configured for the affected package, run it before lint/typecheck/test
+- every validation command must be recorded verbatim; unrun commands must never be claimed as completed
+
+Commit creation rules are mandatory:
+
+- commit only the files directly related to the completed story, even when unrelated dirty files exist elsewhere in the worktree
+- include workflow artifacts only when they were directly updated by this story and are required for traceability, such as the story file, sprint status, deferred-work file, or handoff file
+- if a file in the changed list also contains unrelated edits that cannot be safely separated, HALT instead of committing a mixed diff
+- commit message subject must use Chinese Conventional Commits: `<type>: <简要描述>`
+- when the story maps to a GitHub/GitLab issue or work item, append `Refs: #<issue-id>` as the final trailer line in the commit body
+
+If required validation cannot be run, do not claim it ran; record what was skipped, why, and the risk. If unrelated dirty changes cannot be safely isolated from workflow changes, HALT and ask the user how to proceed.
 
 Run `{workflow.on_complete}` if non-empty. Update `{handoff_file}` with `phase: complete`.

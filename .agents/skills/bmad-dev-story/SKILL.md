@@ -84,6 +84,7 @@ Activation is complete. If `activation_steps_prepend` or `activation_steps_appen
     other instruction.</critical>
   <critical>Do NOT schedule a "next session" or request review pauses unless a HALT condition applies. Only Step 9 decides completion.</critical>
   <critical>User skill level ({user_skill_level}) affects conversation style ONLY, not code updates.</critical>
+  <critical>Project rules loaded from `AGENTS.md`, `docs/standards/shared/git-workflow.md`, and `docs/standards/shared/coding-style.md` override any weaker default in this workflow.</critical>
 
   <step n="1" goal="Find next ready story and load it" tag="sprint-status">
     <check if="{{story_path}} is provided">
@@ -348,10 +349,14 @@ Activation is complete. If `activation_steps_prepend` or `activation_steps_appen
   </step>
 
   <step n="7" goal="Run validations and tests">
-    <action>Determine how to run tests for this repo (infer test framework from project structure)</action>
-    <action>Run all existing tests to ensure no regressions</action>
-    <action>Run the new tests to verify implementation correctness</action>
-    <action>Run linting and code quality checks if configured in project</action>
+    <action>Determine the exact validation command set for this repo and this story before running anything. Record the planned commands in Dev Agent Record using exact shell command strings, one command per entry.</action>
+    <action>When formatting is configured for the affected package, run formatting before lint, typecheck, and test.</action>
+    <action>If TypeScript or JavaScript source changed, run the affected package `lint` and `typecheck` even if the story could appear complete without them.</action>
+    <action>If runtime behavior, branch logic, data flow, rendering logic, or test-dependent implementation changed, run the affected `test` commands in addition to `lint` and `typecheck`.</action>
+    <action>Run all existing regression tests required by the affected scope to ensure no regressions.</action>
+    <action>Run the new or updated tests that verify this implementation.</action>
+    <action>Run any additional code quality checks explicitly required by project configuration.</action>
+    <action>For every validation command, record the actual result in Dev Agent Record as passed, failed, or skipped. For skipped commands, include the concrete reason and risk.</action>
     <action>Validate implementation meets ALL story acceptance criteria; enforce quantitative thresholds explicitly</action>
     <action if="regression tests fail">STOP and fix before continuing - identify breaking changes immediately</action>
     <action if="new tests fail">STOP and fix before continuing - ensure implementation correctness</action>
@@ -385,7 +390,7 @@ Activation is complete. If `activation_steps_prepend` or `activation_steps_appen
     <check if="ALL validation gates pass AND tests ACTUALLY exist and pass">
       <action>ONLY THEN mark the task (and subtasks) checkbox with [x]</action>
       <action>Update File List section with ALL new, modified, or deleted files (paths relative to repo root)</action>
-      <action>Add completion notes to Dev Agent Record summarizing what was ACTUALLY implemented and tested</action>
+      <action>Add completion notes to Dev Agent Record summarizing what was ACTUALLY implemented and tested, citing the exact validation commands that ran</action>
     </check>
 
     <check if="ANY validation fails">
@@ -411,6 +416,7 @@ Activation is complete. If `activation_steps_prepend` or `activation_steps_appen
   <step n="9" goal="Story completion and mark for review" tag="sprint-status">
     <action>Verify ALL tasks and subtasks are marked [x] (re-scan the story document now)</action>
     <action>Run the full regression suite (do not skip)</action>
+    <action>Verify the Dev Agent Record contains the exact command list and results for format, lint, typecheck, test, and any additional checks that actually ran.</action>
     <action>Confirm File List includes every changed file</action>
     <action>Execute enhanced definition-of-done validation</action>
     <action>Update the story Status to: "review"</action>
@@ -423,7 +429,8 @@ Activation is complete. If `activation_steps_prepend` or `activation_steps_appen
       - Integration tests for component interactions added when required
       - End-to-end tests for critical flows added when story demands them
       - All tests pass (no regressions, new tests successful)
-      - Code quality checks pass (linting, static analysis if configured)
+      - Code quality checks pass (formatting if configured, linting, typecheck, static analysis if configured)
+      - Validation commands are recorded as exact shell commands with pass/fail/skipped status
       - File List includes every new/modified/deleted file (relative paths)
       - Dev Agent Record contains implementation notes
       - Change Log includes summary of changes
