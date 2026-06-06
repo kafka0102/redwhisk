@@ -10,11 +10,15 @@ import {
   type IssueRecord,
   type IssueStatus,
 } from "./issue-commands";
+import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueDescriptionEditor } from "./issue-description-editor";
+import { listAgentProfiles } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
 interface IssuesActivityProps {
   projectId: number;
+  projectName: string;
+  projectPath: string;
 }
 
 interface IssueFormState {
@@ -53,13 +57,23 @@ const ISSUE_LANES: LaneDefinition[] = [
 
 type DialogMode = "create" | "edit";
 
-export function IssuesActivity({ projectId }: IssuesActivityProps) {
+export function IssuesActivity({
+  projectId,
+  projectName,
+  projectPath,
+}: IssuesActivityProps) {
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
+  const [isRunDialogOpen, setIsRunDialogOpen] = useState(false);
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingAgentProfiles, setIsLoadingAgentProfiles] = useState(true);
+  const [agentProfileCount, setAgentProfileCount] = useState(0);
+  const [agentProfileErrorMessage, setAgentProfileErrorMessage] = useState<
+    string | null
+  >(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
@@ -71,6 +85,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const saveButtonRef = useRef<HTMLButtonElement | null>(null);
+  const runButtonRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef(new Map<number, HTMLButtonElement>());
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
@@ -88,6 +103,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
       setIssues([]);
       setSelectedIssueId(null);
       setDialogMode(null);
+      setIsRunDialogOpen(false);
       setForm(EMPTY_FORM);
       setIsSaving(false);
       setDialogErrorMessage(null);
@@ -112,6 +128,45 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     }
 
     void loadIssues();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAgentProfiles() {
+      setIsLoadingAgentProfiles(true);
+      setAgentProfileErrorMessage(null);
+      setAgentProfileCount(0);
+
+      try {
+        const [projectResponse, globalResponse] = await Promise.all([
+          listAgentProfiles({ scope: "project", projectId }),
+          listAgentProfiles({ scope: "global", projectId: null }),
+        ]);
+
+        if (!isMounted || activeProjectIdRef.current !== projectId) {
+          return;
+        }
+
+        setAgentProfileCount(
+          projectResponse.profiles.length + globalResponse.profiles.length,
+        );
+      } catch (error) {
+        if (isMounted && activeProjectIdRef.current === projectId) {
+          setAgentProfileErrorMessage(toCommandError(error).message);
+        }
+      } finally {
+        if (isMounted && activeProjectIdRef.current === projectId) {
+          setIsLoadingAgentProfiles(false);
+        }
+      }
+    }
+
+    void loadAgentProfiles();
 
     return () => {
       isMounted = false;
@@ -164,6 +219,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     }
 
     setDialogErrorMessage(null);
+    setIsRunDialogOpen(false);
     const closingMode = dialogMode;
     const previousSelectedIssue =
       issues.find((issue) => issue.id === previousSelectedIssueIdRef.current) ??
@@ -301,7 +357,39 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     }
   }
 
+  function openRunDialog() {
+    if (!selectedIssue || selectedIssue.status !== "backlog") {
+      return;
+    }
+
+    setIsRunDialogOpen(true);
+  }
+
+  function closeRunDialog() {
+    setIsRunDialogOpen(false);
+    runButtonRef.current?.focus();
+  }
+
   const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Detail";
+  const issueForRunPreview =
+    dialogMode === "edit" && selectedIssue
+      ? {
+          ...selectedIssue,
+          title: form.title,
+          description: form.description,
+        }
+      : null;
+  const canRunIssue =
+    selectedIssue?.status === "backlog" &&
+    agentProfileCount > 0 &&
+    !isLoadingAgentProfiles;
+  const runStatusMessage =
+    agentProfileErrorMessage ??
+    (isLoadingAgentProfiles
+      ? "Loading agent profiles..."
+      : agentProfileCount === 0
+        ? "No agent profiles available. Configure an agent in Settings first."
+        : null);
 
   return (
     <main className="activity-surface activity-surface--issues">
@@ -473,14 +561,19 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   <h4>Actions</h4>
                   {dialogMode === "edit" &&
                   selectedIssue?.status === "backlog" ? (
-                    <Button
-                      className="issues-button"
-                      type="button"
-                      variant="outline"
-                      disabled
-                    >
-                      Run
-                    </Button>
+                    <>
+                      <Button
+                        ref={runButtonRef}
+                        className="issues-button"
+                        type="button"
+                        variant="outline"
+                        disabled={!canRunIssue}
+                        onClick={openRunDialog}
+                      >
+                        Run
+                      </Button>
+                      {runStatusMessage ? <p>{runStatusMessage}</p> : null}
+                    </>
                   ) : (
                     <p>No actions available.</p>
                   )}
@@ -516,6 +609,18 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
             </div>
           </form>
         </div>
+      ) : null}
+
+      {isRunDialogOpen && issueForRunPreview ? (
+        <IssueRunDialog
+          issue={issueForRunPreview}
+          project={{
+            id: projectId,
+            name: projectName,
+            path: projectPath,
+          }}
+          onClose={closeRunDialog}
+        />
       ) : null}
     </main>
   );

@@ -9,11 +9,16 @@ import {
   updateIssue,
   type IssueRecord,
 } from "./issue-commands";
+import { listAgentProfiles } from "../settings/settings-commands";
 
 vi.mock("./issue-commands", () => ({
   createIssue: vi.fn(),
   listIssues: vi.fn(),
   updateIssue: vi.fn(),
+}));
+
+vi.mock("../settings/settings-commands", () => ({
+  listAgentProfiles: vi.fn(),
 }));
 
 vi.mock("./issue-description-editor", () => ({
@@ -40,6 +45,7 @@ vi.mock("./issue-description-editor", () => ({
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
 const updateIssueMock = vi.mocked(updateIssue);
+const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 
 const existingIssue: IssueRecord = {
   id: 20,
@@ -81,11 +87,39 @@ const completedIssue: IssueRecord = {
   updatedAt: 1_780_635_000_000,
 };
 
+const projectProfile = {
+  id: 100,
+  name: "Project Codex",
+  agentType: "codex" as const,
+  command: "/usr/local/bin/codex",
+  scope: "project" as const,
+  projectId: 1,
+  mode: "full-auto",
+  dangerous: true,
+  defaultSkill: "bmad-dev-story",
+  promptTemplate: "Review {{issue.description}} in {{project.name}}.",
+};
+
+const globalProfile = {
+  id: 200,
+  name: "Global Codex",
+  agentType: "codex" as const,
+  command: "/usr/local/bin/codex",
+  scope: "global" as const,
+  projectId: null,
+  mode: "full-auto",
+  dangerous: false,
+  defaultSkill: "",
+  promptTemplate: "",
+};
+
 describe("IssuesActivity", () => {
   beforeEach(() => {
     createIssueMock.mockReset();
     listIssuesMock.mockReset();
     updateIssueMock.mockReset();
+    listAgentProfilesMock.mockReset();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
   });
 
   it("renders four persistent lanes and groups issues by status", async () => {
@@ -93,7 +127,7 @@ describe("IssuesActivity", () => {
       issues: [existingIssue, runningIssue, reviewIssue, completedIssue],
     });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     const backlogLane = await screen.findByRole("region", {
       name: "Backlog",
@@ -122,7 +156,7 @@ describe("IssuesActivity", () => {
   it("keeps empty lanes visible when only backlog issues exist", async () => {
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     const runningLane = await screen.findByRole("region", { name: "Running" });
     const reviewLane = screen.getByRole("region", { name: "Review" });
@@ -137,7 +171,7 @@ describe("IssuesActivity", () => {
   it("shows issue id, updated time, full title, and a single-line description excerpt", async () => {
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     const card = await screen.findByRole("button", {
       name: "Existing issue",
@@ -156,7 +190,7 @@ describe("IssuesActivity", () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -191,7 +225,7 @@ describe("IssuesActivity", () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     const card = await screen.findByRole("button", { name: "Existing issue" });
     await user.click(card);
@@ -208,7 +242,7 @@ describe("IssuesActivity", () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -239,7 +273,7 @@ describe("IssuesActivity", () => {
       message: "Issue title 不能为空。",
     });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
@@ -264,7 +298,7 @@ describe("IssuesActivity", () => {
       () => new Promise<IssueRecord>(() => undefined),
     );
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
@@ -293,7 +327,7 @@ describe("IssuesActivity", () => {
       updatedAt: 1_780_632_000_000,
     });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
@@ -333,7 +367,7 @@ describe("IssuesActivity", () => {
       updatedAt: 1_780_635_600_000,
     });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -371,7 +405,7 @@ describe("IssuesActivity", () => {
       message: "Issue 不存在。",
     });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -401,7 +435,7 @@ describe("IssuesActivity", () => {
 
   it("clears stale issue state when a new project list fails", async () => {
     listIssuesMock.mockResolvedValueOnce({ issues: [existingIssue] });
-    const { rerender } = render(<IssuesActivity projectId={1} />);
+    const { rerender } = renderIssuesActivity();
 
     expect(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -411,7 +445,13 @@ describe("IssuesActivity", () => {
       code: "PROJECT_NOT_FOUND",
       message: "Project 不存在。",
     });
-    rerender(<IssuesActivity projectId={2} />);
+    rerender(
+      <IssuesActivity
+        projectId={2}
+        projectName="Agents Lab"
+        projectPath="/workspace/agents-lab"
+      />,
+    );
 
     expect(
       await screen.findByRole("status", { name: "Issues status" }),
@@ -434,14 +474,20 @@ describe("IssuesActivity", () => {
           resolveCreate = resolve;
         }),
     );
-    const { rerender } = render(<IssuesActivity projectId={1} />);
+    const { rerender } = renderIssuesActivity();
 
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
     await user.type(screen.getByLabelText("Title"), "Late issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
-    rerender(<IssuesActivity projectId={2} />);
+    rerender(
+      <IssuesActivity
+        projectId={2}
+        projectName="Agents Lab"
+        projectPath="/workspace/agents-lab"
+      />,
+    );
     resolveCreate({
       id: 24,
       projectId: 1,
@@ -462,7 +508,7 @@ describe("IssuesActivity", () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     expect(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -479,7 +525,7 @@ describe("IssuesActivity", () => {
   it("uses the backlog lane header plus action to create issues", async () => {
     listIssuesMock.mockResolvedValue({ issues: [] });
 
-    render(<IssuesActivity projectId={1} />);
+    renderIssuesActivity();
 
     const header = screen.getByRole("heading", {
       name: "Issues",
@@ -497,7 +543,107 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
     expect(createButton).toBeInTheDocument();
   });
+
+  it("opens the run dialog when backlog issue has available agent profiles", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Dialog" });
+    expect(within(dialog).getByLabelText("Agent profile")).toHaveValue("100");
+    expect(within(dialog).getByLabelText("Working directory")).toHaveValue(
+      "/workspace/redwhisk",
+    );
+    expect(within(dialog).getByLabelText("Default args")).toHaveValue(
+      "--full-auto --dangerous",
+    );
+    expect(
+      (
+        within(dialog).getByLabelText(
+          "Final prompt preview",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toContain("Existing description");
+    expect(within(dialog).getByText("Prompt sources")).toBeInTheDocument();
+  });
+
+  it("restores focus to the Run button after canceling the run dialog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+
+    const runButton = screen.getByRole("button", { name: "Run" });
+    await user.click(runButton);
+    const runDialog = screen.getByRole("dialog", { name: "Run Dialog" });
+    await user.click(within(runDialog).getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Run Dialog" }),
+    ).not.toBeInTheDocument();
+    expect(runButton).toHaveFocus();
+  });
+
+  it("shows a factual prompt when no agent profiles are available", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    expect(within(dialog).getByRole("button", { name: "Run" })).toBeDisabled();
+    expect(
+      within(dialog).getByText(
+        "No agent profiles available. Configure an agent in Settings first.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
+
+function renderIssuesActivity() {
+  return render(
+    <IssuesActivity
+      projectId={1}
+      projectName="RedWhisk"
+      projectPath="/workspace/redwhisk"
+    />,
+  );
+}
 
 function formatTestTimestamp(epochMilliseconds: number): string {
   return new Date(epochMilliseconds).toLocaleString();
