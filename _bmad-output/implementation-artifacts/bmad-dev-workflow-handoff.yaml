@@ -1,39 +1,12 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: _bmad-output/implementation-artifacts/2-2-edit-and-save-final-prompt-snapshot.md
-story_key: 2-2-edit-and-save-final-prompt-snapshot
-story_status: done
-baseline_commit: 4b70eba
-changed_files:
-  - _bmad-output/implementation-artifacts/2-2-edit-and-save-final-prompt-snapshot.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src/features/issues/issue-commands.ts
-  - src/features/issues/issue-run-dialog.tsx
-  - src/features/issues/issues-activity.test.tsx
-  - src-tauri/src/commands/agent_session_commands.rs
-  - src-tauri/src/commands/mod.rs
-  - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/core/mod.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/agent_session.rs
-  - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/mod.rs
-  - src-tauri/tests/agent_session.rs
-validation_commands:
-  - pnpm format
-  - cargo fmt
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - cargo test
-validation_results:
-  - "pnpm format: pass"
-  - "cargo fmt: pass"
-  - "pnpm lint: pass"
-  - "pnpm typecheck: pass"
-  - "pnpm test: pass (63 tests; includes existing CSS stylesheet warnings)"
-  - "cargo test: pass"
-review_summary: clean - 自动 review 未发现阻塞性问题；已补齐独立 AgentSession 错误码与输入校验测试。
+phase: story-created
+story_file: _bmad-output/implementation-artifacts/2-3-create-agent-session-and-update-issue-after-successful-start.md
+story_key: 2-3-create-agent-session-and-update-issue-after-successful-start
+story_status: ready-for-dev
+baseline_commit: badda72
+changed_files: []
+validation_commands: []
+validation_results: []
+review_summary:
 blocking_reason:
-updated_at: 2026-06-06T18:48:00+08:00
+updated_at: 2026-06-06T19:10:00+08:00
