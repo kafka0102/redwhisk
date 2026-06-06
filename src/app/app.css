@@ -267,6 +267,29 @@ button:focus-visible {
   background: var(--color-surface);
 }
 
+.workbench__header-settings {
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.workbench__header-settings:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.workbench__header-settings[aria-pressed="true"] {
+  color: var(--color-accent);
+}
+
 .workbench__content {
   display: grid;
   grid-column: 2;
