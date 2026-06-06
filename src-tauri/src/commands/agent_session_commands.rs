@@ -2,7 +2,7 @@ use tauri::{Manager, State};
 
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
-use crate::types::agent_session::StartAgentSessionInput;
+use crate::types::agent_session::{StartAgentSessionInput, StartAgentSessionResult};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 #[tauri::command]
@@ -10,7 +10,7 @@ pub fn start_agent_session(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: StartAgentSessionInput,
-) -> Result<(), CommandError> {
+) -> Result<StartAgentSessionResult, CommandError> {
     let data_dir = app.path().app_data_dir().map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,

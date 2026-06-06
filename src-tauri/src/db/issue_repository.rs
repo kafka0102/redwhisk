@@ -114,6 +114,30 @@ impl<'connection> IssueRepository<'connection> {
 
         self.find_by_id(issue_id)
     }
+
+    pub fn update_status_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        status: IssueStatus,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        let changed = transaction.execute(
+            "UPDATE issues
+             SET status = ?1,
+                 updated_at = MAX(
+                   updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 )
+             WHERE id = ?2 AND project_id = ?3",
+            params![issue_status_to_str(&status), issue_id, project_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, issue_id)
+    }
 }
 
 fn find_by_id_on_connection(
@@ -150,5 +174,14 @@ fn issue_status_from_str(value: &str) -> rusqlite::Result<IssueStatus> {
         "review" => Ok(IssueStatus::Review),
         "completed" => Ok(IssueStatus::Completed),
         _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn issue_status_to_str(value: &IssueStatus) -> &'static str {
+    match value {
+        IssueStatus::Backlog => "backlog",
+        IssueStatus::Running => "running",
+        IssueStatus::Review => "review",
+        IssueStatus::Completed => "completed",
     }
 }

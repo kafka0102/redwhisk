@@ -364,6 +364,24 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
     runButtonRef.current?.focus();
   }
 
+  async function handleRunStarted(result: { issueId: number }) {
+    setIsRunDialogOpen(false);
+
+    try {
+      const response = await listIssues({ projectId });
+      if (activeProjectIdRef.current !== projectId) {
+        return;
+      }
+
+      setIssues(response.issues);
+      setSelectedIssueId(result.issueId);
+    } catch (error) {
+      if (activeProjectIdRef.current === projectId) {
+        setErrorMessage(toCommandError(error).message);
+      }
+    }
+  }
+
   const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Detail";
   const issueForRunPreview =
     dialogMode === "edit" && selectedIssue
@@ -610,6 +628,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
           issue={issueForRunPreview}
           projectId={projectId}
           onClose={closeRunDialog}
+          onStarted={handleRunStarted}
         />
       ) : null}
     </main>

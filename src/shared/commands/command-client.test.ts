@@ -8,6 +8,7 @@ import {
   openProject,
   openProjectWindow,
 } from "../../features/project/project-commands";
+import { startAgentSession } from "../../features/issues/issue-commands";
 import {
   detectCodexCommand,
   listAgentProfiles,
@@ -288,6 +289,33 @@ describe("command client", () => {
         dangerous: true,
         defaultSkill: "",
         promptTemplate: "",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the start agent session command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: 7,
+      issueId: 3,
+    });
+
+    await expect(
+      startAgentSession({
+        projectId: 1,
+        issueId: 3,
+        agentProfileId: 9,
+        promptSnapshot: "Final prompt",
+      }),
+    ).resolves.toEqual({
+      sessionId: 7,
+      issueId: 3,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("start_agent_session", {
+      input: {
+        projectId: 1,
+        issueId: 3,
+        agentProfileId: 9,
+        promptSnapshot: "Final prompt",
       },
     });
   });

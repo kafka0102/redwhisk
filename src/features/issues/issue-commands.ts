@@ -40,6 +40,11 @@ export interface StartAgentSessionInput {
   promptSnapshot: string;
 }
 
+export interface StartAgentSessionResult {
+  sessionId: number;
+  issueId: number;
+}
+
 export function listIssues(input: ListIssuesInput): Promise<IssueListResponse> {
   return invokeCommand<IssueListResponse>("list_issues", {
     projectId: input.projectId,
@@ -56,6 +61,8 @@ export function updateIssue(input: UpdateIssueInput): Promise<IssueRecord> {
 
 export function startAgentSession(
   input: StartAgentSessionInput,
-): Promise<void> {
-  return invokeCommand<void>("start_agent_session", { input });
+): Promise<StartAgentSessionResult> {
+  return invokeCommand<StartAgentSessionResult>("start_agent_session", {
+    input,
+  });
 }
