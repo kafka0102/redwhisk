@@ -21,8 +21,8 @@ export function ProjectHome({
           <p className="eyebrow">RedWhisk</p>
           <h1>Projects</h1>
           <p className="project-home__lede">
-            Open a local Git repository to manage issues, agent sessions, and
-            completion checks from one workbench.
+            Local Git repositories available to this workbench. Open one to
+            continue issue and agent work.
           </p>
         </div>
       </header>

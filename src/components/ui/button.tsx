@@ -4,21 +4,24 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-card)] border border-transparent text-[13px] font-medium leading-[1.3] transition-[color,background-color,border-color,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-focus-offset)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:opacity-90",
+        default:
+          "border-[var(--color-accent)] bg-primary text-primary-foreground hover:brightness-[0.98]",
         outline:
-          "border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:opacity-90",
-        ghost: "text-foreground hover:bg-accent hover:text-accent-foreground",
+          "border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "border-border bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground",
+        ghost:
+          "border-transparent bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 px-3 text-xs",
-        lg: "h-10 px-6",
-        icon: "h-9 w-9",
+        default: "min-h-8 px-3 py-1.5",
+        sm: "min-h-7 px-2.5 text-[12px]",
+        lg: "min-h-9 px-4",
+        icon: "h-8 w-8 p-0",
       },
     },
     defaultVariants: {

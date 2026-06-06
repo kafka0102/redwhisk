@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-06T11:12:24+0800
+last_updated: 2026-06-06T14:16:00+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -52,7 +52,7 @@ development_status:
   1-7-record-issue-action-audit: done
   1-8-configure-codex-agent-profile-and-project-override: done
   1-9-implement-project-settings-global-settings-and-basic-i18n: backlog
-  1-10-implement-desktop-visual-tokens-and-basic-accessibility: backlog
+  1-10-implement-desktop-visual-tokens-and-basic-accessibility: review
   epic-1-retrospective: optional
 
   epic-2: backlog
