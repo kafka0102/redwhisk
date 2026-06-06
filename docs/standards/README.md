@@ -6,5 +6,4 @@
 
 - [TypeScript 工程规范](./shared/engineering-spec.md)
 - [编码风格](./shared/coding-style.md)
-- [API 约定](./shared/api-conventions.md)
 - [Git 工作流规范](./shared/git-workflow.md)
