@@ -4,7 +4,7 @@ baseline_commit: cbf97fb
 
 # Story 1.10: 实现桌面视觉 Token 与基础可访问性
 
-Status: review
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -129,6 +129,7 @@ GPT-5 Codex
 - 2026-06-06T14:12+0800：完成 `tokens.css`、`app.css`、`project-home.tsx`、`project-switcher.tsx` 与 `components/ui/*` 收口；将 Activity Bar / Settings 当前态改为细指示 + 轻底色，统一 light/dark surface 分层与 focus ring。
 - 2026-06-06T14:18+0800：发现 `app.css` 的部分 Settings/Header 样式与当前未提交的功能改动耦合，改为兼容基线 `ProjectSettingsActivity` / `AppShell` 结构的写法，避免 `1-10` 提交依赖无关功能文件。
 - 2026-06-06T14:13+0800：完成格式化、lint、typecheck、test、build 验证；`vitest` 仍输出既有 `Could not parse CSS stylesheet` 警告，`vite build` 仍输出既有 CSS minify / chunk size warning，但均未阻塞本 story。
+- 2026-06-06T14:58+0800：复核发现先前 `revert` 回滚了 `tokens.css` 与 desktop primitives 收口；已重新补回 token、基础控件和 `desktop-primitives.test.tsx`，并保留当前 Settings 列表布局改版。
 
 ### Completion Notes List
 
@@ -143,6 +144,7 @@ GPT-5 Codex
 - 已通过 `project-switcher.tsx` 的 `aria-controls` 与 `data-current` 辅助当前态和可访问结构；已有 `Escape` / 焦点恢复行为继续由现有 `App`、`Issues` 测试覆盖。
 - 已执行并记录验证：`pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`，以及两轮定向 `vitest` 命令用于红绿测试。
 - 已将 `app.css` 调整为同时兼容基线的顶部项目设置按钮和既有 Settings 面板结构，从而允许只提交 `1-10` 直接相关文件而不混入当前工作区里的 Settings 功能改动。
+- 已修正 story 记录与实际代码不一致的问题：当前 `HEAD` 再次包含桌面字体/token、基础控件视觉基线、Settings 简洁列表样式，以及对应的 primitive 回归测试。
 
 ### Validation Commands
 
@@ -153,6 +155,11 @@ GPT-5 Codex
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm test`
+- `pnpm build`
+- `pnpm exec prettier --write src/shared/styles/tokens.css src/components/ui/button.tsx src/components/ui/input.tsx src/components/ui/textarea.tsx src/components/ui/dropdown-menu.tsx src/components/ui/desktop-primitives.test.tsx`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test -- --run src/components/ui/desktop-primitives.test.tsx src/app/app.test.tsx src/features/settings/project-settings-activity.test.tsx`
 - `pnpm build`
 - `pnpm format`
 - `pnpm test -- --run src/components/ui/desktop-primitives.test.tsx src/app/app.test.tsx`
@@ -177,11 +184,15 @@ GPT-5 Codex
 - `pnpm typecheck`：通过（最终版）。
 - `pnpm test`：通过，54 个测试通过；输出包含既有 `Could not parse CSS stylesheet` 警告（最终版）。
 - `pnpm build`：通过；保留既有 esbuild CSS minify warning 与 chunk size warning（最终版）。
+- `pnpm exec prettier --write src/shared/styles/tokens.css src/components/ui/button.tsx src/components/ui/input.tsx src/components/ui/textarea.tsx src/components/ui/dropdown-menu.tsx src/components/ui/desktop-primitives.test.tsx`：通过，6 个目标文件已符合格式，无额外改写。
+- `pnpm lint`：通过（完成 story 前复核）。
+- `pnpm typecheck`：通过（完成 story 前复核）。
+- `pnpm test -- --run src/components/ui/desktop-primitives.test.tsx src/app/app.test.tsx src/features/settings/project-settings-activity.test.tsx`：通过，55 个测试通过；输出包含既有 `Could not parse CSS stylesheet` 警告。
+- `pnpm build`：通过；保留既有 esbuild CSS minify warning（`"file" is not a known CSS property`）与 chunk size warning，未阻塞 story 完成。
 
 ### File List
 
 - _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
-- _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 - src/app/app.css
 - src/components/ui/button.tsx
@@ -191,9 +202,12 @@ GPT-5 Codex
 - src/components/ui/textarea.tsx
 - src/features/project/project-home.tsx
 - src/features/project/project-switcher.tsx
+- src/features/settings/project-settings-activity.test.tsx
+- src/features/settings/project-settings-activity.tsx
 - src/shared/styles/tokens.css
 
 ### Change Log
 
 - 2026-06-06：创建 Story 1.10 开发上下文并进入开发。
 - 2026-06-06：完成桌面视觉 token、基础控件和工作台壳层收口，状态推进到 review。
+- 2026-06-06：补回被 `revert` 回滚的桌面 token / primitive 收口，保留 Settings 列表改版，并将 story 标记为 done。
