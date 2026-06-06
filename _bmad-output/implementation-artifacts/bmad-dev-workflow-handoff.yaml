@@ -1,21 +1,39 @@
 workflow: bmad-dev-workflow
 phase: review-complete
-story_file: _bmad-output/implementation-artifacts/1-9a-relocate-project-settings-entry-point.md
-story_key: 1-9a-relocate-project-settings-entry-point
-story_status: done
-baseline_commit: 5ed5828
+story_file: _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
+story_key: 1-10-implement-desktop-visual-tokens-and-basic-accessibility
+story_status: review
+baseline_commit: cbf97fb
 changed_files:
-  - src/app/app-shell.tsx
+  - _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
   - src/app/app.css
-  - src/app/app.test.tsx
+  - src/components/ui/button.tsx
+  - src/components/ui/desktop-primitives.test.tsx
+  - src/components/ui/dropdown-menu.tsx
+  - src/components/ui/input.tsx
+  - src/components/ui/textarea.tsx
+  - src/features/project/project-home.tsx
+  - src/features/project/project-switcher.tsx
+  - src/shared/styles/tokens.css
 validation_commands:
+  - pnpm test -- --run src/components/ui/desktop-primitives.test.tsx
+  - pnpm test -- --run src/components/ui/desktop-primitives.test.tsx
+  - pnpm test -- --run src/app/app.test.tsx src/features/settings/project-settings-activity.test.tsx src/components/ui/desktop-primitives.test.tsx
+  - pnpm format
   - pnpm lint
   - pnpm typecheck
-  - pnpm test -- --run
+  - pnpm test
+  - pnpm build
 validation_results:
+  - fail: pnpm test -- --run src/components/ui/desktop-primitives.test.tsx (3 个 primitive 测试红灯)
+  - pass: pnpm test -- --run src/components/ui/desktop-primitives.test.tsx
+  - pass: pnpm test -- --run src/app/app.test.tsx src/features/settings/project-settings-activity.test.tsx src/components/ui/desktop-primitives.test.tsx
+  - pass: pnpm format
   - pass: pnpm lint
   - pass: pnpm typecheck
-  - pass: pnpm test -- --run (54 tests passed, 4 files)
-review_summary: clean - 无需修改，diff 最小且正确
+  - pass: pnpm test (54 个测试通过，包含既有 CSS stylesheet 警告)
+  - pass: pnpm build (保留既有 CSS minify / chunk size warning)
+review_summary: clean - 未发现需要回修的代码问题
 blocking_reason:
-updated_at: 2026-06-06T10:46:00+0800
+updated_at: 2026-06-06T14:20:00+08:00

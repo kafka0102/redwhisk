@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { ProjectSummary } from "../../app/app";
 import { openProjectWindow } from "./project-commands";
@@ -25,6 +25,7 @@ export function ProjectSwitcher({
   onProjectsRefresh,
   projects,
 }: ProjectSwitcherProps) {
+  const popoverId = useId();
   const switcherRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +102,7 @@ export function ProjectSwitcher({
       <button
         className="project-switcher__trigger"
         type="button"
+        aria-controls={isOpen ? popoverId : undefined}
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-label={`Current project ${currentProject.name}`}
@@ -112,7 +114,7 @@ export function ProjectSwitcher({
         <ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} />
       </button>
       {isOpen ? (
-        <div className="project-switcher__popover">
+        <div className="project-switcher__popover" id={popoverId}>
           <div
             className="project-switcher__list"
             role="menu"
@@ -122,6 +124,7 @@ export function ProjectSwitcher({
               <button
                 className="project-switcher__item"
                 key={project.id}
+                data-current={project.id === currentProject.id}
                 role="menuitem"
                 type="button"
                 title={project.path}
