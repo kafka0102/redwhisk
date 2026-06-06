@@ -1,6 +1,9 @@
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createIssue,
   listIssues,
@@ -357,7 +360,9 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                         }
                       }}
                       aria-describedby={
-                        issue.description ? `${metaId} ${descriptionId}` : metaId
+                        issue.description
+                          ? `${metaId} ${descriptionId}`
+                          : metaId
                       }
                       aria-label={issue.title}
                       aria-pressed={issue.id === selectedIssueId}
@@ -428,7 +433,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
             <div className="issue-dialog__body">
               <div className="issue-dialog__editor">
                 <div className="issue-field">
-                  <input
+                  <Input
                     ref={titleInputRef}
                     aria-label="Title"
                     autoCapitalize="none"
@@ -446,7 +451,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   />
                 </div>
                 <div className="issue-field">
-                  <textarea
+                  <Textarea
                     aria-label="Description"
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -473,9 +478,14 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   <h4>Actions</h4>
                   {dialogMode === "edit" &&
                   selectedIssue?.status === "backlog" ? (
-                    <button className="issues-button" type="button" disabled>
+                    <Button
+                      className="issues-button"
+                      type="button"
+                      variant="outline"
+                      disabled
+                    >
                       Run
-                    </button>
+                    </Button>
                   ) : (
                     <p>No actions available.</p>
                   )}
@@ -490,23 +500,24 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
               {dialogErrorMessage}
             </p>
             <div className="issue-dialog__footer">
-              <button
+              <Button
                 ref={cancelButtonRef}
                 className="issues-button"
                 type="button"
+                variant="outline"
                 disabled={isSaving}
                 onClick={closeDialog}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 ref={saveButtonRef}
                 className="issues-button issues-button--primary"
                 type="submit"
                 disabled={isSaving}
               >
                 {dialogMode === "create" ? "Create Issue" : "Save"}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
