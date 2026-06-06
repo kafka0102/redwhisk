@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::types::issue::{IssueRecord, IssueStatus};
 
@@ -9,6 +9,10 @@ pub struct IssueRepository<'connection> {
 impl<'connection> IssueRepository<'connection> {
     pub fn new(connection: &'connection Connection) -> Self {
         Self { connection }
+    }
+
+    pub fn connection(&self) -> &'connection Connection {
+        self.connection
     }
 
     pub fn list_by_project_id(&self, project_id: i64) -> rusqlite::Result<Vec<IssueRecord>> {
@@ -62,6 +66,29 @@ impl<'connection> IssueRepository<'connection> {
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
+    pub fn insert_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        title: &str,
+        description: &str,
+    ) -> rusqlite::Result<IssueRecord> {
+        transaction.execute(
+            "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+             VALUES (
+               ?1,
+               ?2,
+               ?3,
+               'backlog',
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+             )",
+            params![project_id, title, description],
+        )?;
+
+        let id = transaction.last_insert_rowid();
+        find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
     pub fn update_title_and_description(
         &self,
         project_id: i64,
@@ -87,6 +114,21 @@ impl<'connection> IssueRepository<'connection> {
 
         self.find_by_id(issue_id)
     }
+}
+
+fn find_by_id_on_connection(
+    connection: &Connection,
+    id: i64,
+) -> rusqlite::Result<Option<IssueRecord>> {
+    connection
+        .query_row(
+            "SELECT id, project_id, title, description, status, created_at, updated_at
+             FROM issues
+             WHERE id = ?1",
+            params![id],
+            issue_from_row,
+        )
+        .optional()
 }
 
 fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {

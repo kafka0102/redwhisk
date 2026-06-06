@@ -1,11 +1,15 @@
 use std::path::Path;
 
+use serde_json::json;
+
 use crate::db::connection::DatabaseConfig;
+use crate::db::event_repository::EventRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{CreateIssueInput, IssueListResponse, IssueRecord, UpdateIssueInput};
+use crate::types::issue_action::IssueActionType;
 
 pub struct IssueService<'connection> {
     issue_repository: IssueRepository<'connection>,
@@ -37,10 +41,37 @@ impl<'connection> IssueService<'connection> {
         self.ensure_project_exists(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::insert_in_transaction(
+            &transaction,
+            input.project_id,
+            &title,
+            &description,
+        )
+        .map_err(issue_database_error)?;
+        let payload_json = json!({
+            "title": issue.title,
+            "description": issue.description,
+            "status": "backlog",
+        })
+        .to_string();
 
-        self.issue_repository
-            .insert(input.project_id, &title, &description)
-            .map_err(issue_database_error)
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            issue.id,
+            IssueActionType::IssueCreated,
+            &payload_json,
+            issue.created_at,
+        )
+        .map_err(issue_database_error)?;
+
+        transaction.commit().map_err(issue_database_error)?;
+
+        Ok(issue)
     }
 
     pub fn update_issue(&self, input: UpdateIssueInput) -> Result<IssueRecord, CommandError> {

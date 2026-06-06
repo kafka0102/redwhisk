@@ -12,6 +12,8 @@ const PROJECT_INTEGER_IDS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0003_project_integer_ids.sql");
 const ISSUES_MIGRATION_VERSION: &str = "0004_issues";
 const ISSUES_MIGRATION_SQL: &str = include_str!("../../migrations/0004_issues.sql");
+const ISSUE_ACTIONS_MIGRATION_VERSION: &str = "0005_issue_actions";
+const ISSUE_ACTIONS_MIGRATION_SQL: &str = include_str!("../../migrations/0005_issue_actions.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -97,6 +99,10 @@ impl MigrationRunner {
                 Migration {
                     version: ISSUES_MIGRATION_VERSION,
                     sql: ISSUES_MIGRATION_SQL,
+                },
+                Migration {
+                    version: ISSUE_ACTIONS_MIGRATION_VERSION,
+                    sql: ISSUE_ACTIONS_MIGRATION_SQL,
                 },
             ];
         }

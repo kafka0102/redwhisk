@@ -1,10 +1,12 @@
 use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::connection::DatabaseConfig;
+use redwhisk_lib::db::event_repository::EventRepository;
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{CreateIssueInput, IssueStatus, UpdateIssueInput};
+use redwhisk_lib::types::issue_action::IssueActionType;
 
 #[test]
 fn issue_migration_creates_issues_schema_with_project_index() {
@@ -79,6 +81,76 @@ fn issue_migration_creates_issues_schema_with_project_index() {
 }
 
 #[test]
+fn issue_action_migration_creates_issue_actions_schema_with_issue_index() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let table_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'issue_actions'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("issue actions table count");
+    assert_eq!(table_count, 1);
+
+    let columns = table_columns(&database.connection, "issue_actions");
+    assert_eq!(
+        columns,
+        vec![
+            "id",
+            "issue_id",
+            "action_type",
+            "payload_json",
+            "created_at"
+        ],
+    );
+    assert_eq!(
+        table_column_type(&database.connection, "issue_actions", "id"),
+        "INTEGER"
+    );
+    assert_eq!(
+        table_column_type(&database.connection, "issue_actions", "issue_id"),
+        "INTEGER"
+    );
+    assert_eq!(
+        table_column_type(&database.connection, "issue_actions", "payload_json"),
+        "TEXT"
+    );
+    assert_eq!(
+        table_column_type(&database.connection, "issue_actions", "created_at"),
+        "INTEGER"
+    );
+
+    let index_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('issue_actions') WHERE name = 'idx_issue_actions_issue_id_created_at'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("issue action index count");
+    assert_eq!(index_count, 1);
+
+    let issue_foreign_key_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_foreign_key_list('issue_actions') WHERE [table] = 'issues' AND [from] = 'issue_id' AND [to] = 'id'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("issue foreign key count");
+    assert_eq!(issue_foreign_key_count, 1);
+}
+
+#[test]
 fn create_issue_defaults_to_backlog_and_saves_timestamps() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -103,6 +175,63 @@ fn create_issue_defaults_to_backlog_and_saves_timestamps() {
     assert_eq!(issue.status, IssueStatus::Backlog);
     assert_eq!(issue.created_at, issue.updated_at);
     assert!(issue.created_at > 1_700_000_000_000);
+
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0].issue_id, issue.id);
+    assert_eq!(actions[0].action_type, IssueActionType::IssueCreated);
+    assert_eq!(actions[0].created_at, issue.created_at);
+
+    let payload: serde_json::Value =
+        serde_json::from_str(&actions[0].payload_json).expect("payload json");
+    assert_eq!(payload["title"], "Write local issue");
+    assert_eq!(payload["description"], "Keep the shape small.");
+    assert_eq!(payload["status"], "backlog");
+}
+
+#[test]
+fn create_issue_rolls_back_issue_when_issue_action_insert_fails() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo");
+    database
+        .connection
+        .execute_batch(
+            "CREATE TRIGGER reject_issue_action_insert
+             BEFORE INSERT ON issue_actions
+             BEGIN
+               SELECT RAISE(FAIL, 'reject issue action insert');
+             END;",
+        )
+        .expect("create trigger");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+
+    let error = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Rollback me".to_string(),
+            description: "Do not persist".to_string(),
+        })
+        .expect_err("issue action insert should fail");
+
+    assert_eq!(error.code, CommandErrorCode::IssuePersistenceFailed);
+
+    let issue_count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM issues", [], |row| row.get(0))
+        .expect("issue count");
+    assert_eq!(issue_count, 0);
+
+    let action_count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM issue_actions", [], |row| row.get(0))
+        .expect("issue action count");
+    assert_eq!(action_count, 0);
 }
 
 #[test]
@@ -266,6 +395,12 @@ fn deleting_project_cascades_to_issues() {
         .query_row("SELECT COUNT(*) FROM issues", [], |row| row.get(0))
         .expect("issue count");
     assert_eq!(issue_count, 0);
+
+    let issue_action_count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM issue_actions", [], |row| row.get(0))
+        .expect("issue action count");
+    assert_eq!(issue_action_count, 0);
 }
 
 #[test]

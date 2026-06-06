@@ -1,38 +1,30 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
-story_key: 1-6-show-issues-kanban-and-issue-detail-dialog
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/1-7-record-issue-action-audit.md
+story_key: 1-7-record-issue-action-audit
 story_status: done
-baseline_commit: d6ae47e
+baseline_commit: abdbf9463937a92ecfe6a9cd4c585c8af14fa01c
 changed_files:
-  - _bmad-output/implementation-artifacts/1-6-show-issues-kanban-and-issue-detail-dialog.md
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src/app/app.css
-  - src/features/issues/issues-activity.test.tsx
-  - src/features/issues/issues-activity.tsx
+  - src-tauri/migrations/0005_issue_actions.sql
+  - src-tauri/src/core/issue_service.rs
+  - src-tauri/src/db/event_repository.rs
+  - src-tauri/src/db/issue_repository.rs
+  - src-tauri/src/db/migrations.rs
+  - src-tauri/src/db/mod.rs
+  - src-tauri/src/types/issue_action.rs
+  - src-tauri/src/types/mod.rs
+  - src-tauri/tests/issue.rs
+  - src-tauri/tests/local_data.rs
 validation_commands:
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx
-  - git diff --check
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/app/app.test.tsx
-  - pnpm format
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - pnpm build
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
+  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo test --manifest-path src-tauri/Cargo.toml
 validation_results:
-  - passed: review patch targeted IssuesActivity Vitest, 40 tests
-  - passed: review patch targeted IssuesActivity/App Vitest, 40 tests
-  - passed: whitespace diff check
-  - passed: RED failures confirmed missing kanban lanes, status label, detail dialog, and focus discipline
-  - passed: targeted IssuesActivity/App Vitest, 36 tests
-  - passed: Prettier format
-  - passed: ESLint
-  - passed: TypeScript typecheck
-  - passed: full Vitest, 36 tests
-  - passed: Vite production build
-review_summary: Applied all 7 patch findings for Run placeholder, pending-save close guard, dialog-local errors, focus trap, kanban grid fill, responsive/dark-mode styles, and acceptance-test coverage.
+  - PASS: cargo test --manifest-path src-tauri/Cargo.toml --test issue
+  - PASS: cargo test --manifest-path src-tauri/Cargo.toml --test local_data
+  - PASS: cargo fmt --manifest-path src-tauri/Cargo.toml
+  - PASS: cargo test --manifest-path src-tauri/Cargo.toml
+review_summary:
 blocking_reason:
-updated_at: 2026-06-05T22:25:52+0800
+updated_at: "2026-06-06T08:02:00+0800"
