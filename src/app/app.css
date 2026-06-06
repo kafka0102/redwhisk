@@ -1,4 +1,9 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 @import "../shared/styles/tokens.css";
+
+@source "../**/*.{ts,tsx}";
 
 * {
   box-sizing: border-box;
@@ -439,8 +444,7 @@ button:focus-visible {
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition:
-    background-color 160ms ease-out;
+  transition: background-color 160ms ease-out;
 }
 
 .issue-card:hover {
