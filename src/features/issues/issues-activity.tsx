@@ -7,6 +7,7 @@ import {
   createIssue,
   listIssues,
   updateIssue,
+  type AgentSessionStatus,
   type IssueRecord,
   type IssueStatus,
 } from "./issue-commands";
@@ -17,6 +18,7 @@ import { toCommandError } from "../../shared/commands/command-error";
 
 interface IssuesActivityProps {
   projectId: number;
+  onOpenAgentsActivity?: (sessionId: number) => void;
 }
 
 interface IssueFormState {
@@ -55,7 +57,10 @@ const ISSUE_LANES: LaneDefinition[] = [
 
 type DialogMode = "create" | "edit";
 
-export function IssuesActivity({ projectId }: IssuesActivityProps) {
+export function IssuesActivity({
+  projectId,
+  onOpenAgentsActivity,
+}: IssuesActivityProps) {
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
@@ -352,11 +357,27 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
   }
 
   function openRunDialog() {
-    if (!selectedIssue || selectedIssue.status !== "backlog") {
+    if (
+      !selectedIssue ||
+      selectedIssue.status !== "backlog" ||
+      selectedIssue.linkedSessionId != null
+    ) {
       return;
     }
 
     setIsRunDialogOpen(true);
+  }
+
+  function openLinkedSession() {
+    if (!selectedIssue?.linkedSessionId) {
+      return;
+    }
+
+    setDialogErrorMessage(null);
+    setIsRunDialogOpen(false);
+    setDialogMode(null);
+    setForm(EMPTY_FORM);
+    onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
   }
 
   function closeRunDialog() {
@@ -393,15 +414,23 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
       : null;
   const canRunIssue =
     selectedIssue?.status === "backlog" &&
+    selectedIssue.linkedSessionId == null &&
     agentProfileCount > 0 &&
     !isLoadingAgentProfiles;
+  const hasLinkedSession = selectedIssue?.linkedSessionId != null;
+  const canOpenSession =
+    hasLinkedSession &&
+    selectedIssue?.status !== "completed" &&
+    selectedIssue?.linkedSessionStatus !== "crashed";
   const runStatusMessage =
     agentProfileErrorMessage ??
     (isLoadingAgentProfiles
       ? "Loading agent profiles..."
-      : agentProfileCount === 0
-        ? "No agent profiles available. Configure an agent in Settings first."
-        : null);
+      : hasLinkedSession
+        ? "This issue already has a linked session."
+        : agentProfileCount === 0
+          ? "No agent profiles available. Configure an agent in Settings first."
+          : null);
 
   return (
     <main className="activity-surface activity-surface--issues">
@@ -567,12 +596,36 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
               <aside className="issue-dialog__side" aria-label="Issue actions">
                 <section className="issue-dialog__panel">
                   <h4>Session</h4>
-                  <p>No session linked.</p>
+                  {hasLinkedSession ? (
+                    <>
+                      <p>{`Linked session #${selectedIssue?.linkedSessionId}`}</p>
+                      <p>
+                        {`Status: ${formatAgentSessionStatus(
+                          selectedIssue?.linkedSessionStatus ?? null,
+                        )}`}
+                      </p>
+                    </>
+                  ) : (
+                    <p>No session linked.</p>
+                  )}
                 </section>
                 <section className="issue-dialog__panel">
                   <h4>Actions</h4>
-                  {dialogMode === "edit" &&
-                  selectedIssue?.status === "backlog" ? (
+                  {dialogMode === "edit" && canOpenSession ? (
+                    <>
+                      <Button
+                        className="issues-button"
+                        type="button"
+                        variant="outline"
+                        disabled={!onOpenAgentsActivity}
+                        onClick={openLinkedSession}
+                      >
+                        Open Session
+                      </Button>
+                      <p>Continue this issue from Agents.</p>
+                    </>
+                  ) : dialogMode === "edit" &&
+                    selectedIssue?.status === "backlog" ? (
                     <>
                       <Button
                         ref={runButtonRef}
@@ -686,4 +739,19 @@ function getFocusableDialogElements(
       'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], a[href], [tabindex]:not([tabindex="-1"])',
     ),
   ).filter((element) => element.tabIndex >= 0);
+}
+
+function formatAgentSessionStatus(status: AgentSessionStatus | null): string {
+  switch (status) {
+    case "running":
+      return "running";
+    case "closed":
+      return "closed";
+    case "crashed":
+      return "crashed";
+    case "stopped":
+      return "stopped";
+    default:
+      return "unknown";
+  }
 }

@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
@@ -88,6 +89,42 @@ const completedIssue: IssueRecord = {
   status: "completed",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_635_000_000,
+};
+
+const linkedSessionIssue: IssueRecord = {
+  id: 24,
+  projectId: 1,
+  title: "Linked session issue",
+  description: "Resume from the existing session",
+  status: "backlog",
+  linkedSessionId: 301,
+  linkedSessionStatus: "stopped",
+  createdAt: 1_780_632_000_000,
+  updatedAt: 1_780_636_000_000,
+};
+
+const completedLinkedSessionIssue: IssueRecord = {
+  id: 25,
+  projectId: 1,
+  title: "Completed linked session issue",
+  description: "Already completed",
+  status: "completed",
+  linkedSessionId: 401,
+  linkedSessionStatus: "closed",
+  createdAt: 1_780_632_000_000,
+  updatedAt: 1_780_637_000_000,
+};
+
+const crashedRunningIssue: IssueRecord = {
+  id: 26,
+  projectId: 1,
+  title: "Crashed running issue",
+  description: "Need log path later",
+  status: "running",
+  linkedSessionId: 402,
+  linkedSessionStatus: "crashed",
+  createdAt: 1_780_632_000_000,
+  updatedAt: 1_780_638_000_000,
 };
 
 const projectProfile = {
@@ -620,10 +657,18 @@ describe("IssuesActivity", () => {
 
   it("closes the run dialog and refreshes issues when start succeeds", async () => {
     const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
     listIssuesMock
       .mockResolvedValueOnce({ issues: [existingIssue] })
       .mockResolvedValueOnce({
-        issues: [{ ...existingIssue, status: "running" as const }],
+        issues: [
+          {
+            ...existingIssue,
+            status: "running" as const,
+            linkedSessionId: 301,
+            linkedSessionStatus: "running" as const,
+          },
+        ],
       });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
@@ -637,7 +682,7 @@ describe("IssuesActivity", () => {
       issueId: existingIssue.id,
     });
 
-    renderIssuesActivity();
+    renderIssuesActivity({ onOpenAgentsActivity });
 
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
@@ -656,7 +701,7 @@ describe("IssuesActivity", () => {
       ).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("No actions available.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Session" })).toBeEnabled();
   });
 
   it("keeps the edited prompt when switching agent profiles", async () => {
@@ -764,6 +809,58 @@ describe("IssuesActivity", () => {
     expect(updateIssueMock).not.toHaveBeenCalled();
   });
 
+  it("refreshes issues and closes the run dialog when start reports an existing session", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock
+      .mockResolvedValueOnce({ issues: [existingIssue] })
+      .mockResolvedValueOnce({
+        issues: [
+          {
+            ...existingIssue,
+            status: "running" as const,
+            linkedSessionId: 301,
+            linkedSessionStatus: "running" as const,
+          },
+        ],
+      });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockRejectedValue({
+      code: "AGENT_SESSION_ALREADY_EXISTS",
+      message: "当前 Issue 已存在关联 Agent Session。",
+      details: [{ "@type": "AgentSession", sessionId: 301 }],
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Run Dialog" })).getByRole(
+        "button",
+        { name: "Start" },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Run Dialog" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Open Session" })).toBeEnabled();
+  });
+
   it("shows a factual prompt when no agent profiles are available", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -782,10 +879,103 @@ describe("IssuesActivity", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("shows Open Session instead of Run when an issue already has a linked session", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [linkedSessionIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Linked session issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    expect(within(dialog).getByText("Linked session #301")).toBeInTheDocument();
+    expect(within(dialog).getByText("Status: stopped")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Open Session" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).queryByRole("button", { name: "Run" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("No session linked."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("delegates to Agents activity when Open Session is clicked", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock.mockResolvedValue({ issues: [linkedSessionIssue] });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Linked session issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Open Session" }));
+
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
+    expect(
+      screen.queryByRole("dialog", { name: "Issue Detail" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show Open Session for completed issues with linked sessions", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    expect(
+      within(dialog).queryByRole("button", { name: "Open Session" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText("No actions available."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show Open Session for crashed sessions", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [crashedRunningIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Crashed running issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    expect(
+      within(dialog).queryByRole("button", { name: "Open Session" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText("No actions available."),
+    ).toBeInTheDocument();
+  });
 });
 
-function renderIssuesActivity() {
-  return render(<IssuesActivity projectId={1} />);
+function renderIssuesActivity(
+  props?: Partial<ComponentProps<typeof IssuesActivity>>,
+) {
+  return render(<IssuesActivity projectId={1} {...props} />);
 }
 
 function formatTestTimestamp(epochMilliseconds: number): string {

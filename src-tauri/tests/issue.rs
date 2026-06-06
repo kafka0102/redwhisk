@@ -1,9 +1,12 @@
 use redwhisk_lib::core::issue_service::IssueService;
+use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::event_repository::EventRepository;
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
+use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
+use redwhisk_lib::types::agent_session::AgentSessionStatus;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{CreateIssueInput, IssueStatus, UpdateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
@@ -486,6 +489,66 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
         .issues
         .iter()
         .all(|issue| issue.project_id == first_project_id));
+    assert!(response
+        .issues
+        .iter()
+        .all(|issue| issue.linked_session_id.is_none()));
+    assert!(response
+        .issues
+        .iter()
+        .all(|issue| issue.linked_session_status.is_none()));
+}
+
+#[test]
+fn list_issues_includes_linked_session_facts() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "linked-session-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Linked session issue".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    let profile_id = insert_agent_profile(&database.connection);
+
+    database
+        .connection
+        .execute(
+            "INSERT INTO agent_sessions (
+                issue_id,
+                agent_profile_id,
+                status,
+                attention,
+                working_dir,
+                command_snapshot,
+                prompt_snapshot,
+                log_path,
+                last_active_at,
+                started_at
+            ) VALUES (?1, ?2, 'stopped', 'none', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
+            rusqlite::params![issue.id, profile_id],
+        )
+        .expect("insert linked session");
+    let linked_session_id = database.connection.last_insert_rowid();
+
+    let response = service.list_issues(project_id).expect("project issues");
+
+    assert_eq!(response.issues.len(), 1);
+    assert_eq!(response.issues[0].id, issue.id);
+    assert_eq!(
+        response.issues[0].linked_session_id,
+        Some(linked_session_id)
+    );
+    assert_eq!(
+        response.issues[0].linked_session_status,
+        Some(AgentSessionStatus::Stopped)
+    );
 }
 
 #[test]
@@ -517,6 +580,24 @@ fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
     ProjectRepository::new(connection)
         .insert(name, &repo_path)
         .expect("insert project")
+        .id
+}
+
+fn insert_agent_profile(connection: &rusqlite::Connection) -> i64 {
+    AgentProfileRepository::new(connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            "/usr/local/bin/codex",
+            &AgentScope::Global,
+            None,
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+        )
+        .expect("insert agent profile")
         .id
 }
 

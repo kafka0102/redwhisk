@@ -173,7 +173,16 @@ export function IssueRunDialog({
       });
       await onStarted(result);
     } catch (error) {
-      setStatusMessage(toCommandError(error).message);
+      const commandError = toCommandError(error);
+      if (commandError.code === "AGENT_SESSION_ALREADY_EXISTS") {
+        await onStarted({
+          issueId: issue.id,
+          sessionId: getExistingSessionId(commandError.details),
+        });
+        return;
+      }
+
+      setStatusMessage(commandError.message);
     } finally {
       setIsStarting(false);
     }
@@ -323,6 +332,16 @@ export function IssueRunDialog({
       </div>
     </div>
   );
+}
+
+function getExistingSessionId(
+  details: Array<Record<string, unknown>> | undefined,
+): number | null {
+  const sessionDetail = details?.find(
+    (detail) => detail["@type"] === "AgentSession",
+  );
+  const sessionId = sessionDetail?.sessionId;
+  return typeof sessionId === "number" ? sessionId : null;
 }
 
 function getFocusableDialogElements(
