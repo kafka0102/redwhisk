@@ -1,68 +1,21 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/1-8-configure-codex-agent-profile-and-project-override.md
-story_key: 1-8-configure-codex-agent-profile-and-project-override
+phase: review-complete
+story_file: _bmad-output/implementation-artifacts/1-9a-relocate-project-settings-entry-point.md
+story_key: 1-9a-relocate-project-settings-entry-point
 story_status: done
-baseline_commit: fe42f4e
+baseline_commit: 5ed5828
 changed_files:
-  - _bmad-output/implementation-artifacts/1-8-configure-codex-agent-profile-and-project-override.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src-tauri/migrations/0006_agent_profiles_and_project_overrides.sql
-  - src-tauri/src/agent/command_detector.rs
-  - src-tauri/src/agent/mod.rs
-  - src-tauri/src/commands/mod.rs
-  - src-tauri/src/commands/settings_commands.rs
-  - src-tauri/src/core/mod.rs
-  - src-tauri/src/core/settings_service.rs
-  - src-tauri/src/db/agent_profile_repository.rs
-  - src-tauri/src/db/migrations.rs
-  - src-tauri/src/db/mod.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/agent_profile.rs
-  - src-tauri/src/types/errors.rs
-  - src-tauri/src/types/mod.rs
-  - src-tauri/tests/local_data.rs
-  - src-tauri/tests/settings.rs
-  - src/app/activity-router.tsx
   - src/app/app-shell.tsx
   - src/app/app.css
-  - src/features/settings/agent-profile-form.tsx
-  - src/features/settings/project-agent-override-form.tsx
-  - src/features/settings/project-settings-activity.test.tsx
-  - src/features/settings/project-settings-activity.tsx
-  - src/features/settings/settings-commands.ts
-  - src/shared/commands/command-client.test.ts
+  - src/app/app.test.tsx
 validation_commands:
-  - cargo test --manifest-path src-tauri/Cargo.toml --test settings
-  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pnpm test -- --run src/features/settings/project-settings-activity.test.tsx src/shared/commands/command-client.test.ts src/app/app.test.tsx
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
   - pnpm typecheck
-  - pnpm test
-  - cargo test --manifest-path src-tauri/Cargo.toml
-  - pnpm build
-  - pnpm format
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test -- --run src/features/settings/project-settings-activity.test.tsx src/shared/commands/command-client.test.ts src/app/app.test.tsx
+  - pnpm test -- --run
 validation_results:
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test settings
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pass: pnpm test -- --run src/features/settings/project-settings-activity.test.tsx src/shared/commands/command-client.test.ts src/app/app.test.tsx
-  - pass: pnpm format
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
   - pass: pnpm lint
   - pass: pnpm typecheck
-  - pass: pnpm test (包含既有 Could not parse CSS stylesheet 警告，不阻塞)
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm build (包含既有 CSS minify 和 chunk size warning，不阻塞)
-  - pass: pnpm format (review patch)
-  - pass: pnpm lint (review patch)
-  - pass: pnpm typecheck (review patch)
-  - pass: pnpm test -- --run src/features/settings/project-settings-activity.test.tsx src/shared/commands/command-client.test.ts src/app/app.test.tsx (review patch，包含既有 Could not parse CSS stylesheet 警告)
-review_summary: clean review after fixing 1 patch finding in project-settings-activity inherited form refresh
+  - pass: pnpm test -- --run (54 tests passed, 4 files)
+review_summary: clean - 无需修改，diff 最小且正确
 blocking_reason:
-updated_at: 2026-06-06T11:12:24+0800
+updated_at: 2026-06-06T10:46:00+0800
