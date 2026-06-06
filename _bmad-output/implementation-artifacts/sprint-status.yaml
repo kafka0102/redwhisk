@@ -58,7 +58,7 @@ development_status:
 
   epic-2: in-progress
   2-1-generate-and-preview-issue-run-prompt: done
-  2-2-edit-and-save-final-prompt-snapshot: backlog
+  2-2-edit-and-save-final-prompt-snapshot: done
   2-3-create-agent-session-and-update-issue-after-successful-start: backlog
   2-4-enforce-one-agent-session-per-issue: backlog
   2-5-show-agents-activity-session-list-and-basic-header: backlog

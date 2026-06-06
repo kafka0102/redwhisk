@@ -6,6 +6,7 @@ import { IssuesActivity } from "./issues-activity";
 import {
   createIssue,
   listIssues,
+  startAgentSession,
   updateIssue,
   type IssueRecord,
 } from "./issue-commands";
@@ -14,6 +15,7 @@ import { listAgentProfiles } from "../settings/settings-commands";
 vi.mock("./issue-commands", () => ({
   createIssue: vi.fn(),
   listIssues: vi.fn(),
+  startAgentSession: vi.fn(),
   updateIssue: vi.fn(),
 }));
 
@@ -44,6 +46,7 @@ vi.mock("./issue-description-editor", () => ({
 
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
+const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 
@@ -117,6 +120,7 @@ describe("IssuesActivity", () => {
   beforeEach(() => {
     createIssueMock.mockReset();
     listIssuesMock.mockReset();
+    startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
@@ -563,13 +567,91 @@ describe("IssuesActivity", () => {
       within(dialog).queryByLabelText("Default args"),
     ).not.toBeInTheDocument();
     expect(
-      (
-        within(dialog).getByLabelText(
-          "Final prompt preview",
-        ) as HTMLTextAreaElement
-      ).value,
+      (within(dialog).getByLabelText("Final prompt") as HTMLTextAreaElement)
+        .value,
     ).toBe("Existing description");
     expect(within(dialog).getByText("Prompt sources")).toBeInTheDocument();
+  });
+
+  it("submits the edited prompt snapshot when starting", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockRejectedValue({
+      code: "AGENT_SESSION_START_NOT_READY",
+      message: "Agent Session 启动将在 Story 2.3 接入。",
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Dialog" });
+    const promptField = within(dialog).getByLabelText(
+      "Final prompt",
+    ) as HTMLTextAreaElement;
+
+    await user.clear(promptField);
+    await user.type(promptField, "Edited prompt snapshot");
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 20,
+      agentProfileId: 100,
+      promptSnapshot: "Edited prompt snapshot",
+    });
+    expect(
+      within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the edited prompt when switching agent profiles", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Dialog" });
+    const promptField = within(dialog).getByLabelText(
+      "Final prompt",
+    ) as HTMLTextAreaElement;
+    const profileSelect = within(dialog).getByLabelText(
+      "Agent profile",
+    ) as HTMLSelectElement;
+
+    await user.clear(promptField);
+    await user.type(promptField, "Keep this prompt");
+    await user.selectOptions(profileSelect, "200");
+
+    expect(promptField.value).toBe("Keep this prompt");
   });
 
   it("restores focus to the Run button after canceling the run dialog", async () => {
@@ -601,6 +683,44 @@ describe("IssuesActivity", () => {
       screen.queryByRole("dialog", { name: "Run Dialog" }),
     ).not.toBeInTheDocument();
     expect(runButton).toHaveFocus();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the run dialog open and shows the failure message when start fails", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [] };
+    });
+    startAgentSessionMock.mockRejectedValue({
+      code: "AGENT_SESSION_START_NOT_READY",
+      message: "Agent Session 启动将在 Story 2.3 接入。",
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Dialog" });
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Run Dialog" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
+    ).toBeInTheDocument();
+    expect(updateIssueMock).not.toHaveBeenCalled();
   });
 
   it("shows a factual prompt when no agent profiles are available", async () => {

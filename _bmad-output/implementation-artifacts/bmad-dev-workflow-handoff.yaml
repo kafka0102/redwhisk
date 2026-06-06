@@ -1,38 +1,39 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/2-1-generate-and-preview-issue-run-prompt.md
-story_key: 2-1-generate-and-preview-issue-run-prompt
+story_file: _bmad-output/implementation-artifacts/2-2-edit-and-save-final-prompt-snapshot.md
+story_key: 2-2-edit-and-save-final-prompt-snapshot
 story_status: done
-baseline_commit: c009ee5
+baseline_commit: 4b70eba
 changed_files:
-  - _bmad-output/implementation-artifacts/2-1-generate-and-preview-issue-run-prompt.md
+  - _bmad-output/implementation-artifacts/2-2-edit-and-save-final-prompt-snapshot.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src/app/activity-router.tsx
-  - src/app/app-shell.tsx
+  - src/features/issues/issue-commands.ts
   - src/features/issues/issue-run-dialog.tsx
   - src/features/issues/issues-activity.test.tsx
-  - src/features/issues/issues-activity.tsx
-  - src/features/issues/run-prompt-builder.test.ts
-  - src/features/issues/run-prompt-builder.ts
+  - src-tauri/src/commands/agent_session_commands.rs
+  - src-tauri/src/commands/mod.rs
+  - src-tauri/src/core/agent_session_service.rs
+  - src-tauri/src/core/mod.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/agent_session.rs
+  - src-tauri/src/types/errors.rs
+  - src-tauri/src/types/mod.rs
+  - src-tauri/tests/agent_session.rs
 validation_commands:
-  - pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx
-  - pnpm typecheck
-  - pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx
   - pnpm format
+  - cargo fmt
   - pnpm lint
   - pnpm typecheck
   - pnpm test
-  - pnpm build
+  - cargo test
 validation_results:
-  - fail: pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx (2 个新用例断言与 mock 初版有误)
-  - pass: pnpm typecheck
-  - pass: pnpm test -- --run src/features/issues/run-prompt-builder.test.ts src/features/issues/issues-activity.test.tsx
-  - pass: pnpm format
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-  - pass: pnpm test (61 个测试通过，包含既有 CSS stylesheet 警告)
-  - pass: pnpm build (保留既有 CSS minify / chunk size warning)
-review_summary: clean - Run Dialog 预览范围符合 Story 2.1 边界，未发现阻塞性问题
+  - "pnpm format: pass"
+  - "cargo fmt: pass"
+  - "pnpm lint: pass"
+  - "pnpm typecheck: pass"
+  - "pnpm test: pass (63 tests; includes existing CSS stylesheet warnings)"
+  - "cargo test: pass"
+review_summary: clean - 自动 review 未发现阻塞性问题；已补齐独立 AgentSession 错误码与输入校验测试。
 blocking_reason:
-updated_at: 2026-06-06T17:49:00+08:00
+updated_at: 2026-06-06T18:48:00+08:00
