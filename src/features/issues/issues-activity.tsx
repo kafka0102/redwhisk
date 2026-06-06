@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   createIssue,
   listIssues,
@@ -11,6 +10,7 @@ import {
   type IssueRecord,
   type IssueStatus,
 } from "./issue-commands";
+import { IssueDescriptionEditor } from "./issue-description-editor";
 import { toCommandError } from "../../shared/commands/command-error";
 
 interface IssuesActivityProps {
@@ -384,7 +384,7 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                           id={descriptionId}
                           className="issue-card__description"
                         >
-                          {issue.description}
+                          {markdownToExcerpt(issue.description)}
                         </span>
                       ) : null}
                     </button>
@@ -451,19 +451,14 @@ export function IssuesActivity({ projectId }: IssuesActivityProps) {
                   />
                 </div>
                 <div className="issue-field">
-                  <Textarea
-                    aria-label="Description"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    name="description"
+                  <IssueDescriptionEditor
+                    ariaLabel="Description"
                     placeholder="Describe the task"
-                    rows={10}
-                    spellCheck={false}
                     value={form.description}
-                    onChange={(event) =>
+                    onChange={(description) =>
                       setForm((currentForm) => ({
                         ...currentForm,
-                        description: event.target.value,
+                        description,
                       }))
                     }
                   />
@@ -548,6 +543,23 @@ function formatLocalTimestamp(epochMilliseconds: number): string {
   return new Date(epochMilliseconds).toLocaleString();
 }
 
+function markdownToExcerpt(markdown: string): string {
+  return markdown
+    .replace(/\r\n/g, "\n")
+    .replace(/```([\s\S]*?)```/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}|\d+\.|[-*+]|>)\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getFocusableDialogElements(
   dialogElement: HTMLFormElement | null,
 ): HTMLElement[] {
@@ -557,7 +569,7 @@ function getFocusableDialogElements(
 
   return Array.from(
     dialogElement.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], a[href], [tabindex]:not([tabindex="-1"])',
     ),
   ).filter((element) => element.tabIndex >= 0);
 }
