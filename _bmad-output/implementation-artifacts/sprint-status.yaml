@@ -35,15 +35,15 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-06T14:58:00+0800
+last_updated: 2026-06-06T16:00:48+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
 story_location: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts
 
 development_status:
-  epic-1: in-progress
-  1-1-initialize-redwhisk-desktop-workbench: review
+  epic-1: done
+  1-1-initialize-redwhisk-desktop-workbench: done
   1-2-establish-local-data-storage-and-core-command-boundary: done
   1-3-create-git-project: done
   1-4-show-project-home-and-handle-path-errors: done
@@ -51,7 +51,8 @@ development_status:
   1-6-show-issues-kanban-and-issue-detail-dialog: done
   1-7-record-issue-action-audit: done
   1-8-configure-codex-agent-profile-and-project-override: done
-  1-9-implement-project-settings-global-settings-and-basic-i18n: backlog
+  # Story 1.9 的落地在实现阶段拆分为 1.9a；Epic 1 现按已完成状态收口。
+  1-9-implement-project-settings-global-settings-and-basic-i18n: done
   1-10-implement-desktop-visual-tokens-and-basic-accessibility: done
   epic-1-retrospective: optional
 

@@ -1,8 +1,8 @@
 workflow: bmad-dev-workflow
-phase: review-complete
+phase: complete
 story_file: _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
 story_key: 1-10-implement-desktop-visual-tokens-and-basic-accessibility
-story_status: review
+story_status: done
 baseline_commit: cbf97fb
 changed_files:
   - _bmad-output/implementation-artifacts/1-10-implement-desktop-visual-tokens-and-basic-accessibility.md
@@ -34,6 +34,6 @@ validation_results:
   - pass: pnpm typecheck
   - pass: pnpm test (54 个测试通过，包含既有 CSS stylesheet 警告)
   - pass: pnpm build (保留既有 CSS minify / chunk size warning)
-review_summary: clean - 未发现需要回修的代码问题
+review_summary: clean - Epic 1 已收口，未发现阻塞性遗留问题
 blocking_reason:
-updated_at: 2026-06-06T14:20:00+08:00
+updated_at: 2026-06-06T16:00:48+08:00

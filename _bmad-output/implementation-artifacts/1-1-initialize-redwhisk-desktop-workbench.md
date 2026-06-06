@@ -4,7 +4,7 @@ baseline_commit: d40a9d56a916a27b2e8696d9f1937d103c9245ee
 
 # Story 1.1: 初始化 RedWhisk 桌面工作台骨架
 
-Status: review
+Status: done
 
 <!-- 说明：可在 dev-story 前运行 validate-create-story 做质量检查。 -->
 
