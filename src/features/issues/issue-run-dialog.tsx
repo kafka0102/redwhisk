@@ -6,19 +6,25 @@ import {
   type AgentProfileRecord,
 } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
-import { startAgentSession, type IssueRecord } from "./issue-commands";
+import {
+  startAgentSession,
+  type IssueRecord,
+  type StartAgentSessionResult,
+} from "./issue-commands";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
 interface IssueRunDialogProps {
   issue: Pick<IssueRecord, "id" | "title" | "description">;
   projectId: number;
   onClose: () => void;
+  onStarted: (result: StartAgentSessionResult) => void | Promise<void>;
 }
 
 export function IssueRunDialog({
   issue,
   projectId,
   onClose,
+  onStarted,
 }: IssueRunDialogProps) {
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
@@ -159,12 +165,13 @@ export function IssueRunDialog({
     setStatusMessage(null);
 
     try {
-      await startAgentSession({
+      const result = await startAgentSession({
         projectId,
         issueId: issue.id,
         agentProfileId: selectedProfile.id,
         promptSnapshot: promptDraft,
       });
+      await onStarted(result);
     } catch (error) {
       setStatusMessage(toCommandError(error).message);
     } finally {

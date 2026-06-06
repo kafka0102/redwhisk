@@ -618,6 +618,47 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("closes the run dialog and refreshes issues when start succeeds", async () => {
+    const user = userEvent.setup();
+    listIssuesMock
+      .mockResolvedValueOnce({ issues: [existingIssue] })
+      .mockResolvedValueOnce({
+        issues: [{ ...existingIssue, status: "running" as const }],
+      });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Dialog" });
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Run Dialog" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("No actions available.")).toBeInTheDocument();
+  });
+
   it("keeps the edited prompt when switching agent profiles", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });

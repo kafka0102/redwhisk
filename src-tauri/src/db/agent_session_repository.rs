@@ -1,0 +1,127 @@
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
+
+use crate::types::agent_session::{AgentSessionAttention, AgentSessionRecord, AgentSessionStatus};
+
+pub struct AgentSessionRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+impl<'connection> AgentSessionRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+                 FROM agent_sessions
+                 WHERE id = ?1",
+                params![id],
+                agent_session_from_row,
+            )
+            .optional()
+    }
+
+    pub fn find_by_issue_id(&self, issue_id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+                 FROM agent_sessions
+                 WHERE issue_id = ?1",
+                params![issue_id],
+                agent_session_from_row,
+            )
+            .optional()
+    }
+
+    pub fn insert_in_transaction(
+        transaction: &Transaction<'_>,
+        issue_id: i64,
+        agent_profile_id: i64,
+        working_dir: &str,
+        command_snapshot: &str,
+        prompt_snapshot: &str,
+        log_path: &str,
+        started_at: i64,
+    ) -> rusqlite::Result<AgentSessionRecord> {
+        transaction.execute(
+            "INSERT INTO agent_sessions (
+               issue_id,
+               agent_profile_id,
+               status,
+               attention,
+               working_dir,
+               command_snapshot,
+               prompt_snapshot,
+               log_path,
+               last_active_at,
+               started_at
+             ) VALUES (?1, ?2, 'running', 'none', ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![
+                issue_id,
+                agent_profile_id,
+                working_dir,
+                command_snapshot,
+                prompt_snapshot,
+                log_path,
+                started_at
+            ],
+        )?;
+
+        let id = transaction.last_insert_rowid();
+        find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+}
+
+fn find_by_id_on_connection(
+    connection: &Connection,
+    id: i64,
+) -> rusqlite::Result<Option<AgentSessionRecord>> {
+    connection
+        .query_row(
+            "SELECT id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+             FROM agent_sessions
+             WHERE id = ?1",
+            params![id],
+            agent_session_from_row,
+        )
+        .optional()
+}
+
+fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSessionRecord> {
+    Ok(AgentSessionRecord {
+        id: row.get(0)?,
+        issue_id: row.get(1)?,
+        title: row.get(2)?,
+        agent_profile_id: row.get(3)?,
+        codex_session_id: row.get(4)?,
+        status: agent_session_status_from_str(&row.get::<_, String>(5)?)?,
+        attention: agent_session_attention_from_str(&row.get::<_, String>(6)?)?,
+        working_dir: row.get(7)?,
+        command_snapshot: row.get(8)?,
+        prompt_snapshot: row.get(9)?,
+        log_path: row.get(10)?,
+        last_active_at: row.get(11)?,
+        started_at: row.get(12)?,
+        closed_at: row.get(13)?,
+    })
+}
+
+fn agent_session_status_from_str(value: &str) -> rusqlite::Result<AgentSessionStatus> {
+    match value {
+        "running" => Ok(AgentSessionStatus::Running),
+        "closed" => Ok(AgentSessionStatus::Closed),
+        "crashed" => Ok(AgentSessionStatus::Crashed),
+        "stopped" => Ok(AgentSessionStatus::Stopped),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn agent_session_attention_from_str(value: &str) -> rusqlite::Result<AgentSessionAttention> {
+    match value {
+        "none" => Ok(AgentSessionAttention::None),
+        "requested" => Ok(AgentSessionAttention::Requested),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
