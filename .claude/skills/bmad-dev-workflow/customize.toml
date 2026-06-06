@@ -1,0 +1,53 @@
+# DO NOT EDIT -- overwritten on every update.
+#
+# Workflow customization surface for bmad-dev-workflow. Mirrors the
+# agent customization shape under the [workflow] namespace.
+
+[workflow]
+
+# Steps to run before the standard activation. Overrides append.
+
+activation_steps_prepend = []
+
+# Steps to run after greet but before the workflow begins. Overrides append.
+
+activation_steps_append = []
+
+# Persistent facts the workflow keeps in mind for the whole run.
+# Entries are literal facts or file references prefixed with `file:`.
+
+persistent_facts = [
+  "file:{project-root}/**/project-context.md",
+]
+
+# Handoff state path used for same-session soft cleanup. Override wins.
+
+handoff_output_path = "{implementation_artifacts}/bmad-dev-workflow-handoff.yaml"
+
+# Create the next backlog story automatically when no ready-for-dev story exists.
+
+auto_create_story = true
+
+# Stop after story creation so a human can approve the generated implementation spec.
+
+require_story_approval = true
+
+# Automatically run dev-story again after code-review leaves Review Follow-ups.
+
+auto_continue_review_fix_loop = false
+
+# Maximum review attempts when auto_continue_review_fix_loop is enabled.
+
+max_review_cycles = 2
+
+# Current bmad-code-review behavior is interactive; this value documents the policy.
+
+review_policy = "interactive"
+
+# Create a git commit for the completed story after validation.
+
+auto_commit = true
+
+# Command or note executed after final handoff is written. Leave empty for none.
+
+on_complete = ""
