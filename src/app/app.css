@@ -318,11 +318,11 @@ button:focus-visible {
   position: relative;
   display: grid;
   grid-area: kanban;
-  grid-template-columns: repeat(4, minmax(248px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   min-height: 0;
   height: 100%;
-  overflow: auto hidden;
+  overflow: hidden;
   padding-bottom: 0;
 }
 
@@ -339,7 +339,7 @@ button:focus-visible {
 .issue-lane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-width: 248px;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   padding: 10px;
@@ -903,11 +903,12 @@ button:focus-visible {
   }
 
   .issues-kanban {
-    grid-template-columns: repeat(4, minmax(228px, 1fr));
+    grid-template-columns: repeat(4, minmax(200px, 1fr));
+    overflow: auto hidden;
   }
 
   .issue-lane {
-    min-width: 228px;
+    min-width: 200px;
   }
 
   .issue-dialog-overlay {
