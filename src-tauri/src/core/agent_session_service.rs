@@ -170,6 +170,9 @@ impl<'connection> AgentSessionService<'connection> {
             started_at,
         )?;
         let command_snapshot = build_command_snapshot(&profile);
+        let command_accepts_prompt_argument = command_supports_prompt_argument(&profile.command);
+        let initial_prompt_argument =
+            command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
 
         let pending_pty = if let Some(pty_sessions) = pty_sessions {
             Some(
@@ -178,6 +181,7 @@ impl<'connection> AgentSessionService<'connection> {
                         command: profile.command.clone(),
                         working_dir: working_dir.clone(),
                         log_path: log_path.clone(),
+                        initial_prompt: initial_prompt_argument.clone(),
                         rows: 32,
                         cols: 120,
                         startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
@@ -190,17 +194,24 @@ impl<'connection> AgentSessionService<'connection> {
         };
         let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
         let mut child = if pending_pty.is_none() {
-            let mut child = spawn_agent_process(&profile, &working_dir, &log_path)?;
+            let mut child = spawn_agent_process(
+                &profile,
+                &working_dir,
+                &log_path,
+                initial_prompt_argument.as_deref(),
+            )?;
             ensure_process_started(&mut child, &profile.command)?;
             Some(child)
         } else {
             None
         };
         let mut pending_pty = pending_pty;
-        if let Some(pending_pty) = pending_pty.as_mut() {
-            pending_pty
-                .write_input(&normalized_prompt)
-                .map_err(agent_session_start_error)?;
+        if !command_accepts_prompt_argument {
+            if let Some(pending_pty) = pending_pty.as_mut() {
+                pending_pty
+                    .write_input(&normalized_prompt)
+                    .map_err(agent_session_start_error)?;
+            }
         }
 
         let transaction = self
@@ -838,16 +849,19 @@ fn spawn_agent_process(
     profile: &AgentProfileRow,
     working_dir: &str,
     log_path: &str,
+    initial_prompt: Option<&str>,
 ) -> Result<Child, CommandError> {
     let log_file = File::create(log_path).map_err(agent_session_start_error)?;
     let stderr_file = log_file.try_clone().map_err(agent_session_start_error)?;
 
-    Command::new(&profile.command)
-        .current_dir(working_dir)
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(stderr_file))
-        .spawn()
-        .map_err(agent_session_start_error)
+    let mut command = Command::new(&profile.command);
+    command.current_dir(working_dir);
+    command.stdout(Stdio::from(log_file));
+    command.stderr(Stdio::from(stderr_file));
+    if let Some(prompt) = initial_prompt {
+        command.arg(prompt);
+    }
+    command.spawn().map_err(agent_session_start_error)
 }
 
 fn ensure_process_started(child: &mut Child, command: &str) -> Result<(), CommandError> {
@@ -958,6 +972,10 @@ fn should_attempt_codex_session_capture(command: &str) -> bool {
         .and_then(|name| name.to_str())
         .map(|name| name.eq_ignore_ascii_case("codex"))
         .unwrap_or(false)
+}
+
+fn command_supports_prompt_argument(command: &str) -> bool {
+    should_attempt_codex_session_capture(command)
 }
 
 fn refresh_codex_session_id_in_data_dir(
@@ -1137,7 +1155,10 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
 
 #[cfg(test)]
 mod tests {
-    use super::{detect_codex_session_id_from_home, normalize_submitted_prompt};
+    use super::{
+        command_supports_prompt_argument, detect_codex_session_id_from_home,
+        normalize_submitted_prompt,
+    };
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1147,6 +1168,13 @@ mod tests {
         assert_eq!(normalize_submitted_prompt("hello"), "hello\r");
         assert_eq!(normalize_submitted_prompt("hello\n"), "hello\n");
         assert_eq!(normalize_submitted_prompt("hello\r"), "hello\r");
+    }
+
+    #[test]
+    fn command_supports_prompt_argument_only_for_codex_binary() {
+        assert!(command_supports_prompt_argument("/usr/local/bin/codex"));
+        assert!(command_supports_prompt_argument("codex"));
+        assert!(!command_supports_prompt_argument("/tmp/echo-stdin.sh"));
     }
 
     #[test]
