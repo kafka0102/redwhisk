@@ -459,8 +459,11 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
             &format!("Completed issue {index:02}"),
         );
         let closed_at = 1_780_620_000_000 + i64::from(index);
-        let status = if index % 2 == 0 {
+        let last_active_at = if index == 20 { 1 } else { closed_at - 10 };
+        let status = if index % 3 == 0 {
             AgentSessionStatus::Closed
+        } else if index % 3 == 1 {
+            AgentSessionStatus::Crashed
         } else {
             AgentSessionStatus::Stopped
         };
@@ -469,7 +472,7 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
             issue_id,
             profile_id,
             status,
-            closed_at - 10,
+            last_active_at,
             Some(closed_at),
         );
     }
@@ -512,9 +515,29 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
     assert!(response.sessions[..2]
         .iter()
         .all(|session| session.status == AgentSessionStatus::Running));
+    assert!(response.sessions[2..].iter().all(|session| matches!(
+        session.status,
+        AgentSessionStatus::Closed | AgentSessionStatus::Crashed | AgentSessionStatus::Stopped
+    )));
     assert!(response.sessions[2..]
         .iter()
-        .all(|session| session.status != AgentSessionStatus::Running));
+        .any(|session| session.status == AgentSessionStatus::Closed));
+    assert!(response.sessions[2..]
+        .iter()
+        .any(|session| session.status == AgentSessionStatus::Crashed));
+    assert!(response.sessions[2..]
+        .iter()
+        .any(|session| session.status == AgentSessionStatus::Stopped));
+    assert_eq!(
+        response.sessions[2..]
+            .iter()
+            .map(|session| session.issue_title.clone())
+            .collect::<Vec<_>>(),
+        (1..=20)
+            .rev()
+            .map(|index| Some(format!("Completed issue {index:02}")))
+            .collect::<Vec<_>>()
+    );
     assert_eq!(
         response.sessions[2].issue_title.as_deref(),
         Some("Completed issue 20")
@@ -538,6 +561,66 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
         .sessions
         .iter()
         .all(|session| session.agent_type == AgentType::Codex));
+}
+
+#[test]
+fn list_agent_sessions_orders_completed_ties_by_session_id_desc() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "completed-order-project");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let shared_closed_at = 1_780_620_999_999;
+
+    let first_issue = insert_issue_with_title(
+        &database.connection,
+        project_id,
+        "running",
+        "First completed issue",
+    );
+    let first_session_id = insert_agent_session_row(
+        &database.connection,
+        first_issue,
+        profile_id,
+        AgentSessionStatus::Closed,
+        shared_closed_at - 1,
+        Some(shared_closed_at),
+    );
+
+    let second_issue = insert_issue_with_title(
+        &database.connection,
+        project_id,
+        "running",
+        "Second completed issue",
+    );
+    let second_session_id = insert_agent_session_row(
+        &database.connection,
+        second_issue,
+        profile_id,
+        AgentSessionStatus::Stopped,
+        shared_closed_at - 2,
+        Some(shared_closed_at),
+    );
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let response = service
+        .list_agent_sessions(project_id)
+        .expect("list agent sessions");
+
+    assert_eq!(response.sessions.len(), 2);
+    assert_eq!(
+        response
+            .sessions
+            .iter()
+            .map(|session| session.session_id)
+            .collect::<Vec<_>>(),
+        vec![second_session_id, first_session_id]
+    );
 }
 
 #[test]
