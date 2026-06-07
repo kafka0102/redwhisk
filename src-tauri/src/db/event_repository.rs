@@ -142,6 +142,7 @@ fn session_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionEv
 fn session_event_type_from_str(value: &str) -> rusqlite::Result<SessionEventType> {
     match value {
         "session_started" => Ok(SessionEventType::SessionStarted),
+        "session_exited" => Ok(SessionEventType::SessionExited),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

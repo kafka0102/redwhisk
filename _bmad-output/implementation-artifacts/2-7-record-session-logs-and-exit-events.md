@@ -4,7 +4,7 @@ baseline_commit: 01028ad
 
 # Story 2.7: 记录 Session 日志和退出事件
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -22,26 +22,32 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 收口 Session 原始日志与结构化事件的职责边界，避免把高频终端输出写进 SQLite (AC: 1, 2)
-  - [ ] 以 `src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/core/agent_session_service.rs` 和现有 `session-logs/*.log` 路径为主边界，确认原始 PTY 输出继续只写日志文件，不新增逐字符 `SessionEvent`。
-  - [ ] 评估当前 `read_agent_session_terminal` 的日志快照读取路径，确保日志文件仍是终端内容的单一事实来源，而 `SessionEvent` 只记录关键生命周期事件和必要摘要。
-  - [ ] 若需要扩展 Rust 类型或 repository，保持 `log_path`、时间戳与 JSON payload 结构和既有 schema 风格一致，不引入第二套并行日志索引模型。
-- [ ] 补齐 `SessionEvent` 的统一事件类型与 payload 合同，覆盖退出相关事实 (AC: 2, 3)
-  - [ ] 扩展 `src-tauri/src/types/session_event.rs`、`src-tauri/src/db/event_repository.rs` 及相关映射，使 `session_started` 之外的退出类事件拥有稳定字面量、统一 JSON payload 和可测试的持久化语义。
-  - [ ] 明确退出事件至少要携带 `sessionId`、`issueId`、退出时间、退出原因或 exit code、`logPath`，并在无法获得完整信息时保持字段缺失语义清晰，而不是混入模糊字符串。
-  - [ ] 本 story 只负责记录“发生了什么”；`crashed` / `stopped` 的完整状态机收口、列表分组和 UI 展示继续留给 Epic 4。
-- [ ] 在 Rust Core 接住 PTY / Agent 退出事实，并把它落成可复盘记录 (AC: 2, 3)
-  - [ ] 基于现有 PTY manager 的活会话注册与等待逻辑，在进程退出时补写结构化 `SessionEvent`，保证正常退出、异常退出至少有一条可查询记录。
-  - [ ] 如本 story 需要更新 `agent_sessions` 的 `last_active_at`、`closed_at` 或状态字段，只做 Epic 2.7 验收必需的最小写入，不提前实现 Epic 4 的完整 `crashed` / `stopped` 判定与 UI 联动。
-  - [ ] 保持 Rust Core 是日志路径、退出信息和事件写入的唯一事实来源；React 不直接推断退出原因，也不自行生成 `SessionEvent`。
-- [ ] 为后续复盘和异常处理留出最小可消费查询面，但不抢跑完整日志 UI (AC: 2, 3)
-  - [ ] 若当前仓库尚无读取 SessionEvent 的最小命令或查询能力，按最小范围补齐仅供测试或后续 story 复用的边界。
-  - [ ] 不在本 story 中实现完整 `Open Log`、Summary 页面或 `crashed` / `stopped` 标记 UI；这些继续由 Epic 4 / Epic 5 承接。
-- [ ] 测试与验证 (AC: 1, 2, 3)
-  - [ ] 新增 Rust 测试覆盖：Session 启动后写日志文件、退出后写入结构化 `SessionEvent`，并且不会把终端全文逐字符塞进 SQLite。
-  - [ ] 新增 Rust 测试覆盖：正常退出与异常退出至少拥有可区分的事件或 payload 事实，且 `log_path` 与时间戳被正确保存。
-  - [ ] 若本 story 修改了 TypeScript / TSX 运行时逻辑，运行 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`。
-  - [ ] 若本 story 修改了 Rust command / service / repository / PTY 管理层，运行 `cargo fmt --manifest-path src-tauri/Cargo.toml` 与 `cargo test --manifest-path src-tauri/Cargo.toml`。
+- [x] 收口 Session 原始日志与结构化事件的职责边界，避免把高频终端输出写进 SQLite (AC: 1, 2)
+  - [x] 以 `src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/core/agent_session_service.rs` 和现有 `session-logs/*.log` 路径为主边界，确认原始 PTY 输出继续只写日志文件，不新增逐字符 `SessionEvent`。
+  - [x] 评估当前 `read_agent_session_terminal` 的日志快照读取路径，确保日志文件仍是终端内容的单一事实来源，而 `SessionEvent` 只记录关键生命周期事件和必要摘要。
+  - [x] 若需要扩展 Rust 类型或 repository，保持 `log_path`、时间戳与 JSON payload 结构和既有 schema 风格一致，不引入第二套并行日志索引模型。
+- [x] 补齐 `SessionEvent` 的统一事件类型与 payload 合同，覆盖退出相关事实 (AC: 2, 3)
+  - [x] 扩展 `src-tauri/src/types/session_event.rs`、`src-tauri/src/db/event_repository.rs` 及相关映射，使 `session_started` 之外的退出类事件拥有稳定字面量、统一 JSON payload 和可测试的持久化语义。
+  - [x] 明确退出事件至少要携带 `sessionId`、`issueId`、退出时间、退出原因或 exit code、`logPath`，并在无法获得完整信息时保持字段缺失语义清晰，而不是混入模糊字符串。
+  - [x] 本 story 只负责记录“发生了什么”；`crashed` / `stopped` 的完整状态机收口、列表分组和 UI 展示继续留给 Epic 4。
+- [x] 在 Rust Core 接住 PTY / Agent 退出事实，并把它落成可复盘记录 (AC: 2, 3)
+  - [x] 基于现有 PTY manager 的活会话注册与等待逻辑，在进程退出时补写结构化 `SessionEvent`，保证正常退出、异常退出至少有一条可查询记录。
+  - [x] 如本 story 需要更新 `agent_sessions` 的 `last_active_at`、`closed_at` 或状态字段，只做 Epic 2.7 验收必需的最小写入，不提前实现 Epic 4 的完整 `crashed` / `stopped` 判定与 UI 联动。
+  - [x] 保持 Rust Core 是日志路径、退出信息和事件写入的唯一事实来源；React 不直接推断退出原因，也不自行生成 `SessionEvent`。
+- [x] 为后续复盘和异常处理留出最小可消费查询面，但不抢跑完整日志 UI (AC: 2, 3)
+  - [x] 若当前仓库尚无读取 SessionEvent 的最小命令或查询能力，按最小范围补齐仅供测试或后续 story 复用的边界。
+  - [x] 不在本 story 中实现完整 `Open Log`、Summary 页面或 `crashed` / `stopped` 标记 UI；这些继续由 Epic 4 / Epic 5 承接。
+- [x] 测试与验证 (AC: 1, 2, 3)
+  - [x] 新增 Rust 测试覆盖：Session 启动后写日志文件、退出后写入结构化 `SessionEvent`，并且不会把终端全文逐字符塞进 SQLite。
+  - [x] 新增 Rust 测试覆盖：正常退出与异常退出至少拥有可区分的事件或 payload 事实，且 `log_path` 与时间戳被正确保存。
+  - [x] 若本 story 修改了 TypeScript / TSX 运行时逻辑，运行 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`。
+  - [x] 若本 story 修改了 Rust command / service / repository / PTY 管理层，运行 `cargo fmt --manifest-path src-tauri/Cargo.toml` 与 `cargo test --manifest-path src-tauri/Cargo.toml`。
+
+## Senior Developer Review (AI)
+
+- Outcome: Approve
+- Date: 2026-06-07
+- Findings: 本轮 review 未发现阻塞 Story 2.7 交付的功能或边界问题；当前实现把退出事实统一收口到 Rust Core，保持了“日志文件承载原始输出、SQLite 只保存结构化事件”的边界，`stopped` 仍明确留给应用重启场景，不与本 story 混淆。
 
 ## Dev Notes
 
@@ -125,12 +131,57 @@ GPT-5 Codex
 - 2026-06-07T09:xx+0800：`bmad-dev-workflow` preflight 读取 `sprint-status.yaml`，确认当前无 `ready-for-dev` story，按顺序锁定 `2-7-record-session-logs-and-exit-events`，基线 `HEAD` 为 `01028ad`。
 - 2026-06-07T09:xx+0800：交叉核对 Epic 2.7、PRD、addendum、architecture、UX 与 Story 2.3 / 2.5 / 2.6，确认本 story 只补“日志与退出事实”而不提前实现完整 `crashed` / `stopped` UX。
 - 2026-06-07T09:xx+0800：复查 `agent_session_service`、`pty_session_manager`、`event_repository` 与 `session_event` 类型，确认当前日志文件已是事实来源，但退出事件尚未结构化落库。
+- 2026-06-07T09:10+0800：扩展 `SessionEventType` 为 `session_exited`，并在 `event_repository` 中补齐映射，确保退出事件可以作为稳定字面量持久化与回读。
+- 2026-06-07T09:12+0800：在 `agent_session_repository` 新增最小 `mark_terminated_in_transaction` 写回路径，并把 PTY manager 的退出线程升级为带退出状态的回调。
+- 2026-06-07T09:14+0800：在 `agent_session_service` 新增 `record_session_termination_in_data_dir`，将 `exit_code == 0` 收口为 `closed`，其余退出收口为 `crashed`，并统一写入包含 `sessionId`、`issueId`、`status`、`exitCode`、`reason`、`logPath` 的 JSON payload。
+- 2026-06-07T09:16+0800：新增 `agent_session` 集成测试覆盖正常退出、非零退出和重复回写幂等性；首次测试失败暴露 `portable-pty` 的 `exit_code()` 为 `u32`，已在 PTY 边界转换为 `i32` 后复跑通过。
+- 2026-06-07T09:20+0800：补齐非 PTY `start_agent_session` 测试路径的退出事件回写，避免主路径与测试/备用路径在退出事实写入上产生行为分叉。
+- 2026-06-07T09:22+0800：完成 `cargo fmt --manifest-path src-tauri/Cargo.toml` 与 `cargo test --manifest-path src-tauri/Cargo.toml` 全量复验，并做同会话代码评审，确认未把 Epic 4 的异常状态 UX 提前混入本 story。
 
 ### Completion Notes List
 
 - 2026-06-07：create-story 已为 Story 2.7 生成开发上下文，并将实现焦点限定在 session log 与退出事件事实源。
 - 2026-06-07：已明确 2.7 与 2.6 / 2.8 / Epic 4 的边界，避免把实时事件流、异常状态 UX 或日志页面混入当前 story。
+- 新增 `session_exited` 结构化事件类型，并将其回读映射接入 `event_repository`，使退出事件与现有 `session_started` 一样具备稳定字面量。
+- PTY 退出线程现在会携带 `exit_code` 回调到 Rust Core；Rust Core 在单个事务内写回 `agent_sessions.status` / `last_active_at` / `closed_at` 的最小退出事实，并落一条统一 JSON payload 的 `SessionEvent`。
+- 退出状态采用当前 story 的最小规则：`exit_code == 0` 记为 `closed`，非 0 或缺失 exit code 记为 `crashed`；`stopped` 继续保留给应用重启后无法恢复活 PTY 的场景。
+- 非 PTY 的 `start_agent_session` 路径也补齐了相同的退出事实回写，避免主路径与测试/备用路径产生行为分叉。
+- 新增 Rust 集成测试覆盖正常退出、异常退出和重复回写幂等性，确保不会把终端全文写入 SQLite，且 `log_path`、`exitCode` 与 `reason` 均进入结构化 payload。
 
 ### File List
 
 - _bmad-output/implementation-artifacts/2-7-record-session-logs-and-exit-events.md
+- _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- src-tauri/src/agent/pty_session_manager.rs
+- src-tauri/src/core/agent_session_service.rs
+- src-tauri/src/db/agent_session_repository.rs
+- src-tauri/src/db/event_repository.rs
+- src-tauri/src/types/session_event.rs
+- src-tauri/tests/agent_session.rs
+
+### Validation Commands
+
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+
+### Validation Results
+
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`：通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`：首次失败，原因是 `portable-pty` 的 `exit_code()` 返回 `u32`，与新增退出事件模型的 `Option<i32>` 不一致；已在 PTY 边界统一转换后修复。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`：修正退出码类型后复跑，通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`：复跑通过，13 个测试全部通过，新增退出事件与幂等性用例通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过，`agent_session`、`issue`、`local_data`、`project`、`settings` 全量 Rust 测试通过。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`：补齐非 PTY 退出事实回写后复跑，通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：补齐非 PTY 退出事实回写后再次复跑，通过。
+
+### Change Log
+
+- 2026-06-07：创建 Story 2.7 开发上下文并将状态推进到 `ready-for-dev`。
+- 2026-06-07：完成退出事件类型、PTY/非 PTY 退出事实回写、最小 session 终止持久化与 Rust 集成测试，状态推进到 `review`。
+- 2026-06-07：完成 Senior Developer Review (AI)，未发现阻塞问题，状态推进到 `done`。

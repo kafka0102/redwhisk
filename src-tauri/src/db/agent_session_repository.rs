@@ -116,6 +116,32 @@ impl<'connection> AgentSessionRepository<'connection> {
         let id = transaction.last_insert_rowid();
         find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
+
+    pub fn mark_terminated_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        status: AgentSessionStatus,
+        terminated_at: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = transaction.execute(
+            "UPDATE agent_sessions
+             SET status = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2),
+                 closed_at = COALESCE(closed_at, ?2)
+             WHERE id = ?3 AND closed_at IS NULL",
+            params![
+                agent_session_status_to_str(&status),
+                terminated_at,
+                session_id
+            ],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, session_id)
+    }
 }
 
 fn find_by_id_on_connection(
@@ -183,6 +209,15 @@ fn agent_session_status_from_str(value: &str) -> rusqlite::Result<AgentSessionSt
         "crashed" => Ok(AgentSessionStatus::Crashed),
         "stopped" => Ok(AgentSessionStatus::Stopped),
         _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn agent_session_status_to_str(value: &AgentSessionStatus) -> &'static str {
+    match value {
+        AgentSessionStatus::Running => "running",
+        AgentSessionStatus::Closed => "closed",
+        AgentSessionStatus::Crashed => "crashed",
+        AgentSessionStatus::Stopped => "stopped",
     }
 }
 

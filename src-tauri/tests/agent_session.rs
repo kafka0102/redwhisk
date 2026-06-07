@@ -1,5 +1,5 @@
 use redwhisk_lib::agent::pty_session_manager::{
-    read_terminal_snapshot, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
 use redwhisk_lib::core::agent_session_service::AgentSessionService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
@@ -18,6 +18,7 @@ use redwhisk_lib::types::issue::CreateIssueInput;
 use redwhisk_lib::types::issue::IssueStatus;
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::session_event::SessionEventType;
+use serde_json::Value;
 
 #[test]
 fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
@@ -557,6 +558,107 @@ fn list_agent_sessions_rejects_missing_project() {
 }
 
 #[test]
+fn record_session_termination_marks_zero_exit_as_closed_and_persists_event() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "termination-closed-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_628_400_000,
+        None,
+    );
+
+    AgentSessionService::record_session_termination_in_data_dir(
+        temp_dir.path(),
+        session_id,
+        PtyExitStatus { exit_code: Some(0) },
+    )
+    .expect("record termination");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(session.status, AgentSessionStatus::Closed);
+    assert!(session.closed_at.is_some());
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionExited
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
+    assert_eq!(payload["status"].as_str(), Some("closed"));
+    assert_eq!(payload["exitCode"].as_i64(), Some(0));
+    assert_eq!(payload["reason"].as_str(), Some("process_exited"));
+    assert_eq!(payload["logPath"].as_str(), Some("/tmp/log"));
+}
+
+#[test]
+fn record_session_termination_marks_non_zero_exit_as_crashed_and_is_idempotent() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "termination-crashed-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_628_500_000,
+        None,
+    );
+
+    AgentSessionService::record_session_termination_in_data_dir(
+        temp_dir.path(),
+        session_id,
+        PtyExitStatus { exit_code: Some(7) },
+    )
+    .expect("record first termination");
+    AgentSessionService::record_session_termination_in_data_dir(
+        temp_dir.path(),
+        session_id,
+        PtyExitStatus { exit_code: Some(9) },
+    )
+    .expect("record duplicate termination");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(session.status, AgentSessionStatus::Crashed);
+    assert!(session.closed_at.is_some());
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionExited
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["status"].as_str(), Some("crashed"));
+    assert_eq!(payload["exitCode"].as_i64(), Some(7));
+    assert_eq!(payload["reason"].as_str(), Some("non_zero_exit_code"));
+}
+
+#[test]
 fn pty_session_manager_forwards_input_resizes_and_persists_output() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let command = echo_stdin_command(temp_dir.path());
@@ -574,7 +676,7 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register(77, pending);
+    manager.register(77, pending, |_| {});
 
     manager
         .write_input(77, "hello from pty\r")

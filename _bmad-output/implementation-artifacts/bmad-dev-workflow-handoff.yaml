@@ -1,15 +1,35 @@
 workflow: bmad-dev-workflow
-phase: story-created
+phase: complete
 story_file: _bmad-output/implementation-artifacts/2-7-record-session-logs-and-exit-events.md
 story_key: 2-7-record-session-logs-and-exit-events
-story_status: ready-for-dev
+story_status: done
 baseline_commit: 01028ad
 changed_files:
   - _bmad-output/implementation-artifacts/2-7-record-session-logs-and-exit-events.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-validation_commands: []
-validation_results: []
-review_summary:
+  - src-tauri/src/agent/pty_session_manager.rs
+  - src-tauri/src/core/agent_session_service.rs
+  - src-tauri/src/db/agent_session_repository.rs
+  - src-tauri/src/db/event_repository.rs
+  - src-tauri/src/types/session_event.rs
+  - src-tauri/tests/agent_session.rs
+validation_commands:
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo test --manifest-path src-tauri/Cargo.toml
+validation_results:
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
+  - fail_then_fixed: cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml
+review_summary: review clean; no blocking findings, and session_exited persistence now records minimal closed/crashed facts while leaving stopped and abnormal-session UX to Epic 4
 blocking_reason:
-updated_at: 2026-06-07T09:07:14+08:00
+updated_at: 2026-06-07T09:25:49+08:00
