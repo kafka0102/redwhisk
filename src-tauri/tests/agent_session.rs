@@ -696,6 +696,127 @@ fn list_agent_sessions_rejects_missing_project() {
 }
 
 #[test]
+fn list_agent_sessions_marks_running_session_as_needing_attention_when_log_ends_with_codex_prompt()
+{
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "attention-project");
+    let issue_id = insert_issue_with_title(
+        &database.connection,
+        project_id,
+        "running",
+        "Needs review issue",
+    );
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let log_path = temp_dir.path().join("attention.log");
+    std::fs::write(
+        &log_path,
+        "Codex finished the current reply.\n\n› Run /review on my current changes\n",
+    )
+    .expect("write log");
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_111_000,
+        None,
+        log_path.to_string_lossy().as_ref(),
+    );
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let response = service
+        .list_agent_sessions(project_id)
+        .expect("list agent sessions");
+
+    assert_eq!(response.sessions.len(), 1);
+    assert_eq!(response.sessions[0].session_id, session_id);
+    assert_eq!(
+        response.sessions[0].attention,
+        AgentSessionAttention::Requested
+    );
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(
+        refreshed_session.attention,
+        AgentSessionAttention::Requested
+    );
+}
+
+#[test]
+fn write_terminal_input_clears_requested_attention_after_successful_write() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "clear-attention-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let log_path = temp_dir.path().join("clear-attention.log");
+    std::fs::write(&log_path, "› Run /review on my current changes\n").expect("write log");
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::Requested,
+        1_780_628_222_000,
+        None,
+        log_path.to_string_lossy().as_ref(),
+    );
+
+    let command = echo_stdin_command(temp_dir.path());
+    let manager = PtySessionManager::new();
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register(session_id, pending, |_| {});
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    service
+        .write_terminal_input(
+            redwhisk_lib::types::agent_session::WriteAgentSessionTerminalInput {
+                project_id,
+                session_id,
+                data: "hello from user\r".to_string(),
+            },
+            &manager,
+        )
+        .expect("write input");
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(refreshed_session.attention, AgentSessionAttention::None);
+
+    manager.kill(session_id).expect("kill session");
+}
+
+#[test]
 fn record_session_termination_marks_zero_exit_as_closed_and_persists_event() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -982,6 +1103,28 @@ fn insert_agent_session_row(
     last_active_at: i64,
     closed_at: Option<i64>,
 ) -> i64 {
+    insert_agent_session_row_with_details(
+        connection,
+        issue_id,
+        agent_profile_id,
+        status,
+        AgentSessionAttention::None,
+        last_active_at,
+        closed_at,
+        "/tmp/log",
+    )
+}
+
+fn insert_agent_session_row_with_details(
+    connection: &rusqlite::Connection,
+    issue_id: i64,
+    agent_profile_id: i64,
+    status: AgentSessionStatus,
+    attention: AgentSessionAttention,
+    last_active_at: i64,
+    closed_at: Option<i64>,
+    log_path: &str,
+) -> i64 {
     connection
         .execute(
             "INSERT INTO agent_sessions (
@@ -996,12 +1139,13 @@ fn insert_agent_session_row(
                 last_active_at,
                 started_at,
                 closed_at
-            ) VALUES (?1, ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', '/tmp/log', ?5, ?5, ?6)",
+            ) VALUES (?1, ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', ?5, ?6, ?6, ?7)",
             rusqlite::params![
                 issue_id,
                 agent_profile_id,
                 agent_session_status_str(&status),
-                agent_session_attention_str(&AgentSessionAttention::None),
+                agent_session_attention_str(&attention),
+                log_path,
                 last_active_at,
                 closed_at,
             ],

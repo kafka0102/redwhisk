@@ -20,10 +20,10 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
-    AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind, AgentSessionStatus,
-    InjectAgentSessionPromptInput, InjectAgentSessionPromptResult, ReadAgentSessionTerminalResult,
-    ResizeAgentSessionTerminalInput, StartAgentSessionInput, StartAgentSessionResult,
-    WriteAgentSessionTerminalInput,
+    AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
+    AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
+    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput, StartAgentSessionInput,
+    StartAgentSessionResult, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
@@ -35,6 +35,7 @@ const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
 const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
+const ATTENTION_SNAPSHOT_MAX_BYTES: usize = 32_768;
 
 pub struct AgentSessionService<'connection> {
     issue_repository: IssueRepository<'connection>,
@@ -354,9 +355,11 @@ impl<'connection> AgentSessionService<'connection> {
         let mut running_sessions = Vec::new();
         let mut completed_sessions = Vec::new();
 
-        for row in rows {
+        for mut row in rows {
             match row.status {
                 crate::types::agent_session::AgentSessionStatus::Running => {
+                    row.attention =
+                        self.reconcile_running_session_attention(row.session_id, None)?;
                     running_sessions.push(row);
                 }
                 crate::types::agent_session::AgentSessionStatus::Closed
@@ -423,10 +426,12 @@ impl<'connection> AgentSessionService<'connection> {
         let session = self.find_project_session(project_id, session_id)?;
         let snapshot = read_terminal_snapshot(Path::new(&session.log_path), max_bytes)
             .map_err(agent_session_start_error)?;
+        self.reconcile_running_session_attention(session_id, Some(snapshot.as_str()))?;
 
         Ok(ReadAgentSessionTerminalResult {
             session_id,
             snapshot,
+            // attention is persisted above; the terminal bridge only needs liveness here.
             is_active: pty_sessions.contains(session_id),
         })
     }
@@ -443,7 +448,10 @@ impl<'connection> AgentSessionService<'connection> {
 
         pty_sessions
             .write_input(input.session_id, &input.data)
-            .map_err(inactive_terminal_error)
+            .map_err(inactive_terminal_error)?;
+
+        self.clear_attention_after_successful_input(input.session_id)?;
+        Ok(())
     }
 
     pub fn inject_session_prompt(
@@ -458,6 +466,7 @@ impl<'connection> AgentSessionService<'connection> {
         pty_sessions
             .write_input(input.session_id, &submitted_prompt)
             .map_err(inactive_terminal_error)?;
+        self.clear_attention_after_successful_input(input.session_id)?;
 
         let codex_session_id = session.codex_session_id.clone();
         let recorded_at = current_epoch_millis()?;
@@ -501,6 +510,65 @@ impl<'connection> AgentSessionService<'connection> {
         pty_sessions
             .resize(input.session_id, input.rows, input.cols)
             .map_err(inactive_terminal_error)
+    }
+
+    fn reconcile_running_session_attention(
+        &self,
+        session_id: i64,
+        snapshot_override: Option<&str>,
+    ) -> Result<AgentSessionAttention, CommandError> {
+        let session = self
+            .agent_session_repository
+            .find_by_id(session_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。")
+                    .with_detail(
+                        ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
+                    )
+            })?;
+
+        if session.status != AgentSessionStatus::Running {
+            return Ok(session.attention);
+        }
+
+        if session.attention == AgentSessionAttention::Requested {
+            return Ok(session.attention);
+        }
+
+        if !session_log_has_new_output(&session.log_path, session.last_active_at) {
+            return Ok(session.attention);
+        }
+
+        let snapshot = match snapshot_override {
+            Some(snapshot) => snapshot.to_string(),
+            None => {
+                read_terminal_snapshot(Path::new(&session.log_path), ATTENTION_SNAPSHOT_MAX_BYTES)
+                    .map_err(agent_session_start_error)?
+            }
+        };
+
+        if !snapshot_ends_with_codex_input_prompt(&snapshot) {
+            return Ok(session.attention);
+        }
+
+        let updated_at = current_epoch_millis()?;
+        let updated_session = self
+            .agent_session_repository
+            .update_attention(session_id, AgentSessionAttention::Requested, updated_at)
+            .map_err(agent_session_database_error)?;
+
+        Ok(updated_session
+            .map(|record| record.attention)
+            .unwrap_or(AgentSessionAttention::Requested))
+    }
+
+    fn clear_attention_after_successful_input(&self, session_id: i64) -> Result<(), CommandError> {
+        let updated_at = current_epoch_millis()?;
+        self.agent_session_repository
+            .update_attention(session_id, AgentSessionAttention::None, updated_at)
+            .map_err(agent_session_database_error)?;
+        Ok(())
     }
 
     fn find_project_session(
@@ -785,6 +853,68 @@ fn validate_profile_scope(profile: &AgentProfileRow, project_id: i64) -> Result<
             }
         }
     }
+}
+
+fn session_log_has_new_output(log_path: &str, last_active_at: i64) -> bool {
+    let Ok(metadata) = fs::metadata(log_path) else {
+        return false;
+    };
+    let Ok(modified_at) = metadata.modified() else {
+        return false;
+    };
+    let Ok(duration) = modified_at.duration_since(UNIX_EPOCH) else {
+        return false;
+    };
+
+    let modified_ms = i64::try_from(duration.as_millis()).unwrap_or(i64::MAX);
+    modified_ms > last_active_at
+}
+
+fn snapshot_ends_with_codex_input_prompt(snapshot: &str) -> bool {
+    last_non_empty_terminal_line(snapshot)
+        .map(|line| {
+            let trimmed = line.trim_start();
+            trimmed == "›" || trimmed.starts_with("› ")
+        })
+        .unwrap_or(false)
+}
+
+fn last_non_empty_terminal_line(snapshot: &str) -> Option<String> {
+    let normalized = strip_terminal_control_sequences(snapshot);
+    normalized
+        .replace('\r', "\n")
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn strip_terminal_control_sequences(snapshot: &str) -> String {
+    let mut cleaned = String::with_capacity(snapshot.len());
+    let mut chars = snapshot.chars().peekable();
+
+    while let Some(character) = chars.next() {
+        if character == '\u{1b}' {
+            if matches!(chars.peek(), Some('[')) {
+                let _ = chars.next();
+                for next in chars.by_ref() {
+                    if ('@'..='~').contains(&next) {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+
+        if character.is_control() && !matches!(character, '\n' | '\r' | '\t') {
+            continue;
+        }
+
+        cleaned.push(character);
+    }
+
+    cleaned
 }
 
 fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandError> {

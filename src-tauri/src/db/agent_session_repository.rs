@@ -161,6 +161,31 @@ impl<'connection> AgentSessionRepository<'connection> {
 
         self.find_by_id(session_id)
     }
+
+    pub fn update_attention(
+        &self,
+        session_id: i64,
+        attention: AgentSessionAttention,
+        updated_at: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = self.connection.execute(
+            "UPDATE agent_sessions
+             SET attention = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?3 AND status = 'running'",
+            params![
+                agent_session_attention_to_str(&attention),
+                updated_at,
+                session_id
+            ],
+        )?;
+
+        if changed == 0 {
+            return self.find_by_id(session_id);
+        }
+
+        self.find_by_id(session_id)
+    }
 }
 
 fn find_by_id_on_connection(
@@ -245,5 +270,12 @@ fn agent_session_attention_from_str(value: &str) -> rusqlite::Result<AgentSessio
         "none" => Ok(AgentSessionAttention::None),
         "requested" => Ok(AgentSessionAttention::Requested),
         _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn agent_session_attention_to_str(value: &AgentSessionAttention) -> &'static str {
+    match value {
+        AgentSessionAttention::None => "none",
+        AgentSessionAttention::Requested => "requested",
     }
 }

@@ -8,6 +8,8 @@ import {
 import { CodexTerminal } from "./codex-terminal";
 import { toCommandError } from "../../shared/commands/command-error";
 
+const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
+
 interface AgentsActivityProps {
   activeSessionId: number | null;
   onSelectSession?: (sessionId: number) => void;
@@ -57,8 +59,10 @@ export function AgentsActivity({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadSessions() {
-      setIsLoading(true);
+    async function loadSessions(showLoading: boolean) {
+      if (showLoading) {
+        setIsLoading(true);
+      }
       setErrorMessage(null);
 
       try {
@@ -73,19 +77,23 @@ export function AgentsActivity({
           return;
         }
 
-        setSessions([]);
         setErrorMessage(toCommandError(error).message);
       } finally {
-        if (isMounted) {
+        if (isMounted && showLoading) {
           setIsLoading(false);
         }
       }
     }
 
-    void loadSessions();
+    void loadSessions(true);
+    const intervalId = window.setInterval(
+      () => void loadSessions(false),
+      SESSION_LIST_POLL_INTERVAL_MS,
+    );
 
     return () => {
       isMounted = false;
+      window.clearInterval(intervalId);
     };
   }, [projectId]);
 
@@ -422,25 +430,20 @@ function SessionGroup({
               type="button"
               onClick={() => onSelect(session.sessionId)}
             >
-              <span className="agents-session-row__title">
-                {formatSessionTitle(session)}
+              <span className="agents-session-row__header">
+                <span
+                  aria-label={`Session 状态：${formatSessionStatusLabel(session)}`}
+                  className={buildSessionStatusDotClassName(session)}
+                />
+                <span className="agents-session-row__title">
+                  {formatSessionTitle(session)}
+                </span>
               </span>
               <span className="agents-session-row__meta">
                 <span className="agents-session-row__meta-main">
-                  {`${formatAgentType(session.agentType)} · ${formatSessionStatus(session.status)}`}
+                  {formatAgentType(session.agentType)}
                 </span>
-                {session.attention === "requested" ? (
-                  <span
-                    aria-label="Codex 需要确认"
-                    className="attention-marker agents-session-row__attention"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="attention-marker__dot"
-                    />
-                    <span className="attention-marker__text">需要确认</span>
-                  </span>
-                ) : null}
+                <span className="sr-only">{`，${formatSessionStatusLabel(session)}`}</span>
               </span>
             </button>
           ))}
@@ -463,17 +466,25 @@ function formatAgentType(agentType: AgentSessionListItem["agentType"]): string {
   }
 }
 
-function formatSessionStatus(status: AgentSessionListItem["status"]): string {
-  switch (status) {
-    case "running":
-      return "running";
-    case "closed":
-      return "closed";
-    case "crashed":
-      return "crashed";
-    case "stopped":
-      return "stopped";
-    default:
-      return status;
+function buildSessionStatusDotClassName(session: AgentSessionListItem): string {
+  const tone =
+    session.attention === "requested"
+      ? "attention"
+      : session.status === "running"
+        ? "running"
+        : "completed";
+
+  return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
+}
+
+function formatSessionStatusLabel(session: AgentSessionListItem): string {
+  if (session.attention === "requested") {
+    return "需要确认";
   }
+
+  if (session.status === "running") {
+    return "运行中";
+  }
+
+  return "已结束";
 }

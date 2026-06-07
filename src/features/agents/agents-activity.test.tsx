@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -6,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentsActivity } from "./agents-activity";
 import {
@@ -41,6 +42,10 @@ describe("AgentsActivity", () => {
     });
     resizeAgentSessionTerminalMock.mockResolvedValue();
     writeAgentSessionTerminalMock.mockResolvedValue();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders groups, terminal workspace and info pane for the selected session", async () => {
@@ -255,7 +260,7 @@ describe("AgentsActivity", () => {
     );
   });
 
-  it("shows a needs-attention marker on session rows when attention is requested", async () => {
+  it("shows an attention status dot on session rows without rendering running text", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -297,8 +302,110 @@ describe("AgentsActivity", () => {
       name: /Quiet issue/i,
     });
 
-    expect(attentionRow).toHaveTextContent("需要确认");
-    expect(quietRow).not.toHaveTextContent("需要确认");
+    expect(
+      within(attentionRow).getByLabelText("Session 状态：需要确认"),
+    ).toHaveClass("agents-session-row__status-dot--attention");
+    expect(
+      within(quietRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+    expect(attentionRow).not.toHaveTextContent("running");
+    expect(quietRow).not.toHaveTextContent("running");
+  });
+
+  it("shows a completed status dot for completed sessions", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 401,
+          issueId: 22,
+          issueTitle: "Closed issue",
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          lastActiveAt: 1_780_630_000_000,
+          startedAt: 1_780_629_000_000,
+          closedAt: 1_780_631_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={401} projectId={1} />);
+
+    const completedGroup = await screen.findByRole("region", {
+      name: "Completed sessions",
+    });
+    const completedRow = within(completedGroup).getByRole("button", {
+      name: /Closed issue/i,
+    });
+
+    expect(
+      within(completedRow).getByLabelText("Session 状态：已结束"),
+    ).toHaveClass("agents-session-row__status-dot--completed");
+    expect(completedRow).not.toHaveTextContent("closed");
+  });
+
+  it("polls the session list and refreshes the attention dot", async () => {
+    vi.useFakeTimers();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Polling issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Polling issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "requested",
+            lastActiveAt: 1_780_638_000_500,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const runningGroup = screen.getByRole("region", {
+      name: "Running sessions",
+    });
+    const initialRow = within(runningGroup).getByRole("button", {
+      name: /Polling issue/i,
+    });
+    expect(
+      within(initialRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+
+    const refreshedRow = within(runningGroup).getByRole("button", {
+      name: /Polling issue/i,
+    });
+    expect(
+      within(refreshedRow).getByLabelText("Session 状态：需要确认"),
+    ).toHaveClass("agents-session-row__status-dot--attention");
   });
 
   it("resizes the session list with the keyboard separator control", async () => {
