@@ -1,56 +1,28 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/2-8-spike-codex-resume-and-completion-prompt-injection.md
-story_key: 2-8-spike-codex-resume-and-completion-prompt-injection
+story_file: _bmad-output/implementation-artifacts/2-9-spike-git-commit-detection.md
+story_key: 2-9-spike-git-commit-detection
 story_status: done
-baseline_commit: b2c02be
+baseline_commit: 426fd6d
 changed_files:
-  - _bmad-output/implementation-artifacts/2-8-spike-codex-resume-and-completion-prompt-injection.md
+  - _bmad-output/implementation-artifacts/2-9-spike-git-commit-detection.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - spikes/codex-resume-completion-prompt.md
-  - src-tauri/src/commands/agent_session_commands.rs
-  - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/db/agent_session_repository.rs
-  - src-tauri/src/db/event_repository.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/agent_session.rs
-  - src-tauri/src/types/session_event.rs
-  - src-tauri/tests/agent_session.rs
-  - src/features/agents/agent-session-commands.ts
-  - src/shared/commands/command-client.test.ts
+  - spikes/git-commit-detection.md
+  - src-tauri/src/git/mod.rs
+  - src-tauri/src/git/operation_state.rs
+  - src-tauri/src/git/status.rs
+  - src-tauri/tests/git_detection.rs
 validation_commands:
-  - rg -n "2\\.8|2-8|resume|completion prompt|prompt injection" _bmad-output/planning-artifacts/epics.md _bmad-output/planning-artifacts/architecture.md _bmad-output/planning-artifacts/ux-designs _bmad-output/planning-artifacts/prds -S
-  - rg -n "resume|completion prompt|session id|write_agent_session_terminal|pty_session_manager|codex_session_id" src-tauri src spikes _bmad-output/implementation-artifacts -S
-  - codex --help
-  - codex resume --help
-  - tail -n 5 ~/.codex/session_index.jsonl
-  - find ~/.codex/profiles -path '*/sessions/*' -type f | tail -n 20
-  - script -q /dev/null codex --no-alt-screen -C "$tmpdir" "Reply with one short word, then wait."
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - pnpm test -- --runInBand src/shared/commands/command-client.test.ts
-  - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
+  - cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
   - cargo test --manifest-path src-tauri/Cargo.toml
+  - rustfmt --edition 2021 --check src-tauri/src/git/mod.rs src-tauri/src/git/operation_state.rs src-tauri/src/git/status.rs src-tauri/tests/git_detection.rs
 validation_results:
-  - pass: rg -n "2\\.8|2-8|resume|completion prompt|prompt injection" _bmad-output/planning-artifacts/epics.md _bmad-output/planning-artifacts/architecture.md _bmad-output/planning-artifacts/ux-designs _bmad-output/planning-artifacts/prds -S
-  - pass: rg -n "resume|completion prompt|session id|write_agent_session_terminal|pty_session_manager|codex_session_id" src-tauri src spikes _bmad-output/implementation-artifacts -S
-  - pass: codex --help
-  - pass: codex resume --help
-  - pass: tail -n 5 ~/.codex/session_index.jsonl
-  - pass: find ~/.codex/profiles -path '*/sessions/*' -type f | tail -n 20
-  - timeout_with_no_stable_sample: script -q /dev/null codex --no-alt-screen -C "$tmpdir" "Reply with one short word, then wait."
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - pass: pnpm test -- --runInBand src/shared/commands/command-client.test.ts
-  - pass: pnpm format
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-  - pass: pnpm test
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml
-review_summary: review clean; prompt injection is now a stable same-session capability, while codex_session_id capture remains explicitly best-effort with resume downgraded to log retention and codex resume --last fallback
+  - pass: cargo fmt completed for Story 2.9 Rust files without staging unrelated settings changes.
+  - pass: git_detection passed with 8 tests, covering special-path porcelain parsing, non-forward HEAD movement, and merge/rebase/cherry-pick/revert/unmerged/sequencer blockers.
+  - pass: full cargo test passed.
+  - pass: rustfmt --check passed for Story 2.9 Rust files.
+review_summary: review clean after follow-up; structured porcelain parsing, operation blocker modeling, and non-forward HEAD movement detection are covered by code and tests
 blocking_reason:
-updated_at: 2026-06-07T10:10:00+08:00
+updated_at: 2026-06-07T11:49:13+08:00
