@@ -48,7 +48,10 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
         )
         .map(|count| count > 0)
         .unwrap_or(false);
-    assert!(!override_exists, "project_agent_overrides should be dropped");
+    assert!(
+        !override_exists,
+        "project_agent_overrides should be dropped"
+    );
 }
 
 #[test]

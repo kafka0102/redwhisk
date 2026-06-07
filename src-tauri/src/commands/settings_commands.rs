@@ -3,8 +3,8 @@ use tauri::{Manager, State};
 use crate::app_state::AppState;
 use crate::core::settings_service::SettingsService;
 use crate::types::agent_profile::{
-    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord,
-    ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
+    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, ListAgentProfilesInput,
+    SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
