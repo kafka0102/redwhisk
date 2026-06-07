@@ -8,6 +8,7 @@ import {
   resizeAgentSessionTerminal,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
+import { resolveSnapshotUpdate } from "./codex-terminal-snapshot";
 import { toCommandError } from "../../shared/commands/command-error";
 
 const TERMINAL_POLL_INTERVAL_MS = 450;
@@ -185,17 +186,18 @@ function applySnapshot(
   previousSnapshot: string,
   nextSnapshot: string,
 ) {
-  if (nextSnapshot === previousSnapshot) {
+  const update = resolveSnapshotUpdate(previousSnapshot, nextSnapshot);
+  if (!update) {
     return;
   }
 
-  if (previousSnapshot && nextSnapshot.startsWith(previousSnapshot)) {
-    terminal.write(nextSnapshot.slice(previousSnapshot.length));
+  if (update.kind === "append") {
+    terminal.write(update.data);
     return;
   }
 
   terminal.reset();
-  terminal.write(nextSnapshot);
+  terminal.write(update.data);
 }
 
 function supportsXtermRuntime(): boolean {

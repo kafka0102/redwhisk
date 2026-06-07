@@ -7,6 +7,7 @@ import {
   resizeAgentSessionTerminal,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
+import { resolveSnapshotUpdate } from "./codex-terminal-snapshot";
 
 vi.mock("./agent-session-commands", () => ({
   readAgentSessionTerminal: vi.fn(),
@@ -36,5 +37,23 @@ describe("CodexTerminal", () => {
     expect(readAgentSessionTerminalMock).not.toHaveBeenCalled();
     expect(resizeAgentSessionTerminalMock).not.toHaveBeenCalled();
     expect(writeAgentSessionTerminalMock).not.toHaveBeenCalled();
+  });
+
+  it("appends only the new suffix when the snapshot tail window slides forward", () => {
+    expect(resolveSnapshotUpdate("0123456789", "456789abcd")).toEqual({
+      kind: "append",
+      data: "abcd",
+    });
+  });
+
+  it("resets the terminal when snapshots cannot be reconciled", () => {
+    expect(resolveSnapshotUpdate("0123456789", "xyz")).toEqual({
+      kind: "reset",
+      data: "xyz",
+    });
+  });
+
+  it("returns no update when the snapshot is unchanged", () => {
+    expect(resolveSnapshotUpdate("same snapshot", "same snapshot")).toBeNull();
   });
 });
