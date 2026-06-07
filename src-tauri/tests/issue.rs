@@ -6,7 +6,7 @@ use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
-use redwhisk_lib::types::agent_session::AgentSessionStatus;
+use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{CreateIssueInput, IssueStatus, UpdateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
@@ -497,6 +497,10 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
         .issues
         .iter()
         .all(|issue| issue.linked_session_status.is_none()));
+    assert!(response
+        .issues
+        .iter()
+        .all(|issue| issue.linked_session_attention.is_none()));
 }
 
 #[test]
@@ -531,7 +535,7 @@ fn list_issues_includes_linked_session_facts() {
                 log_path,
                 last_active_at,
                 started_at
-            ) VALUES (?1, ?2, 'stopped', 'none', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
+            ) VALUES (?1, ?2, 'stopped', 'requested', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
             rusqlite::params![issue.id, profile_id],
         )
         .expect("insert linked session");
@@ -548,6 +552,10 @@ fn list_issues_includes_linked_session_facts() {
     assert_eq!(
         response.issues[0].linked_session_status,
         Some(AgentSessionStatus::Stopped)
+    );
+    assert_eq!(
+        response.issues[0].linked_session_attention,
+        Some(AgentSessionAttention::Requested)
     );
 }
 

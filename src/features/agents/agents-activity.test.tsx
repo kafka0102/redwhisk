@@ -199,6 +199,52 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a needs-attention marker on session rows when attention is requested", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Needs attention issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "requested",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 303,
+          issueId: 22,
+          issueTitle: "Quiet issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const runningGroup = await screen.findByRole("region", {
+      name: "Running sessions",
+    });
+    const attentionRow = within(runningGroup).getByRole("button", {
+      name: /Needs attention issue/i,
+    });
+    const quietRow = within(runningGroup).getByRole("button", {
+      name: /Quiet issue/i,
+    });
+
+    expect(attentionRow).toHaveTextContent("需要确认");
+    expect(quietRow).not.toHaveTextContent("需要确认");
+  });
+
   it("resizes the session list with the keyboard separator control", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({

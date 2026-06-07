@@ -420,7 +420,21 @@ function SessionGroup({
                 {formatSessionTitle(session)}
               </span>
               <span className="agents-session-row__meta">
-                {`${formatAgentType(session.agentType)} · ${formatSessionStatus(session.status)}`}
+                <span className="agents-session-row__meta-main">
+                  {`${formatAgentType(session.agentType)} · ${formatSessionStatus(session.status)}`}
+                </span>
+                {session.attention === "requested" ? (
+                  <span
+                    aria-label="Codex 需要确认"
+                    className="attention-marker agents-session-row__attention"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="attention-marker__dot"
+                    />
+                    <span className="attention-marker__text">需要确认</span>
+                  </span>
+                ) : null}
               </span>
             </button>
           ))}

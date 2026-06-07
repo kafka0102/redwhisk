@@ -99,6 +99,7 @@ const linkedSessionIssue: IssueRecord = {
   status: "backlog",
   linkedSessionId: 301,
   linkedSessionStatus: "stopped",
+  linkedSessionAttention: "none",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_636_000_000,
 };
@@ -111,6 +112,7 @@ const completedLinkedSessionIssue: IssueRecord = {
   status: "completed",
   linkedSessionId: 401,
   linkedSessionStatus: "closed",
+  linkedSessionAttention: "none",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_637_000_000,
 };
@@ -123,8 +125,22 @@ const crashedRunningIssue: IssueRecord = {
   status: "running",
   linkedSessionId: 402,
   linkedSessionStatus: "crashed",
+  linkedSessionAttention: "none",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_638_000_000,
+};
+
+const attentionIssue: IssueRecord = {
+  id: 27,
+  projectId: 1,
+  title: "Attention issue",
+  description: "Need a quick review in Codex",
+  status: "running",
+  linkedSessionId: 403,
+  linkedSessionStatus: "running",
+  linkedSessionAttention: "requested",
+  createdAt: 1_780_632_000_000,
+  updatedAt: 1_780_639_000_000,
 };
 
 const projectProfile = {
@@ -225,6 +241,24 @@ describe("IssuesActivity", () => {
     );
     expect(card).toHaveTextContent("Existing description");
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
+  });
+
+  it("shows a needs-attention marker on issue cards when linked session attention is requested", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [attentionIssue, linkedSessionIssue],
+    });
+
+    renderIssuesActivity();
+
+    const attentionCard = await screen.findByRole("button", {
+      name: "Attention issue",
+    });
+    const normalCard = screen.getByRole("button", {
+      name: "Linked session issue",
+    });
+
+    expect(attentionCard).toHaveTextContent("Codex 需要确认");
+    expect(normalCard).not.toHaveTextContent("Codex 需要确认");
   });
 
   it("opens an issue detail dialog without status or updated-at fields", async () => {
