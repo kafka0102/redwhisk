@@ -10,6 +10,7 @@ import { toCommandError } from "../../shared/commands/command-error";
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
+  onSelectSession?: (sessionId: number) => void;
   onOpenIssuesActivity?: (issueId: number) => void;
   projectId: number;
 }
@@ -30,6 +31,7 @@ function isCompletedSession(
 
 export function AgentsActivity({
   activeSessionId,
+  onSelectSession,
   onOpenIssuesActivity,
   projectId,
 }: AgentsActivityProps) {
@@ -40,9 +42,9 @@ export function AgentsActivity({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
-  const [manuallySelectedSessionId, setManuallySelectedSessionId] = useState<
-    number | null
-  >(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
+    activeSessionId,
+  );
   const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
   const [infoPaneWidth, setInfoPaneWidth] = useState(infoPaneDefaultWidth);
   const [isInfoPaneCollapsed, setIsInfoPaneCollapsed] = useState(false);
@@ -92,17 +94,16 @@ export function AgentsActivity({
   );
   const completedSessions = sessions.filter(isCompletedSession);
 
-  const selectedSessionId =
-    activeSessionId ??
-    (sessions.some((session) => session.sessionId === manuallySelectedSessionId)
-      ? manuallySelectedSessionId
+  const currentSessionId =
+    (sessions.some((session) => session.sessionId === selectedSessionId)
+      ? selectedSessionId
       : null) ??
     runningSessions[0]?.sessionId ??
     completedSessions[0]?.sessionId ??
     null;
 
   const selectedSession =
-    sessions.find((session) => session.sessionId === selectedSessionId) ?? null;
+    sessions.find((session) => session.sessionId === currentSessionId) ?? null;
   const linkedIssue =
     selectedSession?.issueId != null && selectedSession.issueTitle
       ? {
@@ -110,6 +111,11 @@ export function AgentsActivity({
           issueTitle: selectedSession.issueTitle,
         }
       : null;
+
+  function handleSelectSession(sessionId: number) {
+    setSelectedSessionId(sessionId);
+    onSelectSession?.(sessionId);
+  }
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
@@ -214,7 +220,7 @@ export function AgentsActivity({
               emptyCopy="No running sessions."
               count={runningSessions.length}
               label="Running"
-              onSelect={setManuallySelectedSessionId}
+              onSelect={handleSelectSession}
               selectedSessionId={selectedSession?.sessionId ?? null}
               sessions={runningSessions}
             />
@@ -222,7 +228,7 @@ export function AgentsActivity({
               emptyCopy="No completed sessions."
               count={completedSessions.length}
               label="Completed"
-              onSelect={setManuallySelectedSessionId}
+              onSelect={handleSelectSession}
               selectedSessionId={selectedSession?.sessionId ?? null}
               sessions={completedSessions}
             />

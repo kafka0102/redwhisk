@@ -213,6 +213,13 @@ impl PtySessionManager {
 }
 
 impl PendingPtySession {
+    pub fn write_input(&mut self, data: &str) -> Result<(), String> {
+        self.writer
+            .write_all(data.as_bytes())
+            .map_err(|error| error.to_string())?;
+        self.writer.flush().map_err(|error| error.to_string())
+    }
+
     pub fn terminate(mut self) {
         let _ = self.killer.kill();
         let _ = self.child.wait();

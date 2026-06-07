@@ -188,6 +188,7 @@ impl<'connection> AgentSessionService<'connection> {
         } else {
             None
         };
+        let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
         let mut child = if pending_pty.is_none() {
             let mut child = spawn_agent_process(&profile, &working_dir, &log_path)?;
             ensure_process_started(&mut child, &profile.command)?;
@@ -195,6 +196,12 @@ impl<'connection> AgentSessionService<'connection> {
         } else {
             None
         };
+        let mut pending_pty = pending_pty;
+        if let Some(pending_pty) = pending_pty.as_mut() {
+            pending_pty
+                .write_input(&normalized_prompt)
+                .map_err(agent_session_start_error)?;
+        }
 
         let transaction = self
             .issue_repository
