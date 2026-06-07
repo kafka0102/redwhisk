@@ -432,6 +432,8 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("complementary", { name: "Linked issue" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Issue$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("No linked issue")).not.toBeInTheDocument();
   });
 
   it("keeps the temporary session dialog open and shows the start failure reason", async () => {
@@ -1066,8 +1068,46 @@ describe("AgentsActivity", () => {
       screen.queryByRole("separator", { name: "Resize session info" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("complementary", { name: "Session links" }),
+      screen.queryByRole("complementary", { name: "Linked issue" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Issue$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("No linked issue")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /#issue/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps completed standalone sessions isolated from linked issue UI", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 601,
+          issueId: null,
+          issueTitle: null,
+          title: "Finished scratch session",
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          lastActiveAt: 1_780_639_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: 1_780_640_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={601} projectId={1} />);
+
+    expect(
+      await screen.findByRole("button", { name: /Finished scratch session/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize session info" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Linked issue" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Issue$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("No linked issue")).not.toBeInTheDocument();
   });
 
   it("opens the linked issue context through the info pane actions", async () => {
