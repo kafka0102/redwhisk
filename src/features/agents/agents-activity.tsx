@@ -21,16 +21,18 @@ export function AgentsActivity({
   onOpenIssuesActivity,
   projectId,
 }: AgentsActivityProps) {
-  const infoPaneMinWidth = 40;
-  const infoPaneMaxWidth = 220;
+  const defaultSidebarWidth = 248;
+  const infoPaneDefaultWidth = defaultSidebarWidth;
+  const infoPaneMinWidth = 220;
+  const infoPaneMaxWidth = 420;
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [manuallySelectedSessionId, setManuallySelectedSessionId] = useState<
     number | null
   >(null);
-  const [sidebarWidth, setSidebarWidth] = useState(248);
-  const [infoPaneWidth, setInfoPaneWidth] = useState(infoPaneMinWidth);
+  const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
+  const [infoPaneWidth, setInfoPaneWidth] = useState(infoPaneDefaultWidth);
   const [isInfoPaneCollapsed, setIsInfoPaneCollapsed] = useState(false);
   const dragStateRef = useRef<{
     pane: DragPane;
@@ -341,22 +343,25 @@ export function AgentsActivity({
             </div>
 
             {!isInfoPaneCollapsed ? (
-              <aside className="agents-info-pane" aria-label="Session links">
+              <aside className="agents-info-pane" aria-label="Linked issue">
+                <p className="agents-info-pane__label">Issue</p>
                 <button
-                  className="agents-info-link"
+                  className="issue-card agents-linked-issue-card"
                   disabled={!onOpenIssuesActivity}
                   type="button"
                   onClick={() => onOpenIssuesActivity?.(linkedIssue.issueId)}
                 >
-                  Link
-                </button>
-                <button
-                  className="agents-info-link"
-                  disabled={!onOpenIssuesActivity}
-                  type="button"
-                  onClick={() => onOpenIssuesActivity?.(linkedIssue.issueId)}
-                >
-                  {linkedIssue.issueTitle}
+                  <span className="issue-card__meta-row">
+                    <span className="issue-card__id">
+                      {`#issue${linkedIssue.issueId}`}
+                    </span>
+                  </span>
+                  <span className="issue-card__title">
+                    {linkedIssue.issueTitle}
+                  </span>
+                  <span className="issue-card__description">
+                    Open this issue in the issues board.
+                  </span>
                 </button>
               </aside>
             ) : null}

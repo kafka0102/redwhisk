@@ -43,7 +43,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
       lineHeight: 1.25,
       scrollback: 2000,
       theme: {
-        background: "#ffffff",
+        background: "#00000000",
         foreground: "#161515",
         black: "#0f172a",
         red: "#a12d24",
