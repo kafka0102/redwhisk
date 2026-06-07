@@ -2,6 +2,7 @@ import { invokeCommand } from "../../shared/commands/command-client";
 
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
+export type AgentSessionAttention = "none" | "requested";
 
 export interface IssueRecord {
   id: number;
@@ -11,6 +12,7 @@ export interface IssueRecord {
   status: IssueStatus;
   linkedSessionId?: number | null;
   linkedSessionStatus?: AgentSessionStatus | null;
+  linkedSessionAttention?: AgentSessionAttention | null;
   createdAt: number;
   updatedAt: number;
 }

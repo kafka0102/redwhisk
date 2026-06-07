@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::agent_session::AgentSessionStatus;
+use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +35,7 @@ pub struct IssueRecord {
     pub status: IssueStatus,
     pub linked_session_id: Option<i64>,
     pub linked_session_status: Option<AgentSessionStatus>,
+    pub linked_session_attention: Option<AgentSessionAttention>,
     pub created_at: i64,
     pub updated_at: i64,
 }

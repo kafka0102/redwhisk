@@ -494,7 +494,17 @@ export function IssuesActivity({
             <div className="issue-lane__cards" role="list">
               {lane.issues.map((issue) => {
                 const metaId = `issue-card-meta-${issue.id}`;
+                const attentionId = `issue-card-attention-${issue.id}`;
                 const descriptionId = `issue-card-description-${issue.id}`;
+                const describedBy = [
+                  metaId,
+                  issue.linkedSessionAttention === "requested"
+                    ? attentionId
+                    : null,
+                  issue.description ? descriptionId : null,
+                ]
+                  .filter((value): value is string => value != null)
+                  .join(" ");
 
                 return (
                   <div key={issue.id} role="listitem">
@@ -506,11 +516,7 @@ export function IssuesActivity({
                           cardRefs.current.delete(issue.id);
                         }
                       }}
-                      aria-describedby={
-                        issue.description
-                          ? `${metaId} ${descriptionId}`
-                          : metaId
-                      }
+                      aria-describedby={describedBy}
                       aria-label={issue.title}
                       aria-pressed={issue.id === selectedIssueId}
                       className="issue-card"
@@ -526,6 +532,20 @@ export function IssuesActivity({
                         </span>
                       </span>
                       <span className="issue-card__title">{issue.title}</span>
+                      {issue.linkedSessionAttention === "requested" ? (
+                        <span
+                          id={attentionId}
+                          className="attention-marker issue-card__attention"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="attention-marker__dot"
+                          />
+                          <span className="attention-marker__text">
+                            Codex 需要确认
+                          </span>
+                        </span>
+                      ) : null}
                       {issue.description ? (
                         <span
                           id={descriptionId}

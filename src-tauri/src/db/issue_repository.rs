@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
+use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use crate::types::issue::{IssueRecord, IssueStatus};
 
 const ISSUE_SELECT_COLUMNS: &str = "SELECT
@@ -20,6 +21,12 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
         WHERE agent_sessions.issue_id = issues.id
         LIMIT 1
     ) AS linked_session_status,
+    (
+        SELECT agent_sessions.attention
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+        LIMIT 1
+    ) AS linked_session_attention,
     issues.created_at,
     issues.updated_at
  FROM issues";
@@ -184,19 +191,29 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
             .get::<_, Option<String>>(6)?
             .map(|value| agent_session_status_from_str(&value))
             .transpose()?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
+        linked_session_attention: row
+            .get::<_, Option<String>>(7)?
+            .map(|value| agent_session_attention_from_str(&value))
+            .transpose()?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
     })
 }
 
-fn agent_session_status_from_str(
-    value: &str,
-) -> rusqlite::Result<crate::types::agent_session::AgentSessionStatus> {
+fn agent_session_status_from_str(value: &str) -> rusqlite::Result<AgentSessionStatus> {
     match value {
-        "running" => Ok(crate::types::agent_session::AgentSessionStatus::Running),
-        "closed" => Ok(crate::types::agent_session::AgentSessionStatus::Closed),
-        "crashed" => Ok(crate::types::agent_session::AgentSessionStatus::Crashed),
-        "stopped" => Ok(crate::types::agent_session::AgentSessionStatus::Stopped),
+        "running" => Ok(AgentSessionStatus::Running),
+        "closed" => Ok(AgentSessionStatus::Closed),
+        "crashed" => Ok(AgentSessionStatus::Crashed),
+        "stopped" => Ok(AgentSessionStatus::Stopped),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn agent_session_attention_from_str(value: &str) -> rusqlite::Result<AgentSessionAttention> {
+    match value {
+        "none" => Ok(AgentSessionAttention::None),
+        "requested" => Ok(AgentSessionAttention::Requested),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
