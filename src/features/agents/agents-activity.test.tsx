@@ -109,10 +109,10 @@ describe("AgentsActivity", () => {
     expect(screen.queryByText("Selected Session")).not.toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize session list" }),
-    ).toHaveAttribute("aria-valuenow", "248");
+    ).toHaveAttribute("aria-valuenow", "200");
     expect(
       screen.getByRole("separator", { name: "Resize session info" }),
-    ).toHaveAttribute("aria-valuenow", "248");
+    ).toHaveAttribute("aria-valuenow", "200");
     expect(
       screen.getByRole("complementary", { name: "Linked issue" }),
     ).toBeInTheDocument();
@@ -149,10 +149,10 @@ describe("AgentsActivity", () => {
 
     separator.focus();
     await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "264");
+    expect(separator).toHaveAttribute("aria-valuenow", "216");
 
     await user.keyboard("{ArrowLeft}");
-    expect(separator).toHaveAttribute("aria-valuenow", "248");
+    expect(separator).toHaveAttribute("aria-valuenow", "200");
   });
 
   it("resizes the session list when dragging the separator", async () => {
@@ -179,7 +179,7 @@ describe("AgentsActivity", () => {
       name: "Resize session list",
     });
 
-    fireEvent.mouseDown(separator, { clientX: 248 });
+    fireEvent.mouseDown(separator, { clientX: 200 });
     fireEvent.mouseMove(window, { clientX: 296 });
 
     expect(separator).toHaveAttribute("aria-valuenow", "296");
@@ -344,7 +344,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("complementary", { name: "Linked issue" }),
     ).toBeInTheDocument();
-    expect(separator).toHaveAttribute("aria-valuenow", "248");
+    expect(separator).toHaveAttribute("aria-valuenow", "200");
   });
 
   it("resizes the info pane with keyboard and dragging interactions", async () => {
@@ -374,15 +374,10 @@ describe("AgentsActivity", () => {
 
     separator.focus();
     await user.keyboard("{ArrowLeft}");
-    expect(separator).toHaveAttribute("aria-valuenow", "264");
+    expect(separator).toHaveAttribute("aria-valuenow", "216");
 
     await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "248");
-
-    for (let index = 0; index < 2; index += 1) {
-      await user.keyboard("{ArrowRight}");
-    }
-    expect(separator).toHaveAttribute("aria-valuenow", "220");
+    expect(separator).toHaveAttribute("aria-valuenow", "200");
 
     await user.keyboard("{ArrowRight}");
     expect(separator).toHaveAttribute("aria-valuenow", "0");
@@ -392,7 +387,7 @@ describe("AgentsActivity", () => {
 
     fireEvent.mouseDown(separator, { clientX: 300 });
     fireEvent.mouseMove(window, { clientX: 220 });
-    expect(separator).toHaveAttribute("aria-valuenow", "220");
+    expect(separator).toHaveAttribute("aria-valuenow", "200");
     expect(
       screen.getByRole("complementary", { name: "Linked issue" }),
     ).toBeInTheDocument();

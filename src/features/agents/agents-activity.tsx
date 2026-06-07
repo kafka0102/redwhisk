@@ -21,9 +21,9 @@ export function AgentsActivity({
   onOpenIssuesActivity,
   projectId,
 }: AgentsActivityProps) {
-  const defaultSidebarWidth = 248;
+  const defaultSidebarWidth = 200;
   const infoPaneDefaultWidth = defaultSidebarWidth;
-  const infoPaneMinWidth = 220;
+  const infoPaneMinWidth = 200;
   const infoPaneMaxWidth = 420;
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
