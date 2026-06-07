@@ -1097,7 +1097,7 @@ button:focus-visible {
 }
 
 .activity-surface--agents {
-  grid-template-columns: var(--agents-sidebar-width, 248px) 8px minmax(0, 1fr);
+  grid-template-columns: var(--agents-sidebar-width, 200px) 8px minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
   height: 100%;
@@ -1716,7 +1716,7 @@ button:focus-visible {
 
   .activity-surface--agents {
     grid-template-columns:
-      minmax(220px, var(--agents-sidebar-width, 248px))
+      minmax(200px, var(--agents-sidebar-width, 200px))
       8px minmax(0, 1fr);
   }
 
