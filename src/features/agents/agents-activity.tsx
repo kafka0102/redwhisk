@@ -7,6 +7,7 @@ import {
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import { CodexTerminal } from "./codex-terminal";
+import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { toCommandError } from "../../shared/commands/command-error";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
@@ -48,6 +49,8 @@ export function AgentsActivity({
     string | null
   >(null);
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
+  const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
+    useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
@@ -60,6 +63,7 @@ export function AgentsActivity({
     startWidth: number;
     startX: number;
   } | null>(null);
+  const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -128,6 +132,17 @@ export function AgentsActivity({
   function handleSelectSession(sessionId: number) {
     setSelectedSessionId(sessionId);
     onSelectSession?.(sessionId);
+  }
+
+  function openTemporarySessionDialog() {
+    setIsTemporarySessionDialogOpen(true);
+  }
+
+  function closeTemporarySessionDialog() {
+    setIsTemporarySessionDialogOpen(false);
+    window.requestAnimationFrame(() => {
+      newSessionButtonRef.current?.focus();
+    });
   }
 
   async function handleSetAttention(attention: "none" | "requested") {
@@ -231,8 +246,9 @@ export function AgentsActivity({
             <button
               aria-label="New session"
               className="agents-toolbar-button"
-              disabled
+              ref={newSessionButtonRef}
               type="button"
+              onClick={openTemporarySessionDialog}
             >
               <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
             </button>
@@ -453,6 +469,13 @@ export function AgentsActivity({
           </>
         ) : null}
       </section>
+
+      {isTemporarySessionDialogOpen ? (
+        <TemporarySessionDialog
+          projectId={projectId}
+          onClose={closeTemporarySessionDialog}
+        />
+      ) : null}
     </main>
   );
 }

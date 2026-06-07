@@ -17,6 +17,7 @@ import {
   setAgentSessionAttention,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
+import { listAgentProfiles } from "../settings/settings-commands";
 
 vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
@@ -26,11 +27,47 @@ vi.mock("./agent-session-commands", () => ({
   writeAgentSessionTerminal: vi.fn(),
 }));
 
+vi.mock("../settings/settings-commands", () => ({
+  listAgentProfiles: vi.fn(),
+}));
+
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const readAgentSessionTerminalMock = vi.mocked(readAgentSessionTerminal);
 const resizeAgentSessionTerminalMock = vi.mocked(resizeAgentSessionTerminal);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
+const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+
+const defaultProfiles = {
+  project: [
+    {
+      id: 101,
+      name: "Project Agent",
+      agentType: "codex" as const,
+      command: "codex",
+      scope: "project" as const,
+      projectId: 1,
+      mode: "full-auto",
+      dangerous: true,
+      defaultSkill: "",
+      promptTemplate: "",
+    },
+  ],
+  global: [
+    {
+      id: 201,
+      name: "Global Agent",
+      agentType: "codex" as const,
+      command: "codex",
+      scope: "global" as const,
+      projectId: null,
+      mode: "full-auto",
+      dangerous: true,
+      defaultSkill: "",
+      promptTemplate: "",
+    },
+  ],
+};
 
 describe("AgentsActivity", () => {
   beforeEach(() => {
@@ -50,6 +87,11 @@ describe("AgentsActivity", () => {
       attention: "requested",
     });
     writeAgentSessionTerminalMock.mockResolvedValue();
+    listAgentProfilesMock.mockReset();
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
+      profiles:
+        scope === "project" ? defaultProfiles.project : defaultProfiles.global,
+    }));
   });
 
   afterEach(() => {
@@ -133,6 +175,170 @@ describe("AgentsActivity", () => {
       screen.getByRole("button", { name: /#issue20.*Existing issue/i }),
     ).toBeDisabled();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("opens the temporary session dialog from the toolbar without changing session state", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    const newSessionButton = await screen.findByRole("button", {
+      name: "New session",
+    });
+
+    await user.click(newSessionButton);
+
+    const dialog = screen.getByRole("dialog", { name: "Session Dialog" });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByLabelText("Session title")).toHaveValue(
+      "Untitled Session",
+    );
+    expect(screen.getByLabelText("Agent profile")).toBeInTheDocument();
+    expect(screen.getByLabelText("Initial prompt")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Start" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Working directory"),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Command")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Profile scope")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Prompt sources"),
+    ).not.toBeInTheDocument();
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
+    const runningGroup = screen.getByRole("region", {
+      name: "Running sessions",
+    });
+    expect(
+      within(runningGroup).getByRole("button", { name: /Existing issue/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("closes the temporary session dialog with escape and restores focus to the toolbar trigger", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    const newSessionButton = await screen.findByRole("button", {
+      name: "New session",
+    });
+    await user.click(newSessionButton);
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("dialog", { name: "Session Dialog" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(newSessionButton).toHaveFocus());
+  });
+
+  it("closes the temporary session dialog from the cancel action and restores focus", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    const newSessionButton = await screen.findByRole("button", {
+      name: "New session",
+    });
+    await user.click(newSessionButton);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Session Dialog" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(newSessionButton).toHaveFocus());
+  });
+
+  it("disables start and shows a factual message when no agent profiles are available", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "New session",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Session Dialog" });
+    expect(
+      within(dialog).getByText(
+        "No agent profiles available. Configure an agent in Settings first.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Start" }),
+    ).toBeDisabled();
   });
 
   it("shows only closed, crashed and stopped sessions in the completed group", async () => {

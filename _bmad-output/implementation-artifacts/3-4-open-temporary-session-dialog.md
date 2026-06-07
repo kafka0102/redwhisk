@@ -4,7 +4,7 @@ baseline_commit: af7b11b
 
 # Story 3.4: 打开临时 Session Dialog
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -22,34 +22,34 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 在 Agents Activity 顶部工具栏接通“新建临时会话”入口，而不是继续停留在禁用占位按钮 (AC: 1)
-  - [ ] 将 `src/features/agents/agents-activity.tsx` 中当前禁用的 `New session` 按钮改为可交互入口，点击后仅打开 Session Dialog，不调用任何创建/启动 Session 的 Rust command。
-  - [ ] 保持当前 Session 列表、终端区、attention 操作和 linked issue pane 的既有行为不变；打开/关闭 Dialog 不应改变当前选中的 Session。
-  - [ ] 不顺手实现 `Cmd/Ctrl+N`、Session Header、临时 Session list item 注入或 Issue 流转；这些不属于 3.4 的最小交付。
-- [ ] 新建最小可用的 Session Dialog 前端组件，并复用现有对话框交互模式 (AC: 1, 2, 3)
-  - [ ] 参考 `src/features/issues/issue-run-dialog.tsx` 与 `src/features/issues/issues-activity.tsx` 的现有 Dialog 结构，在 `src/features/agents/` 下新增 Session Dialog 组件或等价实现，使用同类 overlay、role、焦点陷阱和关闭交互。
-  - [ ] Dialog 只包含 `title` 输入、`agent_profile` 选择、`prompt` 多行输入，以及 `Cancel` / `Start` 两个动作；不要展示 working directory、agent command、profile scope、prompt 来源、default args 或其他调试信息。
-  - [ ] `title` 初始值设为 `Untitled Session` 或项目既有等价文案；`prompt` 初始值保持最小事实性空白或极简默认值，不在 3.4 预先生成完整 Run prompt preview。
-  - [ ] `Start` 只保留为 Dialog 主动作外观和提交流程承载点；在 3.4 不得伪造“已启动成功”的前端假象，也不要提前接入 `start_standalone_agent_session`。
-- [ ] 复用现有 Agent Profile 查询能力，为 Dialog 提供最小必需数据 (AC: 2, 3)
-  - [ ] 复用 `listAgentProfiles({ scope: "project", projectId })` 与 `listAgentProfiles({ scope: "global", projectId: null })` 的现有合并模式，为 `agent_profile` 下拉提供候选项，优先保持与 `IssueRunDialog` 一致的排序和 label 规则。
-  - [ ] 若当前 Project 和全局都没有可用 Agent Profile，显示事实性提示并让 `Start` 保持不可执行状态；不要在 3.4 中内嵌“去 Settings 创建 profile”的复杂跳转。
-  - [ ] 不新增 Rust DTO、command、service 或 repository；3.4 的最小范围应收口在前端 UI 和既有 profile 查询。
-- [ ] 满足 Session Dialog 的键盘与焦点约束 (AC: 1, 2, 3)
-  - [ ] Dialog 打开时把焦点移入 Dialog；关闭后把焦点还给触发它的 `New session` 按钮，满足 UX-DR20。
-  - [ ] 支持 `Esc` 关闭最上层 Dialog、`Tab` 按视觉阅读顺序在 Dialog 内循环，满足 UX-DR19；不要让键盘焦点穿透到底层终端或列表。
-  - [ ] `Enter` 在表单内仍应走主动作提交流程，但在 3.4 仅触发前端表单 submit/校验，不得隐式创建 Session；真正启动逻辑留给 3.5。
-- [ ] 补齐前端测试，锁定 3.4 的边界而不是只测 happy path (AC: 1, 2, 3)
-  - [ ] 在 `src/features/agents/agents-activity.test.tsx` 或新增 co-located test 中覆盖：点击 `New session` 按钮会打开 `Session Dialog`，且不会调用任何“创建 Session”命令。
-  - [ ] 覆盖 Dialog 首次打开时的默认 `title`、仅渲染 `title` / `agent_profile` / `prompt` / `Cancel` / `Start`、以及“不展示 working directory / command / 配置来源”这些反向断言。
-  - [ ] 覆盖 `Esc` 关闭、`Cancel` 关闭、关闭后焦点返回 `New session` 按钮，以及无可用 Agent Profile 时的事实性提示和 `Start` 禁用态。
-  - [ ] 若本 story 只修改 TypeScript / TSX / CSS，运行 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`；除非你意外引入 Rust 改动，否则不要扩大到 `cargo` 侧。
+- [x] 在 Agents Activity 顶部工具栏接通“新建临时会话”入口，而不是继续停留在禁用占位按钮 (AC: 1)
+  - [x] 将 `src/features/agents/agents-activity.tsx` 中当前禁用的 `New session` 按钮改为可交互入口，点击后仅打开 Session Dialog，不调用任何创建/启动 Session 的 Rust command。
+  - [x] 保持当前 Session 列表、终端区、attention 操作和 linked issue pane 的既有行为不变；打开/关闭 Dialog 不应改变当前选中的 Session。
+  - [x] 不顺手实现 `Cmd/Ctrl+N`、Session Header、临时 Session list item 注入或 Issue 流转；这些不属于 3.4 的最小交付。
+- [x] 新建最小可用的 Session Dialog 前端组件，并复用现有对话框交互模式 (AC: 1, 2, 3)
+  - [x] 参考 `src/features/issues/issue-run-dialog.tsx` 与 `src/features/issues/issues-activity.tsx` 的现有 Dialog 结构，在 `src/features/agents/` 下新增 Session Dialog 组件或等价实现，使用同类 overlay、role、焦点陷阱和关闭交互。
+  - [x] Dialog 只包含 `title` 输入、`agent_profile` 选择、`prompt` 多行输入，以及 `Cancel` / `Start` 两个动作；不要展示 working directory、agent command、profile scope、prompt 来源、default args 或其他调试信息。
+  - [x] `title` 初始值设为 `Untitled Session` 或项目既有等价文案；`prompt` 初始值保持最小事实性默认文案，不生成 Run prompt preview。
+  - [x] `Start` 只保留为 Dialog 主动作外观和提交流程承载点；在 3.4 不伪造“已启动成功”的前端假象，也没有提前接入 `start_standalone_agent_session`。
+- [x] 复用现有 Agent Profile 查询能力，为 Dialog 提供最小必需数据 (AC: 2, 3)
+  - [x] 复用 `listAgentProfiles({ scope: "project", projectId })` 与 `listAgentProfiles({ scope: "global", projectId: null })` 的现有合并模式，为 `agent_profile` 下拉提供候选项，并保持与 `IssueRunDialog` 一致的 label 规则。
+  - [x] 若当前 Project 和全局都没有可用 Agent Profile，显示事实性提示并让 `Start` 保持不可执行状态；没有在 3.4 中内嵌“去 Settings 创建 profile”的复杂跳转。
+  - [x] 不新增 Rust DTO、command、service 或 repository；3.4 的实现范围收口在前端 UI 和既有 profile 查询。
+- [x] 满足 Session Dialog 的键盘与焦点约束 (AC: 1, 2, 3)
+  - [x] Dialog 打开时把焦点移入 Dialog；关闭后把焦点还给触发它的 `New session` 按钮，满足 UX-DR20。
+  - [x] 支持 `Esc` 关闭最上层 Dialog、`Tab` 按视觉阅读顺序在 Dialog 内循环，满足 UX-DR19；键盘焦点不会穿透到底层终端或列表。
+  - [x] `Enter` 在表单内仍走主动作提交流程，但在 3.4 只触发前端 submit 和事实性状态提示，不隐式创建 Session；真正启动逻辑留给 3.5。
+- [x] 补齐前端测试，锁定 3.4 的边界而不是只测 happy path (AC: 1, 2, 3)
+  - [x] 在 `src/features/agents/agents-activity.test.tsx` 覆盖：点击 `New session` 按钮会打开 `Session Dialog`，且不会触发任何 Session 创建副作用。
+  - [x] 覆盖 Dialog 首次打开时的默认 `title`、仅渲染 `title` / `agent_profile` / `prompt` / `Cancel` / `Start`、以及“不展示 working directory / command / 配置来源”这些反向断言。
+  - [x] 覆盖 `Esc` 关闭、`Cancel` 关闭、关闭后焦点返回 `New session` 按钮，以及无可用 Agent Profile 时的事实性提示和 `Start` 禁用态。
+  - [x] 本 story 只修改了 TypeScript / TSX，已实际运行 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`。
 
 ## Senior Developer Review (AI)
 
-- Outcome: Pending
+- Outcome: Approve
 - Date: 2026-06-07
-- Findings: 待开发与同会话 code review 后填写。
+- Findings: 同会话自动 code review 未发现需要补丁、决策或延期处理的问题。当前实现满足 Story 3.4 的验收标准，并把真正的临时 Session 启动能力明确留在 Story 3.5。
 
 ## Dev Notes
 
@@ -132,25 +132,59 @@ GPT-5 Codex
 - 2026-06-07T20:06:30+0800：`bmad-dev-workflow` preflight 读取 `sprint-status.yaml`，确认当前无 `ready-for-dev` story，按顺序锁定 `3-4-open-temporary-session-dialog`，基线 `HEAD` 为 `af7b11b`。
 - 2026-06-07T20:08:00+0800：交叉核对 Epic 3.4 / 3.5、PRD FR-16、UX `Session Dialog` / 键盘焦点约束，以及 Story 2.5 / 3.2 / 3.3 的现有边界。
 - 2026-06-07T20:09:44+0800：复查代码后确认当前仓库只有 `New session` 占位按钮与现成 profile 查询能力，但尚无 `SessionDialog` 或 `start_standalone_agent_session` 链路；因此 3.4 范围收口为前端 Dialog UI 与测试。
+- 2026-06-07T20:16:00+0800：先在 `AgentsActivity` 测试里补红测，覆盖打开 Dialog、默认标题、`Esc` / `Cancel` 关闭、焦点回退和无 profile 禁用态，确认现状仍是 disabled 占位按钮。
+- 2026-06-07T20:17:00+0800：新增 `src/features/agents/temporary-session-dialog.tsx`，复用现有 overlay / field / focus trap 模式，接入 project/global agent profile 合并查询，并把 `Start` 收口为不创建 Session 的前端 submit 占位。
+- 2026-06-07T20:19:00+0800：全量验证第一轮发现 `TemporarySessionDialog` 的 `form` ref 与 `onKeyDown` 类型声明仍按 `div` 编写，导致 `pnpm typecheck` 失败；随后修正为 `HTMLFormElement` 后重跑全套验证通过。
 
 ### Completion Notes List
 
 - 2026-06-07：create-story 已为 Story 3.4 生成开发上下文，并将实现范围收口为“打开并管理临时 Session Dialog UI”，不包含真正启动临时 Session。
 - 2026-06-07：已明确 3.4 与 3.5 的边界，避免把 `start_standalone_agent_session`、Session 创建或 Issue 隔离逻辑提前混入当前 story。
 - 2026-06-07：已识别当前仓库的真实可复用基础：`AgentsActivity` 顶部 `New session` 占位按钮、`IssueRunDialog` 的 Dialog 交互模式，以及 `listAgentProfiles` 的 project/global 合并查询。
+- 2026-06-07：`AgentsActivity` 顶部 `New session` 按钮已接通，点击后只打开 `Session Dialog`，不会改动当前选中 Session、attention 操作、linked issue pane 或任何 Rust Session 状态。
+- 2026-06-07：新增 `TemporarySessionDialog`，只渲染 `title`、`agent_profile`、`prompt`、`Cancel`、`Start`，默认标题为 `Untitled Session`，并对无可用 profile 的场景显示事实性提示。
+- 2026-06-07：Dialog 支持 `Esc` / `Cancel` 关闭、焦点回到 `New session` 触发按钮、`Tab` 循环和 `Enter` 提交；`Start` 仅显示“Story 3.5 承接启动能力”的事实性状态，不会伪造临时 Session 已创建。
+- 2026-06-07：实际验证命令包括三轮 `pnpm test -- src/features/agents/agents-activity.test.tsx` 红绿测试，以及两轮 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test` 全量验证；最新一轮全部通过。
+- 2026-06-07：同会话自动 code review 完成，未发现需要继续修复的问题；Story 3.4 状态收口为 `done`。
 
 ### File List
 
 - _bmad-output/implementation-artifacts/3-4-open-temporary-session-dialog.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- src/features/agents/agents-activity.test.tsx
+- src/features/agents/agents-activity.tsx
+- src/features/agents/temporary-session-dialog.tsx
 
 ### Validation Commands
 
-- create-story 阶段未运行代码验证；待开发阶段按本文件“测试要求”执行并记录实际命令。
+- `pnpm test -- src/features/agents/agents-activity.test.tsx`
+- `pnpm test -- src/features/agents/agents-activity.test.tsx`
+- `pnpm test -- src/features/agents/agents-activity.test.tsx`
+- `pnpm format`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm format`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
 ### Validation Results
 
-- create-story 阶段已完成工件交叉检查：Epic / PRD / UX / Architecture / 前序 story / 当前代码入口已对齐，故事状态可推进到 `ready-for-dev`。
+- `pnpm test -- src/features/agents/agents-activity.test.tsx`：失败，新增的 3 个 Dialog 测试未通过，符合红测预期；失败原因是 `New session` 按钮仍为 disabled，占位实现尚未打开 Dialog。
+- `pnpm test -- src/features/agents/agents-activity.test.tsx`：失败，第一版实现后仍有 2 个测试未通过；问题分别是断言命中了重复的 `Existing issue` 按钮，以及焦点回退需要等待 `requestAnimationFrame`。
+- `pnpm test -- src/features/agents/agents-activity.test.tsx`：通过，目标测试文件 102 个测试全部通过。
+- `pnpm format`：第一轮通过；`prettier` 会顺带折行无关文件 `src/features/agents/codex-terminal-snapshot.ts`，该无关改动已从当前 story 范围剔除。
+- `pnpm lint`：第一轮通过。
+- `pnpm typecheck`：第一轮失败，`src/features/agents/temporary-session-dialog.tsx` 中 `form` ref 和 `onKeyDown` 仍使用 `HTMLDivElement` 类型；修正为 `HTMLFormElement` 后继续复验。
+- `pnpm test`：第一轮通过，8 个测试文件、102 个测试通过；输出仍包含既有 `HTMLCanvasElement.getContext()` 与 `Could not parse CSS stylesheet` 警告，但未导致失败。
+- `pnpm format`：第二轮通过；同样只重写了无关文件 `src/features/agents/codex-terminal-snapshot.ts` 的折行，已从当前 story 改动中剔除。
+- `pnpm lint`：第二轮通过。
+- `pnpm typecheck`：第二轮通过。
+- `pnpm test`：第二轮通过，8 个测试文件、102 个测试通过；输出仍包含既有 `HTMLCanvasElement.getContext()` 与 `Could not parse CSS stylesheet` 警告，但未导致失败。
 
 ### Change Log
 
 - 2026-06-07：创建 Story 3.4 开发上下文并将状态推进到 `ready-for-dev`。
+- 2026-06-07：完成临时 Session Dialog 的前端 UI、Agents 顶部入口接线、焦点与键盘交互，以及对应前端回归测试，状态推进到 `review`。
+- 2026-06-07：完成同会话 code review，未发现阻塞问题，状态推进到 `done`。
