@@ -1,28 +1,18 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-5-start-temporary-agent-session-without-linked-issue.md
-story_key: 3-5-start-temporary-agent-session-without-linked-issue
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-6-ensure-temporary-session-does-not-trigger-issue-flow.md
+story_key: 3-6-ensure-temporary-session-does-not-trigger-issue-flow
 story_status: done
-baseline_commit: 5842f99
+baseline_commit: a757501
 changed_files:
-  - _bmad-output/implementation-artifacts/3-5-start-temporary-agent-session-without-linked-issue.md
+  - _bmad-output/implementation-artifacts/3-6-ensure-temporary-session-does-not-trigger-issue-flow.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src-tauri/migrations/0009_agent_sessions_project_id.sql
-  - src-tauri/src/db/migrations.rs
-  - src-tauri/src/types/agent_session.rs
-  - src-tauri/src/db/agent_session_repository.rs
-  - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/commands/agent_session_commands.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/tests/agent_session.rs
-  - src-tauri/tests/local_data.rs
-  - src/features/agents/agent-session-commands.ts
-  - src/features/agents/temporary-session-dialog.tsx
-  - src/features/agents/agents-activity.tsx
   - src/features/agents/agents-activity.test.tsx
-  - src/shared/commands/command-client.test.ts
+  - src-tauri/tests/agent_session.rs
+  - src-tauri/tests/issue.rs
 validation_commands:
-  - pnpm test -- --run src/shared/commands/command-client.test.ts src/features/agents/agents-activity.test.tsx
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
   - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
@@ -30,23 +20,16 @@ validation_commands:
   - pnpm typecheck
   - pnpm test
   - cargo test --manifest-path src-tauri/Cargo.toml
-  - pnpm format
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
 validation_results:
-  - "pnpm test -- --run src/shared/commands/command-client.test.ts src/features/agents/agents-activity.test.tsx: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: pass"
   - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: pass"
   - "pnpm format: pass"
   - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
-  - "pnpm lint: fail - temporary-session-dialog.tsx triggered no-unsafe-finally"
-  - "pnpm typecheck: pass"
-  - "pnpm test: pass"
-  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
-  - "pnpm format: pass"
   - "pnpm lint: pass"
   - "pnpm typecheck: pass"
   - "pnpm test: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
 review_summary: "clean review; no patch, decision-needed, or defer findings"
 blocking_reason:
-updated_at: 2026-06-07T22:44:35+08:00
+updated_at: 2026-06-07T23:05:30+08:00

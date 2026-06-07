@@ -314,6 +314,88 @@ fn start_standalone_agent_session_creates_session_records_event_and_lists_it() {
 }
 
 #[test]
+fn set_session_attention_on_standalone_session_records_session_event_without_issue_side_effects() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-attention-project");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_standalone_agent_session_row(
+        &database.connection,
+        project_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_366_000,
+        None,
+        "/tmp/standalone-attention.log",
+    );
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .set_session_attention(SetAgentSessionAttentionInput {
+            project_id,
+            session_id,
+            attention: AgentSessionAttention::Requested,
+        })
+        .expect("set standalone attention");
+
+    assert_eq!(result.session_id, session_id);
+    assert_eq!(result.attention, AgentSessionAttention::Requested);
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(
+        refreshed_session.attention,
+        AgentSessionAttention::Requested
+    );
+    assert_eq!(refreshed_session.issue_id, None);
+
+    let issue_response = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    )
+    .list_issues(project_id)
+    .expect("list issues");
+    assert_eq!(issue_response.issues.len(), 1);
+    assert_eq!(issue_response.issues[0].id, issue_id);
+    assert_eq!(issue_response.issues[0].status, IssueStatus::Backlog);
+    assert_eq!(issue_response.issues[0].linked_session_id, None);
+    assert_eq!(issue_response.issues[0].linked_session_status, None);
+    assert_eq!(issue_response.issues[0].linked_session_attention, None);
+
+    let issue_actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions");
+    assert_eq!(issue_actions.len(), 1);
+    assert_eq!(issue_actions[0].action_type, IssueActionType::IssueCreated);
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionAttentionRequested
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert!(payload["issueId"].is_null());
+    assert_eq!(payload["attention"].as_str(), Some("requested"));
+    assert_eq!(payload["trigger"].as_str(), Some("manual"));
+}
+
+#[test]
 fn start_agent_session_rejects_second_session_for_same_issue() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -1174,6 +1256,75 @@ fn record_session_termination_marks_zero_exit_as_closed_and_persists_event() {
 }
 
 #[test]
+fn record_session_termination_for_standalone_session_keeps_issue_state_unchanged() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-termination-project");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_standalone_agent_session_row(
+        &database.connection,
+        project_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_400_000,
+        None,
+        "/tmp/standalone-log",
+    );
+
+    AgentSessionService::record_session_termination_in_data_dir(
+        temp_dir.path(),
+        session_id,
+        PtyExitStatus { exit_code: Some(0) },
+    )
+    .expect("record standalone termination");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(session.status, AgentSessionStatus::Closed);
+    assert_eq!(session.issue_id, None);
+    assert!(session.closed_at.is_some());
+
+    let issue_response = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    )
+    .list_issues(project_id)
+    .expect("list issues");
+    assert_eq!(issue_response.issues.len(), 1);
+    assert_eq!(issue_response.issues[0].id, issue_id);
+    assert_eq!(issue_response.issues[0].status, IssueStatus::Backlog);
+    assert_eq!(issue_response.issues[0].linked_session_id, None);
+    assert_eq!(issue_response.issues[0].linked_session_status, None);
+    assert_eq!(issue_response.issues[0].linked_session_attention, None);
+
+    let issue_actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions");
+    assert_eq!(issue_actions.len(), 1);
+    assert_eq!(issue_actions[0].action_type, IssueActionType::IssueCreated);
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionExited
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["status"].as_str(), Some("closed"));
+    assert_eq!(payload["exitCode"].as_i64(), Some(0));
+    assert!(payload["issueId"].is_null());
+    assert_eq!(payload["logPath"].as_str(), Some("/tmp/standalone-log"));
+}
+
+#[test]
 fn record_session_termination_marks_non_zero_exit_as_crashed_and_is_idempotent() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -1469,6 +1620,47 @@ fn insert_agent_session_row_with_details(
             ],
         )
         .expect("insert agent session row");
+    connection.last_insert_rowid()
+}
+
+fn insert_standalone_agent_session_row(
+    connection: &rusqlite::Connection,
+    project_id: i64,
+    agent_profile_id: i64,
+    status: AgentSessionStatus,
+    attention: AgentSessionAttention,
+    last_active_at: i64,
+    closed_at: Option<i64>,
+    log_path: &str,
+) -> i64 {
+    connection
+        .execute(
+            "INSERT INTO agent_sessions (
+                project_id,
+                issue_id,
+                title,
+                agent_profile_id,
+                status,
+                attention,
+                working_dir,
+                command_snapshot,
+                prompt_snapshot,
+                log_path,
+                last_active_at,
+                started_at,
+                closed_at
+            ) VALUES (?1, NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', ?5, ?6, ?6, ?7)",
+            rusqlite::params![
+                project_id,
+                agent_profile_id,
+                agent_session_status_str(&status),
+                agent_session_attention_str(&attention),
+                log_path,
+                last_active_at,
+                closed_at,
+            ],
+        )
+        .expect("insert standalone agent session row");
     connection.last_insert_rowid()
 }
 

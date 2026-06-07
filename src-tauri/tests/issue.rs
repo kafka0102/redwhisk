@@ -560,6 +560,55 @@ fn list_issues_includes_linked_session_facts() {
 }
 
 #[test]
+fn list_issues_ignores_standalone_sessions_in_same_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-isolation-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Issue without linked session".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    let profile_id = insert_agent_profile(&database.connection);
+
+    database
+        .connection
+        .execute(
+            "INSERT INTO agent_sessions (
+                project_id,
+                issue_id,
+                title,
+                agent_profile_id,
+                status,
+                attention,
+                working_dir,
+                command_snapshot,
+                prompt_snapshot,
+                log_path,
+                last_active_at,
+                started_at,
+                closed_at
+            ) VALUES (?1, NULL, 'Scratch Session', ?2, 'closed', 'requested', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628500000, 1780628400000, 1780628600000)",
+            rusqlite::params![project_id, profile_id],
+        )
+        .expect("insert standalone session");
+
+    let response = service.list_issues(project_id).expect("project issues");
+
+    assert_eq!(response.issues.len(), 1);
+    assert_eq!(response.issues[0].id, issue.id);
+    assert_eq!(response.issues[0].linked_session_id, None);
+    assert_eq!(response.issues[0].linked_session_status, None);
+    assert_eq!(response.issues[0].linked_session_attention, None);
+}
+
+#[test]
 fn list_issues_rejects_missing_project() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
