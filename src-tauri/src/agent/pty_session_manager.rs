@@ -28,6 +28,7 @@ pub struct PtySpawnRequest {
     pub command: String,
     pub working_dir: String,
     pub log_path: String,
+    pub initial_prompt: Option<String>,
     pub rows: u16,
     pub cols: u16,
     pub startup_check_total_ms: u64,
@@ -68,7 +69,8 @@ impl PtySessionManager {
             })
             .map_err(|error| error.to_string())?;
 
-        let mut command = build_command_builder(&request.command);
+        let mut command =
+            build_command_builder(&request.command, request.initial_prompt.as_deref());
         command.cwd(&request.working_dir);
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
@@ -262,19 +264,32 @@ fn ensure_child_started(
     Ok(())
 }
 
-fn build_command_builder(command: &str) -> CommandBuilder {
+pub(crate) fn build_shell_command_line(command: &str, prompt: Option<&str>) -> String {
+    let mut command_line = format!("exec {}", shell_quote(command));
+    if let Some(prompt) = prompt {
+        command_line.push(' ');
+        command_line.push_str(&shell_quote(prompt));
+    }
+    format!("{command_line} || exit $?")
+}
+
+fn build_command_builder(command: &str, prompt: Option<&str>) -> CommandBuilder {
     #[cfg(unix)]
     {
         let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
         let mut builder = CommandBuilder::new(shell);
         builder.arg("-lc");
-        builder.arg(format!("exec {}", shell_quote(command)));
+        builder.arg(build_shell_command_line(command, prompt));
         builder
     }
 
     #[cfg(not(unix))]
     {
-        CommandBuilder::new(command)
+        let mut builder = CommandBuilder::new(command);
+        if let Some(prompt) = prompt {
+            builder.arg(prompt);
+        }
+        builder
     }
 }
 
