@@ -1,47 +1,15 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: _bmad-output/implementation-artifacts/2-6-spike-codex-native-session-view-with-pty-xterm.md
-story_key: 2-6-spike-codex-native-session-view-with-pty-xterm
-story_status: done
-baseline_commit: bf81423
+phase: story-created
+story_file: _bmad-output/implementation-artifacts/2-7-record-session-logs-and-exit-events.md
+story_key: 2-7-record-session-logs-and-exit-events
+story_status: ready-for-dev
+baseline_commit: 01028ad
 changed_files:
-  - _bmad-output/implementation-artifacts/2-6-spike-codex-native-session-view-with-pty-xterm.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - _bmad-output/implementation-artifacts/2-7-record-session-logs-and-exit-events.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - package.json
-  - pnpm-lock.yaml
-  - spikes/embedded-codex-terminal.md
-  - src/app/app.css
-  - src/features/agents/agent-session-commands.ts
-  - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/agents/codex-terminal.test.tsx
-  - src/features/agents/codex-terminal.tsx
-  - src/shared/commands/command-client.test.ts
-  - src-tauri/Cargo.lock
-  - src-tauri/Cargo.toml
-  - src-tauri/src/agent/mod.rs
-  - src-tauri/src/agent/pty_session_manager.rs
-  - src-tauri/src/app_state.rs
-  - src-tauri/src/commands/agent_session_commands.rs
-  - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/agent_session.rs
-  - src-tauri/tests/agent_session.rs
-validation_commands:
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - cargo test --manifest-path src-tauri/Cargo.toml
-validation_results:
-  - pass: pnpm format
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-  - pass: pnpm test
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml
-review_summary: review clean; no blocking findings, and remaining cross-restart recovery or lower-latency terminal streaming stays deferred to stories 2.7, 2.8 and Epic 4
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+validation_commands: []
+validation_results: []
+review_summary:
 blocking_reason:
-updated_at: 2026-06-06T22:58:00+08:00
+updated_at: 2026-06-07T09:07:14+08:00
