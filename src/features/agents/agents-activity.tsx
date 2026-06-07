@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import {
   listAgentSessions,
+  setAgentSessionAttention,
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import { CodexTerminal } from "./codex-terminal";
@@ -43,6 +44,10 @@ export function AgentsActivity({
   const infoPaneMaxWidth = 420;
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [attentionErrorMessage, setAttentionErrorMessage] = useState<
+    string | null
+  >(null);
+  const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
@@ -123,6 +128,29 @@ export function AgentsActivity({
   function handleSelectSession(sessionId: number) {
     setSelectedSessionId(sessionId);
     onSelectSession?.(sessionId);
+  }
+
+  async function handleSetAttention(attention: "none" | "requested") {
+    if (selectedSession == null) {
+      return;
+    }
+
+    setAttentionErrorMessage(null);
+    setIsUpdatingAttention(true);
+
+    try {
+      await setAgentSessionAttention({
+        projectId,
+        sessionId: selectedSession.sessionId,
+        attention,
+      });
+      const response = await listAgentSessions(projectId);
+      setSessions(response.sessions);
+    } catch (error) {
+      setAttentionErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsUpdatingAttention(false);
+    }
   }
 
   useEffect(() => {
@@ -277,6 +305,39 @@ export function AgentsActivity({
 
       <section className="agents-workspace" aria-label="Session workspace">
         <div className="agents-terminal-pane">
+          {selectedSession ? (
+            <div className="agents-session-toolbar">
+              <div className="agents-session-toolbar__copy">
+                <p className="agents-session-toolbar__eyebrow">当前会话</p>
+                <h3>{formatSessionTitle(selectedSession)}</h3>
+              </div>
+              {selectedSession.status === "running" ? (
+                <button
+                  className="agents-session-toolbar__action"
+                  disabled={isUpdatingAttention}
+                  type="button"
+                  onClick={() =>
+                    void handleSetAttention(
+                      selectedSession.attention === "requested"
+                        ? "none"
+                        : "requested",
+                    )
+                  }
+                >
+                  {isUpdatingAttention
+                    ? "更新中..."
+                    : selectedSession.attention === "requested"
+                      ? "清除关注"
+                      : "标记关注"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {attentionErrorMessage ? (
+            <p className="issues-status" role="status">
+              {attentionErrorMessage}
+            </p>
+          ) : null}
           {selectedSession ? (
             <CodexTerminal
               projectId={projectId}
