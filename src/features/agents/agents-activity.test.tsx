@@ -15,6 +15,7 @@ import {
   readAgentSessionTerminal,
   resizeAgentSessionTerminal,
   setAgentSessionAttention,
+  startStandaloneAgentSession,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
@@ -24,6 +25,7 @@ vi.mock("./agent-session-commands", () => ({
   readAgentSessionTerminal: vi.fn(),
   resizeAgentSessionTerminal: vi.fn(),
   setAgentSessionAttention: vi.fn(),
+  startStandaloneAgentSession: vi.fn(),
   writeAgentSessionTerminal: vi.fn(),
 }));
 
@@ -35,6 +37,7 @@ const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const readAgentSessionTerminalMock = vi.mocked(readAgentSessionTerminal);
 const resizeAgentSessionTerminalMock = vi.mocked(resizeAgentSessionTerminal);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
+const startStandaloneAgentSessionMock = vi.mocked(startStandaloneAgentSession);
 const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 
@@ -75,6 +78,7 @@ describe("AgentsActivity", () => {
     readAgentSessionTerminalMock.mockReset();
     resizeAgentSessionTerminalMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
+    startStandaloneAgentSessionMock.mockReset();
     writeAgentSessionTerminalMock.mockReset();
     readAgentSessionTerminalMock.mockResolvedValue({
       sessionId: 301,
@@ -85,6 +89,9 @@ describe("AgentsActivity", () => {
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
       attention: "requested",
+    });
+    startStandaloneAgentSessionMock.mockResolvedValue({
+      sessionId: 701,
     });
     writeAgentSessionTerminalMock.mockResolvedValue();
     listAgentProfilesMock.mockReset();
@@ -339,6 +346,131 @@ describe("AgentsActivity", () => {
     expect(
       within(dialog).getByRole("button", { name: "Start" }),
     ).toBeDisabled();
+  });
+
+  it("starts a temporary session, refreshes the list, and hides the linked issue pane for the new session", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 301,
+            issueId: 20,
+            issueTitle: "Existing issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 701,
+            issueId: null,
+            issueTitle: null,
+            title: "Scratch Session",
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_500_000,
+            startedAt: 1_780_638_500_000,
+            closedAt: null,
+          },
+          {
+            sessionId: 301,
+            issueId: 20,
+            issueTitle: "Existing issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "New session",
+      }),
+    );
+    await user.clear(screen.getByLabelText("Session title"));
+    await user.type(screen.getByLabelText("Session title"), "Scratch Session");
+    await user.clear(screen.getByLabelText("Initial prompt"));
+    await user.type(
+      screen.getByLabelText("Initial prompt"),
+      "Help me inspect the current repo",
+    );
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() =>
+      expect(startStandaloneAgentSessionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        title: "Scratch Session",
+        agentProfileId: 101,
+        promptSnapshot: "Help me inspect the current repo",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Session Dialog" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Scratch Session" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Linked issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the temporary session dialog open and shows the start failure reason", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+    startStandaloneAgentSessionMock.mockRejectedValue({
+      code: "AGENT_SESSION_START_FAILED",
+      message: "Agent 进程启动失败。",
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "New session",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Session Dialog" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Agent 进程启动失败。")).toBeInTheDocument();
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
   });
 
   it("shows only closed, crashed and stopped sessions in the completed group", async () => {

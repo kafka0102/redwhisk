@@ -6,7 +6,8 @@ use crate::types::agent_session::{
     AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
-    StartAgentSessionResult, WriteAgentSessionTerminalInput,
+    StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
+    WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -85,6 +86,54 @@ pub fn start_agent_session(
         crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
     )
     .start_agent_session_with_pty(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn start_standalone_agent_session(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: StartStandaloneAgentSessionInput,
+) -> Result<StartStandaloneAgentSessionResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 启动失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    {
+        let mut local_data = state.local_data.lock().map_err(|_| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 启动失败。",
+            )
+        })?;
+        local_data
+            .initialize(&data_dir)
+            .map_err(CommandError::from)?;
+    }
+
+    let database = crate::db::connection::DatabaseConfig::new(&data_dir)
+        .open()
+        .map_err(CommandError::from)?;
+    crate::db::migrations::MigrationRunner::default()
+        .run(&database.connection)
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 启动失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+
+    AgentSessionService::new(
+        crate::db::issue_repository::IssueRepository::new(&database.connection),
+        crate::db::project_repository::ProjectRepository::new(&database.connection),
+        crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
+        crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
+    )
+    .start_standalone_agent_session_with_pty(data_dir, input, &state.pty_sessions)
 }
 
 #[tauri::command]

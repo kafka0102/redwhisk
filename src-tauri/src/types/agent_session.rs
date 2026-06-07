@@ -20,6 +20,21 @@ pub struct StartAgentSessionResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct StartStandaloneAgentSessionInput {
+    pub project_id: i64,
+    pub title: String,
+    pub agent_profile_id: i64,
+    pub prompt_snapshot: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartStandaloneAgentSessionResult {
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadAgentSessionTerminalInput {
     pub project_id: i64,
     pub session_id: i64,
@@ -107,6 +122,7 @@ pub struct AgentSessionListItem {
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionRecord {
     pub id: i64,
+    pub project_id: i64,
     pub issue_id: Option<i64>,
     pub title: Option<String>,
     pub agent_profile_id: i64,

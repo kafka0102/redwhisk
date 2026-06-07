@@ -24,6 +24,7 @@ use crate::types::agent_session::{
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
+    StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
     WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -77,6 +78,23 @@ impl<'connection> AgentSessionService<'connection> {
         self.start_agent_session_internal(data_dir, input, Some(pty_sessions))
     }
 
+    pub fn start_standalone_agent_session(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartStandaloneAgentSessionInput,
+    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
+        self.start_standalone_agent_session_internal(data_dir, input, None)
+    }
+
+    pub fn start_standalone_agent_session_with_pty(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartStandaloneAgentSessionInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
+        self.start_standalone_agent_session_internal(data_dir, input, Some(pty_sessions))
+    }
+
     fn start_agent_session_internal(
         &self,
         data_dir: impl AsRef<Path>,
@@ -84,17 +102,13 @@ impl<'connection> AgentSessionService<'connection> {
         pty_sessions: Option<&PtySessionManager>,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
-
-        let project = self
-            .project_repository
-            .find_by_id(input.project_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
-                    .with_detail(
-                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
-                    )
-            })?;
+        let (profile, working_dir, log_path, command_snapshot, started_at) = self
+            .prepare_session_launch(
+                data_dir.as_ref(),
+                input.project_id,
+                input.agent_profile_id,
+                &format!("issue-{}", input.issue_id),
+            )?;
 
         let issue = self
             .issue_repository
@@ -146,32 +160,6 @@ impl<'connection> AgentSessionService<'connection> {
             ));
         }
 
-        let profile = self
-            .agent_profile_repository
-            .find_profile_by_id(input.agent_profile_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentProfileValidationFailed,
-                    "Agent Profile 不存在。",
-                )
-                .with_detail(
-                    ErrorDetail::new("AgentProfile")
-                        .with_value("agentProfileId", input.agent_profile_id),
-                )
-            })?;
-
-        validate_profile_scope(&profile, input.project_id)?;
-
-        let started_at = current_epoch_millis()?;
-        let working_dir = validate_working_dir(&project.repo_path)?;
-        let log_path = build_log_path(
-            data_dir.as_ref(),
-            issue.id,
-            input.agent_profile_id,
-            started_at,
-        )?;
-        let command_snapshot = build_command_snapshot(&profile);
         let command_accepts_prompt_argument = command_supports_prompt_argument(&profile.command);
         let initial_prompt_argument =
             command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
@@ -225,6 +213,7 @@ impl<'connection> AgentSessionService<'connection> {
         let transaction_result: Result<StartAgentSessionResult, rusqlite::Error> = (|| {
             let session = AgentSessionRepository::insert_in_transaction(
                 &transaction,
+                input.project_id,
                 issue.id,
                 input.agent_profile_id,
                 &working_dir,
@@ -337,9 +326,219 @@ impl<'connection> AgentSessionService<'connection> {
                     let _ = child.kill();
                     let _ = child.wait();
                 }
-                Err(agent_session_transaction_error(error, input.issue_id))
+                Err(agent_session_transaction_error_for_issue(
+                    error,
+                    input.issue_id,
+                ))
             }
         }
+    }
+
+    fn start_standalone_agent_session_internal(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartStandaloneAgentSessionInput,
+        pty_sessions: Option<&PtySessionManager>,
+    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
+        let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
+        let title = validate_session_title(&input.title)?;
+        let (profile, working_dir, log_path, command_snapshot, started_at) = self
+            .prepare_session_launch(
+                data_dir.as_ref(),
+                input.project_id,
+                input.agent_profile_id,
+                &format!("project-{}-standalone", input.project_id),
+            )?;
+
+        let command_accepts_prompt_argument = command_supports_prompt_argument(&profile.command);
+        let initial_prompt_argument =
+            command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
+
+        let pending_pty = if let Some(pty_sessions) = pty_sessions {
+            Some(
+                pty_sessions
+                    .spawn_pending(&PtySpawnRequest {
+                        command: profile.command.clone(),
+                        working_dir: working_dir.clone(),
+                        log_path: log_path.clone(),
+                        initial_prompt: initial_prompt_argument.clone(),
+                        rows: 32,
+                        cols: 120,
+                        startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+                        startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+                    })
+                    .map_err(agent_session_start_error)?,
+            )
+        } else {
+            None
+        };
+        let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
+        let mut child = if pending_pty.is_none() {
+            let mut child = spawn_agent_process(
+                &profile,
+                &working_dir,
+                &log_path,
+                initial_prompt_argument.as_deref(),
+            )?;
+            ensure_process_started(&mut child, &profile.command)?;
+            Some(child)
+        } else {
+            None
+        };
+        let mut pending_pty = pending_pty;
+        if !command_accepts_prompt_argument {
+            if let Some(pending_pty) = pending_pty.as_mut() {
+                pending_pty
+                    .write_input(&normalized_prompt)
+                    .map_err(agent_session_start_error)?;
+            }
+        }
+
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+
+        let transaction_result: Result<StartStandaloneAgentSessionResult, rusqlite::Error> =
+            (|| {
+                let session = AgentSessionRepository::insert_standalone_in_transaction(
+                    &transaction,
+                    input.project_id,
+                    &title,
+                    input.agent_profile_id,
+                    &working_dir,
+                    &command_snapshot,
+                    &prompt_snapshot,
+                    &log_path,
+                    started_at,
+                )?;
+
+                let session_event_payload = json!({
+                    "sessionId": session.id,
+                    "projectId": input.project_id,
+                    "issueId": Value::Null,
+                    "agentProfileId": input.agent_profile_id,
+                    "title": title,
+                    "status": "running",
+                    "logPath": log_path,
+                })
+                .to_string();
+                EventRepository::insert_session_event_in_transaction(
+                    &transaction,
+                    session.id,
+                    SessionEventType::SessionStarted,
+                    &session_event_payload,
+                    started_at,
+                )?;
+
+                transaction.commit()?;
+
+                Ok(StartStandaloneAgentSessionResult {
+                    session_id: session.id,
+                })
+            })();
+
+        match transaction_result {
+            Ok(result) => {
+                if should_attempt_codex_session_capture(&profile.command) {
+                    let data_dir = data_dir.as_ref().to_path_buf();
+                    let working_dir = working_dir.clone();
+                    let session_id = result.session_id;
+                    thread::spawn(move || {
+                        refresh_codex_session_id_in_data_dir(
+                            &data_dir,
+                            session_id,
+                            &working_dir,
+                            started_at,
+                        );
+                    });
+                }
+
+                if let Some(pty_sessions) = pty_sessions {
+                    if let Some(pending_pty) = pending_pty {
+                        let data_dir = data_dir.as_ref().to_path_buf();
+                        pty_sessions.register(result.session_id, pending_pty, move |exit_status| {
+                            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                &data_dir,
+                                result.session_id,
+                                exit_status,
+                            );
+                        });
+                    }
+                } else if let Some(child) = child.take() {
+                    let data_dir = data_dir.as_ref().to_path_buf();
+                    let session_id = result.session_id;
+                    thread::spawn(move || {
+                        let mut child = child;
+                        let exit_status = child
+                            .wait()
+                            .ok()
+                            .map(|status| PtyExitStatus {
+                                exit_code: status.code(),
+                            })
+                            .unwrap_or(PtyExitStatus { exit_code: None });
+                        let _ = AgentSessionService::record_session_termination_in_data_dir(
+                            &data_dir,
+                            session_id,
+                            exit_status,
+                        );
+                    });
+                }
+
+                Ok(result)
+            }
+            Err(error) => {
+                if let Some(pending_pty) = pending_pty {
+                    pending_pty.terminate();
+                }
+                if let Some(mut child) = child.take() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+                Err(agent_session_database_error(error))
+            }
+        }
+    }
+
+    fn prepare_session_launch(
+        &self,
+        data_dir: &Path,
+        project_id: i64,
+        agent_profile_id: i64,
+        log_name: &str,
+    ) -> Result<(AgentProfileRow, String, String, String, i64), CommandError> {
+        let project = self
+            .project_repository
+            .find_by_id(project_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
+            })?;
+
+        let profile = self
+            .agent_profile_repository
+            .find_profile_by_id(agent_profile_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "Agent Profile 不存在。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentProfile").with_value("agentProfileId", agent_profile_id),
+                )
+            })?;
+
+        validate_profile_scope(&profile, project_id)?;
+
+        let started_at = current_epoch_millis()?;
+        let working_dir = validate_working_dir(&project.repo_path)?;
+        let log_path = build_log_path(data_dir, log_name, agent_profile_id, started_at)?;
+        let command_snapshot = build_command_snapshot(&profile);
+
+        Ok((profile, working_dir, log_path, command_snapshot, started_at))
     }
 
     pub fn list_agent_sessions(
@@ -659,23 +858,7 @@ impl<'connection> AgentSessionService<'connection> {
                     )
             })?;
 
-        let issue_id = session.issue_id.ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "当前 Session 尚未关联到可交互 Issue。",
-            )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
-        })?;
-        let issue = self
-            .issue_repository
-            .find_by_id(issue_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
-                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
-            })?;
-
-        if issue.project_id != project_id {
+        if session.project_id != project_id {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Agent Session 不属于当前 Project。",
@@ -707,6 +890,26 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .start_agent_session(data_dir, input)
+    }
+
+    pub fn start_standalone_agent_session_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: StartStandaloneAgentSessionInput,
+    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
+        let database = DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .start_standalone_agent_session(data_dir, input)
     }
 
     pub fn list_agent_sessions_in_data_dir(
@@ -1021,6 +1224,19 @@ fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandErro
     Ok(trimmed.to_string())
 }
 
+fn validate_session_title(title: &str) -> Result<String, CommandError> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "Session title 不能为空。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "title")));
+    }
+
+    Ok(trimmed.to_string())
+}
+
 fn validate_injected_prompt(prompt: &str) -> Result<String, CommandError> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
@@ -1053,7 +1269,7 @@ fn build_command_snapshot(profile: &AgentProfileRow) -> String {
 
 fn build_log_path(
     data_dir: &Path,
-    issue_id: i64,
+    session_name: &str,
     agent_profile_id: i64,
     started_at: i64,
 ) -> Result<String, CommandError> {
@@ -1061,7 +1277,7 @@ fn build_log_path(
     fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
 
     let path = logs_dir.join(format!(
-        "issue-{issue_id}-profile-{agent_profile_id}-{started_at}.log"
+        "{session_name}-profile-{agent_profile_id}-{started_at}.log"
     ));
     Ok(path.to_string_lossy().to_string())
 }
@@ -1124,7 +1340,10 @@ fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-fn agent_session_transaction_error(error: rusqlite::Error, issue_id: i64) -> CommandError {
+fn agent_session_transaction_error_for_issue(
+    error: rusqlite::Error,
+    issue_id: i64,
+) -> CommandError {
     if let rusqlite::Error::SqliteFailure(_, Some(message)) = &error {
         if message.contains("UNIQUE constraint failed: agent_sessions.issue_id") {
             return CommandError::new(

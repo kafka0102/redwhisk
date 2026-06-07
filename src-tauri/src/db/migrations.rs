@@ -25,6 +25,9 @@ const AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_VERSION: &str =
     "0008_agent_sessions_and_session_events";
 const AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0008_agent_sessions_and_session_events.sql");
+const AGENT_SESSIONS_PROJECT_ID_MIGRATION_VERSION: &str = "0009_agent_sessions_project_id";
+const AGENT_SESSIONS_PROJECT_ID_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0009_agent_sessions_project_id.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -126,6 +129,10 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_VERSION,
                     sql: AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_SESSIONS_PROJECT_ID_MIGRATION_VERSION,
+                    sql: AGENT_SESSIONS_PROJECT_ID_MIGRATION_SQL,
                 },
             ];
         }
