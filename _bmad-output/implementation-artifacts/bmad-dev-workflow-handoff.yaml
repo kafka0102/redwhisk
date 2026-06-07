@@ -1,12 +1,39 @@
 workflow: bmad-dev-workflow
-phase: story-created
+phase: complete
 story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-4-open-temporary-session-dialog.md
 story_key: 3-4-open-temporary-session-dialog
-story_status: ready-for-dev
+story_status: done
 baseline_commit: af7b11b
-changed_files: []
-validation_commands: []
-validation_results: []
-review_summary:
+changed_files:
+  - _bmad-output/implementation-artifacts/3-4-open-temporary-session-dialog.md
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - src/features/agents/agents-activity.test.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/temporary-session-dialog.tsx
+validation_commands:
+  - pnpm test -- src/features/agents/agents-activity.test.tsx
+  - pnpm test -- src/features/agents/agents-activity.test.tsx
+  - pnpm test -- src/features/agents/agents-activity.test.tsx
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+validation_results:
+  - fail: pnpm test -- src/features/agents/agents-activity.test.tsx (3 failing dialog tests before implementation)
+  - fail: pnpm test -- src/features/agents/agents-activity.test.tsx (2 failing assertions after first implementation pass)
+  - pass: pnpm test -- src/features/agents/agents-activity.test.tsx
+  - pass: pnpm format
+  - pass: pnpm lint
+  - fail then fixed: pnpm typecheck (HTMLFormElement typing in temporary-session-dialog.tsx)
+  - pass: pnpm test
+  - pass: pnpm format
+  - pass: pnpm lint
+  - pass: pnpm typecheck
+  - pass: pnpm test
+review_summary: clean same-session automatic review; no patch, decision, or defer findings
 blocking_reason:
-updated_at: 2026-06-07T20:09:44+0800
+updated_at: 2026-06-07T20:24:01+0800

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-07T20:09:44+0800
+last_updated: 2026-06-07T20:24:01+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -72,7 +72,7 @@ development_status:
   3-1-improve-session-list-grouping-and-sorting: done
   3-2-show-needs-attention-indicator: done
   3-3-manually-set-and-clear-attention: done
-  3-4-open-temporary-session-dialog: ready-for-dev
+  3-4-open-temporary-session-dialog: done
   3-5-start-temporary-agent-session-without-linked-issue: backlog
   3-6-ensure-temporary-session-does-not-trigger-issue-flow: backlog
   epic-3-retrospective: optional
