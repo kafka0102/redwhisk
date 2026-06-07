@@ -1313,12 +1313,23 @@ button:focus-visible {
 .codex-terminal {
   min-height: 0;
   overflow: hidden;
+  padding: 12px 14px;
   background: #ffffff;
 }
 
 .codex-terminal .xterm {
   height: 100%;
-  padding: 12px 14px;
+}
+
+.codex-terminal .xterm,
+.codex-terminal .xterm-viewport,
+.codex-terminal .xterm-screen,
+.codex-terminal .xterm-helpers {
+  background: transparent;
+}
+
+.codex-terminal .xterm-viewport {
+  background-color: transparent;
 }
 
 .agents-info-splitter {
@@ -1368,38 +1379,38 @@ button:focus-visible {
 .agents-info-pane {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   min-height: 0;
-  padding: 12px 8px;
+  padding: 12px 10px;
   overflow: auto;
   background: var(--color-surface);
 }
 
-.agents-info-link {
-  display: block;
-  width: 100%;
+.agents-info-pane__label {
   margin: 0;
-  padding: 8px 6px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.35;
-  text-align: left;
-  word-break: break-word;
-}
-
-.agents-info-link:hover,
-.agents-info-link:focus-visible {
-  color: var(--color-text-strong);
-}
-
-.agents-info-link:disabled {
   color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.agents-linked-issue-card {
+  min-height: 92px;
+  gap: 6px;
+}
+
+.agents-linked-issue-card:hover,
+.agents-linked-issue-card:focus-visible {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.agents-linked-issue-card:disabled {
   cursor: default;
+  opacity: 0.72;
 }
 
 .issue-dialog-overlay {

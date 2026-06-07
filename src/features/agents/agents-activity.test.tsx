@@ -112,13 +112,12 @@ describe("AgentsActivity", () => {
     ).toHaveAttribute("aria-valuenow", "248");
     expect(
       screen.getByRole("separator", { name: "Resize session info" }),
-    ).toHaveAttribute("aria-valuenow", "40");
+    ).toHaveAttribute("aria-valuenow", "248");
     expect(
-      screen.getByRole("complementary", { name: "Session links" }),
+      screen.getByRole("complementary", { name: "Linked issue" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Link" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Existing issue" }),
+      screen.getByRole("button", { name: /#issue20.*Existing issue/i }),
     ).toBeDisabled();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
@@ -228,7 +227,9 @@ describe("AgentsActivity", () => {
         name: /Newest running issue/i,
       }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Link" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /#issue21.*Newest running issue/i }),
+    ).toBeDisabled();
   });
 
   it("hides the info pane when the selected session has no linked issue", async () => {
@@ -290,11 +291,12 @@ describe("AgentsActivity", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Link" }));
-    await user.click(screen.getByRole("button", { name: "Existing issue" }));
+    await user.click(
+      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
+    );
 
+    expect(onOpenIssuesActivity).toHaveBeenCalledTimes(1);
     expect(onOpenIssuesActivity).toHaveBeenNthCalledWith(1, 20);
-    expect(onOpenIssuesActivity).toHaveBeenNthCalledWith(2, 20);
   });
 
   it("collapses and expands the info pane from the splitter toggle", async () => {
@@ -328,7 +330,7 @@ describe("AgentsActivity", () => {
     await user.click(toggle);
 
     expect(
-      screen.queryByRole("complementary", { name: "Session links" }),
+      screen.queryByRole("complementary", { name: "Linked issue" }),
     ).not.toBeInTheDocument();
     expect(separator).toHaveAttribute("aria-valuenow", "0");
     expect(
@@ -340,9 +342,9 @@ describe("AgentsActivity", () => {
     );
 
     expect(
-      screen.getByRole("complementary", { name: "Session links" }),
+      screen.getByRole("complementary", { name: "Linked issue" }),
     ).toBeInTheDocument();
-    expect(separator).toHaveAttribute("aria-valuenow", "40");
+    expect(separator).toHaveAttribute("aria-valuenow", "248");
   });
 
   it("resizes the info pane with keyboard and dragging interactions", async () => {
@@ -372,22 +374,27 @@ describe("AgentsActivity", () => {
 
     separator.focus();
     await user.keyboard("{ArrowLeft}");
-    expect(separator).toHaveAttribute("aria-valuenow", "56");
+    expect(separator).toHaveAttribute("aria-valuenow", "264");
 
     await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "40");
+    expect(separator).toHaveAttribute("aria-valuenow", "248");
+
+    for (let index = 0; index < 2; index += 1) {
+      await user.keyboard("{ArrowRight}");
+    }
+    expect(separator).toHaveAttribute("aria-valuenow", "220");
 
     await user.keyboard("{ArrowRight}");
     expect(separator).toHaveAttribute("aria-valuenow", "0");
     expect(
-      screen.queryByRole("complementary", { name: "Session links" }),
+      screen.queryByRole("complementary", { name: "Linked issue" }),
     ).not.toBeInTheDocument();
 
     fireEvent.mouseDown(separator, { clientX: 300 });
     fireEvent.mouseMove(window, { clientX: 220 });
-    expect(separator).toHaveAttribute("aria-valuenow", "80");
+    expect(separator).toHaveAttribute("aria-valuenow", "220");
     expect(
-      screen.getByRole("complementary", { name: "Session links" }),
+      screen.getByRole("complementary", { name: "Linked issue" }),
     ).toBeInTheDocument();
 
     fireEvent.mouseUp(window);
