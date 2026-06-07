@@ -13,6 +13,7 @@ import {
   listAgentSessions,
   readAgentSessionTerminal,
   resizeAgentSessionTerminal,
+  startStandaloneAgentSession,
   writeAgentSessionTerminal,
 } from "../../features/agents/agent-session-commands";
 import { startAgentSession } from "../../features/issues/issue-commands";
@@ -271,6 +272,31 @@ describe("command client", () => {
         sessionId: 301,
         rows: 38,
         cols: 120,
+      },
+    });
+  });
+
+  it("invokes Rust Core through the start standalone agent session command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: 11,
+    });
+
+    await expect(
+      startStandaloneAgentSession({
+        projectId: 1,
+        title: "Scratch Session",
+        agentProfileId: 9,
+        promptSnapshot: "Help me inspect the current repo",
+      }),
+    ).resolves.toEqual({
+      sessionId: 11,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("start_standalone_agent_session", {
+      input: {
+        projectId: 1,
+        title: "Scratch Session",
+        agentProfileId: 9,
+        promptSnapshot: "Help me inspect the current repo",
       },
     });
   });

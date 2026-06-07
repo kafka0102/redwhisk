@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
+  startStandaloneAgentSession,
+  type StartStandaloneAgentSessionResult,
+} from "./agent-session-commands";
+import {
   listAgentProfiles,
   type AgentProfileRecord,
 } from "../settings/settings-commands";
@@ -9,6 +13,9 @@ import { toCommandError } from "../../shared/commands/command-error";
 interface TemporarySessionDialogProps {
   projectId: number;
   onClose: () => void;
+  onStarted: (
+    result: StartStandaloneAgentSessionResult,
+  ) => Promise<void> | void;
 }
 
 const DEFAULT_SESSION_TITLE = "Untitled Session";
@@ -18,6 +25,7 @@ const DEFAULT_PROMPT =
 export function TemporarySessionDialog({
   projectId,
   onClose,
+  onStarted,
 }: TemporarySessionDialogProps) {
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
@@ -26,6 +34,7 @@ export function TemporarySessionDialog({
   );
   const [title, setTitle] = useState(DEFAULT_SESSION_TITLE);
   const [promptDraft, setPromptDraft] = useState(DEFAULT_PROMPT);
+  const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLFormElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -90,6 +99,7 @@ export function TemporarySessionDialog({
 
   const isStartDisabled =
     isLoadingProfiles ||
+    isStarting ||
     selectedProfile == null ||
     title.trim().length === 0 ||
     promptDraft.trim().length === 0;
@@ -126,16 +136,36 @@ export function TemporarySessionDialog({
     }
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isStartDisabled) {
+    if (isStartDisabled || selectedProfile == null) {
       return;
     }
 
-    setStatusMessage(
-      "Temporary session start will be implemented in Story 3.5.",
-    );
+    setIsStarting(true);
+    setStatusMessage(null);
+    let didStart = false;
+
+    try {
+      const result = await startStandaloneAgentSession({
+        projectId,
+        title: title.trim(),
+        agentProfileId: selectedProfile.id,
+        promptSnapshot: promptDraft,
+      });
+      await onStarted(result);
+      didStart = true;
+    } catch (error) {
+      setStatusMessage(toCommandError(error).message);
+    }
+
+    if (didStart) {
+      onClose();
+      return;
+    }
+
+    setIsStarting(false);
   }
 
   return (
@@ -234,7 +264,7 @@ export function TemporarySessionDialog({
             type="submit"
             disabled={isStartDisabled}
           >
-            Start
+            {isStarting ? "Starting..." : "Start"}
           </button>
         </div>
       </form>

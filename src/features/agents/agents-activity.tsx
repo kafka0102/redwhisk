@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   listAgentSessions,
   setAgentSessionAttention,
+  type StartStandaloneAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import { CodexTerminal } from "./codex-terminal";
@@ -143,6 +144,15 @@ export function AgentsActivity({
     window.requestAnimationFrame(() => {
       newSessionButtonRef.current?.focus();
     });
+  }
+
+  async function handleTemporarySessionStarted(
+    result: StartStandaloneAgentSessionResult,
+  ) {
+    const response = await listAgentSessions(projectId);
+    setSessions(response.sessions);
+    setSelectedSessionId(result.sessionId);
+    onSelectSession?.(result.sessionId);
   }
 
   async function handleSetAttention(attention: "none" | "requested") {
@@ -474,6 +484,7 @@ export function AgentsActivity({
         <TemporarySessionDialog
           projectId={projectId}
           onClose={closeTemporarySessionDialog}
+          onStarted={handleTemporarySessionStarted}
         />
       ) : null}
     </main>

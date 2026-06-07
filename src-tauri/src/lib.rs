@@ -26,6 +26,7 @@ pub fn run() {
             commands::issue_commands::update_issue,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::start_agent_session,
+            commands::agent_session_commands::start_standalone_agent_session,
             commands::agent_session_commands::read_agent_session_terminal,
             commands::agent_session_commands::write_agent_session_terminal,
             commands::agent_session_commands::set_agent_session_attention,

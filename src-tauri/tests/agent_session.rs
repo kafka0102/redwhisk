@@ -14,6 +14,7 @@ use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentSessionAttention, AgentSessionPromptKind, AgentSessionStatus,
     InjectAgentSessionPromptInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
+    StartStandaloneAgentSessionInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::CreateIssueInput;
@@ -50,7 +51,8 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "log_path",
             "last_active_at",
             "started_at",
-            "closed_at"
+            "closed_at",
+            "project_id"
         ]
     );
 
@@ -203,6 +205,7 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
         .expect("find session")
         .expect("session should exist");
     assert_eq!(session.issue_id, Some(issue_id));
+    assert_eq!(session.project_id, project_id);
     assert_eq!(session.agent_profile_id, profile_id);
     assert_eq!(
         session.status,
@@ -237,6 +240,76 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
     assert_eq!(
         session_events[0].event_type,
         SessionEventType::SessionStarted
+    );
+}
+
+#[test]
+fn start_standalone_agent_session_creates_session_records_event_and_lists_it() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-success-project");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        success_command(temp_dir.path()).to_string_lossy().as_ref(),
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_standalone_agent_session(
+            temp_dir.path(),
+            StartStandaloneAgentSessionInput {
+                project_id,
+                title: "Scratch Session".to_string(),
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Help me inspect the current repo".to_string(),
+            },
+        )
+        .expect("standalone start should succeed");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(session.project_id, project_id);
+    assert_eq!(session.issue_id, None);
+    assert_eq!(session.title.as_deref(), Some("Scratch Session"));
+    assert_eq!(session.agent_profile_id, profile_id);
+    assert_eq!(session.status, AgentSessionStatus::Running);
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(result.session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionStarted
+    );
+
+    let issue_actions = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM issue_actions", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .expect("issue action count");
+    assert_eq!(issue_actions, 0);
+
+    let response = service
+        .list_agent_sessions(project_id)
+        .expect("list agent sessions");
+    assert_eq!(response.sessions.len(), 1);
+    assert_eq!(response.sessions[0].session_id, result.session_id);
+    assert_eq!(response.sessions[0].issue_id, None);
+    assert_eq!(response.sessions[0].issue_title, None);
+    assert_eq!(
+        response.sessions[0].title.as_deref(),
+        Some("Scratch Session")
     );
 }
 
@@ -363,6 +436,59 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
         .list_session_events(1)
         .expect("list session events");
     assert!(session_event_count.is_empty());
+}
+
+#[test]
+fn start_standalone_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_start() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-fail-project");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        temp_dir
+            .path()
+            .join("missing-standalone-command")
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .start_standalone_agent_session(
+            temp_dir.path(),
+            StartStandaloneAgentSessionInput {
+                project_id,
+                title: "Scratch Session".to_string(),
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Help me inspect the current repo".to_string(),
+            },
+        )
+        .expect_err("standalone start should fail when command cannot start");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionStartFailed);
+
+    let session_count = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM agent_sessions", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .expect("agent session count");
+    assert_eq!(session_count, 0);
+
+    let session_event_count = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM session_events", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .expect("session event count");
+    assert_eq!(session_event_count, 0);
 }
 
 #[test]
@@ -1307,9 +1433,18 @@ fn insert_agent_session_row_with_details(
     closed_at: Option<i64>,
     log_path: &str,
 ) -> i64 {
+    let project_id: i64 = connection
+        .query_row(
+            "SELECT project_id FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("project id for issue");
+
     connection
         .execute(
             "INSERT INTO agent_sessions (
+                project_id,
                 issue_id,
                 agent_profile_id,
                 status,
@@ -1321,8 +1456,9 @@ fn insert_agent_session_row_with_details(
                 last_active_at,
                 started_at,
                 closed_at
-            ) VALUES (?1, ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', ?5, ?6, ?6, ?7)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, '/tmp/repo', 'codex', 'prompt', ?6, ?7, ?7, ?8)",
             rusqlite::params![
+                project_id,
                 issue_id,
                 agent_profile_id,
                 agent_session_status_str(&status),

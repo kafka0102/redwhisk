@@ -29,7 +29,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
                  FROM agent_sessions
                  WHERE id = ?1",
                 params![id],
@@ -41,7 +41,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_issue_id(&self, issue_id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
                  FROM agent_sessions
                  WHERE issue_id = ?1",
                 params![issue_id],
@@ -67,9 +67,9 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.started_at,
                 agent_sessions.closed_at
              FROM agent_sessions
-             INNER JOIN issues ON issues.id = agent_sessions.issue_id
+             LEFT JOIN issues ON issues.id = agent_sessions.issue_id
              INNER JOIN agent_profiles ON agent_profiles.id = agent_sessions.agent_profile_id
-             WHERE issues.project_id = ?1",
+             WHERE agent_sessions.project_id = ?1",
         )?;
 
         let sessions = statement
@@ -81,6 +81,7 @@ impl<'connection> AgentSessionRepository<'connection> {
 
     pub fn insert_in_transaction(
         transaction: &Transaction<'_>,
+        project_id: i64,
         issue_id: i64,
         agent_profile_id: i64,
         working_dir: &str,
@@ -91,6 +92,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<AgentSessionRecord> {
         transaction.execute(
             "INSERT INTO agent_sessions (
+               project_id,
                issue_id,
                agent_profile_id,
                status,
@@ -101,9 +103,52 @@ impl<'connection> AgentSessionRepository<'connection> {
                log_path,
                last_active_at,
                started_at
-             ) VALUES (?1, ?2, 'running', 'none', ?3, ?4, ?5, ?6, ?7, ?7)",
+             ) VALUES (?1, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?8)",
             params![
+                project_id,
                 issue_id,
+                agent_profile_id,
+                working_dir,
+                command_snapshot,
+                prompt_snapshot,
+                log_path,
+                started_at
+            ],
+        )?;
+
+        let id = transaction.last_insert_rowid();
+        find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    pub fn insert_standalone_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        title: &str,
+        agent_profile_id: i64,
+        working_dir: &str,
+        command_snapshot: &str,
+        prompt_snapshot: &str,
+        log_path: &str,
+        started_at: i64,
+    ) -> rusqlite::Result<AgentSessionRecord> {
+        transaction.execute(
+            "INSERT INTO agent_sessions (
+               project_id,
+               issue_id,
+               title,
+               agent_profile_id,
+               status,
+               attention,
+               working_dir,
+               command_snapshot,
+               prompt_snapshot,
+               log_path,
+               last_active_at,
+               started_at
+             ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?8)",
+            params![
+                project_id,
+                title,
                 agent_profile_id,
                 working_dir,
                 command_snapshot,
@@ -194,7 +239,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<AgentSessionRecord>> {
     connection
         .query_row(
-            "SELECT id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
              FROM agent_sessions
              WHERE id = ?1",
             params![id],
@@ -206,19 +251,20 @@ fn find_by_id_on_connection(
 fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSessionRecord> {
     Ok(AgentSessionRecord {
         id: row.get(0)?,
-        issue_id: row.get(1)?,
-        title: row.get(2)?,
-        agent_profile_id: row.get(3)?,
-        codex_session_id: row.get(4)?,
-        status: agent_session_status_from_str(&row.get::<_, String>(5)?)?,
-        attention: agent_session_attention_from_str(&row.get::<_, String>(6)?)?,
-        working_dir: row.get(7)?,
-        command_snapshot: row.get(8)?,
-        prompt_snapshot: row.get(9)?,
-        log_path: row.get(10)?,
-        last_active_at: row.get(11)?,
-        started_at: row.get(12)?,
-        closed_at: row.get(13)?,
+        project_id: row.get(1)?,
+        issue_id: row.get(2)?,
+        title: row.get(3)?,
+        agent_profile_id: row.get(4)?,
+        codex_session_id: row.get(5)?,
+        status: agent_session_status_from_str(&row.get::<_, String>(6)?)?,
+        attention: agent_session_attention_from_str(&row.get::<_, String>(7)?)?,
+        working_dir: row.get(8)?,
+        command_snapshot: row.get(9)?,
+        prompt_snapshot: row.get(10)?,
+        log_path: row.get(11)?,
+        last_active_at: row.get(12)?,
+        started_at: row.get(13)?,
+        closed_at: row.get(14)?,
     })
 }
 

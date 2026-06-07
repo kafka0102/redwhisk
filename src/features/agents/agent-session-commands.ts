@@ -71,6 +71,17 @@ export interface ResizeAgentSessionTerminalInput {
   cols: number;
 }
 
+export interface StartStandaloneAgentSessionInput {
+  projectId: number;
+  title: string;
+  agentProfileId: number;
+  promptSnapshot: string;
+}
+
+export interface StartStandaloneAgentSessionResult {
+  sessionId: number;
+}
+
 export function listAgentSessions(
   projectId: number,
 ): Promise<AgentSessionListResponse> {
@@ -116,4 +127,15 @@ export function resizeAgentSessionTerminal(
   input: ResizeAgentSessionTerminalInput,
 ): Promise<void> {
   return invokeCommand("resize_agent_session_terminal", { input });
+}
+
+export function startStandaloneAgentSession(
+  input: StartStandaloneAgentSessionInput,
+): Promise<StartStandaloneAgentSessionResult> {
+  return invokeCommand<StartStandaloneAgentSessionResult>(
+    "start_standalone_agent_session",
+    {
+      input,
+    },
+  );
 }
