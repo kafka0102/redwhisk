@@ -16,6 +16,18 @@ interface AgentsActivityProps {
 
 type DragPane = "info" | "sidebar";
 
+function isCompletedSession(
+  session: AgentSessionListItem,
+): session is AgentSessionListItem & {
+  status: "closed" | "crashed" | "stopped";
+} {
+  return (
+    session.status === "closed" ||
+    session.status === "crashed" ||
+    session.status === "stopped"
+  );
+}
+
 export function AgentsActivity({
   activeSessionId,
   onOpenIssuesActivity,
@@ -78,9 +90,7 @@ export function AgentsActivity({
   const runningSessions = sessions.filter(
     (session) => session.status === "running",
   );
-  const completedSessions = sessions.filter(
-    (session) => session.status !== "running",
-  );
+  const completedSessions = sessions.filter(isCompletedSession);
 
   const selectedSessionId =
     activeSessionId ??

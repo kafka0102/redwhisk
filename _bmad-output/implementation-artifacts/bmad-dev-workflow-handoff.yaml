@@ -1,28 +1,46 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: _bmad-output/implementation-artifacts/2-9-spike-git-commit-detection.md
-story_key: 2-9-spike-git-commit-detection
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-1-improve-session-list-grouping-and-sorting.md
+story_key: 3-1-improve-session-list-grouping-and-sorting
 story_status: done
-baseline_commit: 426fd6d
+baseline_commit: 4e05dac
 changed_files:
-  - _bmad-output/implementation-artifacts/2-9-spike-git-commit-detection.md
+  - _bmad-output/implementation-artifacts/3-1-improve-session-list-grouping-and-sorting.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - spikes/git-commit-detection.md
-  - src-tauri/src/git/mod.rs
-  - src-tauri/src/git/operation_state.rs
-  - src-tauri/src/git/status.rs
-  - src-tauri/tests/git_detection.rs
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/agents-activity.test.tsx
+  - src-tauri/tests/agent_session.rs
 validation_commands:
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
   - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
   - cargo test --manifest-path src-tauri/Cargo.toml
-  - rustfmt --edition 2021 --check src-tauri/src/git/mod.rs src-tauri/src/git/operation_state.rs src-tauri/src/git/status.rs src-tauri/tests/git_detection.rs
+  - rustfmt --edition 2021 src-tauri/tests/agent_session.rs
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo test --manifest-path src-tauri/Cargo.toml
 validation_results:
-  - pass: cargo fmt completed for Story 2.9 Rust files without staging unrelated settings changes.
-  - pass: git_detection passed with 8 tests, covering special-path porcelain parsing, non-forward HEAD movement, and merge/rebase/cherry-pick/revert/unmerged/sequencer blockers.
-  - pass: full cargo test passed.
-  - pass: rustfmt --check passed for Story 2.9 Rust files.
-review_summary: review clean after follow-up; structured porcelain parsing, operation blocker modeling, and non-forward HEAD movement detection are covered by code and tests
+  - pass: pnpm format
+  - pass: pnpm lint
+  - pass: pnpm typecheck
+  - pass: pnpm test (87 tests passed; existing HTMLCanvasElement.getContext and CSS stylesheet warnings persisted)
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml
+  - pass: rustfmt --edition 2021 src-tauri/tests/agent_session.rs
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml (review follow-up rerun)
+  - pass: pnpm format (edge reviewer test follow-up rerun)
+  - pass: pnpm lint (edge reviewer test follow-up rerun)
+  - pass: pnpm typecheck (edge reviewer test follow-up rerun)
+  - pass: pnpm test (edge reviewer test follow-up rerun; 88 tests passed, existing warnings persisted)
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml (edge reviewer test follow-up rerun)
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml (edge reviewer test follow-up rerun)
+review_summary: initial Rust ordering patch was fixed; a later edge review added three test-strengthening follow-ups, which were applied and revalidated. No unresolved findings remain.
 blocking_reason:
-updated_at: 2026-06-07T11:49:13+08:00
+updated_at: 2026-06-07T12:47:20+08:00

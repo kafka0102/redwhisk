@@ -122,6 +122,83 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
+  it("shows only closed, crashed and stopped sessions in the completed group", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Running issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 401,
+          issueId: 22,
+          issueTitle: "Closed issue",
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          lastActiveAt: 1_780_630_000_000,
+          startedAt: 1_780_629_000_000,
+          closedAt: 1_780_631_000_000,
+        },
+        {
+          sessionId: 402,
+          issueId: 23,
+          issueTitle: "Crashed issue",
+          title: null,
+          agentType: "codex",
+          status: "crashed",
+          attention: "none",
+          lastActiveAt: 1_780_632_000_000,
+          startedAt: 1_780_631_000_000,
+          closedAt: 1_780_633_000_000,
+        },
+        {
+          sessionId: 403,
+          issueId: 24,
+          issueTitle: "Stopped issue",
+          title: null,
+          agentType: "codex",
+          status: "stopped",
+          attention: "none",
+          lastActiveAt: 1_780_634_000_000,
+          startedAt: 1_780_633_000_000,
+          closedAt: 1_780_635_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const completedGroup = await screen.findByRole("region", {
+      name: "Completed sessions",
+    });
+
+    expect(
+      within(completedGroup).getByText("Completed(3)"),
+    ).toBeInTheDocument();
+    expect(
+      within(completedGroup).getByRole("button", { name: /Stopped issue/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(completedGroup).getByRole("button", { name: /Crashed issue/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(completedGroup).getByRole("button", { name: /Closed issue/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(completedGroup).queryByRole("button", { name: /Running issue/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("resizes the session list with the keyboard separator control", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
@@ -230,6 +307,49 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("button", { name: /#issue21.*Newest running issue/i }),
     ).toBeDisabled();
+  });
+
+  it("falls back to the first completed session when no running session exists", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 402,
+          issueId: 23,
+          issueTitle: "Newest completed issue",
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          lastActiveAt: 1_780_632_000_000,
+          startedAt: 1_780_631_000_000,
+          closedAt: 1_780_633_000_000,
+        },
+        {
+          sessionId: 401,
+          issueId: 22,
+          issueTitle: "Older completed issue",
+          title: null,
+          agentType: "codex",
+          status: "stopped",
+          attention: "none",
+          lastActiveAt: 1_780_630_000_000,
+          startedAt: 1_780_629_000_000,
+          closedAt: 1_780_631_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={null} projectId={1} />);
+
+    const completedGroup = await screen.findByRole("region", {
+      name: "Completed sessions",
+    });
+    expect(
+      within(completedGroup).getByRole("button", {
+        name: /Newest completed issue/i,
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
   it("hides the info pane when the selected session has no linked issue", async () => {
