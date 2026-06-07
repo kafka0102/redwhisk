@@ -39,6 +39,20 @@ export interface WriteAgentSessionTerminalInput {
   data: string;
 }
 
+export type AgentSessionPromptKind = "follow_up" | "completion";
+
+export interface InjectAgentSessionPromptInput {
+  projectId: number;
+  sessionId: number;
+  prompt: string;
+  kind: AgentSessionPromptKind;
+}
+
+export interface InjectAgentSessionPromptResult {
+  sessionId: number;
+  codexSessionId: string | null;
+}
+
 export interface ResizeAgentSessionTerminalInput {
   projectId: number;
   sessionId: number;
@@ -67,6 +81,15 @@ export function writeAgentSessionTerminal(
   input: WriteAgentSessionTerminalInput,
 ): Promise<void> {
   return invokeCommand("write_agent_session_terminal", { input });
+}
+
+export function injectAgentSessionPrompt(
+  input: InjectAgentSessionPromptInput,
+): Promise<InjectAgentSessionPromptResult> {
+  return invokeCommand<InjectAgentSessionPromptResult>(
+    "inject_agent_session_prompt",
+    { input },
+  );
 }
 
 export function resizeAgentSessionTerminal(

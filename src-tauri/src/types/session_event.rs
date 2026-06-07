@@ -15,6 +15,7 @@ pub struct SessionEventRecord {
 pub enum SessionEventType {
     SessionStarted,
     SessionExited,
+    SessionPromptInjected,
 }
 
 impl SessionEventType {
@@ -22,6 +23,7 @@ impl SessionEventType {
         match self {
             Self::SessionStarted => "session_started",
             Self::SessionExited => "session_exited",
+            Self::SessionPromptInjected => "session_prompt_injected",
         }
     }
 }

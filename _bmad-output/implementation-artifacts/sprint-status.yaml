@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-07T09:25:49+0800
+last_updated: 2026-06-07T10:10:00+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -64,7 +64,7 @@ development_status:
   2-5-show-agents-activity-session-list-and-basic-header: done
   2-6-spike-codex-native-session-view-with-pty-xterm: done
   2-7-record-session-logs-and-exit-events: done
-  2-8-spike-codex-resume-and-completion-prompt-injection: backlog
+  2-8-spike-codex-resume-and-completion-prompt-injection: done
   2-9-spike-git-commit-detection: backlog
   epic-2-retrospective: optional
 
