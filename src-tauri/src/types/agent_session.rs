@@ -44,6 +44,22 @@ pub struct WriteAgentSessionTerminalInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct InjectAgentSessionPromptInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub prompt: String,
+    pub kind: AgentSessionPromptKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InjectAgentSessionPromptResult {
+    pub session_id: i64,
+    pub codex_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResizeAgentSessionTerminalInput {
     pub project_id: i64,
     pub session_id: i64,
@@ -105,4 +121,11 @@ pub enum AgentSessionStatus {
 pub enum AgentSessionAttention {
     None,
     Requested,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSessionPromptKind {
+    FollowUp,
+    Completion,
 }

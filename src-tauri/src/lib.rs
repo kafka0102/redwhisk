@@ -28,6 +28,7 @@ pub fn run() {
             commands::agent_session_commands::start_agent_session,
             commands::agent_session_commands::read_agent_session_terminal,
             commands::agent_session_commands::write_agent_session_terminal,
+            commands::agent_session_commands::inject_agent_session_prompt,
             commands::agent_session_commands::resize_agent_session_terminal,
             commands::settings_commands::detect_codex_command,
             commands::settings_commands::test_agent_command,

@@ -3,9 +3,9 @@ use tauri::{Manager, State};
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::types::agent_session::{
-    AgentSessionListResponse, ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
-    ResizeAgentSessionTerminalInput, StartAgentSessionInput, StartAgentSessionResult,
-    WriteAgentSessionTerminalInput,
+    AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
+    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
+    StartAgentSessionInput, StartAgentSessionResult, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -124,6 +124,23 @@ pub fn write_agent_session_terminal(
     })?;
 
     AgentSessionService::write_terminal_input_in_data_dir(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn inject_agent_session_prompt(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: InjectAgentSessionPromptInput,
+) -> Result<InjectAgentSessionPromptResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session prompt 注入失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    AgentSessionService::inject_session_prompt_in_data_dir(data_dir, input, &state.pty_sessions)
 }
 
 #[tauri::command]

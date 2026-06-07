@@ -11,7 +11,8 @@ use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
-    AgentSessionAttention, AgentSessionStatus, StartAgentSessionInput,
+    AgentSessionAttention, AgentSessionPromptKind, AgentSessionStatus,
+    InjectAgentSessionPromptInput, StartAgentSessionInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::CreateIssueInput;
@@ -694,6 +695,91 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
 
     assert!(snapshot.contains("hello from pty"));
     manager.kill(77).expect("kill session");
+}
+
+#[test]
+fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "inject-prompt-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_628_600_000,
+        None,
+    );
+
+    let command = echo_stdin_command(temp_dir.path());
+    let log_path = temp_dir.path().join("inject-prompt.log");
+    let manager = PtySessionManager::new();
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register(session_id, pending, |_| {});
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .inject_session_prompt(
+            InjectAgentSessionPromptInput {
+                project_id,
+                session_id,
+                prompt: "please continue".to_string(),
+                kind: AgentSessionPromptKind::FollowUp,
+            },
+            &manager,
+        )
+        .expect("inject prompt");
+
+    assert_eq!(result.session_id, session_id);
+    assert_eq!(result.codex_session_id, None);
+
+    let mut snapshot = String::new();
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
+        if snapshot.contains("please continue") {
+            break;
+        }
+    }
+
+    assert!(snapshot.contains("please continue"));
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionPromptInjected
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
+    assert_eq!(payload["kind"].as_str(), Some("follow_up"));
+    assert_eq!(payload["prompt"].as_str(), Some("please continue"));
+    assert_eq!(payload["submitted"].as_bool(), Some(true));
+
+    manager.kill(session_id).expect("kill session");
 }
 
 fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection::Database {

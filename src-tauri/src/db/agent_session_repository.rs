@@ -142,6 +142,25 @@ impl<'connection> AgentSessionRepository<'connection> {
 
         find_by_id_on_connection(transaction, session_id)
     }
+
+    pub fn update_codex_session_id(
+        &self,
+        session_id: i64,
+        codex_session_id: &str,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = self.connection.execute(
+            "UPDATE agent_sessions
+             SET codex_session_id = ?1
+             WHERE id = ?2 AND codex_session_id IS NULL",
+            params![codex_session_id, session_id],
+        )?;
+
+        if changed == 0 {
+            return self.find_by_id(session_id);
+        }
+
+        self.find_by_id(session_id)
+    }
 }
 
 fn find_by_id_on_connection(

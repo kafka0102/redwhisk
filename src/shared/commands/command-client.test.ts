@@ -9,6 +9,7 @@ import {
   openProjectWindow,
 } from "../../features/project/project-commands";
 import {
+  injectAgentSessionPrompt,
   listAgentSessions,
   readAgentSessionTerminal,
   resizeAgentSessionTerminal,
@@ -222,6 +223,33 @@ describe("command client", () => {
         projectId: 1,
         sessionId: 301,
         data: "status\r",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the inject agent session prompt command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: 301,
+      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+    });
+
+    await expect(
+      injectAgentSessionPrompt({
+        projectId: 1,
+        sessionId: 301,
+        prompt: "please continue",
+        kind: "follow_up",
+      }),
+    ).resolves.toEqual({
+      sessionId: 301,
+      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("inject_agent_session_prompt", {
+      input: {
+        projectId: 1,
+        sessionId: 301,
+        prompt: "please continue",
+        kind: "follow_up",
       },
     });
   });
