@@ -415,6 +415,60 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
 }
 
 #[test]
+fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo-pty-prompt");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        echo_stdin_command(temp_dir.path())
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let manager = PtySessionManager::new();
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session_with_pty(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "please start working".to_string(),
+            },
+            &manager,
+        )
+        .expect("start should succeed");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session should exist");
+
+    let mut snapshot = String::new();
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        snapshot = read_terminal_snapshot(std::path::Path::new(&session.log_path), 8_192)
+            .expect("read snapshot");
+        if snapshot.contains("please start working") {
+            break;
+        }
+    }
+
+    assert!(snapshot.contains("please start working"));
+    manager.kill(result.session_id).expect("kill session");
+}
+
+#[test]
 fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

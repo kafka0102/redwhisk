@@ -9,6 +9,7 @@ interface ActivityRouterProps {
   activeAgentSessionId: number | null;
   onOpenAgentsActivity: (sessionId: number) => void;
   onOpenIssuesActivity: (issueId: number) => void;
+  onSelectAgentSession: (sessionId: number) => void;
   projectId: number;
   projectName: string;
   requestedIssueId: number | null;
@@ -19,6 +20,7 @@ export function ActivityRouter({
   activeAgentSessionId,
   onOpenAgentsActivity,
   onOpenIssuesActivity,
+  onSelectAgentSession,
   projectId,
   projectName,
   requestedIssueId,
@@ -27,6 +29,7 @@ export function ActivityRouter({
     return (
       <AgentsActivity
         activeSessionId={activeAgentSessionId}
+        onSelectSession={onSelectAgentSession}
         projectId={projectId}
         onOpenIssuesActivity={onOpenIssuesActivity}
       />

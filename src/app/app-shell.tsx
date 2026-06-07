@@ -69,6 +69,7 @@ export function AppShell({
               setRequestedIssueId(issueId);
               setActiveActivity("issues");
             }}
+            onSelectAgentSession={setActiveAgentSessionId}
             projectId={project.id}
             projectName={project.name}
             requestedIssueId={requestedIssueId}

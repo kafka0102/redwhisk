@@ -199,6 +199,62 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("allows manually switching to another session even when an initial active session is provided", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Running issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    const runningGroup = await screen.findByRole("region", {
+      name: "Running sessions",
+    });
+    const existingIssueRow = within(runningGroup).getByRole("button", {
+      name: /Existing issue/i,
+    });
+    const runningIssueRow = within(runningGroup).getByRole("button", {
+      name: /Running issue/i,
+    });
+
+    expect(existingIssueRow).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(runningIssueRow);
+
+    expect(runningIssueRow).toHaveAttribute("aria-pressed", "true");
+    expect(existingIssueRow).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /#issue21.*Running issue/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it("shows a needs-attention marker on session rows when attention is requested", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
