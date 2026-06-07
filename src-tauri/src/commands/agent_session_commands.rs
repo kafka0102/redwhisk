@@ -5,7 +5,8 @@ use crate::core::agent_session_service::AgentSessionService;
 use crate::types::agent_session::{
     AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
-    StartAgentSessionInput, StartAgentSessionResult, WriteAgentSessionTerminalInput,
+    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
+    StartAgentSessionResult, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -124,6 +125,35 @@ pub fn write_agent_session_terminal(
     })?;
 
     AgentSessionService::write_terminal_input_in_data_dir(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn set_agent_session_attention(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SetAgentSessionAttentionInput,
+) -> Result<SetAgentSessionAttentionResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 关注状态更新失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    {
+        let mut local_data = state.local_data.lock().map_err(|_| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 关注状态更新失败。",
+            )
+        })?;
+        local_data
+            .initialize(&data_dir)
+            .map_err(CommandError::from)?;
+    }
+
+    AgentSessionService::set_session_attention_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]

@@ -1,36 +1,66 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-2-show-needs-attention-indicator.md
-story_key: 3-2-show-needs-attention-indicator
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-3-manually-set-and-clear-attention.md
+story_key: 3-3-manually-set-and-clear-attention
 story_status: done
-baseline_commit: ef84c74
+baseline_commit: 43f71e9
 changed_files:
-  - _bmad-output/implementation-artifacts/3-2-show-needs-attention-indicator.md
+  - _bmad-output/implementation-artifacts/3-3-manually-set-and-clear-attention.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - src-tauri/src/commands/agent_session_commands.rs
+  - src-tauri/src/core/agent_session_service.rs
+  - src-tauri/src/db/event_repository.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/agent_session.rs
+  - src-tauri/src/types/session_event.rs
+  - src-tauri/tests/agent_session.rs
   - src/app/app.css
+  - src/features/agents/agent-session-commands.ts
   - src/features/agents/agents-activity.tsx
   - src/features/agents/agents-activity.test.tsx
-  - src/features/issues/issue-commands.ts
-  - src/features/issues/issues-activity.tsx
-  - src/features/issues/issues-activity.test.tsx
-  - src-tauri/src/db/issue_repository.rs
-  - src-tauri/src/types/issue.rs
-  - src-tauri/tests/issue.rs
 validation_commands:
+  - pnpm test -- src/features/agents/agents-activity.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml agent_session
+  - cargo test --manifest-path src-tauri/Cargo.toml set_session_attention
+  - cargo test --manifest-path src-tauri/Cargo.toml write_terminal_input_clears_requested_attention_after_successful_write
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
   - pnpm typecheck
   - pnpm test
   - cargo test --manifest-path src-tauri/Cargo.toml
+  - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
 validation_results:
+  - pass: pnpm test -- src/features/agents/agents-activity.test.tsx
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml agent_session
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml set_session_attention
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml write_terminal_input_clears_requested_attention_after_successful_write
+  - pass: pnpm format
+  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
+  - fail then fixed: pnpm lint (react-hooks/set-state-in-effect in src/features/agents/agents-activity.tsx)
+  - pass: pnpm typecheck
+  - pass: pnpm test (98 tests passed; existing HTMLCanvasElement.getContext and CSS stylesheet warnings persisted)
+  - pass: cargo test --manifest-path src-tauri/Cargo.toml
   - pass: pnpm format
   - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
   - pass: pnpm lint
   - pass: pnpm typecheck
-  - pass: pnpm test (90 tests passed; existing HTMLCanvasElement.getContext and CSS stylesheet warnings persisted)
+  - pass: pnpm test (98 tests passed; existing HTMLCanvasElement.getContext and CSS stylesheet warnings persisted)
   - pass: cargo test --manifest-path src-tauri/Cargo.toml
-review_summary: same-session review clean; no unresolved findings. The change only adds linked session attention passthrough, lightweight markers, and regression coverage.
+  - pass: pnpm format
+  - pass: pnpm lint
+  - pass: pnpm typecheck
+  - pass: pnpm test (98 tests passed; existing HTMLCanvasElement.getContext and CSS stylesheet warnings persisted)
+review_summary: same-session review clean after one patch follow-up; Completed sessions no longer expose manual attention actions, and no unresolved findings remain.
 blocking_reason:
-updated_at: 2026-06-07T13:46:38+08:00
+updated_at: 2026-06-07T15:45:05+08:00

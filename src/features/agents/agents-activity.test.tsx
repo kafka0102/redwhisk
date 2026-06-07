@@ -14,6 +14,7 @@ import {
   listAgentSessions,
   readAgentSessionTerminal,
   resizeAgentSessionTerminal,
+  setAgentSessionAttention,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
 
@@ -21,12 +22,14 @@ vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
   readAgentSessionTerminal: vi.fn(),
   resizeAgentSessionTerminal: vi.fn(),
+  setAgentSessionAttention: vi.fn(),
   writeAgentSessionTerminal: vi.fn(),
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const readAgentSessionTerminalMock = vi.mocked(readAgentSessionTerminal);
 const resizeAgentSessionTerminalMock = vi.mocked(resizeAgentSessionTerminal);
+const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 
 describe("AgentsActivity", () => {
@@ -34,6 +37,7 @@ describe("AgentsActivity", () => {
     listAgentSessionsMock.mockReset();
     readAgentSessionTerminalMock.mockReset();
     resizeAgentSessionTerminalMock.mockReset();
+    setAgentSessionAttentionMock.mockReset();
     writeAgentSessionTerminalMock.mockReset();
     readAgentSessionTerminalMock.mockResolvedValue({
       sessionId: 301,
@@ -41,6 +45,10 @@ describe("AgentsActivity", () => {
       isActive: true,
     });
     resizeAgentSessionTerminalMock.mockResolvedValue();
+    setAgentSessionAttentionMock.mockResolvedValue({
+      sessionId: 301,
+      attention: "requested",
+    });
     writeAgentSessionTerminalMock.mockResolvedValue();
   });
 
@@ -305,9 +313,9 @@ describe("AgentsActivity", () => {
     expect(
       within(attentionRow).getByLabelText("Session 状态：需要确认"),
     ).toHaveClass("agents-session-row__status-dot--attention");
-    expect(
-      within(quietRow).getByLabelText("Session 状态：运行中"),
-    ).toHaveClass("agents-session-row__status-dot--running");
+    expect(within(quietRow).getByLabelText("Session 状态：运行中")).toHaveClass(
+      "agents-session-row__status-dot--running",
+    );
     expect(attentionRow).not.toHaveTextContent("running");
     expect(quietRow).not.toHaveTextContent("running");
   });
@@ -343,6 +351,12 @@ describe("AgentsActivity", () => {
       within(completedRow).getByLabelText("Session 状态：已结束"),
     ).toHaveClass("agents-session-row__status-dot--completed");
     expect(completedRow).not.toHaveTextContent("closed");
+    expect(
+      screen.queryByRole("button", { name: "标记关注" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "清除关注" }),
+    ).not.toBeInTheDocument();
   });
 
   it("polls the session list and refreshes the attention dot", async () => {
@@ -379,7 +393,7 @@ describe("AgentsActivity", () => {
             closedAt: null,
           },
         ],
-    });
+      });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
@@ -406,6 +420,132 @@ describe("AgentsActivity", () => {
     expect(
       within(refreshedRow).getByLabelText("Session 状态：需要确认"),
     ).toHaveClass("agents-session-row__status-dot--attention");
+  });
+
+  it("marks the selected running session as needing attention and refreshes the workspace action", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Manual attention issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Manual attention issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "requested",
+            lastActiveAt: 1_780_638_001_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+    setAgentSessionAttentionMock.mockResolvedValue({
+      sessionId: 302,
+      attention: "requested",
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const markButton = await screen.findByRole("button", { name: "标记关注" });
+    await user.click(markButton);
+
+    expect(setAgentSessionAttentionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 302,
+      attention: "requested",
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "清除关注" }),
+      ).toBeInTheDocument(),
+    );
+
+    const runningGroup = screen.getByRole("region", {
+      name: "Running sessions",
+    });
+    const refreshedRow = within(runningGroup).getByRole("button", {
+      name: /Manual attention issue/i,
+    });
+    expect(
+      within(refreshedRow).getByLabelText("Session 状态：需要确认"),
+    ).toHaveClass("agents-session-row__status-dot--attention");
+  });
+
+  it("clears requested attention from the selected running session", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Manual attention issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "requested",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Manual attention issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_001_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+    setAgentSessionAttentionMock.mockResolvedValue({
+      sessionId: 302,
+      attention: "none",
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const clearButton = await screen.findByRole("button", { name: "清除关注" });
+    await user.click(clearButton);
+
+    expect(setAgentSessionAttentionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 302,
+      attention: "none",
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "标记关注" }),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("resizes the session list with the keyboard separator control", async () => {

@@ -39,6 +39,17 @@ export interface WriteAgentSessionTerminalInput {
   data: string;
 }
 
+export interface SetAgentSessionAttentionInput {
+  projectId: number;
+  sessionId: number;
+  attention: AgentSessionAttention;
+}
+
+export interface SetAgentSessionAttentionResult {
+  sessionId: number;
+  attention: AgentSessionAttention;
+}
+
 export type AgentSessionPromptKind = "follow_up" | "completion";
 
 export interface InjectAgentSessionPromptInput {
@@ -81,6 +92,15 @@ export function writeAgentSessionTerminal(
   input: WriteAgentSessionTerminalInput,
 ): Promise<void> {
   return invokeCommand("write_agent_session_terminal", { input });
+}
+
+export function setAgentSessionAttention(
+  input: SetAgentSessionAttentionInput,
+): Promise<SetAgentSessionAttentionResult> {
+  return invokeCommand<SetAgentSessionAttentionResult>(
+    "set_agent_session_attention",
+    { input },
+  );
 }
 
 export function injectAgentSessionPrompt(

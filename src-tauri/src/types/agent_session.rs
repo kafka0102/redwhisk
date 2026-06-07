@@ -44,6 +44,21 @@ pub struct WriteAgentSessionTerminalInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetAgentSessionAttentionInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub attention: AgentSessionAttention,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAgentSessionAttentionResult {
+    pub session_id: i64,
+    pub attention: AgentSessionAttention,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InjectAgentSessionPromptInput {
     pub project_id: i64,
     pub session_id: i64,
@@ -116,7 +131,7 @@ pub enum AgentSessionStatus {
     Stopped,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentSessionAttention {
     None,

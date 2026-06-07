@@ -22,8 +22,9 @@ use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput, StartAgentSessionInput,
-    StartAgentSessionResult, WriteAgentSessionTerminalInput,
+    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput, SetAgentSessionAttentionInput,
+    SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
+    WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
@@ -454,6 +455,76 @@ impl<'connection> AgentSessionService<'connection> {
         Ok(())
     }
 
+    pub fn set_session_attention(
+        &self,
+        input: SetAgentSessionAttentionInput,
+    ) -> Result<SetAgentSessionAttentionResult, CommandError> {
+        let session = self.find_project_session(input.project_id, input.session_id)?;
+        if session.status != AgentSessionStatus::Running {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "只有运行中的 Agent Session 可以更新关注状态。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
+            ));
+        }
+
+        if session.attention == input.attention {
+            return Ok(SetAgentSessionAttentionResult {
+                session_id: session.id,
+                attention: session.attention,
+            });
+        }
+
+        let updated_at = current_epoch_millis()?;
+        let updated_session = self
+            .agent_session_repository
+            .update_attention(input.session_id, input.attention.clone(), updated_at)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionPersistenceFailed,
+                    "Agent Session 关注状态更新失败。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
+                )
+            })?;
+
+        let payload = json!({
+            "sessionId": session.id,
+            "issueId": session.issue_id,
+            "attention": attention_literal(&input.attention),
+            "trigger": "manual",
+        })
+        .to_string();
+        let event_type = match input.attention {
+            AgentSessionAttention::Requested => SessionEventType::SessionAttentionRequested,
+            AgentSessionAttention::None => SessionEventType::SessionAttentionCleared,
+        };
+
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            session.id,
+            event_type,
+            &payload,
+            updated_at,
+        )
+        .map_err(agent_session_database_error)?;
+        transaction.commit().map_err(agent_session_database_error)?;
+
+        Ok(SetAgentSessionAttentionResult {
+            session_id: updated_session.id,
+            attention: updated_session.attention,
+        })
+    }
+
     pub fn inject_session_prompt(
         &self,
         input: InjectAgentSessionPromptInput,
@@ -700,6 +771,26 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .write_terminal_input(input, pty_sessions)
+    }
+
+    pub fn set_session_attention_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SetAgentSessionAttentionInput,
+    ) -> Result<SetAgentSessionAttentionResult, CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .set_session_attention(input)
     }
 
     pub fn inject_session_prompt_in_data_dir(
@@ -1085,6 +1176,13 @@ fn prompt_kind_literal(kind: &AgentSessionPromptKind) -> &'static str {
     match kind {
         AgentSessionPromptKind::FollowUp => "follow_up",
         AgentSessionPromptKind::Completion => "completion",
+    }
+}
+
+fn attention_literal(attention: &AgentSessionAttention) -> &'static str {
+    match attention {
+        AgentSessionAttention::None => "none",
+        AgentSessionAttention::Requested => "requested",
     }
 }
 

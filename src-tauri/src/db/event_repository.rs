@@ -144,6 +144,8 @@ fn session_event_type_from_str(value: &str) -> rusqlite::Result<SessionEventType
         "session_started" => Ok(SessionEventType::SessionStarted),
         "session_exited" => Ok(SessionEventType::SessionExited),
         "session_prompt_injected" => Ok(SessionEventType::SessionPromptInjected),
+        "session_attention_requested" => Ok(SessionEventType::SessionAttentionRequested),
+        "session_attention_cleared" => Ok(SessionEventType::SessionAttentionCleared),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

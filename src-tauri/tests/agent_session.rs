@@ -2,6 +2,7 @@ use redwhisk_lib::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
 use redwhisk_lib::core::agent_session_service::AgentSessionService;
+use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
@@ -12,7 +13,7 @@ use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentSessionAttention, AgentSessionPromptKind, AgentSessionStatus,
-    InjectAgentSessionPromptInput, StartAgentSessionInput,
+    InjectAgentSessionPromptInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::CreateIssueInput;
@@ -814,6 +815,187 @@ fn write_terminal_input_clears_requested_attention_after_successful_write() {
     assert_eq!(refreshed_session.attention, AgentSessionAttention::None);
 
     manager.kill(session_id).expect("kill session");
+}
+
+#[test]
+fn set_session_attention_marks_running_session_and_records_manual_request_event() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "manual-attention-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_628_333_000,
+        None,
+    );
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .set_session_attention(SetAgentSessionAttentionInput {
+            project_id,
+            session_id,
+            attention: AgentSessionAttention::Requested,
+        })
+        .expect("set attention");
+
+    assert_eq!(result.session_id, session_id);
+    assert_eq!(result.attention, AgentSessionAttention::Requested);
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(
+        refreshed_session.attention,
+        AgentSessionAttention::Requested
+    );
+
+    let issue_response = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    )
+    .list_issues(project_id)
+    .expect("list issues");
+    assert_eq!(issue_response.issues.len(), 1);
+    assert_eq!(
+        issue_response.issues[0].linked_session_attention,
+        Some(AgentSessionAttention::Requested)
+    );
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionAttentionRequested
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
+    assert_eq!(payload["attention"].as_str(), Some("requested"));
+    assert_eq!(payload["trigger"].as_str(), Some("manual"));
+}
+
+#[test]
+fn set_session_attention_clears_requested_attention_and_records_manual_clear_event() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "manual-clear-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::Requested,
+        1_780_628_444_000,
+        None,
+        "/tmp/manual-clear.log",
+    );
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .set_session_attention(SetAgentSessionAttentionInput {
+            project_id,
+            session_id,
+            attention: AgentSessionAttention::None,
+        })
+        .expect("clear attention");
+
+    assert_eq!(result.session_id, session_id);
+    assert_eq!(result.attention, AgentSessionAttention::None);
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(refreshed_session.attention, AgentSessionAttention::None);
+
+    let issue_response = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    )
+    .list_issues(project_id)
+    .expect("list issues");
+    assert_eq!(issue_response.issues.len(), 1);
+    assert_eq!(
+        issue_response.issues[0].linked_session_attention,
+        Some(AgentSessionAttention::None)
+    );
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionAttentionCleared
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
+    assert_eq!(payload["attention"].as_str(), Some("none"));
+    assert_eq!(payload["trigger"].as_str(), Some("manual"));
+}
+
+#[test]
+fn set_session_attention_rejects_non_running_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "manual-invalid-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Closed,
+        1_780_628_555_000,
+        Some(1_780_628_556_000),
+    );
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .set_session_attention(SetAgentSessionAttentionInput {
+            project_id,
+            session_id,
+            attention: AgentSessionAttention::Requested,
+        })
+        .expect_err("closed session should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+    assert_eq!(
+        error.message,
+        "只有运行中的 Agent Session 可以更新关注状态。"
+    );
 }
 
 #[test]

@@ -16,6 +16,8 @@ pub enum SessionEventType {
     SessionStarted,
     SessionExited,
     SessionPromptInjected,
+    SessionAttentionRequested,
+    SessionAttentionCleared,
 }
 
 impl SessionEventType {
@@ -24,6 +26,8 @@ impl SessionEventType {
             Self::SessionStarted => "session_started",
             Self::SessionExited => "session_exited",
             Self::SessionPromptInjected => "session_prompt_injected",
+            Self::SessionAttentionRequested => "session_attention_requested",
+            Self::SessionAttentionCleared => "session_attention_cleared",
         }
     }
 }
