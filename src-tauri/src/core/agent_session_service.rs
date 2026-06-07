@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
 
 use crate::agent::pty_session_manager::{
-    read_terminal_snapshot, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
 use crate::db::agent_profile_repository::{AgentProfileRepository, AgentProfileRow};
 use crate::db::agent_session_repository::AgentSessionRepository;
@@ -18,9 +18,9 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
-    AgentSessionListItem, AgentSessionListResponse, ReadAgentSessionTerminalResult,
-    ResizeAgentSessionTerminalInput, StartAgentSessionInput, StartAgentSessionResult,
-    WriteAgentSessionTerminalInput,
+    AgentSessionListItem, AgentSessionListResponse, AgentSessionStatus,
+    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput, StartAgentSessionInput,
+    StartAgentSessionResult, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
@@ -260,12 +260,32 @@ impl<'connection> AgentSessionService<'connection> {
             Ok(result) => {
                 if let Some(pty_sessions) = pty_sessions {
                     if let Some(pending_pty) = pending_pty {
-                        pty_sessions.register(result.session_id, pending_pty);
+                        let data_dir = data_dir.as_ref().to_path_buf();
+                        pty_sessions.register(result.session_id, pending_pty, move |exit_status| {
+                            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                &data_dir,
+                                result.session_id,
+                                exit_status,
+                            );
+                        });
                     }
                 } else if let Some(child) = child.take() {
+                    let data_dir = data_dir.as_ref().to_path_buf();
+                    let session_id = result.session_id;
                     thread::spawn(move || {
                         let mut child = child;
-                        let _ = child.wait();
+                        let exit_status = child
+                            .wait()
+                            .ok()
+                            .map(|status| PtyExitStatus {
+                                exit_code: status.code(),
+                            })
+                            .unwrap_or(PtyExitStatus { exit_code: None });
+                        let _ = AgentSessionService::record_session_termination_in_data_dir(
+                            &data_dir,
+                            session_id,
+                            exit_status,
+                        );
                     });
                 }
                 Ok(result)
@@ -551,6 +571,79 @@ impl AgentSessionService<'_> {
         )
         .resize_terminal(input, pty_sessions)
     }
+
+    pub fn record_session_termination_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        session_id: i64,
+        exit_status: PtyExitStatus,
+    ) -> Result<(), CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        let session_repository = AgentSessionRepository::new(&database.connection);
+        let session = session_repository
+            .find_by_id(session_id)
+            .map_err(agent_session_database_error)?;
+        let Some(session) = session else {
+            return Ok(());
+        };
+
+        if session.closed_at.is_some() {
+            return Ok(());
+        }
+
+        let terminated_at = current_epoch_millis()?;
+        let termination_status = if exit_status.exit_code == Some(0) {
+            AgentSessionStatus::Closed
+        } else {
+            AgentSessionStatus::Crashed
+        };
+        let reason = termination_reason(exit_status.exit_code);
+        let status_literal = termination_status_literal(&termination_status);
+
+        let transaction = database
+            .connection
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+
+        let updated_session = AgentSessionRepository::mark_terminated_in_transaction(
+            &transaction,
+            session_id,
+            termination_status.clone(),
+            terminated_at,
+        )
+        .map_err(agent_session_database_error)?;
+
+        if updated_session.is_none() {
+            transaction.commit().map_err(agent_session_database_error)?;
+            return Ok(());
+        }
+
+        let payload = json!({
+            "sessionId": session.id,
+            "issueId": session.issue_id,
+            "status": status_literal,
+            "exitCode": exit_status.exit_code,
+            "reason": reason,
+            "logPath": session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            session.id,
+            SessionEventType::SessionExited,
+            &payload,
+            terminated_at,
+        )
+        .map_err(agent_session_database_error)?;
+
+        transaction.commit().map_err(agent_session_database_error)?;
+        Ok(())
+    }
 }
 
 fn validate_profile_scope(profile: &AgentProfileRow, project_id: i64) -> Result<(), CommandError> {
@@ -698,4 +791,21 @@ fn inactive_terminal_error(error: String) -> CommandError {
         "当前 Session 没有活跃终端。",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error))
+}
+
+fn termination_reason(exit_code: Option<i32>) -> &'static str {
+    match exit_code {
+        Some(0) => "process_exited",
+        Some(_) => "non_zero_exit_code",
+        None => "missing_exit_code",
+    }
+}
+
+fn termination_status_literal(status: &AgentSessionStatus) -> &'static str {
+    match status {
+        AgentSessionStatus::Running => "running",
+        AgentSessionStatus::Closed => "closed",
+        AgentSessionStatus::Crashed => "crashed",
+        AgentSessionStatus::Stopped => "stopped",
+    }
 }

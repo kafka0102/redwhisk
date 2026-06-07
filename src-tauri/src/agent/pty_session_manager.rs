@@ -43,6 +43,11 @@ pub struct PendingPtySession {
     log_path: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PtyExitStatus {
+    pub exit_code: Option<i32>,
+}
+
 impl PtySessionManager {
     pub fn new() -> Self {
         Self {
@@ -98,7 +103,10 @@ impl PtySessionManager {
         })
     }
 
-    pub fn register(&self, session_id: i64, pending: PendingPtySession) {
+    pub fn register<F>(&self, session_id: i64, pending: PendingPtySession, on_exit: F)
+    where
+        F: FnOnce(PtyExitStatus) + Send + 'static,
+    {
         let handle = Arc::new(PtySessionHandle {
             master: Mutex::new(pending.master),
             writer: Mutex::new(pending.writer),
@@ -135,10 +143,14 @@ impl PtySessionManager {
         let store = Arc::clone(&store);
         let mut child = pending.child;
         thread::spawn(move || {
-            let _ = child.wait();
+            let exit_code = child
+                .wait()
+                .ok()
+                .and_then(|status| i32::try_from(status.exit_code()).ok());
             if let Ok(mut sessions) = store.sessions.lock() {
                 sessions.remove(&session_id);
             }
+            on_exit(PtyExitStatus { exit_code });
         });
     }
 

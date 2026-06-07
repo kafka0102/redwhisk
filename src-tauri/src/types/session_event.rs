@@ -14,12 +14,14 @@ pub struct SessionEventRecord {
 #[serde(rename_all = "snake_case")]
 pub enum SessionEventType {
     SessionStarted,
+    SessionExited,
 }
 
 impl SessionEventType {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SessionStarted => "session_started",
+            Self::SessionExited => "session_exited",
         }
     }
 }
