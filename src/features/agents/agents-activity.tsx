@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, LayoutGrid, Plus } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -15,7 +16,8 @@ import {
 } from "./agent-session-commands";
 import { CodexTerminal } from "./codex-terminal";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
-import { markIssueReview } from "../issues/issue-commands";
+import { IssueInspector } from "./issue-inspector";
+import { markIssueReview, type IssueRecord } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
@@ -72,7 +74,9 @@ export function AgentsActivity({
   );
   const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
   const [infoPaneWidth, setInfoPaneWidth] = useState(infoPaneDefaultWidth);
-  const [isInfoPaneCollapsed, setIsInfoPaneCollapsed] = useState(false);
+  const [openInspectorIssueId, setOpenInspectorIssueId] = useState<
+    number | null
+  >(null);
   const dragStateRef = useRef<{
     pane: DragPane;
     startWidth: number;
@@ -80,6 +84,9 @@ export function AgentsActivity({
   } | null>(null);
   const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
+  const issueTitleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const inspectorPaneRef = useRef<HTMLElement | null>(null);
+  const infoSplitterRef = useRef<HTMLDivElement | null>(null);
 
   const applySessionListOverlays = useCallback(
     (nextSessions: AgentSessionListItem[]) => {
@@ -155,17 +162,73 @@ export function AgentsActivity({
 
   const selectedSession =
     sessions.find((session) => session.sessionId === currentSessionId) ?? null;
-  const linkedIssue =
-    selectedSession?.issueId != null && selectedSession.issueTitle
-      ? {
-          issueId: selectedSession.issueId,
-          issueTitle: selectedSession.issueTitle,
-          issueStatus: selectedSession.issueStatus ?? null,
-        }
-      : null;
+  const linkedIssue = useMemo(
+    () =>
+      selectedSession?.issueId != null && selectedSession.issueTitle
+        ? {
+            issueId: selectedSession.issueId,
+            issueTitle: selectedSession.issueTitle,
+            issueStatus: selectedSession.issueStatus ?? null,
+          }
+        : null,
+    [selectedSession],
+  );
+  const isInspectorOpen =
+    linkedIssue != null && openInspectorIssueId === linkedIssue.issueId;
   const canMarkReview =
     selectedSession?.status === "running" &&
     linkedIssue?.issueStatus === "running";
+
+  useEffect(() => {
+    if (!isInspectorOpen) {
+      return;
+    }
+
+    function closeInspector() {
+      setOpenInspectorIssueId(null);
+      window.requestAnimationFrame(() => {
+        issueTitleButtonRef.current?.focus();
+      });
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (inspectorPaneRef.current?.contains(target)) {
+        return;
+      }
+
+      if (issueTitleButtonRef.current?.contains(target)) {
+        return;
+      }
+
+      if (infoSplitterRef.current?.contains(target)) {
+        return;
+      }
+
+      closeInspector();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      closeInspector();
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isInspectorOpen]);
 
   function markSessionViewed(session: AgentSessionListItem) {
     if (session.status !== "running" || session.attention !== "none") {
@@ -286,6 +349,41 @@ export function AgentsActivity({
     }
   }
 
+  function handleToggleInspector() {
+    if (!linkedIssue) {
+      return;
+    }
+
+    setOpenInspectorIssueId((currentIssueId) =>
+      currentIssueId === linkedIssue.issueId ? null : linkedIssue.issueId,
+    );
+  }
+
+  function handleCloseInspector() {
+    setOpenInspectorIssueId(null);
+    window.requestAnimationFrame(() => {
+      issueTitleButtonRef.current?.focus();
+    });
+  }
+
+  function handleInspectorIssueUpdated(updatedIssue: IssueRecord) {
+    setSessions((currentSessions) =>
+      currentSessions.map((session) =>
+        session.issueId === updatedIssue.id
+          ? {
+              ...session,
+              issueTitle: updatedIssue.title,
+              issueStatus: updatedIssue.status,
+              lastActiveAt: Math.max(
+                session.lastActiveAt,
+                updatedIssue.updatedAt,
+              ),
+            }
+          : session,
+      ),
+    );
+  }
+
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
       const dragState = dragStateRef.current;
@@ -305,11 +403,13 @@ export function AgentsActivity({
 
       const nextWidth = dragState.startWidth + dragState.startX - event.clientX;
       if (nextWidth <= 0) {
-        setIsInfoPaneCollapsed(true);
+        setOpenInspectorIssueId(null);
         return;
       }
 
-      setIsInfoPaneCollapsed(false);
+      if (linkedIssue) {
+        setOpenInspectorIssueId(linkedIssue.issueId);
+      }
       setInfoPaneWidth(
         Math.max(infoPaneMinWidth, Math.min(infoPaneMaxWidth, nextWidth)),
       );
@@ -330,7 +430,7 @@ export function AgentsActivity({
       window.document.body.style.cursor = "";
       window.document.body.style.userSelect = "";
     };
-  }, []);
+  }, [linkedIssue]);
 
   function openTemporarySessionDialog() {
     setIsTemporarySessionDialogOpen(true);
@@ -358,8 +458,9 @@ export function AgentsActivity({
       style={
         {
           "--agents-sidebar-width": `${sidebarWidth}px`,
-          "--agents-info-pane-width":
-            linkedIssue && !isInfoPaneCollapsed ? `${infoPaneWidth}px` : "0px",
+          "--agents-info-pane-width": isInspectorOpen
+            ? `${infoPaneWidth}px`
+            : "0px",
           "--agents-info-splitter-width": linkedIssue ? "8px" : "0px",
         } as CSSProperties
       }
@@ -465,7 +566,26 @@ export function AgentsActivity({
             <div className="agents-session-toolbar">
               <div className="agents-session-toolbar__copy">
                 <p className="agents-session-toolbar__eyebrow">当前会话</p>
-                <h3>{formatSessionTitle(selectedSession)}</h3>
+                {linkedIssue ? (
+                  <h3 aria-label={linkedIssue.issueTitle}>
+                    <button
+                      ref={issueTitleButtonRef}
+                      aria-expanded={isInspectorOpen}
+                      className="agents-session-toolbar__issue-button"
+                      type="button"
+                      onClick={handleToggleInspector}
+                    >
+                      <span className="agents-session-toolbar__issue-id">
+                        {`#issue${linkedIssue.issueId}`}
+                      </span>
+                      <span className="agents-session-toolbar__issue-title">
+                        {linkedIssue.issueTitle}
+                      </span>
+                    </button>
+                  </h3>
+                ) : (
+                  <h3>{formatSessionTitle(selectedSession)}</h3>
+                )}
               </div>
               <div className="agents-session-toolbar__actions">
                 {canMarkReview ? (
@@ -515,18 +635,19 @@ export function AgentsActivity({
         {linkedIssue ? (
           <>
             <div
+              ref={infoSplitterRef}
               aria-label="Resize session info"
               aria-orientation="vertical"
               aria-valuemax={infoPaneMaxWidth}
               aria-valuemin={0}
-              aria-valuenow={isInfoPaneCollapsed ? 0 : infoPaneWidth}
+              aria-valuenow={isInspectorOpen ? infoPaneWidth : 0}
               className="agents-info-splitter"
               role="separator"
               tabIndex={0}
               onMouseDown={(event) => {
                 dragStateRef.current = {
                   pane: "info",
-                  startWidth: isInfoPaneCollapsed ? 0 : infoPaneWidth,
+                  startWidth: isInspectorOpen ? infoPaneWidth : 0,
                   startX: event.clientX,
                 };
                 window.document.body.style.cursor = "col-resize";
@@ -535,7 +656,9 @@ export function AgentsActivity({
               onKeyDown={(event) => {
                 if (event.key === "ArrowLeft") {
                   event.preventDefault();
-                  setIsInfoPaneCollapsed(false);
+                  if (linkedIssue) {
+                    setOpenInspectorIssueId(linkedIssue.issueId);
+                  }
                   setInfoPaneWidth((currentWidth) =>
                     Math.min(infoPaneMaxWidth, currentWidth + 16),
                   );
@@ -543,19 +666,19 @@ export function AgentsActivity({
 
                 if (event.key === "ArrowRight") {
                   event.preventDefault();
-                  if (isInfoPaneCollapsed) {
+                  if (!isInspectorOpen) {
                     return;
                   }
 
                   setInfoPaneWidth((currentWidth) => {
                     if (currentWidth <= infoPaneMinWidth) {
-                      setIsInfoPaneCollapsed(true);
+                      setOpenInspectorIssueId(null);
                       return infoPaneMinWidth;
                     }
 
                     const nextWidth = Math.max(0, currentWidth - 16);
                     if (nextWidth === 0) {
-                      setIsInfoPaneCollapsed(true);
+                      setOpenInspectorIssueId(null);
                       return infoPaneMinWidth;
                     }
 
@@ -566,17 +689,15 @@ export function AgentsActivity({
             >
               <button
                 aria-label={
-                  isInfoPaneCollapsed
-                    ? "Expand session info"
-                    : "Collapse session info"
+                  isInspectorOpen
+                    ? "Collapse issue inspector"
+                    : "Expand issue inspector"
                 }
                 className="agents-info-toggle"
                 type="button"
-                onClick={() =>
-                  setIsInfoPaneCollapsed((currentState) => !currentState)
-                }
+                onClick={handleToggleInspector}
               >
-                {isInfoPaneCollapsed ? (
+                {!isInspectorOpen ? (
                   <ChevronLeft aria-hidden="true" size={14} strokeWidth={1.8} />
                 ) : (
                   <ChevronRight
@@ -588,27 +709,22 @@ export function AgentsActivity({
               </button>
             </div>
 
-            {!isInfoPaneCollapsed ? (
-              <aside className="agents-info-pane" aria-label="Linked issue">
-                <p className="agents-info-pane__label">Issue</p>
-                <button
-                  className="issue-card agents-linked-issue-card"
-                  disabled={!onOpenIssuesActivity}
-                  type="button"
-                  onClick={() => onOpenIssuesActivity?.(linkedIssue.issueId)}
-                >
-                  <span className="issue-card__meta-row">
-                    <span className="issue-card__id">
-                      {`#issue${linkedIssue.issueId}`}
-                    </span>
-                  </span>
-                  <span className="issue-card__title">
-                    {linkedIssue.issueTitle}
-                  </span>
-                  <span className="issue-card__description">
-                    Open this issue in the issues board.
-                  </span>
-                </button>
+            {isInspectorOpen && selectedSession ? (
+              <aside
+                ref={inspectorPaneRef}
+                className="agents-info-pane"
+                aria-label="Issue Inspector"
+              >
+                <IssueInspector
+                  issueId={linkedIssue.issueId}
+                  issueTitle={linkedIssue.issueTitle}
+                  linkedSessionId={selectedSession.sessionId}
+                  linkedSessionStatus={selectedSession.status}
+                  projectId={projectId}
+                  onClose={handleCloseInspector}
+                  onIssueUpdated={handleInspectorIssueUpdated}
+                  onOpenIssuesActivity={onOpenIssuesActivity}
+                />
               </aside>
             ) : null}
           </>
