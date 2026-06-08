@@ -27,6 +27,12 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
         WHERE agent_sessions.issue_id = issues.id
         LIMIT 1
     ) AS linked_session_attention,
+    (
+        SELECT agent_sessions.log_path
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+        LIMIT 1
+    ) AS linked_session_log_path,
     issues.created_at,
     issues.updated_at
  FROM issues";
@@ -278,8 +284,9 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
             .get::<_, Option<String>>(7)?
             .map(|value| agent_session_attention_from_str(&value))
             .transpose()?,
-        created_at: row.get(8)?,
-        updated_at: row.get(9)?,
+        linked_session_log_path: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 

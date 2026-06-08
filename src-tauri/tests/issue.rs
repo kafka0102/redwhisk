@@ -773,6 +773,10 @@ fn list_issues_includes_linked_session_facts() {
         response.issues[0].linked_session_attention,
         Some(AgentSessionAttention::Requested)
     );
+    assert_eq!(
+        response.issues[0].linked_session_log_path.as_deref(),
+        Some("/tmp/log")
+    );
 }
 
 #[test]

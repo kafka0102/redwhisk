@@ -1,29 +1,28 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-6-mark-unrecoverable-sessions-after-app-restart.md
-story_key: 4-6-mark-unrecoverable-sessions-after-app-restart
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-7-provide-log-review-entry-for-abnormal-sessions.md
+story_key: 4-7-provide-log-review-entry-for-abnormal-sessions
 story_status: done
-baseline_commit: 4a18372
+baseline_commit: 4b3e706
 changed_files:
-  - _bmad-output/implementation-artifacts/4-6-mark-unrecoverable-sessions-after-app-restart.md
+  - _bmad-output/implementation-artifacts/4-7-provide-log-review-entry-for-abnormal-sessions.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src-tauri/src/commands/agent_session_commands.rs
-  - src-tauri/src/commands/issue_commands.rs
-  - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/db/agent_session_repository.rs
-  - src-tauri/tests/agent_session.rs
-  - src/features/agents/agents-activity.tsx
+  - src-tauri/src/db/issue_repository.rs
+  - src-tauri/src/types/issue.rs
+  - src-tauri/tests/issue.rs
   - src/features/agents/agents-activity.test.tsx
-  - src/features/issues/issues-activity.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/issue-inspector.tsx
+  - src/features/issues/issue-commands.ts
   - src/features/issues/issues-activity.test.tsx
+  - src/features/issues/issues-activity.tsx
 validation_commands:
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
   - pnpm typecheck
   - pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx
-  - cargo test --manifest-path src-tauri/Cargo.toml reconcile_unrecoverable_running_sessions_marks_session_stopped_and_records_restart_reason
   - cargo test --manifest-path src-tauri/Cargo.toml agent_session
   - cargo test --manifest-path src-tauri/Cargo.toml issue
   - pnpm test
@@ -33,12 +32,11 @@ validation_results:
   - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
   - "pnpm lint: pass"
   - "pnpm typecheck: pass"
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx: pass; 8 files and 120 tests passed with existing jsdom canvas/CSS warnings"
-  - "cargo test --manifest-path src-tauri/Cargo.toml reconcile_unrecoverable_running_sessions_marks_session_stopped_and_records_restart_reason: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx: pass; 8 files and 123 tests passed with existing jsdom canvas/CSS warnings"
   - "cargo test --manifest-path src-tauri/Cargo.toml agent_session: pass; 4 unit tests and 16 integration tests executed under the filter"
-  - "cargo test --manifest-path src-tauri/Cargo.toml issue: pass; 18 issue tests plus filtered related tests passed"
-  - "pnpm test: pass; 8 files and 120 tests passed with existing jsdom canvas/CSS warnings"
+  - "cargo test --manifest-path src-tauri/Cargo.toml issue: pass; 8 related filtered tests plus 18 issue tests passed"
+  - "pnpm test: pass; 8 files and 123 tests passed with existing jsdom canvas/CSS warnings"
   - "git diff --check: pass"
-review_summary: "Automatic same-session review clean: startup/session-read paths now downgrade unrecoverable persisted running sessions to stopped, record a factual session_exited reason, and keep UI actions limited to explicit abnormal-session handling."
+review_summary: "Automatic same-session review clean: abnormal crashed/stopped sessions now expose Open Log in issue detail and inspector, preserve log path as a diagnostic fact, and keep non-running actions gated."
 blocking_reason:
-updated_at: 2026-06-08T20:52:19+08:00
+updated_at: 2026-06-08T21:24:36+08:00

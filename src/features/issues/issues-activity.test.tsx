@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { openPath } from "@tauri-apps/plugin-opener";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +23,10 @@ vi.mock("./issue-commands", () => ({
 
 vi.mock("../settings/settings-commands", () => ({
   listAgentProfiles: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath: vi.fn(),
 }));
 
 vi.mock("./issue-description-editor", () => ({
@@ -50,6 +55,7 @@ const listIssuesMock = vi.mocked(listIssues);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const openPathMock = vi.mocked(openPath);
 
 const existingIssue: IssueRecord = {
   id: 20,
@@ -176,6 +182,8 @@ describe("IssuesActivity", () => {
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
+    openPathMock.mockReset();
+    openPathMock.mockResolvedValue();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
   });
 
@@ -928,9 +936,16 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a stopped linked session as read-only without Run or Open Session", async () => {
+  it("shows a stopped linked session as read-only with an open log action", async () => {
     const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [linkedSessionIssue] });
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...linkedSessionIssue,
+          linkedSessionLogPath: "/tmp/stopped.log",
+        } as IssueRecord,
+      ],
+    });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
         return { profiles: [projectProfile] };
@@ -954,9 +969,8 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
-    expect(
-      within(dialog).getByText("No actions available."),
-    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
     expect(
       within(dialog).queryByText("No session linked."),
     ).not.toBeInTheDocument();
@@ -983,9 +997,16 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not show Open Session for crashed sessions", async () => {
+  it("shows open log instead of open session for crashed sessions", async () => {
     const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [crashedRunningIssue] });
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...crashedRunningIssue,
+          linkedSessionLogPath: "/tmp/crashed.log",
+        } as IssueRecord,
+      ],
+    });
 
     renderIssuesActivity();
 
@@ -999,8 +1020,35 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/crashed.log");
+  });
+
+  it("surfaces open log failures for abnormal linked sessions", async () => {
+    const user = userEvent.setup();
+    openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...crashedRunningIssue,
+          linkedSessionLogPath: "/tmp/crashed.log",
+        } as IssueRecord,
+      ],
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Crashed running issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
+
     expect(
-      within(dialog).getByText("No actions available."),
+      await within(dialog).findByText("log unavailable"),
     ).toBeInTheDocument();
   });
 });

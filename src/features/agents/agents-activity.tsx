@@ -767,6 +767,7 @@ export function AgentsActivity({
                   issueId={linkedIssue.issueId}
                   issueTitle={linkedIssue.issueTitle}
                   linkedSessionId={selectedSession.sessionId}
+                  linkedSessionLogPath={selectedSession.logPath ?? null}
                   linkedSessionStatus={selectedSession.status}
                   projectId={projectId}
                   onClose={handleCloseInspector}
