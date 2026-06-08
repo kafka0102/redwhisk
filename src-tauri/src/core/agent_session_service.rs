@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
+use crate::core::issue_service::IssueService;
 use crate::db::agent_profile_repository::{AgentProfileRepository, AgentProfileRow};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -28,7 +29,7 @@ use crate::types::agent_session::{
     WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
-use crate::types::issue::IssueStatus;
+use crate::types::issue::{CompleteIssueManualInput, IssueRecord, IssueStatus};
 use crate::types::issue_action::IssueActionType;
 use crate::types::session_event::SessionEventType;
 
@@ -964,6 +965,33 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .list_agent_sessions(project_id)
+    }
+
+    pub fn complete_issue_manual_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: CompleteIssueManualInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<IssueRecord, CommandError> {
+        let completed_issue = IssueService::complete_issue_manual_in_data_dir(&data_dir, input)?;
+
+        if let Some(session_id) = completed_issue.linked_session_id {
+            if pty_sessions.contains(session_id) {
+                if let Err(error) = pty_sessions.kill(session_id) {
+                    if error != "session not found" {
+                        return Err(CommandError::new(
+                            CommandErrorCode::AgentSessionPersistenceFailed,
+                            "Agent Session 关闭失败。",
+                        )
+                        .with_detail(
+                            ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
+                        )
+                        .with_detail(ErrorDetail::new("Cause").with_value("message", error)));
+                    }
+                }
+            }
+        }
+
+        Ok(completed_issue)
     }
 
     pub fn read_terminal_snapshot_in_data_dir(

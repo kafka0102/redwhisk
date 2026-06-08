@@ -17,8 +17,8 @@ use redwhisk_lib::types::agent_session::{
     StartStandaloneAgentSessionInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
-use redwhisk_lib::types::issue::CreateIssueInput;
 use redwhisk_lib::types::issue::IssueStatus;
+use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::session_event::SessionEventType;
 use serde_json::Value;
@@ -676,6 +676,67 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
 
     assert!(snapshot.contains("please start working"));
     manager.kill(result.session_id).expect("kill session");
+}
+
+#[test]
+fn complete_issue_manual_with_pty_terminates_tracked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "manual-complete-pty-project");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        success_command(temp_dir.path()).to_string_lossy().as_ref(),
+    );
+    let manager = PtySessionManager::new();
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session_with_pty(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "ready to complete".to_string(),
+            },
+            &manager,
+        )
+        .expect("start should succeed");
+
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue_id],
+        )
+        .expect("set review");
+
+    let completed = AgentSessionService::complete_issue_manual_in_data_dir(
+        temp_dir.path(),
+        CompleteIssueManualInput {
+            project_id,
+            issue_id,
+        },
+        &manager,
+    )
+    .expect("complete issue manually");
+
+    assert_eq!(completed.status, IssueStatus::Completed);
+    for _ in 0..20 {
+        if !manager.contains(result.session_id) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(!manager.contains(result.session_id));
 }
 
 #[test]

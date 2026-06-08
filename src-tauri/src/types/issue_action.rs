@@ -16,6 +16,7 @@ pub enum IssueActionType {
     IssueCreated,
     AgentSessionStarted,
     IssueReviewMarked,
+    IssueCompleted,
 }
 
 impl IssueActionType {
@@ -24,6 +25,7 @@ impl IssueActionType {
             Self::IssueCreated => "issue_created",
             Self::AgentSessionStarted => "agent_session_started",
             Self::IssueReviewMarked => "issue_review_marked",
+            Self::IssueCompleted => "issue_completed",
         }
     }
 }

@@ -20,6 +20,7 @@ import {
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
 import {
+  completeIssueManual,
   listIssues,
   markIssueReview,
   updateIssue,
@@ -44,6 +45,7 @@ vi.mock("../settings/settings-commands", () => ({
 }));
 
 vi.mock("../issues/issue-commands", () => ({
+  completeIssueManual: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
   updateIssue: vi.fn(),
@@ -56,10 +58,12 @@ const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStandaloneAgentSessionMock = vi.mocked(startStandaloneAgentSession);
 const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const completeIssueManualMock = vi.mocked(completeIssueManual);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
 const updateIssueMock = vi.mocked(updateIssue);
 const openPathMock = vi.mocked(openPath);
+const confirmSpy = vi.spyOn(window, "confirm");
 
 const defaultProfiles = {
   project: [
@@ -101,9 +105,12 @@ describe("AgentsActivity", () => {
     startStandaloneAgentSessionMock.mockReset();
     writeAgentSessionTerminalMock.mockReset();
     listIssuesMock.mockReset();
+    completeIssueManualMock.mockReset();
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     openPathMock.mockReset();
+    confirmSpy.mockReset();
+    confirmSpy.mockReturnValue(true);
     readAgentSessionTerminalMock.mockResolvedValue({
       sessionId: 301,
       snapshot: "",
@@ -158,6 +165,18 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+    });
+    completeIssueManualMock.mockResolvedValue({
+      id: 22,
+      projectId: 1,
+      title: "Review issue",
+      description: "Review description",
+      status: "completed",
+      linkedSessionId: 502,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_639_000_000,
     });
     updateIssueMock.mockImplementation(async (input) => ({
       id: input.issueId,
@@ -1479,8 +1498,8 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark Review" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete Manually" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Complete Manually" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Complete with Agent Commit" }),
     ).not.toBeInTheDocument();
@@ -1496,7 +1515,7 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
-  it("keeps review header limited to the issue title trigger without placeholder completion actions", async () => {
+  it("shows the manual completion action on review header without placeholder follow-up actions", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -1527,8 +1546,8 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark Review" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete Manually" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Complete Manually" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Complete with Agent Commit" }),
     ).not.toBeInTheDocument();
@@ -1542,6 +1561,142 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("completes a linked review issue manually from the session header and refreshes sessions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "completed",
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_639_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: 1_780_639_000_000,
+          },
+        ],
+      });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    expect(
+      await screen.findByRole("button", { name: "Complete Manually" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Complete Manually" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "确认手动完成 #issue22 Review issue 吗？",
+    );
+    expect(completeIssueManualMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 22,
+    });
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Complete Manually" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("keeps complete manually hidden after command success when refreshing sessions fails", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Complete Manually" }),
+    );
+
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Complete Manually" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("refresh failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("does not complete manually when the confirmation is cancelled", async () => {
+    const user = userEvent.setup();
+    confirmSpy.mockReturnValue(false);
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Complete Manually" }),
+    );
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "确认手动完成 #issue22 Review issue 吗？",
+    );
+    expect(completeIssueManualMock).not.toHaveBeenCalled();
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Complete Manually" }),
+    ).toBeInTheDocument();
   });
 
   it("clears requested attention from the selected running session", async () => {

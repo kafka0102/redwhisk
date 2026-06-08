@@ -5,7 +5,8 @@ use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::IssueService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    CreateIssueInput, IssueListResponse, IssueRecord, MarkIssueReviewInput, UpdateIssueInput,
+    CompleteIssueManualInput, CreateIssueInput, IssueListResponse, IssueRecord,
+    MarkIssueReviewInput, UpdateIssueInput,
 };
 
 #[tauri::command]
@@ -51,6 +52,16 @@ pub fn mark_issue_review(
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     IssueService::mark_issue_review_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn complete_issue_manual(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: CompleteIssueManualInput,
+) -> Result<IssueRecord, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    AgentSessionService::complete_issue_manual_in_data_dir(data_dir, input, &state.pty_sessions)
 }
 
 fn prepare_issue_data_dir(

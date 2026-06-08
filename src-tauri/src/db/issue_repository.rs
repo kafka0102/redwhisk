@@ -253,6 +253,41 @@ impl<'connection> IssueRepository<'connection> {
 
         find_by_id_on_connection(transaction, issue_id)
     }
+
+    pub fn complete_review_issue_manually_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        linked_session_id: i64,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        let changed = transaction.execute(
+            "UPDATE issues
+             SET status = 'completed',
+                 updated_at = MAX(
+                   updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 )
+             WHERE id = ?1
+               AND project_id = ?2
+               AND status = 'review'
+               AND EXISTS (
+                 SELECT 1
+                 FROM agent_sessions
+                 WHERE agent_sessions.id = ?3
+                   AND agent_sessions.issue_id = issues.id
+                   AND agent_sessions.project_id = ?2
+                   AND agent_sessions.status = 'running'
+                   AND agent_sessions.closed_at IS NULL
+               )",
+            params![issue_id, project_id, linked_session_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, issue_id)
+    }
 }
 
 fn find_by_id_on_connection(

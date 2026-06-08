@@ -126,6 +126,7 @@ fn issue_action_type_from_str(value: &str) -> rusqlite::Result<IssueActionType> 
         "issue_created" => Ok(IssueActionType::IssueCreated),
         "agent_session_started" => Ok(IssueActionType::AgentSessionStarted),
         "issue_review_marked" => Ok(IssueActionType::IssueReviewMarked),
+        "issue_completed" => Ok(IssueActionType::IssueCompleted),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -144,6 +145,7 @@ fn session_event_type_from_str(value: &str) -> rusqlite::Result<SessionEventType
     match value {
         "session_started" => Ok(SessionEventType::SessionStarted),
         "session_exited" => Ok(SessionEventType::SessionExited),
+        "session_closed" => Ok(SessionEventType::SessionClosed),
         "session_prompt_injected" => Ok(SessionEventType::SessionPromptInjected),
         "session_attention_requested" => Ok(SessionEventType::SessionAttentionRequested),
         "session_attention_cleared" => Ok(SessionEventType::SessionAttentionCleared),
