@@ -1270,6 +1270,10 @@ button:focus-visible {
   background: var(--color-lane-running-marker);
 }
 
+.agents-session-row__status-dot--viewed {
+  background: color-mix(in srgb, var(--color-text-muted) 84%, white);
+}
+
 .agents-session-row__status-dot--completed {
   background: color-mix(in srgb, var(--color-text-muted) 78%, white);
 }

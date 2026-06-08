@@ -252,7 +252,7 @@ describe("AgentsActivity", () => {
       within(dialog).queryByText("Prompt sources"),
     ).not.toBeInTheDocument();
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
-    const runningGroup = screen.getByRole("region", {
+    const runningGroup = await screen.findByRole("region", {
       name: "Running sessions",
     });
     expect(
@@ -679,7 +679,7 @@ describe("AgentsActivity", () => {
     expect(quietRow).not.toHaveTextContent("running");
   });
 
-  it("shows a completed status dot for completed sessions", async () => {
+  it("hides the status dot for completed sessions", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -707,15 +707,9 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(completedRow).getByLabelText("Session 状态：已结束"),
-    ).toHaveClass("agents-session-row__status-dot--completed");
+      within(completedRow).queryByLabelText("Session 状态：已结束"),
+    ).not.toBeInTheDocument();
     expect(completedRow).not.toHaveTextContent("closed");
-    expect(
-      screen.queryByRole("button", { name: "标记关注" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "清除关注" }),
-    ).not.toBeInTheDocument();
   });
 
   it("polls the session list and refreshes the attention dot", async () => {
@@ -781,15 +775,55 @@ describe("AgentsActivity", () => {
     ).toHaveClass("agents-session-row__status-dot--attention");
   });
 
-  it("marks the selected running session as needing attention and refreshes the workspace action", async () => {
+  it("turns a running session gray after the user clicks it", async () => {
     const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Viewed session issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const runningGroup = await screen.findByRole("region", {
+      name: "Running sessions",
+    });
+    const sessionRow = await within(runningGroup).findByRole("button", {
+      name: /Viewed session issue/i,
+    });
+
+    expect(
+      within(sessionRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+
+    await user.click(sessionRow);
+
+    expect(
+      within(sessionRow).getByLabelText("Session 状态：已查看"),
+    ).toHaveClass("agents-session-row__status-dot--viewed");
+    expect(setAgentSessionAttentionMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a viewed session row to green after new session activity arrives", async () => {
+    vi.useFakeTimers();
     listAgentSessionsMock
       .mockResolvedValueOnce({
         sessions: [
           {
             sessionId: 302,
             issueId: 21,
-            issueTitle: "Manual attention issue",
+            issueTitle: "Viewed polling issue",
             title: null,
             agentType: "codex",
             status: "running",
@@ -805,48 +839,43 @@ describe("AgentsActivity", () => {
           {
             sessionId: 302,
             issueId: 21,
-            issueTitle: "Manual attention issue",
+            issueTitle: "Viewed polling issue",
             title: null,
             agentType: "codex",
             status: "running",
-            attention: "requested",
-            lastActiveAt: 1_780_638_001_000,
+            attention: "none",
+            lastActiveAt: 1_780_638_002_000,
             startedAt: 1_780_638_000_000,
             closedAt: null,
           },
         ],
       });
-    setAgentSessionAttentionMock.mockResolvedValue({
-      sessionId: 302,
-      attention: "requested",
-    });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
-    const markButton = await screen.findByRole("button", { name: "标记关注" });
-    await user.click(markButton);
-
-    expect(setAgentSessionAttentionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 302,
-      attention: "requested",
+    await act(async () => {
+      await Promise.resolve();
     });
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "清除关注" }),
-      ).toBeInTheDocument(),
-    );
 
     const runningGroup = screen.getByRole("region", {
       name: "Running sessions",
     });
-    const refreshedRow = within(runningGroup).getByRole("button", {
-      name: /Manual attention issue/i,
+    const sessionRow = within(runningGroup).getByRole("button", {
+      name: /Viewed polling issue/i,
     });
+
+    fireEvent.click(sessionRow);
     expect(
-      within(refreshedRow).getByLabelText("Session 状态：需要确认"),
-    ).toHaveClass("agents-session-row__status-dot--attention");
+      within(sessionRow).getByLabelText("Session 状态：已查看"),
+    ).toHaveClass("agents-session-row__status-dot--viewed");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+
+    expect(
+      within(sessionRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
   });
 
   it("marks a linked running issue for review from the session header and refreshes sessions", async () => {
@@ -1292,8 +1321,18 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
-    const clearButton = await screen.findByRole("button", { name: "清除关注" });
-    await user.click(clearButton);
+    const runningGroup = await screen.findByRole("region", {
+      name: "Running sessions",
+    });
+    const attentionRow = within(runningGroup).getByRole("button", {
+      name: /Manual attention issue/i,
+    });
+
+    expect(
+      within(attentionRow).getByLabelText("Session 状态：需要确认"),
+    ).toHaveClass("agents-session-row__status-dot--attention");
+
+    await user.click(attentionRow);
 
     expect(setAgentSessionAttentionMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -1303,8 +1342,8 @@ describe("AgentsActivity", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "标记关注" }),
-      ).toBeInTheDocument(),
+        within(attentionRow).getByLabelText("Session 状态：已查看"),
+      ).toHaveClass("agents-session-row__status-dot--viewed"),
     );
   });
 

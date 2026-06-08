@@ -64,6 +64,9 @@ export function AgentsActivity({
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
     useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
+  const [viewedSessionActivity, setViewedSessionActivity] = useState<
+    Record<number, number>
+  >({});
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
   );
@@ -164,52 +167,64 @@ export function AgentsActivity({
     selectedSession?.status === "running" &&
     linkedIssue?.issueStatus === "running";
 
-  function handleSelectSession(sessionId: number) {
-    setSelectedSessionId(sessionId);
-    onSelectSession?.(sessionId);
-  }
-
-  function openTemporarySessionDialog() {
-    setIsTemporarySessionDialogOpen(true);
-  }
-
-  function closeTemporarySessionDialog() {
-    setIsTemporarySessionDialogOpen(false);
-    window.requestAnimationFrame(() => {
-      newSessionButtonRef.current?.focus();
-    });
-  }
-
-  async function handleTemporarySessionStarted(
-    result: StartStandaloneAgentSessionResult,
-  ) {
-    const response = await listAgentSessions(projectId);
-    setSessions(applySessionListOverlays(response.sessions));
-    setSelectedSessionId(result.sessionId);
-    onSelectSession?.(result.sessionId);
-  }
-
-  async function handleSetAttention(attention: "none" | "requested") {
-    if (selectedSession == null) {
+  function markSessionViewed(session: AgentSessionListItem) {
+    if (session.status !== "running" || session.attention !== "none") {
       return;
     }
 
-    setAttentionErrorMessage(null);
-    setIsUpdatingAttention(true);
+    setViewedSessionActivity((currentViewedSessionActivity) => ({
+      ...currentViewedSessionActivity,
+      [session.sessionId]: session.lastActiveAt,
+    }));
+  }
 
-    try {
-      await setAgentSessionAttention({
-        projectId,
-        sessionId: selectedSession.sessionId,
-        attention,
-      });
-      const response = await listAgentSessions(projectId);
-      setSessions(applySessionListOverlays(response.sessions));
-    } catch (error) {
-      setAttentionErrorMessage(toCommandError(error).message);
-    } finally {
-      setIsUpdatingAttention(false);
+  async function acknowledgeSessionAttention(sessionId: number) {
+    const targetSession = sessions.find(
+      (session) => session.sessionId === sessionId,
+    );
+    if (targetSession == null || targetSession.status !== "running") {
+      return;
     }
+
+    if (targetSession.attention === "requested") {
+      if (isUpdatingAttention) {
+        return;
+      }
+
+      setAttentionErrorMessage(null);
+      setIsUpdatingAttention(true);
+
+      try {
+        await setAgentSessionAttention({
+          projectId,
+          sessionId,
+          attention: "none",
+        });
+        const response = await listAgentSessions(projectId);
+        const nextSessions = applySessionListOverlays(response.sessions);
+        setSessions(nextSessions);
+        const refreshedSession = nextSessions.find(
+          (session) => session.sessionId === sessionId,
+        );
+        if (refreshedSession) {
+          markSessionViewed(refreshedSession);
+        }
+      } catch (error) {
+        setAttentionErrorMessage(toCommandError(error).message);
+      } finally {
+        setIsUpdatingAttention(false);
+      }
+
+      return;
+    }
+
+    markSessionViewed(targetSession);
+  }
+
+  function handleSelectSession(sessionId: number) {
+    setSelectedSessionId(sessionId);
+    onSelectSession?.(sessionId);
+    void acknowledgeSessionAttention(sessionId);
   }
 
   async function handleMarkReview() {
@@ -317,6 +332,26 @@ export function AgentsActivity({
     };
   }, []);
 
+  function openTemporarySessionDialog() {
+    setIsTemporarySessionDialogOpen(true);
+  }
+
+  function closeTemporarySessionDialog() {
+    setIsTemporarySessionDialogOpen(false);
+    window.requestAnimationFrame(() => {
+      newSessionButtonRef.current?.focus();
+    });
+  }
+
+  async function handleTemporarySessionStarted(
+    result: StartStandaloneAgentSessionResult,
+  ) {
+    const response = await listAgentSessions(projectId);
+    setSessions(applySessionListOverlays(response.sessions));
+    setSelectedSessionId(result.sessionId);
+    onSelectSession?.(result.sessionId);
+  }
+
   return (
     <main
       className="activity-surface activity-surface--agents"
@@ -378,6 +413,7 @@ export function AgentsActivity({
               onSelect={handleSelectSession}
               selectedSessionId={selectedSession?.sessionId ?? null}
               sessions={runningSessions}
+              viewedSessionActivity={viewedSessionActivity}
             />
             <SessionGroup
               emptyCopy="No completed sessions."
@@ -386,6 +422,7 @@ export function AgentsActivity({
               onSelect={handleSelectSession}
               selectedSessionId={selectedSession?.sessionId ?? null}
               sessions={completedSessions}
+              viewedSessionActivity={viewedSessionActivity}
             />
           </div>
         ) : null}
@@ -441,26 +478,6 @@ export function AgentsActivity({
                     {isMarkingReview ? "更新中..." : "Mark Review"}
                   </button>
                 ) : null}
-                {selectedSession.status === "running" ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    disabled={isUpdatingAttention}
-                    type="button"
-                    onClick={() =>
-                      void handleSetAttention(
-                        selectedSession.attention === "requested"
-                          ? "none"
-                          : "requested",
-                      )
-                    }
-                  >
-                    {isUpdatingAttention
-                      ? "更新中..."
-                      : selectedSession.attention === "requested"
-                        ? "清除关注"
-                        : "标记关注"}
-                  </button>
-                ) : null}
               </div>
             </div>
           ) : null}
@@ -474,17 +491,25 @@ export function AgentsActivity({
               {attentionErrorMessage}
             </p>
           ) : null}
-          {selectedSession ? (
-            <CodexTerminal
-              projectId={projectId}
-              sessionId={selectedSession.sessionId}
-            />
-          ) : (
-            <p className="empty-state">
-              Agent sessions will appear here after a session has been started
-              for this project.
-            </p>
-          )}
+          <div
+            onMouseDown={() => {
+              if (selectedSession) {
+                void acknowledgeSessionAttention(selectedSession.sessionId);
+              }
+            }}
+          >
+            {selectedSession ? (
+              <CodexTerminal
+                projectId={projectId}
+                sessionId={selectedSession.sessionId}
+              />
+            ) : (
+              <p className="empty-state">
+                Agent sessions will appear here after a session has been started
+                for this project.
+              </p>
+            )}
+          </div>
         </div>
 
         {linkedIssue ? (
@@ -608,6 +633,7 @@ interface SessionGroupProps {
   onSelect: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
+  viewedSessionActivity: Record<number, number>;
 }
 
 function SessionGroup({
@@ -617,6 +643,7 @@ function SessionGroup({
   onSelect,
   selectedSessionId,
   sessions,
+  viewedSessionActivity,
 }: SessionGroupProps) {
   return (
     <section aria-label={`${label} sessions`} className="agents-group">
@@ -636,10 +663,15 @@ function SessionGroup({
               onClick={() => onSelect(session.sessionId)}
             >
               <span className="agents-session-row__header">
-                <span
-                  aria-label={`Session 状态：${formatSessionStatusLabel(session)}`}
-                  className={buildSessionStatusDotClassName(session)}
-                />
+                {shouldShowSessionStatusDot(session) ? (
+                  <span
+                    aria-label={`Session 状态：${formatSessionStatusLabel(session, viewedSessionActivity)}`}
+                    className={buildSessionStatusDotClassName(
+                      session,
+                      viewedSessionActivity,
+                    )}
+                  />
+                ) : null}
                 <span className="agents-session-row__title">
                   {formatSessionTitle(session)}
                 </span>
@@ -648,7 +680,7 @@ function SessionGroup({
                 <span className="agents-session-row__meta-main">
                   {formatAgentType(session.agentType)}
                 </span>
-                <span className="sr-only">{`，${formatSessionStatusLabel(session)}`}</span>
+                <span className="sr-only">{`，${formatSessionStatusLabel(session, viewedSessionActivity)}`}</span>
               </span>
             </button>
           ))}
@@ -671,25 +703,49 @@ function formatAgentType(agentType: AgentSessionListItem["agentType"]): string {
   }
 }
 
-function buildSessionStatusDotClassName(session: AgentSessionListItem): string {
+function shouldShowSessionStatusDot(session: AgentSessionListItem): boolean {
+  return session.status === "running";
+}
+
+function buildSessionStatusDotClassName(
+  session: AgentSessionListItem,
+  viewedSessionActivity: Record<number, number>,
+): string {
   const tone =
     session.attention === "requested"
       ? "attention"
       : session.status === "running"
-        ? "running"
+        ? isViewedSession(session, viewedSessionActivity)
+          ? "viewed"
+          : "running"
         : "completed";
 
   return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
 }
 
-function formatSessionStatusLabel(session: AgentSessionListItem): string {
+function formatSessionStatusLabel(
+  session: AgentSessionListItem,
+  viewedSessionActivity: Record<number, number>,
+): string {
   if (session.attention === "requested") {
     return "需要确认";
   }
 
   if (session.status === "running") {
+    if (isViewedSession(session, viewedSessionActivity)) {
+      return "已查看";
+    }
+
     return "运行中";
   }
 
   return "已结束";
+}
+
+function isViewedSession(
+  session: AgentSessionListItem,
+  viewedSessionActivity: Record<number, number>,
+): boolean {
+  const viewedAt = viewedSessionActivity[session.sessionId];
+  return viewedAt != null && viewedAt >= session.lastActiveAt;
 }
