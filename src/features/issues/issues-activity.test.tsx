@@ -928,7 +928,7 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows Open Session instead of Run when an issue already has a linked session", async () => {
+  it("shows a stopped linked session as read-only without Run or Open Session", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [linkedSessionIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
@@ -949,31 +949,16 @@ describe("IssuesActivity", () => {
     expect(within(dialog).getByText("Linked session #301")).toBeInTheDocument();
     expect(within(dialog).getByText("Status: stopped")).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "Open Session" }),
-    ).toBeDisabled();
+      within(dialog).queryByRole("button", { name: "Open Session" }),
+    ).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByText("No session linked."),
-    ).not.toBeInTheDocument();
-  });
-
-  it("delegates to Agents activity when Open Session is clicked", async () => {
-    const user = userEvent.setup();
-    const onOpenAgentsActivity = vi.fn();
-    listIssuesMock.mockResolvedValue({ issues: [linkedSessionIssue] });
-
-    renderIssuesActivity({ onOpenAgentsActivity });
-
-    await user.click(
-      await screen.findByRole("button", { name: "Linked session issue" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Open Session" }));
-
-    expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
+      within(dialog).getByText("No actions available."),
+    ).toBeInTheDocument();
     expect(
-      screen.queryByRole("dialog", { name: "Issue Detail" }),
+      within(dialog).queryByText("No session linked."),
     ).not.toBeInTheDocument();
   });
 

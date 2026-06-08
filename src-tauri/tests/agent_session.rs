@@ -1318,6 +1318,79 @@ fn set_session_attention_clears_requested_attention_and_records_manual_clear_eve
 }
 
 #[test]
+fn reconcile_unrecoverable_running_sessions_marks_session_stopped_and_records_restart_reason() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "restart-reconcile-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_555_000,
+        None,
+        "/tmp/restart-reconcile.log",
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let manager = PtySessionManager::new();
+
+    service
+        .reconcile_unrecoverable_running_sessions(project_id, &manager)
+        .expect("reconcile running sessions");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session exists");
+    assert_eq!(session.status, AgentSessionStatus::Stopped);
+    assert!(session.closed_at.is_some());
+
+    let issue = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    )
+    .list_issues(project_id)
+    .expect("list issues")
+    .issues
+    .into_iter()
+    .find(|candidate| candidate.id == issue_id)
+    .expect("linked issue exists");
+    assert_eq!(issue.status, IssueStatus::Running);
+    assert_eq!(
+        issue.linked_session_status,
+        Some(AgentSessionStatus::Stopped)
+    );
+
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("list session events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, SessionEventType::SessionExited);
+
+    let payload: Value = serde_json::from_str(&events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
+    assert_eq!(payload["status"].as_str(), Some("stopped"));
+    assert!(payload["exitCode"].is_null());
+    assert_eq!(
+        payload["reason"].as_str(),
+        Some("app_restarted_no_active_pty")
+    );
+    assert_eq!(
+        payload["logPath"].as_str(),
+        Some("/tmp/restart-reconcile.log")
+    );
+}
+
+#[test]
 fn set_session_attention_rejects_non_running_session() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

@@ -37,7 +37,7 @@ pub fn list_agent_sessions(
             .map_err(CommandError::from)?;
     }
 
-    AgentSessionService::list_agent_sessions_in_data_dir(data_dir, project_id)
+    AgentSessionService::list_agent_sessions_in_data_dir(data_dir, project_id, &state.pty_sessions)
 }
 
 #[tauri::command]

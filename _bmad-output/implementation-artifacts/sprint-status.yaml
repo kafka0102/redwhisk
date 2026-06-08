@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-08T20:24:30+0800
+last_updated: 2026-06-08T20:52:19+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -83,7 +83,7 @@ development_status:
   4-3-view-and-edit-linked-issue-in-issue-inspector: done
   4-4-show-header-actions-based-on-issue-status: done
   4-5-handle-codex-process-crashed: done
-  4-6-mark-unrecoverable-sessions-after-app-restart: backlog
+  4-6-mark-unrecoverable-sessions-after-app-restart: done
   4-7-provide-log-review-entry-for-abnormal-sessions: backlog
   epic-4-retrospective: optional
 
