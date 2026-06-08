@@ -1,5 +1,6 @@
 pub mod agent_profile;
 pub mod agent_session;
+pub mod completion_attempt;
 pub mod errors;
 pub mod issue;
 pub mod issue_action;

@@ -19,11 +19,13 @@ import { CodexTerminal } from "./codex-terminal";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueInspector } from "./issue-inspector";
 import {
+  completeIssueClean,
   completeIssueManual,
   markIssueReview,
   type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 
@@ -31,6 +33,7 @@ interface AgentsActivityProps {
   activeSessionId: number | null;
   onSelectSession?: (sessionId: number) => void;
   onOpenIssuesActivity?: (issueId: number) => void;
+  projectCompletionPolicy?: ProjectCompletionPolicy;
   projectId: number;
 }
 
@@ -52,6 +55,7 @@ export function AgentsActivity({
   activeSessionId,
   onSelectSession,
   onOpenIssuesActivity,
+  projectCompletionPolicy = "manual",
   projectId,
 }: AgentsActivityProps) {
   const defaultSidebarWidth = 200;
@@ -69,11 +73,15 @@ export function AgentsActivity({
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
   const [isMarkingReview, setIsMarkingReview] = useState(false);
   const [isCompletingManual, setIsCompletingManual] = useState(false);
+  const [isCompletingClean, setIsCompletingClean] = useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
     string | null
   >(null);
   const [completeManualErrorMessage, setCompleteManualErrorMessage] = useState<
+    string | null
+  >(null);
+  const [completeCleanErrorMessage, setCompleteCleanErrorMessage] = useState<
     string | null
   >(null);
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
@@ -202,7 +210,13 @@ export function AgentsActivity({
     linkedIssue?.issueStatus === "running";
   const canCompleteManual =
     selectedSession?.status === "running" &&
-    linkedIssue?.issueStatus === "review";
+    linkedIssue?.issueStatus === "review" &&
+    projectCompletionPolicy === "manual";
+  const canCompleteClean =
+    selectedSession?.status === "running" &&
+    linkedIssue?.issueStatus === "review" &&
+    projectCompletionPolicy === "agent_auto_commit" &&
+    selectedSession?.canCompleteClean === true;
   const canOpenLog =
     (selectedSession?.status === "crashed" ||
       selectedSession?.status === "stopped") &&
@@ -453,6 +467,83 @@ export function AgentsActivity({
       setCompleteManualErrorMessage(toCommandError(error).message);
     } finally {
       setIsCompletingManual(false);
+    }
+  }
+
+  async function handleCompleteClean() {
+    if (!linkedIssue || !selectedSession) {
+      return;
+    }
+
+    const isConfirmed = window.confirm(
+      `确认直接完成 #issue${linkedIssue.issueId} ${linkedIssue.issueTitle} 吗？`,
+    );
+    if (!isConfirmed) {
+      return;
+    }
+
+    setCompleteCleanErrorMessage(null);
+    setIsCompletingClean(true);
+
+    let completedIssueId: number | null = null;
+    let completedSessionId: number | null = null;
+
+    try {
+      const completedIssue = await completeIssueClean({
+        projectId,
+        issueId: linkedIssue.issueId,
+      });
+      completedIssueId = completedIssue.id;
+      completedSessionId = selectedSession.sessionId;
+      completedIssueIdsRef.current.add(completedIssue.id);
+      closedSessionIdsRef.current.add(selectedSession.sessionId);
+      setSessions((currentSessions) =>
+        currentSessions.map((session) =>
+          session.issueId === completedIssue.id
+            ? {
+                ...session,
+                status:
+                  session.sessionId === selectedSession.sessionId
+                    ? ("closed" as const)
+                    : session.status,
+                issueStatus: completedIssue.status,
+                lastActiveAt: Math.max(
+                  session.lastActiveAt,
+                  completedIssue.updatedAt,
+                ),
+                closedAt:
+                  session.sessionId === selectedSession.sessionId
+                    ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
+                    : session.closedAt,
+              }
+            : session,
+        ),
+      );
+    } catch (error) {
+      setCompleteCleanErrorMessage(toCommandError(error).message);
+      try {
+        const response = await listAgentSessions(projectId);
+        setSessions(applySessionListOverlays(response.sessions));
+      } catch {
+        // Keep the command failure visible; polling can retry the refresh.
+      }
+    } finally {
+      if (completedIssueId == null) {
+        setIsCompletingClean(false);
+      }
+    }
+
+    if (completedIssueId == null || completedSessionId == null) {
+      return;
+    }
+
+    try {
+      const response = await listAgentSessions(projectId);
+      setSessions(applySessionListOverlays(response.sessions));
+    } catch (error) {
+      setCompleteCleanErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsCompletingClean(false);
     }
   }
 
@@ -738,6 +829,16 @@ export function AgentsActivity({
                     {isCompletingManual ? "完成中..." : "Complete Manually"}
                   </button>
                 ) : null}
+                {canCompleteClean ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    disabled={isCompletingClean}
+                    type="button"
+                    onClick={() => void handleCompleteClean()}
+                  >
+                    {isCompletingClean ? "完成中..." : "Complete"}
+                  </button>
+                ) : null}
                 {canOpenLog ? (
                   <button
                     className="agents-session-toolbar__action"
@@ -759,6 +860,11 @@ export function AgentsActivity({
           {completeManualErrorMessage ? (
             <p className="issues-status" role="status">
               {completeManualErrorMessage}
+            </p>
+          ) : null}
+          {completeCleanErrorMessage ? (
+            <p className="issues-status" role="status">
+              {completeCleanErrorMessage}
             </p>
           ) : null}
           {attentionErrorMessage ? (

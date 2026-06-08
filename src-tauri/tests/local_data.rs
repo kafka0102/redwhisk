@@ -27,12 +27,14 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0006_agent_profiles_and_project_overrides",
             "0007_restructure_agent_profiles",
             "0008_agent_sessions_and_session_events",
-            "0009_agent_sessions_project_id"
+            "0009_agent_sessions_project_id",
+            "0010_project_completion_policy",
+            "0011_completion_attempts",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0009_agent_sessions_project_id".to_string())
+        Some("0011_completion_attempts".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -68,13 +70,15 @@ fn migrations_are_idempotent_after_first_run() {
             "0006_agent_profiles_and_project_overrides",
             "0007_restructure_agent_profiles",
             "0008_agent_sessions_and_session_events",
-            "0009_agent_sessions_project_id"
+            "0009_agent_sessions_project_id",
+            "0010_project_completion_policy",
+            "0011_completion_attempts",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0009_agent_sessions_project_id".to_string())
+        Some("0011_completion_attempts".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -83,7 +87,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 9);
+    assert_eq!(schema_migrations_count, 11);
 }
 
 #[test]

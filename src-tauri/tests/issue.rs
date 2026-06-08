@@ -1,3 +1,7 @@
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+
 use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
@@ -10,9 +14,11 @@ use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
-    CompleteIssueManualInput, CreateIssueInput, IssueStatus, MarkIssueReviewInput, UpdateIssueInput,
+    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, IssueStatus,
+    MarkIssueReviewInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
+use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 
 #[test]
@@ -691,6 +697,208 @@ fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
 }
 
 #[test]
+fn complete_issue_clean_closes_running_session_and_records_audit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("clean-complete-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    let head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "clean-complete-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Ready to complete cleanly".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let completed = service
+        .complete_issue_clean(CompleteIssueCleanInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete clean");
+
+    assert_eq!(completed.id, issue.id);
+    assert_eq!(completed.status, IssueStatus::Completed);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+    assert_eq!(stored_session.closed_at, Some(completed.updated_at));
+
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[0].action_type, IssueActionType::IssueCompleted);
+    let action_payload: serde_json::Value =
+        serde_json::from_str(&actions[0].payload_json).expect("payload json");
+    assert_eq!(action_payload["fromStatus"], "review");
+    assert_eq!(action_payload["toStatus"], "completed");
+    assert_eq!(action_payload["linkedSessionId"], session_id);
+    assert_eq!(action_payload["option"], "complete_clean");
+
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, SessionEventType::SessionClosed);
+    let event_payload: serde_json::Value =
+        serde_json::from_str(&events[0].payload_json).expect("payload json");
+    assert_eq!(event_payload["reason"], "clean_completion");
+
+    let attempt_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM completion_attempts WHERE issue_id = ?1",
+            [issue.id],
+            |row| row.get(0),
+        )
+        .expect("completion attempt count");
+    assert_eq!(attempt_count, 1);
+
+    let attempt = database
+        .connection
+        .query_row(
+            "SELECT session_id, option, head_before, head_after, result
+             FROM completion_attempts
+             WHERE issue_id = ?1",
+            [issue.id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
+        .expect("completion attempt");
+    assert_eq!(attempt.0, session_id);
+    assert_eq!(attempt.1, "complete_clean");
+    assert_eq!(attempt.2, head);
+    assert_eq!(attempt.3, head);
+    assert_eq!(attempt.4, "completed");
+}
+
+#[test]
+fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("dirty-complete-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty change\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "dirty-complete-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Dirty worktree should block".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .complete_issue_clean(CompleteIssueCleanInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("dirty worktree should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Review);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Running);
+    assert_eq!(stored_session.closed_at, None);
+
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 1);
+
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert!(events.is_empty());
+
+    let attempt_count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM completion_attempts", [], |row| {
+            row.get(0)
+        })
+        .expect("completion attempt count");
+    assert_eq!(attempt_count, 0);
+}
+
+#[test]
 fn update_issue_advances_timestamp_monotonically_from_future_timestamp() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -999,6 +1207,30 @@ fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
         .id
 }
 
+fn insert_project_with_repo_path_and_policy(
+    connection: &rusqlite::Connection,
+    name: &str,
+    repo_path: &Path,
+    completion_policy: ProjectCompletionPolicy,
+) -> i64 {
+    let completion_policy = match completion_policy {
+        ProjectCompletionPolicy::Manual => "manual",
+        ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
+    };
+    connection
+        .execute(
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
+             VALUES (?1, ?2, 1780624800000, 1780624800000, ?3)",
+            rusqlite::params![
+                name,
+                repo_path.to_string_lossy().to_string(),
+                completion_policy
+            ],
+        )
+        .expect("insert project");
+    connection.last_insert_rowid()
+}
+
 fn insert_agent_profile(connection: &rusqlite::Connection) -> i64 {
     AgentProfileRepository::new(connection)
         .save_profile(
@@ -1071,4 +1303,49 @@ fn table_column_type(
     statement
         .query_row([column_name], |row| row.get::<_, String>(0))
         .expect("column type")
+}
+
+fn init_repo(path: &Path) {
+    fs::create_dir_all(path).expect("create repo dir");
+    git(path, &["init", "-b", "main"]);
+    git(path, &["config", "user.name", "RedWhisk Test"]);
+    git(path, &["config", "user.email", "redwhisk@example.test"]);
+}
+
+fn write_file(repo: &Path, relative_path: &str, content: &str) {
+    fs::write(repo.join(relative_path), content).expect("write file");
+}
+
+fn git(repo: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("run git");
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_output(repo: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("run git");
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .expect("utf8 output")
+        .trim()
+        .to_string()
 }

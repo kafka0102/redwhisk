@@ -3,18 +3,23 @@ use std::path::Path;
 use serde_json::json;
 
 use crate::db::agent_session_repository::AgentSessionRepository;
+use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::event_repository::EventRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::operation_state::GitOperationState;
+use crate::git::status::read_git_snapshot;
 use crate::types::agent_session::AgentSessionStatus;
+use crate::types::completion_attempt::{CompletionAttemptOption, CompletionAttemptResult};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    CompleteIssueManualInput, CreateIssueInput, IssueListResponse, IssueRecord, IssueStatus,
-    MarkIssueReviewInput, UpdateIssueInput,
+    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, IssueListResponse,
+    IssueRecord, IssueStatus, MarkIssueReviewInput, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
+use crate::types::project::ProjectCompletionPolicy;
 use crate::types::session_event::SessionEventType;
 
 pub struct IssueService<'connection> {
@@ -286,6 +291,182 @@ impl<'connection> IssueService<'connection> {
         Ok(completed_issue)
     }
 
+    pub fn complete_issue_clean(
+        &self,
+        input: CompleteIssueCleanInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let project = self
+            .project_repository
+            .find_by_id(input.project_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(
+                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
+                    )
+            })?;
+
+        if project.completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
+            let completion_policy = match project.completion_policy {
+                ProjectCompletionPolicy::Manual => "manual",
+                ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
+            };
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 Project 未启用 agent_auto_commit 完成策略。",
+            )
+            .with_detail(
+                ErrorDetail::new("CompletionPolicy")
+                    .with_value("projectId", input.project_id)
+                    .with_value("completionPolicy", completion_policy),
+            ));
+        }
+
+        let snapshot = read_git_snapshot(&project.repo_path).map_err(issue_git_error)?;
+        if snapshot.operation_state != GitOperationState::None {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 Git 正在进行中的操作阻止直接完成。",
+            )
+            .with_detail(ErrorDetail::new("GitOperation").with_value(
+                "state",
+                format_git_operation_state(snapshot.operation_state),
+            )));
+        }
+        if !snapshot.is_clean {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前仓库存在未提交改动，不能直接完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("GitStatus")
+                    .with_value("head", snapshot.head.clone())
+                    .with_value("isClean", false),
+            ));
+        }
+
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status != IssueStatus::Review {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以直接完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
+        })?;
+
+        let completed_issue = IssueRepository::complete_review_issue_cleanly_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            linked_session_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以直接完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            )
+        })?;
+
+        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
+            &transaction,
+            linked_session_id,
+            AgentSessionStatus::Closed,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+            )
+        })?;
+
+        let issue_action_payload = json!({
+            "fromStatus": "review",
+            "toStatus": "completed",
+            "linkedSessionId": linked_session_id,
+            "option": "complete_clean",
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            completed_issue.id,
+            IssueActionType::IssueCompleted,
+            &issue_action_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        let session_event_payload = json!({
+            "sessionId": closed_session.id,
+            "issueId": closed_session.issue_id,
+            "status": "closed",
+            "reason": "clean_completion",
+            "logPath": closed_session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            closed_session.id,
+            SessionEventType::SessionClosed,
+            &session_event_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        CompletionAttemptRepository::insert_in_transaction(
+            &transaction,
+            completed_issue.id,
+            closed_session.id,
+            CompletionAttemptOption::CompleteClean,
+            &snapshot.head,
+            &snapshot.head,
+            CompletionAttemptResult::Completed,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        transaction.commit().map_err(issue_database_error)?;
+
+        Ok(completed_issue)
+    }
+
     pub fn list_issues_in_data_dir(
         data_dir: impl AsRef<Path>,
         project_id: i64,
@@ -334,6 +515,16 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).complete_issue_manual(input)
+    }
+
+    pub fn complete_issue_clean_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: CompleteIssueCleanInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).complete_issue_clean(input)
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
@@ -387,11 +578,31 @@ fn issue_database_error(error: rusqlite::Error) -> CommandError {
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
+fn issue_git_error(error: crate::git::status::GitStatusError) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::IssueValidationFailed,
+        "当前 Project 的 Git 状态不可用。",
+    )
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
 fn issue_status_to_str(status: &IssueStatus) -> &'static str {
     match status {
         IssueStatus::Backlog => "backlog",
         IssueStatus::Running => "running",
         IssueStatus::Review => "review",
         IssueStatus::Completed => "completed",
+    }
+}
+
+fn format_git_operation_state(state: GitOperationState) -> &'static str {
+    match state {
+        GitOperationState::None => "none",
+        GitOperationState::MergeInProgress => "merge_in_progress",
+        GitOperationState::RebaseInProgress => "rebase_in_progress",
+        GitOperationState::CherryPickInProgress => "cherry_pick_in_progress",
+        GitOperationState::RevertInProgress => "revert_in_progress",
+        GitOperationState::SequencerInProgress => "sequencer_in_progress",
+        GitOperationState::Unmerged => "unmerged",
     }
 }

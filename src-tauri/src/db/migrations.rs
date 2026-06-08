@@ -28,6 +28,12 @@ const AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_SQL: &str =
 const AGENT_SESSIONS_PROJECT_ID_MIGRATION_VERSION: &str = "0009_agent_sessions_project_id";
 const AGENT_SESSIONS_PROJECT_ID_MIGRATION_SQL: &str =
     include_str!("../../migrations/0009_agent_sessions_project_id.sql");
+const PROJECT_COMPLETION_POLICY_MIGRATION_VERSION: &str = "0010_project_completion_policy";
+const PROJECT_COMPLETION_POLICY_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0010_project_completion_policy.sql");
+const COMPLETION_ATTEMPTS_MIGRATION_VERSION: &str = "0011_completion_attempts";
+const COMPLETION_ATTEMPTS_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0011_completion_attempts.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -133,6 +139,14 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_SESSIONS_PROJECT_ID_MIGRATION_VERSION,
                     sql: AGENT_SESSIONS_PROJECT_ID_MIGRATION_SQL,
+                },
+                Migration {
+                    version: PROJECT_COMPLETION_POLICY_MIGRATION_VERSION,
+                    sql: PROJECT_COMPLETION_POLICY_MIGRATION_SQL,
+                },
+                Migration {
+                    version: COMPLETION_ATTEMPTS_MIGRATION_VERSION,
+                    sql: COMPLETION_ATTEMPTS_MIGRATION_SQL,
                 },
             ];
         }

@@ -14,10 +14,18 @@ export interface OpenProjectInput {
   projectId: number;
 }
 
+export type ProjectCompletionPolicy = "manual" | "agent_auto_commit";
+
+export interface UpdateProjectCompletionPolicyInput {
+  projectId: number;
+  completionPolicy: ProjectCompletionPolicy;
+}
+
 export interface ProjectRecord {
   id: number;
   name: string;
   repoPath: string;
+  completionPolicy: ProjectCompletionPolicy;
   createdAt: number;
   lastOpenedAt: number;
 }
@@ -51,6 +59,14 @@ export function listProjects(): Promise<ProjectListResponse> {
 
 export function openProject(input: OpenProjectInput): Promise<ProjectRecord> {
   return invokeCommand<ProjectRecord>("open_project", { input });
+}
+
+export function updateProjectCompletionPolicy(
+  input: UpdateProjectCompletionPolicyInput,
+): Promise<ProjectRecord> {
+  return invokeCommand<ProjectRecord>("update_project_completion_policy", {
+    input,
+  });
 }
 
 export function openProjectWindow(

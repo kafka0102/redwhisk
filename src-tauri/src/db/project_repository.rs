@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::types::project::ProjectSummary;
+use crate::types::project::{ProjectCompletionPolicy, ProjectSummary};
 
 pub struct ProjectRepository<'connection> {
     connection: &'connection Connection,
@@ -14,7 +14,7 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_repo_path(&self, repo_path: &str) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, created_at, last_opened_at FROM projects WHERE repo_path = ?1",
+                "SELECT id, name, repo_path, completion_policy, created_at, last_opened_at FROM projects WHERE repo_path = ?1",
                 params![repo_path],
                 project_from_row,
             )
@@ -24,7 +24,7 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, created_at, last_opened_at FROM projects WHERE id = ?1",
+                "SELECT id, name, repo_path, completion_policy, created_at, last_opened_at FROM projects WHERE id = ?1",
                 params![id],
                 project_from_row,
             )
@@ -33,7 +33,7 @@ impl<'connection> ProjectRepository<'connection> {
 
     pub fn list_recent(&self) -> rusqlite::Result<Vec<ProjectSummary>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, name, repo_path, created_at, last_opened_at
+            "SELECT id, name, repo_path, completion_policy, created_at, last_opened_at
              FROM projects
              ORDER BY last_opened_at DESC, created_at DESC, name ASC",
         )?;
@@ -96,6 +96,22 @@ impl<'connection> ProjectRepository<'connection> {
         self.find_by_id(id)?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
+
+    pub fn update_completion_policy(
+        &self,
+        id: i64,
+        completion_policy: ProjectCompletionPolicy,
+    ) -> rusqlite::Result<ProjectSummary> {
+        self.connection.execute(
+            "UPDATE projects
+             SET completion_policy = ?1
+             WHERE id = ?2",
+            params![project_completion_policy_to_str(&completion_policy), id],
+        )?;
+
+        self.find_by_id(id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
 }
 
 fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary> {
@@ -103,7 +119,23 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary>
         id: row.get(0)?,
         name: row.get(1)?,
         repo_path: row.get(2)?,
-        created_at: row.get(3)?,
-        last_opened_at: row.get(4)?,
+        completion_policy: project_completion_policy_from_str(&row.get::<_, String>(3)?)?,
+        created_at: row.get(4)?,
+        last_opened_at: row.get(5)?,
     })
+}
+
+fn project_completion_policy_from_str(value: &str) -> rusqlite::Result<ProjectCompletionPolicy> {
+    match value {
+        "manual" => Ok(ProjectCompletionPolicy::Manual),
+        "agent_auto_commit" => Ok(ProjectCompletionPolicy::AgentAutoCommit),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn project_completion_policy_to_str(value: &ProjectCompletionPolicy) -> &'static str {
+    match value {
+        ProjectCompletionPolicy::Manual => "manual",
+        ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
+    }
 }

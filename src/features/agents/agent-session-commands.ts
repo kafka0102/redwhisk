@@ -10,6 +10,7 @@ export interface AgentSessionListItem {
   issueId: number | null;
   issueTitle: string | null;
   issueStatus?: IssueStatus | null;
+  canCompleteClean?: boolean;
   title: string | null;
   agentType: AgentType;
   status: AgentSessionStatus;

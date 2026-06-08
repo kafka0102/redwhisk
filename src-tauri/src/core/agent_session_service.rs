@@ -19,6 +19,8 @@ use crate::db::event_repository::EventRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::operation_state::GitOperationState;
+use crate::git::status::read_git_snapshot;
 use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
@@ -29,7 +31,9 @@ use crate::types::agent_session::{
     WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
-use crate::types::issue::{CompleteIssueManualInput, IssueRecord, IssueStatus};
+use crate::types::issue::{
+    CompleteIssueCleanInput, CompleteIssueManualInput, IssueRecord, IssueStatus,
+};
 use crate::types::issue_action::IssueActionType;
 use crate::types::session_event::SessionEventType;
 
@@ -546,7 +550,10 @@ impl<'connection> AgentSessionService<'connection> {
         &self,
         project_id: i64,
     ) -> Result<AgentSessionListResponse, CommandError> {
-        self.ensure_project_exists(project_id)?;
+        let project = self.project_by_id(project_id)?;
+        let can_complete_clean_for_project = project.completion_policy
+            == crate::types::project::ProjectCompletionPolicy::AgentAutoCommit
+            && project_can_complete_clean(&project.repo_path);
 
         let rows = self
             .agent_session_repository
@@ -589,19 +596,26 @@ impl<'connection> AgentSessionService<'connection> {
         let sessions = running_sessions
             .into_iter()
             .chain(completed_sessions)
-            .map(|row| AgentSessionListItem {
-                session_id: row.session_id,
-                issue_id: row.issue_id,
-                issue_title: row.issue_title,
-                issue_status: row.issue_status,
-                title: row.title,
-                agent_type: row.agent_type,
-                status: row.status,
-                attention: row.attention,
-                log_path: row.log_path,
-                last_active_at: row.last_active_at,
-                started_at: row.started_at,
-                closed_at: row.closed_at,
+            .map(|row| {
+                let can_complete_clean = can_complete_clean_for_project
+                    && row.status == crate::types::agent_session::AgentSessionStatus::Running
+                    && row.issue_status == Some(IssueStatus::Review);
+
+                AgentSessionListItem {
+                    session_id: row.session_id,
+                    issue_id: row.issue_id,
+                    issue_title: row.issue_title,
+                    issue_status: row.issue_status,
+                    can_complete_clean,
+                    title: row.title,
+                    agent_type: row.agent_type,
+                    status: row.status,
+                    attention: row.attention,
+                    log_path: row.log_path,
+                    last_active_at: row.last_active_at,
+                    started_at: row.started_at,
+                    closed_at: row.closed_at,
+                }
             })
             .collect();
 
@@ -632,10 +646,16 @@ impl<'connection> AgentSessionService<'connection> {
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
+        self.project_by_id(project_id).map(|_| ())
+    }
+
+    fn project_by_id(
+        &self,
+        project_id: i64,
+    ) -> Result<crate::types::project::ProjectSummary, CommandError> {
         self.project_repository
             .find_by_id(project_id)
             .map_err(agent_session_database_error)?
-            .map(|_| ())
             .ok_or_else(|| {
                 CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
                     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
@@ -897,6 +917,13 @@ impl<'connection> AgentSessionService<'connection> {
     }
 }
 
+fn project_can_complete_clean(repo_path: &str) -> bool {
+    match read_git_snapshot(repo_path) {
+        Ok(snapshot) => snapshot.is_clean && snapshot.operation_state == GitOperationState::None,
+        Err(_) => false,
+    }
+}
+
 impl AgentSessionService<'_> {
     pub fn start_agent_session_in_data_dir(
         data_dir: impl AsRef<Path>,
@@ -973,6 +1000,33 @@ impl AgentSessionService<'_> {
         pty_sessions: &PtySessionManager,
     ) -> Result<IssueRecord, CommandError> {
         let completed_issue = IssueService::complete_issue_manual_in_data_dir(&data_dir, input)?;
+
+        if let Some(session_id) = completed_issue.linked_session_id {
+            if pty_sessions.contains(session_id) {
+                if let Err(error) = pty_sessions.kill(session_id) {
+                    if error != "session not found" {
+                        return Err(CommandError::new(
+                            CommandErrorCode::AgentSessionPersistenceFailed,
+                            "Agent Session 关闭失败。",
+                        )
+                        .with_detail(
+                            ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
+                        )
+                        .with_detail(ErrorDetail::new("Cause").with_value("message", error)));
+                    }
+                }
+            }
+        }
+
+        Ok(completed_issue)
+    }
+
+    pub fn complete_issue_clean_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: CompleteIssueCleanInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<IssueRecord, CommandError> {
+        let completed_issue = IssueService::complete_issue_clean_in_data_dir(&data_dir, input)?;
 
         if let Some(session_id) = completed_issue.linked_session_id {
             if pty_sessions.contains(session_id) {

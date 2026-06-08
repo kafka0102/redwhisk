@@ -1921,8 +1921,8 @@ fn insert_project(connection: &rusqlite::Connection, repo_name: &str) -> i64 {
     std::fs::create_dir_all(&repo_dir).expect("create repo dir");
     connection
         .execute(
-            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
-             VALUES (?1, ?2, 1780624800000, 1780624800000)",
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
+             VALUES (?1, ?2, 1780624800000, 1780624800000, 'manual')",
             rusqlite::params![repo_name, repo_dir.to_string_lossy().to_string()],
         )
         .expect("insert project");

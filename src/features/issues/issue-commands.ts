@@ -49,6 +49,11 @@ export interface CompleteIssueManualInput {
   issueId: number;
 }
 
+export interface CompleteIssueCleanInput {
+  projectId: number;
+  issueId: number;
+}
+
 export interface StartAgentSessionInput {
   projectId: number;
   issueId: number;
@@ -85,6 +90,12 @@ export function completeIssueManual(
   input: CompleteIssueManualInput,
 ): Promise<IssueRecord> {
   return invokeCommand<IssueRecord>("complete_issue_manual", { input });
+}
+
+export function completeIssueClean(
+  input: CompleteIssueCleanInput,
+): Promise<IssueRecord> {
+  return invokeCommand<IssueRecord>("complete_issue_clean", { input });
 }
 
 export function startAgentSession(
