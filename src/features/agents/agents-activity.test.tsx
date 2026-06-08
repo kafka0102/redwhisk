@@ -1201,6 +1201,55 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the same review session selected with terminal mounted", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 503,
+          issueId: 23,
+          issueTitle: "Another running issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_636_000_000,
+          startedAt: 1_780_636_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    const runningGroup = await screen.findByRole("region", {
+      name: "Running sessions",
+    });
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Review issue" }),
+    ).toBeInTheDocument();
+    expect(
+      within(runningGroup).getByRole("button", { name: /Review issue/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
   it("clears requested attention from the selected running session", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock
