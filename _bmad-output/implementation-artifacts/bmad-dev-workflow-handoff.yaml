@@ -1,51 +1,28 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-3-view-and-edit-linked-issue-in-issue-inspector.md
-story_key: 4-3-view-and-edit-linked-issue-in-issue-inspector
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-4-show-header-actions-based-on-issue-status.md
+story_key: 4-4-show-header-actions-based-on-issue-status
 story_status: done
-baseline_commit: e728aa2
+baseline_commit: c502483
 changed_files:
-  - _bmad-output/implementation-artifacts/4-3-view-and-edit-linked-issue-in-issue-inspector.md
+  - _bmad-output/implementation-artifacts/4-4-show-header-actions-based-on-issue-status.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src/app/app.css
   - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/agents/issue-inspector.tsx
 validation_commands:
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
   - pnpm format
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx
   - pnpm lint
   - pnpm typecheck
   - pnpm test -- --run src/features/agents/agents-activity.test.tsx
   - pnpm test
   - git diff --check
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
-  - pnpm test
-  - pnpm lint
 validation_results:
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: fail first; exposed 5 regressions around header naming, inspector toggle behavior, and jsdom editor interaction"
   - "pnpm format: pass; unrelated formatting-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
-  - "pnpm lint: fail first due to react-hooks/set-state-in-effect in agents-activity.tsx"
-  - "pnpm typecheck: pass"
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
-  - "pnpm test -- --run src/features/issues/issues-activity.test.tsx: pass"
-  - "pnpm lint: pass with warning first; linkedIssue dependency warning cleared in a later rerun"
-  - "pnpm typecheck: pass"
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: fail once on drag reopen behavior; fixed by refreshing linkedIssue dependency in effect"
-  - "pnpm test: fail once on the same drag reopen behavior"
-  - "git diff --check: pass"
   - "pnpm lint: pass"
   - "pnpm typecheck: pass"
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
-  - "pnpm test: pass"
-  - "pnpm lint: final pass"
-review_summary: "Automatic same-session review clean: Agents now opens a local Issue Inspector from the session header, reuses existing issue update commands, preserves terminal continuity, and has regression coverage for save and close paths."
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass; 8 files and 118 tests passed with existing jsdom canvas/CSS warnings"
+  - "pnpm test: pass; 8 files and 118 tests passed with existing jsdom canvas/CSS warnings"
+  - "git diff --check: pass"
+review_summary: "Automatic same-session review clean: Story 4.4 required no runtime code change; explicit regression coverage now locks running/review/standalone header actions and keeps unfinished completion actions hidden."
 blocking_reason:
-updated_at: 2026-06-08T17:39:24+08:00
+updated_at: 2026-06-08T19:55:00+08:00
