@@ -1,28 +1,39 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-4-show-header-actions-based-on-issue-status.md
-story_key: 4-4-show-header-actions-based-on-issue-status
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-5-handle-codex-process-crashed.md
+story_key: 4-5-handle-codex-process-crashed
 story_status: done
-baseline_commit: c502483
+baseline_commit: fbb58c0
 changed_files:
-  - _bmad-output/implementation-artifacts/4-4-show-header-actions-based-on-issue-status.md
+  - _bmad-output/implementation-artifacts/4-5-handle-codex-process-crashed.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - src-tauri/src/core/agent_session_service.rs
+  - src-tauri/src/db/agent_session_repository.rs
+  - src-tauri/src/types/agent_session.rs
+  - src-tauri/tests/agent_session.rs
+  - src/app/app.css
+  - src/features/agents/agent-session-commands.ts
+  - src/features/agents/agents-activity.tsx
   - src/features/agents/agents-activity.test.tsx
 validation_commands:
   - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
   - pnpm typecheck
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml agent_session
   - pnpm test
   - git diff --check
 validation_results:
   - "pnpm format: pass; unrelated formatting-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
+  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
   - "pnpm lint: pass"
   - "pnpm typecheck: pass"
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass; 8 files and 118 tests passed with existing jsdom canvas/CSS warnings"
-  - "pnpm test: pass; 8 files and 118 tests passed with existing jsdom canvas/CSS warnings"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx: pass; 8 files and 120 tests passed with existing jsdom canvas/CSS warnings"
+  - "cargo test --manifest-path src-tauri/Cargo.toml agent_session: pass; 4 unit tests and 16 integration tests executed under the filter"
+  - "pnpm test: pass; 8 files and 120 tests passed with existing jsdom canvas/CSS warnings"
   - "git diff --check: pass"
-review_summary: "Automatic same-session review clean: Story 4.4 required no runtime code change; explicit regression coverage now locks running/review/standalone header actions and keeps unfinished completion actions hidden."
+review_summary: "Automatic same-session review clean: Story 4.5 now exposes crashed sessions explicitly without extending scope to stopped/recovery flows; log-path plumbing and UI gating match the story ACs."
 blocking_reason:
-updated_at: 2026-06-08T19:55:00+08:00
+updated_at: 2026-06-08T20:24:30+08:00

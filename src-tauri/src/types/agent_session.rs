@@ -115,6 +115,7 @@ pub struct AgentSessionListItem {
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
+    pub log_path: String,
     pub last_active_at: i64,
     pub started_at: i64,
     pub closed_at: Option<i64>,

@@ -597,6 +597,7 @@ impl<'connection> AgentSessionService<'connection> {
                 agent_type: row.agent_type,
                 status: row.status,
                 attention: row.attention,
+                log_path: row.log_path,
                 last_active_at: row.last_active_at,
                 started_at: row.started_at,
                 closed_at: row.closed_at,

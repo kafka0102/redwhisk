@@ -14,6 +14,7 @@ pub struct AgentSessionListRow {
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
+    pub log_path: String,
     pub last_active_at: i64,
     pub started_at: i64,
     pub closed_at: Option<i64>,
@@ -66,6 +67,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_profiles.agent_type,
                 agent_sessions.status,
                 agent_sessions.attention,
+                agent_sessions.log_path,
                 agent_sessions.last_active_at,
                 agent_sessions.started_at,
                 agent_sessions.closed_at
@@ -288,9 +290,10 @@ fn agent_session_list_row_from_row(
         agent_type: agent_type_from_str(&row.get::<_, String>(5)?)?,
         status: agent_session_status_from_str(&row.get::<_, String>(6)?)?,
         attention: agent_session_attention_from_str(&row.get::<_, String>(7)?)?,
-        last_active_at: row.get(8)?,
-        started_at: row.get(9)?,
-        closed_at: row.get(10)?,
+        log_path: row.get(8)?,
+        last_active_at: row.get(9)?,
+        started_at: row.get(10)?,
+        closed_at: row.get(11)?,
     })
 }
 
