@@ -1,3 +1,4 @@
+import { openPath } from "@tauri-apps/plugin-opener";
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -72,6 +73,7 @@ export function IssuesActivity({
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [isLoadingAgentProfiles, setIsLoadingAgentProfiles] = useState(true);
   const [agentProfileCount, setAgentProfileCount] = useState(0);
   const [agentProfileErrorMessage, setAgentProfileErrorMessage] = useState<
@@ -226,6 +228,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setIsOpeningLog(false);
     setIsRunDialogOpen(false);
     const closingMode = dialogMode;
     const previousSelectedIssue =
@@ -388,6 +391,23 @@ export function IssuesActivity({
     onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
   }
 
+  async function handleOpenLog() {
+    if (!selectedIssue?.linkedSessionLogPath || isOpeningLog) {
+      return;
+    }
+
+    setDialogErrorMessage(null);
+    setIsOpeningLog(true);
+
+    try {
+      await openPath(selectedIssue.linkedSessionLogPath);
+    } catch (error) {
+      setDialogErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsOpeningLog(false);
+    }
+  }
+
   function closeRunDialog() {
     setIsRunDialogOpen(false);
     runButtonRef.current?.focus();
@@ -440,6 +460,12 @@ export function IssuesActivity({
     hasLinkedSession &&
     selectedIssue?.status !== "completed" &&
     selectedIssue?.linkedSessionStatus === "running";
+  const canOpenLog =
+    hasLinkedSession &&
+    (selectedIssue?.linkedSessionStatus === "crashed" ||
+      selectedIssue?.linkedSessionStatus === "stopped") &&
+    selectedIssue.linkedSessionLogPath != null &&
+    selectedIssue.linkedSessionLogPath.length > 0;
   const runStatusMessage =
     agentProfileErrorMessage ??
     (isLoadingAgentProfiles
@@ -642,6 +668,9 @@ export function IssuesActivity({
                           selectedIssue?.linkedSessionStatus ?? null,
                         )}`}
                       </p>
+                      {selectedIssue?.linkedSessionLogPath ? (
+                        <p>{`Log path: ${selectedIssue.linkedSessionLogPath}`}</p>
+                      ) : null}
                     </>
                   ) : (
                     <p>No session linked.</p>
@@ -661,6 +690,19 @@ export function IssuesActivity({
                         Open Session
                       </Button>
                       <p>Continue this issue from Agents.</p>
+                    </>
+                  ) : dialogMode === "edit" && canOpenLog ? (
+                    <>
+                      <Button
+                        className="issues-button"
+                        type="button"
+                        variant="outline"
+                        disabled={isOpeningLog}
+                        onClick={() => void handleOpenLog()}
+                      >
+                        {isOpeningLog ? "打开中..." : "Open Log"}
+                      </Button>
+                      <p>Open the abnormal session log for diagnosis.</p>
                     </>
                   ) : dialogMode === "edit" &&
                     selectedIssue?.status === "backlog" &&

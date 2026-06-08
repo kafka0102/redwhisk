@@ -1876,6 +1876,81 @@ describe("AgentsActivity", () => {
     expect(onOpenIssuesActivity).toHaveBeenNthCalledWith(1, 20);
   });
 
+  it("opens the linked session log from the inspector for abnormal sessions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "stopped",
+          attention: "none",
+          logPath: "/tmp/stopped.log",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: 1_780_638_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
+    );
+
+    const inspector = await screen.findByRole("complementary", {
+      name: "Issue Inspector",
+    });
+    await user.click(
+      within(inspector).getByRole("button", { name: "Open Log" }),
+    );
+
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
+  });
+
+  it("surfaces inspector open log failures for abnormal sessions", async () => {
+    const user = userEvent.setup();
+    openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "crashed",
+          attention: "none",
+          logPath: "/tmp/crashed.log",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: 1_780_638_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
+    );
+
+    const inspector = await screen.findByRole("complementary", {
+      name: "Issue Inspector",
+    });
+    await user.click(
+      within(inspector).getByRole("button", { name: "Open Log" }),
+    );
+
+    expect(
+      await within(inspector).findByText("log unavailable"),
+    ).toBeInTheDocument();
+  });
+
   it("opens and closes the issue inspector from the splitter toggle", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({

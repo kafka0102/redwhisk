@@ -1,3 +1,4 @@
+import { openPath } from "@tauri-apps/plugin-opener";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ interface IssueInspectorProps {
   issueTitle: string;
   linkedSessionId: number;
   linkedSessionStatus: AgentSessionStatus | null;
+  linkedSessionLogPath?: string | null;
   onClose: () => void;
   onIssueUpdated: (issue: IssueRecord) => void;
   onOpenIssuesActivity?: (issueId: number) => void;
@@ -33,6 +35,7 @@ export function IssueInspector({
   issueTitle,
   linkedSessionId,
   linkedSessionStatus,
+  linkedSessionLogPath = null,
   onClose,
   onIssueUpdated,
   onOpenIssuesActivity,
@@ -44,6 +47,7 @@ export function IssueInspector({
     description: "",
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const activeProjectIdRef = useRef(projectId);
@@ -102,6 +106,12 @@ export function IssueInspector({
     };
   }, [issueId, issueTitle, projectId]);
 
+  const effectiveLogPath = issue?.linkedSessionLogPath ?? linkedSessionLogPath;
+  const canOpenLog =
+    (linkedSessionStatus === "crashed" || linkedSessionStatus === "stopped") &&
+    effectiveLogPath != null &&
+    effectiveLogPath.length > 0;
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -133,6 +143,27 @@ export function IssueInspector({
     } finally {
       if (activeProjectIdRef.current === projectId) {
         setIsSaving(false);
+      }
+    }
+  }
+
+  async function handleOpenLog() {
+    if (!effectiveLogPath || isOpeningLog) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsOpeningLog(true);
+
+    try {
+      await openPath(effectiveLogPath);
+    } catch (error) {
+      if (activeProjectIdRef.current === projectId) {
+        setErrorMessage(toCommandError(error).message);
+      }
+    } finally {
+      if (activeProjectIdRef.current === projectId) {
+        setIsOpeningLog(false);
       }
     }
   }
@@ -197,10 +228,38 @@ export function IssueInspector({
             <h4>Session</h4>
             <p>{`Linked session #${linkedSessionId}`}</p>
             <p>{`Status: ${formatAgentSessionStatus(linkedSessionStatus)}`}</p>
+            {effectiveLogPath ? <p>{`Log path: ${effectiveLogPath}`}</p> : null}
           </section>
           <section className="issue-dialog__panel">
             <h4>Actions</h4>
-            {onOpenIssuesActivity ? (
+            {canOpenLog ? (
+              <>
+                <Button
+                  className="issues-button"
+                  disabled={isLoading || isOpeningLog}
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleOpenLog()}
+                >
+                  {isOpeningLog ? "打开中..." : "Open Log"}
+                </Button>
+                <p>Open the abnormal session log for diagnosis.</p>
+                {onOpenIssuesActivity ? (
+                  <>
+                    <Button
+                      className="issues-button"
+                      disabled={isLoading}
+                      type="button"
+                      variant="outline"
+                      onClick={() => onOpenIssuesActivity(issueId)}
+                    >
+                      Open in Issues
+                    </Button>
+                    <p>Open this issue in the issues board.</p>
+                  </>
+                ) : null}
+              </>
+            ) : onOpenIssuesActivity ? (
               <>
                 <Button
                   className="issues-button"

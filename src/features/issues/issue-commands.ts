@@ -13,6 +13,7 @@ export interface IssueRecord {
   linkedSessionId?: number | null;
   linkedSessionStatus?: AgentSessionStatus | null;
   linkedSessionAttention?: AgentSessionAttention | null;
+  linkedSessionLogPath?: string | null;
   createdAt: number;
   updatedAt: number;
 }
