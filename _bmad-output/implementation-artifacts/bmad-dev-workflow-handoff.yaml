@@ -1,42 +1,18 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-7-provide-log-review-entry-for-abnormal-sessions.md
-story_key: 4-7-provide-log-review-entry-for-abnormal-sessions
-story_status: done
-baseline_commit: 4b3e706
-changed_files:
-  - _bmad-output/implementation-artifacts/4-7-provide-log-review-entry-for-abnormal-sessions.md
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src-tauri/src/db/issue_repository.rs
-  - src-tauri/src/types/issue.rs
-  - src-tauri/tests/issue.rs
-  - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/agents/issue-inspector.tsx
-  - src/features/issues/issue-commands.ts
-  - src/features/issues/issues-activity.test.tsx
-  - src/features/issues/issues-activity.tsx
+phase: story-created
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-1-manually-complete-review-issue.md
+story_key: 5-1-manually-complete-review-issue
+story_status: ready-for-dev
+baseline_commit: 9efbc2f
+changed_files: []
 validation_commands:
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx
-  - cargo test --manifest-path src-tauri/Cargo.toml agent_session
-  - cargo test --manifest-path src-tauri/Cargo.toml issue
-  - pnpm test
+  - python3 -c "import pathlib, sys; paths = [pathlib.Path('_bmad-output/implementation-artifacts/5-1-manually-complete-review-issue.md'), pathlib.Path('_bmad-output/implementation-artifacts/sprint-status.yaml'), pathlib.Path('_bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml')]; missing = [str(path) for path in paths if not path.exists()]; sys.exit(1 if missing else 0)"
+  - python3 -c "import pathlib, re, sys; text = pathlib.Path('_bmad-output/implementation-artifacts/sprint-status.yaml').read_text(); sys.exit(0 if re.search(r'epic-5:\\s+in-progress', text) and re.search(r'5-1-manually-complete-review-issue:\\s+ready-for-dev', text) else 1)"
   - git diff --check
 validation_results:
-  - "pnpm format: pass; unrelated formatting-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
-  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
-  - "pnpm lint: pass"
-  - "pnpm typecheck: pass"
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx: pass; 8 files and 123 tests passed with existing jsdom canvas/CSS warnings"
-  - "cargo test --manifest-path src-tauri/Cargo.toml agent_session: pass; 4 unit tests and 16 integration tests executed under the filter"
-  - "cargo test --manifest-path src-tauri/Cargo.toml issue: pass; 8 related filtered tests plus 18 issue tests passed"
-  - "pnpm test: pass; 8 files and 123 tests passed with existing jsdom canvas/CSS warnings"
+  - "python3 -c import pathlib...: pass; story file、sprint-status 与 handoff 文件均存在"
+  - "python3 -c import pathlib, re...: pass; sprint-status 已更新为 epic-5=in-progress、5-1=ready-for-dev"
   - "git diff --check: pass"
-review_summary: "Automatic same-session review clean: abnormal crashed/stopped sessions now expose Open Log in issue detail and inspector, preserve log path as a diagnostic fact, and keep non-running actions gated."
+review_summary:
 blocking_reason:
-updated_at: 2026-06-08T21:24:36+08:00
+updated_at: 2026-06-08T21:43:26+08:00
