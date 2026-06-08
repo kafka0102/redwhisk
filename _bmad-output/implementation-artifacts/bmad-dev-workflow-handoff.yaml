@@ -8,7 +8,6 @@ changed_files:
   - _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-validation_commands: []
 validation_commands:
   - test -f _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md && rg -n "^Status: ready-for-dev$|^# Story 4\\.1:" _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
   - rg -n "epic-4: in-progress|4-1-manually-mark-review-in-session-header: ready-for-dev|last_updated: 2026-06-08T09:08:54\\+0800" _bmad-output/implementation-artifacts/sprint-status.yaml
