@@ -1,35 +1,24 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/3-6-ensure-temporary-session-does-not-trigger-issue-flow.md
-story_key: 3-6-ensure-temporary-session-does-not-trigger-issue-flow
-story_status: done
-baseline_commit: a757501
+phase: story-created
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
+story_key: 4-1-manually-mark-review-in-session-header
+story_status: ready-for-dev
+baseline_commit: eda4c7b
 changed_files:
-  - _bmad-output/implementation-artifacts/3-6-ensure-temporary-session-does-not-trigger-issue-flow.md
+  - _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src/features/agents/agents-activity.test.tsx
-  - src-tauri/tests/agent_session.rs
-  - src-tauri/tests/issue.rs
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+validation_commands: []
 validation_commands:
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
-  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - cargo test --manifest-path src-tauri/Cargo.toml
+  - test -f _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md && rg -n "^Status: ready-for-dev$|^# Story 4\\.1:" _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
+  - rg -n "epic-4: in-progress|4-1-manually-mark-review-in-session-header: ready-for-dev|last_updated: 2026-06-08T09:08:54\\+0800" _bmad-output/implementation-artifacts/sprint-status.yaml
+  - rg -n "phase: story-created|story_key: 4-1-manually-mark-review-in-session-header|story_status: ready-for-dev|baseline_commit: eda4c7b" _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - git diff --check -- _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md _bmad-output/implementation-artifacts/sprint-status.yaml _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
 validation_results:
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: pass"
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: pass"
-  - "pnpm format: pass"
-  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
-  - "pnpm lint: pass"
-  - "pnpm typecheck: pass"
-  - "pnpm test: pass"
-  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
-review_summary: "clean review; no patch, decision-needed, or defer findings"
+  - "test -f _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md && rg -n \"^Status: ready-for-dev$|^# Story 4\\.1:\" _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md: pass"
+  - "rg -n \"epic-4: in-progress|4-1-manually-mark-review-in-session-header: ready-for-dev|last_updated: 2026-06-08T09:08:54\\+0800\" _bmad-output/implementation-artifacts/sprint-status.yaml: pass"
+  - "rg -n \"phase: story-created|story_key: 4-1-manually-mark-review-in-session-header|story_status: ready-for-dev|baseline_commit: eda4c7b\" _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml: pass"
+  - "git diff --check -- _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md _bmad-output/implementation-artifacts/sprint-status.yaml _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml: pass"
+review_summary:
 blocking_reason:
-updated_at: 2026-06-07T23:05:30+08:00
+updated_at: 2026-06-08T09:08:54+08:00
