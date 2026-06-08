@@ -8,7 +8,9 @@ use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use redwhisk_lib::types::errors::CommandErrorCode;
-use redwhisk_lib::types::issue::{CreateIssueInput, IssueStatus, UpdateIssueInput};
+use redwhisk_lib::types::issue::{
+    CreateIssueInput, IssueStatus, MarkIssueReviewInput, UpdateIssueInput,
+};
 use redwhisk_lib::types::issue_action::IssueActionType;
 
 #[test]
@@ -336,6 +338,220 @@ fn update_issue_rejects_missing_issue() {
 }
 
 #[test]
+fn mark_issue_review_updates_running_issue_and_records_action_without_closing_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "review-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Ready for review".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let reviewed = service
+        .mark_issue_review(MarkIssueReviewInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("mark review");
+
+    assert_eq!(reviewed.id, issue.id);
+    assert_eq!(reviewed.status, IssueStatus::Review);
+    assert!(reviewed.updated_at > issue.updated_at);
+
+    let session_status: String = database
+        .connection
+        .query_row(
+            "SELECT status FROM agent_sessions WHERE id = ?1",
+            [session_id],
+            |row| row.get(0),
+        )
+        .expect("session status");
+    assert_eq!(session_status, "running");
+
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[0].action_type, IssueActionType::IssueReviewMarked);
+    assert_eq!(actions[1].action_type, IssueActionType::IssueCreated);
+
+    let payload: serde_json::Value =
+        serde_json::from_str(&actions[0].payload_json).expect("payload json");
+    assert_eq!(payload["fromStatus"], "running");
+    assert_eq!(payload["toStatus"], "review");
+    assert_eq!(payload["linkedSessionId"], session_id);
+}
+
+#[test]
+fn mark_issue_review_rejects_non_running_issue_without_action() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "review-state-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Already review".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .mark_issue_review(MarkIssueReviewInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("review issue should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue still exists");
+    assert_eq!(stored_issue.status, IssueStatus::Review);
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0].action_type, IssueActionType::IssueCreated);
+}
+
+#[test]
+fn mark_issue_review_rejects_issue_without_running_linked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "review-session-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "No session".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+
+    let error = service
+        .mark_issue_review(MarkIssueReviewInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("missing linked session should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue still exists");
+    assert_eq!(stored_issue.status, IssueStatus::Running);
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 1);
+}
+
+#[test]
+fn mark_issue_review_rejects_cross_project_issue_without_action() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let first_project_id = insert_project(&database.connection, "first-review-repo");
+    let second_project_id = insert_project(&database.connection, "second-review-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id: first_project_id,
+            title: "Wrong project".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    insert_agent_session_for_issue(
+        &database.connection,
+        first_project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .mark_issue_review(MarkIssueReviewInput {
+            project_id: second_project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("cross-project mark review should fail");
+
+    assert_eq!(error.code, CommandErrorCode::IssueNotFound);
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue still exists");
+    assert_eq!(stored_issue.status, IssueStatus::Running);
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 1);
+}
+
+#[test]
 fn update_issue_advances_timestamp_monotonically_from_future_timestamp() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -656,6 +872,34 @@ fn insert_agent_profile(connection: &rusqlite::Connection) -> i64 {
         )
         .expect("insert agent profile")
         .id
+}
+
+fn insert_agent_session_for_issue(
+    connection: &rusqlite::Connection,
+    project_id: i64,
+    issue_id: i64,
+    agent_profile_id: i64,
+    status: &str,
+) -> i64 {
+    connection
+        .execute(
+            "INSERT INTO agent_sessions (
+                project_id,
+                issue_id,
+                agent_profile_id,
+                status,
+                attention,
+                working_dir,
+                command_snapshot,
+                prompt_snapshot,
+                log_path,
+                last_active_at,
+                started_at
+            ) VALUES (?1, ?2, ?3, ?4, 'none', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
+            rusqlite::params![project_id, issue_id, agent_profile_id, status],
+        )
+        .expect("insert agent session");
+    connection.last_insert_rowid()
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {

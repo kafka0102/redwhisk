@@ -1,5 +1,11 @@
 import { ChevronLeft, ChevronRight, LayoutGrid, Plus } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import {
   listAgentSessions,
@@ -9,6 +15,7 @@ import {
 } from "./agent-session-commands";
 import { CodexTerminal } from "./codex-terminal";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
+import { markIssueReview } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
@@ -50,6 +57,10 @@ export function AgentsActivity({
     string | null
   >(null);
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
+  const [isMarkingReview, setIsMarkingReview] = useState(false);
+  const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
+    string | null
+  >(null);
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
     useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
@@ -65,6 +76,25 @@ export function AgentsActivity({
     startX: number;
   } | null>(null);
   const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
+
+  const applySessionListOverlays = useCallback(
+    (nextSessions: AgentSessionListItem[]) => {
+      const reviewedIssueIds = reviewedIssueIdsRef.current;
+      if (reviewedIssueIds.size === 0) {
+        return nextSessions;
+      }
+
+      return nextSessions.map((session) =>
+        session.issueId != null &&
+        reviewedIssueIds.has(session.issueId) &&
+        session.issueStatus === "running"
+          ? { ...session, issueStatus: "review" as const }
+          : session,
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -81,7 +111,7 @@ export function AgentsActivity({
           return;
         }
 
-        setSessions(response.sessions);
+        setSessions(applySessionListOverlays(response.sessions));
       } catch (error) {
         if (!isMounted) {
           return;
@@ -105,7 +135,7 @@ export function AgentsActivity({
       isMounted = false;
       window.clearInterval(intervalId);
     };
-  }, [projectId]);
+  }, [applySessionListOverlays, projectId]);
 
   const runningSessions = sessions.filter(
     (session) => session.status === "running",
@@ -127,8 +157,12 @@ export function AgentsActivity({
       ? {
           issueId: selectedSession.issueId,
           issueTitle: selectedSession.issueTitle,
+          issueStatus: selectedSession.issueStatus ?? null,
         }
       : null;
+  const canMarkReview =
+    selectedSession?.status === "running" &&
+    linkedIssue?.issueStatus === "running";
 
   function handleSelectSession(sessionId: number) {
     setSelectedSessionId(sessionId);
@@ -150,7 +184,7 @@ export function AgentsActivity({
     result: StartStandaloneAgentSessionResult,
   ) {
     const response = await listAgentSessions(projectId);
-    setSessions(response.sessions);
+    setSessions(applySessionListOverlays(response.sessions));
     setSelectedSessionId(result.sessionId);
     onSelectSession?.(result.sessionId);
   }
@@ -170,11 +204,70 @@ export function AgentsActivity({
         attention,
       });
       const response = await listAgentSessions(projectId);
-      setSessions(response.sessions);
+      setSessions(applySessionListOverlays(response.sessions));
     } catch (error) {
       setAttentionErrorMessage(toCommandError(error).message);
     } finally {
       setIsUpdatingAttention(false);
+    }
+  }
+
+  async function handleMarkReview() {
+    if (!linkedIssue) {
+      return;
+    }
+
+    setMarkReviewErrorMessage(null);
+    setIsMarkingReview(true);
+
+    let reviewedIssueId: number | null = null;
+
+    try {
+      const reviewedIssue = await markIssueReview({
+        projectId,
+        issueId: linkedIssue.issueId,
+      });
+      reviewedIssueId = reviewedIssue.id;
+      reviewedIssueIdsRef.current.add(reviewedIssue.id);
+      setSessions((currentSessions) =>
+        currentSessions.map((session) =>
+          session.issueId === reviewedIssue.id
+            ? {
+                ...session,
+                issueStatus: reviewedIssue.status,
+                lastActiveAt: Math.max(
+                  session.lastActiveAt,
+                  reviewedIssue.updatedAt,
+                ),
+              }
+            : session,
+        ),
+      );
+    } catch (error) {
+      setMarkReviewErrorMessage(toCommandError(error).message);
+      try {
+        const response = await listAgentSessions(projectId);
+        setSessions(applySessionListOverlays(response.sessions));
+      } catch {
+        // Keep the command failure visible; polling can retry the refresh.
+      }
+    } finally {
+      if (reviewedIssueId == null) {
+        setIsMarkingReview(false);
+      }
+    }
+
+    if (reviewedIssueId == null) {
+      return;
+    }
+
+    try {
+      const response = await listAgentSessions(projectId);
+      setSessions(applySessionListOverlays(response.sessions));
+    } catch (error) {
+      setMarkReviewErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsMarkingReview(false);
     }
   }
 
@@ -337,27 +430,44 @@ export function AgentsActivity({
                 <p className="agents-session-toolbar__eyebrow">当前会话</p>
                 <h3>{formatSessionTitle(selectedSession)}</h3>
               </div>
-              {selectedSession.status === "running" ? (
-                <button
-                  className="agents-session-toolbar__action"
-                  disabled={isUpdatingAttention}
-                  type="button"
-                  onClick={() =>
-                    void handleSetAttention(
-                      selectedSession.attention === "requested"
-                        ? "none"
-                        : "requested",
-                    )
-                  }
-                >
-                  {isUpdatingAttention
-                    ? "更新中..."
-                    : selectedSession.attention === "requested"
-                      ? "清除关注"
-                      : "标记关注"}
-                </button>
-              ) : null}
+              <div className="agents-session-toolbar__actions">
+                {canMarkReview ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    disabled={isMarkingReview}
+                    type="button"
+                    onClick={() => void handleMarkReview()}
+                  >
+                    {isMarkingReview ? "更新中..." : "Mark Review"}
+                  </button>
+                ) : null}
+                {selectedSession.status === "running" ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    disabled={isUpdatingAttention}
+                    type="button"
+                    onClick={() =>
+                      void handleSetAttention(
+                        selectedSession.attention === "requested"
+                          ? "none"
+                          : "requested",
+                      )
+                    }
+                  >
+                    {isUpdatingAttention
+                      ? "更新中..."
+                      : selectedSession.attention === "requested"
+                        ? "清除关注"
+                        : "标记关注"}
+                  </button>
+                ) : null}
+              </div>
             </div>
+          ) : null}
+          {markReviewErrorMessage ? (
+            <p className="issues-status" role="status">
+              {markReviewErrorMessage}
+            </p>
           ) : null}
           {attentionErrorMessage ? (
             <p className="issues-status" role="status">

@@ -141,6 +141,55 @@ impl<'connection> IssueRepository<'connection> {
         self.find_by_id(issue_id)
     }
 
+    pub fn find_running_linked_session_id(
+        &self,
+        project_id: i64,
+        issue_id: i64,
+    ) -> rusqlite::Result<Option<i64>> {
+        self.connection
+            .query_row(
+                "SELECT agent_sessions.id
+                 FROM agent_sessions
+                 INNER JOIN issues ON issues.id = agent_sessions.issue_id
+                 WHERE issues.id = ?1
+                   AND issues.project_id = ?2
+                   AND agent_sessions.project_id = ?2
+                   AND agent_sessions.status = 'running'
+                 LIMIT 1",
+                params![issue_id, project_id],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
+    pub fn find_by_id_in_transaction(
+        transaction: &Transaction<'_>,
+        id: i64,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        find_by_id_on_connection(transaction, id)
+    }
+
+    pub fn find_running_linked_session_id_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+    ) -> rusqlite::Result<Option<i64>> {
+        transaction
+            .query_row(
+                "SELECT agent_sessions.id
+                 FROM agent_sessions
+                 INNER JOIN issues ON issues.id = agent_sessions.issue_id
+                 WHERE issues.id = ?1
+                   AND issues.project_id = ?2
+                   AND agent_sessions.project_id = ?2
+                   AND agent_sessions.status = 'running'
+                 LIMIT 1",
+                params![issue_id, project_id],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
     pub fn update_status_in_transaction(
         transaction: &Transaction<'_>,
         project_id: i64,
@@ -156,6 +205,40 @@ impl<'connection> IssueRepository<'connection> {
                  )
              WHERE id = ?2 AND project_id = ?3",
             params![issue_status_to_str(&status), issue_id, project_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, issue_id)
+    }
+
+    pub fn mark_running_issue_review_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        linked_session_id: i64,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        let changed = transaction.execute(
+            "UPDATE issues
+             SET status = 'review',
+                 updated_at = MAX(
+                   updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 )
+             WHERE id = ?1
+               AND project_id = ?2
+               AND status = 'running'
+               AND EXISTS (
+                 SELECT 1
+                 FROM agent_sessions
+                 WHERE agent_sessions.id = ?3
+                   AND agent_sessions.issue_id = issues.id
+                   AND agent_sessions.project_id = ?2
+                   AND agent_sessions.status = 'running'
+               )",
+            params![issue_id, project_id, linked_session_id],
         )?;
 
         if changed == 0 {

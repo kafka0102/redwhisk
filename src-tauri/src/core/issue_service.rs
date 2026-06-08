@@ -8,7 +8,10 @@ use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
-use crate::types::issue::{CreateIssueInput, IssueListResponse, IssueRecord, UpdateIssueInput};
+use crate::types::issue::{
+    CreateIssueInput, IssueListResponse, IssueRecord, IssueStatus, MarkIssueReviewInput,
+    UpdateIssueInput,
+};
 use crate::types::issue_action::IssueActionType;
 
 pub struct IssueService<'connection> {
@@ -85,6 +88,86 @@ impl<'connection> IssueService<'connection> {
             .ok_or_else(|| issue_not_found(input.issue_id))
     }
 
+    pub fn mark_issue_review(
+        &self,
+        input: MarkIssueReviewInput,
+    ) -> Result<IssueRecord, CommandError> {
+        self.ensure_project_exists(input.project_id)?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status != IssueStatus::Running {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有运行中的 Issue 可以标记待验收。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的 Issue 可以标记待验收。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
+        })?;
+
+        let reviewed_issue = IssueRepository::mark_running_issue_review_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            linked_session_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有运行中的 Issue 可以标记待验收。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            )
+        })?;
+
+        let payload_json = json!({
+            "fromStatus": "running",
+            "toStatus": "review",
+            "linkedSessionId": linked_session_id,
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            reviewed_issue.id,
+            IssueActionType::IssueReviewMarked,
+            &payload_json,
+            reviewed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        transaction.commit().map_err(issue_database_error)?;
+
+        Ok(reviewed_issue)
+    }
+
     pub fn list_issues_in_data_dir(
         data_dir: impl AsRef<Path>,
         project_id: i64,
@@ -113,6 +196,16 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).update_issue(input)
+    }
+
+    pub fn mark_issue_review_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: MarkIssueReviewInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).mark_issue_review(input)
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
@@ -164,4 +257,13 @@ fn issue_not_found(issue_id: i64) -> CommandError {
 fn issue_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+fn issue_status_to_str(status: &IssueStatus) -> &'static str {
+    match status {
+        IssueStatus::Backlog => "backlog",
+        IssueStatus::Running => "running",
+        IssueStatus::Review => "review",
+        IssueStatus::Completed => "completed",
+    }
 }

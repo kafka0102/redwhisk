@@ -1381,6 +1381,13 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.agents-session-toolbar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .agents-session-toolbar__action {
   flex: 0 0 auto;
   min-width: 88px;

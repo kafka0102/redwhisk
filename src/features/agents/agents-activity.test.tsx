@@ -18,6 +18,7 @@ import {
   startStandaloneAgentSession,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
+import { markIssueReview } from "../issues/issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
 
 vi.mock("./agent-session-commands", () => ({
@@ -33,6 +34,10 @@ vi.mock("../settings/settings-commands", () => ({
   listAgentProfiles: vi.fn(),
 }));
 
+vi.mock("../issues/issue-commands", () => ({
+  markIssueReview: vi.fn(),
+}));
+
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const readAgentSessionTerminalMock = vi.mocked(readAgentSessionTerminal);
 const resizeAgentSessionTerminalMock = vi.mocked(resizeAgentSessionTerminal);
@@ -40,6 +45,7 @@ const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStandaloneAgentSessionMock = vi.mocked(startStandaloneAgentSession);
 const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const markIssueReviewMock = vi.mocked(markIssueReview);
 
 const defaultProfiles = {
   project: [
@@ -80,6 +86,7 @@ describe("AgentsActivity", () => {
     setAgentSessionAttentionMock.mockReset();
     startStandaloneAgentSessionMock.mockReset();
     writeAgentSessionTerminalMock.mockReset();
+    markIssueReviewMock.mockReset();
     readAgentSessionTerminalMock.mockResolvedValue({
       sessionId: 301,
       snapshot: "",
@@ -94,6 +101,18 @@ describe("AgentsActivity", () => {
       sessionId: 701,
     });
     writeAgentSessionTerminalMock.mockResolvedValue();
+    markIssueReviewMock.mockResolvedValue({
+      id: 20,
+      projectId: 1,
+      title: "Existing issue",
+      description: "",
+      status: "review",
+      linkedSessionId: 301,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_001_000,
+    });
     listAgentProfilesMock.mockReset();
     listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
       profiles:
@@ -828,6 +847,358 @@ describe("AgentsActivity", () => {
     expect(
       within(refreshedRow).getByLabelText("Session 状态：需要确认"),
     ).toHaveClass("agents-session-row__status-dot--attention");
+  });
+
+  it("marks a linked running issue for review from the session header and refreshes sessions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "review",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_001_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+    markIssueReviewMock.mockResolvedValue({
+      id: 21,
+      projectId: 1,
+      title: "Review candidate",
+      description: "",
+      status: "review",
+      linkedSessionId: 302,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_001_000,
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "Review candidate",
+      }),
+    ).toBeInTheDocument();
+
+    const markReviewButton = screen.getByRole("button", {
+      name: "Mark Review",
+    });
+    await user.click(markReviewButton);
+
+    expect(markIssueReviewMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 21,
+    });
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("hides mark review after command success when refreshing sessions fails", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    markIssueReviewMock.mockResolvedValue({
+      id: 21,
+      projectId: 1,
+      title: "Review candidate",
+      description: "",
+      status: "review",
+      linkedSessionId: 302,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_001_000,
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Mark Review",
+      }),
+    );
+
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("refresh failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("keeps mark review hidden when an older polling response returns running after command success", async () => {
+    vi.useFakeTimers();
+    let resolvePollingResponse:
+      | ((response: Awaited<ReturnType<typeof listAgentSessions>>) => void)
+      | null = null;
+    const pollingResponse = new Promise<
+      Awaited<ReturnType<typeof listAgentSessions>>
+    >((resolve) => {
+      resolvePollingResponse = resolve;
+    });
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockReturnValueOnce(pollingResponse)
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    markIssueReviewMock.mockResolvedValue({
+      id: 21,
+      projectId: 1,
+      title: "Review candidate",
+      description: "",
+      status: "review",
+      linkedSessionId: 302,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_001_000,
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(
+      screen.getByRole("button", { name: "Mark Review" }),
+    ).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(1_500);
+    });
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark Review" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(3);
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolvePollingResponse?.({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_999_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("refresh failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("refreshes sessions after mark review command fails without unmounting terminal", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "review",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_001_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+    markIssueReviewMock.mockRejectedValue(new Error("already review"));
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Mark Review",
+      }),
+    );
+
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("already review")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("hides mark review when the selected session has no linked running issue", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 501,
+          issueId: null,
+          issueTitle: null,
+          issueStatus: null,
+          title: "Temporary session",
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 503,
+          issueId: 23,
+          issueTitle: "Completed issue",
+          issueStatus: "completed",
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          lastActiveAt: 1_780_636_000_000,
+          startedAt: 1_780_635_000_000,
+          closedAt: 1_780_636_500_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={501} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "Temporary session",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Review issue/i }));
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Review issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Completed issue/i }));
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "Completed issue",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
   });
 
   it("clears requested attention from the selected running session", async () => {

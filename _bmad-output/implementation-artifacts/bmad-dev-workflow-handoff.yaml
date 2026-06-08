@@ -1,23 +1,107 @@
 workflow: bmad-dev-workflow
-phase: story-created
+phase: complete
 story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
 story_key: 4-1-manually-mark-review-in-session-header
-story_status: ready-for-dev
+story_status: done
 baseline_commit: eda4c7b
 changed_files:
   - _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - _bmad-output/implementation-artifacts/review-prompts/4-1-blind-hunter.md
+  - _bmad-output/implementation-artifacts/review-prompts/4-1-edge-case-hunter.md
+  - _bmad-output/implementation-artifacts/review-prompts/4-1-acceptance-auditor.md
+  - src-tauri/src/commands/issue_commands.rs
+  - src-tauri/src/core/agent_session_service.rs
+  - src-tauri/src/core/issue_service.rs
+  - src-tauri/src/db/agent_session_repository.rs
+  - src-tauri/src/db/event_repository.rs
+  - src-tauri/src/db/issue_repository.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/agent_session.rs
+  - src-tauri/src/types/issue.rs
+  - src-tauri/src/types/issue_action.rs
+  - src-tauri/tests/agent_session.rs
+  - src-tauri/tests/issue.rs
+  - src/app/app.css
+  - src/features/agents/agent-session-commands.ts
+  - src/features/agents/agents-activity.test.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/issues/issue-commands.ts
 validation_commands:
-  - test -f _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md && rg -n "^Status: ready-for-dev$|^# Story 4\\.1:" _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md
-  - rg -n "epic-4: in-progress|4-1-manually-mark-review-in-session-header: ready-for-dev|last_updated: 2026-06-08T09:08:54\\+0800" _bmad-output/implementation-artifacts/sprint-status.yaml
-  - rg -n "phase: story-created|story_key: 4-1-manually-mark-review-in-session-header|story_status: ready-for-dev|baseline_commit: eda4c7b" _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - git diff --check -- _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md _bmad-output/implementation-artifacts/sprint-status.yaml _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue mark_issue_review
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx -t "Mark Review|mark review"
+  - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
+  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - pnpm test
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - git diff --check
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx -t "older polling response|command fails|refreshing sessions fails|Mark Review|mark review"
+  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session list_agent_sessions_does_not_project_issue_from_another_project
+  - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
+  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - pnpm test
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - git diff --check
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx -t "refreshing sessions fails|Mark Review|mark review"
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue mark_issue_review
+  - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
+  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
+  - pnpm test
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - git diff --check
 validation_results:
-  - "test -f _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md && rg -n \"^Status: ready-for-dev$|^# Story 4\\.1:\" _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md: pass"
-  - "rg -n \"epic-4: in-progress|4-1-manually-mark-review-in-session-header: ready-for-dev|last_updated: 2026-06-08T09:08:54\\+0800\" _bmad-output/implementation-artifacts/sprint-status.yaml: pass"
-  - "rg -n \"phase: story-created|story_key: 4-1-manually-mark-review-in-session-header|story_status: ready-for-dev|baseline_commit: eda4c7b\" _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml: pass"
-  - "git diff --check -- _bmad-output/implementation-artifacts/4-1-manually-mark-review-in-session-header.md _bmad-output/implementation-artifacts/sprint-status.yaml _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml: pass"
-review_summary:
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue mark_issue_review: pass after expected RED compile failures were addressed"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx -t \"Mark Review|mark review\": pass after expected RED UI failure was addressed"
+  - "pnpm format: pass; unrelated Prettier-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
+  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
+  - "pnpm lint: pass"
+  - "pnpm typecheck: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: pass"
+  - "pnpm test: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
+  - "git diff --check: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx -t \"refreshing sessions fails|Mark Review|mark review\": pass after expected RED failure was addressed"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue mark_issue_review: pass"
+  - "pnpm format: pass; unrelated Prettier-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
+  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
+  - "pnpm lint: pass"
+  - "pnpm typecheck: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: pass"
+  - "pnpm test: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
+  - "git diff --check: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx -t \"older polling response|command fails|refreshing sessions fails|Mark Review|mark review\": pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session list_agent_sessions_does_not_project_issue_from_another_project: pass"
+  - "pnpm format: pass; unrelated Prettier-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
+  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
+  - "pnpm lint: pass"
+  - "pnpm typecheck: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: pass"
+  - "pnpm test: pass"
+  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
+  - "git diff --check: pass"
+review_summary: "Final re-review clean: Blind Hunter, Edge Case Hunter, and Acceptance Auditor all reported clean. Story 4.1 completed with all review findings fixed and checked off."
 blocking_reason:
-updated_at: 2026-06-08T09:08:54+08:00
+updated_at: 2026-06-08T11:04:24+08:00
