@@ -1324,7 +1324,73 @@ describe("AgentsActivity", () => {
       within(runningGroup).getByRole("button", { name: /Review issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
+      screen.getByRole("button", { name: /#issue22.*Review issue/i }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
       screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete Manually" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete with Agent Commit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "View Summary" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("keeps review header limited to the issue title trigger without placeholder completion actions", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Review issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /#issue22.*Review issue/i }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Mark Review" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete Manually" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete with Agent Commit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "View Summary" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });

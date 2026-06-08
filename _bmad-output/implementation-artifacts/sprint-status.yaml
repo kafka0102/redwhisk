@@ -81,7 +81,7 @@ development_status:
   4-1-manually-mark-review-in-session-header: done
   4-2-continue-fixes-during-review-without-returning-to-running: done
   4-3-view-and-edit-linked-issue-in-issue-inspector: done
-  4-4-show-header-actions-based-on-issue-status: backlog
+  4-4-show-header-actions-based-on-issue-status: done
   4-5-handle-codex-process-crashed: backlog
   4-6-mark-unrecoverable-sessions-after-app-restart: backlog
   4-7-provide-log-review-entry-for-abnormal-sessions: backlog
