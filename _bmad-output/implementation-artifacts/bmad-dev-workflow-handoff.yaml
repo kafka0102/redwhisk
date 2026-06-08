@@ -1,41 +1,51 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-2-continue-fixes-during-review-without-returning-to-running.md
-story_key: 4-2-continue-fixes-during-review-without-returning-to-running
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/4-3-view-and-edit-linked-issue-in-issue-inspector.md
+story_key: 4-3-view-and-edit-linked-issue-in-issue-inspector
 story_status: done
-baseline_commit: b83a9ce
+baseline_commit: e728aa2
 changed_files:
-  - _bmad-output/implementation-artifacts/4-2-continue-fixes-during-review-without-returning-to-running.md
+  - _bmad-output/implementation-artifacts/4-3-view-and-edit-linked-issue-in-issue-inspector.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - src/app/app.css
   - src/features/agents/agents-activity.test.tsx
-  - src-tauri/tests/agent_session.rs
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/issue-inspector.tsx
 validation_commands:
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx -t "review session|Mark Review|mark review"
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session write_terminal_input_keeps_review_issue_bound_to_same_running_session
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session inject_session_prompt_keeps_review_issue_in_same_session_and_log
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
   - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx
   - pnpm lint
   - pnpm typecheck
   - pnpm test -- --run src/features/agents/agents-activity.test.tsx
   - pnpm test
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - cargo test --manifest-path src-tauri/Cargo.toml
   - git diff --check
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test -- --run src/features/agents/agents-activity.test.tsx
+  - pnpm test
+  - pnpm lint
 validation_results:
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx -t \"review session|Mark Review|mark review\": fail first due to broad query; pass after narrowing query scope"
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session write_terminal_input_keeps_review_issue_bound_to_same_running_session: fail first due to malformed test command and test assumptions; pass after tightening assertions"
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session inject_session_prompt_keeps_review_issue_in_same_session_and_log: fail first due to malformed test command and test assumptions; pass after tightening assertions"
-  - "pnpm format: pass; unrelated Prettier-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
-  - "cargo fmt --manifest-path src-tauri/Cargo.toml: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: fail first; exposed 5 regressions around header naming, inspector toggle behavior, and jsdom editor interaction"
+  - "pnpm format: pass; unrelated formatting-only diff in src/features/agents/codex-terminal-snapshot.ts was reverted"
+  - "pnpm lint: fail first due to react-hooks/set-state-in-effect in agents-activity.tsx"
+  - "pnpm typecheck: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
+  - "pnpm test -- --run src/features/issues/issues-activity.test.tsx: pass"
+  - "pnpm lint: pass with warning first; linkedIssue dependency warning cleared in a later rerun"
+  - "pnpm typecheck: pass"
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: fail once on drag reopen behavior; fixed by refreshing linkedIssue dependency in effect"
+  - "pnpm test: fail once on the same drag reopen behavior"
+  - "git diff --check: pass"
   - "pnpm lint: pass"
   - "pnpm typecheck: pass"
   - "pnpm test -- --run src/features/agents/agents-activity.test.tsx: pass"
   - "pnpm test: pass"
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: pass"
-  - "cargo test --manifest-path src-tauri/Cargo.toml: pass"
-  - "git diff --check: pass"
-review_summary: "Automatic same-session review clean: diff only adds regression coverage proving review-stage fixes stay on the same running session, keep issue status at review, and preserve terminal continuity."
+  - "pnpm lint: final pass"
+review_summary: "Automatic same-session review clean: Agents now opens a local Issue Inspector from the session header, reuses existing issue update commands, preserves terminal continuity, and has regression coverage for save and close paths."
 blocking_reason:
-updated_at: 2026-06-08T16:00:05+08:00
+updated_at: 2026-06-08T17:39:24+08:00
