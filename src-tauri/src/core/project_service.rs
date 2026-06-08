@@ -7,7 +7,7 @@ use crate::git::repository::is_git_repository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
-    ProjectSummary,
+    ProjectSummary, UpdateProjectCompletionPolicyInput,
 };
 
 pub struct ProjectService<'connection> {
@@ -89,6 +89,17 @@ impl<'connection> ProjectService<'connection> {
             .map_err(project_database_error)
     }
 
+    pub fn update_project_completion_policy(
+        &self,
+        input: UpdateProjectCompletionPolicyInput,
+    ) -> Result<ProjectSummary, CommandError> {
+        self.project_by_id(input.project_id)?;
+
+        self.repository
+            .update_completion_policy(input.project_id, input.completion_policy)
+            .map_err(project_database_error)
+    }
+
     pub fn create_project_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: CreateProjectInput,
@@ -143,6 +154,15 @@ impl<'connection> ProjectService<'connection> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).record_project_opened(project_id)
+    }
+
+    pub fn update_project_completion_policy_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: UpdateProjectCompletionPolicyInput,
+    ) -> Result<ProjectSummary, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectService::new(repository).update_project_completion_policy(input)
     }
 
     fn project_by_id(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
@@ -224,6 +244,7 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         id: project.id,
         name: project.name,
         repo_path: project.repo_path,
+        completion_policy: project.completion_policy,
         created_at: project.created_at,
         last_opened_at: project.last_opened_at,
         path_status,

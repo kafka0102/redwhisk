@@ -20,6 +20,7 @@ import {
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
 import {
+  completeIssueClean,
   completeIssueManual,
   listIssues,
   markIssueReview,
@@ -46,6 +47,7 @@ vi.mock("../settings/settings-commands", () => ({
 
 vi.mock("../issues/issue-commands", () => ({
   completeIssueManual: vi.fn(),
+  completeIssueClean: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
   updateIssue: vi.fn(),
@@ -58,6 +60,7 @@ const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStandaloneAgentSessionMock = vi.mocked(startStandaloneAgentSession);
 const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
@@ -106,6 +109,7 @@ describe("AgentsActivity", () => {
     writeAgentSessionTerminalMock.mockReset();
     listIssuesMock.mockReset();
     completeIssueManualMock.mockReset();
+    completeIssueCleanMock.mockReset();
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     openPathMock.mockReset();
@@ -167,6 +171,18 @@ describe("AgentsActivity", () => {
       updatedAt: 1_780_638_001_000,
     });
     completeIssueManualMock.mockResolvedValue({
+      id: 22,
+      projectId: 1,
+      title: "Review issue",
+      description: "Review description",
+      status: "completed",
+      linkedSessionId: 502,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_639_000_000,
+    });
+    completeIssueCleanMock.mockResolvedValue({
       id: 22,
       projectId: 1,
       title: "Review issue",
@@ -243,7 +259,13 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    render(
+      <AgentsActivity
+        activeSessionId={301}
+        projectCompletionPolicy="manual"
+        projectId={1}
+      />,
+    );
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Agents" }),
@@ -299,7 +321,13 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    render(
+      <AgentsActivity
+        activeSessionId={301}
+        projectCompletionPolicy="manual"
+        projectId={1}
+      />,
+    );
 
     const newSessionButton = await screen.findByRole("button", {
       name: "New session",
@@ -653,7 +681,13 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+    render(
+      <AgentsActivity
+        activeSessionId={302}
+        projectCompletionPolicy="manual"
+        projectId={1}
+      />,
+    );
 
     const completedGroup = await screen.findByRole("region", {
       name: "Completed sessions",
@@ -707,7 +741,13 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    render(
+      <AgentsActivity
+        activeSessionId={301}
+        projectCompletionPolicy="manual"
+        projectId={1}
+      />,
+    );
 
     const runningGroup = await screen.findByRole("region", {
       name: "Running sessions",
@@ -762,7 +802,13 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+    render(
+      <AgentsActivity
+        activeSessionId={302}
+        projectCompletionPolicy="manual"
+        projectId={1}
+      />,
+    );
 
     const runningGroup = await screen.findByRole("region", {
       name: "Running sessions",

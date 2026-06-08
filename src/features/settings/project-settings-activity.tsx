@@ -8,15 +8,24 @@ import {
 } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
+import {
+  updateProjectCompletionPolicy,
+  type ProjectCompletionPolicy,
+} from "../project/project-commands";
+import type { ProjectSummary } from "../../app/app";
 
 type SettingsMenu = "general" | "agents";
 
 interface ProjectSettingsActivityProps {
+  completionPolicy: ProjectCompletionPolicy;
+  onProjectUpdated?: (project: ProjectSummary) => void;
   projectId: number;
   projectName: string;
 }
 
 export function ProjectSettingsActivity({
+  completionPolicy,
+  onProjectUpdated,
   projectId,
   projectName,
 }: ProjectSettingsActivityProps) {
@@ -31,6 +40,8 @@ export function ProjectSettingsActivity({
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const [isSavingCompletionPolicy, setIsSavingCompletionPolicy] =
+    useState(false);
   const [addFormScope, setAddFormScope] = useState<AgentScope | null>(null);
   const [editingProfile, setEditingProfile] =
     useState<AgentProfileRecord | null>(null);
@@ -69,6 +80,36 @@ export function ProjectSettingsActivity({
     setEditingProfile(null);
   }
 
+  async function handleCompletionPolicyChange(
+    nextPolicy: ProjectCompletionPolicy,
+  ) {
+    if (nextPolicy === completionPolicy || isSavingCompletionPolicy) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSavingCompletionPolicy(true);
+
+    try {
+      const updatedProject = await updateProjectCompletionPolicy({
+        projectId,
+        completionPolicy: nextPolicy,
+      });
+      onProjectUpdated?.({
+        id: updatedProject.id,
+        name: updatedProject.name,
+        path: updatedProject.repoPath,
+        completionPolicy: updatedProject.completionPolicy,
+        recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
+        status: "available",
+      });
+    } catch (error: unknown) {
+      setErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsSavingCompletionPolicy(false);
+    }
+  }
+
   return (
     <main className="activity-surface activity-surface--settings">
       <div className="settings-layout">
@@ -101,6 +142,23 @@ export function ProjectSettingsActivity({
                 <span className="settings-basic-info__label">Project</span>
                 <p>{projectName}</p>
               </div>
+              <label className="settings-field">
+                <span>Completion Policy</span>
+                <select
+                  aria-label="Completion Policy"
+                  className="settings-input"
+                  disabled={isSavingCompletionPolicy}
+                  value={completionPolicy}
+                  onChange={(event) =>
+                    void handleCompletionPolicyChange(
+                      event.target.value as ProjectCompletionPolicy,
+                    )
+                  }
+                >
+                  <option value="manual">manual</option>
+                  <option value="agent_auto_commit">agent_auto_commit</option>
+                </select>
+              </label>
             </section>
           ) : null}
 

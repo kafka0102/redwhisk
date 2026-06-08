@@ -1,6 +1,8 @@
 import { AgentsActivity } from "../features/agents/agents-activity";
 import { IssuesActivity } from "../features/issues/issues-activity";
 import { ProjectSettingsActivity } from "../features/settings/project-settings-activity";
+import type { ProjectCompletionPolicy } from "../features/project/project-commands";
+import type { ProjectSummary } from "./app";
 
 export type ActivityKey = "issues" | "agents" | "settings";
 
@@ -9,7 +11,9 @@ interface ActivityRouterProps {
   activeAgentSessionId: number | null;
   onOpenAgentsActivity: (sessionId: number) => void;
   onOpenIssuesActivity: (issueId: number) => void;
+  onProjectUpdated: (project: ProjectSummary) => void;
   onSelectAgentSession: (sessionId: number) => void;
+  projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   projectName: string;
   requestedIssueId: number | null;
@@ -20,7 +24,9 @@ export function ActivityRouter({
   activeAgentSessionId,
   onOpenAgentsActivity,
   onOpenIssuesActivity,
+  onProjectUpdated,
   onSelectAgentSession,
+  projectCompletionPolicy,
   projectId,
   projectName,
   requestedIssueId,
@@ -30,6 +36,7 @@ export function ActivityRouter({
       <AgentsActivity
         activeSessionId={activeAgentSessionId}
         onSelectSession={onSelectAgentSession}
+        projectCompletionPolicy={projectCompletionPolicy}
         projectId={projectId}
         onOpenIssuesActivity={onOpenIssuesActivity}
       />
@@ -39,7 +46,9 @@ export function ActivityRouter({
   if (activeActivity === "settings") {
     return (
       <ProjectSettingsActivity
+        completionPolicy={projectCompletionPolicy}
         key={projectId}
+        onProjectUpdated={onProjectUpdated}
         projectId={projectId}
         projectName={projectName}
       />

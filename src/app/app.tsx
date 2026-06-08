@@ -9,6 +9,7 @@ import {
   initializeLocalData,
   listProjects,
   openProject,
+  type ProjectCompletionPolicy,
   type ProjectRecord,
   type ProjectListItem,
 } from "../features/project/project-commands";
@@ -18,6 +19,7 @@ export interface ProjectSummary {
   id: number;
   name: string;
   path: string;
+  completionPolicy: ProjectCompletionPolicy;
   recentOpenedAt: string;
   status: "available" | "missing";
 }
@@ -129,6 +131,13 @@ export function App() {
     setProjects(response.projects.map(toProjectSummary));
   }, []);
 
+  const handleProjectUpdated = useCallback((project: ProjectSummary) => {
+    setSelectedProject((currentProject) =>
+      currentProject?.id === project.id ? project : currentProject,
+    );
+    setProjects((currentProjects) => mergeProject(currentProjects, project));
+  }, []);
+
   if (!selectedProject) {
     const statusMessages = [
       {
@@ -176,6 +185,7 @@ export function App() {
 
   return (
     <AppShell
+      onProjectUpdated={handleProjectUpdated}
       project={selectedProject}
       projects={projects}
       onProjectsRefresh={refreshProjects}
@@ -190,6 +200,7 @@ function toProjectSummary(
     id: project.id,
     name: project.name,
     path: project.repoPath,
+    completionPolicy: project.completionPolicy,
     recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,
     status: "pathStatus" in project ? project.pathStatus : "available",
   };

@@ -6,6 +6,7 @@ import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 
 interface AppShellProps {
+  onProjectUpdated: (project: ProjectSummary) => void;
   project: ProjectSummary;
   projects: ProjectSummary[];
   onProjectsRefresh: () => Promise<void>;
@@ -22,6 +23,7 @@ const ACTIVITIES: Array<{
 ];
 
 export function AppShell({
+  onProjectUpdated,
   onProjectsRefresh,
   project,
   projects,
@@ -69,7 +71,9 @@ export function AppShell({
               setRequestedIssueId(issueId);
               setActiveActivity("issues");
             }}
+            onProjectUpdated={onProjectUpdated}
             onSelectAgentSession={setActiveAgentSessionId}
+            projectCompletionPolicy={project.completionPolicy}
             projectId={project.id}
             projectName={project.name}
             requestedIssueId={requestedIssueId}

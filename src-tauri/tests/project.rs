@@ -30,7 +30,14 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
     let columns = table_columns(&database.connection, "projects");
     assert_eq!(
         columns,
-        vec!["id", "name", "repo_path", "created_at", "last_opened_at"],
+        vec![
+            "id",
+            "name",
+            "repo_path",
+            "created_at",
+            "last_opened_at",
+            "completion_policy",
+        ],
     );
     assert_eq!(
         table_column_type(&database.connection, "projects", "id"),
@@ -93,6 +100,10 @@ fn project_integer_id_migration_converts_existing_text_schema() {
             "0003_project_integer_ids",
             include_str!("../migrations/0003_project_integer_ids.sql"),
         ),
+        (
+            "0010_project_completion_policy",
+            include_str!("../migrations/0010_project_completion_policy.sql"),
+        ),
     ]);
 
     runner.run(&database.connection).expect("migrations");
@@ -112,6 +123,10 @@ fn project_integer_id_migration_converts_existing_text_schema() {
 
     assert!(project.id > 0);
     assert_eq!(project.name, "old-repo");
+    assert_eq!(
+        project.completion_policy,
+        redwhisk_lib::types::project::ProjectCompletionPolicy::Manual
+    );
     assert_eq!(project.created_at, 1_780_624_800_000);
     assert_eq!(project.last_opened_at, 1_780_628_400_000);
 }
@@ -143,6 +158,10 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
             "0003_project_integer_ids",
             include_str!("../migrations/0003_project_integer_ids.sql"),
         ),
+        (
+            "0010_project_completion_policy",
+            include_str!("../migrations/0010_project_completion_policy.sql"),
+        ),
     ]);
 
     runner.run(&database.connection).expect("migrations");
@@ -152,6 +171,10 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
         .expect("query project")
         .expect("project");
     assert_eq!(project.id, 42);
+    assert_eq!(
+        project.completion_policy,
+        redwhisk_lib::types::project::ProjectCompletionPolicy::Manual
+    );
     assert_eq!(project.created_at, 1_780_624_800_000);
     assert_eq!(project.last_opened_at, 1_780_628_400_000);
 }

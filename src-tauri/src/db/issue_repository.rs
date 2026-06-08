@@ -288,6 +288,20 @@ impl<'connection> IssueRepository<'connection> {
 
         find_by_id_on_connection(transaction, issue_id)
     }
+
+    pub fn complete_review_issue_cleanly_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        linked_session_id: i64,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        Self::complete_review_issue_manually_in_transaction(
+            transaction,
+            project_id,
+            issue_id,
+            linked_session_id,
+        )
+    }
 }
 
 fn find_by_id_on_connection(

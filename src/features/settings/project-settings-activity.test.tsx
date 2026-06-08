@@ -10,6 +10,7 @@ import {
   testAgentCommand,
   type AgentProfileRecord,
 } from "./settings-commands";
+import { updateProjectCompletionPolicy } from "../project/project-commands";
 
 vi.mock("./settings-commands", () => ({
   detectCodexCommand: vi.fn(),
@@ -18,10 +19,18 @@ vi.mock("./settings-commands", () => ({
   saveAgentProfile: vi.fn(),
 }));
 
+vi.mock("../project/project-commands", () => ({
+  updateProjectCompletionPolicy: vi.fn(),
+}));
+
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
+const updateProjectCompletionPolicyMock = vi.mocked(
+  updateProjectCompletionPolicy,
+);
+const onProjectUpdated = vi.fn();
 
 const projectProfile: AgentProfileRecord = {
   id: 1,
@@ -55,6 +64,16 @@ describe("ProjectSettingsActivity", () => {
     testAgentCommandMock.mockReset();
     listAgentProfilesMock.mockReset();
     saveAgentProfileMock.mockReset();
+    updateProjectCompletionPolicyMock.mockReset();
+    onProjectUpdated.mockReset();
+    updateProjectCompletionPolicyMock.mockResolvedValue({
+      id: 1,
+      name: "RedWhisk",
+      repoPath: "/tmp/redwhisk",
+      completionPolicy: "agent_auto_commit",
+      createdAt: 1_780_624_800_000,
+      lastOpenedAt: 1_780_628_400_000,
+    });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") return { profiles: [projectProfile] };
       return { profiles: [globalProfile] };
@@ -62,7 +81,14 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("renders two-column layout with agents menu active by default", async () => {
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
 
     expect(
       await screen.findByRole("navigation", { name: "Settings menu" }),
@@ -83,7 +109,14 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("shows project and global agents in separate sections", async () => {
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
 
     expect(await screen.findByText("Project Codex")).toBeInTheDocument();
     expect(screen.getByText("Global Codex")).toBeInTheDocument();
@@ -92,7 +125,14 @@ describe("ProjectSettingsActivity", () => {
   it("shows No agents for empty project and global lists", async () => {
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
 
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
 
     expect(await screen.findAllByText("No agents")).toHaveLength(2);
   });
@@ -104,7 +144,14 @@ describe("ProjectSettingsActivity", () => {
       message: "Agent command 不可用。",
     });
 
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
 
     await user.click(
       await screen.findByRole("button", { name: "Add project agent" }),
@@ -132,7 +179,14 @@ describe("ProjectSettingsActivity", () => {
       command: "/opt/codex/bin/codex",
     });
 
-    render(<ProjectSettingsActivity projectId={1} projectName="RedWhisk" />);
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
 
     await user.click(
       await screen.findByRole("button", { name: "Add global agent" }),
@@ -160,7 +214,12 @@ describe("ProjectSettingsActivity", () => {
 
   it("reloads agents when project id changes", async () => {
     const { rerender } = render(
-      <ProjectSettingsActivity projectId={1} projectName="RedWhisk" />,
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
     );
 
     await screen.findByText("Project Codex");
@@ -175,13 +234,50 @@ describe("ProjectSettingsActivity", () => {
     });
 
     rerender(
-      <ProjectSettingsActivity projectId={2} projectName="Agents Lab" />,
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={2}
+        projectName="Agents Lab"
+      />,
     );
 
     await waitFor(() =>
       expect(listAgentProfilesMock).toHaveBeenCalledWith({
         scope: "project",
         projectId: 2,
+      }),
+    );
+  });
+
+  it("updates project completion policy from the general settings section", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "基本信息" }));
+    await user.selectOptions(
+      await screen.findByLabelText("Completion Policy"),
+      "agent_auto_commit",
+    );
+
+    await waitFor(() =>
+      expect(updateProjectCompletionPolicyMock).toHaveBeenCalledWith({
+        projectId: 1,
+        completionPolicy: "agent_auto_commit",
+      }),
+    );
+    expect(onProjectUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 1,
+        completionPolicy: "agent_auto_commit",
       }),
     );
   });
