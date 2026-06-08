@@ -1072,6 +1072,108 @@ fn write_terminal_input_clears_requested_attention_after_successful_write() {
 }
 
 #[test]
+fn write_terminal_input_keeps_review_issue_bound_to_same_running_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "review-continue-project");
+    let issue_id = insert_issue(&database.connection, project_id, "review");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let log_path = temp_dir.path().join("review-continue.log");
+    std::fs::write(&log_path, "existing review context\n").expect("write log");
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::Requested,
+        1_780_628_223_000,
+        None,
+        log_path.to_string_lossy().as_ref(),
+    );
+
+    let command = echo_stdin_command(temp_dir.path());
+    let manager = PtySessionManager::new();
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register(session_id, pending, |_| {});
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let issue_action_count_before = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions before write")
+        .len();
+
+    service
+        .write_terminal_input(
+            redwhisk_lib::types::agent_session::WriteAgentSessionTerminalInput {
+                project_id,
+                session_id,
+                data: "fix the latest review findings\r".to_string(),
+            },
+            &manager,
+        )
+        .expect("write review input");
+
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue should exist");
+    assert_eq!(issue.status, IssueStatus::Review);
+
+    let sessions = AgentSessionRepository::new(&database.connection)
+        .list_by_project_id(project_id)
+        .expect("list sessions");
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].session_id, session_id);
+    assert_eq!(sessions[0].status, AgentSessionStatus::Running);
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(refreshed_session.log_path, log_path.to_string_lossy());
+    assert_eq!(refreshed_session.attention, AgentSessionAttention::None);
+
+    let mut snapshot = String::new();
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
+        if snapshot.contains("fix the latest review findings") {
+            break;
+        }
+    }
+
+    assert!(snapshot.contains("fix the latest review findings"));
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert!(session_events.is_empty());
+
+    let issue_actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions");
+    assert_eq!(issue_actions.len(), issue_action_count_before);
+
+    manager.kill(session_id).expect("kill session");
+}
+
+#[test]
 fn set_session_attention_marks_running_session_and_records_manual_request_event() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -1543,6 +1645,124 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
     assert_eq!(payload["kind"].as_str(), Some("follow_up"));
     assert_eq!(payload["prompt"].as_str(), Some("please continue"));
     assert_eq!(payload["submitted"].as_bool(), Some(true));
+
+    manager.kill(session_id).expect("kill session");
+}
+
+#[test]
+fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "review-prompt-project");
+    let issue_id = insert_issue(&database.connection, project_id, "review");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let log_path = temp_dir.path().join("review-prompt.log");
+    std::fs::write(&log_path, "review log header\n").expect("write log");
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_600_000,
+        None,
+        log_path.to_string_lossy().as_ref(),
+    );
+
+    let command = echo_stdin_command(temp_dir.path());
+    let manager = PtySessionManager::new();
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register(session_id, pending, |_| {});
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let issue_action_count_before = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions before inject")
+        .len();
+
+    let result = service
+        .inject_session_prompt(
+            InjectAgentSessionPromptInput {
+                project_id,
+                session_id,
+                prompt: "apply the requested fixes".to_string(),
+                kind: AgentSessionPromptKind::FollowUp,
+            },
+            &manager,
+        )
+        .expect("inject review prompt");
+
+    assert_eq!(result.session_id, session_id);
+    assert_eq!(result.codex_session_id, None);
+
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue should exist");
+    assert_eq!(issue.status, IssueStatus::Review);
+
+    let sessions = AgentSessionRepository::new(&database.connection)
+        .list_by_project_id(project_id)
+        .expect("list sessions");
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].session_id, session_id);
+
+    let refreshed_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(refreshed_session.log_path, log_path.to_string_lossy());
+
+    let mut snapshot = String::new();
+    for _ in 0..20 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
+        if snapshot.contains("apply the requested fixes") {
+            break;
+        }
+    }
+
+    assert!(snapshot.contains("apply the requested fixes"));
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(session_events.len(), 1);
+    assert_eq!(
+        session_events[0].event_type,
+        SessionEventType::SessionPromptInjected
+    );
+
+    let payload: Value =
+        serde_json::from_str(&session_events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["sessionId"].as_i64(), Some(session_id));
+    assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
+    assert_eq!(payload["kind"].as_str(), Some("follow_up"));
+    assert_eq!(
+        payload["prompt"].as_str(),
+        Some("apply the requested fixes")
+    );
+
+    let issue_actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue_id)
+        .expect("issue actions");
+    assert_eq!(issue_actions.len(), issue_action_count_before);
 
     manager.kill(session_id).expect("kill session");
 }

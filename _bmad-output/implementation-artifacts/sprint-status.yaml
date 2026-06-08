@@ -79,7 +79,7 @@ development_status:
 
   epic-4: in-progress
   4-1-manually-mark-review-in-session-header: done
-  4-2-continue-fixes-during-review-without-returning-to-running: backlog
+  4-2-continue-fixes-during-review-without-returning-to-running: done
   4-3-view-and-edit-linked-issue-in-issue-inspector: backlog
   4-4-show-header-actions-based-on-issue-status: backlog
   4-5-handle-codex-process-crashed: backlog
