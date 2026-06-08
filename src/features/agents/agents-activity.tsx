@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, LayoutGrid, Plus } from "lucide-react";
+import { openPath } from "@tauri-apps/plugin-opener";
 import {
   useCallback,
   useEffect,
@@ -58,8 +59,12 @@ export function AgentsActivity({
   const [attentionErrorMessage, setAttentionErrorMessage] = useState<
     string | null
   >(null);
+  const [sessionActionErrorMessage, setSessionActionErrorMessage] = useState<
+    string | null
+  >(null);
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
   const [isMarkingReview, setIsMarkingReview] = useState(false);
+  const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
     string | null
   >(null);
@@ -178,6 +183,10 @@ export function AgentsActivity({
   const canMarkReview =
     selectedSession?.status === "running" &&
     linkedIssue?.issueStatus === "running";
+  const canOpenLog =
+    selectedSession?.status === "crashed" &&
+    selectedSession.logPath != null &&
+    selectedSession.logPath.length > 0;
 
   useEffect(() => {
     if (!isInspectorOpen) {
@@ -346,6 +355,23 @@ export function AgentsActivity({
       setMarkReviewErrorMessage(toCommandError(error).message);
     } finally {
       setIsMarkingReview(false);
+    }
+  }
+
+  async function handleOpenLog() {
+    if (!selectedSession?.logPath || isOpeningLog) {
+      return;
+    }
+
+    setSessionActionErrorMessage(null);
+    setIsOpeningLog(true);
+
+    try {
+      await openPath(selectedSession.logPath);
+    } catch (error) {
+      setSessionActionErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsOpeningLog(false);
     }
   }
 
@@ -586,6 +612,12 @@ export function AgentsActivity({
                 ) : (
                   <h3>{formatSessionTitle(selectedSession)}</h3>
                 )}
+                {shouldShowExplicitSessionStatus(selectedSession) ? (
+                  <p className="agents-session-toolbar__status">{`Status: ${formatSessionStatusLabel(
+                    selectedSession,
+                    viewedSessionActivity,
+                  )}`}</p>
+                ) : null}
               </div>
               <div className="agents-session-toolbar__actions">
                 {canMarkReview ? (
@@ -596,6 +628,16 @@ export function AgentsActivity({
                     onClick={() => void handleMarkReview()}
                   >
                     {isMarkingReview ? "更新中..." : "Mark Review"}
+                  </button>
+                ) : null}
+                {canOpenLog ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    disabled={isOpeningLog}
+                    type="button"
+                    onClick={() => void handleOpenLog()}
+                  >
+                    {isOpeningLog ? "打开中..." : "Open Log"}
                   </button>
                 ) : null}
               </div>
@@ -609,6 +651,11 @@ export function AgentsActivity({
           {attentionErrorMessage ? (
             <p className="issues-status" role="status">
               {attentionErrorMessage}
+            </p>
+          ) : null}
+          {sessionActionErrorMessage ? (
+            <p className="issues-status" role="status">
+              {sessionActionErrorMessage}
             </p>
           ) : null}
           <div
@@ -796,6 +843,11 @@ function SessionGroup({
                 <span className="agents-session-row__meta-main">
                   {formatAgentType(session.agentType)}
                 </span>
+                {shouldShowExplicitSessionStatus(session) ? (
+                  <span className="agents-session-row__meta-status">
+                    {formatSessionStatusLabel(session, viewedSessionActivity)}
+                  </span>
+                ) : null}
                 <span className="sr-only">{`，${formatSessionStatusLabel(session, viewedSessionActivity)}`}</span>
               </span>
             </button>
@@ -855,7 +907,20 @@ function formatSessionStatusLabel(
     return "运行中";
   }
 
-  return "已结束";
+  switch (session.status) {
+    case "crashed":
+      return "crashed";
+    case "stopped":
+      return "stopped";
+    case "closed":
+      return "closed";
+    default:
+      return "closed";
+  }
+}
+
+function shouldShowExplicitSessionStatus(session: AgentSessionListItem): boolean {
+  return session.status === "crashed";
 }
 
 function isViewedSession(

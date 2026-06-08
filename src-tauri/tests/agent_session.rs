@@ -311,6 +311,7 @@ fn start_standalone_agent_session_creates_session_records_event_and_lists_it() {
         response.sessions[0].title.as_deref(),
         Some("Scratch Session")
     );
+    assert!(!response.sessions[0].log_path.is_empty());
 }
 
 #[test]
@@ -1507,6 +1508,12 @@ fn record_session_termination_marks_non_zero_exit_as_crashed_and_is_idempotent()
         .expect("session should exist");
     assert_eq!(session.status, AgentSessionStatus::Crashed);
     assert!(session.closed_at.is_some());
+
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue should exist");
+    assert_eq!(issue.status, IssueStatus::Running);
 
     let session_events = EventRepository::new(&database.connection)
         .list_session_events(session_id)

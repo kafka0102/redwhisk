@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 import { AgentsActivity } from "./agents-activity";
 import {
@@ -24,6 +25,10 @@ import {
   updateIssue,
 } from "../issues/issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath: vi.fn(),
+}));
 
 vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
@@ -54,6 +59,7 @@ const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
 const updateIssueMock = vi.mocked(updateIssue);
+const openPathMock = vi.mocked(openPath);
 
 const defaultProfiles = {
   project: [
@@ -97,6 +103,7 @@ describe("AgentsActivity", () => {
     listIssuesMock.mockReset();
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
+    openPathMock.mockReset();
     readAgentSessionTerminalMock.mockResolvedValue({
       sessionId: 301,
       snapshot: "",
@@ -111,6 +118,7 @@ describe("AgentsActivity", () => {
       sessionId: 701,
     });
     writeAgentSessionTerminalMock.mockResolvedValue();
+    openPathMock.mockResolvedValue();
     listIssuesMock.mockResolvedValue({
       issues: [
         {
@@ -463,6 +471,34 @@ describe("AgentsActivity", () => {
             closedAt: null,
           },
         ],
+      })
+      .mockResolvedValue({
+        sessions: [
+          {
+            sessionId: 701,
+            issueId: null,
+            issueTitle: null,
+            title: "Scratch Session",
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_500_000,
+            startedAt: 1_780_638_500_000,
+            closedAt: null,
+          },
+          {
+            sessionId: 301,
+            issueId: 20,
+            issueTitle: "Existing issue",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
       });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
@@ -740,6 +776,7 @@ describe("AgentsActivity", () => {
           agentType: "codex",
           status: "closed",
           attention: "none",
+          logPath: "/tmp/closed.log",
           lastActiveAt: 1_780_630_000_000,
           startedAt: 1_780_629_000_000,
           closedAt: 1_780_631_000_000,
@@ -757,9 +794,80 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(completedRow).queryByLabelText("Session 状态：已结束"),
+      within(completedRow).queryByLabelText("Session 状态：closed"),
     ).not.toBeInTheDocument();
-    expect(completedRow).not.toHaveTextContent("closed");
+    expect(completedRow).toHaveTextContent("closed");
+  });
+
+  it("shows crashed status and opens the session log from the header", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 402,
+          issueId: 23,
+          issueTitle: "Crashed issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "crashed",
+          attention: "none",
+          logPath: "/tmp/crashed.log",
+          lastActiveAt: 1_780_632_000_000,
+          startedAt: 1_780_631_000_000,
+          closedAt: 1_780_633_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={402} projectId={1} />);
+
+    const completedGroup = await screen.findByRole("region", {
+      name: "Completed sessions",
+    });
+    const crashedRow = within(completedGroup).getByRole("button", {
+      name: /Crashed issue/i,
+    });
+
+    expect(crashedRow).toHaveTextContent("crashed");
+    expect(await screen.findByText("Status: crashed")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open Log" }));
+
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/crashed.log");
+    expect(
+      screen.queryByRole("button", { name: "Open Session" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces open log failures for crashed sessions", async () => {
+    const user = userEvent.setup();
+    openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 402,
+          issueId: 23,
+          issueTitle: "Crashed issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "crashed",
+          attention: "none",
+          logPath: "/tmp/crashed.log",
+          lastActiveAt: 1_780_632_000_000,
+          startedAt: 1_780_631_000_000,
+          closedAt: 1_780_633_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={402} projectId={1} />);
+
+    await screen.findByText("Status: crashed");
+    await user.click(screen.getByRole("button", { name: "Open Log" }));
+
+    expect(await screen.findByText("log unavailable")).toBeInTheDocument();
   });
 
   it("polls the session list and refreshes the attention dot", async () => {
