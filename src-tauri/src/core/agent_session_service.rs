@@ -607,6 +607,29 @@ impl<'connection> AgentSessionService<'connection> {
         Ok(AgentSessionListResponse { sessions })
     }
 
+    pub fn reconcile_unrecoverable_running_sessions(
+        &self,
+        project_id: i64,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        self.ensure_project_exists(project_id)?;
+
+        let running_sessions = self
+            .agent_session_repository
+            .list_running_by_project_id(project_id)
+            .map_err(agent_session_database_error)?;
+
+        for session in running_sessions {
+            if pty_sessions.contains(session.id) {
+                continue;
+            }
+
+            self.mark_session_stopped_after_restart(&session)?;
+        }
+
+        Ok(())
+    }
+
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
         self.project_repository
             .find_by_id(project_id)
@@ -917,6 +940,7 @@ impl AgentSessionService<'_> {
     pub fn list_agent_sessions_in_data_dir(
         data_dir: impl AsRef<Path>,
         project_id: i64,
+        pty_sessions: &PtySessionManager,
     ) -> Result<AgentSessionListResponse, CommandError> {
         let database = DatabaseConfig::new(data_dir)
             .open()
@@ -924,6 +948,14 @@ impl AgentSessionService<'_> {
         MigrationRunner::default()
             .run(&database.connection)
             .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .reconcile_unrecoverable_running_sessions(project_id, pty_sessions)?;
 
         AgentSessionService::new(
             IssueRepository::new(&database.connection),
@@ -1114,6 +1146,73 @@ impl AgentSessionService<'_> {
             "status": status_literal,
             "exitCode": exit_status.exit_code,
             "reason": reason,
+            "logPath": session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            session.id,
+            SessionEventType::SessionExited,
+            &payload,
+            terminated_at,
+        )
+        .map_err(agent_session_database_error)?;
+
+        transaction.commit().map_err(agent_session_database_error)?;
+        Ok(())
+    }
+
+    pub fn reconcile_unrecoverable_running_sessions_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .reconcile_unrecoverable_running_sessions(project_id, pty_sessions)
+    }
+
+    fn mark_session_stopped_after_restart(
+        &self,
+        session: &crate::types::agent_session::AgentSessionRecord,
+    ) -> Result<(), CommandError> {
+        let terminated_at = current_epoch_millis()?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+
+        let updated_session = AgentSessionRepository::mark_terminated_in_transaction(
+            &transaction,
+            session.id,
+            AgentSessionStatus::Stopped,
+            terminated_at,
+        )
+        .map_err(agent_session_database_error)?;
+
+        if updated_session.is_none() {
+            transaction.commit().map_err(agent_session_database_error)?;
+            return Ok(());
+        }
+
+        let payload = json!({
+            "sessionId": session.id,
+            "issueId": session.issue_id,
+            "status": "stopped",
+            "exitCode": Value::Null,
+            "reason": "app_restarted_no_active_pty",
             "logPath": session.log_path,
         })
         .to_string();

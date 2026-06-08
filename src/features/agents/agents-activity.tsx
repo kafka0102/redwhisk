@@ -184,7 +184,8 @@ export function AgentsActivity({
     selectedSession?.status === "running" &&
     linkedIssue?.issueStatus === "running";
   const canOpenLog =
-    selectedSession?.status === "crashed" &&
+    (selectedSession?.status === "crashed" ||
+      selectedSession?.status === "stopped") &&
     selectedSession.logPath != null &&
     selectedSession.logPath.length > 0;
 
@@ -919,8 +920,10 @@ function formatSessionStatusLabel(
   }
 }
 
-function shouldShowExplicitSessionStatus(session: AgentSessionListItem): boolean {
-  return session.status === "crashed";
+function shouldShowExplicitSessionStatus(
+  session: AgentSessionListItem,
+): boolean {
+  return session.status === "crashed" || session.status === "stopped";
 }
 
 function isViewedSession(

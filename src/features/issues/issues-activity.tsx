@@ -439,7 +439,7 @@ export function IssuesActivity({
   const canOpenSession =
     hasLinkedSession &&
     selectedIssue?.status !== "completed" &&
-    selectedIssue?.linkedSessionStatus !== "crashed";
+    selectedIssue?.linkedSessionStatus === "running";
   const runStatusMessage =
     agentProfileErrorMessage ??
     (isLoadingAgentProfiles
@@ -663,7 +663,8 @@ export function IssuesActivity({
                       <p>Continue this issue from Agents.</p>
                     </>
                   ) : dialogMode === "edit" &&
-                    selectedIssue?.status === "backlog" ? (
+                    selectedIssue?.status === "backlog" &&
+                    !hasLinkedSession ? (
                     <>
                       <Button
                         ref={runButtonRef}

@@ -870,6 +870,47 @@ describe("AgentsActivity", () => {
     expect(await screen.findByText("log unavailable")).toBeInTheDocument();
   });
 
+  it("shows stopped status and opens the session log from the header", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 403,
+          issueId: 24,
+          issueTitle: "Stopped issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "stopped",
+          attention: "none",
+          logPath: "/tmp/stopped.log",
+          lastActiveAt: 1_780_633_000_000,
+          startedAt: 1_780_632_000_000,
+          closedAt: 1_780_634_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={403} projectId={1} />);
+
+    const completedGroup = await screen.findByRole("region", {
+      name: "Completed sessions",
+    });
+    const stoppedRow = within(completedGroup).getByRole("button", {
+      name: /Stopped issue/i,
+    });
+
+    expect(stoppedRow).toHaveTextContent("stopped");
+    expect(await screen.findByText("Status: stopped")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open Log" }));
+
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
+    expect(
+      screen.queryByRole("button", { name: "Open Session" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("polls the session list and refreshes the attention dot", async () => {
     vi.useFakeTimers();
     listAgentSessionsMock

@@ -86,6 +86,24 @@ impl<'connection> AgentSessionRepository<'connection> {
         Ok(sessions)
     }
 
+    pub fn list_running_by_project_id(
+        &self,
+        project_id: i64,
+    ) -> rusqlite::Result<Vec<AgentSessionRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+             FROM agent_sessions
+             WHERE project_id = ?1 AND status = 'running'
+             ORDER BY last_active_at DESC, started_at DESC, id DESC",
+        )?;
+
+        let sessions = statement
+            .query_map(params![project_id], agent_session_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(sessions)
+    }
+
     pub fn insert_in_transaction(
         transaction: &Transaction<'_>,
         project_id: i64,

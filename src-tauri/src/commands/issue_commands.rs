@@ -1,6 +1,7 @@
 use tauri::{Manager, State};
 
 use crate::app_state::AppState;
+use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::IssueService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -14,6 +15,11 @@ pub fn list_issues(
     project_id: i64,
 ) -> Result<IssueListResponse, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
+    AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
+        &data_dir,
+        project_id,
+        &state.pty_sessions,
+    )?;
     IssueService::list_issues_in_data_dir(data_dir, project_id)
 }
 
