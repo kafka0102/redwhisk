@@ -2,12 +2,14 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionRecord, AgentSessionStatus};
+use crate::types::issue::IssueStatus;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentSessionListRow {
     pub session_id: i64,
     pub issue_id: Option<i64>,
     pub issue_title: Option<String>,
+    pub issue_status: Option<IssueStatus>,
     pub title: Option<String>,
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,
@@ -59,6 +61,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.id,
                 agent_sessions.issue_id,
                 issues.title,
+                issues.status,
                 agent_sessions.title,
                 agent_profiles.agent_type,
                 agent_sessions.status,
@@ -67,7 +70,9 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.started_at,
                 agent_sessions.closed_at
              FROM agent_sessions
-             LEFT JOIN issues ON issues.id = agent_sessions.issue_id
+             LEFT JOIN issues
+               ON issues.id = agent_sessions.issue_id
+              AND issues.project_id = agent_sessions.project_id
              INNER JOIN agent_profiles ON agent_profiles.id = agent_sessions.agent_profile_id
              WHERE agent_sessions.project_id = ?1",
         )?;
@@ -275,13 +280,17 @@ fn agent_session_list_row_from_row(
         session_id: row.get(0)?,
         issue_id: row.get(1)?,
         issue_title: row.get(2)?,
-        title: row.get(3)?,
-        agent_type: agent_type_from_str(&row.get::<_, String>(4)?)?,
-        status: agent_session_status_from_str(&row.get::<_, String>(5)?)?,
-        attention: agent_session_attention_from_str(&row.get::<_, String>(6)?)?,
-        last_active_at: row.get(7)?,
-        started_at: row.get(8)?,
-        closed_at: row.get(9)?,
+        issue_status: row
+            .get::<_, Option<String>>(3)?
+            .map(|value| issue_status_from_str(&value))
+            .transpose()?,
+        title: row.get(4)?,
+        agent_type: agent_type_from_str(&row.get::<_, String>(5)?)?,
+        status: agent_session_status_from_str(&row.get::<_, String>(6)?)?,
+        attention: agent_session_attention_from_str(&row.get::<_, String>(7)?)?,
+        last_active_at: row.get(8)?,
+        started_at: row.get(9)?,
+        closed_at: row.get(10)?,
     })
 }
 
@@ -298,6 +307,16 @@ fn agent_session_status_from_str(value: &str) -> rusqlite::Result<AgentSessionSt
         "closed" => Ok(AgentSessionStatus::Closed),
         "crashed" => Ok(AgentSessionStatus::Crashed),
         "stopped" => Ok(AgentSessionStatus::Stopped),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn issue_status_from_str(value: &str) -> rusqlite::Result<IssueStatus> {
+    match value {
+        "backlog" => Ok(IssueStatus::Backlog),
+        "running" => Ok(IssueStatus::Running),
+        "review" => Ok(IssueStatus::Review),
+        "completed" => Ok(IssueStatus::Completed),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

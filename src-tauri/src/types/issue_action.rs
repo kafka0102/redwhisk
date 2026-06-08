@@ -15,6 +15,7 @@ pub struct IssueActionRecord {
 pub enum IssueActionType {
     IssueCreated,
     AgentSessionStarted,
+    IssueReviewMarked,
 }
 
 impl IssueActionType {
@@ -22,6 +23,7 @@ impl IssueActionType {
         match self {
             Self::IssueCreated => "issue_created",
             Self::AgentSessionStarted => "agent_session_started",
+            Self::IssueReviewMarked => "issue_review_marked",
         }
     }
 }

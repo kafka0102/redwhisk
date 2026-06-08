@@ -3,11 +3,13 @@ import { invokeCommand } from "../../shared/commands/command-client";
 export type AgentType = "codex";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
+export type IssueStatus = "backlog" | "running" | "review" | "completed";
 
 export interface AgentSessionListItem {
   sessionId: number;
   issueId: number | null;
   issueTitle: string | null;
+  issueStatus?: IssueStatus | null;
   title: string | null;
   agentType: AgentType;
   status: AgentSessionStatus;

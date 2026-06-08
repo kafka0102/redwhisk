@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::agent_profile::AgentType;
+use crate::types::issue::IssueStatus;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +110,7 @@ pub struct AgentSessionListItem {
     pub session_id: i64,
     pub issue_id: Option<i64>,
     pub issue_title: Option<String>,
+    pub issue_status: Option<IssueStatus>,
     pub title: Option<String>,
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,

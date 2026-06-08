@@ -592,6 +592,7 @@ impl<'connection> AgentSessionService<'connection> {
                 session_id: row.session_id,
                 issue_id: row.issue_id,
                 issue_title: row.issue_title,
+                issue_status: row.issue_status,
                 title: row.title,
                 agent_type: row.agent_type,
                 status: row.status,

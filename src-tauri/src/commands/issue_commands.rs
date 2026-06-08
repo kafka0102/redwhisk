@@ -3,7 +3,9 @@ use tauri::{Manager, State};
 use crate::app_state::AppState;
 use crate::core::issue_service::IssueService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
-use crate::types::issue::{CreateIssueInput, IssueListResponse, IssueRecord, UpdateIssueInput};
+use crate::types::issue::{
+    CreateIssueInput, IssueListResponse, IssueRecord, MarkIssueReviewInput, UpdateIssueInput,
+};
 
 #[tauri::command]
 pub fn list_issues(
@@ -33,6 +35,16 @@ pub fn update_issue(
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     IssueService::update_issue_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn mark_issue_review(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: MarkIssueReviewInput,
+) -> Result<IssueRecord, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    IssueService::mark_issue_review_in_data_dir(data_dir, input)
 }
 
 fn prepare_issue_data_dir(

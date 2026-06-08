@@ -38,6 +38,11 @@ export interface UpdateIssueInput {
   description: string;
 }
 
+export interface MarkIssueReviewInput {
+  projectId: number;
+  issueId: number;
+}
+
 export interface StartAgentSessionInput {
   projectId: number;
   issueId: number;
@@ -62,6 +67,12 @@ export function createIssue(input: CreateIssueInput): Promise<IssueRecord> {
 
 export function updateIssue(input: UpdateIssueInput): Promise<IssueRecord> {
   return invokeCommand<IssueRecord>("update_issue", { input });
+}
+
+export function markIssueReview(
+  input: MarkIssueReviewInput,
+): Promise<IssueRecord> {
+  return invokeCommand<IssueRecord>("mark_issue_review", { input });
 }
 
 export function startAgentSession(

@@ -827,6 +827,52 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
 }
 
 #[test]
+fn list_agent_sessions_does_not_project_issue_from_another_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let issue_project_id = insert_project(&database.connection, "issue-project");
+    let session_project_id = insert_project(&database.connection, "session-project");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let issue_id = insert_issue_with_title(
+        &database.connection,
+        issue_project_id,
+        "running",
+        "Leaked issue",
+    );
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_638_000_000,
+        None,
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET project_id = ?1 WHERE id = ?2",
+            rusqlite::params![session_project_id, session_id],
+        )
+        .expect("desync session project");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let response = service
+        .list_agent_sessions(session_project_id)
+        .expect("list agent sessions");
+
+    assert_eq!(response.sessions.len(), 1);
+    assert_eq!(response.sessions[0].session_id, session_id);
+    assert_eq!(response.sessions[0].issue_id, Some(issue_id));
+    assert_eq!(response.sessions[0].issue_title, None);
+    assert_eq!(response.sessions[0].issue_status, None);
+}
+
+#[test]
 fn list_agent_sessions_orders_completed_ties_by_session_id_desc() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

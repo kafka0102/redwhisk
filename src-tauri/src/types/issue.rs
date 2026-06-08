@@ -19,6 +19,13 @@ pub struct UpdateIssueInput {
     pub description: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkIssueReviewInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssueListResponse {
