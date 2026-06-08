@@ -88,7 +88,7 @@ development_status:
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-manually-complete-review-issue: ready-for-dev
+  5-1-manually-complete-review-issue: done
   5-2-complete-directly-when-no-uncommitted-changes: backlog
   5-3-show-agent-commit-completion-confirmation-panel: backlog
   5-4-inject-completion-prompt-into-current-codex-session: backlog

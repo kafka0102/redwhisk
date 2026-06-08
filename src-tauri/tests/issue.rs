@@ -1,5 +1,6 @@
 use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
+use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::event_repository::EventRepository;
 use redwhisk_lib::db::issue_repository::IssueRepository;
@@ -9,9 +10,10 @@ use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
-    CreateIssueInput, IssueStatus, MarkIssueReviewInput, UpdateIssueInput,
+    CompleteIssueManualInput, CreateIssueInput, IssueStatus, MarkIssueReviewInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
+use redwhisk_lib::types::session_event::SessionEventType;
 
 #[test]
 fn issue_migration_creates_issues_schema_with_project_index() {
@@ -549,6 +551,143 @@ fn mark_issue_review_rejects_cross_project_issue_without_action() {
         .list_issue_actions(issue.id)
         .expect("issue actions");
     assert_eq!(actions.len(), 1);
+}
+
+#[test]
+fn complete_issue_manual_closes_running_session_and_records_audit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "complete-review-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Ready to complete".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let completed = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete manually");
+
+    assert_eq!(completed.id, issue.id);
+    assert_eq!(completed.status, IssueStatus::Completed);
+    assert!(completed.updated_at > issue.updated_at);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+    assert_eq!(stored_session.closed_at, Some(completed.updated_at));
+
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[0].action_type, IssueActionType::IssueCompleted);
+    assert_eq!(actions[1].action_type, IssueActionType::IssueCreated);
+    let action_payload: serde_json::Value =
+        serde_json::from_str(&actions[0].payload_json).expect("payload json");
+    assert_eq!(action_payload["fromStatus"], "review");
+    assert_eq!(action_payload["toStatus"], "completed");
+    assert_eq!(action_payload["linkedSessionId"], session_id);
+    assert_eq!(action_payload["option"], "complete_manual");
+
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, SessionEventType::SessionClosed);
+    let event_payload: serde_json::Value =
+        serde_json::from_str(&events[0].payload_json).expect("payload json");
+    assert_eq!(event_payload["sessionId"], session_id);
+    assert_eq!(event_payload["issueId"], issue.id);
+    assert_eq!(event_payload["status"], "closed");
+    assert_eq!(event_payload["reason"], "manual_completion");
+}
+
+#[test]
+fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "complete-invalid-state-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Still running".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("non-review issue should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Running);
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Running);
+    assert_eq!(stored_session.closed_at, None);
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions.len(), 1);
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert!(events.is_empty());
 }
 
 #[test]

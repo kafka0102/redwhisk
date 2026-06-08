@@ -18,7 +18,11 @@ import {
 import { CodexTerminal } from "./codex-terminal";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueInspector } from "./issue-inspector";
-import { markIssueReview, type IssueRecord } from "../issues/issue-commands";
+import {
+  completeIssueManual,
+  markIssueReview,
+  type IssueRecord,
+} from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
@@ -64,8 +68,12 @@ export function AgentsActivity({
   >(null);
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
   const [isMarkingReview, setIsMarkingReview] = useState(false);
+  const [isCompletingManual, setIsCompletingManual] = useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
+    string | null
+  >(null);
+  const [completeManualErrorMessage, setCompleteManualErrorMessage] = useState<
     string | null
   >(null);
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
@@ -89,6 +97,8 @@ export function AgentsActivity({
   } | null>(null);
   const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
+  const completedIssueIdsRef = useRef<Set<number>>(new Set());
+  const closedSessionIdsRef = useRef<Set<number>>(new Set());
   const issueTitleButtonRef = useRef<HTMLButtonElement | null>(null);
   const inspectorPaneRef = useRef<HTMLElement | null>(null);
   const infoSplitterRef = useRef<HTMLDivElement | null>(null);
@@ -96,16 +106,23 @@ export function AgentsActivity({
   const applySessionListOverlays = useCallback(
     (nextSessions: AgentSessionListItem[]) => {
       const reviewedIssueIds = reviewedIssueIdsRef.current;
-      if (reviewedIssueIds.size === 0) {
+      const completedIssueIds = completedIssueIdsRef.current;
+      const closedSessionIds = closedSessionIdsRef.current;
+      if (
+        reviewedIssueIds.size === 0 &&
+        completedIssueIds.size === 0 &&
+        closedSessionIds.size === 0
+      ) {
         return nextSessions;
       }
 
       return nextSessions.map((session) =>
-        session.issueId != null &&
-        reviewedIssueIds.has(session.issueId) &&
-        session.issueStatus === "running"
-          ? { ...session, issueStatus: "review" as const }
-          : session,
+        applySessionOverlay(
+          session,
+          reviewedIssueIds,
+          completedIssueIds,
+          closedSessionIds,
+        ),
       );
     },
     [],
@@ -183,6 +200,9 @@ export function AgentsActivity({
   const canMarkReview =
     selectedSession?.status === "running" &&
     linkedIssue?.issueStatus === "running";
+  const canCompleteManual =
+    selectedSession?.status === "running" &&
+    linkedIssue?.issueStatus === "review";
   const canOpenLog =
     (selectedSession?.status === "crashed" ||
       selectedSession?.status === "stopped") &&
@@ -356,6 +376,83 @@ export function AgentsActivity({
       setMarkReviewErrorMessage(toCommandError(error).message);
     } finally {
       setIsMarkingReview(false);
+    }
+  }
+
+  async function handleCompleteManual() {
+    if (!linkedIssue || !selectedSession) {
+      return;
+    }
+
+    const isConfirmed = window.confirm(
+      `确认手动完成 #issue${linkedIssue.issueId} ${linkedIssue.issueTitle} 吗？`,
+    );
+    if (!isConfirmed) {
+      return;
+    }
+
+    setCompleteManualErrorMessage(null);
+    setIsCompletingManual(true);
+
+    let completedIssueId: number | null = null;
+    let completedSessionId: number | null = null;
+
+    try {
+      const completedIssue = await completeIssueManual({
+        projectId,
+        issueId: linkedIssue.issueId,
+      });
+      completedIssueId = completedIssue.id;
+      completedSessionId = selectedSession.sessionId;
+      completedIssueIdsRef.current.add(completedIssue.id);
+      closedSessionIdsRef.current.add(selectedSession.sessionId);
+      setSessions((currentSessions) =>
+        currentSessions.map((session) =>
+          session.issueId === completedIssue.id
+            ? {
+                ...session,
+                status:
+                  session.sessionId === selectedSession.sessionId
+                    ? ("closed" as const)
+                    : session.status,
+                issueStatus: completedIssue.status,
+                lastActiveAt: Math.max(
+                  session.lastActiveAt,
+                  completedIssue.updatedAt,
+                ),
+                closedAt:
+                  session.sessionId === selectedSession.sessionId
+                    ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
+                    : session.closedAt,
+              }
+            : session,
+        ),
+      );
+    } catch (error) {
+      setCompleteManualErrorMessage(toCommandError(error).message);
+      try {
+        const response = await listAgentSessions(projectId);
+        setSessions(applySessionListOverlays(response.sessions));
+      } catch {
+        // Keep the command failure visible; polling can retry the refresh.
+      }
+    } finally {
+      if (completedIssueId == null) {
+        setIsCompletingManual(false);
+      }
+    }
+
+    if (completedIssueId == null || completedSessionId == null) {
+      return;
+    }
+
+    try {
+      const response = await listAgentSessions(projectId);
+      setSessions(applySessionListOverlays(response.sessions));
+    } catch (error) {
+      setCompleteManualErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsCompletingManual(false);
     }
   }
 
@@ -631,6 +728,16 @@ export function AgentsActivity({
                     {isMarkingReview ? "更新中..." : "Mark Review"}
                   </button>
                 ) : null}
+                {canCompleteManual ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    disabled={isCompletingManual}
+                    type="button"
+                    onClick={() => void handleCompleteManual()}
+                  >
+                    {isCompletingManual ? "完成中..." : "Complete Manually"}
+                  </button>
+                ) : null}
                 {canOpenLog ? (
                   <button
                     className="agents-session-toolbar__action"
@@ -647,6 +754,11 @@ export function AgentsActivity({
           {markReviewErrorMessage ? (
             <p className="issues-status" role="status">
               {markReviewErrorMessage}
+            </p>
+          ) : null}
+          {completeManualErrorMessage ? (
+            <p className="issues-status" role="status">
+              {completeManualErrorMessage}
             </p>
           ) : null}
           {attentionErrorMessage ? (
@@ -789,6 +901,40 @@ export function AgentsActivity({
       ) : null}
     </main>
   );
+}
+
+function applySessionOverlay(
+  session: AgentSessionListItem,
+  reviewedIssueIds: Set<number>,
+  completedIssueIds: Set<number>,
+  closedSessionIds: Set<number>,
+): AgentSessionListItem {
+  let nextSession = session;
+
+  if (
+    nextSession.issueId != null &&
+    reviewedIssueIds.has(nextSession.issueId) &&
+    nextSession.issueStatus === "running"
+  ) {
+    nextSession = { ...nextSession, issueStatus: "review" as const };
+  }
+
+  const shouldCloseSession = closedSessionIds.has(nextSession.sessionId);
+  const shouldCompleteIssue =
+    nextSession.issueId != null && completedIssueIds.has(nextSession.issueId);
+
+  if (!shouldCloseSession && !shouldCompleteIssue) {
+    return nextSession;
+  }
+
+  return {
+    ...nextSession,
+    status: shouldCloseSession ? "closed" : nextSession.status,
+    issueStatus: shouldCompleteIssue ? "completed" : nextSession.issueStatus,
+    closedAt: shouldCloseSession
+      ? Math.max(nextSession.closedAt ?? 0, nextSession.lastActiveAt)
+      : nextSession.closedAt,
+  };
 }
 
 interface SessionGroupProps {

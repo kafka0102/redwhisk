@@ -2,17 +2,20 @@ use std::path::Path;
 
 use serde_json::json;
 
+use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::event_repository::EventRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::types::agent_session::AgentSessionStatus;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    CreateIssueInput, IssueListResponse, IssueRecord, IssueStatus, MarkIssueReviewInput,
-    UpdateIssueInput,
+    CompleteIssueManualInput, CreateIssueInput, IssueListResponse, IssueRecord, IssueStatus,
+    MarkIssueReviewInput, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
+use crate::types::session_event::SessionEventType;
 
 pub struct IssueService<'connection> {
     issue_repository: IssueRepository<'connection>,
@@ -168,6 +171,121 @@ impl<'connection> IssueService<'connection> {
         Ok(reviewed_issue)
     }
 
+    pub fn complete_issue_manual(
+        &self,
+        input: CompleteIssueManualInput,
+    ) -> Result<IssueRecord, CommandError> {
+        self.ensure_project_exists(input.project_id)?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status != IssueStatus::Review {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以手动完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
+        })?;
+
+        let completed_issue = IssueRepository::complete_review_issue_manually_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            linked_session_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以手动完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            )
+        })?;
+
+        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
+            &transaction,
+            linked_session_id,
+            AgentSessionStatus::Closed,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+            )
+        })?;
+
+        let issue_action_payload = json!({
+            "fromStatus": "review",
+            "toStatus": "completed",
+            "linkedSessionId": linked_session_id,
+            "option": "complete_manual",
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            completed_issue.id,
+            IssueActionType::IssueCompleted,
+            &issue_action_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        let session_event_payload = json!({
+            "sessionId": closed_session.id,
+            "issueId": closed_session.issue_id,
+            "status": "closed",
+            "reason": "manual_completion",
+            "logPath": closed_session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            closed_session.id,
+            SessionEventType::SessionClosed,
+            &session_event_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        transaction.commit().map_err(issue_database_error)?;
+
+        Ok(completed_issue)
+    }
+
     pub fn list_issues_in_data_dir(
         data_dir: impl AsRef<Path>,
         project_id: i64,
@@ -206,6 +324,16 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).mark_issue_review(input)
+    }
+
+    pub fn complete_issue_manual_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: CompleteIssueManualInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).complete_issue_manual(input)
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {

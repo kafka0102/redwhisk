@@ -4,7 +4,7 @@ baseline_commit: 9efbc2f
 
 # Story 5.1: 手动完成 Review Issue
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -22,23 +22,23 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 补齐 manual completion 的核心状态闭环，只覆盖 Story 5.1 需要的最小路径 (AC: 2, 3)
-  - [ ] 复查 [src-tauri/src/core/issue_service.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/core/issue_service.rs)、[src-tauri/src/db/issue_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/issue_repository.rs)、[src-tauri/src/db/agent_session_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/agent_session_repository.rs) 与 [src-tauri/src/db/event_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/event_repository.rs)，确定现有 `review -> completed` 与 `running -> closed` 事务边界是否已存在可复用原语。
-  - [ ] 若缺少显式命令，按最小范围新增 Rust Core completion command，只允许 `review` Issue + linked `running` AgentSession 成功完成；不要顺手实现 5.2-5.6 的 Git 检测、CompletionAttempt 或 prompt 注入。
-  - [ ] 在同一事务内完成状态校验、Issue 更新、AgentSession 关闭、IssueAction 写入与 SessionEvent 写入，避免“Issue 已 completed 但 Session 仍 running”之类的中间态。
-- [ ] 把 manual completion 暴露到现有 Header 与 command 边界，不发明新页面流 (AC: 1, 2, 3)
-  - [ ] 复查 [src/features/agents/agents-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/agents-activity.tsx)、[src/features/issues/issue-commands.ts](/Users/yujianjia/workspace/kafka/redwhisk/src/features/issues/issue-commands.ts) 和相关 Tauri command，沿用 Story 4.1 `Mark Review` 的接线方式补 `Complete Manually`。
-  - [ ] 若当前 completion policy 运行时读取尚未完整落地，优先采用项目当前默认的 `manual` 事实来源或最小可用读取路径，只满足 AC 所需显示与校验，不提前扩展 agent_auto_commit 分支。
-  - [ ] 保持 Header 的 linked issue title / inspector 打开入口与 terminal 挂载连续性不变；完成成功后允许刷新到 completed 展示，但不要卸载或重建无关 UI 结构。
-- [ ] 收紧 completed Issue 的 Header / Issue 操作 gating，避免伪入口残留 (AC: 3)
-  - [ ] 复查 [src/features/agents/agents-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/agents-activity.tsx)、[src/features/issues/issues-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/issues/issues-activity.tsx) 与 [src/features/agents/issue-inspector.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/issue-inspector.tsx) 的 completed 路径，确保完成后不再显示 `Run`、`Mark Review`、`Complete Manually` 或其它未实现完成动作。
-  - [ ] 本故事只需要把 completed 后的禁用/隐藏边界与手动完成闭环对齐；不要提前实现 Story 5.8 / 5.9 的 Summary、Open Log 入口增强。
-- [ ] 用测试锁定 manual completion 的成功路径和状态护栏 (AC: 1, 2, 3)
-  - [ ] Rust 测试覆盖：只有 `review` Issue + linked `running` AgentSession 能手动完成；成功后 Issue 为 `completed`、AgentSession 为 `closed`，并新增对应 IssueAction 与 SessionEvent。
-  - [ ] Rust 测试覆盖：非 `review` Issue、无 linked running session、跨 Project 或已关闭 Session 的手动完成必须失败，且不产生部分写入。
-  - [ ] 前端测试覆盖：review Header 在 manual 策略路径显示 `Complete Manually`，点击后调用 command 并刷新；completed 路径不再显示 `Run`、`Mark Review` 或 `Complete Manually`。
-- [ ] 按项目规则执行并记录必要验证命令 (AC: 1, 2, 3)
-  - [ ] 本 story 预计会修改 TypeScript / TSX 渲染逻辑、Rust 核心状态事务与测试，默认至少执行：
+- [x] 补齐 manual completion 的核心状态闭环，只覆盖 Story 5.1 需要的最小路径 (AC: 2, 3)
+  - [x] 复查 [src-tauri/src/core/issue_service.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/core/issue_service.rs)、[src-tauri/src/db/issue_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/issue_repository.rs)、[src-tauri/src/db/agent_session_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/agent_session_repository.rs) 与 [src-tauri/src/db/event_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/event_repository.rs)，确定现有 `review -> completed` 与 `running -> closed` 事务边界是否已存在可复用原语。
+  - [x] 若缺少显式命令，按最小范围新增 Rust Core completion command，只允许 `review` Issue + linked `running` AgentSession 成功完成；不要顺手实现 5.2-5.6 的 Git 检测、CompletionAttempt 或 prompt 注入。
+  - [x] 在同一事务内完成状态校验、Issue 更新、AgentSession 关闭、IssueAction 写入与 SessionEvent 写入，避免“Issue 已 completed 但 Session 仍 running”之类的中间态。
+- [x] 把 manual completion 暴露到现有 Header 与 command 边界，不发明新页面流 (AC: 1, 2, 3)
+  - [x] 复查 [src/features/agents/agents-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/agents-activity.tsx)、[src/features/issues/issue-commands.ts](/Users/yujianjia/workspace/kafka/redwhisk/src/features/issues/issue-commands.ts) 和相关 Tauri command，沿用 Story 4.1 `Mark Review` 的接线方式补 `Complete Manually`。
+  - [x] 若当前 completion policy 运行时读取尚未完整落地，优先采用项目当前默认的 `manual` 事实来源或最小可用读取路径，只满足 AC 所需显示与校验，不提前扩展 agent_auto_commit 分支。
+  - [x] 保持 Header 的 linked issue title / inspector 打开入口与 terminal 挂载连续性不变；完成成功后允许刷新到 completed 展示，但不要卸载或重建无关 UI 结构。
+- [x] 收紧 completed Issue 的 Header / Issue 操作 gating，避免伪入口残留 (AC: 3)
+  - [x] 复查 [src/features/agents/agents-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/agents-activity.tsx)、[src/features/issues/issues-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/issues/issues-activity.tsx) 与 [src/features/agents/issue-inspector.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/issue-inspector.tsx) 的 completed 路径，确保完成后不再显示 `Run`、`Mark Review`、`Complete Manually` 或其它未实现完成动作。
+  - [x] 本故事只需要把 completed 后的禁用/隐藏边界与手动完成闭环对齐；不要提前实现 Story 5.8 / 5.9 的 Summary、Open Log 入口增强。
+- [x] 用测试锁定 manual completion 的成功路径和状态护栏 (AC: 1, 2, 3)
+  - [x] Rust 测试覆盖：只有 `review` Issue + linked `running` AgentSession 能手动完成；成功后 Issue 为 `completed`、AgentSession 为 `closed`，并新增对应 IssueAction 与 SessionEvent。
+  - [x] Rust 测试覆盖：非 `review` Issue、无 linked running session、跨 Project 或已关闭 Session 的手动完成必须失败，且不产生部分写入。
+  - [x] 前端测试覆盖：review Header 在 manual 策略路径显示 `Complete Manually`，点击后调用 command 并刷新；completed 路径不再显示 `Run`、`Mark Review` 或 `Complete Manually`。
+- [x] 按项目规则执行并记录必要验证命令 (AC: 1, 2, 3)
+  - [x] 本 story 预计会修改 TypeScript / TSX 渲染逻辑、Rust 核心状态事务与测试，默认至少执行：
 
 ```bash
 pnpm format
@@ -116,13 +116,85 @@ GPT-5 Codex
 - 2026-06-08T21:43:26+08:00：`bmad-dev-workflow` preflight 读取完整 `sprint-status.yaml`，确认当前没有 `ready-for-dev` story，按顺序锁定 `5-1-manually-complete-review-issue`，基线 `HEAD` 为 `9efbc2f`。
 - 2026-06-08T21:43:26+08:00：交叉核对 Epic 5.1、PRD FR-20 / FR-23、addendum Header 状态矩阵、architecture 的状态单一写入约束，以及 Story 4.1 / 4.2 / 4.4 / 4.7 的前置边界。
 - 2026-06-08T21:43:26+08:00：复查仓库实现后确认 `completion policy` 运行时代码尚未成型；Story 5.1 的默认最小方案改为先打通 `manual` completion 闭环，不提前扩展 5.2-5.6 的 agent_auto_commit 能力。
+- 2026-06-08T21:59:52+08:00：先补 Rust `complete_issue_manual` 与前端 `Complete Manually` 相关测试，再按失败信号实现 `issue_completed` / `session_closed` 审计、review Header 按钮与本地 overlay。
+- 2026-06-08T22:10:53+08:00：首次实现后复核发现仅改数据库状态会留下活动 PTY 未终止的伪完成风险，补充 `AgentSessionService::complete_issue_manual_in_data_dir` 在完成成功后关闭 tracked PTY，并用 `complete_issue_manual_with_pty_terminates_tracked_session` 锁住该语义。
+- 2026-06-08T22:20:13+08:00：补齐 `Complete Manually` 的确认门槛；确认通过后才执行完成命令，取消时不触发状态变更。
 
 ### Completion Notes List
 
 - 2026-06-08：create-story 已为 Story 5.1 生成开发上下文，并将范围收口为“manual completion 的最小可靠闭环”。
 - 2026-06-08：已显式记录当前仓库缺少成型 completion policy 运行时代码这一歧义，默认选择先满足 `manual` 路径，而不是静默假设 5.2-5.6 依赖已存在。
 - 2026-06-08：已把 Review Header gating、Rust Core 状态事务、IssueAction / SessionEvent 审计要求与 completed Issue 禁用边界写入上下文，供 dev-story 直接消费。
+- 2026-06-08：新增 `complete_issue_manual` Tauri/Rust Core 命令，在单事务内完成 `review -> completed`、linked running session `running -> closed`、`issue_completed` IssueAction 和 `session_closed` SessionEvent。
+- 2026-06-08：`AgentsActivity` 的 review Header 现在显示 `Complete Manually`，先经过确认，再调用完成命令；成功后通过本地 overlay 与刷新结果同步收口 completed/closed 状态，避免旧轮询短暂带回已完成动作。
+- 2026-06-08：手动完成成功后会尝试关闭当前 tracked PTY；若 PTY 已被异步移除，则忽略 `session not found` 竞态，避免把已完成状态误报为失败。
 
 ### File List
 
 - _bmad-output/implementation-artifacts/5-1-manually-complete-review-issue.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+- src-tauri/src/commands/issue_commands.rs
+- src-tauri/src/core/agent_session_service.rs
+- src-tauri/src/core/issue_service.rs
+- src-tauri/src/db/event_repository.rs
+- src-tauri/src/db/issue_repository.rs
+- src-tauri/src/lib.rs
+- src-tauri/src/types/issue.rs
+- src-tauri/src/types/issue_action.rs
+- src-tauri/src/types/session_event.rs
+- src-tauri/tests/agent_session.rs
+- src-tauri/tests/issue.rs
+- src/features/agents/agents-activity.test.tsx
+- src/features/agents/agents-activity.tsx
+- src/features/issues/issue-commands.ts
+
+### Validation Commands
+
+- `pnpm format`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test issue`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`
+- `pnpm test`
+- `git diff --check`
+
+### Validation Results
+
+- `pnpm format`：通过；期间对无关文件 `src/features/agents/codex-terminal-snapshot.ts` 产生纯折行差异，已回退，不纳入本 story。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`：通过。
+- `pnpm lint`：通过。
+- `pnpm typecheck`：通过。
+- `pnpm test -- --run src/features/agents/agents-activity.test.tsx src/features/issues/issues-activity.test.tsx`：通过；8 个测试文件、126 个测试通过，输出包含既有 `HTMLCanvasElement.getContext()` 与 `Could not parse CSS stylesheet` 警告，但未导致失败。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test issue`：通过；20 个 `issue` 测试通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`：通过；30 个 `agent_session` 测试通过。
+- `pnpm test`：通过；8 个测试文件、126 个测试通过，输出包含既有 `HTMLCanvasElement.getContext()` 与 `Could not parse CSS stylesheet` 警告，但未导致失败。
+- `git diff --check`：通过。
+
+### Change Log
+
+- 2026-06-08：创建 Story 5.1 开发上下文并将状态推进到 `ready-for-dev`。
+- 2026-06-08：实现 `complete_issue_manual` Rust Core / Tauri command、审计事件扩展、review Header 手动完成按钮与确认门槛，状态推进到 `review`。
+- 2026-06-08：补充完成后关闭 tracked PTY 的收口与前后端回归测试，完成同会话自动 review，状态推进到 `done`。
+
+## Senior Developer Review (AI)
+
+### Review Date
+
+2026-06-08
+
+### Outcome
+
+Approved
+
+### Findings Summary
+
+- Clean review：本次 diff 只为 `review` Issue 增加 `Complete Manually` 最小闭环，覆盖 Rust 状态事务、IssueAction / SessionEvent 审计、Header 确认与 PTY 终止收口；未发现剩余阻塞问题。
+
+### Reviewer Notes
+
+- Blind Hunter：`Complete Manually` 只在 linked `review` + running session 路径出现，completed 后不再显示 `Run`、`Mark Review` 或完成类动作。
+- Edge Case Hunter：完成后会终止 tracked PTY，并对异步移除导致的 `session not found` 竞态做了忽略处理；刷新失败时前端 overlay 仍能保持按钮隐藏，避免伪回退。
+- Acceptance Auditor：AC1 由 review Header 的 `Complete Manually` + 确认门槛满足；AC2 由 Rust Core 单事务完成 `review -> completed` / `running -> closed` 满足；AC3 由 `issue_completed` / `session_closed` 审计和 completed 动作 gating 满足。
