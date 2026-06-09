@@ -7,8 +7,9 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
     CreateIssueInput, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
-    IssueListResponse, IssueRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
+    GetIssueSummaryInput, IssueListResponse, IssueRecord, IssueSummaryRecord, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    UpdateIssueInput,
 };
 
 #[tauri::command]
@@ -109,6 +110,21 @@ pub fn detect_agent_commit_completion(
         &state.pty_sessions,
     )?;
     IssueService::detect_agent_commit_completion_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn get_issue_summary(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: GetIssueSummaryInput,
+) -> Result<IssueSummaryRecord, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
+        &data_dir,
+        input.project_id,
+        &state.pty_sessions,
+    )?;
+    IssueService::get_issue_summary_in_data_dir(data_dir, input)
 }
 
 fn prepare_issue_data_dir(

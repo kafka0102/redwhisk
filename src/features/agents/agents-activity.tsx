@@ -18,6 +18,7 @@ import {
 import { CodexTerminal } from "./codex-terminal";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueInspector } from "./issue-inspector";
+import { IssueSummaryDialog } from "../issues/issue-summary-dialog";
 import {
   completeIssueClean,
   completeIssueManual,
@@ -101,6 +102,7 @@ export function AgentsActivity({
     useState<AgentCommitCompletionPreview | null>(null);
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
     useState(false);
+  const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [viewedSessionActivity, setViewedSessionActivity] = useState<
     Record<number, number>
@@ -242,6 +244,7 @@ export function AgentsActivity({
       selectedSession?.status === "stopped") &&
     selectedSession.logPath != null &&
     selectedSession.logPath.length > 0;
+  const canViewSummary = linkedIssue?.issueStatus === "completed";
 
   useEffect(() => {
     if (!isInspectorOpen) {
@@ -676,6 +679,14 @@ export function AgentsActivity({
     }
   }
 
+  function handleOpenSummary() {
+    if (!linkedIssue || linkedIssue.issueStatus !== "completed") {
+      return;
+    }
+
+    setSummaryIssueId(linkedIssue.issueId);
+  }
+
   function handleToggleInspector() {
     if (!linkedIssue) {
       return;
@@ -973,6 +984,15 @@ export function AgentsActivity({
                     {isOpeningLog ? "打开中..." : "Open Log"}
                   </button>
                 ) : null}
+                {canViewSummary ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    type="button"
+                    onClick={handleOpenSummary}
+                  >
+                    View Summary
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1208,6 +1228,13 @@ export function AgentsActivity({
             </div>
           </div>
         </div>
+      ) : null}
+      {summaryIssueId != null ? (
+        <IssueSummaryDialog
+          issueId={summaryIssueId}
+          projectId={projectId}
+          onClose={() => setSummaryIssueId(null)}
+        />
       ) : null}
     </main>
   );

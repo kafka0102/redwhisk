@@ -26,9 +26,10 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
     CompleteIssueManualInput, CreateIssueInput, DetectAgentCommitCompletionInput,
-    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult, IssueListResponse,
-    IssueRecord, IssueStatus, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
+    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult, GetIssueSummaryInput,
+    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput,
+    SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -69,6 +70,84 @@ impl<'connection> IssueService<'connection> {
             .map_err(issue_database_error)?;
 
         Ok(IssueListResponse { issues })
+    }
+
+    pub fn get_issue_summary(
+        &self,
+        input: GetIssueSummaryInput,
+    ) -> Result<IssueSummaryRecord, CommandError> {
+        self.ensure_project_exists(input.project_id)?;
+
+        let issue = self
+            .issue_repository
+            .find_by_id(input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status != IssueStatus::Completed {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有已完成 Issue 可以查看 Summary。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let mut diagnostics = Vec::new();
+        let session = match issue.linked_session_id {
+            Some(session_id) => AgentSessionRepository::new(self.issue_repository.connection())
+                .find_by_id(session_id)
+                .map_err(issue_database_error)?,
+            None => None,
+        };
+
+        if issue.linked_session_id.is_none() {
+            diagnostics.push("缺少关联 Agent Session。".to_string());
+        }
+
+        if issue.linked_session_log_path.is_none() {
+            diagnostics.push("缺少日志路径。".to_string());
+        }
+
+        if let Some(session) = session.as_ref() {
+            if session.status != AgentSessionStatus::Closed {
+                diagnostics.push(format!(
+                    "已完成 Issue 关联的 Session 状态异常：{}。",
+                    format_agent_session_status_for_summary(&session.status)
+                ));
+            }
+
+            if session.closed_at.is_none() {
+                diagnostics.push("已完成 Issue 关联的 Session 缺少 closed_at。".to_string());
+            }
+        }
+
+        let attempts = CompletionAttemptRepository::new(self.issue_repository.connection())
+            .list_by_issue_id(issue.id)
+            .map_err(issue_database_error)?;
+
+        let completion = resolve_issue_summary_completion(
+            self.issue_repository.connection(),
+            issue.id,
+            &attempts,
+            &mut diagnostics,
+        )?;
+
+        if completion.is_none() {
+            diagnostics.push("缺少可用于复盘的完成记录。".to_string());
+        }
+
+        Ok(IssueSummaryRecord {
+            issue,
+            session_started_at: session.as_ref().map(|session| session.started_at),
+            session_closed_at: session.as_ref().and_then(|session| session.closed_at),
+            completion,
+            diagnostics,
+        })
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
@@ -922,6 +1001,16 @@ impl<'connection> IssueService<'connection> {
             .detect_agent_commit_completion(input)
     }
 
+    pub fn get_issue_summary_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: GetIssueSummaryInput,
+    ) -> Result<IssueSummaryRecord, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).get_issue_summary(input)
+    }
+
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
         self.project_repository
             .find_by_id(project_id)
@@ -1209,6 +1298,99 @@ fn record_blocked_completion_attempt(
         CompletionAttemptResult::GitOperationBlocked,
         current_epoch_millis_for_db()?,
     )
+}
+
+fn summary_completion_from_attempt(attempt: CompletionAttemptRecord) -> IssueSummaryCompletionInfo {
+    IssueSummaryCompletionInfo {
+        option: attempt.option.as_str().to_string(),
+        result: attempt.result.as_str().to_string(),
+        commit_hash: attempt.commit_hash,
+        failure_reason: attempt.failure_reason,
+        head_before: Some(attempt.head_before),
+        head_after: Some(attempt.head_after),
+        changed_files_json: Some(attempt.changed_files_json),
+        created_at: attempt.created_at,
+        source: "completion_attempt".to_string(),
+    }
+}
+
+fn latest_completion_from_issue_action(
+    connection: &rusqlite::Connection,
+    issue_id: i64,
+) -> Result<Option<IssueSummaryCompletionInfo>, CommandError> {
+    let issue_completed_action = EventRepository::new(connection)
+        .list_issue_actions(issue_id)
+        .map_err(issue_database_error)?
+        .into_iter()
+        .find(|action| action.action_type == IssueActionType::IssueCompleted);
+
+    let Some(action) = issue_completed_action else {
+        return Ok(None);
+    };
+
+    let payload =
+        serde_json::from_str::<serde_json::Value>(&action.payload_json).map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::IssuePersistenceFailed,
+                "Issue Summary 解析失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            .with_detail(ErrorDetail::new("IssueAction").with_value("issueId", issue_id))
+        })?;
+
+    let option = payload
+        .get("option")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown")
+        .to_string();
+
+    Ok(Some(IssueSummaryCompletionInfo {
+        option,
+        result: "completed".to_string(),
+        commit_hash: None,
+        failure_reason: None,
+        head_before: None,
+        head_after: None,
+        changed_files_json: None,
+        created_at: action.created_at,
+        source: "issue_action_fallback".to_string(),
+    }))
+}
+
+fn resolve_issue_summary_completion(
+    connection: &rusqlite::Connection,
+    issue_id: i64,
+    attempts: &[CompletionAttemptRecord],
+    diagnostics: &mut Vec<String>,
+) -> Result<Option<IssueSummaryCompletionInfo>, CommandError> {
+    let completed_attempt = attempts
+        .iter()
+        .find(|attempt| attempt.result == CompletionAttemptResult::Completed)
+        .cloned();
+
+    if let Some(attempt) = completed_attempt {
+        return Ok(Some(summary_completion_from_attempt(attempt)));
+    }
+
+    if attempts.is_empty() {
+        diagnostics.push("缺少 CompletionAttempt 记录，已回退到 Issue 完成事件推断。".to_string());
+    } else {
+        diagnostics.push(
+            "未找到可代表最终 completed 的 CompletionAttempt，已回退到 Issue 完成事件推断。"
+                .to_string(),
+        );
+    }
+
+    latest_completion_from_issue_action(connection, issue_id)
+}
+
+fn format_agent_session_status_for_summary(status: &AgentSessionStatus) -> &'static str {
+    match status {
+        AgentSessionStatus::Running => "running",
+        AgentSessionStatus::Closed => "closed",
+        AgentSessionStatus::Crashed => "crashed",
+        AgentSessionStatus::Stopped => "stopped",
+    }
 }
 
 fn current_epoch_millis_for_db() -> rusqlite::Result<i64> {

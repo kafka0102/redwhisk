@@ -69,6 +69,11 @@ export interface DetectAgentCommitCompletionInput {
   issueId: number;
 }
 
+export interface GetIssueSummaryInput {
+  projectId: number;
+  issueId: number;
+}
+
 export interface AgentCommitChangedFileSummary {
   status: string;
   path: string;
@@ -100,6 +105,26 @@ export interface DetectAgentCommitCompletionResult {
   outcome: DetectAgentCommitCompletionOutcome;
   issue: IssueRecord;
   message: string;
+}
+
+export interface IssueSummaryCompletionInfo {
+  option: string;
+  result: string;
+  commitHash?: string | null;
+  failureReason?: string | null;
+  headBefore?: string | null;
+  headAfter?: string | null;
+  changedFilesJson?: string | null;
+  createdAt: number;
+  source: string;
+}
+
+export interface IssueSummaryRecord {
+  issue: IssueRecord;
+  sessionStartedAt?: number | null;
+  sessionClosedAt?: number | null;
+  completion?: IssueSummaryCompletionInfo | null;
+  diagnostics: string[];
 }
 
 export interface StartAgentSessionInput {
@@ -175,6 +200,14 @@ export function detectAgentCommitCompletion(
       input,
     },
   );
+}
+
+export function getIssueSummary(
+  input: GetIssueSummaryInput,
+): Promise<IssueSummaryRecord> {
+  return invokeCommand<IssueSummaryRecord>("get_issue_summary", {
+    input,
+  });
 }
 
 export function startAgentSession(

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuesActivity } from "./issues-activity";
 import {
   createIssue,
+  getIssueSummary,
   listIssues,
   startAgentSession,
   updateIssue,
@@ -16,6 +17,7 @@ import { listAgentProfiles } from "../settings/settings-commands";
 
 vi.mock("./issue-commands", () => ({
   createIssue: vi.fn(),
+  getIssueSummary: vi.fn(),
   listIssues: vi.fn(),
   startAgentSession: vi.fn(),
   updateIssue: vi.fn(),
@@ -51,6 +53,7 @@ vi.mock("./issue-description-editor", () => ({
 }));
 
 const createIssueMock = vi.mocked(createIssue);
+const getIssueSummaryMock = vi.mocked(getIssueSummary);
 const listIssuesMock = vi.mocked(listIssues);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
@@ -979,6 +982,28 @@ describe("IssuesActivity", () => {
   it("does not show Open Session for completed issues with linked sessions", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+    getIssueSummaryMock.mockResolvedValue({
+      issue: {
+        ...completedLinkedSessionIssue,
+        linkedSessionLogPath: "/tmp/completed.log",
+      },
+      sessionStartedAt: 1_780_636_000_000,
+      sessionClosedAt: 1_780_637_000_000,
+      completion: {
+        option: "complete_manual",
+        result: "completed",
+        commitHash: null,
+        failureReason: null,
+        headBefore: null,
+        headAfter: null,
+        changedFilesJson: null,
+        createdAt: 1_780_637_000_000,
+        source: "issue_action_fallback",
+      },
+      diagnostics: [
+        "缺少 CompletionAttempt 记录，已回退到 Issue 完成事件推断。",
+      ],
+    });
 
     renderIssuesActivity();
 
@@ -993,7 +1018,7 @@ describe("IssuesActivity", () => {
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).getByText("No actions available."),
+      within(dialog).getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
   });
 
@@ -1049,6 +1074,54 @@ describe("IssuesActivity", () => {
 
     expect(
       await within(dialog).findByText("log unavailable"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens completed issue summary from the issue detail dialog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+    getIssueSummaryMock.mockResolvedValue({
+      issue: {
+        ...completedLinkedSessionIssue,
+        linkedSessionLogPath: "/tmp/completed.log",
+      },
+      sessionStartedAt: 1_780_636_000_000,
+      sessionClosedAt: 1_780_637_000_000,
+      completion: {
+        option: "agent_auto_commit",
+        result: "completed",
+        commitHash: "abc1234",
+        failureReason: null,
+        headBefore: "1111111",
+        headAfter: "abc1234",
+        changedFilesJson: "[]",
+        createdAt: 1_780_637_000_000,
+        source: "completion_attempt",
+      },
+      diagnostics: [],
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "View Summary" }),
+    );
+
+    const summary = await screen.findByRole("dialog", {
+      name: "Issue Summary",
+    });
+    expect(
+      within(summary).getByText("Commit hash: abc1234"),
+    ).toBeInTheDocument();
+    expect(
+      within(summary).getByText("Log path: /tmp/completed.log"),
     ).toBeInTheDocument();
   });
 });
