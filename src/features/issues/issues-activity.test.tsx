@@ -1020,6 +1020,55 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Open Log" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens completed issue log from the issue detail dialog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...completedLinkedSessionIssue,
+          linkedSessionLogPath: "/tmp/completed.log",
+        } as IssueRecord,
+      ],
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
+
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/completed.log");
+  });
+
+  it("shows a factual error when completed issue log path is missing", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
+
+    expect(
+      await within(dialog).findByText("No log path recorded for this session."),
+    ).toBeInTheDocument();
+    expect(openPathMock).not.toHaveBeenCalled();
   });
 
   it("shows open log instead of open session for crashed sessions", async () => {

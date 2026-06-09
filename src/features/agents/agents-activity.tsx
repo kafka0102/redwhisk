@@ -240,10 +240,9 @@ export function AgentsActivity({
     projectCompletionPolicy === "agent_auto_commit" &&
     selectedSession?.canCompleteAgentCommit === true;
   const canOpenLog =
-    (selectedSession?.status === "crashed" ||
-      selectedSession?.status === "stopped") &&
-    selectedSession.logPath != null &&
-    selectedSession.logPath.length > 0;
+    linkedIssue?.issueStatus === "completed" ||
+    selectedSession?.status === "crashed" ||
+    selectedSession?.status === "stopped";
   const canViewSummary = linkedIssue?.issueStatus === "completed";
 
   useEffect(() => {
@@ -663,11 +662,17 @@ export function AgentsActivity({
   }
 
   async function handleOpenLog() {
-    if (!selectedSession?.logPath || isOpeningLog) {
+    if (!selectedSession || isOpeningLog) {
       return;
     }
 
     setSessionActionErrorMessage(null);
+
+    if (!selectedSession.logPath) {
+      setSessionActionErrorMessage("No log path recorded for this session.");
+      return;
+    }
+
     setIsOpeningLog(true);
 
     try {

@@ -2650,7 +2650,13 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={601} projectId={1} />);
 
     expect(
-      await screen.findByRole("button", { name: "View Summary" }),
+      await screen.findByRole("button", { name: "Open Log" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Log" }));
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/completed.log");
+
+    expect(
+      screen.getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "View Summary" }));
 
@@ -2731,6 +2737,37 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a factual error when completed header log path is missing", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 601,
+          issueId: 23,
+          issueTitle: "Newest completed issue",
+          issueStatus: "completed",
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          logPath: null,
+          lastActiveAt: 1_780_639_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: 1_780_639_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={601} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Log" }));
+
+    expect(
+      await screen.findByText("No log path recorded for this session."),
+    ).toBeInTheDocument();
+    expect(openPathMock).not.toHaveBeenCalled();
+  });
+
   it("opens completed issue summary from the inspector", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
@@ -2780,6 +2817,11 @@ describe("AgentsActivity", () => {
     const inspector = await screen.findByRole("complementary", {
       name: "Issue Inspector",
     });
+    await user.click(
+      within(inspector).getByRole("button", { name: "Open Log" }),
+    );
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/completed.log");
+
     await user.click(
       within(inspector).getByRole("button", { name: "View Summary" }),
     );

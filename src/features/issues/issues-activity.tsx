@@ -395,11 +395,17 @@ export function IssuesActivity({
   }
 
   async function handleOpenLog() {
-    if (!selectedIssue?.linkedSessionLogPath || isOpeningLog) {
+    if (!selectedIssue || isOpeningLog) {
       return;
     }
 
     setDialogErrorMessage(null);
+
+    if (!selectedIssue.linkedSessionLogPath) {
+      setDialogErrorMessage("No log path recorded for this session.");
+      return;
+    }
+
     setIsOpeningLog(true);
 
     try {
@@ -474,10 +480,9 @@ export function IssuesActivity({
     selectedIssue?.linkedSessionStatus === "running";
   const canOpenLog =
     hasLinkedSession &&
-    (selectedIssue?.linkedSessionStatus === "crashed" ||
-      selectedIssue?.linkedSessionStatus === "stopped") &&
-    selectedIssue.linkedSessionLogPath != null &&
-    selectedIssue.linkedSessionLogPath.length > 0;
+    (selectedIssue?.status === "completed" ||
+      selectedIssue?.linkedSessionStatus === "crashed" ||
+      selectedIssue?.linkedSessionStatus === "stopped");
   const canViewSummary =
     dialogMode === "edit" && selectedIssue?.status === "completed";
   const runStatusMessage =
@@ -716,6 +721,16 @@ export function IssuesActivity({
                         View Summary
                       </Button>
                       <p>Review the completed issue summary.</p>
+                      <Button
+                        className="issues-button"
+                        type="button"
+                        variant="outline"
+                        disabled={isOpeningLog}
+                        onClick={() => void handleOpenLog()}
+                      >
+                        {isOpeningLog ? "打开中..." : "Open Log"}
+                      </Button>
+                      <p>Open the completed session log for review.</p>
                     </>
                   ) : dialogMode === "edit" && canOpenLog ? (
                     <>

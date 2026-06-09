@@ -1,44 +1,30 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-8-view-completed-issue-summary.md
-story_key: 5-8-view-completed-issue-summary
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-9-open-completed-issue-log.md
+story_key: 5-9-open-completed-issue-log
 story_status: done
-baseline_commit: 3629596
+baseline_commit: c88e091
 changed_files:
-  - _bmad-output/implementation-artifacts/5-8-view-completed-issue-summary.md
+  - _bmad-output/implementation-artifacts/5-9-open-completed-issue-log.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src-tauri/src/commands/issue_commands.rs
-  - src-tauri/src/core/issue_service.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/issue.rs
-  - src-tauri/tests/issue.rs
-  - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/agents/issue-inspector.tsx
-  - src/features/issues/issue-commands.ts
-  - src/features/issues/issue-summary-dialog.tsx
-  - src/features/issues/issues-activity.test.tsx
   - src/features/issues/issues-activity.tsx
-  - src/shared/commands/command-client.test.ts
+  - src/features/issues/issues-activity.test.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/agents-activity.test.tsx
+  - src/features/agents/issue-inspector.tsx
 validation_commands:
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - pnpm prettier --write src/features/issues/issues-activity.tsx src/features/agents/issue-inspector.tsx src/features/agents/agents-activity.tsx src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx
   - pnpm lint
   - pnpm typecheck
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
-  - cargo test --manifest-path src-tauri/Cargo.toml --test issue get_issue_summary
-  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx
   - git diff --check
 validation_results:
-  - "pnpm format: passed; excluded unrelated formatting-only diff in src/features/agents/codex-terminal-snapshot.ts from commit scope."
-  - "cargo fmt --manifest-path src-tauri/Cargo.toml: passed."
+  - "pnpm prettier --write src/features/issues/issues-activity.tsx src/features/agents/issue-inspector.tsx src/features/agents/agents-activity.tsx src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx: passed."
   - "pnpm lint: passed."
   - "pnpm typecheck: passed."
-  - "pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts: passed."
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue get_issue_summary: passed."
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: passed."
+  - "pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx: passed with existing jsdom canvas/CSS warnings."
   - "git diff --check: passed."
-review_summary: "Approved: follow-up review clean after fixing final-completion selection and completed-session diagnostics."
+review_summary: "Approved: completed Issue 现在可从 Detail、Header、Inspector 打开原始日志，缺失 log path 时返回事实性错误，回归测试覆盖完整。"
 blocking_reason:
-updated_at: 2026-06-09T17:11:16+08:00
+updated_at: 2026-06-09T18:10:17+08:00
