@@ -37,7 +37,10 @@ export function resolveSnapshotUpdate(
   };
 }
 
-function findSnapshotTailOverlap(previousSnapshot: string, nextSnapshot: string) {
+function findSnapshotTailOverlap(
+  previousSnapshot: string,
+  nextSnapshot: string,
+) {
   const maxOverlap = Math.min(previousSnapshot.length, nextSnapshot.length);
 
   for (let overlapLength = maxOverlap; overlapLength > 0; overlapLength -= 1) {
