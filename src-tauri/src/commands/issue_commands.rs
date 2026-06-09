@@ -5,8 +5,9 @@ use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::IssueService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, IssueListResponse,
-    IssueRecord, MarkIssueReviewInput, UpdateIssueInput,
+    AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
+    CreateIssueInput, IssueListResponse, IssueRecord, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, UpdateIssueInput,
 };
 
 #[tauri::command]
@@ -72,6 +73,16 @@ pub fn complete_issue_clean(
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     AgentSessionService::complete_issue_clean_in_data_dir(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn prepare_agent_commit_completion(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: PrepareAgentCommitCompletionInput,
+) -> Result<AgentCommitCompletionPreview, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    IssueService::prepare_agent_commit_completion_in_data_dir(data_dir, input)
 }
 
 fn prepare_issue_data_dir(

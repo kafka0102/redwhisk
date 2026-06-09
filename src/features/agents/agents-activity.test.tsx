@@ -24,6 +24,7 @@ import {
   completeIssueManual,
   listIssues,
   markIssueReview,
+  prepareAgentCommitCompletion,
   updateIssue,
 } from "../issues/issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
@@ -50,6 +51,7 @@ vi.mock("../issues/issue-commands", () => ({
   completeIssueClean: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
+  prepareAgentCommitCompletion: vi.fn(),
   updateIssue: vi.fn(),
 }));
 
@@ -64,6 +66,9 @@ const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
+const prepareAgentCommitCompletionMock = vi.mocked(
+  prepareAgentCommitCompletion,
+);
 const updateIssueMock = vi.mocked(updateIssue);
 const openPathMock = vi.mocked(openPath);
 const confirmSpy = vi.spyOn(window, "confirm");
@@ -110,6 +115,7 @@ describe("AgentsActivity", () => {
     listIssuesMock.mockReset();
     completeIssueManualMock.mockReset();
     completeIssueCleanMock.mockReset();
+    prepareAgentCommitCompletionMock.mockReset();
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     openPathMock.mockReset();
@@ -193,6 +199,18 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_639_000_000,
+    });
+    prepareAgentCommitCompletionMock.mockResolvedValue({
+      issueId: 22,
+      sessionId: 502,
+      option: "complete_agent_commit",
+      head: "4157f0c",
+      changedFilesCount: 2,
+      changedFiles: [
+        { status: " M", path: "src/features/agents/agents-activity.tsx" },
+        { status: " M", path: "src-tauri/src/core/issue_service.rs" },
+      ],
+      completionPrompt: "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
     });
     updateIssueMock.mockImplementation(async (input) => ({
       id: input.issueId,
@@ -1607,6 +1625,85 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("shows agent commit action for dirty review sessions and opens completion confirmation", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          canCompleteClean: false,
+          canCompleteAgentCommit: true,
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(
+      <AgentsActivity
+        activeSessionId={502}
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete Manually" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Complete with Agent Commit" }),
+    );
+
+    expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 22,
+    });
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Completion Confirmation",
+    });
+    expect(within(dialog).getByText("HEAD: 4157f0c")).toBeInTheDocument();
+    expect(within(dialog).getByText("Changed files: 2")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Completion option: complete_agent_commit"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
+      ),
+    ).not.toBeVisible();
+
+    await user.click(within(dialog).getByText("Completion prompt"));
+    expect(
+      within(dialog).getByText(
+        "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(completeIssueCleanMock).not.toHaveBeenCalled();
   });
 
   it("completes a linked review issue manually from the session header and refreshes sessions", async () => {

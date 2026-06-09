@@ -551,9 +551,8 @@ impl<'connection> AgentSessionService<'connection> {
         project_id: i64,
     ) -> Result<AgentSessionListResponse, CommandError> {
         let project = self.project_by_id(project_id)?;
-        let can_complete_clean_for_project = project.completion_policy
-            == crate::types::project::ProjectCompletionPolicy::AgentAutoCommit
-            && project_can_complete_clean(&project.repo_path);
+        let (can_complete_clean_for_project, can_complete_agent_commit_for_project) =
+            project_completion_capabilities(&project.repo_path, project.completion_policy);
 
         let rows = self
             .agent_session_repository
@@ -600,6 +599,9 @@ impl<'connection> AgentSessionService<'connection> {
                 let can_complete_clean = can_complete_clean_for_project
                     && row.status == crate::types::agent_session::AgentSessionStatus::Running
                     && row.issue_status == Some(IssueStatus::Review);
+                let can_complete_agent_commit = can_complete_agent_commit_for_project
+                    && row.status == crate::types::agent_session::AgentSessionStatus::Running
+                    && row.issue_status == Some(IssueStatus::Review);
 
                 AgentSessionListItem {
                     session_id: row.session_id,
@@ -607,6 +609,7 @@ impl<'connection> AgentSessionService<'connection> {
                     issue_title: row.issue_title,
                     issue_status: row.issue_status,
                     can_complete_clean,
+                    can_complete_agent_commit,
                     title: row.title,
                     agent_type: row.agent_type,
                     status: row.status,
@@ -917,10 +920,19 @@ impl<'connection> AgentSessionService<'connection> {
     }
 }
 
-fn project_can_complete_clean(repo_path: &str) -> bool {
+fn project_completion_capabilities(
+    repo_path: &str,
+    completion_policy: crate::types::project::ProjectCompletionPolicy,
+) -> (bool, bool) {
+    if completion_policy != crate::types::project::ProjectCompletionPolicy::AgentAutoCommit {
+        return (false, false);
+    }
+
     match read_git_snapshot(repo_path) {
-        Ok(snapshot) => snapshot.is_clean && snapshot.operation_state == GitOperationState::None,
-        Err(_) => false,
+        Ok(snapshot) if snapshot.operation_state == GitOperationState::None => {
+            (snapshot.is_clean, !snapshot.is_clean)
+        }
+        _ => (false, false),
     }
 }
 

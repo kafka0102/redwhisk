@@ -28,6 +28,7 @@ pub fn run() {
             commands::issue_commands::mark_issue_review,
             commands::issue_commands::complete_issue_manual,
             commands::issue_commands::complete_issue_clean,
+            commands::issue_commands::prepare_agent_commit_completion,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::start_agent_session,
             commands::agent_session_commands::start_standalone_agent_session,

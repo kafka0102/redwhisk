@@ -15,8 +15,9 @@ use crate::types::agent_session::AgentSessionStatus;
 use crate::types::completion_attempt::{CompletionAttemptOption, CompletionAttemptResult};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, IssueListResponse,
-    IssueRecord, IssueStatus, MarkIssueReviewInput, UpdateIssueInput,
+    AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
+    CompleteIssueManualInput, CreateIssueInput, IssueListResponse, IssueRecord, IssueStatus,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -467,6 +468,113 @@ impl<'connection> IssueService<'connection> {
         Ok(completed_issue)
     }
 
+    pub fn prepare_agent_commit_completion(
+        &self,
+        input: PrepareAgentCommitCompletionInput,
+    ) -> Result<AgentCommitCompletionPreview, CommandError> {
+        let project = self
+            .project_repository
+            .find_by_id(input.project_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(
+                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
+                    )
+            })?;
+
+        if project.completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
+            let completion_policy = match project.completion_policy {
+                ProjectCompletionPolicy::Manual => "manual",
+                ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
+            };
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 Project 未启用 agent_auto_commit 完成策略。",
+            )
+            .with_detail(
+                ErrorDetail::new("CompletionPolicy")
+                    .with_value("projectId", input.project_id)
+                    .with_value("completionPolicy", completion_policy),
+            ));
+        }
+
+        let snapshot = read_git_snapshot(&project.repo_path).map_err(issue_git_error)?;
+        if snapshot.operation_state != GitOperationState::None {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 Git 正在进行中的操作阻止 Agent Commit。",
+            )
+            .with_detail(ErrorDetail::new("GitOperation").with_value(
+                "state",
+                format_git_operation_state(snapshot.operation_state),
+            )));
+        }
+        if snapshot.is_clean {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前仓库无未提交改动，请直接使用 Complete。",
+            )
+            .with_detail(
+                ErrorDetail::new("GitStatus")
+                    .with_value("head", snapshot.head.clone())
+                    .with_value("isClean", true),
+            ));
+        }
+
+        let issue = self
+            .issue_repository
+            .find_by_id(input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status != IssueStatus::Review {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以准备 Agent Commit。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let linked_session_id = self
+            .issue_repository
+            .find_running_linked_session_id(input.project_id, input.issue_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
+                )
+                .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
+            })?;
+
+        let completion_prompt = build_agent_commit_completion_prompt(&issue.title, &snapshot.head);
+        let changed_files = snapshot
+            .changed_files
+            .iter()
+            .map(|file| AgentCommitChangedFileSummary {
+                status: file.status.clone(),
+                path: file.path.clone(),
+                old_path: file.old_path.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        Ok(AgentCommitCompletionPreview {
+            issue_id: issue.id,
+            session_id: linked_session_id,
+            option: "complete_agent_commit".to_string(),
+            head: snapshot.head,
+            changed_files_count: changed_files.len(),
+            changed_files,
+            completion_prompt,
+        })
+    }
+
     pub fn list_issues_in_data_dir(
         data_dir: impl AsRef<Path>,
         project_id: i64,
@@ -525,6 +633,17 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).complete_issue_clean(input)
+    }
+
+    pub fn prepare_agent_commit_completion_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: PrepareAgentCommitCompletionInput,
+    ) -> Result<AgentCommitCompletionPreview, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository)
+            .prepare_agent_commit_completion(input)
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
@@ -593,6 +712,19 @@ fn issue_status_to_str(status: &IssueStatus) -> &'static str {
         IssueStatus::Review => "review",
         IssueStatus::Completed => "completed",
     }
+}
+
+fn build_agent_commit_completion_prompt(issue_title: &str, head: &str) -> String {
+    format!(
+        "请仅处理当前 Issue 相关改动，并在确认无误后提交。\n\
+Issue: {issue_title}\n\
+当前 HEAD: {head}\n\
+要求：\n\
+- 只包含当前 Issue 直接相关文件\n\
+- 先自检再提交\n\
+- 使用中文 Conventional Commit\n\
+- 完成后汇报提交结果与验证命令\n"
+    )
 }
 
 fn format_git_operation_state(state: GitOperationState) -> &'static str {
