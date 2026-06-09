@@ -609,39 +609,48 @@ export function AgentsActivity({
         issueId: linkedIssue.issueId,
       });
       setIsDetectingAgentCommitCompletion(true);
-      const completedIssue = await detectAgentCommitCompletion({
+      const detectionResult = await detectAgentCommitCompletion({
         projectId,
         issueId: linkedIssue.issueId,
       });
-      completedIssueIdsRef.current.add(completedIssue.id);
-      closedSessionIdsRef.current.add(selectedSession.sessionId);
-      setSessions((currentSessions) =>
-        currentSessions.map((session) =>
-          session.issueId === completedIssue.id
-            ? {
-                ...session,
-                status:
-                  session.sessionId === selectedSession.sessionId
-                    ? ("closed" as const)
-                    : session.status,
-                issueStatus: completedIssue.status,
-                lastActiveAt: Math.max(
-                  session.lastActiveAt,
-                  completedIssue.updatedAt,
-                ),
-                closedAt:
-                  session.sessionId === selectedSession.sessionId
-                    ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
-                    : session.closedAt,
-                canCompleteClean: false,
-                canCompleteAgentCommit: false,
-              }
-            : session,
-        ),
-      );
-      setAgentCommitPreview(null);
-      const response = await listAgentSessions(projectId);
-      setSessions(applySessionListOverlays(response.sessions));
+      if (detectionResult.outcome === "completed") {
+        const completedIssue = detectionResult.issue;
+        completedIssueIdsRef.current.add(completedIssue.id);
+        closedSessionIdsRef.current.add(selectedSession.sessionId);
+        setSessions((currentSessions) =>
+          currentSessions.map((session) =>
+            session.issueId === completedIssue.id
+              ? {
+                  ...session,
+                  status:
+                    session.sessionId === selectedSession.sessionId
+                      ? ("closed" as const)
+                      : session.status,
+                  issueStatus: completedIssue.status,
+                  lastActiveAt: Math.max(
+                    session.lastActiveAt,
+                    completedIssue.updatedAt,
+                  ),
+                  closedAt:
+                    session.sessionId === selectedSession.sessionId
+                      ? Math.max(
+                          session.closedAt ?? 0,
+                          completedIssue.updatedAt,
+                        )
+                      : session.closedAt,
+                  canCompleteClean: false,
+                  canCompleteAgentCommit: false,
+                }
+              : session,
+          ),
+        );
+        setAgentCommitPreview(null);
+        const response = await listAgentSessions(projectId);
+        setSessions(applySessionListOverlays(response.sessions));
+      } else {
+        setAgentCommitPreview(null);
+        setCompleteAgentCommitErrorMessage(detectionResult.message);
+      }
     } catch (error) {
       setCompleteAgentCommitErrorMessage(toCommandError(error).message);
     } finally {

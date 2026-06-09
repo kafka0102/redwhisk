@@ -551,17 +551,21 @@ describe("command client", () => {
 
   it("invokes Rust Core through the detect agent commit completion command", async () => {
     invokeMock.mockResolvedValue({
-      id: 3,
-      projectId: 1,
-      title: "Review issue",
-      description: "",
-      status: "completed",
-      linkedSessionId: 7,
-      linkedSessionStatus: "closed",
-      linkedSessionAttention: "none",
-      linkedSessionLogPath: "/tmp/session.log",
-      createdAt: 1_780_700_000_000,
-      updatedAt: 1_780_700_100_000,
+      outcome: "completed",
+      issue: {
+        id: 3,
+        projectId: 1,
+        title: "Review issue",
+        description: "",
+        status: "completed",
+        linkedSessionId: 7,
+        linkedSessionStatus: "closed",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_700_000_000,
+        updatedAt: 1_780_700_100_000,
+      },
+      message: "已检测到新的 commit，Issue 已完成。",
     });
 
     await expect(
@@ -570,17 +574,21 @@ describe("command client", () => {
         issueId: 3,
       }),
     ).resolves.toEqual({
-      id: 3,
-      projectId: 1,
-      title: "Review issue",
-      description: "",
-      status: "completed",
-      linkedSessionId: 7,
-      linkedSessionStatus: "closed",
-      linkedSessionAttention: "none",
-      linkedSessionLogPath: "/tmp/session.log",
-      createdAt: 1_780_700_000_000,
-      updatedAt: 1_780_700_100_000,
+      outcome: "completed",
+      issue: {
+        id: 3,
+        projectId: 1,
+        title: "Review issue",
+        description: "",
+        status: "completed",
+        linkedSessionId: 7,
+        linkedSessionStatus: "closed",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_700_000_000,
+        updatedAt: 1_780_700_100_000,
+      },
+      message: "已检测到新的 commit，Issue 已完成。",
     });
     expect(invokeMock).toHaveBeenCalledWith("detect_agent_commit_completion", {
       input: {

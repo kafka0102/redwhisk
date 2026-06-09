@@ -90,6 +90,21 @@ pub struct SendAgentCommitPromptResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DetectAgentCommitCompletionOutcome {
+    Completed,
+    NoCommitDetected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectAgentCommitCompletionResult {
+    pub outcome: DetectAgentCommitCompletionOutcome,
+    pub issue: IssueRecord,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssueListResponse {
     pub issues: Vec<IssueRecord>,

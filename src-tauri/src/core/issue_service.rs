@@ -24,9 +24,9 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
     CompleteIssueManualInput, CreateIssueInput, DetectAgentCommitCompletionInput,
-    IssueListResponse, IssueRecord, IssueStatus, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
-    UpdateIssueInput,
+    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult, IssueListResponse,
+    IssueRecord, IssueStatus, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -574,7 +574,7 @@ impl<'connection> IssueService<'connection> {
     pub fn detect_agent_commit_completion(
         &self,
         input: DetectAgentCommitCompletionInput,
-    ) -> Result<IssueRecord, CommandError> {
+    ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
         let project = self
             .project_repository
             .find_by_id(input.project_id)
@@ -658,15 +658,35 @@ impl<'connection> IssueService<'connection> {
         let commit_hash = match detection {
             GitCommitDetectionResult::NewCommit { commit_hash } => commit_hash,
             GitCommitDetectionResult::NoCommitDetected => {
-                return Err(CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "尚未检测到新的 commit，Issue 保持待验收。",
+                CompletionAttemptRepository::update_result_in_transaction(
+                    &transaction,
+                    attempt.id,
+                    &after_snapshot.head,
+                    None,
+                    CompletionAttemptResult::NoCommitDetected,
                 )
-                .with_detail(
-                    ErrorDetail::new("CompletionAttempt")
-                        .with_value("issueId", issue.id)
-                        .with_value("result", "no_commit_detected"),
-                ));
+                .map_err(issue_database_error)?
+                .ok_or_else(|| {
+                    CommandError::new(
+                        CommandErrorCode::IssuePersistenceFailed,
+                        "CompletionAttempt 更新失败。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt.id),
+                    )
+                })?;
+
+                let current_issue =
+                    IssueRepository::find_by_id_in_transaction(&transaction, issue.id)
+                        .map_err(issue_database_error)?
+                        .ok_or_else(|| issue_not_found(issue.id))?;
+                transaction.commit().map_err(issue_database_error)?;
+
+                return Ok(DetectAgentCommitCompletionResult {
+                    outcome: DetectAgentCommitCompletionOutcome::NoCommitDetected,
+                    issue: current_issue,
+                    message: "尚未检测到新的 commit，Issue 保持待验收。".to_string(),
+                });
             }
             GitCommitDetectionResult::HeadMovedWithoutNewCommit { head } => {
                 return Err(CommandError::new(
@@ -776,7 +796,11 @@ impl<'connection> IssueService<'connection> {
 
         transaction.commit().map_err(issue_database_error)?;
 
-        Ok(completed_issue)
+        Ok(DetectAgentCommitCompletionResult {
+            outcome: DetectAgentCommitCompletionOutcome::Completed,
+            issue: completed_issue,
+            message: "已检测到新的 commit，Issue 已完成。".to_string(),
+        })
     }
 
     pub fn list_issues_in_data_dir(
@@ -868,7 +892,7 @@ impl<'connection> IssueService<'connection> {
     pub fn detect_agent_commit_completion_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: DetectAgentCommitCompletionInput,
-    ) -> Result<IssueRecord, CommandError> {
+    ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
