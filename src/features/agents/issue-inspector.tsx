@@ -11,6 +11,7 @@ import {
   type IssueRecord,
 } from "../issues/issue-commands";
 import { IssueDescriptionEditor } from "../issues/issue-description-editor";
+import { IssueSummaryDialog } from "../issues/issue-summary-dialog";
 import { toCommandError } from "../../shared/commands/command-error";
 
 interface IssueInspectorProps {
@@ -48,6 +49,7 @@ export function IssueInspector({
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const activeProjectIdRef = useRef(projectId);
@@ -111,6 +113,7 @@ export function IssueInspector({
     (linkedSessionStatus === "crashed" || linkedSessionStatus === "stopped") &&
     effectiveLogPath != null &&
     effectiveLogPath.length > 0;
+  const canViewSummary = issue?.status === "completed";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,7 +235,34 @@ export function IssueInspector({
           </section>
           <section className="issue-dialog__panel">
             <h4>Actions</h4>
-            {canOpenLog ? (
+            {canViewSummary ? (
+              <>
+                <Button
+                  className="issues-button"
+                  disabled={isLoading}
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsSummaryOpen(true)}
+                >
+                  View Summary
+                </Button>
+                <p>Review the completed issue summary.</p>
+                {onOpenIssuesActivity ? (
+                  <>
+                    <Button
+                      className="issues-button"
+                      disabled={isLoading}
+                      type="button"
+                      variant="outline"
+                      onClick={() => onOpenIssuesActivity(issueId)}
+                    >
+                      Open in Issues
+                    </Button>
+                    <p>Open this issue in the issues board.</p>
+                  </>
+                ) : null}
+              </>
+            ) : canOpenLog ? (
               <>
                 <Button
                   className="issues-button"
@@ -305,6 +335,13 @@ export function IssueInspector({
           {isSaving ? "Saving..." : "Save"}
         </Button>
       </div>
+      {isSummaryOpen ? (
+        <IssueSummaryDialog
+          issueId={issueId}
+          projectId={projectId}
+          onClose={() => setIsSummaryOpen(false)}
+        />
+      ) : null}
     </form>
   );
 }

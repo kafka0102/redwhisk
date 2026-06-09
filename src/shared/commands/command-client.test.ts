@@ -18,6 +18,7 @@ import {
 } from "../../features/agents/agent-session-commands";
 import {
   detectAgentCommitCompletion,
+  getIssueSummary,
   prepareAgentCommitCompletion,
   sendAgentCommitPrompt,
   startAgentSession,
@@ -640,6 +641,79 @@ describe("command client", () => {
       },
       message:
         "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+    });
+  });
+
+  it("invokes Rust Core through the get issue summary command", async () => {
+    invokeMock.mockResolvedValue({
+      issue: {
+        id: 3,
+        projectId: 1,
+        title: "Review issue",
+        description: "",
+        status: "completed",
+        linkedSessionId: 7,
+        linkedSessionStatus: "closed",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_700_000_000,
+        updatedAt: 1_780_700_100_000,
+      },
+      sessionStartedAt: 1_780_700_000_000,
+      sessionClosedAt: 1_780_700_100_000,
+      completion: {
+        option: "agent_auto_commit",
+        result: "completed",
+        commitHash: "abc1234",
+        failureReason: null,
+        headBefore: "1111111",
+        headAfter: "abc1234",
+        changedFilesJson: "[]",
+        createdAt: 1_780_700_100_000,
+        source: "completion_attempt",
+      },
+      diagnostics: [],
+    });
+
+    await expect(
+      getIssueSummary({
+        projectId: 1,
+        issueId: 3,
+      }),
+    ).resolves.toEqual({
+      issue: {
+        id: 3,
+        projectId: 1,
+        title: "Review issue",
+        description: "",
+        status: "completed",
+        linkedSessionId: 7,
+        linkedSessionStatus: "closed",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_700_000_000,
+        updatedAt: 1_780_700_100_000,
+      },
+      sessionStartedAt: 1_780_700_000_000,
+      sessionClosedAt: 1_780_700_100_000,
+      completion: {
+        option: "agent_auto_commit",
+        result: "completed",
+        commitHash: "abc1234",
+        failureReason: null,
+        headBefore: "1111111",
+        headAfter: "abc1234",
+        changedFilesJson: "[]",
+        createdAt: 1_780_700_100_000,
+        source: "completion_attempt",
+      },
+      diagnostics: [],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("get_issue_summary", {
+      input: {
+        projectId: 1,
+        issueId: 3,
+      },
     });
   });
 });

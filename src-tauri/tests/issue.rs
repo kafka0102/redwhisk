@@ -16,7 +16,7 @@ use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStat
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput,
-    DetectAgentCommitCompletionInput, IssueStatus, MarkIssueReviewInput,
+    DetectAgentCommitCompletionInput, GetIssueSummaryInput, IssueStatus, MarkIssueReviewInput,
     PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
@@ -696,6 +696,189 @@ fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
         .list_session_events(session_id)
         .expect("session events");
     assert!(events.is_empty());
+}
+
+#[test]
+fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "summary-manual-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Manual completed issue".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete manually");
+
+    let summary = service
+        .get_issue_summary(GetIssueSummaryInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("summary");
+
+    assert_eq!(summary.issue.status, IssueStatus::Completed);
+    assert_eq!(summary.issue.linked_session_id, Some(session_id));
+    assert_eq!(
+        summary.completion.as_ref().map(|info| info.option.as_str()),
+        Some("complete_manual")
+    );
+    assert_eq!(
+        summary.completion.as_ref().map(|info| info.result.as_str()),
+        Some("completed")
+    );
+    assert_eq!(
+        summary
+            .completion
+            .as_ref()
+            .and_then(|info| info.commit_hash.as_deref()),
+        None
+    );
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|item| item.contains("缺少 CompletionAttempt 记录")));
+}
+
+#[test]
+fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_completion() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("summary-final-fact-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty change\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "summary-final-fact-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Manual complete after failed attempt".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
+    let pending = pty_sessions
+        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
+            command: "/bin/sh".to_string(),
+            working_dir: repo_dir.to_string_lossy().into_owned(),
+            log_path: temp_dir
+                .path()
+                .join("session.log")
+                .to_string_lossy()
+                .into_owned(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending");
+    pty_sessions.register(session_id, pending, |_| {});
+
+    service
+        .send_agent_commit_prompt(
+            SendAgentCommitPromptInput {
+                project_id,
+                issue_id: issue.id,
+            },
+            temp_dir.path(),
+            &pty_sessions,
+        )
+        .expect("send prompt");
+
+    let failed_completion = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect no commit");
+    assert_eq!(
+        failed_completion.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::NoCommitDetected
+    );
+
+    service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("manual complete");
+
+    let summary = service
+        .get_issue_summary(GetIssueSummaryInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("summary");
+
+    assert_eq!(summary.issue.status, IssueStatus::Completed);
+    assert_eq!(
+        summary.completion.as_ref().map(|info| info.option.as_str()),
+        Some("complete_manual")
+    );
+    assert_eq!(
+        summary.completion.as_ref().map(|info| info.source.as_str()),
+        Some("issue_action_fallback")
+    );
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|item| item.contains("未找到可代表最终 completed")));
 }
 
 #[test]
@@ -1420,6 +1603,30 @@ fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
         attempts[0].commit_hash.as_deref(),
         Some(attempts[0].head_after.as_str())
     );
+
+    let summary = service
+        .get_issue_summary(GetIssueSummaryInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("summary");
+    assert_eq!(summary.issue.status, IssueStatus::Completed);
+    assert_eq!(
+        summary.completion.as_ref().map(|info| info.option.as_str()),
+        Some("agent_auto_commit")
+    );
+    assert_eq!(
+        summary.completion.as_ref().map(|info| info.result.as_str()),
+        Some("completed")
+    );
+    assert_eq!(
+        summary
+            .completion
+            .as_ref()
+            .and_then(|info| info.commit_hash.as_deref()),
+        Some(attempts[0].head_after.as_str())
+    );
+    assert!(summary.diagnostics.is_empty());
 }
 
 #[test]
@@ -1668,6 +1875,62 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
         Some("merge_in_progress")
     );
     assert_eq!(attempts[0].commit_hash, None);
+}
+
+#[test]
+fn get_issue_summary_reports_completed_session_state_mismatch() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "summary-mismatch-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Completed mismatch".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'completed' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set completed");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "stopped",
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET closed_at = NULL WHERE id = ?1",
+            [session_id],
+        )
+        .expect("clear closed_at");
+
+    let summary = service
+        .get_issue_summary(GetIssueSummaryInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("summary");
+
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|item| item.contains("Session 状态异常：stopped")));
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|item| item.contains("缺少 closed_at")));
 }
 
 #[test]

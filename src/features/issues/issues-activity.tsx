@@ -13,6 +13,7 @@ import {
   type IssueStatus,
 } from "./issue-commands";
 import { IssueRunDialog } from "./issue-run-dialog";
+import { IssueSummaryDialog } from "./issue-summary-dialog";
 import { IssueDescriptionEditor } from "./issue-description-editor";
 import { listAgentProfiles } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -70,6 +71,7 @@ export function IssuesActivity({
   );
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
   const [isRunDialogOpen, setIsRunDialogOpen] = useState(false);
+  const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -230,6 +232,7 @@ export function IssuesActivity({
     setDialogErrorMessage(null);
     setIsOpeningLog(false);
     setIsRunDialogOpen(false);
+    setSummaryIssueId(null);
     const closingMode = dialogMode;
     const previousSelectedIssue =
       issues.find((issue) => issue.id === previousSelectedIssueIdRef.current) ??
@@ -408,6 +411,15 @@ export function IssuesActivity({
     }
   }
 
+  function handleOpenSummary() {
+    if (selectedIssue?.status !== "completed") {
+      return;
+    }
+
+    setDialogErrorMessage(null);
+    setSummaryIssueId(selectedIssue.id);
+  }
+
   function closeRunDialog() {
     setIsRunDialogOpen(false);
     runButtonRef.current?.focus();
@@ -466,6 +478,8 @@ export function IssuesActivity({
       selectedIssue?.linkedSessionStatus === "stopped") &&
     selectedIssue.linkedSessionLogPath != null &&
     selectedIssue.linkedSessionLogPath.length > 0;
+  const canViewSummary =
+    dialogMode === "edit" && selectedIssue?.status === "completed";
   const runStatusMessage =
     agentProfileErrorMessage ??
     (isLoadingAgentProfiles
@@ -691,6 +705,18 @@ export function IssuesActivity({
                       </Button>
                       <p>Continue this issue from Agents.</p>
                     </>
+                  ) : canViewSummary ? (
+                    <>
+                      <Button
+                        className="issues-button"
+                        type="button"
+                        variant="outline"
+                        onClick={handleOpenSummary}
+                      >
+                        View Summary
+                      </Button>
+                      <p>Review the completed issue summary.</p>
+                    </>
                   ) : dialogMode === "edit" && canOpenLog ? (
                     <>
                       <Button
@@ -763,6 +789,13 @@ export function IssuesActivity({
           projectId={projectId}
           onClose={closeRunDialog}
           onStarted={handleRunStarted}
+        />
+      ) : null}
+      {summaryIssueId != null ? (
+        <IssueSummaryDialog
+          issueId={summaryIssueId}
+          projectId={projectId}
+          onClose={() => setSummaryIssueId(null)}
         />
       ) : null}
     </main>

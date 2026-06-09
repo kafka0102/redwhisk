@@ -1,43 +1,44 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-7-block-auto-completion-during-git-operation.md
-story_key: 5-7-block-auto-completion-during-git-operation
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-8-view-completed-issue-summary.md
+story_key: 5-8-view-completed-issue-summary
 story_status: done
-baseline_commit: 29fc520
+baseline_commit: 3629596
 changed_files:
-  - _bmad-output/implementation-artifacts/5-7-block-auto-completion-during-git-operation.md
+  - _bmad-output/implementation-artifacts/5-8-view-completed-issue-summary.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src-tauri/migrations/0014_completion_attempt_failure_reason.sql
-  - src-tauri/migrations/0015_completion_attempt_git_operation_blocked.sql
+  - src-tauri/src/commands/issue_commands.rs
   - src-tauri/src/core/issue_service.rs
-  - src-tauri/src/db/completion_attempt_repository.rs
-  - src-tauri/src/db/migrations.rs
-  - src-tauri/src/types/completion_attempt.rs
+  - src-tauri/src/lib.rs
   - src-tauri/src/types/issue.rs
   - src-tauri/tests/issue.rs
-  - src-tauri/tests/local_data.rs
   - src/features/agents/agents-activity.test.tsx
+  - src/features/agents/agents-activity.tsx
+  - src/features/agents/issue-inspector.tsx
   - src/features/issues/issue-commands.ts
+  - src/features/issues/issue-summary-dialog.tsx
+  - src/features/issues/issues-activity.test.tsx
+  - src/features/issues/issues-activity.tsx
   - src/shared/commands/command-client.test.ts
 validation_commands:
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
   - pnpm lint
   - pnpm typecheck
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
+  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
+  - cargo test --manifest-path src-tauri/Cargo.toml --test issue get_issue_summary
   - cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
   - git diff --check
 validation_results:
-  - "pnpm format: passed; removed unrelated formatting diff before commit."
+  - "pnpm format: passed; excluded unrelated formatting-only diff in src/features/agents/codex-terminal-snapshot.ts from commit scope."
   - "cargo fmt --manifest-path src-tauri/Cargo.toml: passed."
   - "pnpm lint: passed."
   - "pnpm typecheck: passed."
-  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts: passed."
+  - "pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts: passed."
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue get_issue_summary: passed."
   - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: passed."
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test git_detection: passed."
   - "git diff --check: passed."
-review_summary: Approved
+review_summary: "Approved: follow-up review clean after fixing final-completion selection and completed-session diagnostics."
 blocking_reason:
-updated_at: 2026-06-09T15:50:30+08:00
+updated_at: 2026-06-09T17:11:16+08:00

@@ -61,6 +61,13 @@ pub struct DetectAgentCommitCompletionInput {
     pub issue_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetIssueSummaryInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCommitChangedFileSummary {
@@ -103,6 +110,30 @@ pub struct DetectAgentCommitCompletionResult {
     pub outcome: DetectAgentCommitCompletionOutcome,
     pub issue: IssueRecord,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueSummaryCompletionInfo {
+    pub option: String,
+    pub result: String,
+    pub commit_hash: Option<String>,
+    pub failure_reason: Option<String>,
+    pub head_before: Option<String>,
+    pub head_after: Option<String>,
+    pub changed_files_json: Option<String>,
+    pub created_at: i64,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueSummaryRecord {
+    pub issue: IssueRecord,
+    pub session_started_at: Option<i64>,
+    pub session_closed_at: Option<i64>,
+    pub completion: Option<IssueSummaryCompletionInfo>,
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
