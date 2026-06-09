@@ -91,6 +91,16 @@ export interface SendAgentCommitPromptResult {
   codexSessionId?: string | null;
 }
 
+export type DetectAgentCommitCompletionOutcome =
+  | "completed"
+  | "no_commit_detected";
+
+export interface DetectAgentCommitCompletionResult {
+  outcome: DetectAgentCommitCompletionOutcome;
+  issue: IssueRecord;
+  message: string;
+}
+
 export interface StartAgentSessionInput {
   projectId: number;
   issueId: number;
@@ -157,10 +167,13 @@ export function sendAgentCommitPrompt(
 
 export function detectAgentCommitCompletion(
   input: DetectAgentCommitCompletionInput,
-): Promise<IssueRecord> {
-  return invokeCommand<IssueRecord>("detect_agent_commit_completion", {
-    input,
-  });
+): Promise<DetectAgentCommitCompletionResult> {
+  return invokeCommand<DetectAgentCommitCompletionResult>(
+    "detect_agent_commit_completion",
+    {
+      input,
+    },
+  );
 }
 
 export function startAgentSession(

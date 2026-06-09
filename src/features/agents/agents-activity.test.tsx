@@ -214,17 +214,21 @@ describe("AgentsActivity", () => {
       updatedAt: 1_780_639_000_000,
     });
     detectAgentCommitCompletionMock.mockResolvedValue({
-      id: 22,
-      projectId: 1,
-      title: "Review issue",
-      description: "Review description",
-      status: "completed",
-      linkedSessionId: 502,
-      linkedSessionStatus: "closed",
-      linkedSessionAttention: "none",
-      linkedSessionLogPath: "/tmp/session.log",
-      createdAt: 1_780_632_000_000,
-      updatedAt: 1_780_639_000_000,
+      outcome: "completed",
+      issue: {
+        id: 22,
+        projectId: 1,
+        title: "Review issue",
+        description: "Review description",
+        status: "completed",
+        linkedSessionId: 502,
+        linkedSessionStatus: "closed",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_632_000_000,
+        updatedAt: 1_780_639_000_000,
+      },
+      message: "已检测到新的 commit，Issue 已完成。",
     });
     prepareAgentCommitCompletionMock.mockResolvedValue({
       issueId: 22,
@@ -1734,9 +1738,23 @@ describe("AgentsActivity", () => {
 
   it("keeps the review session active when agent commit detection does not complete", async () => {
     const user = userEvent.setup();
-    detectAgentCommitCompletionMock.mockRejectedValueOnce(
-      new Error("尚未检测到新的 commit，Issue 保持待验收。"),
-    );
+    detectAgentCommitCompletionMock.mockResolvedValueOnce({
+      outcome: "no_commit_detected",
+      issue: {
+        id: 22,
+        projectId: 1,
+        title: "Review issue",
+        description: "Review description",
+        status: "review",
+        linkedSessionId: 502,
+        linkedSessionStatus: "running",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_632_000_000,
+        updatedAt: 1_780_639_000_000,
+      },
+      message: "尚未检测到新的 commit，Issue 保持待验收。",
+    });
     listAgentSessionsMock
       .mockResolvedValueOnce({
         sessions: [
@@ -1801,6 +1819,11 @@ describe("AgentsActivity", () => {
       projectId: 1,
       issueId: 22,
     });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
+      ).not.toBeInTheDocument(),
+    );
     expect(
       screen.getByRole("button", { name: "Complete with Agent Commit" }),
     ).toBeInTheDocument();

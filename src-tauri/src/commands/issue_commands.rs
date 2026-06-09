@@ -6,9 +6,9 @@ use crate::core::issue_service::IssueService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
-    CreateIssueInput, DetectAgentCommitCompletionInput, IssueListResponse, IssueRecord,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput,
-    SendAgentCommitPromptResult, UpdateIssueInput,
+    CreateIssueInput, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
+    IssueListResponse, IssueRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
 };
 
 #[tauri::command]
@@ -101,7 +101,7 @@ pub fn detect_agent_commit_completion(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: DetectAgentCommitCompletionInput,
-) -> Result<IssueRecord, CommandError> {
+) -> Result<DetectAgentCommitCompletionResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
         &data_dir,
