@@ -18,6 +18,7 @@ import {
 } from "../../features/agents/agent-session-commands";
 import {
   prepareAgentCommitCompletion,
+  sendAgentCommitPrompt,
   startAgentSession,
 } from "../../features/issues/issue-commands";
 import {
@@ -515,6 +516,31 @@ describe("command client", () => {
       completionPrompt: "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
     });
     expect(invokeMock).toHaveBeenCalledWith("prepare_agent_commit_completion", {
+      input: {
+        projectId: 1,
+        issueId: 3,
+      },
+    });
+  });
+
+  it("invokes Rust Core through the send agent commit prompt command", async () => {
+    invokeMock.mockResolvedValue({
+      issueId: 3,
+      sessionId: 7,
+      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+    });
+
+    await expect(
+      sendAgentCommitPrompt({
+        projectId: 1,
+        issueId: 3,
+      }),
+    ).resolves.toEqual({
+      issueId: 3,
+      sessionId: 7,
+      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("send_agent_commit_prompt", {
       input: {
         projectId: 1,
         issueId: 3,

@@ -23,6 +23,7 @@ import {
   completeIssueManual,
   markIssueReview,
   prepareAgentCommitCompletion,
+  sendAgentCommitPrompt,
   type AgentCommitCompletionPreview,
   type IssueRecord,
 } from "../issues/issue-commands";
@@ -77,6 +78,8 @@ export function AgentsActivity({
   const [isCompletingManual, setIsCompletingManual] = useState(false);
   const [isCompletingClean, setIsCompletingClean] = useState(false);
   const [isPreparingAgentCommit, setIsPreparingAgentCommit] = useState(false);
+  const [isSendingAgentCommitPrompt, setIsSendingAgentCommitPrompt] =
+    useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
     string | null
@@ -581,7 +584,33 @@ export function AgentsActivity({
   }
 
   function handleCloseAgentCommitPreview() {
+    if (isSendingAgentCommitPrompt) {
+      return;
+    }
     setAgentCommitPreview(null);
+  }
+
+  async function handleConfirmAgentCommit() {
+    if (!linkedIssue || !agentCommitPreview) {
+      return;
+    }
+
+    setCompleteAgentCommitErrorMessage(null);
+    setIsSendingAgentCommitPrompt(true);
+
+    try {
+      await sendAgentCommitPrompt({
+        projectId,
+        issueId: linkedIssue.issueId,
+      });
+      setAgentCommitPreview(null);
+      const response = await listAgentSessions(projectId);
+      setSessions(applySessionListOverlays(response.sessions));
+    } catch (error) {
+      setCompleteAgentCommitErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsSendingAgentCommitPrompt(false);
+    }
   }
 
   async function handleOpenLog() {
@@ -1109,13 +1138,20 @@ export function AgentsActivity({
                 </details>
               </div>
             </div>
-            <p className="issue-dialog__status" aria-label="Dialog status">
-              确认后的 Agent Commit 注入将在 Story 5.4
-              接入；当前故事只展示确认面板。
-            </p>
             <div className="issue-dialog__footer">
-              <button type="button" onClick={handleCloseAgentCommitPreview}>
+              <button
+                disabled={isSendingAgentCommitPrompt}
+                type="button"
+                onClick={handleCloseAgentCommitPreview}
+              >
                 Cancel
+              </button>
+              <button
+                disabled={isSendingAgentCommitPrompt}
+                type="button"
+                onClick={() => void handleConfirmAgentCommit()}
+              >
+                {isSendingAgentCommitPrompt ? "Sending..." : "Confirm"}
               </button>
             </div>
           </div>

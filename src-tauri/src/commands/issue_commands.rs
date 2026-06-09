@@ -7,7 +7,8 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
     CreateIssueInput, IssueListResponse, IssueRecord, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, UpdateIssueInput,
+    PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    UpdateIssueInput,
 };
 
 #[tauri::command]
@@ -83,6 +84,16 @@ pub fn prepare_agent_commit_completion(
 ) -> Result<AgentCommitCompletionPreview, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     IssueService::prepare_agent_commit_completion_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn send_agent_commit_prompt(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SendAgentCommitPromptInput,
+) -> Result<SendAgentCommitPromptResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    IssueService::send_agent_commit_prompt_in_data_dir(data_dir, input, &state.pty_sessions)
 }
 
 fn prepare_issue_data_dir(

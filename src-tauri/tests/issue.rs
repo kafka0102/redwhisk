@@ -5,6 +5,7 @@ use std::process::Command;
 use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
+use redwhisk_lib::db::completion_attempt_repository::CompletionAttemptRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::event_repository::EventRepository;
 use redwhisk_lib::db::issue_repository::IssueRepository;
@@ -15,7 +16,8 @@ use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStat
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, IssueStatus,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, UpdateIssueInput,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput,
+    UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
@@ -1009,6 +1011,110 @@ fn prepare_agent_commit_completion_rejects_clean_repo() {
         .expect_err("clean repo should be rejected");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+}
+
+#[test]
+fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("send-agent-commit-prompt-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty change\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "send-agent-commit-prompt-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Review issue".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
+    let pending = pty_sessions
+        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
+            command: "/bin/sh".to_string(),
+            working_dir: repo_dir.to_string_lossy().into_owned(),
+            log_path: temp_dir
+                .path()
+                .join("session.log")
+                .to_string_lossy()
+                .into_owned(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending");
+    pty_sessions.register(session_id, pending, |_| {});
+
+    let result = service
+        .send_agent_commit_prompt(
+            SendAgentCommitPromptInput {
+                project_id,
+                issue_id: issue.id,
+            },
+            temp_dir.path(),
+            &pty_sessions,
+        )
+        .expect("send prompt");
+
+    assert_eq!(result.issue_id, issue.id);
+    assert_eq!(result.session_id, session_id);
+
+    let persisted_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(persisted_issue.status, IssueStatus::Review);
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    let prompt_event = session_events
+        .iter()
+        .find(|event| event.event_type == SessionEventType::SessionPromptInjected)
+        .expect("prompt injected event");
+    let prompt_payload: serde_json::Value =
+        serde_json::from_str(&prompt_event.payload_json).expect("prompt payload");
+    assert_eq!(prompt_payload["kind"], "completion");
+    assert_eq!(prompt_payload["issueId"], issue.id);
+
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].option.as_str(), "agent_auto_commit");
+    assert_eq!(attempts[0].result.as_str(), "prompt_sent");
+    assert!(attempts[0].changed_files_json.contains("tracked.txt"));
 }
 
 #[test]

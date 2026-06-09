@@ -47,6 +47,13 @@ pub struct PrepareAgentCommitCompletionInput {
     pub issue_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendAgentCommitPromptInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCommitChangedFileSummary {
@@ -65,6 +72,14 @@ pub struct AgentCommitCompletionPreview {
     pub changed_files_count: usize,
     pub changed_files: Vec<AgentCommitChangedFileSummary>,
     pub completion_prompt: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendAgentCommitPromptResult {
+    pub issue_id: i64,
+    pub session_id: i64,
+    pub codex_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -20,6 +20,7 @@ impl<'connection> CompletionAttemptRepository<'connection> {
         option: CompletionAttemptOption,
         head_before: &str,
         head_after: &str,
+        changed_files_json: &str,
         result: CompletionAttemptResult,
         created_at: i64,
     ) -> rusqlite::Result<CompletionAttemptRecord> {
@@ -30,15 +31,17 @@ impl<'connection> CompletionAttemptRepository<'connection> {
                option,
                head_before,
                head_after,
+               changed_files_json,
                result,
                created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 issue_id,
                 session_id,
                 option.as_str(),
                 head_before,
                 head_after,
+                changed_files_json,
                 result.as_str(),
                 created_at
             ],
@@ -53,7 +56,7 @@ impl<'connection> CompletionAttemptRepository<'connection> {
         issue_id: i64,
     ) -> rusqlite::Result<Vec<CompletionAttemptRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, issue_id, session_id, option, head_before, head_after, result, created_at
+            "SELECT id, issue_id, session_id, option, head_before, head_after, changed_files_json, result, created_at
              FROM completion_attempts
              WHERE issue_id = ?1
              ORDER BY created_at DESC, id DESC",
@@ -73,7 +76,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<CompletionAttemptRecord>> {
     connection
         .query_row(
-            "SELECT id, issue_id, session_id, option, head_before, head_after, result, created_at
+            "SELECT id, issue_id, session_id, option, head_before, head_after, changed_files_json, result, created_at
              FROM completion_attempts
              WHERE id = ?1",
             params![id],
@@ -92,8 +95,9 @@ fn completion_attempt_from_row(
         option: completion_attempt_option_from_str(&row.get::<_, String>(3)?)?,
         head_before: row.get(4)?,
         head_after: row.get(5)?,
-        result: completion_attempt_result_from_str(&row.get::<_, String>(6)?)?,
-        created_at: row.get(7)?,
+        changed_files_json: row.get(6)?,
+        result: completion_attempt_result_from_str(&row.get::<_, String>(7)?)?,
+        created_at: row.get(8)?,
     })
 }
 
@@ -101,6 +105,7 @@ fn completion_attempt_option_from_str(value: &str) -> rusqlite::Result<Completio
     match value {
         "complete_manual" => Ok(CompletionAttemptOption::CompleteManual),
         "complete_clean" => Ok(CompletionAttemptOption::CompleteClean),
+        "agent_auto_commit" => Ok(CompletionAttemptOption::AgentAutoCommit),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -108,6 +113,7 @@ fn completion_attempt_option_from_str(value: &str) -> rusqlite::Result<Completio
 fn completion_attempt_result_from_str(value: &str) -> rusqlite::Result<CompletionAttemptResult> {
     match value {
         "completed" => Ok(CompletionAttemptResult::Completed),
+        "prompt_sent" => Ok(CompletionAttemptResult::PromptSent),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

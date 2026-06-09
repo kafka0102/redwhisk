@@ -59,6 +59,11 @@ export interface PrepareAgentCommitCompletionInput {
   issueId: number;
 }
 
+export interface SendAgentCommitPromptInput {
+  projectId: number;
+  issueId: number;
+}
+
 export interface AgentCommitChangedFileSummary {
   status: string;
   path: string;
@@ -73,6 +78,12 @@ export interface AgentCommitCompletionPreview {
   changedFilesCount: number;
   changedFiles: AgentCommitChangedFileSummary[];
   completionPrompt: string;
+}
+
+export interface SendAgentCommitPromptResult {
+  issueId: number;
+  sessionId: number;
+  codexSessionId?: string | null;
 }
 
 export interface StartAgentSessionInput {
@@ -125,6 +136,17 @@ export function prepareAgentCommitCompletion(
   return invokeCommand<AgentCommitCompletionPreview>(
     "prepare_agent_commit_completion",
     { input },
+  );
+}
+
+export function sendAgentCommitPrompt(
+  input: SendAgentCommitPromptInput,
+): Promise<SendAgentCommitPromptResult> {
+  return invokeCommand<SendAgentCommitPromptResult>(
+    "send_agent_commit_prompt",
+    {
+      input,
+    },
   );
 }
 
