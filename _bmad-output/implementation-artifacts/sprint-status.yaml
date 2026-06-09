@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-09T18:10:17+0800
+last_updated: 2026-06-09T20:59:50+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -98,3 +98,7 @@ development_status:
   5-8-view-completed-issue-summary: done
   5-9-open-completed-issue-log: done
   epic-5-retrospective: optional
+
+  epic-6: in-progress
+  6-1-stabilize-agent-session-terminal-rendering: ready-for-dev
+  epic-6-retrospective: optional
