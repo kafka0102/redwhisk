@@ -13,7 +13,9 @@ use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
-use crate::git::status::{read_git_snapshot, GitSnapshot};
+use crate::git::status::{
+    detect_commit_result, read_git_snapshot, GitCommitDetectionResult, GitSnapshot,
+};
 use crate::types::agent_session::{
     AgentSessionPromptKind, AgentSessionStatus, InjectAgentSessionPromptInput,
 };
@@ -21,9 +23,10 @@ use crate::types::completion_attempt::{CompletionAttemptOption, CompletionAttemp
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
-    CompleteIssueManualInput, CreateIssueInput, IssueListResponse, IssueRecord, IssueStatus,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput,
-    SendAgentCommitPromptResult, UpdateIssueInput,
+    CompleteIssueManualInput, CreateIssueInput, DetectAgentCommitCompletionInput,
+    IssueListResponse, IssueRecord, IssueStatus, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -470,6 +473,7 @@ impl<'connection> IssueService<'connection> {
             CompletionAttemptOption::CompleteClean,
             &snapshot.head,
             &snapshot.head,
+            None,
             "[]",
             CompletionAttemptResult::Completed,
             completed_issue.updated_at,
@@ -552,6 +556,7 @@ impl<'connection> IssueService<'connection> {
             CompletionAttemptOption::AgentAutoCommit,
             &context.snapshot.head,
             &context.snapshot.head,
+            None,
             &changed_files_json,
             CompletionAttemptResult::PromptSent,
             recorded_at,
@@ -564,6 +569,214 @@ impl<'connection> IssueService<'connection> {
             session_id: context.linked_session_id,
             codex_session_id: inject_result.codex_session_id,
         })
+    }
+
+    pub fn detect_agent_commit_completion(
+        &self,
+        input: DetectAgentCommitCompletionInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let project = self
+            .project_repository
+            .find_by_id(input.project_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(
+                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
+                    )
+            })?;
+
+        if project.completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 Project 未启用 agent_auto_commit 完成策略。",
+            ));
+        }
+
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status != IssueStatus::Review {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以检测 Agent Commit 完成结果。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以检测 Agent Commit 完成结果。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
+        })?;
+
+        let attempt =
+            CompletionAttemptRepository::find_latest_pending_agent_commit_attempt_in_transaction(
+                &transaction,
+                issue.id,
+                linked_session_id,
+            )
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "当前 Issue 没有可检测的 Agent Commit 尝试。",
+                )
+                .with_detail(ErrorDetail::new("CompletionAttempt").with_value("issueId", issue.id))
+            })?;
+
+        let before_snapshot = GitSnapshot {
+            head: attempt.head_before.clone(),
+            status_porcelain: String::new(),
+            changed_files: Vec::new(),
+            operation_state: GitOperationState::None,
+            is_clean: false,
+        };
+        let after_snapshot = read_git_snapshot(&project.repo_path).map_err(issue_git_error)?;
+        let detection = detect_commit_result(&project.repo_path, &before_snapshot, &after_snapshot)
+            .map_err(issue_git_error)?;
+
+        let commit_hash = match detection {
+            GitCommitDetectionResult::NewCommit { commit_hash } => commit_hash,
+            GitCommitDetectionResult::NoCommitDetected => {
+                return Err(CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "尚未检测到新的 commit，Issue 保持待验收。",
+                )
+                .with_detail(
+                    ErrorDetail::new("CompletionAttempt")
+                        .with_value("issueId", issue.id)
+                        .with_value("result", "no_commit_detected"),
+                ));
+            }
+            GitCommitDetectionResult::HeadMovedWithoutNewCommit { head } => {
+                return Err(CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "检测到 HEAD 变化，但不是新的前进式 commit。",
+                )
+                .with_detail(ErrorDetail::new("GitStatus").with_value("head", head)));
+            }
+            GitCommitDetectionResult::OperationInProgress { operation_state } => {
+                return Err(CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "当前 Git 正在进行中的操作阻止 Agent Commit 完成检测。",
+                )
+                .with_detail(
+                    ErrorDetail::new("GitOperation")
+                        .with_value("state", format_git_operation_state(operation_state)),
+                ));
+            }
+        };
+
+        let completed_issue = IssueRepository::complete_review_issue_cleanly_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            linked_session_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            )
+        })?;
+
+        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
+            &transaction,
+            linked_session_id,
+            AgentSessionStatus::Closed,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+            )
+        })?;
+
+        let issue_action_payload = json!({
+            "fromStatus": "review",
+            "toStatus": "completed",
+            "linkedSessionId": linked_session_id,
+            "option": "agent_auto_commit",
+            "commitHash": commit_hash,
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            completed_issue.id,
+            IssueActionType::IssueCompleted,
+            &issue_action_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        let session_event_payload = json!({
+            "sessionId": closed_session.id,
+            "issueId": closed_session.issue_id,
+            "status": "closed",
+            "reason": "agent_commit_completion",
+            "commitHash": commit_hash,
+            "logPath": closed_session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            closed_session.id,
+            SessionEventType::SessionClosed,
+            &session_event_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        CompletionAttemptRepository::update_result_in_transaction(
+            &transaction,
+            attempt.id,
+            &after_snapshot.head,
+            Some(&commit_hash),
+            CompletionAttemptResult::Completed,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssuePersistenceFailed,
+                "CompletionAttempt 更新失败。",
+            )
+            .with_detail(ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt.id))
+        })?;
+
+        transaction.commit().map_err(issue_database_error)?;
+
+        Ok(completed_issue)
     }
 
     pub fn list_issues_in_data_dir(
@@ -650,6 +863,17 @@ impl<'connection> IssueService<'connection> {
             data_dir,
             pty_sessions,
         )
+    }
+
+    pub fn detect_agent_commit_completion_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DetectAgentCommitCompletionInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository)
+            .detect_agent_commit_completion(input)
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {

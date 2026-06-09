@@ -38,6 +38,10 @@ const AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_VERSION: &str =
     "0012_agent_commit_completion_attempts";
 const AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0012_agent_commit_completion_attempts.sql");
+const AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_VERSION: &str =
+    "0013_agent_commit_completion_result";
+const AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0013_agent_commit_completion_result.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -155,6 +159,10 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_VERSION,
                     sql: AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_VERSION,
+                    sql: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_SQL,
                 },
             ];
         }

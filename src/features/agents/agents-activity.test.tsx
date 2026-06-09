@@ -22,6 +22,7 @@ import {
 import {
   completeIssueClean,
   completeIssueManual,
+  detectAgentCommitCompletion,
   listIssues,
   markIssueReview,
   prepareAgentCommitCompletion,
@@ -50,6 +51,7 @@ vi.mock("../settings/settings-commands", () => ({
 vi.mock("../issues/issue-commands", () => ({
   completeIssueManual: vi.fn(),
   completeIssueClean: vi.fn(),
+  detectAgentCommitCompletion: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
   prepareAgentCommitCompletion: vi.fn(),
@@ -66,6 +68,7 @@ const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
+const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
 const prepareAgentCommitCompletionMock = vi.mocked(
@@ -118,6 +121,7 @@ describe("AgentsActivity", () => {
     listIssuesMock.mockReset();
     completeIssueManualMock.mockReset();
     completeIssueCleanMock.mockReset();
+    detectAgentCommitCompletionMock.mockReset();
     prepareAgentCommitCompletionMock.mockReset();
     sendAgentCommitPromptMock.mockReset();
     markIssueReviewMock.mockReset();
@@ -206,6 +210,19 @@ describe("AgentsActivity", () => {
       linkedSessionId: 502,
       linkedSessionStatus: "closed",
       linkedSessionAttention: "none",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_639_000_000,
+    });
+    detectAgentCommitCompletionMock.mockResolvedValue({
+      id: 22,
+      projectId: 1,
+      title: "Review issue",
+      description: "Review description",
+      status: "completed",
+      linkedSessionId: 502,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      linkedSessionLogPath: "/tmp/session.log",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_639_000_000,
     });
@@ -1715,8 +1732,11 @@ describe("AgentsActivity", () => {
     expect(completeIssueCleanMock).not.toHaveBeenCalled();
   });
 
-  it("sends agent commit prompt from confirmation and keeps the review session active", async () => {
+  it("keeps the review session active when agent commit detection does not complete", async () => {
     const user = userEvent.setup();
+    detectAgentCommitCompletionMock.mockRejectedValueOnce(
+      new Error("尚未检测到新的 commit，Issue 保持待验收。"),
+    );
     listAgentSessionsMock
       .mockResolvedValueOnce({
         sessions: [
@@ -1777,14 +1797,98 @@ describe("AgentsActivity", () => {
       projectId: 1,
       issueId: 22,
     });
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
-      ).not.toBeInTheDocument(),
-    );
+    expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 22,
+    });
     expect(
       screen.getByRole("button", { name: "Complete with Agent Commit" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("尚未检测到新的 commit，Issue 保持待验收。"),
+    ).toBeInTheDocument();
+  });
+
+  it("detects agent commit completion after sending prompt and hides completion actions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            canCompleteClean: false,
+            canCompleteAgentCommit: true,
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "completed",
+            canCompleteClean: false,
+            canCompleteAgentCommit: false,
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_639_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: 1_780_639_000_000,
+          },
+        ],
+      });
+
+    render(
+      <AgentsActivity
+        activeSessionId={502}
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Completion Confirmation",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: 22,
+      }),
+    );
+    await waitFor(() =>
+      expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: 22,
+      }),
+    );
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Complete with Agent Commit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete Manually" }),
+    ).not.toBeInTheDocument();
   });
 
   it("completes a linked review issue manually from the session header and refreshes sessions", async () => {

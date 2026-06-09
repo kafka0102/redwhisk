@@ -17,6 +17,7 @@ import {
   writeAgentSessionTerminal,
 } from "../../features/agents/agent-session-commands";
 import {
+  detectAgentCommitCompletion,
   prepareAgentCommitCompletion,
   sendAgentCommitPrompt,
   startAgentSession,
@@ -541,6 +542,47 @@ describe("command client", () => {
       codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
     });
     expect(invokeMock).toHaveBeenCalledWith("send_agent_commit_prompt", {
+      input: {
+        projectId: 1,
+        issueId: 3,
+      },
+    });
+  });
+
+  it("invokes Rust Core through the detect agent commit completion command", async () => {
+    invokeMock.mockResolvedValue({
+      id: 3,
+      projectId: 1,
+      title: "Review issue",
+      description: "",
+      status: "completed",
+      linkedSessionId: 7,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      linkedSessionLogPath: "/tmp/session.log",
+      createdAt: 1_780_700_000_000,
+      updatedAt: 1_780_700_100_000,
+    });
+
+    await expect(
+      detectAgentCommitCompletion({
+        projectId: 1,
+        issueId: 3,
+      }),
+    ).resolves.toEqual({
+      id: 3,
+      projectId: 1,
+      title: "Review issue",
+      description: "",
+      status: "completed",
+      linkedSessionId: 7,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      linkedSessionLogPath: "/tmp/session.log",
+      createdAt: 1_780_700_000_000,
+      updatedAt: 1_780_700_100_000,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("detect_agent_commit_completion", {
       input: {
         projectId: 1,
         issueId: 3,

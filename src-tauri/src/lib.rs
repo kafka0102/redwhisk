@@ -30,6 +30,7 @@ pub fn run() {
             commands::issue_commands::complete_issue_clean,
             commands::issue_commands::prepare_agent_commit_completion,
             commands::issue_commands::send_agent_commit_prompt,
+            commands::issue_commands::detect_agent_commit_completion,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::start_agent_session,
             commands::agent_session_commands::start_standalone_agent_session,

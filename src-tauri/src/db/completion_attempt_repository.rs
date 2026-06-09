@@ -20,6 +20,7 @@ impl<'connection> CompletionAttemptRepository<'connection> {
         option: CompletionAttemptOption,
         head_before: &str,
         head_after: &str,
+        commit_hash: Option<&str>,
         changed_files_json: &str,
         result: CompletionAttemptResult,
         created_at: i64,
@@ -31,16 +32,18 @@ impl<'connection> CompletionAttemptRepository<'connection> {
                option,
                head_before,
                head_after,
+               commit_hash,
                changed_files_json,
                result,
                created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 issue_id,
                 session_id,
                 option.as_str(),
                 head_before,
                 head_after,
+                commit_hash,
                 changed_files_json,
                 result.as_str(),
                 created_at
@@ -51,12 +54,56 @@ impl<'connection> CompletionAttemptRepository<'connection> {
         find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
+    pub fn find_latest_pending_agent_commit_attempt_in_transaction(
+        transaction: &Transaction<'_>,
+        issue_id: i64,
+        session_id: i64,
+    ) -> rusqlite::Result<Option<CompletionAttemptRecord>> {
+        transaction
+            .query_row(
+                "SELECT id, issue_id, session_id, option, head_before, head_after, commit_hash, changed_files_json, result, created_at
+                 FROM completion_attempts
+                 WHERE issue_id = ?1
+                   AND session_id = ?2
+                   AND option = 'agent_auto_commit'
+                   AND result = 'prompt_sent'
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 1",
+                params![issue_id, session_id],
+                completion_attempt_from_row,
+            )
+            .optional()
+    }
+
+    pub fn update_result_in_transaction(
+        transaction: &Transaction<'_>,
+        id: i64,
+        head_after: &str,
+        commit_hash: Option<&str>,
+        result: CompletionAttemptResult,
+    ) -> rusqlite::Result<Option<CompletionAttemptRecord>> {
+        let changed = transaction.execute(
+            "UPDATE completion_attempts
+             SET head_after = ?1,
+                 commit_hash = ?2,
+                 result = ?3
+             WHERE id = ?4",
+            params![head_after, commit_hash, result.as_str(), id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, id)
+    }
+
     pub fn list_by_issue_id(
         &self,
         issue_id: i64,
     ) -> rusqlite::Result<Vec<CompletionAttemptRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, issue_id, session_id, option, head_before, head_after, changed_files_json, result, created_at
+            "SELECT id, issue_id, session_id, option, head_before, head_after, commit_hash, changed_files_json, result, created_at
              FROM completion_attempts
              WHERE issue_id = ?1
              ORDER BY created_at DESC, id DESC",
@@ -76,7 +123,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<CompletionAttemptRecord>> {
     connection
         .query_row(
-            "SELECT id, issue_id, session_id, option, head_before, head_after, changed_files_json, result, created_at
+            "SELECT id, issue_id, session_id, option, head_before, head_after, commit_hash, changed_files_json, result, created_at
              FROM completion_attempts
              WHERE id = ?1",
             params![id],
@@ -95,9 +142,10 @@ fn completion_attempt_from_row(
         option: completion_attempt_option_from_str(&row.get::<_, String>(3)?)?,
         head_before: row.get(4)?,
         head_after: row.get(5)?,
-        changed_files_json: row.get(6)?,
-        result: completion_attempt_result_from_str(&row.get::<_, String>(7)?)?,
-        created_at: row.get(8)?,
+        commit_hash: row.get(6)?,
+        changed_files_json: row.get(7)?,
+        result: completion_attempt_result_from_str(&row.get::<_, String>(8)?)?,
+        created_at: row.get(9)?,
     })
 }
 
@@ -114,6 +162,7 @@ fn completion_attempt_result_from_str(value: &str) -> rusqlite::Result<Completio
     match value {
         "completed" => Ok(CompletionAttemptResult::Completed),
         "prompt_sent" => Ok(CompletionAttemptResult::PromptSent),
+        "no_commit_detected" => Ok(CompletionAttemptResult::NoCommitDetected),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

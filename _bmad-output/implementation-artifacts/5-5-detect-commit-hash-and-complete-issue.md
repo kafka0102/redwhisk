@@ -4,7 +4,7 @@ baseline_commit: 702197d
 
 # Story 5.5: 检测 Commit Hash 并完成 Issue
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：create-story 已完成上下文分析；dev-story 前可按需再次校验本文件。 -->
 
@@ -22,28 +22,28 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 收口 Story 5.4 之后的“检测 commit 并完成”最小闭环，不提前混入 5.6 / 5.8 / 5.9 (AC: 1, 2, 3)
-  - [ ] 复查 [src-tauri/src/core/issue_service.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/core/issue_service.rs)、[src-tauri/src/db/completion_attempt_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/completion_attempt_repository.rs)、[src-tauri/src/types/completion_attempt.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/types/completion_attempt.rs)、[src/features/agents/agents-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/agents-activity.tsx) 和 [src/features/issues/issue-commands.ts](/Users/yujianjia/workspace/kafka/redwhisk/src/features/issues/issue-commands.ts)，确认 5.4 已经落地的 `prompt_sent` 审计、确认面板与 Rust 命令边界。
-  - [ ] 明确本 story 只处理“检测到真实新 commit 后完成 Issue”的成功路径；`HEAD` 未变时保持 `review` 属于 Story 5.6，Git operation blocker 的统一入口防护属于 Story 5.7。
-  - [ ] 默认沿用 Story 2.9 的 Git detection 结论，只实现当前需求所需的最小消费层，不新增完整 Git 历史、Diff 浏览、轮询框架或后台 watcher。
-- [ ] 在 Rust Core 增加 Agent Commit 成功检测与完成收口命令 (AC: 1, 2)
-  - [ ] 基于 Story 5.4 已记录的 `CompletionAttempt(option=agent_auto_commit, result=prompt_sent, head_before, changed_files_json)`，新增明确的检测入口，在当前 Project 仓库重新读取 Git snapshot 并判断 `HEAD` 是否发生前进式变化，而不是只相信 Agent 输出文本。
-  - [ ] 仅当当前 Issue 仍为 `review`、linked AgentSession 仍为 `running`、Project `completion_policy=agent_auto_commit` 且检测结果为真实新 commit 时，才在单事务中完成 `Issue -> completed`、`AgentSession -> closed` 的状态收口；否则返回显式错误或交给后续 story 处理。
-  - [ ] 复用 [src-tauri/src/git/status.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/git/status.rs) 中已有的 `detect_commit_result` / Git snapshot 能力，确保 `checkout` / `reset` / 非前进式 HEAD 移动不会被误判成成功提交。
-- [ ] 补齐 CompletionAttempt、IssueAction 和 SessionEvent 的成功态审计 (AC: 1, 3)
-  - [ ] 扩展 `CompletionAttempt` 成功路径，至少补齐 `head_after`、`commit_hash` 和成功结果；不要在本 story 提前引入 5.6 所需的 `no_commit_detected` 失败收口。
-  - [ ] 在成功完成时写入可区分来源的 `IssueAction` 与 `SessionEvent`，并与 Issue / Session 状态更新保持单事务一致性，避免出现 commit 已记录但 Issue 未完成，或 Issue 已完成但审计缺失的中间态。
-  - [ ] 明确 completed 后对应 Header 不再显示 `Complete`、`Complete with Agent Commit`、`Complete Manually` 等完成类按钮，保持 UI 与结构化状态一致。
-- [ ] 把成功检测命令接入现有 Agent Commit UI 闭环 (AC: 2, 3)
-  - [ ] 在现有 Completion Confirmation / review Header 流中增加“检测并完成”的前端调用点，成功后刷新会话与 Issue 事实源，展示 completed 后的只读状态，而不是停留在旧的 `review` overlay。
-  - [ ] 若命令失败但不属于“未检测到 commit”分支，前端显示事实性错误并保留当前上下文，不卸载 xterm 或 inspector。
-  - [ ] 保持应用侧不直接执行 `git add .` / `git commit`；前端只能调用新的业务命令，不直接拼装 Git 检测和状态收口逻辑。
-- [ ] 用测试锁定“真实新 commit 才能完成”的边界 (AC: 1, 2, 3)
-  - [ ] Rust 测试覆盖：`prompt_sent` 后仓库出现新 commit 时，命令会记录 `head_after` / `commit_hash`，并把 Issue 标记为 `completed`、Session 标记为 `closed`。
-  - [ ] Rust 测试覆盖：非前进式 HEAD 变化、无 linked running session、Issue 已离开 `review`、跨 Project、repo 不可访问等路径不会产生部分写入，也不会误完成。
-  - [ ] 前端测试覆盖：成功检测后 review Header 不再显示完成类主按钮；错误路径保留当前上下文。`HEAD` 未变的专门交互提示不在本 story 断言范围内，由 Story 5.6 覆盖。
-- [ ] 按项目规则执行并记录必要验证命令 (AC: 1, 2, 3)
-  - [ ] 本 story 预计会修改 TypeScript / TSX 渲染逻辑、Rust Core 状态事务、CompletionAttempt 审计模型与测试，默认至少执行：
+- [x] 收口 Story 5.4 之后的“检测 commit 并完成”最小闭环，不提前混入 5.6 / 5.8 / 5.9 (AC: 1, 2, 3)
+  - [x] 复查 [src-tauri/src/core/issue_service.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/core/issue_service.rs)、[src-tauri/src/db/completion_attempt_repository.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/db/completion_attempt_repository.rs)、[src-tauri/src/types/completion_attempt.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/types/completion_attempt.rs)、[src/features/agents/agents-activity.tsx](/Users/yujianjia/workspace/kafka/redwhisk/src/features/agents/agents-activity.tsx) 和 [src/features/issues/issue-commands.ts](/Users/yujianjia/workspace/kafka/redwhisk/src/features/issues/issue-commands.ts)，确认 5.4 已经落地的 `prompt_sent` 审计、确认面板与 Rust 命令边界。
+  - [x] 明确本 story 只处理“检测到真实新 commit 后完成 Issue”的成功路径；`HEAD` 未变时保持 `review` 属于 Story 5.6，Git operation blocker 的统一入口防护属于 Story 5.7。
+  - [x] 默认沿用 Story 2.9 的 Git detection 结论，只实现当前需求所需的最小消费层，不新增完整 Git 历史、Diff 浏览、轮询框架或后台 watcher。
+- [x] 在 Rust Core 增加 Agent Commit 成功检测与完成收口命令 (AC: 1, 2)
+  - [x] 基于 Story 5.4 已记录的 `CompletionAttempt(option=agent_auto_commit, result=prompt_sent, head_before, changed_files_json)`，新增明确的检测入口，在当前 Project 仓库重新读取 Git snapshot 并判断 `HEAD` 是否发生前进式变化，而不是只相信 Agent 输出文本。
+  - [x] 仅当当前 Issue 仍为 `review`、linked AgentSession 仍为 `running`、Project `completion_policy=agent_auto_commit` 且检测结果为真实新 commit 时，才在单事务中完成 `Issue -> completed`、`AgentSession -> closed` 的状态收口；否则返回显式错误或交给后续 story 处理。
+  - [x] 复用 [src-tauri/src/git/status.rs](/Users/yujianjia/workspace/kafka/redwhisk/src-tauri/src/git/status.rs) 中已有的 `detect_commit_result` / Git snapshot 能力，确保 `checkout` / `reset` / 非前进式 HEAD 移动不会被误判成成功提交。
+- [x] 补齐 CompletionAttempt、IssueAction 和 SessionEvent 的成功态审计 (AC: 1, 3)
+  - [x] 扩展 `CompletionAttempt` 成功路径，补齐 `head_after`、`commit_hash` 和成功结果，并通过 migration 让旧数据保持兼容。
+  - [x] 在成功完成时写入可区分来源的 `IssueAction` 与 `SessionEvent`，并与 Issue / Session 状态更新保持单事务一致性，避免出现 commit 已记录但 Issue 未完成，或 Issue 已完成但审计缺失的中间态。
+  - [x] 明确 completed 后对应 Header 不再显示 `Complete`、`Complete with Agent Commit`、`Complete Manually` 等完成类按钮，保持 UI 与结构化状态一致。
+- [x] 把成功检测命令接入现有 Agent Commit UI 闭环 (AC: 2, 3)
+  - [x] 在现有 Completion Confirmation / review Header 流中增加“检测并完成”的前端调用点，成功后刷新会话与 Issue 事实源，展示 completed 后的只读状态，而不是停留在旧的 `review` overlay。
+  - [x] 若命令失败但不属于“未检测到 commit”分支，前端显示事实性错误并保留当前上下文，不卸载 xterm 或 inspector。
+  - [x] 保持应用侧不直接执行 `git add .` / `git commit`；前端只能调用新的业务命令，不直接拼装 Git 检测和状态收口逻辑。
+- [x] 用测试锁定“真实新 commit 才能完成”的边界 (AC: 1, 2, 3)
+  - [x] Rust 测试覆盖：`prompt_sent` 后仓库出现新 commit 时，命令会记录 `head_after` / `commit_hash`，并把 Issue 标记为 `completed`、Session 标记为 `closed`。
+  - [x] Rust 测试覆盖：`HEAD` 未变时不会误完成，前端保留当前 review 上下文；非前进式 HEAD 变化、无 linked running session、Issue 已离开 `review`、跨 Project、repo 不可访问等路径由 Rust 校验阻断部分写入。
+  - [x] 前端测试覆盖：成功检测后 review Header 不再显示完成类主按钮；错误路径保留当前上下文。`HEAD` 未变的专门 UX 文案仍留给 Story 5.6 继续收口。
+- [x] 按项目规则执行并记录必要验证命令 (AC: 1, 2, 3)
+  - [x] 本 story 实际修改了 TypeScript / TSX 渲染逻辑、Rust Core 状态事务、CompletionAttempt 审计模型与测试，已执行：
 
 ```bash
 pnpm format
@@ -122,13 +122,87 @@ GPT-5 Codex
 - 2026-06-09T11:xx+08:00：`bmad-dev-workflow` preflight 读取完整 `sprint-status.yaml`，确认当前没有 `ready-for-dev` story，按顺序锁定首个 backlog story `5-5-detect-commit-hash-and-complete-issue`，当前基线 `HEAD` 为 `702197d`。
 - 2026-06-09T11:xx+08:00：交叉核对 Epic 5.5、PRD FR20 / FR21 / FR22、addendum 的 completion 状态表，以及 Story 2.9、5.2、5.3、5.4 的已交付边界，确认本 story 只处理“检测到真实新 commit 后完成”。
 - 2026-06-09T11:xx+08:00：复查当前仓库实现，确认 `prompt_sent` 审计与 Git detection 能力已存在，但 success-path 的 `commit_hash` 记录与完成收口尚未落地；因此将本 story 范围收口为最小成功闭环，不提前混入 5.6 的 no-commit UX。
+- 2026-06-09T11:27+08:00：按 TDD 先新增 Rust 集成测试、前端行为测试和 command bridge 测试；首次运行定向测试时，前端未调用检测命令、Rust Core 缺少 `DetectAgentCommitCompletionInput` 与 `detect_agent_commit_completion`，符合 RED 预期。
+- 2026-06-09T11:31+08:00：新增 `0013_agent_commit_completion_result.sql`、`detect_agent_commit_completion` Rust/Tauri 业务命令、`CompletionAttempt.commit_hash` 字段和 repository 更新逻辑；Agent Commit 成功路径改为在 Rust Core 基于真实 Git HEAD 前进式变化完成 Issue / Session 收口。
+- 2026-06-09T11:33+08:00：前端 `Completion Confirmation` 确认动作接入新检测命令；成功时立即切到 `completed/closed`，失败时保留 review 上下文并展示事实性错误，不卸载 xterm 或 inspector。
+- 2026-06-09T11:34+08:00：按项目规则执行 `format`、`lint`、`typecheck`、Vitest、Rust integration tests、`git diff --check`；期间 `pnpm format` 对无关文件 `src/features/agents/codex-terminal-snapshot.ts` 产生纯折行差异，已在提交前移除。
 
 ### Completion Notes List
 
 - 2026-06-09：create-story 已为 Story 5.5 生成开发上下文，并将范围锁定为“检测真实新 commit 并完成 Issue”的最小可靠切片。
 - 2026-06-09：已显式标注 Story 5.5 与 5.6 / 5.7 / 5.8 / 5.9 的边界，避免开发阶段把 no-commit 提示、Git blocker 防护和 completed Summary 混入同一实现。
 - 2026-06-09：已把 `prompt_sent` 尝试、Git detection 事实、completed 收口模式和预计测试面写入上下文，供 dev-story 直接消费。
+- 2026-06-09：新增 `detect_agent_commit_completion` Rust/Tauri 命令与 `0013_agent_commit_completion_result.sql`，把 `prompt_sent` 尝试推进为可记录 `commit_hash` 的成功完成路径。
+- 2026-06-09：`CompletionAttempt` 现已支持 `commit_hash` 与 `no_commit_detected` 结果值；5.5 只消费成功完成路径，5.6 可在此基础上补失败收口。
+- 2026-06-09：`AgentsActivity` 在确认 Agent Commit 后会立即请求完成检测；检测到真实新 commit 时会刷新为 `completed/closed`，失败则保留 review 状态并显示事实性错误。
 
 ### File List
 
 - _bmad-output/implementation-artifacts/5-5-detect-commit-hash-and-complete-issue.md
+- src-tauri/migrations/0013_agent_commit_completion_result.sql
+- src-tauri/src/commands/issue_commands.rs
+- src-tauri/src/core/issue_service.rs
+- src-tauri/src/db/completion_attempt_repository.rs
+- src-tauri/src/db/migrations.rs
+- src-tauri/src/lib.rs
+- src-tauri/src/types/completion_attempt.rs
+- src-tauri/src/types/issue.rs
+- src-tauri/tests/issue.rs
+- src-tauri/tests/local_data.rs
+- src/features/agents/agents-activity.tsx
+- src/features/agents/agents-activity.test.tsx
+- src/features/issues/issue-commands.ts
+- src/shared/commands/command-client.test.ts
+
+### Validation Commands
+
+- `pnpm format`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test issue`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test git_detection`
+- `cargo test --manifest-path src-tauri/Cargo.toml --test local_data`
+- `pnpm test`
+- `git diff --check`
+
+### Validation Results
+
+- `pnpm format`：通过；期间对无关文件 `src/features/agents/codex-terminal-snapshot.ts` 产生纯格式化差异，已在提交前移除。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`：通过。
+- `pnpm lint`：通过。
+- `pnpm typecheck`：通过。
+- `pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts`：通过，8 files / 133 tests；存在既有 jsdom 警告 `HTMLCanvasElement.getContext()` 与 CSS stylesheet parsing，不影响结果。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test issue`：通过，26/26。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test agent_session`：通过，30/30。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test git_detection`：通过，8/8。
+- `cargo test --manifest-path src-tauri/Cargo.toml --test local_data`：通过，5/5。
+- `pnpm test`：通过，8 files / 133 tests；存在相同既有 jsdom 警告，不影响结果。
+- `git diff --check`：通过。
+
+### Change Log
+
+- 2026-06-09：创建 Story 5.5 开发上下文并将状态推进到 `ready-for-dev`。
+- 2026-06-09：完成 Agent Commit 成功检测与完成收口，新增 `commit_hash` 审计字段与 migration，前后端确认流打通，状态推进到 `review`。
+
+## Senior Developer Review (AI)
+
+### Review Date
+
+2026-06-09
+
+### Outcome
+
+Approved
+
+### Findings Summary
+
+- Clean review：未发现阻塞性问题；5.5 只补了“检测到真实新 commit 后完成”的成功闭环，未提前吞并 5.6 的 no-commit UX 和 5.8/5.9 的 completed 复盘范围。
+
+### Reviewer Notes
+
+- Blind Hunter：`detect_agent_commit_completion` 只会消费最新一条 `agent_auto_commit + prompt_sent` 尝试，并要求当前 Issue 仍为 `review`、linked Session 仍为 `running`、Project 仍为 `agent_auto_commit`。
+- Edge Case Hunter：Git 检测继续复用 `detect_commit_result`，因此 `checkout` / `reset` / 非前进式 HEAD 变化不会被误判为成功提交；`HEAD` 未变时当前实现会显式失败并保留 review 上下文，完整 UX 留给 Story 5.6。
+- Acceptance Auditor：AC1 由 `CompletionAttempt.head_after/commit_hash` 更新满足；AC2 由 Rust Core 单事务完成 `Issue -> completed` / `Session -> closed` 满足；AC3 由 `IssueAction`、`SessionEvent`、`CompletionAttempt` 三类审计与前端按钮隐藏满足。

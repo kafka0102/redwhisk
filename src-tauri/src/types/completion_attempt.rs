@@ -23,6 +23,7 @@ impl CompletionAttemptOption {
 pub enum CompletionAttemptResult {
     Completed,
     PromptSent,
+    NoCommitDetected,
 }
 
 impl CompletionAttemptResult {
@@ -30,6 +31,7 @@ impl CompletionAttemptResult {
         match self {
             Self::Completed => "completed",
             Self::PromptSent => "prompt_sent",
+            Self::NoCommitDetected => "no_commit_detected",
         }
     }
 }
@@ -43,6 +45,7 @@ pub struct CompletionAttemptRecord {
     pub option: CompletionAttemptOption,
     pub head_before: String,
     pub head_after: String,
+    pub commit_hash: Option<String>,
     pub changed_files_json: String,
     pub result: CompletionAttemptResult,
     pub created_at: i64,
