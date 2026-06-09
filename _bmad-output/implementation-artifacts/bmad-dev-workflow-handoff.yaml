@@ -1,12 +1,11 @@
 workflow: bmad-dev-workflow
-phase: review-complete
+phase: complete
 story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-5-detect-commit-hash-and-complete-issue.md
 story_key: 5-5-detect-commit-hash-and-complete-issue
 story_status: done
-baseline_commit: 29bcb59
+baseline_commit: 702197d
 changed_files:
   - _bmad-output/implementation-artifacts/5-5-detect-commit-hash-and-complete-issue.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - src-tauri/migrations/0013_agent_commit_completion_result.sql
   - src-tauri/src/commands/issue_commands.rs
   - src-tauri/src/core/issue_service.rs
@@ -34,17 +33,17 @@ validation_commands:
   - pnpm test
   - git diff --check
 validation_results:
-  - pass: pnpm format
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-  - pass: pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pass: pnpm test
-  - pass: git diff --check
-review_summary: 未发现阻塞性问题；5.5 只补了真实新 commit 检测与完成收口的成功闭环，未提前吞并 5.6 的 no-commit UX 和 5.8/5.9 的 completed 复盘范围。
+  - "pnpm format: passed; removed unrelated formatting diff before commit."
+  - "cargo fmt --manifest-path src-tauri/Cargo.toml: passed."
+  - "pnpm lint: passed."
+  - "pnpm typecheck: passed."
+  - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts: passed."
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: passed."
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: passed."
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test git_detection: passed."
+  - "cargo test --manifest-path src-tauri/Cargo.toml --test local_data: passed."
+  - "pnpm test: passed."
+  - "git diff --check: passed."
+review_summary: Approved
 blocking_reason:
-updated_at: 2026-06-09T11:35:00+08:00
+updated_at: 2026-06-09T14:58:31+08:00
