@@ -64,6 +64,11 @@ export interface SendAgentCommitPromptInput {
   issueId: number;
 }
 
+export interface DetectAgentCommitCompletionInput {
+  projectId: number;
+  issueId: number;
+}
+
 export interface AgentCommitChangedFileSummary {
   status: string;
   path: string;
@@ -148,6 +153,14 @@ export function sendAgentCommitPrompt(
       input,
     },
   );
+}
+
+export function detectAgentCommitCompletion(
+  input: DetectAgentCommitCompletionInput,
+): Promise<IssueRecord> {
+  return invokeCommand<IssueRecord>("detect_agent_commit_completion", {
+    input,
+  });
 }
 
 export function startAgentSession(

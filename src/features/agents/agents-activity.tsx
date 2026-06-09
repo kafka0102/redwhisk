@@ -21,6 +21,7 @@ import { IssueInspector } from "./issue-inspector";
 import {
   completeIssueClean,
   completeIssueManual,
+  detectAgentCommitCompletion,
   markIssueReview,
   prepareAgentCommitCompletion,
   sendAgentCommitPrompt,
@@ -80,6 +81,10 @@ export function AgentsActivity({
   const [isPreparingAgentCommit, setIsPreparingAgentCommit] = useState(false);
   const [isSendingAgentCommitPrompt, setIsSendingAgentCommitPrompt] =
     useState(false);
+  const [
+    isDetectingAgentCommitCompletion,
+    setIsDetectingAgentCommitCompletion,
+  ] = useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
     string | null
@@ -584,14 +589,14 @@ export function AgentsActivity({
   }
 
   function handleCloseAgentCommitPreview() {
-    if (isSendingAgentCommitPrompt) {
+    if (isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion) {
       return;
     }
     setAgentCommitPreview(null);
   }
 
   async function handleConfirmAgentCommit() {
-    if (!linkedIssue || !agentCommitPreview) {
+    if (!linkedIssue || !agentCommitPreview || !selectedSession) {
       return;
     }
 
@@ -603,12 +608,44 @@ export function AgentsActivity({
         projectId,
         issueId: linkedIssue.issueId,
       });
+      setIsDetectingAgentCommitCompletion(true);
+      const completedIssue = await detectAgentCommitCompletion({
+        projectId,
+        issueId: linkedIssue.issueId,
+      });
+      completedIssueIdsRef.current.add(completedIssue.id);
+      closedSessionIdsRef.current.add(selectedSession.sessionId);
+      setSessions((currentSessions) =>
+        currentSessions.map((session) =>
+          session.issueId === completedIssue.id
+            ? {
+                ...session,
+                status:
+                  session.sessionId === selectedSession.sessionId
+                    ? ("closed" as const)
+                    : session.status,
+                issueStatus: completedIssue.status,
+                lastActiveAt: Math.max(
+                  session.lastActiveAt,
+                  completedIssue.updatedAt,
+                ),
+                closedAt:
+                  session.sessionId === selectedSession.sessionId
+                    ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
+                    : session.closedAt,
+                canCompleteClean: false,
+                canCompleteAgentCommit: false,
+              }
+            : session,
+        ),
+      );
       setAgentCommitPreview(null);
       const response = await listAgentSessions(projectId);
       setSessions(applySessionListOverlays(response.sessions));
     } catch (error) {
       setCompleteAgentCommitErrorMessage(toCommandError(error).message);
     } finally {
+      setIsDetectingAgentCommitCompletion(false);
       setIsSendingAgentCommitPrompt(false);
     }
   }
@@ -1140,18 +1177,24 @@ export function AgentsActivity({
             </div>
             <div className="issue-dialog__footer">
               <button
-                disabled={isSendingAgentCommitPrompt}
+                disabled={
+                  isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion
+                }
                 type="button"
                 onClick={handleCloseAgentCommitPreview}
               >
                 Cancel
               </button>
               <button
-                disabled={isSendingAgentCommitPrompt}
+                disabled={
+                  isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion
+                }
                 type="button"
                 onClick={() => void handleConfirmAgentCommit()}
               >
-                {isSendingAgentCommitPrompt ? "Sending..." : "Confirm"}
+                {isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion
+                  ? "Sending..."
+                  : "Confirm"}
               </button>
             </div>
           </div>
