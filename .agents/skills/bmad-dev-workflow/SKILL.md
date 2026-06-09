@@ -1,6 +1,6 @@
 ---
 name: bmad-dev-workflow
-description: 'Orchestrates one BMad story workflow. Use when the user says "run bmad dev workflow" or "develop the next BMad story end to end".'
+description: 'Orchestrates one BMad story workflow. Use when the user says "run bmad dev workflow", "develop the next BMad story end to end", or provides requirements to turn into a story and implement.'
 ---
 
 # BMad Dev Workflow
@@ -22,6 +22,15 @@ This skill orchestrates one BMad story through `bmad-create-story`, `bmad-dev-st
 - `{skill-root}` resolves to this skill's installed directory (where `customize.toml` lives).
 - `{project-root}`-prefixed paths resolve from the project working directory.
 - `{skill-name}` resolves to the skill directory's basename.
+
+## Operating Modes
+
+This workflow has two valid entry modes:
+
+- Ready-story mode: find the current `ready-for-dev` story and run it through development, review, and finalize.
+- Requirement-to-story mode: when no `ready-for-dev` story is available and the user provided descriptive requirements, treat that input as a request to create one story, then continue the same development workflow for the created story.
+
+Descriptive requirements include natural-language feature requests, bug reports, acceptance criteria, implementation intent, or any multi-sentence task description that is not merely a story path, story key, workflow command, menu choice, or direct question about the skill.
 
 ## On Activation
 
@@ -59,6 +68,16 @@ Greet `{user_name}` briefly in `{communication_language}`.
 
 Execute each entry in `{workflow.activation_steps_append}` in order. Do not begin the workflow until activation steps are complete.
 
+### Step 7: Classify the Invocation
+
+Classify the user's activating message before Preflight:
+
+- `explicit-story`: the user provided a story path or story key.
+- `descriptive-requirements`: the user provided requirements or implementation intent that should become a story if no ready story exists.
+- `auto-discover`: the user asked to run the workflow without specifying a story or requirements.
+
+If classified as `descriptive-requirements`, preserve the user's original message verbatim as `story_creation_request`. Do not summarize it before story creation.
+
 ## Handoff Contract
 
 After every phase, overwrite `{handoff_file}` with YAML containing only:
@@ -66,6 +85,8 @@ After every phase, overwrite `{handoff_file}` with YAML containing only:
 ```yaml
 workflow: bmad-dev-workflow
 phase: preflight|story-created|dev-complete|review-complete|blocked|complete
+workflow_mode:
+story_creation_request:
 story_file:
 story_key:
 story_status:
@@ -106,10 +127,13 @@ Project-level rules loaded from `AGENTS.md` and `docs/standards/shared/git-workf
 
 Inspect `sprint_status` if it exists and determine the target story:
 
-- If the user provided a story path or story key, use it.
-- Else if a `ready-for-dev` story exists, skip story creation and use that story.
-- Else if a `backlog` story exists and `{workflow.auto_create_story}` is true, run story creation.
-- Else HALT and ask the user to choose a story or run sprint planning.
+- If the user provided a story path or story key, set `workflow_mode: ready-story` and use it.
+- Else if a `ready-for-dev` story exists, set `workflow_mode: ready-story`, skip story creation, and use that story.
+- Else if the invocation is `descriptive-requirements` and `{workflow.auto_create_story}` is true, set `workflow_mode: requirement-to-story`, keep `story_creation_request`, and run story creation from the user's requirements.
+- Else if a `backlog` story exists and `{workflow.auto_create_story}` is true, set `workflow_mode: ready-story`, run story creation for the selected backlog story, then continue with the created story.
+- Else HALT and ask the user to choose a story, provide requirements for a new story, or run sprint planning.
+
+In `requirement-to-story` mode, the absence of a `ready-for-dev` or `backlog` story is not by itself a HALT condition. The user's descriptive request is the story source. HALT only if the request is too ambiguous to create one implementable story, required planning artifacts are unavailable and cannot be safely inferred, or the child story creation workflow reports a blocking condition.
 
 Record initial git state and current `HEAD` short SHA if git is available. If unrelated dirty changes are visible, note them and continue; final commit staging must include only files directly related to this workflow. Capture enough detail to distinguish workflow-related files from unrelated dirty files during Finalize.
 
@@ -117,7 +141,12 @@ Write `{handoff_file}` with `phase: preflight`.
 
 ### 2. Create Story When Needed
 
-If no `ready-for-dev` story is available, execute `bmad-create-story` for the selected backlog story. Let that skill perform its own discovery, story generation, checklist validation, and sprint-status update.
+If no `ready-for-dev` story is available, execute `bmad-create-story` using the source determined in Preflight:
+
+- For backlog-driven creation, pass the selected backlog story key/path.
+- For requirement-to-story creation, pass this intent to the child skill: create exactly one implementable story from `story_creation_request`, use project artifacts for context, derive a stable story title/key, and update sprint tracking when a safe matching entry exists. If sprint tracking has no matching entry, create the story file first and update sprint status only when the child skill can do so without corrupting existing ordering or statuses.
+
+Let `bmad-create-story` perform its own discovery, story generation, checklist validation, and sprint-status update. Do not manually write the story in this parent workflow unless the child skill explicitly instructs a fallback path.
 
 After it finishes, locate the created story file and verify its status is `ready-for-dev`. Update `{handoff_file}` with `phase: story-created`, `story_file`, `story_key`, and `story_status`.
 
