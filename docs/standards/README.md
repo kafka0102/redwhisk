@@ -7,3 +7,4 @@
 - [TypeScript 工程规范](./shared/engineering-spec.md)
 - [编码风格](./shared/coding-style.md)
 - [Git 工作流规范](./shared/git-workflow.md)
+- [Settings 页面布局规范](./settings-page-layout.md)

@@ -182,18 +182,18 @@ UX-DR28: Command Palette 和快捷键属于 UX 假设，核心流程不得依赖
 
 FR1: Epic 1 - 创建 Git Project
 FR2: Epic 1 - 展示 Project Home 并打开选中 Project
-FR3: Epic 1 - Project Settings 与 Global Settings
+FR3: Epic 1 - Project Settings 与 Global Settings；Epic 6 - Settings 页面统一布局
 FR4: Epic 1 - 创建和编辑 Issue
 FR5: Epic 1 - Issue 详情弹窗
 FR6: Epic 1 - IssueAction 审计记录
 FR7: Epic 1 - Codex command 检测
-FR8: Epic 1 - Agent Profile 与 ProjectAgentOverride
+FR8: Epic 1 - Agent Profile 与 ProjectAgentOverride；Epic 6 - Settings 页面 Agents 模块布局
 FR9: Epic 2 - 最终 prompt 生成与确认
 FR10: Epic 2 - 成功启动后才进入 running
 FR11: Epic 2 - Agent Session 快照和日志索引
 FR12: Epic 2 - 一 Issue 一 Agent Session
 FR13: Epic 2 - Agents Activity 左右两栏和 Session list 基础
-FR14: Epic 2 - 内嵌 PTY/xterm 运行 Codex
+FR14: Epic 2 - 内嵌 PTY/xterm 运行 Codex；Epic 6 - Agent Session 终端渲染稳定性
 FR15: Epic 3 - Needs Attention
 FR16: Epic 3 - 不关联 Issue 的临时 Agent Session
 FR17: Epic 4 - 手动 Mark Review
@@ -204,30 +204,40 @@ FR21: Epic 5 - Agent Commit 完成
 FR22: Epic 5 - CompletionAttempt
 FR23: Epic 5 - completed Issue 操作限制
 FR24: Epic 5 - Summary 和日志复盘
-FR25: Epic 4 - Session Header 与 Issue Inspector
-FR26: Epic 1 - zh-CN / en-US 核心文案
+FR25: Epic 4 - Session Header 与 Issue Inspector；Epic 6 - 终端与 Inspector 共存稳定性
+FR26: Epic 1 - zh-CN / en-US 核心文案；Epic 6 - Settings 菜单与标题文案
 
 ## Epic List
 
 ### Epic 1: 本地 Project、Issue 与配置基础
+
 用户可以打开一个本地 Git Repository 作为 Project，管理极简本地 Issue，并配置 Project / Global Settings、Codex Agent Profile 和基础双语文案，为后续 Agent 工作流建立可信本地基础。
 **FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR7, FR8, FR26
 
 ### Epic 2: 从 Issue 可靠启动 Codex Session
+
 用户可以从一个 backlog Issue 生成并确认最终 prompt，启动 Codex Agent Session，并在启动成功后进入可交互的 Codex Native Session View；启动失败不污染 Issue 状态。
 **FRs covered:** FR9, FR10, FR11, FR12, FR13, FR14
 
 ### Epic 3: Agent Session 管理与临时 Codex 会话
+
 用户可以在 Agents Activity 中查看 Running / Completed Session，识别 Needs Attention，并创建不关联 Issue 的临时 Codex Session；这些临时 Session 不影响 Issue 状态流转。
 **FRs covered:** FR15, FR16
 
 ### Epic 4: Review 循环、Issue Inspector 与异常 Session
+
 用户可以手动将 running Issue 标记为 review，在 review 阶段继续让 Codex 修正，并通过 Session Header / Issue Inspector 管理关联 Issue；crashed 或 stopped Session 必须显式展示且不自动完成 Issue。
 **FRs covered:** FR17, FR18, FR19, FR25
 
 ### Epic 5: 完成策略、Agent Commit 与复盘
+
 用户可以按 manual 或 agent_auto_commit 策略完成 Issue；系统记录 CompletionAttempt、检测 commit hash、避免误完成，并在 completed 后提供 Summary 和 Open Log。
 **FRs covered:** FR20, FR21, FR22, FR23, FR24
+
+### Epic 6: 体验稳定性与设置页统一布局
+
+用户可以获得稳定的 Agent Session 终端体验，并在 Settings 页面使用统一、可调整、可复用的双栏设置布局。
+**FRs covered:** FR3, FR8, FR14, FR25, FR26
 
 ## Epic 1: 本地 Project、Issue 与配置基础
 
@@ -1341,3 +1351,83 @@ So that MVP 的核心信任链路可演示.
 **Then** Issue 保持 `backlog`
 **And** 显示失败原因，不创建有效 AgentSession
 **And** 核心流程不依赖 Command Palette 或未确认快捷键；如需要视觉校准，优先覆盖 Issues Activity、Agents Activity with linked Issue、Run Dialog、Completion Confirmation
+
+## Epic 6: 体验稳定性与设置页统一布局
+
+用户可以获得稳定的 Agent Session 终端体验，并在 Settings 页面使用统一、可调整、可复用的双栏设置布局。Epic 6 承接已交付 MVP 闭环后的体验稳定性和页面一致性修正，不扩大 Project Settings / Global Settings 的产品边界。
+
+### Story 6.1: 稳定 Agent Session 终端渲染
+
+As a 本地开发者,
+I want Agent Session 的 Codex TUI 在 RedWhisk 中稳定显示和交互,
+So that 点击运行、切换 Session 或返回页面时不会闪烁、大片空白、整页变白或出现乱码.
+
+**Requirements:** FR14、FR25、NFR4、NFR6、NFR8；UX-DR9、UX-DR21；参考 `kanban/src/terminal` 终端实现思路
+
+**Acceptance Criteria:**
+
+**Given** 用户从 Issue 或临时 Session 点击运行
+**When** Codex TUI 开始输出
+**Then** 终端区域不得因为日志快照重放而反复清屏、闪烁或出现大片空白
+**And** 高频终端输出继续写入日志文件，SQLite 只保存关键事件和日志路径
+
+**Given** 用户切换 Session、切换 Activity 或打开/关闭 Issue Inspector
+**When** 目标 Session 仍可用
+**Then** Codex TUI 恢复到最近的稳定终端状态
+**And** Issue Inspector、Dialog、Header 操作不得卸载 active xterm
+
+**Given** Codex 输出 ANSI/OSC/CSI 控制序列、全屏 TUI 重绘或多字节字符
+**When** 前端渲染终端输出
+**Then** running Session 不得把截断日志尾部当作完整终端协议重放
+**And** 终端异常必须被局部展示，不得扩散为 Agents Activity 或整页白屏
+
+### Story 6.2: 统一 Settings 页面双栏布局
+
+As a 本地开发者,
+I want Settings 页面与 Agents 页面保持一致的双栏布局和可调左栏,
+So that 我在配置基本信息和 Agents 时能获得稳定、清晰、可复用的桌面设置体验.
+
+**Requirements:** FR3、FR8、FR26、NFR8、NFR9；UX-DR3、UX-DR5、UX-DR18、UX-DR22、UX-DR26；`docs/standards/settings-page-layout.md`
+
+**Acceptance Criteria:**
+
+**Given** 用户打开 Project 工作台的 Settings Activity
+**When** Settings 页面渲染
+**Then** 页面保持左右两栏结构
+**And** 左侧菜单默认宽度、最小宽度、最大宽度与 Agents Activity 左侧 Session list 保持一致
+**And** 左栏与右侧内容之间的分割线从页面顶部连续延伸至底部
+
+**Given** 用户拖动 Settings 左右栏之间的分割线
+**When** 指针水平移动
+**Then** 左侧菜单宽度跟随调整，并遵守与 Agents Activity 一致的宽度上下限
+**And** 拖动行为、光标、不可选中文本处理、可访问标签和 keyboard focus 样式参考 Agents Activity 的 splitter 实现
+
+**Given** Settings 当前包含 `基本信息` 和 `Agents` 两个菜单项
+**When** 左侧菜单和右侧标题渲染
+**Then** 每个菜单项和当前页面标题在文字前展示小图标
+**And** 图标优先使用项目已依赖的 `lucide-react` 图标；如后续改用外部图标资源，必须保存为本地资产并确认 license 允许随应用分发
+
+**Given** 用户选中 `基本信息` 或 `Agents`
+**When** 菜单项处于当前选中状态
+**Then** 该菜单项背景色变为灰色或等价的 `var(--color-surface-muted)` 选中底色
+**And** 选中状态仍通过 `aria-pressed` 或等价语义暴露，不能只依赖颜色表达
+
+**Given** 用户点击任一 Settings 菜单项
+**When** 右侧内容区域切换
+**Then** 右侧使用统一的 Settings 内容模板，而不是每个模块各自定义外层布局
+**And** 内容模板顶部显示当前菜单名称，例如 `基本信息` 或 `Agents`
+**And** 标题下方渲染该菜单对应的具体内容
+
+**Given** Settings 右侧内容区域渲染
+**When** 可用内容宽度大于 900px
+**Then** 具体内容容器在右侧区域内居中显示，最大宽度固定为 900px
+
+**Given** Settings 右侧内容区域渲染
+**When** 可用内容宽度小于 900px
+**Then** 具体内容容器宽度为 100%
+**And** 标题、表单、列表和状态信息不得溢出或与左侧菜单、分割线重叠
+
+**Given** 后续新增 Settings 模块
+**When** 开发者接入新菜单项
+**Then** 新模块复用同一份 Settings 页面布局约束和菜单配置模式
+**And** 不新增与该 story 无关的 Settings 字段、Project/Global Settings 数据模型或 Agent Profile 行为
