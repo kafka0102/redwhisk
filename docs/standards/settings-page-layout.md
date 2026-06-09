@@ -39,4 +39,4 @@ Settings 菜单项由图标和文字组成。当前菜单项包括：
 
 ## 非目标
 
-本规范不新增 Settings 业务字段，不改变 Project Settings 与 Global Settings 的产品边界，不调整 Agent Profile / ProjectAgentOverride 的数据模型和状态流。
+本规范不新增 Settings 业务字段，不改变 Project Settings 与 Global Settings 的产品边界，不调整 Agent Profile 的数据模型和状态流。

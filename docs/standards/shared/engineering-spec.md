@@ -2,76 +2,95 @@
 
 ## 目标
 
-本文档定义本项目后续引入 TypeScript 与 monorepo 工程层时的通用规则，适用于前端、后端、共享包、构建脚本与工具链配置。
+本文档定义本项目 TypeScript 工程层的通用规则，适用于 React 前端、构建脚本、测试配置与后续可能拆分出的共享包。
 
 本文档只负责“全局 TypeScript 工程基线”，不负责通用编码风格或某一端的业务实现约束。通用编码风格以 [编码风格](./coding-style.md) 为准。
 
-当前仓库尚未包含 `package.json`、`tsconfig.base.json`、workspace 配置或 TypeScript 应用源码。因此，本规范是新增工程代码时的准入约束，不表示这些文件当前已经存在。
+当前仓库已经包含 Vite + React + TypeScript 应用源码，根级配置包括 `package.json`、`tsconfig.json`、`tsconfig.node.json`、`eslint.config.js`、`prettier.config.mjs` 和 `vitest.config.ts`。当前不使用 monorepo workspace，也没有 `tsconfig.base.json`。
 
 ## 适用范围
 
-引入 TypeScript 工程后，适用于以下内容：
+适用于以下内容：
 
-- `tsconfig.base.json`
-- 各 workspace 的 `tsconfig*.json`
-- 前端与后端的 TypeScript 源码
+- 根级 `tsconfig.json` 与 `tsconfig.node.json`
+- 前端 TypeScript / TSX 源码
 - 构建配置、测试配置与类型检查入口
-- monorepo 内部路径别名与 workspace 包引用方式
+- 路径别名与未来 workspace 包引用方式
 
 ## 核心原则
 
-### 1. 根配置优先
+### 1. 当前根配置优先
 
-引入 TypeScript workspace 后必须遵守：
+当前阶段必须遵守：
 
-- 所有 workspace `tsconfig` 默认继承根级 `tsconfig.base.json`
-- 跨项目共享的 TypeScript 编译基线统一在根级维护
-- workspace 级 `tsconfig` 只覆盖本模块确实需要的最小差异
+- TypeScript 编译基线统一在根级 `tsconfig.json` 维护
+- Node 侧 Vite/Vitest 配置使用 `tsconfig.node.json`
+- 当前配置启用 `strict`、`noUnusedLocals`、`noUnusedParameters` 和 bundler module resolution
+- 新增配置只覆盖确实需要的最小差异
 
 禁止：
 
-- 在局部 `tsconfig` 中复制整份根级配置
-- 为了临时通过构建，在子项目里偷偷放宽全局约束
+- 为了临时通过构建而放宽根级类型约束
+- 新增局部 `tsconfig` 后复制整份根级配置
+- 静音未使用变量、未使用参数或严格类型错误来掩盖实现问题
 
 ### 2. 路径解析显式一致
 
-引入路径别名或多 workspace 后必须遵守：
+当前代码事实：
 
-- 禁止新增 `compilerOptions.baseUrl`
-- 如需路径别名，统一在根级 `tsconfig.base.json` 维护 `paths`
+- `tsconfig.json` 目前设置了 `baseUrl: "."`
+- `paths` 目前包含 `"@/*": ["src/*"]`
+- 当前源码多数仍使用相对路径导入
+
+后续修改路径解析时必须遵守：
+
+- 路径别名统一在根级 `tsconfig.json` 维护
 - `paths` 的目标路径必须写成显式相对路径
-- workspace 之间的共享能力优先通过包名或统一别名导入，而不是层层 `../`
+- 同一 feature 内优先保持现有相对路径风格
+- 大范围迁移到 `@/` alias 必须作为单独任务处理，不得混入业务改动
 
 禁止：
 
-- 使用 `ignoreDeprecations: "6.0"` 静音 `baseUrl` 弃用告警
-- 在不同 app 或 package 中各自维护一套不一致的 alias 规则
-- 在构建配置文件中使用跨层级相对路径硬连共享配置
-
-说明：
-
-- 后续如采用 ESM + `paths` 管理 workspace 内部别名，不依赖 `baseUrl` 作为根目录查找机制
+- 在不同配置文件中维护不一致的 alias 规则
+- 为了少写路径而重排目录结构
+- 在 feature 代码中跨层级硬连另一个 feature 的内部实现
 
 ### 3. ESM 与构建方式统一
 
-引入 TypeScript app 或 package 后必须遵守：
+必须遵守：
 
-- app 与 package 默认使用 bundler 风格的 ESM 配置
-- Node 侧运行时代码应通过 bundler 构建产出，不依赖 `tsc` 直接输出可执行 JS
-- 前端 bundler 侧配置继续使用各自框架要求的 ESM 配置，但仍然遵守本规范的路径与别名规则
-- 共享 bundler / build helper 应通过 workspace 包或统一脚本导入
+- `package.json` 使用 `"type": "module"`
+- 前端和配置代码默认使用 ESM
+- TypeScript 使用 `moduleResolution: "bundler"`，`tsc --noEmit` 只做类型检查
+- 构建入口通过 Vite 和 Tauri CLI，不用 `tsc` 直接输出应用 JS
 
 禁止：
 
 - 在局部模块中临时切回与全局冲突的 CommonJS 或旧式解析策略
 - 把 bundler、测试器、运行时各自配置成不同的模块解析语义
 
+### 4. 跨边界类型同步
+
+当前项目尚未落地 Rust `serde` 类型自动生成 TypeScript 类型。跨 Tauri command 边界的类型当前由 Rust DTO 与前端 wrapper 手动同步。
+
+新增或修改 DTO 时必须同时更新：
+
+- `src-tauri/src/types/` 下的 Rust 类型
+- 对应 `src/features/**/**-commands.ts` 或 `src/shared/commands/` 下的 TypeScript 类型
+- command client 或 feature 测试中的示例 payload
+
+禁止：
+
+- 只改 Rust DTO，不改前端类型
+- 只在前端新增字段，然后假设后端会返回
+- 让前端用 `any` 消化跨边界类型漂移
+
 ## 推荐检查项
 
-新增 TypeScript app、package 或独立工具模块时，至少检查以下项目：
+新增 TypeScript feature、command wrapper 或独立工具模块时，至少检查以下项目：
 
-1. 是否继承根级 `tsconfig.base.json`
-2. 是否重新引入了 `baseUrl`
-3. 是否把 alias 漂移到局部 `paths`
-4. 是否与根级 ESM / bundler 解析策略一致
-5. 是否只是做了最小必要的 `tsconfig` 差异覆盖
+1. 是否保持根级 strict/bundler/ESM 配置
+2. 是否避免跨 feature 直接依赖内部实现
+3. 是否与 Rust DTO 或 command payload 同步
+4. 是否没有引入 `any`、`@ts-ignore` 或局部放宽类型检查
+5. 是否运行了 `pnpm lint` 与 `pnpm typecheck`
