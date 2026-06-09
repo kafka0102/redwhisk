@@ -19,7 +19,9 @@ use crate::git::status::{
 use crate::types::agent_session::{
     AgentSessionPromptKind, AgentSessionStatus, InjectAgentSessionPromptInput,
 };
-use crate::types::completion_attempt::{CompletionAttemptOption, CompletionAttemptResult};
+use crate::types::completion_attempt::{
+    CompletionAttemptOption, CompletionAttemptRecord, CompletionAttemptResult,
+};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
@@ -35,6 +37,11 @@ use crate::types::session_event::SessionEventType;
 pub struct IssueService<'connection> {
     issue_repository: IssueRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
+}
+
+struct ReviewCompletionContext {
+    issue: IssueRecord,
+    linked_session_id: i64,
 }
 
 struct AgentCommitContext {
@@ -338,8 +345,31 @@ impl<'connection> IssueService<'connection> {
             ));
         }
 
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let context = self.load_review_completion_context_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+        )?;
         let snapshot = read_git_snapshot(&project.repo_path).map_err(issue_git_error)?;
         if snapshot.operation_state != GitOperationState::None {
+            record_blocked_completion_attempt(
+                &transaction,
+                context.issue.id,
+                context.linked_session_id,
+                CompletionAttemptOption::CompleteClean,
+                &snapshot.head,
+                format_git_operation_state(snapshot.operation_state),
+                snapshot.operation_state,
+                "当前 Git 正在进行中的操作阻止直接完成。",
+            )
+            .map_err(issue_database_error)?;
+            transaction.commit().map_err(issue_database_error)?;
+
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前 Git 正在进行中的操作阻止直接完成。",
@@ -361,47 +391,11 @@ impl<'connection> IssueService<'connection> {
             ));
         }
 
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(issue_database_error)?;
-        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
-            .map_err(issue_database_error)?
-            .filter(|issue| issue.project_id == input.project_id)
-            .ok_or_else(|| issue_not_found(input.issue_id))?;
-
-        if issue.status != IssueStatus::Review {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以直接完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            ));
-        }
-
-        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
-            )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
-        })?;
-
         let completed_issue = IssueRepository::complete_review_issue_cleanly_in_transaction(
             &transaction,
             input.project_id,
             input.issue_id,
-            linked_session_id,
+            context.linked_session_id,
         )
         .map_err(issue_database_error)?
         .ok_or_else(|| {
@@ -412,13 +406,13 @@ impl<'connection> IssueService<'connection> {
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
+                    .with_value("status", issue_status_to_str(&context.issue.status)),
             )
         })?;
 
         let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
             &transaction,
-            linked_session_id,
+            context.linked_session_id,
             AgentSessionStatus::Closed,
             completed_issue.updated_at,
         )
@@ -429,14 +423,14 @@ impl<'connection> IssueService<'connection> {
                 "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
             )
             .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+                ErrorDetail::new("AgentSession").with_value("sessionId", context.linked_session_id),
             )
         })?;
 
         let issue_action_payload = json!({
             "fromStatus": "review",
             "toStatus": "completed",
-            "linkedSessionId": linked_session_id,
+            "linkedSessionId": context.linked_session_id,
             "option": "complete_clean",
         })
         .to_string();
@@ -473,6 +467,7 @@ impl<'connection> IssueService<'connection> {
             CompletionAttemptOption::CompleteClean,
             &snapshot.head,
             &snapshot.head,
+            None,
             None,
             "[]",
             CompletionAttemptResult::Completed,
@@ -556,6 +551,7 @@ impl<'connection> IssueService<'connection> {
             CompletionAttemptOption::AgentAutoCommit,
             &context.snapshot.head,
             &context.snapshot.head,
+            None,
             None,
             &changed_files_json,
             CompletionAttemptResult::PromptSent,
@@ -663,6 +659,7 @@ impl<'connection> IssueService<'connection> {
                     attempt.id,
                     &after_snapshot.head,
                     None,
+                    None,
                     CompletionAttemptResult::NoCommitDetected,
                 )
                 .map_err(issue_database_error)?
@@ -696,14 +693,38 @@ impl<'connection> IssueService<'connection> {
                 .with_detail(ErrorDetail::new("GitStatus").with_value("head", head)));
             }
             GitCommitDetectionResult::OperationInProgress { operation_state } => {
-                return Err(CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "当前 Git 正在进行中的操作阻止 Agent Commit 完成检测。",
+                CompletionAttemptRepository::update_result_in_transaction(
+                    &transaction,
+                    attempt.id,
+                    &after_snapshot.head,
+                    None,
+                    Some(format_git_operation_state(operation_state)),
+                    CompletionAttemptResult::GitOperationBlocked,
                 )
-                .with_detail(
-                    ErrorDetail::new("GitOperation")
-                        .with_value("state", format_git_operation_state(operation_state)),
-                ));
+                .map_err(issue_database_error)?
+                .ok_or_else(|| {
+                    CommandError::new(
+                        CommandErrorCode::IssuePersistenceFailed,
+                        "CompletionAttempt 更新失败。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt.id),
+                    )
+                })?;
+
+                let current_issue =
+                    IssueRepository::find_by_id_in_transaction(&transaction, issue.id)
+                        .map_err(issue_database_error)?
+                        .ok_or_else(|| issue_not_found(issue.id))?;
+                transaction.commit().map_err(issue_database_error)?;
+
+                return Ok(DetectAgentCommitCompletionResult {
+                    outcome: DetectAgentCommitCompletionOutcome::GitOperationBlocked,
+                    issue: current_issue,
+                    message:
+                        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。"
+                            .to_string(),
+                });
             }
         };
 
@@ -783,6 +804,7 @@ impl<'connection> IssueService<'connection> {
             attempt.id,
             &after_snapshot.head,
             Some(&commit_hash),
+            None,
             CompletionAttemptResult::Completed,
         )
         .map_err(issue_database_error)?
@@ -943,9 +965,49 @@ impl<'connection> IssueService<'connection> {
 
         let snapshot = read_git_snapshot(&project.repo_path).map_err(issue_git_error)?;
         if snapshot.operation_state != GitOperationState::None {
+            let issue = self
+                .issue_repository
+                .find_by_id(issue_id)
+                .map_err(issue_database_error)?
+                .filter(|issue| issue.project_id == project_id)
+                .ok_or_else(|| issue_not_found(issue_id))?;
+
+            if issue.status == IssueStatus::Review {
+                let linked_session_id = self
+                    .issue_repository
+                    .find_running_linked_session_id(project_id, issue_id)
+                    .map_err(issue_database_error)?
+                    .ok_or_else(|| {
+                        CommandError::new(
+                            CommandErrorCode::IssueValidationFailed,
+                            "只有存在运行中关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
+                        )
+                        .with_detail(
+                            ErrorDetail::new("AgentSession").with_value("issueId", issue_id),
+                        )
+                    })?;
+                let transaction = self
+                    .issue_repository
+                    .connection()
+                    .unchecked_transaction()
+                    .map_err(issue_database_error)?;
+                record_blocked_completion_attempt(
+                    &transaction,
+                    issue.id,
+                    linked_session_id,
+                    CompletionAttemptOption::AgentAutoCommit,
+                    &snapshot.head,
+                    format_git_operation_state(snapshot.operation_state),
+                    snapshot.operation_state,
+                    "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。",
+                )
+                .map_err(issue_database_error)?;
+                transaction.commit().map_err(issue_database_error)?;
+            }
+
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前 Git 正在进行中的操作阻止 Agent Commit。",
+                "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。",
             )
             .with_detail(ErrorDetail::new("GitOperation").with_value(
                 "state",
@@ -999,6 +1061,51 @@ impl<'connection> IssueService<'connection> {
             issue,
             linked_session_id,
             snapshot,
+        })
+    }
+}
+
+impl<'connection> IssueService<'connection> {
+    fn load_review_completion_context_in_transaction(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+    ) -> Result<ReviewCompletionContext, CommandError> {
+        let issue = IssueRepository::find_by_id_in_transaction(transaction, issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == project_id)
+            .ok_or_else(|| issue_not_found(issue_id))?;
+
+        if issue.status != IssueStatus::Review {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有待验收 Issue 可以直接完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            ));
+        }
+
+        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+            transaction,
+            project_id,
+            issue_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", issue_id))
+        })?;
+
+        Ok(ReviewCompletionContext {
+            issue,
+            linked_session_id,
         })
     }
 }
@@ -1070,6 +1177,46 @@ Issue: {issue_title}\n\
 - 使用中文 Conventional Commit\n\
 - 完成后汇报提交结果与验证命令\n"
     )
+}
+
+fn record_blocked_completion_attempt(
+    transaction: &rusqlite::Transaction<'_>,
+    issue_id: i64,
+    session_id: i64,
+    option: CompletionAttemptOption,
+    head: &str,
+    failure_reason: &str,
+    operation_state: GitOperationState,
+    message: &str,
+) -> rusqlite::Result<CompletionAttemptRecord> {
+    let changed_files_json = json!({
+        "blockedBy": "git_operation",
+        "state": format_git_operation_state(operation_state),
+        "message": message,
+    })
+    .to_string();
+
+    CompletionAttemptRepository::insert_in_transaction(
+        transaction,
+        issue_id,
+        session_id,
+        option,
+        head,
+        head,
+        None,
+        Some(failure_reason),
+        &changed_files_json,
+        CompletionAttemptResult::GitOperationBlocked,
+        current_epoch_millis_for_db()?,
+    )
+}
+
+fn current_epoch_millis_for_db() -> rusqlite::Result<i64> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+    i64::try_from(duration.as_millis()).map_err(|_| rusqlite::Error::InvalidQuery)
 }
 
 fn format_git_operation_state(state: GitOperationState) -> &'static str {

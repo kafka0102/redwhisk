@@ -901,6 +901,91 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
 }
 
 #[test]
+fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progress() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("blocked-clean-complete-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "conflict.txt", "base\n");
+    git(&repo_dir, &["add", "conflict.txt"]);
+    git(&repo_dir, &["commit", "-m", "base"]);
+    git(&repo_dir, &["checkout", "-b", "feature"]);
+    write_file(&repo_dir, "conflict.txt", "feature\n");
+    git(&repo_dir, &["commit", "-am", "feature"]);
+    git(&repo_dir, &["checkout", "main"]);
+    write_file(&repo_dir, "conflict.txt", "main\n");
+    git(&repo_dir, &["commit", "-am", "main"]);
+    git_expect_failure(&repo_dir, &["merge", "feature"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "blocked-clean-complete-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Blocked clean complete".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .complete_issue_clean(CompleteIssueCleanInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("git operation should block complete");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    assert_eq!(error.message, "当前 Git 正在进行中的操作阻止直接完成。");
+
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Review);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Running);
+
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].option.as_str(), "complete_clean");
+    assert_eq!(attempts[0].result.as_str(), "git_operation_blocked");
+    assert_eq!(
+        attempts[0].failure_reason.as_deref(),
+        Some("merge_in_progress")
+    );
+    assert_eq!(attempts[0].commit_hash, None);
+}
+
+#[test]
 fn prepare_agent_commit_completion_returns_preview_for_dirty_review_issue() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("prepare-agent-commit-repo");
@@ -1011,6 +1096,94 @@ fn prepare_agent_commit_completion_rejects_clean_repo() {
         .expect_err("clean repo should be rejected");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+}
+
+#[test]
+fn prepare_agent_commit_completion_records_blocked_attempt_when_git_operation_is_in_progress() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("prepare-agent-commit-blocked-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "conflict.txt", "base\n");
+    git(&repo_dir, &["add", "conflict.txt"]);
+    git(&repo_dir, &["commit", "-m", "base"]);
+    git(&repo_dir, &["checkout", "-b", "feature"]);
+    write_file(&repo_dir, "conflict.txt", "feature\n");
+    git(&repo_dir, &["commit", "-am", "feature"]);
+    git(&repo_dir, &["checkout", "main"]);
+    write_file(&repo_dir, "conflict.txt", "main\n");
+    git(&repo_dir, &["commit", "-am", "main"]);
+    git_expect_failure(&repo_dir, &["merge", "feature"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "prepare-agent-commit-blocked-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Blocked agent commit".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .prepare_agent_commit_completion(PrepareAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("git operation should block agent commit prepare");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    assert_eq!(
+        error.message,
+        "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。"
+    );
+
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Review);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Running);
+
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].option.as_str(), "agent_auto_commit");
+    assert_eq!(attempts[0].result.as_str(), "git_operation_blocked");
+    assert_eq!(
+        attempts[0].failure_reason.as_deref(),
+        Some("merge_in_progress")
+    );
+    assert_eq!(attempts[0].commit_hash, None);
 }
 
 #[test]
@@ -1373,6 +1546,128 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
     assert_eq!(attempts[0].result.as_str(), "no_commit_detected");
     assert_eq!(attempts[0].commit_hash, None);
     assert_eq!(attempts[0].head_before, attempts[0].head_after);
+}
+
+#[test]
+fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_starts() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("detect-agent-commit-blocked-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "conflict.txt", "base\n");
+    git(&repo_dir, &["add", "conflict.txt"]);
+    git(&repo_dir, &["commit", "-m", "base"]);
+    git(&repo_dir, &["checkout", "-b", "feature"]);
+    write_file(&repo_dir, "conflict.txt", "feature\n");
+    git(&repo_dir, &["commit", "-am", "feature"]);
+    git(&repo_dir, &["checkout", "main"]);
+    write_file(&repo_dir, "conflict.txt", "main dirty\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "detect-agent-commit-blocked-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Blocked detect".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
+    let pending = pty_sessions
+        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
+            command: "/bin/sh".to_string(),
+            working_dir: repo_dir.to_string_lossy().into_owned(),
+            log_path: temp_dir
+                .path()
+                .join("session.log")
+                .to_string_lossy()
+                .into_owned(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending");
+    pty_sessions.register(session_id, pending, |_| {});
+
+    service
+        .send_agent_commit_prompt(
+            SendAgentCommitPromptInput {
+                project_id,
+                issue_id: issue.id,
+            },
+            temp_dir.path(),
+            &pty_sessions,
+        )
+        .expect("send prompt");
+
+    git(&repo_dir, &["commit", "-am", "main update"]);
+    git_expect_failure(&repo_dir, &["merge", "feature"]);
+
+    let completion_result = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect completion blocked by git operation");
+
+    assert_eq!(
+        completion_result.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::GitOperationBlocked
+    );
+    assert_eq!(completion_result.issue.status, IssueStatus::Review);
+    assert_eq!(
+        completion_result.message,
+        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。"
+    );
+
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Review);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Running);
+
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].result.as_str(), "git_operation_blocked");
+    assert_eq!(
+        attempts[0].failure_reason.as_deref(),
+        Some("merge_in_progress")
+    );
+    assert_eq!(attempts[0].commit_hash, None);
 }
 
 #[test]
@@ -1802,6 +2097,21 @@ fn git(repo: &Path, args: &[&str]) {
     assert!(
         output.status.success(),
         "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_expect_failure(repo: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("run git");
+    assert!(
+        !output.status.success(),
+        "git {:?} unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
         args,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)

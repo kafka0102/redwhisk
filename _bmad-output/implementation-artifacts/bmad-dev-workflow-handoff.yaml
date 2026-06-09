@@ -1,18 +1,23 @@
 workflow: bmad-dev-workflow
 phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-6-keep-review-when-no-commit-detected.md
-story_key: 5-6-keep-review-when-no-commit-detected
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-7-block-auto-completion-during-git-operation.md
+story_key: 5-7-block-auto-completion-during-git-operation
 story_status: done
-baseline_commit: fa4cb73
+baseline_commit: 29fc520
 changed_files:
-  - _bmad-output/implementation-artifacts/5-6-keep-review-when-no-commit-detected.md
+  - _bmad-output/implementation-artifacts/5-7-block-auto-completion-during-git-operation.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src-tauri/src/commands/issue_commands.rs
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - src-tauri/migrations/0014_completion_attempt_failure_reason.sql
+  - src-tauri/migrations/0015_completion_attempt_git_operation_blocked.sql
   - src-tauri/src/core/issue_service.rs
+  - src-tauri/src/db/completion_attempt_repository.rs
+  - src-tauri/src/db/migrations.rs
+  - src-tauri/src/types/completion_attempt.rs
   - src-tauri/src/types/issue.rs
   - src-tauri/tests/issue.rs
+  - src-tauri/tests/local_data.rs
   - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
   - src/features/issues/issue-commands.ts
   - src/shared/commands/command-client.test.ts
 validation_commands:
@@ -22,9 +27,7 @@ validation_commands:
   - pnpm typecheck
   - pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
   - cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
   - cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
-  - pnpm test
   - git diff --check
 validation_results:
   - "pnpm format: passed; removed unrelated formatting diff before commit."
@@ -33,10 +36,8 @@ validation_results:
   - "pnpm typecheck: passed."
   - "pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts: passed."
   - "cargo test --manifest-path src-tauri/Cargo.toml --test issue: passed."
-  - "cargo test --manifest-path src-tauri/Cargo.toml --test agent_session: passed."
   - "cargo test --manifest-path src-tauri/Cargo.toml --test git_detection: passed."
-  - "pnpm test: passed."
   - "git diff --check: passed."
 review_summary: Approved
 blocking_reason:
-updated_at: 2026-06-09T15:18:40+08:00
+updated_at: 2026-06-09T15:50:30+08:00

@@ -32,11 +32,13 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0011_completion_attempts",
             "0012_agent_commit_completion_attempts",
             "0013_agent_commit_completion_result",
+            "0014_completion_attempt_failure_reason",
+            "0015_completion_attempt_git_operation_blocked",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0013_agent_commit_completion_result".to_string())
+        Some("0015_completion_attempt_git_operation_blocked".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -77,12 +79,14 @@ fn migrations_are_idempotent_after_first_run() {
             "0011_completion_attempts",
             "0012_agent_commit_completion_attempts",
             "0013_agent_commit_completion_result",
+            "0014_completion_attempt_failure_reason",
+            "0015_completion_attempt_git_operation_blocked",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0013_agent_commit_completion_result".to_string())
+        Some("0015_completion_attempt_git_operation_blocked".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -91,7 +95,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 13);
+    assert_eq!(schema_migrations_count, 15);
 }
 
 #[test]

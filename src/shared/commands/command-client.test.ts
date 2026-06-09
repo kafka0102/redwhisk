@@ -597,4 +597,49 @@ describe("command client", () => {
       },
     });
   });
+
+  it("supports git operation blocked outcome from detect agent commit completion", async () => {
+    invokeMock.mockResolvedValue({
+      outcome: "git_operation_blocked",
+      issue: {
+        id: 3,
+        projectId: 1,
+        title: "Review issue",
+        description: "",
+        status: "review",
+        linkedSessionId: 7,
+        linkedSessionStatus: "running",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_700_000_000,
+        updatedAt: 1_780_700_100_000,
+      },
+      message:
+        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+    });
+
+    await expect(
+      detectAgentCommitCompletion({
+        projectId: 1,
+        issueId: 3,
+      }),
+    ).resolves.toEqual({
+      outcome: "git_operation_blocked",
+      issue: {
+        id: 3,
+        projectId: 1,
+        title: "Review issue",
+        description: "",
+        status: "review",
+        linkedSessionId: 7,
+        linkedSessionStatus: "running",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_700_000_000,
+        updatedAt: 1_780_700_100_000,
+      },
+      message:
+        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+    });
+  });
 });

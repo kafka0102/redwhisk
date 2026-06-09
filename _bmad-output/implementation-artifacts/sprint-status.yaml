@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-09T15:15:27+0800
+last_updated: 2026-06-09T15:50:30+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -94,7 +94,7 @@ development_status:
   5-4-inject-completion-prompt-into-current-codex-session: done
   5-5-detect-commit-hash-and-complete-issue: done
   5-6-keep-review-when-no-commit-detected: done
-  5-7-block-auto-completion-during-git-operation: backlog
+  5-7-block-auto-completion-during-git-operation: done
   5-8-view-completed-issue-summary: backlog
   5-9-open-completed-issue-log: backlog
   epic-5-retrospective: optional
