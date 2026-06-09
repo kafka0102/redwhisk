@@ -110,9 +110,9 @@ export function IssueInspector({
 
   const effectiveLogPath = issue?.linkedSessionLogPath ?? linkedSessionLogPath;
   const canOpenLog =
-    (linkedSessionStatus === "crashed" || linkedSessionStatus === "stopped") &&
-    effectiveLogPath != null &&
-    effectiveLogPath.length > 0;
+    issue?.status === "completed" ||
+    linkedSessionStatus === "crashed" ||
+    linkedSessionStatus === "stopped";
   const canViewSummary = issue?.status === "completed";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -151,11 +151,17 @@ export function IssueInspector({
   }
 
   async function handleOpenLog() {
-    if (!effectiveLogPath || isOpeningLog) {
+    if (isOpeningLog) {
       return;
     }
 
     setErrorMessage(null);
+
+    if (!effectiveLogPath) {
+      setErrorMessage("No log path recorded for this session.");
+      return;
+    }
+
     setIsOpeningLog(true);
 
     try {
@@ -247,6 +253,16 @@ export function IssueInspector({
                   View Summary
                 </Button>
                 <p>Review the completed issue summary.</p>
+                <Button
+                  className="issues-button"
+                  disabled={isLoading || isOpeningLog}
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleOpenLog()}
+                >
+                  {isOpeningLog ? "打开中..." : "Open Log"}
+                </Button>
+                <p>Open the completed session log for review.</p>
                 {onOpenIssuesActivity ? (
                   <>
                     <Button
