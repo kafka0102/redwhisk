@@ -93,7 +93,8 @@ export interface SendAgentCommitPromptResult {
 
 export type DetectAgentCommitCompletionOutcome =
   | "completed"
-  | "no_commit_detected";
+  | "no_commit_detected"
+  | "git_operation_blocked";
 
 export interface DetectAgentCommitCompletionResult {
   outcome: DetectAgentCommitCompletionOutcome;

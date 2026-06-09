@@ -1832,6 +1832,142 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the review session active when agent commit is blocked by git operation", async () => {
+    const user = userEvent.setup();
+    detectAgentCommitCompletionMock.mockResolvedValueOnce({
+      outcome: "git_operation_blocked",
+      issue: {
+        id: 22,
+        projectId: 1,
+        title: "Review issue",
+        description: "Review description",
+        status: "review",
+        linkedSessionId: 502,
+        linkedSessionStatus: "running",
+        linkedSessionAttention: "none",
+        linkedSessionLogPath: "/tmp/session.log",
+        createdAt: 1_780_632_000_000,
+        updatedAt: 1_780_639_000_000,
+      },
+      message:
+        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+    });
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            canCompleteClean: false,
+            canCompleteAgentCommit: true,
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            canCompleteClean: false,
+            canCompleteAgentCommit: true,
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_100_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      });
+
+    render(
+      <AgentsActivity
+        activeSessionId={502}
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Completion Confirmation",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Complete with Agent Commit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows explicit blocker message when clean completion is rejected", async () => {
+    const user = userEvent.setup();
+    completeIssueCleanMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前 Git 正在进行中的操作阻止直接完成。",
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          canCompleteClean: true,
+          canCompleteAgentCommit: false,
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+    confirmSpy.mockReturnValueOnce(true);
+
+    render(
+      <AgentsActivity
+        activeSessionId={502}
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Complete" }));
+
+    expect(
+      await screen.findByText("当前 Git 正在进行中的操作阻止直接完成。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Complete" }),
+    ).toBeInTheDocument();
+  });
+
   it("detects agent commit completion after sending prompt and hides completion actions", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock

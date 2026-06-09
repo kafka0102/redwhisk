@@ -94,6 +94,7 @@ pub struct SendAgentCommitPromptResult {
 pub enum DetectAgentCommitCompletionOutcome {
     Completed,
     NoCommitDetected,
+    GitOperationBlocked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

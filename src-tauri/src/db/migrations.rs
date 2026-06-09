@@ -42,6 +42,14 @@ const AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_VERSION: &str =
     "0013_agent_commit_completion_result";
 const AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_SQL: &str =
     include_str!("../../migrations/0013_agent_commit_completion_result.sql");
+const COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_VERSION: &str =
+    "0014_completion_attempt_failure_reason";
+const COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0014_completion_attempt_failure_reason.sql");
+const COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_VERSION: &str =
+    "0015_completion_attempt_git_operation_blocked";
+const COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0015_completion_attempt_git_operation_blocked.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -163,6 +171,14 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_VERSION,
                     sql: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_SQL,
+                },
+                Migration {
+                    version: COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_VERSION,
+                    sql: COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_SQL,
+                },
+                Migration {
+                    version: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_VERSION,
+                    sql: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_SQL,
                 },
             ];
         }

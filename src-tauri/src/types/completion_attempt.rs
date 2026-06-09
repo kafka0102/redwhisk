@@ -24,6 +24,7 @@ pub enum CompletionAttemptResult {
     Completed,
     PromptSent,
     NoCommitDetected,
+    GitOperationBlocked,
 }
 
 impl CompletionAttemptResult {
@@ -32,6 +33,7 @@ impl CompletionAttemptResult {
             Self::Completed => "completed",
             Self::PromptSent => "prompt_sent",
             Self::NoCommitDetected => "no_commit_detected",
+            Self::GitOperationBlocked => "git_operation_blocked",
         }
     }
 }
@@ -46,6 +48,7 @@ pub struct CompletionAttemptRecord {
     pub head_before: String,
     pub head_after: String,
     pub commit_hash: Option<String>,
+    pub failure_reason: Option<String>,
     pub changed_files_json: String,
     pub result: CompletionAttemptResult,
     pub created_at: i64,
