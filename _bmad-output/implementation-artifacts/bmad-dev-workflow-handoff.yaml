@@ -1,30 +1,12 @@
 workflow: bmad-dev-workflow
-phase: complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-9-open-completed-issue-log.md
-story_key: 5-9-open-completed-issue-log
-story_status: done
-baseline_commit: c88e091
-changed_files:
-  - _bmad-output/implementation-artifacts/5-9-open-completed-issue-log.md
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - src/features/issues/issues-activity.tsx
-  - src/features/issues/issues-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/issue-inspector.tsx
-validation_commands:
-  - pnpm prettier --write src/features/issues/issues-activity.tsx src/features/agents/issue-inspector.tsx src/features/agents/agents-activity.tsx src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx
-  - git diff --check
-validation_results:
-  - "pnpm prettier --write src/features/issues/issues-activity.tsx src/features/agents/issue-inspector.tsx src/features/agents/agents-activity.tsx src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx: passed."
-  - "pnpm lint: passed."
-  - "pnpm typecheck: passed."
-  - "pnpm test -- --run src/features/issues/issues-activity.test.tsx src/features/agents/agents-activity.test.tsx: passed with existing jsdom canvas/CSS warnings."
-  - "git diff --check: passed."
-review_summary: "Approved: completed Issue 现在可从 Detail、Header、Inspector 打开原始日志，缺失 log path 时返回事实性错误，回归测试覆盖完整。"
-blocking_reason:
-updated_at: 2026-06-09T18:10:17+08:00
+phase: blocked
+story_file:
+story_key:
+story_status:
+baseline_commit: 82aa24f
+changed_files: []
+validation_commands: []
+validation_results: []
+review_summary:
+blocking_reason: "preflight 未找到 ready-for-dev 或 backlog story；当前 sprint-status.yaml 中 1.1 至 5.9 均为 done，无法继续单条 story workflow。"
+updated_at: 2026-06-09T19:01:00+08:00
