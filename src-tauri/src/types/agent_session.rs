@@ -52,6 +52,23 @@ pub struct ReadAgentSessionTerminalResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RestoreAgentSessionTerminalInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreAgentSessionTerminalResult {
+    pub session_id: i64,
+    pub sequence: u64,
+    pub chunks: Vec<Vec<u8>>,
+    pub is_complete: bool,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteAgentSessionTerminalInput {
     pub project_id: i64,
     pub session_id: i64,

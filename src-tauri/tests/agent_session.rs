@@ -1705,6 +1705,109 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
 }
 
 #[test]
+fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let command = echo_stdin_command(temp_dir.path());
+    let log_path = temp_dir.path().join("pty-session-output-event.log");
+    let manager = PtySessionManager::new();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    manager.set_output_sink(move |event| {
+        let _ = sender.send(event);
+    });
+
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register_for_project(42, 77, pending, |_| {});
+
+    manager
+        .write_input(77, "hello event stream\r")
+        .expect("write input");
+
+    let mut events = Vec::new();
+    let mut snapshot = String::new();
+    for _ in 0..20 {
+        if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(50)) {
+            events.push(event);
+        }
+        snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
+        if snapshot.contains("hello event stream")
+            && events.iter().any(|event| {
+                event
+                    .data
+                    .windows("hello".len())
+                    .any(|chunk| chunk == b"hello")
+            })
+        {
+            break;
+        }
+    }
+
+    assert!(snapshot.contains("hello event stream"));
+    assert!(events.iter().any(|event| {
+        event.project_id == 42
+            && event.session_id == 77
+            && event.sequence > 0
+            && !event.data.is_empty()
+    }));
+    manager.kill(77).expect("kill session");
+}
+
+#[test]
+fn pty_session_manager_restores_complete_output_chunks_for_active_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let command = echo_stdin_command(temp_dir.path());
+    let log_path = temp_dir.path().join("pty-session-restore.log");
+    let manager = PtySessionManager::new();
+    let pending = manager
+        .spawn_pending(&PtySpawnRequest {
+            command: command.to_string_lossy().to_string(),
+            working_dir: temp_dir.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 500,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending pty");
+    manager.register_for_project(42, 77, pending, |_| {});
+
+    manager
+        .write_input(77, "restore me\r")
+        .expect("write input");
+
+    let mut snapshot = manager.restore_snapshot(77).expect("restore snapshot");
+    for _ in 0..20 {
+        if snapshot.chunks.iter().any(|chunk| {
+            chunk
+                .windows("restore".len())
+                .any(|data| data == b"restore")
+        }) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        snapshot = manager.restore_snapshot(77).expect("restore snapshot");
+    }
+
+    assert!(snapshot.is_complete);
+    assert!(snapshot.sequence > 0);
+    assert!(snapshot.chunks.iter().any(|chunk| chunk
+        .windows("restore".len())
+        .any(|data| data == b"restore")));
+    manager.kill(77).expect("kill session");
+}
+
+#[test]
 fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

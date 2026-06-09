@@ -1,3 +1,4 @@
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -5,14 +6,19 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   readAgentSessionTerminal,
+  restoreAgentSessionTerminal,
   resizeAgentSessionTerminal,
   writeAgentSessionTerminal,
 } from "./agent-session-commands";
-import { resolveSnapshotUpdate } from "./codex-terminal-snapshot";
+import {
+  type AgentSessionTerminalOutputEvent,
+  subscribeAgentSessionTerminalOutput,
+} from "./agent-terminal-events";
 import { toCommandError } from "../../shared/commands/command-error";
 
-const TERMINAL_POLL_INTERVAL_MS = 450;
-const TERMINAL_MAX_BYTES = 32_768;
+const TERMINAL_STATUS_MAX_BYTES = 1;
+const TERMINAL_STATUS_POLL_MS = 2_000;
+const TERMINAL_WORD_SEPARATOR = " ()[]{}',\"`";
 
 interface CodexTerminalProps {
   projectId: number;
@@ -23,7 +29,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const latestSnapshotRef = useRef("");
+  const latestSequenceRef = useRef(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const canBootXterm = supportsXtermRuntime();
 
@@ -33,48 +39,88 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
       return;
     }
 
-    const terminal = new Terminal({
-      allowTransparency: true,
-      convertEol: true,
-      cursorBlink: true,
-      cursorStyle: "bar",
-      fontFamily:
-        '"SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace',
-      fontSize: 12,
-      lineHeight: 1.25,
-      scrollback: 2000,
-      theme: {
-        background: "#00000000",
-        foreground: "#161515",
-        black: "#0f172a",
-        red: "#a12d24",
-        green: "#1f6b44",
-        yellow: "#9b6b16",
-        blue: "#275dad",
-        magenta: "#8a3b8f",
-        cyan: "#1b6f78",
-        white: "#d4d4d4",
-        brightBlack: "#64748b",
-        brightRed: "#c2410c",
-        brightGreen: "#15803d",
-        brightYellow: "#a16207",
-        brightBlue: "#1d4ed8",
-        brightMagenta: "#a21caf",
-        brightCyan: "#0f766e",
-        brightWhite: "#f8fafc",
-      },
-    });
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(host);
-    fitAddon.fit();
+    let terminal: Terminal;
+    let fitAddon: FitAddon;
+    try {
+      terminal = new Terminal({
+        allowTransparency: false,
+        convertEol: false,
+        cursorBlink: false,
+        cursorInactiveStyle: "outline",
+        cursorStyle: "block",
+        disableStdin: false,
+        fontFamily:
+          '"SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace',
+        fontSize: 13,
+        fontWeight: "normal",
+        fontWeightBold: "bold",
+        letterSpacing: 0,
+        lineHeight: 1,
+        rightClickSelectsWord: false,
+        scrollOnEraseInDisplay: true,
+        scrollOnUserInput: true,
+        scrollback: 10_000,
+        smoothScrollDuration: 0,
+        theme: {
+          background: "#ffffff",
+          cursor: "#161515",
+          cursorAccent: "#ffffff",
+          foreground: "#161515",
+          selectionBackground: "#dbeafe",
+          selectionForeground: "#0f172a",
+          selectionInactiveBackground: "#e5e7eb",
+          black: "#0f172a",
+          red: "#a12d24",
+          green: "#1f6b44",
+          yellow: "#9b6b16",
+          blue: "#275dad",
+          magenta: "#8a3b8f",
+          cyan: "#1b6f78",
+          white: "#d4d4d4",
+          brightBlack: "#64748b",
+          brightRed: "#c2410c",
+          brightGreen: "#15803d",
+          brightYellow: "#a16207",
+          brightBlue: "#1d4ed8",
+          brightMagenta: "#a21caf",
+          brightCyan: "#0f766e",
+          brightWhite: "#f8fafc",
+        },
+        wordSeparator: TERMINAL_WORD_SEPARATOR,
+      });
+      fitAddon = new FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminal.loadAddon(new ClipboardAddon());
+      terminal.open(host);
+      fitAddon.fit();
+    } catch (error) {
+      const message = toCommandError(error).message;
+      const bootErrorTimer = window.setTimeout(() => {
+        setStatusMessage(message);
+      }, 0);
+      return () => {
+        window.clearTimeout(bootErrorTimer);
+      };
+    }
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    setStatusMessage("Connecting terminal…");
+    latestSequenceRef.current = 0;
 
     const syncSize = () => {
-      fitAddon.fit();
+      try {
+        fitAddon.fit();
+      } catch (error) {
+        const message = toCommandError(error).message;
+        window.setTimeout(() => {
+          if (!terminalRef.current) {
+            return;
+          }
+          setStatusMessage(message);
+        }, 0);
+        return;
+      }
+
       const dimensions = fitAddon.proposeDimensions();
       if (!dimensions) {
         return;
@@ -86,7 +132,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         rows: dimensions.rows,
         cols: dimensions.cols,
       }).catch(() => {
-        // Resize failures are surfaced through the polling status instead.
+        // Resize failures should not tear down terminal rendering.
       });
     };
 
@@ -98,6 +144,18 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
           setStatusMessage(toCommandError(error).message);
         },
       );
+    });
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (isCopyShortcut(event) && terminal.hasSelection()) {
+        void navigator.clipboard
+          ?.writeText(terminal.getSelection())
+          ?.catch(() => {
+            // Ignore clipboard failures; selection remains available in xterm.
+          });
+        return false;
+      }
+
+      return true;
     });
 
     const resizeObserver =
@@ -114,25 +172,106 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
     window.addEventListener("resize", handleWindowResize);
 
     let isDisposed = false;
+    let unlistenOutput: (() => void) | null = null;
+    let statusTimer: number | null = null;
+    let hasRestored = false;
+    const pendingOutputEvents: AgentSessionTerminalOutputEvent[] = [];
 
-    const refreshSnapshot = async () => {
+    const writeOutput = (event: AgentSessionTerminalOutputEvent) => {
+      if (
+        isDisposed ||
+        event.projectId !== projectId ||
+        event.sessionId !== sessionId ||
+        event.sequence <= latestSequenceRef.current
+      ) {
+        return;
+      }
+
+      latestSequenceRef.current = event.sequence;
       try {
-        const result = await readAgentSessionTerminal({
+        terminal.write(new Uint8Array(event.data));
+        setStatusMessage(null);
+      } catch (error) {
+        setStatusMessage(toCommandError(error).message);
+      }
+    };
+
+    const flushPendingOutput = () => {
+      for (const event of pendingOutputEvents.splice(0)) {
+        writeOutput(event);
+      }
+    };
+
+    const handleOutput = (event: AgentSessionTerminalOutputEvent) => {
+      if (!hasRestored) {
+        pendingOutputEvents.push(event);
+        return;
+      }
+
+      writeOutput(event);
+    };
+
+    const restoreTerminal = async () => {
+      try {
+        const result = await restoreAgentSessionTerminal({
           projectId,
           sessionId,
-          maxBytes: TERMINAL_MAX_BYTES,
         });
         if (isDisposed) {
           return;
         }
 
-        applySnapshot(terminal, latestSnapshotRef.current, result.snapshot);
-        latestSnapshotRef.current = result.snapshot;
-        setStatusMessage(
-          result.isActive
-            ? null
-            : "Session terminal is no longer active. Showing the latest log snapshot.",
-        );
+        if (!result.isActive) {
+          setStatusMessage(
+            "Session terminal is no longer active. Open the session log to inspect output.",
+          );
+          hasRestored = true;
+          flushPendingOutput();
+          return;
+        }
+
+        latestSequenceRef.current = result.sequence;
+        if (!result.isComplete) {
+          setStatusMessage(
+            "Terminal restore snapshot is unavailable. New live output will continue below.",
+          );
+          hasRestored = true;
+          flushPendingOutput();
+          return;
+        }
+
+        for (const chunk of result.chunks) {
+          terminal.write(new Uint8Array(chunk));
+        }
+        terminal.scrollToBottom();
+        setStatusMessage(null);
+        hasRestored = true;
+        flushPendingOutput();
+      } catch (error) {
+        if (!isDisposed) {
+          setStatusMessage(toCommandError(error).message);
+          hasRestored = true;
+          flushPendingOutput();
+        }
+      }
+    };
+
+    const refreshStatus = async () => {
+      try {
+        const result = await readAgentSessionTerminal({
+          projectId,
+          sessionId,
+          maxBytes: TERMINAL_STATUS_MAX_BYTES,
+        });
+        if (isDisposed) {
+          return;
+        }
+
+        if (!result.isActive) {
+          setStatusMessage(
+            "Session terminal is no longer active. Open the session log to inspect output.",
+          );
+        }
       } catch (error) {
         if (!isDisposed) {
           setStatusMessage(toCommandError(error).message);
@@ -140,22 +279,47 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
       }
     };
 
-    void refreshSnapshot();
-    const intervalId = window.setInterval(
-      () => void refreshSnapshot(),
-      TERMINAL_POLL_INTERVAL_MS,
-    );
+    const startTerminal = async () => {
+      try {
+        unlistenOutput = await subscribeAgentSessionTerminalOutput(
+          handleOutput,
+        );
+        if (isDisposed) {
+          unlistenOutput();
+          unlistenOutput = null;
+          return;
+        }
+      } catch (error) {
+        if (!isDisposed) {
+          setStatusMessage(toCommandError(error).message);
+        }
+        return;
+      }
+
+      await restoreTerminal();
+      await refreshStatus();
+      if (!isDisposed) {
+        statusTimer = window.setInterval(() => {
+          void refreshStatus();
+        }, TERMINAL_STATUS_POLL_MS);
+      }
+    };
+
+    void startTerminal();
 
     return () => {
       isDisposed = true;
-      window.clearInterval(intervalId);
+      unlistenOutput?.();
+      if (statusTimer !== null) {
+        window.clearInterval(statusTimer);
+      }
       resizeObserver?.disconnect();
       window.removeEventListener("resize", handleWindowResize);
       disposeData.dispose();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
-      latestSnapshotRef.current = "";
+      latestSequenceRef.current = 0;
     };
   }, [canBootXterm, projectId, sessionId]);
 
@@ -181,25 +345,6 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
   );
 }
 
-function applySnapshot(
-  terminal: Terminal,
-  previousSnapshot: string,
-  nextSnapshot: string,
-) {
-  const update = resolveSnapshotUpdate(previousSnapshot, nextSnapshot);
-  if (!update) {
-    return;
-  }
-
-  if (update.kind === "append") {
-    terminal.write(update.data);
-    return;
-  }
-
-  terminal.reset();
-  terminal.write(update.data);
-}
-
 function supportsXtermRuntime(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -209,12 +354,28 @@ function supportsXtermRuntime(): boolean {
     return false;
   }
 
-  if (
-    typeof navigator !== "undefined" &&
-    /jsdom/i.test(navigator.userAgent || "")
-  ) {
+  return true;
+}
+
+function isCopyShortcut(event: KeyboardEvent): boolean {
+  if (event.type !== "keydown") {
     return false;
   }
 
-  return true;
+  const key = event.key.toLowerCase();
+  if (key !== "c") {
+    return false;
+  }
+
+  return isMacPlatform()
+    ? event.metaKey && !event.shiftKey
+    : event.ctrlKey && event.shiftKey;
+}
+
+function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
 }

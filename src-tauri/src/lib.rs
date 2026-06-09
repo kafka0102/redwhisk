@@ -8,6 +8,9 @@ pub mod types;
 
 use app_state::AppState;
 use core::local_data_service::LocalDataService;
+use tauri::{Emitter, Manager};
+
+const AGENT_SESSION_TERMINAL_OUTPUT_EVENT: &str = "agent-session-terminal-output";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,6 +18,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::new(LocalDataService::new()))
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            let state = app.state::<AppState>();
+            state.pty_sessions.set_output_sink(move |event| {
+                let _ = app_handle.emit(AGENT_SESSION_TERMINAL_OUTPUT_EVENT, event);
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::core_commands::initialize_local_data,
             commands::project_commands::create_project,
@@ -37,6 +48,7 @@ pub fn run() {
             commands::agent_session_commands::start_standalone_agent_session,
             commands::agent_session_commands::read_agent_session_terminal,
             commands::agent_session_commands::write_agent_session_terminal,
+            commands::agent_session_commands::restore_agent_session_terminal,
             commands::agent_session_commands::set_agent_session_attention,
             commands::agent_session_commands::inject_agent_session_prompt,
             commands::agent_session_commands::resize_agent_session_terminal,

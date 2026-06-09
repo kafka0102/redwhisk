@@ -1468,14 +1468,16 @@ button:focus-visible {
 }
 
 .codex-terminal {
+  display: grid;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
-  padding: 12px 14px;
   background: #ffffff;
 }
 
 .codex-terminal .xterm {
   height: 100%;
+  padding: 0;
 }
 
 .codex-terminal .xterm,

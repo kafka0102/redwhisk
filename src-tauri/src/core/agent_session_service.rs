@@ -25,9 +25,10 @@ use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput, SetAgentSessionAttentionInput,
-    SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
-    StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
+    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
+    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
+    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
+    StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
     WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -294,13 +295,18 @@ impl<'connection> AgentSessionService<'connection> {
                 if let Some(pty_sessions) = pty_sessions {
                     if let Some(pending_pty) = pending_pty {
                         let data_dir = data_dir.as_ref().to_path_buf();
-                        pty_sessions.register(result.session_id, pending_pty, move |exit_status| {
-                            let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                &data_dir,
-                                result.session_id,
-                                exit_status,
-                            );
-                        });
+                        pty_sessions.register_for_project(
+                            input.project_id,
+                            result.session_id,
+                            pending_pty,
+                            move |exit_status| {
+                                let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                    &data_dir,
+                                    result.session_id,
+                                    exit_status,
+                                );
+                            },
+                        );
                     }
                 } else if let Some(child) = child.take() {
                     let data_dir = data_dir.as_ref().to_path_buf();
@@ -463,13 +469,18 @@ impl<'connection> AgentSessionService<'connection> {
                 if let Some(pty_sessions) = pty_sessions {
                     if let Some(pending_pty) = pending_pty {
                         let data_dir = data_dir.as_ref().to_path_buf();
-                        pty_sessions.register(result.session_id, pending_pty, move |exit_status| {
-                            let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                &data_dir,
-                                result.session_id,
-                                exit_status,
-                            );
-                        });
+                        pty_sessions.register_for_project(
+                            input.project_id,
+                            result.session_id,
+                            pending_pty,
+                            move |exit_status| {
+                                let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                    &data_dir,
+                                    result.session_id,
+                                    exit_status,
+                                );
+                            },
+                        );
                     }
                 } else if let Some(child) = child.take() {
                     let data_dir = data_dir.as_ref().to_path_buf();
@@ -701,6 +712,35 @@ impl<'connection> AgentSessionService<'connection> {
 
         self.clear_attention_after_successful_input(input.session_id)?;
         Ok(())
+    }
+
+    pub fn restore_terminal(
+        &self,
+        input: RestoreAgentSessionTerminalInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
+        self.find_project_session(input.project_id, input.session_id)?;
+        if !pty_sessions.contains(input.session_id) {
+            return Ok(RestoreAgentSessionTerminalResult {
+                session_id: input.session_id,
+                sequence: 0,
+                chunks: Vec::new(),
+                is_complete: false,
+                is_active: false,
+            });
+        }
+
+        let snapshot = pty_sessions
+            .restore_snapshot(input.session_id)
+            .map_err(inactive_terminal_error)?;
+
+        Ok(RestoreAgentSessionTerminalResult {
+            session_id: snapshot.session_id,
+            sequence: snapshot.sequence,
+            chunks: snapshot.chunks,
+            is_complete: snapshot.is_complete,
+            is_active: true,
+        })
     }
 
     pub fn set_session_attention(
@@ -1102,6 +1142,27 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .write_terminal_input(input, pty_sessions)
+    }
+
+    pub fn restore_terminal_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: RestoreAgentSessionTerminalInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .restore_terminal(input, pty_sessions)
     }
 
     pub fn set_session_attention_in_data_dir(

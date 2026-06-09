@@ -38,6 +38,19 @@ export interface ReadAgentSessionTerminalResult {
   isActive: boolean;
 }
 
+export interface RestoreAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface RestoreAgentSessionTerminalResult {
+  sessionId: number;
+  sequence: number;
+  chunks: number[][];
+  isComplete: boolean;
+  isActive: boolean;
+}
+
 export interface WriteAgentSessionTerminalInput {
   projectId: number;
   sessionId: number;
@@ -108,6 +121,15 @@ export function writeAgentSessionTerminal(
   input: WriteAgentSessionTerminalInput,
 ): Promise<void> {
   return invokeCommand("write_agent_session_terminal", { input });
+}
+
+export function restoreAgentSessionTerminal(
+  input: RestoreAgentSessionTerminalInput,
+): Promise<RestoreAgentSessionTerminalResult> {
+  return invokeCommand<RestoreAgentSessionTerminalResult>(
+    "restore_agent_session_terminal",
+    { input },
+  );
 }
 
 export function setAgentSessionAttention(
