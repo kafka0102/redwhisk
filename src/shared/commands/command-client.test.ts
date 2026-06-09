@@ -16,7 +16,10 @@ import {
   startStandaloneAgentSession,
   writeAgentSessionTerminal,
 } from "../../features/agents/agent-session-commands";
-import { startAgentSession } from "../../features/issues/issue-commands";
+import {
+  prepareAgentCommitCompletion,
+  startAgentSession,
+} from "../../features/issues/issue-commands";
 import {
   detectCodexCommand,
   listAgentProfiles,
@@ -482,6 +485,39 @@ describe("command client", () => {
         issueId: 3,
         agentProfileId: 9,
         promptSnapshot: "Final prompt",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the prepare agent commit completion command", async () => {
+    invokeMock.mockResolvedValue({
+      issueId: 3,
+      sessionId: 7,
+      option: "complete_agent_commit",
+      head: "4157f0c",
+      changedFilesCount: 1,
+      changedFiles: [{ status: " M", path: "src/app/app.tsx", oldPath: null }],
+      completionPrompt: "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
+    });
+
+    await expect(
+      prepareAgentCommitCompletion({
+        projectId: 1,
+        issueId: 3,
+      }),
+    ).resolves.toEqual({
+      issueId: 3,
+      sessionId: 7,
+      option: "complete_agent_commit",
+      head: "4157f0c",
+      changedFilesCount: 1,
+      changedFiles: [{ status: " M", path: "src/app/app.tsx", oldPath: null }],
+      completionPrompt: "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("prepare_agent_commit_completion", {
+      input: {
+        projectId: 1,
+        issueId: 3,
       },
     });
   });

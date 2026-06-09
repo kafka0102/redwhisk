@@ -112,6 +112,7 @@ pub struct AgentSessionListItem {
     pub issue_title: Option<String>,
     pub issue_status: Option<IssueStatus>,
     pub can_complete_clean: bool,
+    pub can_complete_agent_commit: bool,
     pub title: Option<String>,
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,

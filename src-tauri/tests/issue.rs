@@ -15,7 +15,7 @@ use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStat
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, IssueStatus,
-    MarkIssueReviewInput, UpdateIssueInput,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
@@ -896,6 +896,119 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
         })
         .expect("completion attempt count");
     assert_eq!(attempt_count, 0);
+}
+
+#[test]
+fn prepare_agent_commit_completion_returns_preview_for_dirty_review_issue() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("prepare-agent-commit-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty change\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "prepare-agent-commit-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Review issue".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let preview = service
+        .prepare_agent_commit_completion(PrepareAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("prepare completion preview");
+
+    assert_eq!(preview.issue_id, issue.id);
+    assert_eq!(preview.session_id, session_id);
+    assert_eq!(preview.option, "complete_agent_commit");
+    assert_eq!(preview.changed_files_count, 1);
+    assert_eq!(preview.changed_files.len(), 1);
+    assert_eq!(preview.changed_files[0].path, "tracked.txt");
+    assert!(preview.completion_prompt.contains("Review issue"));
+}
+
+#[test]
+fn prepare_agent_commit_completion_rejects_clean_repo() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("prepare-agent-commit-clean-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "prepare-agent-commit-clean-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Review issue".to_string(),
+            description: "".to_string(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let error = service
+        .prepare_agent_commit_completion(PrepareAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect_err("clean repo should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
 }
 
 #[test]

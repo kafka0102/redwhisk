@@ -40,6 +40,33 @@ pub struct CompleteIssueCleanInput {
     pub issue_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareAgentCommitCompletionInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommitChangedFileSummary {
+    pub status: String,
+    pub path: String,
+    pub old_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommitCompletionPreview {
+    pub issue_id: i64,
+    pub session_id: i64,
+    pub option: String,
+    pub head: String,
+    pub changed_files_count: usize,
+    pub changed_files: Vec<AgentCommitChangedFileSummary>,
+    pub completion_prompt: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssueListResponse {

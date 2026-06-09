@@ -22,6 +22,8 @@ import {
   completeIssueClean,
   completeIssueManual,
   markIssueReview,
+  prepareAgentCommitCompletion,
+  type AgentCommitCompletionPreview,
   type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -74,6 +76,7 @@ export function AgentsActivity({
   const [isMarkingReview, setIsMarkingReview] = useState(false);
   const [isCompletingManual, setIsCompletingManual] = useState(false);
   const [isCompletingClean, setIsCompletingClean] = useState(false);
+  const [isPreparingAgentCommit, setIsPreparingAgentCommit] = useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
     string | null
@@ -84,6 +87,10 @@ export function AgentsActivity({
   const [completeCleanErrorMessage, setCompleteCleanErrorMessage] = useState<
     string | null
   >(null);
+  const [completeAgentCommitErrorMessage, setCompleteAgentCommitErrorMessage] =
+    useState<string | null>(null);
+  const [agentCommitPreview, setAgentCommitPreview] =
+    useState<AgentCommitCompletionPreview | null>(null);
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
     useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
@@ -217,6 +224,11 @@ export function AgentsActivity({
     linkedIssue?.issueStatus === "review" &&
     projectCompletionPolicy === "agent_auto_commit" &&
     selectedSession?.canCompleteClean === true;
+  const canCompleteAgentCommit =
+    selectedSession?.status === "running" &&
+    linkedIssue?.issueStatus === "review" &&
+    projectCompletionPolicy === "agent_auto_commit" &&
+    selectedSession?.canCompleteAgentCommit === true;
   const canOpenLog =
     (selectedSession?.status === "crashed" ||
       selectedSession?.status === "stopped") &&
@@ -547,6 +559,31 @@ export function AgentsActivity({
     }
   }
 
+  async function handlePrepareAgentCommit() {
+    if (!linkedIssue) {
+      return;
+    }
+
+    setCompleteAgentCommitErrorMessage(null);
+    setIsPreparingAgentCommit(true);
+
+    try {
+      const preview = await prepareAgentCommitCompletion({
+        projectId,
+        issueId: linkedIssue.issueId,
+      });
+      setAgentCommitPreview(preview);
+    } catch (error) {
+      setCompleteAgentCommitErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsPreparingAgentCommit(false);
+    }
+  }
+
+  function handleCloseAgentCommitPreview() {
+    setAgentCommitPreview(null);
+  }
+
   async function handleOpenLog() {
     if (!selectedSession?.logPath || isOpeningLog) {
       return;
@@ -839,6 +876,18 @@ export function AgentsActivity({
                     {isCompletingClean ? "完成中..." : "Complete"}
                   </button>
                 ) : null}
+                {canCompleteAgentCommit ? (
+                  <button
+                    className="agents-session-toolbar__action"
+                    disabled={isPreparingAgentCommit}
+                    type="button"
+                    onClick={() => void handlePrepareAgentCommit()}
+                  >
+                    {isPreparingAgentCommit
+                      ? "准备中..."
+                      : "Complete with Agent Commit"}
+                  </button>
+                ) : null}
                 {canOpenLog ? (
                   <button
                     className="agents-session-toolbar__action"
@@ -865,6 +914,11 @@ export function AgentsActivity({
           {completeCleanErrorMessage ? (
             <p className="issues-status" role="status">
               {completeCleanErrorMessage}
+            </p>
+          ) : null}
+          {completeAgentCommitErrorMessage ? (
+            <p className="issues-status" role="status">
+              {completeAgentCommitErrorMessage}
             </p>
           ) : null}
           {attentionErrorMessage ? (
@@ -1004,6 +1058,68 @@ export function AgentsActivity({
           onClose={closeTemporarySessionDialog}
           onStarted={handleTemporarySessionStarted}
         />
+      ) : null}
+      {agentCommitPreview ? (
+        <div className="issue-dialog-overlay">
+          <div
+            aria-label="Completion Confirmation"
+            aria-modal="true"
+            className="issue-dialog issue-dialog--compact"
+            role="dialog"
+          >
+            <div className="issue-dialog__header">
+              <h3>Completion Confirmation</h3>
+              <button
+                aria-label="Close completion confirmation"
+                className="issue-dialog__close"
+                type="button"
+                onClick={handleCloseAgentCommitPreview}
+              >
+                ×
+              </button>
+            </div>
+            <div className="issue-dialog__body issue-dialog__body--single">
+              <div className="issue-dialog__editor">
+                <section className="issue-dialog__panel">
+                  <h4>Git summary</h4>
+                  <p>{`HEAD: ${agentCommitPreview.head}`}</p>
+                  <p>{`Changed files: ${agentCommitPreview.changedFilesCount}`}</p>
+                  <p>{`Completion option: ${agentCommitPreview.option}`}</p>
+                </section>
+                <section className="issue-dialog__panel">
+                  <h4>Changed files</h4>
+                  {agentCommitPreview.changedFiles.length > 0 ? (
+                    <ul className="completion-preview__files">
+                      {agentCommitPreview.changedFiles.map((file) => (
+                        <li key={`${file.status}:${file.path}`}>
+                          <span>{file.status}</span>
+                          <code>{file.path}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No changed files.</p>
+                  )}
+                </section>
+                <details className="settings-panel">
+                  <summary>Completion prompt</summary>
+                  <pre className="completion-preview__prompt">
+                    {agentCommitPreview.completionPrompt}
+                  </pre>
+                </details>
+              </div>
+            </div>
+            <p className="issue-dialog__status" aria-label="Dialog status">
+              确认后的 Agent Commit 注入将在 Story 5.4
+              接入；当前故事只展示确认面板。
+            </p>
+            <div className="issue-dialog__footer">
+              <button type="button" onClick={handleCloseAgentCommitPreview}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );

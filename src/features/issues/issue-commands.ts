@@ -54,6 +54,27 @@ export interface CompleteIssueCleanInput {
   issueId: number;
 }
 
+export interface PrepareAgentCommitCompletionInput {
+  projectId: number;
+  issueId: number;
+}
+
+export interface AgentCommitChangedFileSummary {
+  status: string;
+  path: string;
+  oldPath?: string | null;
+}
+
+export interface AgentCommitCompletionPreview {
+  issueId: number;
+  sessionId: number;
+  option: string;
+  head: string;
+  changedFilesCount: number;
+  changedFiles: AgentCommitChangedFileSummary[];
+  completionPrompt: string;
+}
+
 export interface StartAgentSessionInput {
   projectId: number;
   issueId: number;
@@ -96,6 +117,15 @@ export function completeIssueClean(
   input: CompleteIssueCleanInput,
 ): Promise<IssueRecord> {
   return invokeCommand<IssueRecord>("complete_issue_clean", { input });
+}
+
+export function prepareAgentCommitCompletion(
+  input: PrepareAgentCommitCompletionInput,
+): Promise<AgentCommitCompletionPreview> {
+  return invokeCommand<AgentCommitCompletionPreview>(
+    "prepare_agent_commit_completion",
+    { input },
+  );
 }
 
 export function startAgentSession(

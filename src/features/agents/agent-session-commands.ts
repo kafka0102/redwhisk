@@ -11,6 +11,7 @@ export interface AgentSessionListItem {
   issueTitle: string | null;
   issueStatus?: IssueStatus | null;
   canCompleteClean?: boolean;
+  canCompleteAgentCommit?: boolean;
   title: string | null;
   agentType: AgentType;
   status: AgentSessionStatus;
