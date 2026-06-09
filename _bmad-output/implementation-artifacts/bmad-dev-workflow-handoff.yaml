@@ -1,12 +1,50 @@
 workflow: bmad-dev-workflow
-phase: blocked
-story_file:
-story_key:
-story_status:
-baseline_commit: c38283d
-changed_files: []
-validation_commands: []
-validation_results: []
-review_summary:
-blocking_reason: "preflight 未找到 ready-for-dev 或 backlog story；当前 _bmad-output/implementation-artifacts/sprint-status.yaml 中已登记的 1.1 至 5.9 均为 done，无法自动选择下一条 story 继续 bmad-dev-workflow。"
-updated_at: 2026-06-09T20:23:08+08:00
+phase: dev-complete
+story_file: _bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md
+story_key: 6-1-stabilize-agent-session-terminal-rendering
+story_status: review
+baseline_commit: c0c09f39ceba751fb4e04c96412173a0c3afb07e
+changed_files:
+  - _bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - package.json
+  - pnpm-lock.yaml
+  - src/app/app.css
+  - src/features/agents/agent-session-commands.ts
+  - src/features/agents/agent-terminal-events.ts
+  - src/features/agents/codex-terminal.test.tsx
+  - src/features/agents/codex-terminal.tsx
+  - src-tauri/src/agent/pty_session_manager.rs
+  - src-tauri/src/commands/agent_session_commands.rs
+  - src-tauri/src/core/agent_session_service.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/types/agent_session.rs
+  - src-tauri/tests/agent_session.rs
+validation_commands:
+  - pnpm test -- src/features/agents/codex-terminal.test.tsx
+  - cargo test --manifest-path src-tauri/Cargo.toml pty_session_manager
+  - pnpm format
+  - cargo fmt --manifest-path src-tauri/Cargo.toml
+  - cargo fmt --manifest-path src-tauri/Cargo.toml --check
+  - pnpm install --frozen-lockfile
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test
+  - cargo test --manifest-path src-tauri/Cargo.toml
+  - git diff --check
+validation_results:
+  - pnpm test -- src/features/agents/codex-terminal.test.tsx: passed
+  - cargo test --manifest-path src-tauri/Cargo.toml pty_session_manager: passed
+  - pnpm format: passed
+  - cargo fmt --manifest-path src-tauri/Cargo.toml: passed
+  - cargo fmt --manifest-path src-tauri/Cargo.toml --check: passed
+  - pnpm install --frozen-lockfile: passed
+  - pnpm lint: passed
+  - pnpm typecheck: passed
+  - pnpm test: passed
+  - cargo test --manifest-path src-tauri/Cargo.toml: passed
+  - git diff --check: passed
+review_summary: "Review follow-ups addressed in dev pass: restore/listen race fixed by awaiting listener registration before restore; liveness polling added; manual desktop validation task un-checked and risk retained; front-end protocol/restore/copy tests expanded. Story is back to review. Real Tauri desktop manual validation remains not run in this environment."
+blocking_reason:
+updated_at: 2026-06-09T22:17:51+08:00

@@ -28,6 +28,9 @@ importers:
       "@tiptap/starter-kit":
         specifier: ^3.26.0
         version: 3.26.0
+      "@xterm/addon-clipboard":
+        specifier: ^0.2.0
+        version: 0.2.0
       "@xterm/addon-fit":
         specifier: ^0.11.0
         version: 0.11.0
@@ -2098,6 +2101,12 @@ packages:
     resolution:
       {
         integrity: sha512-uOJamYALNhfJ6iolExyQM40yIQwDqYnkKtQ5VCiSe17E33H0aQ/u+1GlRuz4LZBk6Mm3sg90G9hEbmEt37C1Zg==,
+      }
+
+  "@xterm/addon-clipboard@0.2.0":
+    resolution:
+      {
+        integrity: sha512-Dl31BCtBhLaUEECUbEiVcCLvLBbaeGYdT7NofB8OJkGTD3MWgBsaLjXvfGAD4tQNHhm6mbKyYkR7XD8kiZsdNg==,
       }
 
   "@xterm/addon-fit@0.11.0":
@@ -6428,6 +6437,8 @@ snapshots:
       "@vitest/pretty-format": 4.1.8
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  "@xterm/addon-clipboard@0.2.0": {}
 
   "@xterm/addon-fit@0.11.0": {}
 

@@ -5,6 +5,7 @@ use crate::core::agent_session_service::AgentSessionService;
 use crate::types::agent_session::{
     AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
+    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
     StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
     WriteAgentSessionTerminalInput,
@@ -174,6 +175,23 @@ pub fn write_agent_session_terminal(
     })?;
 
     AgentSessionService::write_terminal_input_in_data_dir(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn restore_agent_session_terminal(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: RestoreAgentSessionTerminalInput,
+) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 终端恢复失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    AgentSessionService::restore_terminal_in_data_dir(data_dir, input, &state.pty_sessions)
 }
 
 #[tauri::command]

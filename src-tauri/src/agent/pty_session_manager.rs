@@ -8,6 +8,9 @@ use std::thread;
 use std::time::Duration;
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use serde::Serialize;
+
+const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
 
 #[derive(Clone)]
 pub struct PtySessionManager {
@@ -16,12 +19,14 @@ pub struct PtySessionManager {
 
 struct PtySessionStore {
     sessions: Mutex<HashMap<i64, Arc<PtySessionHandle>>>,
+    output_sink: Mutex<Option<Arc<dyn Fn(PtyOutputEvent) + Send + Sync>>>,
 }
 
 struct PtySessionHandle {
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
+    restore_buffer: Mutex<PtyRestoreBuffer>,
 }
 
 pub struct PtySpawnRequest {
@@ -44,6 +49,31 @@ pub struct PendingPtySession {
     log_path: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyOutputEvent {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub sequence: u64,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyRestoreSnapshot {
+    pub session_id: i64,
+    pub sequence: u64,
+    pub chunks: Vec<Vec<u8>>,
+    pub is_complete: bool,
+}
+
+struct PtyRestoreBuffer {
+    chunks: Vec<Vec<u8>>,
+    total_bytes: usize,
+    latest_sequence: u64,
+    is_complete: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PtyExitStatus {
     pub exit_code: Option<i32>,
@@ -54,7 +84,17 @@ impl PtySessionManager {
         Self {
             store: Arc::new(PtySessionStore {
                 sessions: Mutex::new(HashMap::new()),
+                output_sink: Mutex::new(None),
             }),
+        }
+    }
+
+    pub fn set_output_sink<F>(&self, sink: F)
+    where
+        F: Fn(PtyOutputEvent) + Send + Sync + 'static,
+    {
+        if let Ok(mut output_sink) = self.store.output_sink.lock() {
+            *output_sink = Some(Arc::new(sink));
         }
     }
 
@@ -109,17 +149,31 @@ impl PtySessionManager {
     where
         F: FnOnce(PtyExitStatus) + Send + 'static,
     {
+        self.register_for_project(0, session_id, pending, on_exit);
+    }
+
+    pub fn register_for_project<F>(
+        &self,
+        project_id: i64,
+        session_id: i64,
+        pending: PendingPtySession,
+        on_exit: F,
+    ) where
+        F: FnOnce(PtyExitStatus) + Send + 'static,
+    {
         let handle = Arc::new(PtySessionHandle {
             master: Mutex::new(pending.master),
             writer: Mutex::new(pending.writer),
             killer: Mutex::new(pending.killer),
+            restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
         });
 
         if let Ok(mut sessions) = self.store.sessions.lock() {
             sessions.insert(session_id, Arc::clone(&handle));
         }
 
-        let store = Arc::clone(&self.store);
+        let reader_store = Arc::clone(&self.store);
+        let reader_handle = Arc::clone(&handle);
         let log_path = pending.log_path.clone();
         let mut reader = pending.reader;
         thread::spawn(move || {
@@ -129,20 +183,39 @@ impl PtySessionManager {
                 Err(_) => return,
             };
             let mut buffer = [0_u8; 4096];
+            let mut sequence = 0_u64;
 
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => break,
                     Ok(count) => {
-                        let _ = file.write_all(&buffer[..count]);
+                        let data = &buffer[..count];
+                        let _ = file.write_all(data);
                         let _ = file.flush();
+                        sequence = sequence.saturating_add(1);
+                        if let Ok(mut restore_buffer) = reader_handle.restore_buffer.lock() {
+                            restore_buffer.push(sequence, data);
+                        }
+                        if let Some(output_sink) = reader_store
+                            .output_sink
+                            .lock()
+                            .ok()
+                            .and_then(|sink| sink.clone())
+                        {
+                            output_sink(PtyOutputEvent {
+                                project_id,
+                                session_id,
+                                sequence,
+                                data: data.to_vec(),
+                            });
+                        }
                     }
                     Err(_) => break,
                 }
             }
         });
 
-        let store = Arc::clone(&store);
+        let store = Arc::clone(&self.store);
         let mut child = pending.child;
         thread::spawn(move || {
             let exit_code = child
@@ -203,6 +276,15 @@ impl PtySessionManager {
             .unwrap_or(false)
     }
 
+    pub fn restore_snapshot(&self, session_id: i64) -> Result<PtyRestoreSnapshot, String> {
+        let session = self.lookup(session_id)?;
+        let restore_buffer = session
+            .restore_buffer
+            .lock()
+            .map_err(|_| "failed to lock PTY restore buffer".to_string())?;
+        Ok(restore_buffer.snapshot(session_id))
+    }
+
     fn lookup(&self, session_id: i64) -> Result<Arc<PtySessionHandle>, String> {
         self.store
             .sessions
@@ -211,6 +293,43 @@ impl PtySessionManager {
             .get(&session_id)
             .cloned()
             .ok_or_else(|| "session not found".to_string())
+    }
+}
+
+impl PtyRestoreBuffer {
+    fn new() -> Self {
+        Self {
+            chunks: Vec::new(),
+            total_bytes: 0,
+            latest_sequence: 0,
+            is_complete: true,
+        }
+    }
+
+    fn push(&mut self, sequence: u64, data: &[u8]) {
+        self.latest_sequence = sequence;
+        if !self.is_complete {
+            return;
+        }
+
+        if self.total_bytes.saturating_add(data.len()) > RESTORE_BUFFER_MAX_BYTES {
+            self.chunks.clear();
+            self.total_bytes = 0;
+            self.is_complete = false;
+            return;
+        }
+
+        self.total_bytes += data.len();
+        self.chunks.push(data.to_vec());
+    }
+
+    fn snapshot(&self, session_id: i64) -> PtyRestoreSnapshot {
+        PtyRestoreSnapshot {
+            session_id,
+            sequence: self.latest_sequence,
+            chunks: self.chunks.clone(),
+            is_complete: self.is_complete,
+        }
     }
 }
 

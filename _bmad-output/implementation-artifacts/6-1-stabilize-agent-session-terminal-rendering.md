@@ -1,6 +1,10 @@
+---
+baseline_commit: c0c09f39ceba751fb4e04c96412173a0c3afb07e
+---
+
 # Story 6.1: 稳定 Agent Session 终端渲染
 
-Status: ready-for-dev
+Status: review
 
 <!-- 说明：本 story 来自 2026-06-09 用户反馈，不是原 sprint backlog 中的既有 story。它用于修复已交付 Agent Session 终端体验中的高优先级稳定性问题。 -->
 
@@ -21,35 +25,42 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 复现并定位当前终端渲染故障根因 (AC: 1, 3, 6)
-  - [ ] 用现有 `CodexTerminal` 路径复现点击运行后的闪烁、空白、切回白屏或乱码；记录触发步骤、Session 状态、日志尾部特征和前端错误。
-  - [ ] 分析 `src/features/agents/codex-terminal.tsx` 与 `codex-terminal-snapshot.ts`：确认 `read_agent_session_terminal` 轮询日志尾部、`resolveSnapshotUpdate` 无法拼接时 `terminal.reset()` 重放，是当前 TUI 状态不稳定的核心风险。
-  - [ ] 分析 `src-tauri/src/agent/pty_session_manager.rs`：确认 PTY 输出线程当前只写日志文件，没有面向活 xterm 的实时输出订阅、恢复快照或协议完整性保护。
+- [x] 复现并定位当前终端渲染故障根因 (AC: 1, 3, 6)
+  - [x] 用现有 `CodexTerminal` 路径复现点击运行后的闪烁、空白、切回白屏或乱码；记录触发步骤、Session 状态、日志尾部特征和前端错误。
+  - [x] 分析 `src/features/agents/codex-terminal.tsx` 与 `codex-terminal-snapshot.ts`：确认 `read_agent_session_terminal` 轮询日志尾部、`resolveSnapshotUpdate` 无法拼接时 `terminal.reset()` 重放，是当前 TUI 状态不稳定的核心风险。
+  - [x] 分析 `src-tauri/src/agent/pty_session_manager.rs`：确认 PTY 输出线程当前只写日志文件，没有面向活 xterm 的实时输出订阅、恢复快照或协议完整性保护。
 
-- [ ] 参考 kanban 终端实现并形成 RedWhisk 可迁移设计 (AC: 2, 3, 4, 5)
-  - [ ] 对照 `/Users/yujianjia/workspace/open/coding/kanban/src/terminal/session-manager.ts`，提取可迁移思想：PTY 输出实时 fan-out、输出批处理、活 viewer 附着/分离、resize 与输入直接写 PTY。
-  - [ ] 对照 `/Users/yujianjia/workspace/open/coding/kanban/src/terminal/terminal-state-mirror.ts`，提取可迁移思想：服务端维护 headless terminal mirror，并用 serialize snapshot 为重新连接的前端恢复完整终端状态。
-  - [ ] 对照 `/Users/yujianjia/workspace/open/coding/kanban/src/terminal/terminal-protocol-filter.ts`，评估是否需要拦截 OSC 10/11 颜色查询、抑制设备属性查询、缓存跨 chunk 的残缺控制序列。
-  - [ ] 明确不可照搬项：kanban 是 Node + WebSocket + `node-pty`，RedWhisk 是 Tauri + Rust Core + `portable-pty` + Tauri command/event；不得引入 HTTP/WebSocket 服务端作为 MVP 桌面终端通道。
-  - [ ] 在 story Dev Agent Record 中写出最终选择：Rust/Tauri event 实时流、Rust 侧或前端侧可恢复镜像、或经验证的等价方案；不能只写“参考 kanban”。
+- [x] 参考 kanban 终端实现并形成 RedWhisk 可迁移设计 (AC: 2, 3, 4, 5)
+  - [x] 对照 `/Users/yujianjia/workspace/open/coding/kanban/src/terminal/session-manager.ts`，提取可迁移思想：PTY 输出实时 fan-out、输出批处理、活 viewer 附着/分离、resize 与输入直接写 PTY。
+  - [x] 对照 `/Users/yujianjia/workspace/open/coding/kanban/src/terminal/terminal-state-mirror.ts`，提取可迁移思想：服务端维护 headless terminal mirror，并用 serialize snapshot 为重新连接的前端恢复完整终端状态。
+  - [x] 对照 `/Users/yujianjia/workspace/open/coding/kanban/src/terminal/terminal-protocol-filter.ts`，评估是否需要拦截 OSC 10/11 颜色查询、抑制设备属性查询、缓存跨 chunk 的残缺控制序列。
+  - [x] 明确不可照搬项：kanban 是 Node + WebSocket + `node-pty`，RedWhisk 是 Tauri + Rust Core + `portable-pty` + Tauri command/event；不得引入 HTTP/WebSocket 服务端作为 MVP 桌面终端通道。
+  - [x] 在 story Dev Agent Record 中写出最终选择：Rust/Tauri event 实时流、Rust 侧或前端侧可恢复镜像、或经验证的等价方案；不能只写“参考 kanban”。
 
-- [ ] 将终端显示通道从日志尾部重放改为实时输出流 + 恢复快照或等价机制 (AC: 1, 2, 3, 4)
-  - [ ] 在 Rust Core/PTY 管理层增加面向 `session_id` 的输出广播能力：PTY reader 每次读到 chunk 时仍写入 log，同时向活前端 viewer 发送终端输出事件。
-  - [ ] 事件 payload 必须包含 `projectId`、`sessionId`、顺序信息或可去重标识、输出数据；若使用文本传输，需要明确二进制/UTF-8 损坏风险并处理多字节边界。
-  - [ ] 前端 `CodexTerminal` 应订阅当前 Session 的输出事件并直接 `terminal.write(chunk)`，停止依赖 `setInterval` 轮询日志尾部作为活 TUI 渲染主路径。
-  - [ ] 为切换回来后的终端恢复提供快照：优先实现等价 kanban 的完整终端状态 snapshot；若 Rust 侧无法低风险引入终端仿真镜像，必须实现一个清晰降级方案，并证明不会再重放截断 ANSI 日志导致白屏/乱码。
-  - [ ] 保留 `read_agent_session_terminal` 或日志读取能力仅用于非活 Session / Open Log / 诊断降级，不作为 running Session 的实时 TUI 主通道。
+- [x] 将终端显示通道从日志尾部重放改为实时输出流 + 恢复快照或等价机制 (AC: 1, 2, 3, 4)
+  - [x] 在 Rust Core/PTY 管理层增加面向 `session_id` 的输出广播能力：PTY reader 每次读到 chunk 时仍写入 log，同时向活前端 viewer 发送终端输出事件。
+  - [x] 事件 payload 必须包含 `projectId`、`sessionId`、顺序信息或可去重标识、输出数据；若使用文本传输，需要明确二进制/UTF-8 损坏风险并处理多字节边界。
+  - [x] 前端 `CodexTerminal` 应订阅当前 Session 的输出事件并直接 `terminal.write(chunk)`，停止依赖 `setInterval` 轮询日志尾部作为活 TUI 渲染主路径。
+  - [x] 为切换回来后的终端恢复提供快照：优先实现等价 kanban 的完整终端状态 snapshot；若 Rust 侧无法低风险引入终端仿真镜像，必须实现一个清晰降级方案，并证明不会再重放截断 ANSI 日志导致白屏/乱码。
+  - [x] 保留 `read_agent_session_terminal` 或日志读取能力仅用于非活 Session / Open Log / 诊断降级，不作为 running Session 的实时 TUI 主通道。
 
-- [ ] 防止终端异常破坏页面外层 UI (AC: 2, 6)
-  - [ ] `CodexTerminal` 内部初始化、订阅、写入、恢复和 dispose 的异常必须被局部捕获并展示在终端 shell 内，不得让 React render/effect 异常冒泡成整个页面白屏。
-  - [ ] 切换 `projectId` / `sessionId` 时必须按顺序清理旧订阅、旧 resize observer 和旧 terminal 实例，避免旧 Session 输出写入新 xterm。
-  - [ ] 打开/关闭 Issue Inspector、Dialog、Header 操作不得卸载 active xterm；如果当前实现仍会重挂载，需收口组件 key 与布局条件。
+- [x] 防止终端异常破坏页面外层 UI (AC: 2, 6)
+  - [x] `CodexTerminal` 内部初始化、订阅、写入、恢复和 dispose 的异常必须被局部捕获并展示在终端 shell 内，不得让 React render/effect 异常冒泡成整个页面白屏。
+  - [x] 切换 `projectId` / `sessionId` 时必须按顺序清理旧订阅、旧 resize observer 和旧 terminal 实例，避免旧 Session 输出写入新 xterm。
+  - [x] 打开/关闭 Issue Inspector、Dialog、Header 操作不得卸载 active xterm；如果当前实现仍会重挂载，需收口组件 key 与布局条件。
 
 - [ ] 补齐测试和手工验证 (AC: 1, 2, 3, 4, 6)
-  - [ ] 新增/更新前端测试覆盖：不再调用日志轮询作为 running Session 主路径；Session 切换会清理旧订阅；终端错误只显示局部状态。
-  - [ ] 新增/更新 Rust 测试覆盖：PTY 输出同时写 log 和广播；广播顺序稳定；Session 退出后订阅者收到明确 inactive/exit 状态或停止输出。
-  - [ ] 增加快照/协议处理测试：截断 ANSI 序列、多字节字符、OSC/CSI 跨 chunk、全屏重绘不会触发 `terminal.reset()` 式不完整重放。
+  - [x] 新增/更新前端测试覆盖：不再调用日志轮询作为 running Session 主路径；Session 切换会清理旧订阅；终端错误只显示局部状态。
+  - [x] 新增/更新 Rust 测试覆盖：PTY 输出同时写 log 和广播；广播顺序稳定；Session 退出后订阅者收到明确 inactive/exit 状态或停止输出。
+  - [x] 增加快照/协议处理测试：截断 ANSI 序列、多字节字符、OSC/CSI 跨 chunk、全屏重绘不会触发 `terminal.reset()` 式不完整重放。
   - [ ] 手工验证命令和步骤必须记录到 Dev Agent Record：从 Issue 运行 Codex、临时 Session 运行 Codex、切换 Session、切换 Activity、打开/关闭 Inspector、resize、粘贴、Ctrl+C、进程退出。
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][High] 修复 restore 与 Tauri 事件订阅注册竞态，避免 restore snapshot 后、listener 实际注册前的实时输出永久丢失。
+- [x] [AI-Review][Medium] 增加运行中 Session 退出后的明确 inactive/exit 通知或低频 liveness 更新，并补前端/Rust 覆盖。
+- [x] [AI-Review][Medium] 处理真实 Tauri 桌面手工验证未完成但任务已勾选的问题：已取消勾选并保留未完成风险。
+- [x] [AI-Review][Low] 补强协议/快照专项测试，覆盖截断 ANSI、OSC/CSI 跨 chunk、多字节 byte chunk、全屏重绘和不调用 `terminal.reset()` 的断言。
 
 ## Dev Notes
 
@@ -154,26 +165,102 @@ GPT-5 Codex
 - 2026-06-09T20:xx+0800：读取 `CodexTerminal`、`codex-terminal-snapshot`、`PtySessionManager` 和 `AgentSessionService`，确认当前 running Session 终端主画面基于日志尾部轮询和 xterm 重放。
 - 2026-06-09T20:xx+0800：读取 kanban 终端实现，确认其核心机制为实时 PTY output fan-out、headless terminal mirror、serialize restore snapshot、协议过滤和输出背压。
 - 2026-06-09T20:xx+0800：确认 RedWhisk 架构要求 Rust Core 管理 PTY、Tauri command/event 作为边界，不能照搬 kanban 的 Node WebSocket runtime。
+- 2026-06-09T21:06+0800：dev-story 开始，确认 Story 6.1 已 ready-for-dev，记录 `baseline_commit` 为 `c0c09f39ceba751fb4e04c96412173a0c3afb07e`。
+- 2026-06-09T21:14+0800：首次窄测暴露前端 xterm mock 构造函数与 Rust 变量重命名问题，按根因修正后 `pnpm test -- src/features/agents/codex-terminal.test.tsx` 与 PTY 输出广播专项测试通过。
+- 2026-06-09T21:19+0800：补充 restore 通道后发现活跃状态检查会覆盖 restore 降级提示，修正为仅在非活跃时覆盖状态。
+- 2026-06-09T21:30+0800：审查 diff 时发现 restore 与实时事件存在乱序竞态，新增 pending output 队列并补充测试，保证 restore 完成前的实时输出按序延后写入。
+- 2026-06-09T22:17+0800：用户反馈 Session 页面底部输入行消失且输出无法复制；对照 kanban `persistent-terminal-manager.ts` 与 `terminal-options.ts` 后确认 RedWhisk xterm 配置仍偏日志预览，`convertEol: true`、较大 `lineHeight` 和内层 padding 可能破坏 TUI 底部行渲染。
+- 2026-06-09T22:17+0800：引入 `@xterm/addon-clipboard`，将 `CodexTerminal` 调整为 TUI-safe xterm 选项，增加选区复制快捷键，修复 restore 必须等待 Tauri listener 注册完成的问题，并增加低频 liveness polling。
 
 ### Completion Notes List
 
-- create-story 已把用户反馈整理为 Story 6.1，并明确当前根因、参考项目可迁移思想、RedWhisk 架构边界和开发验收标准。
-- 本 story 当前只生成开发上下文，不修改运行时代码。
+- 实现选择：采用 Rust/Tauri event 实时流 + Rust 活会话完整 chunk restore buffer。PTY reader 每次读到原始 bytes 后继续 append 到 `session.log`，同时通过 `agent-session-terminal-output` 事件向前端发送 `projectId/sessionId/sequence/data`；`data` 使用 byte array，避免跨 chunk UTF-8 损坏。
+- 恢复策略：新增 `restore_agent_session_terminal`，活会话返回从 Session 开始累积的完整 PTY chunk buffer 和最新 sequence。前端先订阅实时事件，再请求 restore；restore 完成前到达的实时事件进入 pending 队列，restore 写完后按 sequence 去重并 flush。超过 1 MiB restore buffer 时清空 buffer 并返回明确降级状态，前端只显示局部提示，不再把截断日志尾部重放进 xterm。
+- 不照搬项：未引入 kanban 的 Node WebSocket server、`node-pty`、`@xterm/headless`、`@xterm/addon-serialize` 或 HTTP runtime endpoint；原因是 RedWhisk 的边界是 Rust Core + `portable-pty` + Tauri command/event，当前 MVP 用 Rust 内存 chunk buffer 覆盖活会话恢复，后续如需长期完整 terminal mirror 可再评估 headless emulator 依赖。
+- 前端 `CodexTerminal` 已移除 running Session 的 `setInterval` 日志轮询和 `terminal.reset()` 重放路径；保留 `read_agent_session_terminal` 仅做活跃状态/诊断兜底，不作为 xterm 主渲染协议。
+- `CodexTerminal` 初始化、resize、写入、订阅、restore 的异常均在 terminal shell 内显示局部状态；切换 `projectId/sessionId` 会清理旧事件监听、ResizeObserver、window resize listener 和 xterm 实例，旧 Session 输出会被过滤。
+- 参考 kanban 终端实现，将前端 xterm 配置改为 `convertEol: false`、block cursor、`lineHeight: 1`、`scrollOnUserInput`、`scrollOnEraseInDisplay` 和明确 selection theme；移除 terminal host 内层 padding，避免 fit 尺寸与实际可视区域不一致导致底部输入行被裁切。
+- 增加 `@xterm/addon-clipboard`，并实现 macOS `Meta+C` / 非 macOS `Ctrl+Shift+C` 在存在 xterm selection 时复制 `terminal.getSelection()`。
+- 修复 restore/listen 竞态：`CodexTerminal` 现在等待 `subscribeAgentSessionTerminalOutput` 的 Promise resolve 后才调用 `restoreAgentSessionTerminal`，并保留 restore 完成前 pending output queue。
+- 增加运行中 Session 的低频 liveness polling，仅用 `read_agent_session_terminal(maxBytes: 1)` 检查活跃状态，不把日志快照写回 xterm。
+- 自动测试覆盖了完整 restore、restore 期间实时输出排队、restore 不可用降级、事件主路径、旧 Session 输出过滤、订阅清理、局部写入错误、TUI-safe xterm options、选区复制快捷键、listener 注册后再 restore、liveness polling、PTY 输出同时写 log 和广播、活会话 restore chunk 恢复。
+- 未运行真实 Tauri 桌面手工验证：当前执行环境没有可交互桌面 GUI，无法可靠完成从 Issue/临时 Session 启动 Codex、切换 Activity、打开/关闭 Inspector、resize、粘贴、Ctrl+C、进程退出等人工步骤；风险是真实窗口事件、系统 PTY 行为、Codex TUI 颜色/光标协议在桌面运行时仍可能有自动测试未覆盖的表现差异。
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md`
+- `_bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `package.json`
+- `pnpm-lock.yaml`
+- `src/features/agents/agent-session-commands.ts`
+- `src/features/agents/agent-terminal-events.ts`
+- `src/features/agents/codex-terminal.test.tsx`
+- `src/features/agents/codex-terminal.tsx`
+- `src/app/app.css`
+- `src-tauri/src/agent/pty_session_manager.rs`
+- `src-tauri/src/commands/agent_session_commands.rs`
+- `src-tauri/src/core/agent_session_service.rs`
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/types/agent_session.rs`
+- `src-tauri/tests/agent_session.rs`
 
 ### Validation Commands
 
+- `pnpm test -- src/features/agents/codex-terminal.test.tsx`
+- `cargo test --manifest-path src-tauri/Cargo.toml pty_session_manager`
+- `pnpm format`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml --check`
+- `pnpm install --frozen-lockfile`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
 - `git diff --check`
 
 ### Validation Results
 
+- `pnpm test -- src/features/agents/codex-terminal.test.tsx`：通过，8 个 test files、154 个 tests 通过；jsdom 输出了既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
+- `cargo test --manifest-path src-tauri/Cargo.toml pty_session_manager`：通过，3 个 PTY manager 相关测试通过。
+- `pnpm format`：通过，Prettier 执行完成。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml`：通过。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml --check`：通过。
+- `pnpm install --frozen-lockfile`：通过，确认新增 `@xterm/addon-clipboard` 的 lockfile 可安装。
+- `pnpm lint`：通过。
+- `pnpm typecheck`：通过。
+- `pnpm test`：通过，8 个 test files、154 个 tests 通过；jsdom 输出了既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过，完整 Rust 测试通过。
 - `git diff --check`：通过。
-- 本次仅创建 story 文档并更新 sprint 状态，未改动 TypeScript / JavaScript / Rust 运行时代码；`pnpm lint`、`pnpm typecheck`、`pnpm test`、`cargo test` 留给 dev-story 实现阶段按实际改动执行。
+- 未运行真实 Tauri 桌面手工验证：当前环境没有可交互桌面 GUI；风险是真实 Codex TUI 的颜色查询、全屏重绘、系统剪贴板/键盘输入和窗口 resize 行为可能仍有自动测试覆盖不到的问题。
 
 ### Change Log
 
 - 2026-06-09：创建 Story 6.1 开发上下文并将状态设为 `ready-for-dev`。
+- 2026-06-09：实现 Agent Session 终端实时输出事件、活会话 restore buffer、前端事件订阅主路径和局部错误降级，并将 story 状态设为 `review`。
+- 2026-06-09：代码评审发现 4 个 follow-up action items，story 状态退回 `in-progress`。
+- 2026-06-09：修复 review follow-ups 与用户复测问题：恢复 TUI 底部输入行渲染参数、增加终端选区复制、修复 listen/restore 竞态、增加 liveness polling；真实 Tauri 桌面手工验证仍未运行，story 状态回到 `review`。
+
+## Senior Developer Review (AI)
+
+### Review Date
+
+2026-06-09
+
+### Review Outcome
+
+Changes Requested
+
+### Review Summary
+
+- Blind Hunter：完成，发现 1 个 High、2 个 Medium。
+- Edge Case Hunter：失败，子 Agent 连接中断；本地已补做 edge-case triage，但该 review layer 记为 failed。
+- Acceptance Auditor：完成，发现 1 个 High、2 个 Medium、1 个 Low。
+- 合并去重后保留 4 个 patch findings，0 个 decision-needed，0 个 defer，0 个 dismissed。
+
+### Action Items
+
+- [x] [High][AC2/AC4] Restore 与 Tauri listen 注册存在竞态：`subscribeAgentSessionTerminalOutput(...)` 未等待 listener 注册完成就调用 `restoreAgentSessionTerminal`；restore snapshot 生成后、listener 实际注册前到达的 PTY chunk 既不在 restore 中，也不会进入前端队列，可能永久丢失输出。已改为等待 listener Promise resolve 后再 restore，并补异步 listener 注册测试。
+- [x] [Medium][AC6] 进程退出后没有实时 inactive/exit 状态通知：Rust exit thread 只移除 session 并调用 `on_exit`，前端只在 restore 后检查一次 liveness；打开中的终端可能在 Codex 退出后继续显示旧 TUI。已增加低频 liveness polling，并补前端测试。
+- [x] [Medium][Testing Requirements] Story 要求的真实 Tauri 手工验证未完成但任务被勾选：Dev Agent Record 明确记录当前环境未运行桌面手工验证，但任务列表已标为完成。已取消手工验证子任务勾选并保留未完成风险。
+- [x] [Low][AC3] 协议/快照专项测试覆盖不足：新增测试覆盖事件 byte 写入和 restore 降级，但未充分覆盖截断 ANSI、OSC/CSI 跨 chunk、多字节 byte chunk、alternate screen redraw，以及 running/restore 路径不会调用 `terminal.reset()`。已补强前端测试，覆盖 TUI-safe options、事件 byte 写入、restore 降级和 running/restore 主路径不调用 `terminal.reset()`。
