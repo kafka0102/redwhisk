@@ -3,10 +3,10 @@ phase: blocked
 story_file:
 story_key:
 story_status:
-baseline_commit: 82aa24f
+baseline_commit: c38283d
 changed_files: []
 validation_commands: []
 validation_results: []
 review_summary:
-blocking_reason: "preflight 未找到 ready-for-dev 或 backlog story；当前 sprint-status.yaml 中 1.1 至 5.9 均为 done，无法继续单条 story workflow。"
-updated_at: 2026-06-09T19:01:00+08:00
+blocking_reason: "preflight 未找到 ready-for-dev 或 backlog story；当前 _bmad-output/implementation-artifacts/sprint-status.yaml 中已登记的 1.1 至 5.9 均为 done，无法自动选择下一条 story 继续 bmad-dev-workflow。"
+updated_at: 2026-06-09T20:23:08+08:00
