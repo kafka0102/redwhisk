@@ -1001,37 +1001,40 @@ export function AgentsActivity({
               </div>
             </div>
           ) : null}
-          {markReviewErrorMessage ? (
-            <p className="issues-status" role="status">
-              {markReviewErrorMessage}
-            </p>
-          ) : null}
-          {completeManualErrorMessage ? (
-            <p className="issues-status" role="status">
-              {completeManualErrorMessage}
-            </p>
-          ) : null}
-          {completeCleanErrorMessage ? (
-            <p className="issues-status" role="status">
-              {completeCleanErrorMessage}
-            </p>
-          ) : null}
-          {completeAgentCommitErrorMessage ? (
-            <p className="issues-status" role="status">
-              {completeAgentCommitErrorMessage}
-            </p>
-          ) : null}
-          {attentionErrorMessage ? (
-            <p className="issues-status" role="status">
-              {attentionErrorMessage}
-            </p>
-          ) : null}
-          {sessionActionErrorMessage ? (
-            <p className="issues-status" role="status">
-              {sessionActionErrorMessage}
-            </p>
-          ) : null}
+          <div className="agents-session-status-stack">
+            {markReviewErrorMessage ? (
+              <p className="issues-status" role="status">
+                {markReviewErrorMessage}
+              </p>
+            ) : null}
+            {completeManualErrorMessage ? (
+              <p className="issues-status" role="status">
+                {completeManualErrorMessage}
+              </p>
+            ) : null}
+            {completeCleanErrorMessage ? (
+              <p className="issues-status" role="status">
+                {completeCleanErrorMessage}
+              </p>
+            ) : null}
+            {completeAgentCommitErrorMessage ? (
+              <p className="issues-status" role="status">
+                {completeAgentCommitErrorMessage}
+              </p>
+            ) : null}
+            {attentionErrorMessage ? (
+              <p className="issues-status" role="status">
+                {attentionErrorMessage}
+              </p>
+            ) : null}
+            {sessionActionErrorMessage ? (
+              <p className="issues-status" role="status">
+                {sessionActionErrorMessage}
+              </p>
+            ) : null}
+          </div>
           <div
+            className="agents-terminal-host"
             onMouseDown={() => {
               if (selectedSession) {
                 void acknowledgeSessionAttention(selectedSession.sessionId);

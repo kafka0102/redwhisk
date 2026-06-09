@@ -1345,6 +1345,8 @@ button:focus-visible {
     minmax(0, 1fr)
     var(--agents-info-splitter-width, 0px)
     var(--agents-info-pane-width, 0px);
+  min-height: 0;
+  height: 100%;
   background: var(--color-app);
 }
 
@@ -1353,11 +1355,19 @@ button:focus-visible {
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
+  height: 100%;
   padding: 12px;
   overflow: hidden;
 }
 
+.agents-terminal-host {
+  grid-row: 3;
+  min-height: 0;
+  height: 100%;
+}
+
 .agents-session-toolbar {
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1449,6 +1459,17 @@ button:focus-visible {
   cursor: wait;
 }
 
+.agents-session-status-stack {
+  grid-row: 2;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.agents-session-status-stack:empty {
+  display: none;
+}
+
 .codex-terminal-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -1469,13 +1490,27 @@ button:focus-visible {
 
 .codex-terminal {
   display: grid;
+  position: relative;
   min-height: 0;
   height: 100%;
   overflow: hidden;
   background: #ffffff;
 }
 
+.codex-terminal::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 32px;
+  background: #f3f4f6;
+  pointer-events: none;
+}
+
 .codex-terminal .xterm {
+  position: relative;
+  z-index: 1;
   height: 100%;
   padding: 0;
 }
