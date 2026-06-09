@@ -4,7 +4,7 @@
 
 本文档定义本项目与前后端无关的通用编码风格，适用于文档、TypeScript 源码、共享包、脚本与配置代码。
 
-当前仓库尚未包含应用源码、包管理配置或统一格式化配置。涉及 TypeScript、Prettier、lint、typecheck 的规则适用于后续新增代码或工具链时。
+当前仓库已经包含 Tauri + React + TypeScript 应用源码、Rust 核心代码、`pnpm` 脚本、Prettier、ESLint、Vitest 与 Cargo 测试。涉及 TypeScript、Rust、Prettier、lint、typecheck、test 的规则适用于当前所有开发任务。
 
 ## 命名规范
 
@@ -83,8 +83,9 @@
 
 必须遵守：
 
-- 若仓库引入 `prettier.config.mjs` 或等价根级格式化配置，所有代码格式以该配置为事实来源
-- 每次完成代码修改后，必须先执行已配置的格式化命令，再进入 lint、typecheck、test
+- 仓库已有 `prettier.config.mjs`，前端和配置文件格式以该配置和 `pnpm format` 覆盖范围为事实来源
+- 每次完成前端代码修改后，必须先执行已配置的格式化命令，再进入 lint、typecheck、test
+- Rust 代码保持 `rustfmt` 默认风格；如任务涉及 Rust 且需要格式化，使用 `cd src-tauri && cargo fmt`
 - 提交前必须清理临时调试代码、废弃分支和无用注释
 
 建议：
