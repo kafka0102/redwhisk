@@ -92,7 +92,7 @@ development_status:
   5-2-complete-directly-when-no-uncommitted-changes: done
   5-3-show-agent-commit-completion-confirmation-panel: done
   5-4-inject-completion-prompt-into-current-codex-session: done
-  5-5-detect-commit-hash-and-complete-issue: backlog
+  5-5-detect-commit-hash-and-complete-issue: ready-for-dev
   5-6-keep-review-when-no-commit-detected: backlog
   5-7-block-auto-completion-during-git-operation: backlog
   5-8-view-completed-issue-summary: backlog

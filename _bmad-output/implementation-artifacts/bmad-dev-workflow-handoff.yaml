@@ -1,51 +1,15 @@
 workflow: bmad-dev-workflow
-phase: review-complete
-story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-4-inject-completion-prompt-into-current-codex-session.md
-story_key: 5-4-inject-completion-prompt-into-current-codex-session
-story_status: done
-baseline_commit: 194ea2c
+phase: story-created
+story_file: /Users/yujianjia/workspace/kafka/redwhisk/_bmad-output/implementation-artifacts/5-5-detect-commit-hash-and-complete-issue.md
+story_key: 5-5-detect-commit-hash-and-complete-issue
+story_status: ready-for-dev
+baseline_commit: 702197d
 changed_files:
-  - _bmad-output/implementation-artifacts/5-4-inject-completion-prompt-into-current-codex-session.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - _bmad-output/implementation-artifacts/5-5-detect-commit-hash-and-complete-issue.md
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src-tauri/migrations/0012_agent_commit_completion_attempts.sql
-  - src-tauri/src/commands/issue_commands.rs
-  - src-tauri/src/core/issue_service.rs
-  - src-tauri/src/db/completion_attempt_repository.rs
-  - src-tauri/src/db/migrations.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/completion_attempt.rs
-  - src-tauri/src/types/issue.rs
-  - src-tauri/tests/issue.rs
-  - src-tauri/tests/local_data.rs
-  - src/features/agents/agents-activity.test.tsx
-  - src/features/agents/agents-activity.tsx
-  - src/features/issues/issue-commands.ts
-  - src/shared/commands/command-client.test.ts
-validation_commands:
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
-  - cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
-  - cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pnpm test
-  - git diff --check
-validation_results:
-  - pass: pnpm format
-  - pass: cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pass: pnpm lint
-  - pass: pnpm typecheck
-  - pass: pnpm test -- --run src/features/agents/agents-activity.test.tsx src/shared/commands/command-client.test.ts
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test issue
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test agent_session
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test git_detection
-  - pass: cargo test --manifest-path src-tauri/Cargo.toml --test local_data
-  - pass: pnpm test
-  - pass: git diff --check
-review_summary: 未发现阻塞性问题；completion prompt 注入边界、最小 CompletionAttempt 审计与前端确认动作和本 story 目标一致，且未提前混入 commit 检测或完成收口副作用。
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+validation_commands: []
+validation_results: []
+review_summary:
 blocking_reason:
-updated_at: 2026-06-09T10:50:53+08:00
+updated_at: 2026-06-09T11:20:00+08:00
