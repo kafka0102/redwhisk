@@ -18,7 +18,17 @@ import { toCommandError } from "../../shared/commands/command-error";
 
 const TERMINAL_STATUS_MAX_BYTES = 1;
 const TERMINAL_STATUS_POLL_MS = 2_000;
+const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
 const TERMINAL_WORD_SEPARATOR = " ()[]{}',\"`";
+
+type TerminalStatusSource =
+  | "boot"
+  | "resize"
+  | "input"
+  | "output"
+  | "restore"
+  | "poll"
+  | "inactive";
 
 interface CodexTerminalProps {
   projectId: number;
@@ -30,6 +40,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const latestSequenceRef = useRef(0);
+  const statusSourceRef = useRef<TerminalStatusSource | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const canBootXterm = supportsXtermRuntime();
 
@@ -41,6 +52,21 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
 
     let terminal: Terminal;
     let fitAddon: FitAddon;
+    const showStatusMessage = (
+      source: TerminalStatusSource,
+      message: string,
+    ) => {
+      statusSourceRef.current = source;
+      setStatusMessage(message);
+    };
+    const clearStatusMessage = (source?: TerminalStatusSource) => {
+      if (source && statusSourceRef.current !== source) {
+        return;
+      }
+      statusSourceRef.current = null;
+      setStatusMessage(null);
+    };
+
     try {
       terminal = new Terminal({
         allowTransparency: false,
@@ -96,7 +122,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
     } catch (error) {
       const message = toCommandError(error).message;
       const bootErrorTimer = window.setTimeout(() => {
-        setStatusMessage(message);
+        showStatusMessage("boot", message);
       }, 0);
       return () => {
         window.clearTimeout(bootErrorTimer);
@@ -116,7 +142,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
           if (!terminalRef.current) {
             return;
           }
-          setStatusMessage(message);
+          showStatusMessage("resize", message);
         }, 0);
         return;
       }
@@ -141,7 +167,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
     const disposeData = terminal.onData((data) => {
       void writeAgentSessionTerminal({ projectId, sessionId, data }).catch(
         (error) => {
-          setStatusMessage(toCommandError(error).message);
+          showStatusMessage("input", toCommandError(error).message);
         },
       );
     });
@@ -176,6 +202,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
     let statusTimer: number | null = null;
     let hasRestored = false;
     const pendingOutputEvents: AgentSessionTerminalOutputEvent[] = [];
+    let pendingOutputBytes = 0;
 
     const writeOutput = (event: AgentSessionTerminalOutputEvent) => {
       if (
@@ -190,21 +217,54 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
       latestSequenceRef.current = event.sequence;
       try {
         terminal.write(new Uint8Array(event.data));
-        setStatusMessage(null);
+        clearStatusMessage();
       } catch (error) {
-        setStatusMessage(toCommandError(error).message);
+        showStatusMessage("output", toCommandError(error).message);
       }
     };
 
     const flushPendingOutput = () => {
       for (const event of pendingOutputEvents.splice(0)) {
+        pendingOutputBytes = Math.max(
+          0,
+          pendingOutputBytes - event.data.length,
+        );
         writeOutput(event);
+      }
+      pendingOutputBytes = 0;
+    };
+
+    const discardPendingOutput = () => {
+      pendingOutputEvents.length = 0;
+      pendingOutputBytes = 0;
+    };
+
+    const queuePendingOutput = (event: AgentSessionTerminalOutputEvent) => {
+      pendingOutputEvents.push(event);
+      pendingOutputBytes += event.data.length;
+
+      while (
+        pendingOutputBytes > TERMINAL_PENDING_OUTPUT_MAX_BYTES &&
+        pendingOutputEvents.length > 0
+      ) {
+        const droppedEvent = pendingOutputEvents.shift();
+        if (!droppedEvent) {
+          break;
+        }
+        pendingOutputBytes = Math.max(
+          0,
+          pendingOutputBytes - droppedEvent.data.length,
+        );
+        showStatusMessage(
+          "restore",
+          "Terminal restore is taking longer than expected. Older live output was dropped while waiting for restore.",
+        );
       }
     };
 
     const handleOutput = (event: AgentSessionTerminalOutputEvent) => {
       if (!hasRestored) {
-        pendingOutputEvents.push(event);
+        queuePendingOutput(event);
         return;
       }
 
@@ -222,17 +282,18 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         }
 
         if (!result.isActive) {
-          setStatusMessage(
+          discardPendingOutput();
+          showStatusMessage(
+            "inactive",
             "Session terminal is no longer active. Open the session log to inspect output.",
           );
           hasRestored = true;
-          flushPendingOutput();
           return;
         }
 
-        latestSequenceRef.current = result.sequence;
         if (!result.isComplete) {
-          setStatusMessage(
+          showStatusMessage(
+            "restore",
             "Terminal restore snapshot is unavailable. New live output will continue below.",
           );
           hasRestored = true;
@@ -243,13 +304,14 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         for (const chunk of result.chunks) {
           terminal.write(new Uint8Array(chunk));
         }
+        latestSequenceRef.current = result.sequence;
         terminal.scrollToBottom();
-        setStatusMessage(null);
+        clearStatusMessage();
         hasRestored = true;
         flushPendingOutput();
       } catch (error) {
         if (!isDisposed) {
-          setStatusMessage(toCommandError(error).message);
+          showStatusMessage("restore", toCommandError(error).message);
           hasRestored = true;
           flushPendingOutput();
         }
@@ -268,22 +330,27 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         }
 
         if (!result.isActive) {
-          setStatusMessage(
+          showStatusMessage(
+            "inactive",
             "Session terminal is no longer active. Open the session log to inspect output.",
           );
+          return;
+        }
+
+        if (statusSourceRef.current === "poll") {
+          clearStatusMessage("poll");
         }
       } catch (error) {
         if (!isDisposed) {
-          setStatusMessage(toCommandError(error).message);
+          showStatusMessage("poll", toCommandError(error).message);
         }
       }
     };
 
     const startTerminal = async () => {
       try {
-        unlistenOutput = await subscribeAgentSessionTerminalOutput(
-          handleOutput,
-        );
+        unlistenOutput =
+          await subscribeAgentSessionTerminalOutput(handleOutput);
         if (isDisposed) {
           unlistenOutput();
           unlistenOutput = null;
@@ -320,6 +387,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
       terminalRef.current = null;
       fitAddonRef.current = null;
       latestSequenceRef.current = 0;
+      statusSourceRef.current = null;
     };
   }, [canBootXterm, projectId, sessionId]);
 
