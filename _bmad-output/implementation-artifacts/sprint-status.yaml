@@ -1,5 +1,5 @@
 # generated: 2026-06-04T15:27:13+0800
-# last_updated: 2026-06-10T20:02:57+0800
+# last_updated: 2026-06-10T21:00:36+0800
 # project: redwhisk
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-10T20:02:57+0800
+last_updated: 2026-06-10T21:00:36+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -101,5 +101,5 @@ development_status:
 
   epic-6: in-progress
   6-1-stabilize-agent-session-terminal-rendering: in-progress
-  6-2-unify-settings-page-two-column-layout: ready-for-dev
+  6-2-unify-settings-page-two-column-layout: done
   epic-6-retrospective: optional
