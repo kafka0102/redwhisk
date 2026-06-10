@@ -1,38 +1,14 @@
 workflow: bmad-dev-workflow
 phase: blocked
-workflow_mode: ready-story
+workflow_mode: auto-discover
 story_creation_request:
-story_file: _bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md
-story_key: 6-1-stabilize-agent-session-terminal-rendering
-story_status: in-progress
-baseline_commit: c0c09f39ceba751fb4e04c96412173a0c3afb07e
-changed_files:
-  - _bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md
-  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
-  - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - src/app/app.css
-  - src/features/agents/codex-terminal.test.tsx
-  - src/features/agents/codex-terminal.tsx
-  - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/tests/agent_session.rs
-validation_commands:
-  - pnpm format
-  - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - pnpm lint
-  - pnpm typecheck
-  - pnpm test
-  - cargo fmt --manifest-path src-tauri/Cargo.toml --check
-  - cargo test --manifest-path src-tauri/Cargo.toml
-  - git diff --check
-validation_results:
-  - pnpm format: passed
-  - cargo fmt --manifest-path src-tauri/Cargo.toml: passed
-  - pnpm lint: passed
-  - pnpm typecheck: passed
-  - pnpm test: passed (8 个 test files、157 个 tests；含既有 jsdom canvas/CSS 警告，不影响退出码)
-  - cargo fmt --manifest-path src-tauri/Cargo.toml --check: passed
-  - cargo test --manifest-path src-tauri/Cargo.toml: passed
-  - git diff --check: passed
-review_summary: "本轮已修复自动 review 留下的 6 个 patch finding，并通过前端/Rust 回归测试与静态校验；当前未发现新的 patch finding。"
-blocking_reason: "真实 Tauri 桌面手工验证未运行。当前环境没有可交互桌面 GUI，无法完成 story 要求的手工验证步骤，因此 story 仍保持 in-progress。"
-updated_at: 2026-06-10T09:57:53+08:00
+story_file:
+story_key:
+story_status:
+baseline_commit: 364ee07
+changed_files: []
+validation_commands: []
+validation_results: []
+review_summary:
+blocking_reason: "preflight 未发现 ready-for-dev 或 backlog story；当前 sprint 仅有 6-1-stabilize-agent-session-terminal-rendering 处于 in-progress，阻塞点仍是真实 Tauri 桌面手工验证未运行。"
+updated_at: 2026-06-10T14:36:43+08:00
