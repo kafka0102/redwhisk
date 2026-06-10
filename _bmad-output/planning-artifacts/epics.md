@@ -1385,7 +1385,7 @@ So that 点击运行、切换 Session 或返回页面时不会闪烁、大片空
 
 As a 本地开发者,
 I want Settings 页面与 Agents 页面保持一致的双栏布局和可调左栏,
-So that 我在配置基本信息和 Agents 时能获得稳定、清晰、可复用的桌面设置体验.
+So that 我在配置 General 和 Agents 时能获得稳定、清晰、可复用的桌面设置体验.
 
 **Requirements:** FR3、FR8、FR26、NFR8、NFR9；UX-DR3、UX-DR5、UX-DR18、UX-DR22、UX-DR26；`docs/standards/settings-page-layout.md`
 
@@ -1402,12 +1402,12 @@ So that 我在配置基本信息和 Agents 时能获得稳定、清晰、可复�
 **Then** 左侧菜单宽度跟随调整，并遵守与 Agents Activity 一致的宽度上下限
 **And** 拖动行为、光标、不可选中文本处理、可访问标签和 keyboard focus 样式参考 Agents Activity 的 splitter 实现
 
-**Given** Settings 当前包含 `基本信息` 和 `Agents` 两个菜单项
+**Given** Settings 当前包含 `General` 和 `Agents` 两个菜单项
 **When** 左侧菜单和右侧标题渲染
 **Then** 每个菜单项和当前页面标题在文字前展示小图标
 **And** 图标优先使用项目已依赖的 `lucide-react` 图标；如后续改用外部图标资源，必须保存为本地资产并确认 license 允许随应用分发
 
-**Given** 用户选中 `基本信息` 或 `Agents`
+**Given** 用户选中 `General` 或 `Agents`
 **When** 菜单项处于当前选中状态
 **Then** 该菜单项背景色变为灰色或等价的 `var(--color-surface-muted)` 选中底色
 **And** 选中状态仍通过 `aria-pressed` 或等价语义暴露，不能只依赖颜色表达
@@ -1415,7 +1415,7 @@ So that 我在配置基本信息和 Agents 时能获得稳定、清晰、可复�
 **Given** 用户点击任一 Settings 菜单项
 **When** 右侧内容区域切换
 **Then** 右侧使用统一的 Settings 内容模板，而不是每个模块各自定义外层布局
-**And** 内容模板顶部显示当前菜单名称，例如 `基本信息` 或 `Agents`
+**And** 内容模板顶部显示当前菜单名称，例如 `General` 或 `Agents`
 **And** 标题下方渲染该菜单对应的具体内容
 
 **Given** Settings 右侧内容区域渲染
