@@ -94,8 +94,21 @@ describe("ProjectSettingsActivity", () => {
       await screen.findByRole("navigation", { name: "Settings menu" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByTestId("settings-menu-icon-general")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByTestId("settings-menu-icon-agents")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
       "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
+    expect(screen.getByTestId("settings-title-icon-agents")).toHaveAttribute(
+      "aria-hidden",
       "true",
     );
     expect(
@@ -103,6 +116,119 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Global Agents" }),
+    ).toBeInTheDocument();
+  });
+
+  it("exposes and updates the settings menu splitter width", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    const splitter = screen.getByRole("separator", {
+      name: "Resize settings menu",
+    });
+    expect(splitter).toHaveAttribute("aria-orientation", "vertical");
+    expect(splitter).toHaveAttribute("aria-valuemin", "200");
+    expect(splitter).toHaveAttribute("aria-valuemax", "420");
+    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+
+    splitter.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(splitter).toHaveAttribute("aria-valuenow", "216");
+    await user.keyboard("{ArrowLeft}");
+    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    await user.keyboard("{End}");
+    expect(splitter).toHaveAttribute("aria-valuenow", "420");
+    await user.keyboard("{Home}");
+    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+  });
+
+  it("resizes the settings menu by mouse drag and clears global drag state", async () => {
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    const splitter = screen.getByRole("separator", {
+      name: "Resize settings menu",
+    });
+
+    await userEvent.pointer([
+      { keys: "[MouseRight>]", target: splitter, coords: { clientX: 200 } },
+      { keys: "[/MouseRight]" },
+    ]);
+    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
+
+    await userEvent.pointer([
+      { keys: "[MouseLeft>]", target: splitter, coords: { clientX: 200 } },
+      { target: window.document.body, coords: { clientX: 480 } },
+    ]);
+    expect(splitter).toHaveAttribute("aria-valuenow", "420");
+    expect(document.body.style.cursor).toBe("col-resize");
+    expect(document.body.style.userSelect).toBe("none");
+
+    await userEvent.pointer([
+      { target: window.document.body, coords: { clientX: -80 } },
+    ]);
+    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+
+    window.dispatchEvent(new Event("blur"));
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
+  });
+
+  it("switches settings modules through a shared content title", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "General" }));
+
+    expect(screen.getByRole("button", { name: "General" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: "General" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("settings-title-icon-general")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(
+      screen.getByLabelText("General").querySelector(".settings-section__body"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Completion Policy")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+
+    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Project Agents" }),
     ).toBeInTheDocument();
   });
 
@@ -211,6 +337,21 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("reloads agents when project id changes", async () => {
+    let resolveProjectProfiles:
+      | ((value: { profiles: AgentProfileRecord[] }) => void)
+      | undefined;
+    listAgentProfilesMock.mockImplementation(({ scope, projectId }) => {
+      if (scope === "project" && projectId === 2) {
+        return new Promise((resolve) => {
+          resolveProjectProfiles = resolve;
+        });
+      }
+
+      if (scope === "project")
+        return Promise.resolve({ profiles: [projectProfile] });
+      return Promise.resolve({ profiles: [globalProfile] });
+    });
+
     const { rerender } = render(
       <ProjectSettingsActivity
         completionPolicy="manual"
@@ -224,11 +365,6 @@ describe("ProjectSettingsActivity", () => {
     expect(listAgentProfilesMock).toHaveBeenCalledWith({
       scope: "project",
       projectId: 1,
-    });
-
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") return { profiles: [] };
-      return { profiles: [globalProfile] };
     });
 
     rerender(
@@ -246,6 +382,47 @@ describe("ProjectSettingsActivity", () => {
         projectId: 2,
       }),
     );
+    expect(screen.queryByText("Project Codex")).not.toBeInTheDocument();
+
+    resolveProjectProfiles?.({ profiles: [] });
+    await screen.findAllByText("No agents");
+  });
+
+  it("clears open agent dialogs when project id changes", async () => {
+    const user = userEvent.setup();
+    detectCodexCommandMock.mockRejectedValue({
+      code: "AGENT_COMMAND_UNAVAILABLE",
+      message: "Agent command 不可用。",
+    });
+
+    const { rerender } = render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add project agent" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Add Project Agent" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={2}
+        projectName="Agents Lab"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Add Project Agent" }),
+    ).not.toBeInTheDocument();
   });
 
   it("updates project completion policy from the general settings section", async () => {

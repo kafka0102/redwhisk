@@ -1,10 +1,10 @@
 ---
-baseline_commit: 7118dc8
+baseline_commit: 355acb1
 ---
 
 # Story 6.2: 统一 Settings 页面双栏布局
 
-Status: ready-for-dev
+Status: done
 
 <!-- 说明：本 story 聚焦 Settings 页面外层布局一致性，不扩大 Project Settings / Global Settings 的产品边界。 -->
 
@@ -27,27 +27,35 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] 建立 Settings 页面统一菜单配置与内容模板 (AC: 3, 5, 8)
-  - [ ] 在 `src/features/settings/project-settings-activity.tsx` 中用一份菜单配置描述 `General` 和 `Agents` 的 key、label、icon。
-  - [ ] 抽出 Settings 右侧统一模板，负责标题、标题图标和 900px 内容容器；具体模块只提供内容。
-  - [ ] 保持现有 General 和 `Agents` 业务内容、加载、保存和弹窗行为不变。
+- [x] 建立 Settings 页面统一菜单配置与内容模板 (AC: 3, 5, 8)
+  - [x] 在 `src/features/settings/project-settings-activity.tsx` 中用一份菜单配置描述 `General` 和 `Agents` 的 key、label、icon。
+  - [x] 抽出 Settings 右侧统一模板，负责标题、标题图标和 900px 内容容器；具体模块只提供内容。
+  - [x] 保持现有 General 和 `Agents` 业务内容、加载、保存和弹窗行为不变。
 
-- [ ] 对齐 Agents Activity 左栏宽度与 splitter 行为 (AC: 1, 2)
-  - [ ] Settings 左栏默认宽度设为 200px，最小 200px，最大 420px，与 `AgentsActivity` 的 session list 常量一致。
-  - [ ] 增加 Settings splitter，`role="separator"`、`aria-orientation="vertical"`、`aria-valuemin`、`aria-valuemax`、`aria-valuenow` 和可读 `aria-label` 必须完整。
-  - [ ] 拖动时更新左栏宽度，设置 `document.body.style.cursor = "col-resize"` 和 `document.body.style.userSelect = "none"`；拖动结束后恢复。
-  - [ ] 支持键盘 `ArrowLeft` / `ArrowRight` 每次调整 16px，并限制在 200px 到 420px 内。
+- [x] 对齐 Agents Activity 左栏宽度与 splitter 行为 (AC: 1, 2)
+  - [x] Settings 左栏默认宽度设为 200px，最小 200px，最大 420px，与 `AgentsActivity` 的 session list 常量一致。
+  - [x] 增加 Settings splitter，`role="separator"`、`aria-orientation="vertical"`、`aria-valuemin`、`aria-valuemax`、`aria-valuenow` 和可读 `aria-label` 必须完整。
+  - [x] 拖动时更新左栏宽度，设置 `document.body.style.cursor = "col-resize"` 和 `document.body.style.userSelect = "none"`；拖动结束后恢复。
+  - [x] 支持键盘 `ArrowLeft` / `ArrowRight` 每次调整 16px，并限制在 200px 到 420px 内。
 
-- [ ] 更新 Settings 菜单与内容样式 (AC: 1, 3, 4, 6, 7)
-  - [ ] 在 `src/app/app.css` 中让 `.activity-surface--settings` / `.settings-layout` 使用 CSS 变量控制左栏宽度，并包含左栏、8px splitter、右侧内容三列。
-  - [ ] 分割线必须从页面顶部到页面底部连续显示；focus-visible 样式参考 `.agents-splitter`。
-  - [ ] 菜单项使用图标 + 文案布局，选中态使用 `var(--color-surface-muted)` 或等价灰色背景，并保留 `aria-pressed`。
-  - [ ] 右侧内容模板在可用宽度大于 900px 时居中，最大宽度 900px；小于 900px 时宽度 100%，内容不重叠、不溢出。
+- [x] 更新 Settings 菜单与内容样式 (AC: 1, 3, 4, 6, 7)
+  - [x] 在 `src/app/app.css` 中让 `.activity-surface--settings` / `.settings-layout` 使用 CSS 变量控制左栏宽度，并包含左栏、8px splitter、右侧内容三列。
+  - [x] 分割线必须从页面顶部到页面底部连续显示；focus-visible 样式参考 `.agents-splitter`。
+  - [x] 菜单项使用图标 + 文案布局，选中态使用 `var(--color-surface-muted)` 或等价灰色背景，并保留 `aria-pressed`。
+  - [x] 右侧内容模板在可用宽度大于 900px 时居中，最大宽度 900px；小于 900px 时宽度 100%，内容不重叠、不溢出。
 
-- [ ] 补齐 Settings 布局测试 (AC: 1, 2, 3, 4, 5, 6, 8)
-  - [ ] 更新 `src/features/settings/project-settings-activity.test.tsx`，断言菜单图标可访问隐藏、`aria-pressed`、统一标题区域和具体模块内容切换。
-  - [ ] 增加 splitter 测试：存在 `role="separator"`，具备宽度 aria 属性；键盘方向键能更新 `aria-valuenow`。
-  - [ ] 增加回归测试，确认点击 `General` / `Agents` 后仍保留现有 Completion Policy 和 Agent list 行为。
+- [x] 补齐 Settings 布局测试 (AC: 1, 2, 3, 4, 5, 6, 8)
+  - [x] 更新 `src/features/settings/project-settings-activity.test.tsx`，断言菜单图标可访问隐藏、`aria-pressed`、统一标题区域和具体模块内容切换。
+  - [x] 增加 splitter 测试：存在 `role="separator"`，具备宽度 aria 属性；键盘方向键能更新 `aria-valuenow`。
+  - [x] 增加回归测试，确认点击 `General` / `Agents` 后仍保留现有 Completion Policy 和 Agent list 行为。
+
+### Review Findings
+
+- [x] [Review][Patch] 修复 Settings splitter 拖拽释放丢失与非主键触发问题 [`src/features/settings/project-settings-activity.tsx`] — 已增加统一 `clearDragState`，监听 `window.blur` 清理拖拽状态和 body 样式；`onMouseDown` 仅响应主键并 `preventDefault()`；测试覆盖右键忽略、鼠标拖拽 clamp 和 blur 清理。
+- [x] [Review][Patch] Project 切换或加载失败时清理旧 Agent 列表和旧弹窗上下文 [`src/features/settings/project-settings-activity.tsx`] — 已通过 `profilesProjectId` 让列表、错误和 loading 只在数据归属当前 `projectId` 时渲染；新增 add/edit dialog 的 project 上下文检查，切换 Project 后不再展示旧弹窗。
+- [x] [Review][Patch] 补齐 splitter 鼠标拖拽测试覆盖 [`src/features/settings/project-settings-activity.test.tsx`] — 已新增鼠标拖拽测试，覆盖右键忽略、宽度 clamp 到 200/420、拖动期间 body cursor/userSelect 和 blur 清理。
+- [x] [Review][Patch] 补强 900px 内容容器约束的测试证据 [`src/features/settings/project-settings-activity.test.tsx`, `src/app/app.css`] — 已增加统一内容容器 `.settings-section__body` 的渲染断言；CSS 保持 `width: min(900px, 100%)`、`max-width: 900px`、居中。
+- [x] [Review][Patch] 明确 Settings 页面单一滚动容器，避免小屏双滚动 [`src/app/app.css`] — 已将 `.activity-surface--settings` 设为 `overflow: hidden`，由 `.settings-content` 作为页面内容滚动容器。
 
 ## Dev Notes
 
@@ -143,20 +151,31 @@ GPT-5 Codex
 - 2026-06-10T20:02+0800：bmad-dev-workflow 预检发现 sprint 中无 `ready-for-dev` story，选择首个 backlog story `6-2-unify-settings-page-two-column-layout` 创建 story。
 - 2026-06-10T20:02+0800：读取 Epic 6、`docs/standards/settings-page-layout.md`、architecture、当前 Settings 和 Agents Activity 实现，确认本 story 只涉及前端布局和测试。
 - 2026-06-10T20:21+0800：根据用户反馈将 Settings 的 General 面向用户标签统一为英文，已同步 story、布局规范、epics、组件和测试。
+- 2026-06-10T20:28+0800：用户批准进入开发阶段，记录 `baseline_commit` 为 `355acb1`，开始实现 Settings 双栏布局。
+- 2026-06-10T20:32+0800：新增 Settings 布局测试，覆盖菜单图标、统一标题、splitter aria 属性和键盘调整宽度。
+- 2026-06-10T20:33+0800：实现 `SETTINGS_MENU_ITEMS`、`SettingsContentFrame`、200/420px Settings splitter、菜单选中底色和 900px 内容容器。
+- 2026-06-10T20:47+0800：自动代码评审完成，记录 5 个 patch follow-up；story 状态退回 `in-progress`。
+- 2026-06-10T20:58+0800：继续修复 5 个 review follow-up，补充拖拽、project 切换、内容容器和滚动容器测试/实现。
+- 2026-06-10T21:00+0800：全部验证重新通过，review follow-up 全部勾选，story 状态更新为 `done`。
 
 ### Completion Notes List
 
 - Story 创建完成，状态为 `ready-for-dev`。
 - 本 story 明确不新增 Settings 业务字段、后端数据模型、Tauri command 或 Agent Profile 行为。
 - Settings 当前 General 标签已在运行时代码和测试中改为英文，后续 6-2 开发应继续以 `General` 作为菜单和标题文案。
+- 已实现 Settings 菜单配置和统一右侧内容模板，`General` / `Agents` 共用标题、图标和内容容器结构。
+- 已实现 Settings 左栏 200px 默认宽度、200-420px clamp、8px splitter、鼠标拖动、`ArrowLeft` / `ArrowRight` 键盘调整和 body cursor/userSelect 清理。
+- 已更新 Settings 样式：菜单图标、选中态 `var(--color-surface-muted)`、连续 splitter 分割线、focus-visible 样式、右侧内容最大 900px 居中和窄屏单列降级。
+- 已补充 Settings 测试覆盖 splitter 可访问属性、键盘调宽、统一标题图标、模块切换和既有 Completion Policy / Agent list 回归。
+- 已解决全部 5 个 review follow-up：拖拽丢失清理、非主键忽略、project 切换旧数据/旧弹窗、鼠标拖拽测试、900px 容器证据和单一滚动容器。
+- Story 6.2 已完成并通过验证，状态更新为 `done`。
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/6-2-unify-settings-page-two-column-layout.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `_bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml`
-- `_bmad-output/planning-artifacts/epics.md`
-- `docs/standards/settings-page-layout.md`
+- `src/app/app.css`
 - `src/features/settings/project-settings-activity.tsx`
 - `src/features/settings/project-settings-activity.test.tsx`
 
@@ -169,6 +188,7 @@ GPT-5 Codex
 - `pnpm typecheck`
 - `pnpm test -- src/features/settings/project-settings-activity.test.tsx`
 - `pnpm test`
+- `git diff --check`
 
 ### Validation Results
 
@@ -177,5 +197,13 @@ GPT-5 Codex
 - `pnpm format`：通过，Prettier 覆盖范围内文件均已格式化。
 - `pnpm lint`：通过。
 - `pnpm typecheck`：通过。
-- `pnpm test -- src/features/settings/project-settings-activity.test.tsx`：通过，8 个 test files、157 个 tests 通过；jsdom 输出既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
-- `pnpm test`：通过，8 个 test files、157 个 tests 通过；jsdom 输出既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
+- `pnpm test -- src/features/settings/project-settings-activity.test.tsx`：通过，8 个 test files、161 个 tests 通过；jsdom 输出既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
+- `pnpm test`：通过，8 个 test files、161 个 tests 通过；jsdom 输出既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
+- `git diff --check`：通过。
+
+### Change Log
+
+- 2026-06-10：实现 Settings 双栏布局、可调左栏、统一内容模板、菜单/标题图标和布局测试；story 状态更新为 `review`。
+- 2026-06-10：自动代码评审发现 5 个 patch follow-up，story 状态退回 `in-progress`。
+- 2026-06-10：修复 5 个 review follow-up，补充回归测试，story 状态更新为 `review`。
+- 2026-06-10：全部 review follow-up 已解决，story 状态更新为 `done`。
