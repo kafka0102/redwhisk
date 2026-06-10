@@ -1,5 +1,5 @@
 # generated: 2026-06-04T15:27:13+0800
-# last_updated: 2026-06-05T22:25:52+0800
+# last_updated: 2026-06-10T19:09:49+0800
 # project: redwhisk
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-04T15:27:13+0800
-last_updated: 2026-06-10T09:57:53+0800
+last_updated: 2026-06-10T19:09:49+0800
 project: redwhisk
 project_key: NOKEY
 tracking_system: file-system
@@ -56,7 +56,7 @@ development_status:
   1-10-implement-desktop-visual-tokens-and-basic-accessibility: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-generate-and-preview-issue-run-prompt: done
   2-2-edit-and-save-final-prompt-snapshot: done
   2-3-create-agent-session-and-update-issue-after-successful-start: done
@@ -68,7 +68,7 @@ development_status:
   2-9-spike-git-commit-detection: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-improve-session-list-grouping-and-sorting: done
   3-2-show-needs-attention-indicator: done
   3-3-manually-set-and-clear-attention: done
@@ -77,7 +77,7 @@ development_status:
   3-6-ensure-temporary-session-does-not-trigger-issue-flow: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-manually-mark-review-in-session-header: done
   4-2-continue-fixes-during-review-without-returning-to-running: done
   4-3-view-and-edit-linked-issue-in-issue-inspector: done
@@ -87,7 +87,7 @@ development_status:
   4-7-provide-log-review-entry-for-abnormal-sessions: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-manually-complete-review-issue: done
   5-2-complete-directly-when-no-uncommitted-changes: done
   5-3-show-agent-commit-completion-confirmation-panel: done
@@ -101,4 +101,5 @@ development_status:
 
   epic-6: in-progress
   6-1-stabilize-agent-session-terminal-rendering: in-progress
+  6-2-unify-settings-page-two-column-layout: backlog
   epic-6-retrospective: optional
