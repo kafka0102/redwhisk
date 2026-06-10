@@ -13,8 +13,8 @@ use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentSessionAttention, AgentSessionPromptKind, AgentSessionStatus,
-    InjectAgentSessionPromptInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
-    StartStandaloneAgentSessionInput,
+    InjectAgentSessionPromptInput, RestoreAgentSessionTerminalInput, SetAgentSessionAttentionInput,
+    StartAgentSessionInput, StartStandaloneAgentSessionInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::IssueStatus;
@@ -1805,6 +1805,77 @@ fn pty_session_manager_restores_complete_output_chunks_for_active_session() {
         .windows("restore".len())
         .any(|data| data == b"restore")));
     manager.kill(77).expect("kill session");
+}
+
+#[test]
+fn restore_terminal_returns_inactive_instead_of_error_when_session_exits_during_transition() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "restore-inactive-project");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        echo_stdin_command(temp_dir.path())
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let manager = PtySessionManager::new();
+
+    let started = service
+        .start_standalone_agent_session_with_pty(
+            temp_dir.path(),
+            StartStandaloneAgentSessionInput {
+                project_id,
+                title: "Restore Transition".to_string(),
+                agent_profile_id: profile_id,
+                prompt_snapshot: "keep running".to_string(),
+            },
+            &manager,
+        )
+        .expect("start standalone session with pty");
+
+    manager
+        .kill(started.session_id)
+        .expect("kill standalone session");
+
+    let mut saw_inactive = false;
+    for _ in 0..40 {
+        let result = service.restore_terminal(
+            RestoreAgentSessionTerminalInput {
+                project_id,
+                session_id: started.session_id,
+            },
+            &manager,
+        );
+
+        match result {
+            Ok(snapshot) if !snapshot.is_active => {
+                saw_inactive = true;
+                assert_eq!(snapshot.session_id, started.session_id);
+                assert_eq!(snapshot.sequence, 0);
+                assert!(snapshot.chunks.is_empty());
+                assert!(!snapshot.is_complete);
+                break;
+            }
+            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(25)),
+            Err(error) => panic!(
+                "restore during session shutdown should not error: {} ({:?})",
+                error.message, error.code
+            ),
+        }
+    }
+
+    assert!(
+        saw_inactive,
+        "expected restore to settle into inactive state"
+    );
 }
 
 #[test]

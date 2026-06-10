@@ -1,50 +1,38 @@
 workflow: bmad-dev-workflow
-phase: dev-complete
+phase: blocked
+workflow_mode: ready-story
+story_creation_request:
 story_file: _bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md
 story_key: 6-1-stabilize-agent-session-terminal-rendering
-story_status: review
+story_status: in-progress
 baseline_commit: c0c09f39ceba751fb4e04c96412173a0c3afb07e
 changed_files:
   - _bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md
   - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
   - _bmad-output/implementation-artifacts/sprint-status.yaml
-  - package.json
-  - pnpm-lock.yaml
   - src/app/app.css
-  - src/features/agents/agent-session-commands.ts
-  - src/features/agents/agent-terminal-events.ts
   - src/features/agents/codex-terminal.test.tsx
   - src/features/agents/codex-terminal.tsx
-  - src-tauri/src/agent/pty_session_manager.rs
-  - src-tauri/src/commands/agent_session_commands.rs
   - src-tauri/src/core/agent_session_service.rs
-  - src-tauri/src/lib.rs
-  - src-tauri/src/types/agent_session.rs
   - src-tauri/tests/agent_session.rs
 validation_commands:
-  - pnpm test -- src/features/agents/codex-terminal.test.tsx
-  - cargo test --manifest-path src-tauri/Cargo.toml pty_session_manager
   - pnpm format
   - cargo fmt --manifest-path src-tauri/Cargo.toml
-  - cargo fmt --manifest-path src-tauri/Cargo.toml --check
-  - pnpm install --frozen-lockfile
   - pnpm lint
   - pnpm typecheck
   - pnpm test
+  - cargo fmt --manifest-path src-tauri/Cargo.toml --check
   - cargo test --manifest-path src-tauri/Cargo.toml
   - git diff --check
 validation_results:
-  - pnpm test -- src/features/agents/codex-terminal.test.tsx: passed
-  - cargo test --manifest-path src-tauri/Cargo.toml pty_session_manager: passed
   - pnpm format: passed
   - cargo fmt --manifest-path src-tauri/Cargo.toml: passed
-  - cargo fmt --manifest-path src-tauri/Cargo.toml --check: passed
-  - pnpm install --frozen-lockfile: passed
   - pnpm lint: passed
   - pnpm typecheck: passed
-  - pnpm test: passed
+  - pnpm test: passed (8 个 test files、157 个 tests；含既有 jsdom canvas/CSS 警告，不影响退出码)
+  - cargo fmt --manifest-path src-tauri/Cargo.toml --check: passed
   - cargo test --manifest-path src-tauri/Cargo.toml: passed
   - git diff --check: passed
-review_summary: "Review follow-ups addressed in dev pass: restore/listen race fixed by awaiting listener registration before restore; liveness polling added; manual desktop validation task un-checked and risk retained; front-end protocol/restore/copy tests expanded. Story is back to review. Real Tauri desktop manual validation remains not run in this environment."
-blocking_reason:
-updated_at: 2026-06-09T22:17:51+08:00
+review_summary: "本轮已修复自动 review 留下的 6 个 patch finding，并通过前端/Rust 回归测试与静态校验；当前未发现新的 patch finding。"
+blocking_reason: "真实 Tauri 桌面手工验证未运行。当前环境没有可交互桌面 GUI，无法完成 story 要求的手工验证步骤，因此 story 仍保持 in-progress。"
+updated_at: 2026-06-10T09:57:53+08:00

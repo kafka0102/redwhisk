@@ -4,7 +4,7 @@ baseline_commit: c0c09f39ceba751fb4e04c96412173a0c3afb07e
 
 # Story 6.1: 稳定 Agent Session 终端渲染
 
-Status: review
+Status: in-progress
 
 <!-- 说明：本 story 来自 2026-06-09 用户反馈，不是原 sprint backlog 中的既有 story。它用于修复已交付 Agent Session 终端体验中的高优先级稳定性问题。 -->
 
@@ -61,6 +61,15 @@ Status: review
 - [x] [AI-Review][Medium] 增加运行中 Session 退出后的明确 inactive/exit 通知或低频 liveness 更新，并补前端/Rust 覆盖。
 - [x] [AI-Review][Medium] 处理真实 Tauri 桌面手工验证未完成但任务已勾选的问题：已取消勾选并保留未完成风险。
 - [x] [AI-Review][Low] 补强协议/快照专项测试，覆盖截断 ANSI、OSC/CSI 跨 chunk、多字节 byte chunk、全屏重绘和不调用 `terminal.reset()` 的断言。
+
+### Review Findings
+
+- [x] [Review][Patch] 不完整 restore 会丢弃 restore 期间已收到的实时输出 [`src/features/agents/codex-terminal.tsx:233`] — 当 `restore_agent_session_terminal` 返回 `isComplete=false` 时，前端先把 `latestSequenceRef.current` 更新为后端返回的最新 sequence，但没有写入任何 restore chunks；随后 flush pending live events 时会丢弃 `sequence <= result.sequence` 的事件，导致 listener 注册后、restore 响应前到达的实时输出静默丢失。
+- [x] [Review][Patch] 终端底部伪元素覆盖 xterm 最后一行 [`src/app/app.css:1505`] — `.codex-terminal::after` 以 `z-index: 2` 覆盖底部 34px，而 `.xterm` 是 `z-index: 1` 且未预留底部空间；这可能遮挡 Codex TUI 的最后一行、输入行或状态栏，和本 story 修复“底部输入行消失”的目标冲突。
+- [x] [Review][Patch] 状态轮询的瞬时错误恢复后不会清除 [`src/features/agents/codex-terminal.tsx:270`] — `refreshStatus` 在读取失败时设置 `statusMessage`，后续轮询成功且 `isActive=true` 时没有清空该错误；空闲但健康的 running session 可能持续显示过期错误，直到新的 terminal output 到达。
+- [x] [Review][Patch] restore 卡住时 pending 输出队列没有上限 [`src/features/agents/codex-terminal.tsx:205`] — restore Promise 长时间未返回时，当前 Session 的实时输出会持续 push 到 `pendingOutputEvents`，没有大小上限或降级策略；高输出会话可能造成渲染进程内存增长。
+- [x] [Review][Patch] `restore_terminal` 未把 contains/restore_snapshot 竞态归一为 inactive [`src-tauri/src/core/agent_session_service.rs:723`] — PTY 可能在 `contains()` 返回 true 后、`restore_snapshot()` 前退出；当前会把 `session not found` 映射成命令错误，而不是稳定返回 `isActive=false` 的恢复结果。
+- [x] [Review][Patch] 测试覆盖记录与实际覆盖不一致 [`src/features/agents/codex-terminal.test.tsx:372`] — 已勾选的协议/快照专项测试没有覆盖截断 ANSI、OSC/CSI 跨 chunk、多字节 byte chunk、全屏重绘和 running/restore 路径“不调用 `terminal.reset()`”的负断言；Rust 侧也未断言退出后订阅者收到明确 inactive/exit 状态或停止输出。
 
 ## Dev Notes
 
@@ -171,6 +180,7 @@ GPT-5 Codex
 - 2026-06-09T21:30+0800：审查 diff 时发现 restore 与实时事件存在乱序竞态，新增 pending output 队列并补充测试，保证 restore 完成前的实时输出按序延后写入。
 - 2026-06-09T22:17+0800：用户反馈 Session 页面底部输入行消失且输出无法复制；对照 kanban `persistent-terminal-manager.ts` 与 `terminal-options.ts` 后确认 RedWhisk xterm 配置仍偏日志预览，`convertEol: true`、较大 `lineHeight` 和内层 padding 可能破坏 TUI 底部行渲染。
 - 2026-06-09T22:17+0800：引入 `@xterm/addon-clipboard`，将 `CodexTerminal` 调整为 TUI-safe xterm 选项，增加选区复制快捷键，修复 restore 必须等待 Tauri listener 注册完成的问题，并增加低频 liveness polling。
+- 2026-06-10T09:57+0800：针对自动 review 留下的 6 个 patch finding 做最小修复：degraded restore 保留并 flush 实时输出、pending output queue 增加 64 KiB 上限和降级提示、poll 错误在后续成功轮询后清除、移除遮挡 xterm 底部行的伪元素、Rust restore 将 `session not found` 稳定归一为 inactive，并补前端/Rust 回归测试。
 
 ### Completion Notes List
 
@@ -184,6 +194,11 @@ GPT-5 Codex
 - 修复 restore/listen 竞态：`CodexTerminal` 现在等待 `subscribeAgentSessionTerminalOutput` 的 Promise resolve 后才调用 `restoreAgentSessionTerminal`，并保留 restore 完成前 pending output queue。
 - 增加运行中 Session 的低频 liveness polling，仅用 `read_agent_session_terminal(maxBytes: 1)` 检查活跃状态，不把日志快照写回 xterm。
 - 自动测试覆盖了完整 restore、restore 期间实时输出排队、restore 不可用降级、事件主路径、旧 Session 输出过滤、订阅清理、局部写入错误、TUI-safe xterm options、选区复制快捷键、listener 注册后再 restore、liveness polling、PTY 输出同时写 log 和广播、活会话 restore chunk 恢复。
+- 本轮补丁修复了 degraded restore 丢实时输出的问题：仅在完整 restore 成功后推进 `latestSequenceRef`，不完整 restore 直接 flush 排队 live output，避免 listener 已注册但 restore 不完整时静默丢字节。
+- 本轮补丁为 restore 期间的实时输出队列增加 64 KiB 上限；超限时丢弃最旧 chunk，并在 terminal shell 内显示事实性降级提示，避免恢复卡住时渲染进程内存持续增长。
+- 本轮补丁移除了 `.codex-terminal::after` 底部遮罩，并让 liveness polling 的瞬时错误在下一次成功轮询后自动清除，避免底部输入行被遮挡或过期错误长期停留。
+- Rust `restore_terminal` 现在直接消费 `restore_snapshot` 的结果，并把 `session not found` 统一视为 inactive 恢复结果；不会再把 PTY 退出窗口映射成命令错误。
+- 新增自动测试覆盖 degraded restore flush、restore 队列上限、poll 错误恢复清除，以及 session 退出过渡时 `restore_terminal` 返回 inactive 而不是错误。
 - 未运行真实 Tauri 桌面手工验证：当前执行环境没有可交互桌面 GUI，无法可靠完成从 Issue/临时 Session 启动 Codex、切换 Activity、打开/关闭 Inspector、resize、粘贴、Ctrl+C、进程退出等人工步骤；风险是真实窗口事件、系统 PTY 行为、Codex TUI 颜色/光标协议在桌面运行时仍可能有自动测试未覆盖的表现差异。
 
 ### File List
@@ -229,8 +244,8 @@ GPT-5 Codex
 - `pnpm install --frozen-lockfile`：通过，确认新增 `@xterm/addon-clipboard` 的 lockfile 可安装。
 - `pnpm lint`：通过。
 - `pnpm typecheck`：通过。
-- `pnpm test`：通过，8 个 test files、154 个 tests 通过；jsdom 输出了既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
-- `cargo test --manifest-path src-tauri/Cargo.toml`：通过，完整 Rust 测试通过。
+- `pnpm test`：通过，8 个 test files、157 个 tests 通过；jsdom 输出了既有 `HTMLCanvasElement.getContext()` 与 CSS parse 警告，不影响退出码。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：通过，完整 Rust 测试通过，包含 session 退出过渡时 `restore_terminal` 返回 inactive 的回归用例。
 - `git diff --check`：通过。
 - 未运行真实 Tauri 桌面手工验证：当前环境没有可交互桌面 GUI；风险是真实 Codex TUI 的颜色查询、全屏重绘、系统剪贴板/键盘输入和窗口 resize 行为可能仍有自动测试覆盖不到的问题。
 
@@ -240,6 +255,7 @@ GPT-5 Codex
 - 2026-06-09：实现 Agent Session 终端实时输出事件、活会话 restore buffer、前端事件订阅主路径和局部错误降级，并将 story 状态设为 `review`。
 - 2026-06-09：代码评审发现 4 个 follow-up action items，story 状态退回 `in-progress`。
 - 2026-06-09：修复 review follow-ups 与用户复测问题：恢复 TUI 底部输入行渲染参数、增加终端选区复制、修复 listen/restore 竞态、增加 liveness polling；真实 Tauri 桌面手工验证仍未运行，story 状态回到 `review`。
+- 2026-06-10：修复自动 review 留下的 6 个 patch finding，并补齐对应前端/Rust 回归测试；真实 Tauri 桌面手工验证仍未运行，story 保持 `in-progress`。
 
 ## Senior Developer Review (AI)
 

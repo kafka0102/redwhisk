@@ -369,6 +369,55 @@ describe("CodexTerminal", () => {
     expect(terminalMocks.terminals[0].write).not.toHaveBeenCalled();
   });
 
+  it("flushes queued live output after a degraded restore without dropping bytes", async () => {
+    let resolveRestore:
+      | ((
+          value: Awaited<ReturnType<typeof restoreAgentSessionTerminal>>,
+        ) => void)
+      | null = null;
+    restoreAgentSessionTerminalMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRestore = resolve;
+      }),
+    );
+
+    render(<CodexTerminal projectId={1} sessionId={301} />);
+
+    await waitFor(() => {
+      expect(terminalMocks.listeners).toHaveLength(1);
+    });
+
+    act(() => {
+      terminalMocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 301,
+          sequence: 8,
+          data: [0x1b, 0x5d, 0x31, 0x30],
+        },
+      });
+    });
+
+    await act(async () => {
+      resolveRestore?.({
+        sessionId: 301,
+        sequence: 8,
+        chunks: [],
+        isComplete: false,
+        isActive: true,
+      });
+    });
+
+    expect(terminalMocks.terminals[0].write).toHaveBeenCalledWith(
+      new Uint8Array([0x1b, 0x5d, 0x31, 0x30]),
+    );
+    expect(
+      screen.queryByText(
+        "Terminal restore snapshot is unavailable. New live output will continue below.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses terminal output events instead of replaying log snapshots for an active session", async () => {
     render(<CodexTerminal projectId={1} sessionId={301} />);
 
@@ -431,6 +480,91 @@ describe("CodexTerminal", () => {
       ),
     ).toBeInTheDocument();
     expect(readAgentSessionTerminalMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears a transient liveness polling error after the next successful poll", async () => {
+    readAgentSessionTerminalMock
+      .mockRejectedValueOnce(new Error("temporary poll failure"))
+      .mockResolvedValueOnce({
+        sessionId: 301,
+        snapshot: "",
+        isActive: true,
+      });
+
+    render(<CodexTerminal projectId={1} sessionId={301} />);
+
+    expect(
+      await screen.findByText("temporary poll failure"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 2_050));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("temporary poll failure"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("caps queued live output while waiting for restore and keeps newer bytes", async () => {
+    let resolveRestore:
+      | ((
+          value: Awaited<ReturnType<typeof restoreAgentSessionTerminal>>,
+        ) => void)
+      | null = null;
+    restoreAgentSessionTerminalMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRestore = resolve;
+      }),
+    );
+
+    render(<CodexTerminal projectId={1} sessionId={301} />);
+
+    await waitFor(() => {
+      expect(terminalMocks.listeners).toHaveLength(1);
+    });
+
+    act(() => {
+      terminalMocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 301,
+          sequence: 1,
+          data: new Array(70_000).fill(65),
+        },
+      });
+      terminalMocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 301,
+          sequence: 2,
+          data: [66],
+        },
+      });
+    });
+
+    expect(
+      await screen.findByText(
+        "Terminal restore is taking longer than expected. Older live output was dropped while waiting for restore.",
+      ),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRestore?.({
+        sessionId: 301,
+        sequence: 0,
+        chunks: [],
+        isComplete: true,
+        isActive: true,
+      });
+    });
+
+    expect(terminalMocks.terminals[0].write).toHaveBeenCalledTimes(1);
+    expect(terminalMocks.terminals[0].write).toHaveBeenCalledWith(
+      new Uint8Array([66]),
+    );
   });
 
   it("ignores stale output events and disposes the listener on session switch", async () => {

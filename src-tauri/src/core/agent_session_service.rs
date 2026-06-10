@@ -720,19 +720,19 @@ impl<'connection> AgentSessionService<'connection> {
         pty_sessions: &PtySessionManager,
     ) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
         self.find_project_session(input.project_id, input.session_id)?;
-        if !pty_sessions.contains(input.session_id) {
-            return Ok(RestoreAgentSessionTerminalResult {
-                session_id: input.session_id,
-                sequence: 0,
-                chunks: Vec::new(),
-                is_complete: false,
-                is_active: false,
-            });
-        }
-
-        let snapshot = pty_sessions
-            .restore_snapshot(input.session_id)
-            .map_err(inactive_terminal_error)?;
+        let snapshot = match pty_sessions.restore_snapshot(input.session_id) {
+            Ok(snapshot) => snapshot,
+            Err(error) if error == "session not found" => {
+                return Ok(RestoreAgentSessionTerminalResult {
+                    session_id: input.session_id,
+                    sequence: 0,
+                    chunks: Vec::new(),
+                    is_complete: false,
+                    is_active: false,
+                });
+            }
+            Err(error) => return Err(inactive_terminal_error(error)),
+        };
 
         Ok(RestoreAgentSessionTerminalResult {
             session_id: snapshot.session_id,
