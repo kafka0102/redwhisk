@@ -120,7 +120,7 @@ export function ProjectSettingsActivity({
             aria-pressed={activeMenu === "general"}
             onClick={() => setActiveMenu("general")}
           >
-            基本信息
+            General
           </button>
           <button
             className="settings-menu__item"
@@ -134,9 +134,9 @@ export function ProjectSettingsActivity({
 
         <div className="settings-content">
           {activeMenu === "general" ? (
-            <section className="settings-section" aria-label="基本信息">
+            <section className="settings-section" aria-label="General">
               <div className="settings-section__header">
-                <h3>基本信息</h3>
+                <h3>General</h3>
               </div>
               <div className="settings-basic-info">
                 <span className="settings-basic-info__label">Project</span>

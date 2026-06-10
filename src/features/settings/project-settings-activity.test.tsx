@@ -93,9 +93,7 @@ describe("ProjectSettingsActivity", () => {
     expect(
       await screen.findByRole("navigation", { name: "Settings menu" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "基本信息" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -262,7 +260,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "基本信息" }));
+    await user.click(screen.getByRole("button", { name: "General" }));
     await user.selectOptions(
       await screen.findByLabelText("Completion Policy"),
       "agent_auto_commit",

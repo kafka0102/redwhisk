@@ -1,14 +1,36 @@
 workflow: bmad-dev-workflow
-phase: blocked
-workflow_mode: auto-discover
+phase: story-created
+workflow_mode: ready-story
 story_creation_request:
-story_file:
-story_key:
-story_status:
-baseline_commit: 364ee07
-changed_files: []
+story_file: _bmad-output/implementation-artifacts/6-2-unify-settings-page-two-column-layout.md
+story_key: 6-2-unify-settings-page-two-column-layout
+story_status: ready-for-dev
+baseline_commit: 7118dc8
+changed_files:
+  - _bmad-output/planning-artifacts/epics.md
+  - _bmad-output/implementation-artifacts/6-2-unify-settings-page-two-column-layout.md
+  - _bmad-output/implementation-artifacts/sprint-status.yaml
+  - _bmad-output/implementation-artifacts/bmad-dev-workflow-handoff.yaml
+  - docs/standards/settings-page-layout.md
+  - src/features/settings/project-settings-activity.tsx
+  - src/features/settings/project-settings-activity.test.tsx
 validation_commands: []
-validation_results: []
+validation_commands:
+  - test -f _bmad-output/implementation-artifacts/6-2-unify-settings-page-two-column-layout.md
+  - rg -n "Status: ready-for-dev|6-2-unify-settings-page-two-column-layout: ready-for-dev" _bmad-output/implementation-artifacts/6-2-unify-settings-page-two-column-layout.md _bmad-output/implementation-artifacts/sprint-status.yaml
+  - pnpm format
+  - pnpm lint
+  - pnpm typecheck
+  - pnpm test -- src/features/settings/project-settings-activity.test.tsx
+  - pnpm test
+validation_results:
+  - "通过：story 文件存在。"
+  - "通过：story 文件状态和 sprint 状态均为 ready-for-dev。"
+  - "通过：Prettier 覆盖范围内文件均已格式化。"
+  - "通过：ESLint 无报错。"
+  - "通过：TypeScript typecheck 无报错。"
+  - "通过：Settings 相关测试通过；jsdom 输出既有 canvas/CSS 警告，不影响退出码。"
+  - "通过：前端测试全集通过；jsdom 输出既有 canvas/CSS 警告，不影响退出码。"
 review_summary:
-blocking_reason: "preflight 未发现 ready-for-dev 或 backlog story；当前 sprint 仅有 6-1-stabilize-agent-session-terminal-rendering 处于 in-progress，阻塞点仍是真实 Tauri 桌面手工验证未运行。"
-updated_at: 2026-06-10T14:36:43+08:00
+blocking_reason:
+updated_at: 2026-06-10T20:02:57+08:00
