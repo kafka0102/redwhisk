@@ -209,6 +209,10 @@ fn create_project_persists_git_repo_and_derives_name() {
             .expect("canonical repo")
             .to_string_lossy()
     );
+    assert_eq!(
+        project.completion_policy,
+        redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
+    );
     assert_eq!(project.created_at, project.last_opened_at);
     assert!(project.created_at > 1_700_000_000_000);
 
@@ -360,6 +364,11 @@ fn repository_insert_is_idempotent_for_existing_repo_path() {
 
     assert_eq!(first_project.id, second_project.id);
     assert!(first_project.id > 0);
+    assert_eq!(
+        first_project.completion_policy,
+        redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
+    );
+    assert_eq!(first_project.completion_policy, second_project.completion_policy);
     let count: i64 = database
         .connection
         .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
