@@ -36,8 +36,8 @@ interface EditingProfileState {
   profile: AgentProfileRecord;
 }
 
-const SETTINGS_MENU_DEFAULT_WIDTH = 200;
-const SETTINGS_MENU_MIN_WIDTH = 200;
+const SETTINGS_MENU_DEFAULT_WIDTH = 180;
+const SETTINGS_MENU_MIN_WIDTH = 180;
 const SETTINGS_MENU_MAX_WIDTH = 420;
 const SETTINGS_MENU_STEP = 16;
 
@@ -45,19 +45,19 @@ const SETTINGS_MENU_ITEMS: {
   iconTestId: string;
   key: SettingsMenu;
   label: string;
-  TitleIcon: typeof Info;
+  MenuIcon: typeof Info;
 }[] = [
   {
     iconTestId: "settings-menu-icon-general",
     key: "general",
     label: "General",
-    TitleIcon: Info,
+    MenuIcon: Info,
   },
   {
     iconTestId: "settings-menu-icon-agents",
     key: "agents",
     label: "Agents",
-    TitleIcon: Bot,
+    MenuIcon: Bot,
   },
 ];
 
@@ -221,7 +221,7 @@ export function ProjectSettingsActivity({
       <div className="settings-layout">
         <nav className="settings-menu" aria-label="Settings menu">
           {SETTINGS_MENU_ITEMS.map((item) => {
-            const Icon = item.TitleIcon;
+            const Icon = item.MenuIcon;
             return (
               <button
                 key={item.key}
@@ -466,20 +466,10 @@ function SettingsContentFrame({
   children: ReactNode;
   item: (typeof SETTINGS_MENU_ITEMS)[number];
 }) {
-  const Icon = item.TitleIcon;
-
   return (
     <section className="settings-section" aria-label={item.label}>
       <div className="settings-section__header">
-        <h3>
-          <Icon
-            aria-hidden="true"
-            data-testid={`settings-title-icon-${item.key}`}
-            size={16}
-            strokeWidth={1.9}
-          />
-          <span>{item.label}</span>
-        </h3>
+        <h3>{item.label}</h3>
       </div>
       <div className="settings-section__body">{children}</div>
     </section>
@@ -493,7 +483,7 @@ function GeneralSettingsForm({
 }: GeneralSettingsFormProps) {
   const [projectNameValue, setProjectNameValue] = useState(projectName);
   const [completionPolicyValue, setCompletionPolicyValue] =
-    useState(completionPolicy);
+    useState<ProjectCompletionPolicy>(completionPolicy);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const trimmedProjectName = projectNameValue.trim();
@@ -540,9 +530,9 @@ function GeneralSettingsForm({
         />
       </label>
       <label className="settings-field">
-        <span>Completion Strategy</span>
+        <span>Git completion strategy</span>
         <select
-          aria-label="Completion Strategy"
+          aria-label="Git completion strategy"
           className="settings-input settings-input--form-control"
           disabled={isSaving}
           value={completionPolicyValue}
@@ -552,8 +542,8 @@ function GeneralSettingsForm({
             )
           }
         >
-          <option value="manual">Manual</option>
           <option value="agent_auto_commit">Auto Commit</option>
+          <option value="manual">Manual</option>
         </select>
       </label>
       {errorMessage ? (

@@ -326,16 +326,17 @@ button:focus-visible {
   gap: 0;
   height: 100%;
   min-height: 0;
+  padding: 0;
   overflow: hidden;
 }
 
 .settings-layout {
   display: grid;
-  grid-template-columns: var(--settings-menu-width, 200px) 8px minmax(0, 1fr);
+  grid-template-columns: var(--settings-menu-width, 180px) 8px minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
   height: 100%;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .settings-menu {
@@ -343,7 +344,9 @@ button:focus-visible {
   align-content: start;
   gap: 4px;
   min-width: 0;
-  padding: 0 8px 0 0;
+  min-height: 0;
+  padding: 14px 0 12px;
+  background: var(--color-surface);
 }
 
 .settings-menu__item {
@@ -352,9 +355,9 @@ button:focus-visible {
   gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 8px;
+  padding: 8px 10px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: 0;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -410,17 +413,18 @@ button:focus-visible {
 
 .settings-content {
   display: grid;
-  align-content: stretch;
+  align-content: start;
   gap: 0;
   min-width: 0;
   min-height: 100%;
+  padding: 24px;
   overflow: auto;
 }
 
 .settings-section {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0;
+  align-content: start;
+  gap: 16px;
   min-width: 0;
   min-height: 0;
 }
@@ -430,16 +434,14 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 24px 12px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 0;
 }
 
 .settings-section__header h3 {
   display: flex;
   align-items: center;
-  gap: 8px;
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -455,7 +457,7 @@ button:focus-visible {
 
 .settings-general-card {
   width: min(520px, 100%);
-  margin: 24px auto 0;
+  margin: 0 auto;
 }
 
 .settings-agent-section {

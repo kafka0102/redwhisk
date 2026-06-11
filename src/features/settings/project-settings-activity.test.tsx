@@ -105,10 +105,6 @@ describe("ProjectSettingsActivity", () => {
       "true",
     );
     expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
-    expect(screen.getByTestId("settings-title-icon-agents")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
     expect(
       screen.getByRole("region", { name: "Project Agents" }),
     ).toBeInTheDocument();
@@ -133,19 +129,19 @@ describe("ProjectSettingsActivity", () => {
       name: "Resize settings menu",
     });
     expect(splitter).toHaveAttribute("aria-orientation", "vertical");
-    expect(splitter).toHaveAttribute("aria-valuemin", "200");
+    expect(splitter).toHaveAttribute("aria-valuemin", "180");
     expect(splitter).toHaveAttribute("aria-valuemax", "420");
-    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    expect(splitter).toHaveAttribute("aria-valuenow", "180");
 
     splitter.focus();
     await user.keyboard("{ArrowRight}");
-    expect(splitter).toHaveAttribute("aria-valuenow", "216");
+    expect(splitter).toHaveAttribute("aria-valuenow", "196");
     await user.keyboard("{ArrowLeft}");
-    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    expect(splitter).toHaveAttribute("aria-valuenow", "180");
     await user.keyboard("{End}");
     expect(splitter).toHaveAttribute("aria-valuenow", "420");
     await user.keyboard("{Home}");
-    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    expect(splitter).toHaveAttribute("aria-valuenow", "180");
   });
 
   it("resizes the settings menu by mouse drag and clears global drag state", async () => {
@@ -166,7 +162,7 @@ describe("ProjectSettingsActivity", () => {
       { keys: "[MouseRight>]", target: splitter, coords: { clientX: 200 } },
       { keys: "[/MouseRight]" },
     ]);
-    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    expect(splitter).toHaveAttribute("aria-valuenow", "180");
     expect(document.body.style.cursor).toBe("");
     expect(document.body.style.userSelect).toBe("");
 
@@ -181,7 +177,7 @@ describe("ProjectSettingsActivity", () => {
     await userEvent.pointer([
       { target: window.document.body, coords: { clientX: -80 } },
     ]);
-    expect(splitter).toHaveAttribute("aria-valuenow", "200");
+    expect(splitter).toHaveAttribute("aria-valuenow", "180");
 
     window.dispatchEvent(new Event("blur"));
     expect(document.body.style.cursor).toBe("");
@@ -209,15 +205,13 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByRole("heading", { name: "General" }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("settings-title-icon-general")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
     expect(
       screen.getByLabelText("General").querySelector(".settings-section__body"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
-    expect(screen.getByLabelText("Completion Strategy")).toHaveValue("manual");
+    expect(screen.getByLabelText("Git completion strategy")).toHaveValue(
+      "manual",
+    );
     expect(screen.getByRole("option", { name: "Manual" })).toBeInTheDocument();
     expect(
       screen.getByRole("option", { name: "Auto Commit" }),
@@ -453,7 +447,7 @@ describe("ProjectSettingsActivity", () => {
     await user.clear(await screen.findByLabelText("Project Name"));
     await user.type(screen.getByLabelText("Project Name"), "RedWhisk Desktop");
     await user.selectOptions(
-      screen.getByLabelText("Completion Strategy"),
+      screen.getByLabelText("Git completion strategy"),
       "agent_auto_commit",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
