@@ -7,7 +7,7 @@ use crate::git::repository::is_git_repository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
-    ProjectSummary, UpdateProjectCompletionPolicyInput,
+    ProjectSummary, UpdateProjectCompletionPolicyInput, UpdateProjectSettingsInput,
 };
 
 pub struct ProjectService<'connection> {
@@ -100,6 +100,25 @@ impl<'connection> ProjectService<'connection> {
             .map_err(project_database_error)
     }
 
+    pub fn update_project_settings(
+        &self,
+        input: UpdateProjectSettingsInput,
+    ) -> Result<ProjectSummary, CommandError> {
+        let project_name = input.name.trim();
+        if project_name.is_empty() {
+            return Err(CommandError::new(
+                CommandErrorCode::ProjectRepoPathInvalid,
+                "Project 名称不能为空。",
+            ));
+        }
+
+        self.project_by_id(input.project_id)?;
+
+        self.repository
+            .update_settings(input.project_id, project_name, input.completion_policy)
+            .map_err(project_database_error)
+    }
+
     pub fn create_project_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: CreateProjectInput,
@@ -163,6 +182,15 @@ impl<'connection> ProjectService<'connection> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).update_project_completion_policy(input)
+    }
+
+    pub fn update_project_settings_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: UpdateProjectSettingsInput,
+    ) -> Result<ProjectSummary, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectService::new(repository).update_project_settings(input)
     }
 
     fn project_by_id(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {

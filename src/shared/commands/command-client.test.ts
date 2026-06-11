@@ -7,6 +7,7 @@ import {
   listProjects,
   openProject,
   openProjectWindow,
+  updateProjectSettings,
 } from "../../features/project/project-commands";
 import {
   injectAgentSessionPrompt,
@@ -146,6 +147,39 @@ describe("command client", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("open_project_window", {
       input: { projectId: 1 },
+    });
+  });
+
+  it("invokes Rust Core through the update project settings command", async () => {
+    invokeMock.mockResolvedValue({
+      id: 1,
+      name: "RedWhisk Desktop",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      completionPolicy: "agent_auto_commit",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_624_800_000,
+    });
+
+    await expect(
+      updateProjectSettings({
+        projectId: 1,
+        name: "RedWhisk Desktop",
+        completionPolicy: "agent_auto_commit",
+      }),
+    ).resolves.toEqual({
+      id: 1,
+      name: "RedWhisk Desktop",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      completionPolicy: "agent_auto_commit",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_624_800_000,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("update_project_settings", {
+      input: {
+        projectId: 1,
+        name: "RedWhisk Desktop",
+        completionPolicy: "agent_auto_commit",
+      },
     });
   });
 

@@ -21,6 +21,12 @@ export interface UpdateProjectCompletionPolicyInput {
   completionPolicy: ProjectCompletionPolicy;
 }
 
+export interface UpdateProjectSettingsInput {
+  projectId: number;
+  name: string;
+  completionPolicy: ProjectCompletionPolicy;
+}
+
 export interface ProjectRecord {
   id: number;
   name: string;
@@ -65,6 +71,14 @@ export function updateProjectCompletionPolicy(
   input: UpdateProjectCompletionPolicyInput,
 ): Promise<ProjectRecord> {
   return invokeCommand<ProjectRecord>("update_project_completion_policy", {
+    input,
+  });
+}
+
+export function updateProjectSettings(
+  input: UpdateProjectSettingsInput,
+): Promise<ProjectRecord> {
+  return invokeCommand<ProjectRecord>("update_project_settings", {
     input,
   });
 }

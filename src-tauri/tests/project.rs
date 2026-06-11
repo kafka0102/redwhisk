@@ -3,7 +3,9 @@ use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::errors::CommandErrorCode;
-use redwhisk_lib::types::project::{CreateProjectInput, OpenProjectInput, ProjectPathStatus};
+use redwhisk_lib::types::project::{
+    CreateProjectInput, OpenProjectInput, ProjectPathStatus, UpdateProjectSettingsInput,
+};
 use std::fs;
 
 #[test]
@@ -596,6 +598,69 @@ fn record_project_opened_updates_last_opened_at_after_window_success() {
     assert_eq!(project.id, stored_project.id);
     assert_ne!(project.last_opened_at, 1_780_624_800_000);
     assert!(project.last_opened_at > 1_700_000_000_000);
+}
+
+#[test]
+fn update_project_settings_persists_project_name_and_completion_policy() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repository = ProjectRepository::new(&database.connection);
+    let stored_project = repository
+        .insert("sample-repo", "/tmp/sample-repo")
+        .expect("insert project");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let updated = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: stored_project.id,
+            name: "RedWhisk Desktop".to_string(),
+            completion_policy:
+                redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit,
+        })
+        .expect("update project settings");
+
+    assert_eq!(updated.id, stored_project.id);
+    assert_eq!(updated.name, "RedWhisk Desktop");
+    assert_eq!(
+        updated.completion_policy,
+        redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
+    );
+}
+
+#[test]
+fn update_project_settings_rejects_blank_name() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repository = ProjectRepository::new(&database.connection);
+    let stored_project = repository
+        .insert("sample-repo", "/tmp/sample-repo")
+        .expect("insert project");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let error = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: stored_project.id,
+            name: "   ".to_string(),
+            completion_policy: redwhisk_lib::types::project::ProjectCompletionPolicy::Manual,
+        })
+        .expect_err("blank name should fail");
+
+    assert_eq!(error.code, CommandErrorCode::ProjectRepoPathInvalid);
+    let persisted = ProjectRepository::new(&database.connection)
+        .find_by_id(stored_project.id)
+        .expect("query project")
+        .expect("project");
+    assert_eq!(persisted.name, "sample-repo");
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {
