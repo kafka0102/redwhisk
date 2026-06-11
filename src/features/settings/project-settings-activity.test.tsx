@@ -10,7 +10,7 @@ import {
   testAgentCommand,
   type AgentProfileRecord,
 } from "./settings-commands";
-import { updateProjectCompletionPolicy } from "../project/project-commands";
+import { updateProjectSettings } from "../project/project-commands";
 
 vi.mock("./settings-commands", () => ({
   detectCodexCommand: vi.fn(),
@@ -20,16 +20,14 @@ vi.mock("./settings-commands", () => ({
 }));
 
 vi.mock("../project/project-commands", () => ({
-  updateProjectCompletionPolicy: vi.fn(),
+  updateProjectSettings: vi.fn(),
 }));
 
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
-const updateProjectCompletionPolicyMock = vi.mocked(
-  updateProjectCompletionPolicy,
-);
+const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const onProjectUpdated = vi.fn();
 
 const projectProfile: AgentProfileRecord = {
@@ -64,9 +62,9 @@ describe("ProjectSettingsActivity", () => {
     testAgentCommandMock.mockReset();
     listAgentProfilesMock.mockReset();
     saveAgentProfileMock.mockReset();
-    updateProjectCompletionPolicyMock.mockReset();
+    updateProjectSettingsMock.mockReset();
     onProjectUpdated.mockReset();
-    updateProjectCompletionPolicyMock.mockResolvedValue({
+    updateProjectSettingsMock.mockResolvedValue({
       id: 1,
       name: "RedWhisk",
       repoPath: "/tmp/redwhisk",
@@ -218,7 +216,13 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByLabelText("General").querySelector(".settings-section__body"),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Completion Policy")).toBeInTheDocument();
+    expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
+    expect(screen.getByLabelText("Completion Strategy")).toHaveValue("manual");
+    expect(screen.getByRole("option", { name: "Manual" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Auto Commit" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Agents" }));
 
@@ -425,8 +429,16 @@ describe("ProjectSettingsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("updates project completion policy from the general settings section", async () => {
+  it("saves project name and completion strategy from the general settings section", async () => {
     const user = userEvent.setup();
+    updateProjectSettingsMock.mockResolvedValue({
+      id: 1,
+      name: "RedWhisk Desktop",
+      repoPath: "/tmp/redwhisk",
+      completionPolicy: "agent_auto_commit",
+      createdAt: 1_780_624_800_000,
+      lastOpenedAt: 1_780_628_400_000,
+    });
 
     render(
       <ProjectSettingsActivity
@@ -438,20 +450,25 @@ describe("ProjectSettingsActivity", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "General" }));
+    await user.clear(await screen.findByLabelText("Project Name"));
+    await user.type(screen.getByLabelText("Project Name"), "RedWhisk Desktop");
     await user.selectOptions(
-      await screen.findByLabelText("Completion Policy"),
+      screen.getByLabelText("Completion Strategy"),
       "agent_auto_commit",
     );
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(updateProjectCompletionPolicyMock).toHaveBeenCalledWith({
+      expect(updateProjectSettingsMock).toHaveBeenCalledWith({
         projectId: 1,
+        name: "RedWhisk Desktop",
         completionPolicy: "agent_auto_commit",
       }),
     );
     expect(onProjectUpdated).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 1,
+        name: "RedWhisk Desktop",
         completionPolicy: "agent_auto_commit",
       }),
     );

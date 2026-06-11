@@ -112,6 +112,28 @@ impl<'connection> ProjectRepository<'connection> {
         self.find_by_id(id)?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
+
+    pub fn update_settings(
+        &self,
+        id: i64,
+        name: &str,
+        completion_policy: ProjectCompletionPolicy,
+    ) -> rusqlite::Result<ProjectSummary> {
+        self.connection.execute(
+            "UPDATE projects
+             SET name = ?1,
+                 completion_policy = ?2
+             WHERE id = ?3",
+            params![
+                name,
+                project_completion_policy_to_str(&completion_policy),
+                id
+            ],
+        )?;
+
+        self.find_by_id(id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
 }
 
 fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary> {

@@ -5,7 +5,7 @@ use crate::core::project_service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,
-    ProjectSummary, UpdateProjectCompletionPolicyInput,
+    ProjectSummary, UpdateProjectCompletionPolicyInput, UpdateProjectSettingsInput,
 };
 
 #[tauri::command]
@@ -45,6 +45,16 @@ pub fn update_project_completion_policy(
 ) -> Result<ProjectSummary, CommandError> {
     let data_dir = prepare_project_data_dir(&app, &state)?;
     ProjectService::update_project_completion_policy_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn update_project_settings(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: UpdateProjectSettingsInput,
+) -> Result<ProjectSummary, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    ProjectService::update_project_settings_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]

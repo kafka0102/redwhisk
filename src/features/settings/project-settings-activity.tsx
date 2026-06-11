@@ -4,10 +4,12 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FormEvent,
   type ReactNode,
 } from "react";
 import { Bot, Info, Plus } from "lucide-react";
 
+import { Button } from "../../components/ui/button";
 import {
   listAgentProfiles,
   type AgentProfileRecord,
@@ -16,8 +18,9 @@ import {
 import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
-  updateProjectCompletionPolicy,
   type ProjectCompletionPolicy,
+  type UpdateProjectSettingsInput,
+  updateProjectSettings,
 } from "../project/project-commands";
 import type { ProjectSummary } from "../../app/app";
 
@@ -65,6 +68,14 @@ interface ProjectSettingsActivityProps {
   projectName: string;
 }
 
+interface GeneralSettingsFormProps {
+  completionPolicy: ProjectCompletionPolicy;
+  onSave: (
+    input: Pick<UpdateProjectSettingsInput, "name" | "completionPolicy">,
+  ) => Promise<void>;
+  projectName: string;
+}
+
 export function ProjectSettingsActivity({
   completionPolicy,
   onProjectUpdated,
@@ -86,8 +97,6 @@ export function ProjectSettingsActivity({
     "loading",
   );
   const [profilesProjectId, setProfilesProjectId] = useState(projectId);
-  const [isSavingCompletionPolicy, setIsSavingCompletionPolicy] =
-    useState(false);
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
   const [editingProfile, setEditingProfile] =
     useState<EditingProfileState | null>(null);
@@ -182,34 +191,22 @@ export function ProjectSettingsActivity({
     setEditingProfile(null);
   }
 
-  async function handleCompletionPolicyChange(
-    nextPolicy: ProjectCompletionPolicy,
+  async function handleGeneralSettingsSave(
+    input: Pick<UpdateProjectSettingsInput, "name" | "completionPolicy">,
   ) {
-    if (nextPolicy === completionPolicy || isSavingCompletionPolicy) {
-      return;
-    }
-
-    setErrorMessage(null);
-    setIsSavingCompletionPolicy(true);
-
-    try {
-      const updatedProject = await updateProjectCompletionPolicy({
-        projectId,
-        completionPolicy: nextPolicy,
-      });
-      onProjectUpdated?.({
-        id: updatedProject.id,
-        name: updatedProject.name,
-        path: updatedProject.repoPath,
-        completionPolicy: updatedProject.completionPolicy,
-        recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
-        status: "available",
-      });
-    } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
-    } finally {
-      setIsSavingCompletionPolicy(false);
-    }
+    const updatedProject = await updateProjectSettings({
+      projectId,
+      name: input.name,
+      completionPolicy: input.completionPolicy,
+    });
+    onProjectUpdated?.({
+      id: updatedProject.id,
+      name: updatedProject.name,
+      path: updatedProject.repoPath,
+      completionPolicy: updatedProject.completionPolicy,
+      recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
+      status: "available",
+    });
   }
 
   return (
@@ -297,29 +294,12 @@ export function ProjectSettingsActivity({
         <div className="settings-content">
           <SettingsContentFrame item={activeMenuItem}>
             {activeMenu === "general" ? (
-              <>
-                <div className="settings-basic-info">
-                  <span className="settings-basic-info__label">Project</span>
-                  <p>{projectName}</p>
-                </div>
-                <label className="settings-field">
-                  <span>Completion Policy</span>
-                  <select
-                    aria-label="Completion Policy"
-                    className="settings-input"
-                    disabled={isSavingCompletionPolicy}
-                    value={completionPolicy}
-                    onChange={(event) =>
-                      void handleCompletionPolicyChange(
-                        event.target.value as ProjectCompletionPolicy,
-                      )
-                    }
-                  >
-                    <option value="manual">manual</option>
-                    <option value="agent_auto_commit">agent_auto_commit</option>
-                  </select>
-                </label>
-              </>
+              <GeneralSettingsForm
+                key={`${projectId}:${projectName}:${completionPolicy}`}
+                completionPolicy={completionPolicy}
+                onSave={handleGeneralSettingsSave}
+                projectName={projectName}
+              />
             ) : null}
 
             {activeMenu === "agents" ? (
@@ -503,6 +483,98 @@ function SettingsContentFrame({
       </div>
       <div className="settings-section__body">{children}</div>
     </section>
+  );
+}
+
+function GeneralSettingsForm({
+  completionPolicy,
+  onSave,
+  projectName,
+}: GeneralSettingsFormProps) {
+  const [projectNameValue, setProjectNameValue] = useState(projectName);
+  const [completionPolicyValue, setCompletionPolicyValue] =
+    useState(completionPolicy);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const trimmedProjectName = projectNameValue.trim();
+  const isDirty =
+    trimmedProjectName !== projectName ||
+    completionPolicyValue !== completionPolicy;
+  const isSaveDisabled =
+    isSaving || trimmedProjectName.length === 0 || !isDirty;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSaveDisabled) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSaving(true);
+
+    try {
+      await onSave({
+        name: trimmedProjectName,
+        completionPolicy: completionPolicyValue,
+      });
+    } catch (error: unknown) {
+      setErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="settings-card settings-general-card"
+      onSubmit={handleSubmit}
+    >
+      <label className="settings-field">
+        <span>Project Name</span>
+        <input
+          aria-label="Project Name"
+          className="settings-input settings-input--form-control"
+          disabled={isSaving}
+          value={projectNameValue}
+          onChange={(event) => setProjectNameValue(event.target.value)}
+        />
+      </label>
+      <label className="settings-field">
+        <span>Completion Strategy</span>
+        <select
+          aria-label="Completion Strategy"
+          className="settings-input settings-input--form-control"
+          disabled={isSaving}
+          value={completionPolicyValue}
+          onChange={(event) =>
+            setCompletionPolicyValue(
+              event.target.value as ProjectCompletionPolicy,
+            )
+          }
+        >
+          <option value="manual">Manual</option>
+          <option value="agent_auto_commit">Auto Commit</option>
+        </select>
+      </label>
+      {errorMessage ? (
+        <p
+          className="settings-status"
+          role="status"
+          aria-label="General settings status"
+        >
+          {errorMessage}
+        </p>
+      ) : null}
+      <div className="settings-form__actions-row settings-form__actions-row--footer">
+        <Button
+          className="settings-save-button"
+          disabled={isSaveDisabled}
+          type="submit"
+        >
+          {isSaving ? "Saving..." : "Save"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
