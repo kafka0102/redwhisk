@@ -1,0 +1,21 @@
+version: 1
+change: preload-agent-skills
+phase: proposal-ready
+ambiguity: low
+complexity: high
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+plan: null
+handoff_context: openspec/changes/preload-agent-skills/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: proposal handoff from 4 file(s); primary artifact: openspec/changes/preload-agent-skills/proposal.md
+handoff_hash: a037a19c4732ce5c895d9dd75bbecc4bee5b90a8db8e1c4ec329a34ec46c65bf
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-06-12
+updated_at: 2026-06-12T15:13:12Z
