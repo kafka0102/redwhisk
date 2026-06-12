@@ -17,6 +17,7 @@ export interface AgentSessionListItem {
   status: AgentSessionStatus;
   attention: AgentSessionAttention;
   logPath?: string | null;
+  latestOutput?: string | null;
   lastActiveAt: number;
   startedAt: number;
   closedAt: number | null;

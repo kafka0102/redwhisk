@@ -52,7 +52,8 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "last_active_at",
             "started_at",
             "closed_at",
-            "project_id"
+            "project_id",
+            "latest_output"
         ]
     );
 
@@ -759,7 +760,7 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
         "running",
         "Older running issue",
     );
-    insert_agent_session_row(
+    let newer_session_id = insert_agent_session_row(
         &database.connection,
         newer_running_issue,
         profile_id,
@@ -767,6 +768,13 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
         1_780_628_000_000,
         None,
     );
+    AgentSessionRepository::new(&database.connection)
+        .update_latest_output(
+            newer_session_id,
+            "Running pnpm test -- --run agents-activity.test.tsx",
+            1_780_628_000_500,
+        )
+        .expect("update latest output");
     insert_agent_session_row(
         &database.connection,
         older_running_issue,
@@ -832,6 +840,10 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
     assert_eq!(
         response.sessions[0].issue_title.as_deref(),
         Some("Newest running issue")
+    );
+    assert_eq!(
+        response.sessions[0].latest_output.as_deref(),
+        Some("Running pnpm test -- --run agents-activity.test.tsx")
     );
     assert_eq!(
         response.sessions[1].issue_title.as_deref(),

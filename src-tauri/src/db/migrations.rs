@@ -50,6 +50,9 @@ const COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_VERSION: &str =
     "0015_completion_attempt_git_operation_blocked";
 const COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_SQL: &str =
     include_str!("../../migrations/0015_completion_attempt_git_operation_blocked.sql");
+const AGENT_SESSION_LATEST_OUTPUT_MIGRATION_VERSION: &str = "0016_agent_session_latest_output";
+const AGENT_SESSION_LATEST_OUTPUT_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0016_agent_session_latest_output.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -179,6 +182,10 @@ impl MigrationRunner {
                 Migration {
                     version: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_VERSION,
                     sql: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_SESSION_LATEST_OUTPUT_MIGRATION_VERSION,
+                    sql: AGENT_SESSION_LATEST_OUTPUT_MIGRATION_SQL,
                 },
             ];
         }

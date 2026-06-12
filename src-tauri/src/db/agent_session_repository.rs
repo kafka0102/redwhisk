@@ -15,6 +15,7 @@ pub struct AgentSessionListRow {
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
     pub log_path: String,
+    pub latest_output: Option<String>,
     pub last_active_at: i64,
     pub started_at: i64,
     pub closed_at: Option<i64>,
@@ -32,7 +33,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
                  FROM agent_sessions
                  WHERE id = ?1",
                 params![id],
@@ -44,7 +45,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_issue_id(&self, issue_id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
                  FROM agent_sessions
                  WHERE issue_id = ?1",
                 params![issue_id],
@@ -68,6 +69,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.status,
                 agent_sessions.attention,
                 agent_sessions.log_path,
+                agent_sessions.latest_output,
                 agent_sessions.last_active_at,
                 agent_sessions.started_at,
                 agent_sessions.closed_at
@@ -91,7 +93,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         project_id: i64,
     ) -> rusqlite::Result<Vec<AgentSessionRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
              FROM agent_sessions
              WHERE project_id = ?1 AND status = 'running'
              ORDER BY last_active_at DESC, started_at DESC, id DESC",
@@ -256,6 +258,21 @@ impl<'connection> AgentSessionRepository<'connection> {
 
         self.find_by_id(session_id)
     }
+
+    pub fn update_latest_output(
+        &self,
+        session_id: i64,
+        latest_output: &str,
+        updated_at: i64,
+    ) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET latest_output = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?3 AND status = 'running'",
+            params![latest_output, updated_at, session_id],
+        )
+    }
 }
 
 fn find_by_id_on_connection(
@@ -264,7 +281,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<AgentSessionRecord>> {
     connection
         .query_row(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, last_active_at, started_at, closed_at
+            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
              FROM agent_sessions
              WHERE id = ?1",
             params![id],
@@ -287,9 +304,10 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSess
         command_snapshot: row.get(9)?,
         prompt_snapshot: row.get(10)?,
         log_path: row.get(11)?,
-        last_active_at: row.get(12)?,
-        started_at: row.get(13)?,
-        closed_at: row.get(14)?,
+        latest_output: row.get(12)?,
+        last_active_at: row.get(13)?,
+        started_at: row.get(14)?,
+        closed_at: row.get(15)?,
     })
 }
 
@@ -309,9 +327,10 @@ fn agent_session_list_row_from_row(
         status: agent_session_status_from_str(&row.get::<_, String>(6)?)?,
         attention: agent_session_attention_from_str(&row.get::<_, String>(7)?)?,
         log_path: row.get(8)?,
-        last_active_at: row.get(9)?,
-        started_at: row.get(10)?,
-        closed_at: row.get(11)?,
+        latest_output: row.get(9)?,
+        last_active_at: row.get(10)?,
+        started_at: row.get(11)?,
+        closed_at: row.get(12)?,
     })
 }
 
