@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum AgentType {
     Codex,
+    Claude,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
