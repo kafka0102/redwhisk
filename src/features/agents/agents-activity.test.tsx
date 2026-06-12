@@ -353,15 +353,19 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
 
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const completedGroup = screen.getByRole("region", {
-      name: "Completed sessions",
+      name: "Done sessions",
+    });
+    const reviewGroup = screen.getByRole("region", {
+      name: "Review sessions",
     });
 
-    expect(within(runningGroup).getByText("Running(2)")).toBeInTheDocument();
+    expect(within(runningGroup).getByText("In Process(2)")).toBeInTheDocument();
+    expect(within(reviewGroup).getByText("Review(0)")).toBeInTheDocument();
     expect(
-      within(completedGroup).getByText("Completed(1)"),
+      within(completedGroup).getByText("Done(1)"),
     ).toBeInTheDocument();
     expect(
       within(runningGroup).getByRole("button", { name: /Existing issue/i }),
@@ -439,7 +443,7 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     expect(
       within(runningGroup).getByRole("button", { name: /Existing issue/i }),
@@ -708,13 +712,14 @@ describe("AgentsActivity", () => {
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows only closed, crashed and stopped sessions in the completed group", async () => {
+  it("groups sessions by linked issue status without rendering backlog", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
           sessionId: 302,
           issueId: 21,
           issueTitle: "Running issue",
+          issueStatus: "running",
           title: null,
           agentType: "codex",
           status: "running",
@@ -724,9 +729,23 @@ describe("AgentsActivity", () => {
           closedAt: null,
         },
         {
+          sessionId: 303,
+          issueId: 25,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_636_000_000,
+          startedAt: 1_780_636_000_000,
+          closedAt: null,
+        },
+        {
           sessionId: 401,
           issueId: 22,
           issueTitle: "Closed issue",
+          issueStatus: "completed",
           title: null,
           agentType: "codex",
           status: "closed",
@@ -739,6 +758,7 @@ describe("AgentsActivity", () => {
           sessionId: 402,
           issueId: 23,
           issueTitle: "Crashed issue",
+          issueStatus: "running",
           title: null,
           agentType: "codex",
           status: "crashed",
@@ -751,6 +771,7 @@ describe("AgentsActivity", () => {
           sessionId: 403,
           issueId: 24,
           issueTitle: "Stopped issue",
+          issueStatus: "review",
           title: null,
           agentType: "codex",
           status: "stopped",
@@ -758,6 +779,32 @@ describe("AgentsActivity", () => {
           lastActiveAt: 1_780_634_000_000,
           startedAt: 1_780_633_000_000,
           closedAt: 1_780_635_000_000,
+        },
+        {
+          sessionId: 404,
+          issueId: 26,
+          issueTitle: "Backlog issue",
+          issueStatus: "backlog",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_635_000_000,
+          startedAt: 1_780_635_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 405,
+          issueId: null,
+          issueTitle: null,
+          issueStatus: null,
+          title: "Finished scratch session",
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          lastActiveAt: 1_780_636_000_000,
+          startedAt: 1_780_635_000_000,
+          closedAt: 1_780_636_500_000,
         },
       ],
     });
@@ -770,24 +817,45 @@ describe("AgentsActivity", () => {
       />,
     );
 
-    const completedGroup = await screen.findByRole("region", {
-      name: "Completed sessions",
+    const inProcessGroup = await screen.findByRole("region", {
+      name: "In Process sessions",
+    });
+    const reviewGroup = screen.getByRole("region", {
+      name: "Review sessions",
+    });
+    const completedGroup = screen.getByRole("region", {
+      name: "Done sessions",
     });
 
     expect(
-      within(completedGroup).getByText("Completed(3)"),
+      within(inProcessGroup).getByText("In Process(2)"),
+    ).toBeInTheDocument();
+    expect(within(reviewGroup).getByText("Review(2)")).toBeInTheDocument();
+    expect(
+      within(completedGroup).getByText("Done(2)"),
     ).toBeInTheDocument();
     expect(
-      within(completedGroup).getByRole("button", { name: /Stopped issue/i }),
+      within(inProcessGroup).getByRole("button", { name: /Running issue/i }),
     ).toBeInTheDocument();
     expect(
-      within(completedGroup).getByRole("button", { name: /Crashed issue/i }),
+      within(inProcessGroup).getByRole("button", { name: /Crashed issue/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(reviewGroup).getByRole("button", { name: /Review issue/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(reviewGroup).getByRole("button", { name: /Stopped issue/i }),
     ).toBeInTheDocument();
     expect(
       within(completedGroup).getByRole("button", { name: /Closed issue/i }),
     ).toBeInTheDocument();
     expect(
-      within(completedGroup).queryByRole("button", { name: /Running issue/i }),
+      within(completedGroup).getByRole("button", {
+        name: /Finished scratch session/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Backlog issue/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -831,7 +899,7 @@ describe("AgentsActivity", () => {
     );
 
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const existingIssueRow = within(runningGroup).getByRole("button", {
       name: /Existing issue/i,
@@ -892,7 +960,7 @@ describe("AgentsActivity", () => {
     );
 
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const attentionRow = within(runningGroup).getByRole("button", {
       name: /Needs attention issue/i,
@@ -933,7 +1001,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={401} projectId={1} />);
 
     const completedGroup = await screen.findByRole("region", {
-      name: "Completed sessions",
+      name: "Done sessions",
     });
     const completedRow = within(completedGroup).getByRole("button", {
       name: /Closed issue/i,
@@ -968,10 +1036,10 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={402} projectId={1} />);
 
-    const completedGroup = await screen.findByRole("region", {
-      name: "Completed sessions",
+    const runningGroup = await screen.findByRole("region", {
+      name: "In Process sessions",
     });
-    const crashedRow = within(completedGroup).getByRole("button", {
+    const crashedRow = within(runningGroup).getByRole("button", {
       name: /Crashed issue/i,
     });
 
@@ -1039,10 +1107,10 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={403} projectId={1} />);
 
-    const completedGroup = await screen.findByRole("region", {
-      name: "Completed sessions",
+    const runningGroup = await screen.findByRole("region", {
+      name: "In Process sessions",
     });
-    const stoppedRow = within(completedGroup).getByRole("button", {
+    const stoppedRow = within(runningGroup).getByRole("button", {
       name: /Stopped issue/i,
     });
 
@@ -1099,7 +1167,7 @@ describe("AgentsActivity", () => {
       await Promise.resolve();
     });
     const runningGroup = screen.getByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const initialRow = within(runningGroup).getByRole("button", {
       name: /Polling issue/i,
@@ -1142,7 +1210,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const sessionRow = await within(runningGroup).findByRole("button", {
       name: /Viewed session issue/i,
@@ -1203,7 +1271,7 @@ describe("AgentsActivity", () => {
     });
 
     const runningGroup = screen.getByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const sessionRow = within(runningGroup).getByRole("button", {
       name: /Viewed polling issue/i,
@@ -1609,14 +1677,14 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
-    const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+    const reviewGroup = await screen.findByRole("region", {
+      name: "Review sessions",
     });
     expect(
       await screen.findByRole("heading", { level: 3, name: "Review issue" }),
     ).toBeInTheDocument();
     expect(
-      within(runningGroup).getByRole("button", { name: /Review issue/i }),
+      within(reviewGroup).getByRole("button", { name: /Review issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByRole("button", { name: /#issue22.*Review issue/i }),
@@ -2262,7 +2330,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     const attentionRow = within(runningGroup).getByRole("button", {
       name: /Manual attention issue/i,
@@ -2385,7 +2453,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={null} projectId={1} />);
 
     const runningGroup = await screen.findByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     expect(
       within(runningGroup).getByRole("button", {
@@ -2430,7 +2498,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={null} projectId={1} />);
 
     const completedGroup = await screen.findByRole("region", {
-      name: "Completed sessions",
+      name: "Done sessions",
     });
     expect(
       within(completedGroup).getByRole("button", {
@@ -3093,7 +3161,7 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     const runningGroup = screen.getByRole("region", {
-      name: "Running sessions",
+      name: "In Process sessions",
     });
     expect(
       within(runningGroup).getByRole("button", { name: /Existing issue/i }),

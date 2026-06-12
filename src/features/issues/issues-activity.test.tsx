@@ -200,9 +200,9 @@ describe("IssuesActivity", () => {
     const backlogLane = await screen.findByRole("region", {
       name: "Backlog",
     });
-    const runningLane = screen.getByRole("region", { name: "Running" });
+    const runningLane = screen.getByRole("region", { name: "In Process" });
     const reviewLane = screen.getByRole("region", { name: "Review" });
-    const completedLane = screen.getByRole("region", { name: "Completed" });
+    const completedLane = screen.getByRole("region", { name: "Done" });
 
     expect(
       within(backlogLane).getByRole("button", { name: "Existing issue" }),
@@ -226,9 +226,11 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    const runningLane = await screen.findByRole("region", { name: "Running" });
+    const runningLane = await screen.findByRole("region", {
+      name: "In Process",
+    });
     const reviewLane = screen.getByRole("region", { name: "Review" });
-    const completedLane = screen.getByRole("region", { name: "Completed" });
+    const completedLane = screen.getByRole("region", { name: "Done" });
 
     expect(runningLane).toHaveTextContent("0");
     expect(runningLane).toHaveTextContent("no issues");
