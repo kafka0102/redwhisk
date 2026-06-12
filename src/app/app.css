@@ -1429,57 +1429,11 @@ button:focus-visible {
 }
 
 .agents-session-row__agent-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
+  display: block;
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  font-size: 0;
-  line-height: 0;
-}
-
-.agents-session-row__agent-logo::before,
-.agents-session-row__agent-logo::after {
-  content: "";
-  position: absolute;
-}
-
-.agents-session-row__agent-logo--codex::before {
-  inset: 1px;
-  border-radius: 4px;
-  background: #2563eb;
-}
-
-.agents-session-row__agent-logo--codex::after {
-  inset: 5px;
-  border-radius: 2px;
-  background: var(--color-surface);
-}
-
-.agents-session-row__agent-logo--claude {
-  border-radius: 999px;
-}
-
-.agents-session-row__agent-logo--claude::before {
-  inset: 1px;
-  border-radius: 999px;
-  background: var(--color-lane-running-marker);
-}
-
-.agents-session-row__agent-logo--claude::after {
-  top: 4px;
-  left: 5px;
-  width: 6px;
-  height: 8px;
-  border-radius: 999px 999px 3px 3px;
-  background: var(--color-surface);
-  transform: rotate(-18deg);
+  object-fit: contain;
 }
 
 .agents-session-row__meta-status {

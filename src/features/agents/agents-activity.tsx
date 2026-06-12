@@ -16,6 +16,8 @@ import {
   type CSSProperties,
 } from "react";
 
+import claudeLogoSrc from "../../assets/images/claude.svg";
+import codexLogoSrc from "../../assets/images/codex.svg";
 import {
   listAgentSessions,
   setAgentSessionAttention,
@@ -1424,9 +1426,10 @@ function SessionGroup({
                   </span>
                 </span>
                 <span className="agents-session-row__agent">
-                  <span
-                    aria-label={`Agent 类型：${agentLabel}`}
-                    className={buildAgentLogoClassName(session.agentType)}
+                  <img
+                    alt={`Agent 类型：${agentLabel}`}
+                    className="agents-session-row__agent-logo"
+                    src={getAgentLogoSrc(session.agentType)}
                   />
                   {shouldShowSessionRowStatus(session) ? (
                     <span className="agents-session-row__meta-status">
@@ -1460,12 +1463,14 @@ function formatAgentType(agentType: AgentSessionListItem["agentType"]): string {
   }
 }
 
-function buildAgentLogoClassName(
+function getAgentLogoSrc(
   agentType: AgentSessionListItem["agentType"],
 ): string {
-  const tone =
-    agentType === "claude" || agentType === "claude_code" ? "claude" : "codex";
-  return `agents-session-row__agent-logo agents-session-row__agent-logo--${tone}`;
+  if (agentType === "claude" || agentType === "claude_code") {
+    return claudeLogoSrc;
+  }
+
+  return codexLogoSrc;
 }
 
 function buildSessionStatusDotClassName(tone: string): string {

@@ -10,6 +10,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openPath } from "@tauri-apps/plugin-opener";
 
+import claudeLogoSrc from "../../assets/images/claude.svg";
+import codexLogoSrc from "../../assets/images/codex.svg";
 import { AgentsActivity } from "./agents-activity";
 import {
   listAgentSessions,
@@ -444,12 +446,12 @@ describe("AgentsActivity", () => {
       name: /Orange agent issue/i,
     });
 
-    expect(within(codexRow).getByLabelText("Agent 类型：Codex")).toHaveClass(
-      "agents-session-row__agent-logo--codex",
-    );
-    expect(within(claudeRow).getByLabelText("Agent 类型：Claude")).toHaveClass(
-      "agents-session-row__agent-logo--claude",
-    );
+    expect(
+      within(codexRow).getByRole("img", { name: "Agent 类型：Codex" }),
+    ).toHaveAttribute("src", codexLogoSrc);
+    expect(
+      within(claudeRow).getByRole("img", { name: "Agent 类型：Claude" }),
+    ).toHaveAttribute("src", claudeLogoSrc);
     expect(codexRow).not.toHaveTextContent("Codex");
     expect(claudeRow).not.toHaveTextContent("Claude");
   });
