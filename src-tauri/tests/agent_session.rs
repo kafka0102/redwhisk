@@ -901,6 +901,48 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
 }
 
 #[test]
+fn agent_session_repository_reads_sessions_for_claude_profiles() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "claude-session-project");
+    let issue_id =
+        insert_issue_with_title(&database.connection, project_id, "running", "Claude issue");
+    database
+        .connection
+        .execute_batch("PRAGMA ignore_check_constraints = ON")
+        .expect("enable claude profile fixture");
+    database
+        .connection
+        .execute(
+            "INSERT INTO agent_profiles (
+               name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
+             ) VALUES ('Claude', 'claude', '/usr/local/bin/claude', 'global', NULL, 'default', 0, 'review', '')",
+            [],
+        )
+        .expect("insert claude profile fixture");
+    database
+        .connection
+        .execute_batch("PRAGMA ignore_check_constraints = OFF")
+        .expect("restore profile constraints");
+    let profile_id = database.connection.last_insert_rowid();
+    insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_638_500_000,
+        None,
+    );
+
+    let sessions = AgentSessionRepository::new(&database.connection)
+        .list_by_project_id(project_id)
+        .expect("list claude profile sessions");
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].agent_type, AgentType::Claude);
+}
+
+#[test]
 fn list_agent_sessions_does_not_project_issue_from_another_project() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
