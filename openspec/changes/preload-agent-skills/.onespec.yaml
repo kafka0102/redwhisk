@@ -1,6 +1,6 @@
 version: 1
 change: preload-agent-skills
-phase: plan-ready
+phase: implementing
 ambiguity: low
 complexity: high
 implementation_path: superpowers
@@ -14,8 +14,8 @@ handoff_context: openspec/changes/preload-agent-skills/.onespec.yaml
 handoff_purpose: plan
 handoff_summary: plan handoff from 4 file(s); primary artifact: openspec/changes/preload-agent-skills/proposal.md
 handoff_hash: a037a19c4732ce5c895d9dd75bbecc4bee5b90a8db8e1c4ec329a34ec46c65bf
-touched_files_b64: null
+touched_files_b64: c3JjLXRhdXJpL3NyYy90eXBlcy9hZ2VudF9za2lsbC5ycwpzcmMtdGF1cmkvc3JjL2FnZW50X3NraWxsL21vZC5ycwpzcmMtdGF1cmkvc3JjL2FnZW50X3NraWxsL2luZGV4LnJzCnNyYy10YXVyaS9zcmMvdHlwZXMvYWdlbnRfcHJvZmlsZS5ycwpzcmMtdGF1cmkvc3JjL3R5cGVzL21vZC5ycwpzcmMtdGF1cmkvc3JjL2FwcF9zdGF0ZS5ycwpzcmMtdGF1cmkvc3JjL2xpYi5ycwpzcmMtdGF1cmkvc3JjL2RiL2FnZW50X3Byb2ZpbGVfcmVwb3NpdG9yeS5ycwo=
 review_result: pending
 archive: pending
 created_at: 2026-06-12
-updated_at: 2026-06-12T15:29:30Z
+updated_at: 2026-06-12T15:31:59Z

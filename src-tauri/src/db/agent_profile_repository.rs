@@ -162,12 +162,14 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
 fn agent_type_to_str(agent_type: &AgentType) -> &'static str {
     match agent_type {
         AgentType::Codex => "codex",
+        AgentType::Claude => "claude",
     }
 }
 
 fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
     match value {
         "codex" => Ok(AgentType::Codex),
+        "claude" => Ok(AgentType::Claude),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
