@@ -1,6 +1,6 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
-export type AgentType = "codex";
+export type AgentType = "codex" | "claude" | "claude_code";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
 export type IssueStatus = "backlog" | "running" | "review" | "completed";

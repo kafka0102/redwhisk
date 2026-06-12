@@ -1,4 +1,11 @@
-import { ChevronLeft, ChevronRight, LayoutGrid, Plus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  LayoutGrid,
+  LoaderCircle,
+  Plus,
+} from "lucide-react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import {
   useCallback,
@@ -33,9 +40,9 @@ import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
-const AGENTS_SIDEBAR_DEFAULT_WIDTH = 220;
-const AGENTS_SIDEBAR_MIN_WIDTH = 220;
-const AGENTS_SIDEBAR_MAX_WIDTH = 440;
+const AGENTS_SIDEBAR_DEFAULT_WIDTH = 230;
+const AGENTS_SIDEBAR_MIN_WIDTH = 230;
+const AGENTS_SIDEBAR_MAX_WIDTH = 450;
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
@@ -55,8 +62,8 @@ const SESSION_GROUPS: Array<{
 }> = [
   {
     key: "inProcess",
-    label: "In Process",
-    emptyCopy: "No in-process sessions.",
+    label: "In Progress",
+    emptyCopy: "No in-progress sessions.",
   },
   {
     key: "review",
@@ -877,6 +884,7 @@ export function AgentsActivity({
                 emptyCopy={group.emptyCopy}
                 count={group.sessions.length}
                 label={group.label}
+                groupKey={group.key}
                 onSelect={handleSelectSession}
                 selectedSessionId={selectedSession?.sessionId ?? null}
                 sessions={group.sessions}
@@ -1327,6 +1335,7 @@ function getSessionIssueGroup(
 interface SessionGroupProps {
   count: number;
   emptyCopy: string;
+  groupKey: SessionIssueGroup;
   label: string;
   onSelect: (sessionId: number) => void;
   selectedSessionId: number | null;
@@ -1337,63 +1346,101 @@ interface SessionGroupProps {
 function SessionGroup({
   count,
   emptyCopy,
+  groupKey,
   label,
   onSelect,
   selectedSessionId,
   sessions,
   viewedSessionActivity,
 }: SessionGroupProps) {
+  const [isExpanded, setIsExpanded] = useState(groupKey !== "done");
+
   return (
     <section aria-label={`${label} sessions`} className="agents-group">
-      <div className="agents-group__header">
-        <h3>{`${label}(${count})`}</h3>
-      </div>
-      {sessions.length === 0 ? (
+      <button
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${label} sessions`}
+        className="agents-group__header"
+        type="button"
+        onClick={() => setIsExpanded((currentIsExpanded) => !currentIsExpanded)}
+      >
+        {isExpanded ? (
+          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />
+        ) : (
+          <ChevronRight aria-hidden="true" size={14} strokeWidth={1.9} />
+        )}
+        <h3>
+          <span className="agents-group__title">{label}</span>
+          <span className="agents-group__count">{`(${count})`}</span>
+        </h3>
+      </button>
+      {isExpanded && sessions.length === 0 ? (
         <p className="agents-group__empty">{emptyCopy}</p>
-      ) : (
+      ) : null}
+      {isExpanded && sessions.length > 0 ? (
         <div className="agents-session-list">
-          {sessions.map((session) => (
-            <button
-              key={session.sessionId}
-              aria-pressed={selectedSessionId === session.sessionId}
-              className="agents-session-row"
-              type="button"
-              onClick={() => onSelect(session.sessionId)}
-            >
-              <span className="agents-session-row__header">
-                {shouldShowSessionStatusDot(session) ? (
+          {sessions.map((session) => {
+            const outputLine = formatSessionOutputLine(session.latestOutput);
+            const statusLabel = formatSessionStatusLabel(
+              session,
+              viewedSessionActivity,
+              selectedSessionId,
+            );
+            const agentLabel = formatAgentType(session.agentType);
+
+            return (
+              <button
+                key={session.sessionId}
+                aria-pressed={selectedSessionId === session.sessionId}
+                className="agents-session-row"
+                type="button"
+                onClick={() => onSelect(session.sessionId)}
+              >
+                <span className="agents-session-row__header">
+                  {session.status === "running" ? (
+                    <LoaderCircle
+                      aria-label="Session 正在运行"
+                      className="agents-session-row__running-icon"
+                      size={12}
+                      strokeWidth={2}
+                    />
+                  ) : null}
+                  <span className="agents-session-row__title">
+                    {formatSessionTitle(session)}
+                  </span>
+                </span>
+                <span className="agents-session-row__output">
                   <span
-                    aria-label={`Session 状态：${formatSessionStatusLabel(session, viewedSessionActivity)}`}
+                    aria-label={`Session 状态：${statusLabel}`}
                     className={buildSessionStatusDotClassName(
                       session,
                       viewedSessionActivity,
+                      selectedSessionId,
                     )}
                   />
-                ) : null}
-                <span className="agents-session-row__title">
-                  {formatSessionTitle(session)}
-                </span>
-              </span>
-              {session.latestOutput ? (
-                <span className="agents-session-row__latest-output">
-                  {session.latestOutput}
-                </span>
-              ) : null}
-              <span className="agents-session-row__meta">
-                <span className="agents-session-row__meta-main">
-                  {formatAgentType(session.agentType)}
-                </span>
-                {shouldShowExplicitSessionStatus(session) ? (
-                  <span className="agents-session-row__meta-status">
-                    {formatSessionStatusLabel(session, viewedSessionActivity)}
+                  <span className="agents-session-row__latest-output">
+                    {outputLine}
                   </span>
-                ) : null}
-                <span className="sr-only">{`，${formatSessionStatusLabel(session, viewedSessionActivity)}`}</span>
-              </span>
-            </button>
-          ))}
+                </span>
+                <span className="agents-session-row__agent">
+                  <span
+                    aria-label={`Agent 类型：${agentLabel}`}
+                    className={buildAgentLogoClassName(session.agentType)}
+                  >
+                    {agentLabel}
+                  </span>
+                  {shouldShowExplicitSessionStatus(session) ? (
+                    <span className="agents-session-row__meta-status">
+                      {statusLabel}
+                    </span>
+                  ) : null}
+                  <span className="sr-only">{`，${statusLabel}`}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -1406,27 +1453,32 @@ function formatAgentType(agentType: AgentSessionListItem["agentType"]): string {
   switch (agentType) {
     case "codex":
       return "Codex";
+    case "claude":
+    case "claude_code":
+      return "Claude";
     default:
       return agentType;
   }
 }
 
-function shouldShowSessionStatusDot(session: AgentSessionListItem): boolean {
-  return session.status === "running";
+function buildAgentLogoClassName(
+  agentType: AgentSessionListItem["agentType"],
+): string {
+  const tone =
+    agentType === "claude" || agentType === "claude_code" ? "claude" : "codex";
+  return `agents-session-row__agent-logo agents-session-row__agent-logo--${tone}`;
 }
 
 function buildSessionStatusDotClassName(
   session: AgentSessionListItem,
   viewedSessionActivity: Record<number, number>,
+  selectedSessionId: number | null,
 ): string {
-  const tone =
-    session.attention === "requested"
-      ? "attention"
-      : session.status === "running"
-        ? isViewedSession(session, viewedSessionActivity)
-          ? "viewed"
-          : "running"
-        : "completed";
+  const tone = getSessionStatusTone(
+    session,
+    viewedSessionActivity,
+    selectedSessionId,
+  );
 
   return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
 }
@@ -1434,29 +1486,104 @@ function buildSessionStatusDotClassName(
 function formatSessionStatusLabel(
   session: AgentSessionListItem,
   viewedSessionActivity: Record<number, number>,
+  selectedSessionId: number | null = null,
 ): string {
+  if (session.status === "crashed") {
+    return "crashed";
+  }
+
+  if (session.status === "stopped") {
+    return "stopped";
+  }
+
+  if (session.issueStatus === "completed") {
+    return "Done";
+  }
+
+  if (session.issueStatus === "review") {
+    return "Review";
+  }
+
   if (session.attention === "requested") {
-    return "需要确认";
+    return "输出完成";
   }
 
   if (session.status === "running") {
-    if (isViewedSession(session, viewedSessionActivity)) {
+    if (
+      selectedSessionId === session.sessionId ||
+      isViewedSession(session, viewedSessionActivity)
+    ) {
       return "已查看";
     }
 
     return "运行中";
   }
 
-  switch (session.status) {
-    case "crashed":
-      return "crashed";
-    case "stopped":
-      return "stopped";
-    case "closed":
-      return "closed";
-    default:
-      return "closed";
+  return "closed";
+}
+
+function getSessionStatusTone(
+  session: AgentSessionListItem,
+  viewedSessionActivity: Record<number, number>,
+  selectedSessionId: number | null,
+): string {
+  if (session.issueStatus === "completed") {
+    return "done";
   }
+
+  if (session.issueStatus === "review") {
+    return "viewed";
+  }
+
+  if (session.status !== "running") {
+    return "done";
+  }
+
+  if (
+    selectedSessionId === session.sessionId ||
+    isViewedSession(session, viewedSessionActivity)
+  ) {
+    return "viewed";
+  }
+
+  if (session.attention === "requested") {
+    return "completed";
+  }
+
+  return "running";
+}
+
+function formatSessionOutputLine(output: string | null | undefined): string {
+  if (!output) {
+    return "";
+  }
+
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!isNonOutputLine(line)) {
+      return line;
+    }
+  }
+
+  return "";
+}
+
+function isNonOutputLine(line: string): boolean {
+  const normalized = line.trim().toLowerCase();
+  return (
+    normalized === "working" ||
+    normalized === "thinking" ||
+    normalized === "working..." ||
+    normalized === "thinking..." ||
+    /^[>›]\s*/.test(line) ||
+    /^input\s*[:：]/i.test(line) ||
+    /^prompt\s*[:：]/i.test(line)
+  );
 }
 
 function shouldShowExplicitSessionStatus(

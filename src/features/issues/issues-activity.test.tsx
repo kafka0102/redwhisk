@@ -200,7 +200,7 @@ describe("IssuesActivity", () => {
     const backlogLane = await screen.findByRole("region", {
       name: "Backlog",
     });
-    const runningLane = screen.getByRole("region", { name: "In Process" });
+    const runningLane = screen.getByRole("region", { name: "In Progress" });
     const reviewLane = screen.getByRole("region", { name: "Review" });
     const completedLane = screen.getByRole("region", { name: "Done" });
 
@@ -227,7 +227,7 @@ describe("IssuesActivity", () => {
     renderIssuesActivity();
 
     const runningLane = await screen.findByRole("region", {
-      name: "In Process",
+      name: "In Progress",
     });
     const reviewLane = screen.getByRole("region", { name: "Review" });
     const completedLane = screen.getByRole("region", { name: "Done" });
