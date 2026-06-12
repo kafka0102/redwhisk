@@ -1528,15 +1528,15 @@ function getSessionStatusTone(
     return "done";
   }
 
+  if (session.attention === "requested") {
+    return "viewed";
+  }
+
   if (
     selectedSessionId === session.sessionId ||
     isViewedSession(session, viewedSessionActivity)
   ) {
     return "viewed";
-  }
-
-  if (session.attention === "requested") {
-    return "completed";
   }
 
   return "running";
