@@ -337,6 +337,7 @@ fn agent_session_list_row_from_row(
 fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
     match value {
         "codex" => Ok(AgentType::Codex),
+        "claude" => Ok(AgentType::Claude),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
