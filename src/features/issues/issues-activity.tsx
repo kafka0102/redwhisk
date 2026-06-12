@@ -46,7 +46,7 @@ const ISSUE_LANES: LaneDefinition[] = [
   },
   {
     status: "running",
-    label: "Running",
+    label: "In Process",
   },
   {
     status: "review",
@@ -54,7 +54,7 @@ const ISSUE_LANES: LaneDefinition[] = [
   },
   {
     status: "completed",
-    label: "Completed",
+    label: "Done",
   },
 ];
 

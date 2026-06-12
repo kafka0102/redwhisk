@@ -43,18 +43,29 @@ interface AgentsActivityProps {
 }
 
 type DragPane = "info" | "sidebar";
+type SessionIssueGroup = "inProcess" | "review" | "done";
 
-function isCompletedSession(
-  session: AgentSessionListItem,
-): session is AgentSessionListItem & {
-  status: "closed" | "crashed" | "stopped";
-} {
-  return (
-    session.status === "closed" ||
-    session.status === "crashed" ||
-    session.status === "stopped"
-  );
-}
+const SESSION_GROUPS: Array<{
+  key: SessionIssueGroup;
+  label: string;
+  emptyCopy: string;
+}> = [
+  {
+    key: "inProcess",
+    label: "In Process",
+    emptyCopy: "No in-process sessions.",
+  },
+  {
+    key: "review",
+    label: "Review",
+    emptyCopy: "No review sessions.",
+  },
+  {
+    key: "done",
+    label: "Done",
+    emptyCopy: "No done sessions.",
+  },
+];
 
 export function AgentsActivity({
   activeSessionId,
@@ -194,17 +205,24 @@ export function AgentsActivity({
     };
   }, [applySessionListOverlays, projectId]);
 
-  const runningSessions = sessions.filter(
-    (session) => session.status === "running",
+  const sessionsByGroup = useMemo(
+    () =>
+      SESSION_GROUPS.map((group) => ({
+        ...group,
+        sessions: sessions.filter(
+          (session) => getSessionIssueGroup(session) === group.key,
+        ),
+      })),
+    [sessions],
   );
-  const completedSessions = sessions.filter(isCompletedSession);
 
   const currentSessionId =
     (sessions.some((session) => session.sessionId === selectedSessionId)
       ? selectedSessionId
       : null) ??
-    runningSessions[0]?.sessionId ??
-    completedSessions[0]?.sessionId ??
+    sessionsByGroup[0]?.sessions[0]?.sessionId ??
+    sessionsByGroup[1]?.sessions[0]?.sessionId ??
+    sessionsByGroup[2]?.sessions[0]?.sessionId ??
     null;
 
   const selectedSession =
@@ -850,24 +868,18 @@ export function AgentsActivity({
 
         {!isLoading && !errorMessage ? (
           <div className="agents-groups">
-            <SessionGroup
-              emptyCopy="No running sessions."
-              count={runningSessions.length}
-              label="Running"
-              onSelect={handleSelectSession}
-              selectedSessionId={selectedSession?.sessionId ?? null}
-              sessions={runningSessions}
-              viewedSessionActivity={viewedSessionActivity}
-            />
-            <SessionGroup
-              emptyCopy="No completed sessions."
-              count={completedSessions.length}
-              label="Completed"
-              onSelect={handleSelectSession}
-              selectedSessionId={selectedSession?.sessionId ?? null}
-              sessions={completedSessions}
-              viewedSessionActivity={viewedSessionActivity}
-            />
+            {sessionsByGroup.map((group) => (
+              <SessionGroup
+                key={group.key}
+                emptyCopy={group.emptyCopy}
+                count={group.sessions.length}
+                label={group.label}
+                onSelect={handleSelectSession}
+                selectedSessionId={selectedSession?.sessionId ?? null}
+                sessions={group.sessions}
+                viewedSessionActivity={viewedSessionActivity}
+              />
+            ))}
           </div>
         ) : null}
       </aside>
@@ -1280,6 +1292,29 @@ function applySessionOverlay(
       ? Math.max(nextSession.closedAt ?? 0, nextSession.lastActiveAt)
       : nextSession.closedAt,
   };
+}
+
+function getSessionIssueGroup(
+  session: AgentSessionListItem,
+): SessionIssueGroup | null {
+  switch (session.issueStatus) {
+    case "running":
+      return "inProcess";
+    case "review":
+      return "review";
+    case "completed":
+      return "done";
+    case "backlog":
+      return null;
+    default:
+      break;
+  }
+
+  if (session.issueId != null) {
+    return session.status === "running" ? "inProcess" : "done";
+  }
+
+  return session.status === "running" ? "inProcess" : "done";
 }
 
 interface SessionGroupProps {
