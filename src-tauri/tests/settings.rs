@@ -133,6 +133,78 @@ fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
 }
 
 #[test]
+fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_profiles() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::from_static_migrations(old_codex_only_agent_profile_migrations())
+        .run(&database.connection)
+        .expect("old migrations");
+    let current_version: String = database
+        .connection
+        .query_row(
+            "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .expect("current migration");
+    assert_eq!(current_version, "0007_restructure_agent_profiles");
+    database
+        .connection
+        .execute(
+            "INSERT INTO agent_profiles (
+               name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
+             ) VALUES ('Codex Existing', 'codex', '/usr/local/bin/codex', 'global', NULL, 'full-auto', 1, 'onespec', 'prompt')",
+            [],
+        )
+        .expect("insert existing codex profile");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("default migrations");
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("claude", Ok("/usr/local/bin/claude")),
+    );
+
+    let profile = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "Claude Upgraded".to_string(),
+            agent_type: AgentType::Claude,
+            command: "claude".to_string(),
+            scope: AgentScope::Global,
+            project_id: None,
+            mode: "default".to_string(),
+            dangerous: false,
+            default_skill: "review".to_string(),
+            prompt_template: "".to_string(),
+        })
+        .expect("saved claude profile after schema upgrade");
+
+    assert_eq!(profile.agent_type, AgentType::Claude);
+    let existing_codex_profile_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM agent_profiles
+             WHERE name = 'Codex Existing'
+               AND agent_type = 'codex'
+               AND command = '/usr/local/bin/codex'
+               AND scope = 'global'
+               AND mode = 'full-auto'
+               AND dangerous = 1
+               AND default_skill = 'onespec'
+               AND prompt_template = 'prompt'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("existing codex profile count");
+    assert_eq!(existing_codex_profile_count, 1);
+}
+
+#[test]
 fn save_agent_profile_rejects_unavailable_command_without_persisting() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -284,6 +356,49 @@ fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection
         .expect("migrations");
     database
 }
+
+fn old_codex_only_agent_profile_migrations() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("0001_core", include_str!("../migrations/0001_core.sql")),
+        (
+            "0002_projects",
+            include_str!("../migrations/0002_projects.sql"),
+        ),
+        (
+            "0003_project_integer_ids",
+            include_str!("../migrations/0003_project_integer_ids.sql"),
+        ),
+        ("0004_issues", include_str!("../migrations/0004_issues.sql")),
+        (
+            "0005_issue_actions",
+            include_str!("../migrations/0005_issue_actions.sql"),
+        ),
+        (
+            "0006_agent_profiles_and_project_overrides",
+            include_str!("../migrations/0006_agent_profiles_and_project_overrides.sql"),
+        ),
+        ("0007_restructure_agent_profiles", OLD_CODEX_ONLY_0007),
+    ]
+}
+
+const OLD_CODEX_ONLY_0007: &str = r#"
+DROP TABLE IF EXISTS project_agent_overrides;
+DROP TABLE IF EXISTS agent_profiles;
+
+CREATE TABLE agent_profiles (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  agent_type TEXT NOT NULL CHECK (agent_type IN ('codex')),
+  command TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('project', 'global')),
+  project_id INTEGER,
+  mode TEXT NOT NULL DEFAULT 'full-auto',
+  dangerous INTEGER NOT NULL DEFAULT 1 CHECK (dangerous IN (0, 1)),
+  default_skill TEXT NOT NULL DEFAULT '',
+  prompt_template TEXT NOT NULL DEFAULT '',
+  FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+"#;
 
 fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
     connection
