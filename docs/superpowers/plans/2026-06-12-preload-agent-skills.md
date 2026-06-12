@@ -240,44 +240,50 @@ impl AgentSkillIndex {
             project_status: project_id
                 .and_then(|id| state.project_statuses.get(&id).cloned())
                 .unwrap_or(AgentSkillRefreshStatus::Idle),
-            last_error: state.last_error.clone(),
+            last_error: project_id
+                .and_then(|id| state.project_errors.get(&id).cloned())
+                .or_else(|| state.global_error.clone()),
         }
     }
 
     pub fn set_global_loading(&self) {
-        self.inner.write().expect("agent skill index poisoned").global_status = AgentSkillRefreshStatus::Loading;
+        let mut state = self.inner.write().expect("agent skill index poisoned");
+        state.global_status = AgentSkillRefreshStatus::Loading;
+        state.global_error = None;
     }
 
     pub fn set_project_loading(&self, project_id: i64) {
-        self.inner
-            .write()
-            .expect("agent skill index poisoned")
+        let mut state = self.inner.write().expect("agent skill index poisoned");
+        state
             .project_statuses
             .insert(project_id, AgentSkillRefreshStatus::Loading);
+        state.project_errors.remove(&project_id);
     }
 
     pub fn replace_global(&self, skills: Vec<AgentSkillRecord>) {
         let mut state = self.inner.write().expect("agent skill index poisoned");
         state.global_skills = skills;
         state.global_status = AgentSkillRefreshStatus::Ready;
-        state.last_error = None;
+        state.global_error = None;
     }
 
     pub fn replace_project(&self, project_id: i64, skills: Vec<AgentSkillRecord>) {
         let mut state = self.inner.write().expect("agent skill index poisoned");
         state.project_skills.insert(project_id, skills);
         state.project_statuses.insert(project_id, AgentSkillRefreshStatus::Ready);
-        state.last_error = None;
+        state.project_errors.remove(&project_id);
     }
 
-    pub fn mark_failed(&self, project_id: Option<i64>, message: String) {
+    pub fn mark_global_failed(&self, message: impl Into<String>) {
         let mut state = self.inner.write().expect("agent skill index poisoned");
-        if let Some(project_id) = project_id {
-            state.project_statuses.insert(project_id, AgentSkillRefreshStatus::Failed);
-        } else {
-            state.global_status = AgentSkillRefreshStatus::Failed;
-        }
-        state.last_error = Some(message);
+        state.global_status = AgentSkillRefreshStatus::Failed;
+        state.global_error = Some(message.into());
+    }
+
+    pub fn mark_project_failed(&self, project_id: i64, message: impl Into<String>) {
+        let mut state = self.inner.write().expect("agent skill index poisoned");
+        state.project_statuses.insert(project_id, AgentSkillRefreshStatus::Failed);
+        state.project_errors.insert(project_id, message.into());
     }
 }
 
