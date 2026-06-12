@@ -142,6 +142,15 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
     MigrationRunner::from_static_migrations(old_codex_only_agent_profile_migrations())
         .run(&database.connection)
         .expect("old migrations");
+    let codex_only_migration_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = '0007_restructure_agent_profiles'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("codex-only migration count");
+    assert_eq!(codex_only_migration_count, 1);
     let current_version: String = database
         .connection
         .query_row(
@@ -150,7 +159,7 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
             |row| row.get(0),
         )
         .expect("current migration");
-    assert_eq!(current_version, "0007_restructure_agent_profiles");
+    assert_eq!(current_version, "0008_agent_sessions_and_session_events");
     database
         .connection
         .execute(
@@ -160,6 +169,27 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
             [],
         )
         .expect("insert existing codex profile");
+    let codex_profile_id = database.connection.last_insert_rowid();
+    database
+        .connection
+        .execute(
+            "INSERT INTO agent_sessions (
+               issue_id,
+               title,
+               agent_profile_id,
+               status,
+               attention,
+               working_dir,
+               command_snapshot,
+               prompt_snapshot,
+               log_path,
+               last_active_at,
+               started_at,
+               closed_at
+             ) VALUES (NULL, 'Existing Session', ?1, 'running', 'none', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780638500000, 1780638500000, NULL)",
+            [codex_profile_id],
+        )
+        .expect("insert existing agent session");
 
     MigrationRunner::default()
         .run(&database.connection)
@@ -202,6 +232,17 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
         )
         .expect("existing codex profile count");
     assert_eq!(existing_codex_profile_count, 1);
+    let existing_session_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM agent_sessions WHERE agent_profile_id = ?1",
+            [codex_profile_id],
+            |row| row.get(0),
+        )
+        .expect("existing session count");
+    assert_eq!(existing_session_count, 1);
+    let foreign_key_violation_count = foreign_key_violation_count(&database.connection);
+    assert_eq!(foreign_key_violation_count, 0);
 }
 
 #[test]
@@ -378,6 +419,10 @@ fn old_codex_only_agent_profile_migrations() -> Vec<(&'static str, &'static str)
             include_str!("../migrations/0006_agent_profiles_and_project_overrides.sql"),
         ),
         ("0007_restructure_agent_profiles", OLD_CODEX_ONLY_0007),
+        (
+            "0008_agent_sessions_and_session_events",
+            include_str!("../migrations/0008_agent_sessions_and_session_events.sql"),
+        ),
     ]
 }
 
@@ -409,6 +454,18 @@ fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
         )
         .expect("insert project");
     connection.last_insert_rowid()
+}
+
+fn foreign_key_violation_count(connection: &rusqlite::Connection) -> i64 {
+    let mut statement = connection
+        .prepare("PRAGMA foreign_key_check")
+        .expect("foreign key check");
+    let violations = statement
+        .query_map([], |_| Ok(()))
+        .expect("query foreign key violations")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect foreign key violations");
+    violations.len() as i64
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {

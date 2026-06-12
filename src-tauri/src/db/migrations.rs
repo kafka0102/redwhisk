@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use rusqlite::config::DbConfig;
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
@@ -96,7 +97,7 @@ impl MigrationRunner {
         let result = (|| {
             for migration in migrations {
                 if !has_migration(connection, migration.version)? {
-                    connection.execute_batch(migration.sql)?;
+                    execute_migration(connection, &migration)?;
                     connection.execute(
                         "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
                         params![migration.version],
@@ -205,6 +206,31 @@ impl MigrationRunner {
 struct Migration {
     version: &'static str,
     sql: &'static str,
+}
+
+fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite::Result<()> {
+    if migration.version != ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION {
+        return connection.execute_batch(migration.sql);
+    }
+
+    let previous_writable_schema =
+        connection.db_config(DbConfig::SQLITE_DBCONFIG_WRITABLE_SCHEMA)?;
+    let previous_defensive = connection.db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE)?;
+    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, false)?;
+    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_WRITABLE_SCHEMA, true)?;
+
+    let migration_result = connection.execute_batch(migration.sql);
+    let restore_result = connection.set_db_config(
+        DbConfig::SQLITE_DBCONFIG_WRITABLE_SCHEMA,
+        previous_writable_schema,
+    );
+    let restore_defensive_result =
+        connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, previous_defensive);
+
+    migration_result?;
+    restore_result?;
+    restore_defensive_result?;
+    Ok(())
 }
 
 fn has_migration(connection: &Connection, version: &str) -> rusqlite::Result<bool> {
