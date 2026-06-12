@@ -907,28 +907,24 @@ fn agent_session_repository_reads_sessions_for_claude_profiles() {
     let project_id = insert_project(&database.connection, "claude-session-project");
     let issue_id =
         insert_issue_with_title(&database.connection, project_id, "running", "Claude issue");
-    database
-        .connection
-        .execute_batch("PRAGMA ignore_check_constraints = ON")
-        .expect("enable claude profile fixture");
-    database
-        .connection
-        .execute(
-            "INSERT INTO agent_profiles (
-               name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
-             ) VALUES ('Claude', 'claude', '/usr/local/bin/claude', 'global', NULL, 'default', 0, 'review', '')",
-            [],
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Claude",
+            AgentType::Claude,
+            "/usr/local/bin/claude",
+            &AgentScope::Global,
+            None,
+            "default",
+            false,
+            "review",
+            "",
         )
-        .expect("insert claude profile fixture");
-    database
-        .connection
-        .execute_batch("PRAGMA ignore_check_constraints = OFF")
-        .expect("restore profile constraints");
-    let profile_id = database.connection.last_insert_rowid();
+        .expect("save claude profile");
     insert_agent_session_row(
         &database.connection,
         issue_id,
-        profile_id,
+        profile.id,
         AgentSessionStatus::Running,
         1_780_638_500_000,
         None,

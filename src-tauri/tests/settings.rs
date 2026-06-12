@@ -96,6 +96,43 @@ fn save_global_agent_profile_resolves_command() {
 }
 
 #[test]
+fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("claude", Ok("/usr/local/bin/claude")),
+    );
+
+    let profile = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "Claude Default".to_string(),
+            agent_type: AgentType::Claude,
+            command: "claude".to_string(),
+            scope: AgentScope::Global,
+            project_id: None,
+            mode: "default".to_string(),
+            dangerous: false,
+            default_skill: "review".to_string(),
+            prompt_template: "".to_string(),
+        })
+        .expect("saved claude agent profile");
+
+    assert_eq!(profile.agent_type, AgentType::Claude);
+    assert_eq!(profile.command, "/usr/local/bin/claude");
+
+    let stored_profiles = service
+        .list_agent_profiles(ListAgentProfilesInput {
+            scope: AgentScope::Global,
+            project_id: None,
+        })
+        .expect("list profiles")
+        .profiles;
+    assert_eq!(stored_profiles, vec![profile]);
+}
+
+#[test]
 fn save_agent_profile_rejects_unavailable_command_without_persisting() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

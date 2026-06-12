@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS agent_profiles;
 CREATE TABLE agent_profiles (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  agent_type TEXT NOT NULL CHECK (agent_type IN ('codex')),
+  agent_type TEXT NOT NULL CHECK (agent_type IN ('codex', 'claude')),
   command TEXT NOT NULL,
   scope TEXT NOT NULL CHECK (scope IN ('project', 'global')),
   project_id INTEGER,
