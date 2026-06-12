@@ -402,6 +402,58 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
+  it("renders agent type icons without visible text labels", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Blue agent issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 303,
+          issueId: 22,
+          issueTitle: "Orange agent issue",
+          title: null,
+          agentType: "claude_code",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    const runningGroup = await screen.findByRole("region", {
+      name: "In Progress sessions",
+    });
+    const codexRow = within(runningGroup).getByRole("button", {
+      name: /Blue agent issue/i,
+    });
+    const claudeRow = within(runningGroup).getByRole("button", {
+      name: /Orange agent issue/i,
+    });
+
+    expect(within(codexRow).getByLabelText("Agent 类型：Codex")).toHaveClass(
+      "agents-session-row__agent-logo--codex",
+    );
+    expect(within(claudeRow).getByLabelText("Agent 类型：Claude")).toHaveClass(
+      "agents-session-row__agent-logo--claude",
+    );
+    expect(codexRow).not.toHaveTextContent("Codex");
+    expect(claudeRow).not.toHaveTextContent("Claude");
+  });
+
   it("opens the temporary session dialog from the toolbar without changing session state", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
@@ -1011,9 +1063,15 @@ describe("AgentsActivity", () => {
     expect(
       within(attentionRow).getByLabelText("Session 状态：输出完成"),
     ).toHaveClass("agents-session-row__status-dot--completed");
+    expect(
+      within(attentionRow).queryByLabelText("Session 正在运行"),
+    ).not.toBeInTheDocument();
     expect(within(quietRow).getByLabelText("Session 状态：运行中")).toHaveClass(
       "agents-session-row__status-dot--running",
     );
+    expect(
+      within(quietRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
     expect(attentionRow).not.toHaveTextContent("running");
     expect(quietRow).not.toHaveTextContent("running");
   });
@@ -1249,11 +1307,14 @@ describe("AgentsActivity", () => {
     });
 
     const refreshedRow = within(runningGroup).getByRole("button", {
-      name: /Session 正在运行Polling issue/i,
+      name: /^Polling issue/i,
     });
     expect(
       within(refreshedRow).getByLabelText("Session 状态：输出完成"),
     ).toHaveClass("agents-session-row__status-dot--completed");
+    expect(
+      within(refreshedRow).queryByLabelText("Session 正在运行"),
+    ).not.toBeInTheDocument();
   });
 
   it("turns a running session blue after the user clicks it", async () => {

@@ -1347,7 +1347,7 @@ button:focus-visible {
 
 .agents-session-row__running-icon {
   flex: 0 0 auto;
-  color: var(--color-lane-review-marker);
+  color: var(--color-text-subtle);
   animation: agents-session-spin 900ms linear infinite;
 }
 
@@ -1368,8 +1368,8 @@ button:focus-visible {
 
 .agents-session-row__status-dot {
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 999px;
   background: var(--color-text-muted);
 }
@@ -1432,21 +1432,54 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  max-width: 84px;
-  height: 15px;
-  padding: 0 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 1;
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0;
+  line-height: 0;
+}
+
+.agents-session-row__agent-logo::before,
+.agents-session-row__agent-logo::after {
+  content: "";
+  position: absolute;
+}
+
+.agents-session-row__agent-logo--codex::before {
+  inset: 1px;
+  border-radius: 4px;
+  background: #2563eb;
+}
+
+.agents-session-row__agent-logo--codex::after {
+  inset: 5px;
+  border-radius: 2px;
+  background: var(--color-surface);
 }
 
 .agents-session-row__agent-logo--claude {
-  background: color-mix(in srgb, var(--color-lane-running-marker) 12%, var(--color-surface));
-  color: var(--color-lane-running-marker);
+  border-radius: 999px;
+}
+
+.agents-session-row__agent-logo--claude::before {
+  inset: 1px;
+  border-radius: 999px;
+  background: var(--color-lane-running-marker);
+}
+
+.agents-session-row__agent-logo--claude::after {
+  top: 4px;
+  left: 5px;
+  width: 6px;
+  height: 8px;
+  border-radius: 999px 999px 3px 3px;
+  background: var(--color-surface);
+  transform: rotate(-18deg);
 }
 
 .agents-session-row__meta-status {

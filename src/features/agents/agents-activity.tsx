@@ -1381,6 +1381,11 @@ function SessionGroup({
         <div className="agents-session-list">
           {sessions.map((session) => {
             const outputLine = formatSessionOutputLine(session.latestOutput);
+            const statusTone = getSessionStatusTone(
+              session,
+              viewedSessionActivity,
+              selectedSessionId,
+            );
             const statusLabel = formatSessionStatusLabel(
               session,
               viewedSessionActivity,
@@ -1397,7 +1402,7 @@ function SessionGroup({
                 onClick={() => onSelect(session.sessionId)}
               >
                 <span className="agents-session-row__header">
-                  {session.status === "running" ? (
+                  {statusTone === "running" ? (
                     <LoaderCircle
                       aria-label="Session 正在运行"
                       className="agents-session-row__running-icon"
@@ -1412,11 +1417,7 @@ function SessionGroup({
                 <span className="agents-session-row__output">
                   <span
                     aria-label={`Session 状态：${statusLabel}`}
-                    className={buildSessionStatusDotClassName(
-                      session,
-                      viewedSessionActivity,
-                      selectedSessionId,
-                    )}
+                    className={buildSessionStatusDotClassName(statusTone)}
                   />
                   <span className="agents-session-row__latest-output">
                     {outputLine}
@@ -1426,10 +1427,8 @@ function SessionGroup({
                   <span
                     aria-label={`Agent 类型：${agentLabel}`}
                     className={buildAgentLogoClassName(session.agentType)}
-                  >
-                    {agentLabel}
-                  </span>
-                  {shouldShowExplicitSessionStatus(session) ? (
+                  />
+                  {shouldShowSessionRowStatus(session) ? (
                     <span className="agents-session-row__meta-status">
                       {statusLabel}
                     </span>
@@ -1469,17 +1468,7 @@ function buildAgentLogoClassName(
   return `agents-session-row__agent-logo agents-session-row__agent-logo--${tone}`;
 }
 
-function buildSessionStatusDotClassName(
-  session: AgentSessionListItem,
-  viewedSessionActivity: Record<number, number>,
-  selectedSessionId: number | null,
-): string {
-  const tone = getSessionStatusTone(
-    session,
-    viewedSessionActivity,
-    selectedSessionId,
-  );
-
+function buildSessionStatusDotClassName(tone: string): string {
   return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
 }
 
@@ -1590,6 +1579,10 @@ function shouldShowExplicitSessionStatus(
   session: AgentSessionListItem,
 ): boolean {
   return session.status === "crashed" || session.status === "stopped";
+}
+
+function shouldShowSessionRowStatus(session: AgentSessionListItem): boolean {
+  return session.status === "crashed";
 }
 
 function isViewedSession(
