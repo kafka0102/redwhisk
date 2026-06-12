@@ -467,7 +467,10 @@ function SettingsContentFrame({
   item: (typeof SETTINGS_MENU_ITEMS)[number];
 }) {
   return (
-    <section className="settings-section" aria-label={item.label}>
+    <section
+      className={`settings-section settings-section--${item.key}`}
+      aria-label={item.label}
+    >
       <div className="settings-section__header">
         <h3>{item.label}</h3>
       </div>

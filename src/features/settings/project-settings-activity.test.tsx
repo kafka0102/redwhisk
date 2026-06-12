@@ -205,6 +205,9 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByRole("heading", { name: "General" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("General")).toHaveClass(
+      "settings-section--general",
+    );
     expect(
       screen.getByLabelText("General").querySelector(".settings-section__body"),
     ).toBeInTheDocument();
