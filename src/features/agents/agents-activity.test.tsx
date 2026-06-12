@@ -1000,7 +1000,8 @@ describe("AgentsActivity", () => {
     );
   });
 
-  it("shows an attention status dot on session rows without rendering running text", async () => {
+  it("keeps attention session rows blue after selecting another session", async () => {
+    const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -1062,7 +1063,7 @@ describe("AgentsActivity", () => {
 
     expect(
       within(attentionRow).getByLabelText("Session 状态：输出完成"),
-    ).toHaveClass("agents-session-row__status-dot--completed");
+    ).toHaveClass("agents-session-row__status-dot--viewed");
     expect(
       within(attentionRow).queryByLabelText("Session 正在运行"),
     ).not.toBeInTheDocument();
@@ -1072,6 +1073,15 @@ describe("AgentsActivity", () => {
     expect(
       within(quietRow).getByLabelText("Session 正在运行"),
     ).toBeInTheDocument();
+
+    await user.click(quietRow);
+
+    expect(
+      within(attentionRow).getByLabelText("Session 状态：输出完成"),
+    ).toHaveClass("agents-session-row__status-dot--viewed");
+    expect(
+      within(attentionRow).queryByLabelText("Session 正在运行"),
+    ).not.toBeInTheDocument();
     expect(attentionRow).not.toHaveTextContent("running");
     expect(quietRow).not.toHaveTextContent("running");
   });
@@ -1311,7 +1321,7 @@ describe("AgentsActivity", () => {
     });
     expect(
       within(refreshedRow).getByLabelText("Session 状态：输出完成"),
-    ).toHaveClass("agents-session-row__status-dot--completed");
+    ).toHaveClass("agents-session-row__status-dot--viewed");
     expect(
       within(refreshedRow).queryByLabelText("Session 正在运行"),
     ).not.toBeInTheDocument();
