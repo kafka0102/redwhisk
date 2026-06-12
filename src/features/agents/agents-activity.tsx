@@ -33,6 +33,9 @@ import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
+const AGENTS_SIDEBAR_DEFAULT_WIDTH = 220;
+const AGENTS_SIDEBAR_MIN_WIDTH = 220;
+const AGENTS_SIDEBAR_MAX_WIDTH = 440;
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
@@ -74,8 +77,8 @@ export function AgentsActivity({
   projectCompletionPolicy = "manual",
   projectId,
 }: AgentsActivityProps) {
-  const defaultSidebarWidth = 200;
-  const infoPaneDefaultWidth = defaultSidebarWidth;
+  const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
+  const infoPaneDefaultWidth = 200;
   const infoPaneMinWidth = 200;
   const infoPaneMaxWidth = 420;
   const [isLoading, setIsLoading] = useState(true);
@@ -755,8 +758,8 @@ export function AgentsActivity({
       if (dragState.pane === "sidebar") {
         const deltaX = event.clientX - dragState.startX;
         const nextWidth = Math.max(
-          200,
-          Math.min(420, dragState.startWidth + deltaX),
+          AGENTS_SIDEBAR_MIN_WIDTH,
+          Math.min(AGENTS_SIDEBAR_MAX_WIDTH, dragState.startWidth + deltaX),
         );
         setSidebarWidth(nextWidth);
         return;
@@ -887,8 +890,8 @@ export function AgentsActivity({
       <div
         aria-label="Resize session list"
         aria-orientation="vertical"
-        aria-valuemax={420}
-        aria-valuemin={200}
+        aria-valuemax={AGENTS_SIDEBAR_MAX_WIDTH}
+        aria-valuemin={AGENTS_SIDEBAR_MIN_WIDTH}
         aria-valuenow={sidebarWidth}
         className="agents-splitter"
         role="separator"
@@ -905,12 +908,16 @@ export function AgentsActivity({
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
-            setSidebarWidth((currentWidth) => Math.max(200, currentWidth - 16));
+            setSidebarWidth((currentWidth) =>
+              Math.max(AGENTS_SIDEBAR_MIN_WIDTH, currentWidth - 16),
+            );
           }
 
           if (event.key === "ArrowRight") {
             event.preventDefault();
-            setSidebarWidth((currentWidth) => Math.min(420, currentWidth + 16));
+            setSidebarWidth((currentWidth) =>
+              Math.min(AGENTS_SIDEBAR_MAX_WIDTH, currentWidth + 16),
+            );
           }
         }}
       />
@@ -1367,6 +1374,11 @@ function SessionGroup({
                   {formatSessionTitle(session)}
                 </span>
               </span>
+              {session.latestOutput ? (
+                <span className="agents-session-row__latest-output">
+                  {session.latestOutput}
+                </span>
+              ) : null}
               <span className="agents-session-row__meta">
                 <span className="agents-session-row__meta-main">
                   {formatAgentType(session.agentType)}

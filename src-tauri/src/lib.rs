@@ -6,6 +6,7 @@ pub mod db;
 pub mod git;
 pub mod types;
 
+use agent::latest_output_writer::LatestOutputWriter;
 use app_state::AppState;
 use core::local_data_service::LocalDataService;
 use tauri::{Emitter, Manager};
@@ -20,8 +21,10 @@ pub fn run() {
         .manage(AppState::new(LocalDataService::new()))
         .setup(|app| {
             let app_handle = app.handle().clone();
+            let latest_output_writer = LatestOutputWriter::new(app.path().app_data_dir()?);
             let state = app.state::<AppState>();
             state.pty_sessions.set_output_sink(move |event| {
+                latest_output_writer.record_terminal_output(&event);
                 let _ = app_handle.emit(AGENT_SESSION_TERMINAL_OUTPUT_EVENT, event);
             });
             Ok(())

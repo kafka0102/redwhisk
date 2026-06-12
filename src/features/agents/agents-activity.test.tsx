@@ -309,6 +309,7 @@ describe("AgentsActivity", () => {
           agentType: "codex",
           status: "running",
           attention: "none",
+          latestOutput: "Running pnpm test -- --run agents-activity.test.tsx",
           lastActiveAt: 1_780_638_000_000,
           startedAt: 1_780_638_000_000,
           closedAt: null,
@@ -364,17 +365,20 @@ describe("AgentsActivity", () => {
 
     expect(within(runningGroup).getByText("In Process(2)")).toBeInTheDocument();
     expect(within(reviewGroup).getByText("Review(0)")).toBeInTheDocument();
-    expect(
-      within(completedGroup).getByText("Done(1)"),
-    ).toBeInTheDocument();
+    expect(within(completedGroup).getByText("Done(1)")).toBeInTheDocument();
     expect(
       within(runningGroup).getByRole("button", { name: /Existing issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(runningGroup).getByText(
+        "Running pnpm test -- --run agents-activity.test.tsx",
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Linked Issue")).not.toBeInTheDocument();
     expect(screen.queryByText("Selected Session")).not.toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize session list" }),
-    ).toHaveAttribute("aria-valuenow", "200");
+    ).toHaveAttribute("aria-valuenow", "220");
     expect(
       screen.getByRole("separator", { name: "Resize session info" }),
     ).toHaveAttribute("aria-valuenow", "0");
@@ -831,9 +835,7 @@ describe("AgentsActivity", () => {
       within(inProcessGroup).getByText("In Process(2)"),
     ).toBeInTheDocument();
     expect(within(reviewGroup).getByText("Review(2)")).toBeInTheDocument();
-    expect(
-      within(completedGroup).getByText("Done(2)"),
-    ).toBeInTheDocument();
+    expect(within(completedGroup).getByText("Done(2)")).toBeInTheDocument();
     expect(
       within(inProcessGroup).getByRole("button", { name: /Running issue/i }),
     ).toBeInTheDocument();
@@ -2382,10 +2384,10 @@ describe("AgentsActivity", () => {
 
     separator.focus();
     await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "216");
+    expect(separator).toHaveAttribute("aria-valuenow", "236");
 
     await user.keyboard("{ArrowLeft}");
-    expect(separator).toHaveAttribute("aria-valuenow", "200");
+    expect(separator).toHaveAttribute("aria-valuenow", "220");
   });
 
   it("resizes the session list when dragging the separator", async () => {
@@ -2415,7 +2417,7 @@ describe("AgentsActivity", () => {
     fireEvent.mouseDown(separator, { clientX: 200 });
     fireEvent.mouseMove(window, { clientX: 296 });
 
-    expect(separator).toHaveAttribute("aria-valuenow", "296");
+    expect(separator).toHaveAttribute("aria-valuenow", "316");
 
     fireEvent.mouseUp(window);
   });
