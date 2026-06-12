@@ -217,7 +217,10 @@ fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite
         connection.db_config(DbConfig::SQLITE_DBCONFIG_WRITABLE_SCHEMA)?;
     let previous_defensive = connection.db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE)?;
     connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, false)?;
-    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_WRITABLE_SCHEMA, true)?;
+    if let Err(error) = connection.set_db_config(DbConfig::SQLITE_DBCONFIG_WRITABLE_SCHEMA, true) {
+        let _ = connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, previous_defensive);
+        return Err(error);
+    }
 
     let migration_result = connection.execute_batch(migration.sql);
     let restore_result = connection.set_db_config(
