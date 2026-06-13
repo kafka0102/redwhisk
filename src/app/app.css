@@ -630,6 +630,89 @@ button:focus-visible {
   overflow-y: auto;
 }
 
+.agent-dialog__command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.agent-dialog__test-button {
+  min-width: 52px;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+
+.agent-dialog__fieldset {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agent-dialog__fieldset legend {
+  margin: 0 0 2px;
+  padding: 0;
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.agent-dialog__segmented-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-dialog__radio-option,
+.agent-dialog__skill-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agent-dialog__radio-option {
+  align-items: center;
+}
+
+.agent-dialog__skill-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-dialog__skill-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agent-dialog__skill-name {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.agent-dialog__skill-path,
+.agent-dialog__skill-status {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.agent-dialog__skill-path {
+  overflow-wrap: anywhere;
+}
+
+.agent-dialog__skill-status {
+  margin: 0;
+}
+
 .settings-header,
 .settings-panel__header,
 .settings-card__header,

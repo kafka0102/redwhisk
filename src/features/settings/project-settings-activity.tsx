@@ -419,7 +419,7 @@ export function ProjectSettingsActivity({
                     key={`create-${currentAddForm.projectId}`}
                     mode="create"
                     scope="global"
-                    projectId={null}
+                    projectId={currentAddForm.projectId}
                     onCancel={() => setAddForm(null)}
                     onSaved={handleProfileSaved}
                   />
