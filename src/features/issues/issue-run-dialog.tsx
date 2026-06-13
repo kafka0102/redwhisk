@@ -14,7 +14,7 @@ import {
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
 interface IssueRunDialogProps {
-  issue: Pick<IssueRecord, "id" | "title" | "description">;
+  issue: Pick<IssueRecord, "id" | "title" | "description" | "attachments">;
   projectId: number;
   onClose: () => void;
   onStarted: (result: StartAgentSessionResult) => void | Promise<void>;
@@ -201,7 +201,7 @@ export function IssueRunDialog({
         ref={dialogRef}
         aria-label="Run Dialog"
         aria-modal="true"
-        className="issue-dialog"
+        className="issue-dialog issue-dialog--compact"
         role="dialog"
         onKeyDown={handleKeyDown}
       >

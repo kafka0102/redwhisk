@@ -3,12 +3,48 @@ import { invokeCommand } from "../../shared/commands/command-client";
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
+export type IssueAttachmentKind =
+  | "image"
+  | "pdf"
+  | "word"
+  | "text"
+  | "generic";
+
+export interface IssueAttachmentRecord {
+  id: number;
+  issueId: number;
+  displayName: string;
+  relativePath: string;
+  absolutePath: string;
+  mimeType?: string | null;
+  fileSize: number;
+  kind: IssueAttachmentKind;
+  isPreviewable: boolean;
+  createdAt: number;
+}
+
+export interface IssueAttachmentDraftInput {
+  attachmentId?: number | null;
+  tempToken?: string | null;
+  sourcePath?: string | null;
+  displayName: string;
+  mimeType?: string | null;
+}
+
+export interface IssueAttachmentPreviewRecord {
+  attachmentId?: number | null;
+  displayName: string;
+  kind: IssueAttachmentKind;
+  textContent?: string | null;
+  absolutePath?: string | null;
+}
 
 export interface IssueRecord {
   id: number;
   projectId: number;
   title: string;
   description: string;
+  attachments?: IssueAttachmentRecord[];
   status: IssueStatus;
   linkedSessionId?: number | null;
   linkedSessionStatus?: AgentSessionStatus | null;
@@ -30,6 +66,7 @@ export interface CreateIssueInput {
   projectId: number;
   title: string;
   description: string;
+  attachments?: IssueAttachmentDraftInput[];
 }
 
 export interface UpdateIssueInput {
@@ -37,6 +74,7 @@ export interface UpdateIssueInput {
   issueId: number;
   title: string;
   description: string;
+  attachments?: IssueAttachmentDraftInput[];
 }
 
 export interface MarkIssueReviewInput {
@@ -72,6 +110,21 @@ export interface DetectAgentCommitCompletionInput {
 export interface GetIssueSummaryInput {
   projectId: number;
   issueId: number;
+}
+
+export interface PreviewIssueAttachmentInput {
+  projectId: number;
+  attachmentId?: number;
+  sourcePath?: string;
+  displayName?: string;
+}
+
+export interface ExportIssueAttachmentInput {
+  projectId: number;
+  attachmentId?: number;
+  sourcePath?: string;
+  displayName?: string;
+  targetPath: string;
 }
 
 export interface AgentCommitChangedFileSummary {
@@ -206,6 +259,22 @@ export function getIssueSummary(
   input: GetIssueSummaryInput,
 ): Promise<IssueSummaryRecord> {
   return invokeCommand<IssueSummaryRecord>("get_issue_summary", {
+    input,
+  });
+}
+
+export function previewIssueAttachment(
+  input: PreviewIssueAttachmentInput,
+): Promise<IssueAttachmentPreviewRecord> {
+  return invokeCommand<IssueAttachmentPreviewRecord>("preview_issue_attachment", {
+    input,
+  });
+}
+
+export function exportIssueAttachment(
+  input: ExportIssueAttachmentInput,
+): Promise<void> {
+  return invokeCommand("export_issue_attachment", {
     input,
   });
 }

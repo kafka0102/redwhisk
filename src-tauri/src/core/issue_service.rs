@@ -1,4 +1,6 @@
-use std::path::Path;
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
@@ -9,6 +11,7 @@ use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::event_repository::EventRepository;
+use crate::db::issue_attachment_repository::IssueAttachmentRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
@@ -26,9 +29,11 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
     CompleteIssueManualInput, CreateIssueInput, DetectAgentCommitCompletionInput,
-    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult, GetIssueSummaryInput,
-    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput,
+    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind,
+    IssueAttachmentPreview, IssueAttachmentRecord, IssueListResponse, IssueRecord, IssueStatus,
+    IssueSummaryCompletionInfo, IssueSummaryRecord, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SendAgentCommitPromptInput,
     SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
@@ -37,6 +42,7 @@ use crate::types::session_event::SessionEventType;
 
 pub struct IssueService<'connection> {
     issue_repository: IssueRepository<'connection>,
+    issue_attachment_repository: IssueAttachmentRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
 }
 
@@ -51,12 +57,33 @@ struct AgentCommitContext {
     snapshot: GitSnapshot,
 }
 
+struct NewAttachmentPersistence {
+    temp_token: String,
+    attachment_id: i64,
+}
+
+struct AttachmentAnalysis {
+    kind: IssueAttachmentKind,
+    is_previewable: bool,
+}
+
+struct ResolvedAttachmentSource {
+    attachment_id: Option<i64>,
+    display_name: String,
+    absolute_path: String,
+    kind: IssueAttachmentKind,
+    is_previewable: bool,
+}
+
 impl<'connection> IssueService<'connection> {
     pub fn new(
         issue_repository: IssueRepository<'connection>,
         project_repository: ProjectRepository<'connection>,
     ) -> Self {
         Self {
+            issue_attachment_repository: IssueAttachmentRepository::new(
+                issue_repository.connection(),
+            ),
             issue_repository,
             project_repository,
         }
@@ -67,7 +94,10 @@ impl<'connection> IssueService<'connection> {
         let issues = self
             .issue_repository
             .list_by_project_id(project_id)
-            .map_err(issue_database_error)?;
+            .map_err(issue_database_error)?
+            .into_iter()
+            .map(|issue| self.hydrate_issue(issue))
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(IssueListResponse { issues })
     }
@@ -142,7 +172,7 @@ impl<'connection> IssueService<'connection> {
         }
 
         Ok(IssueSummaryRecord {
-            issue,
+            issue: self.hydrate_issue(issue)?,
             session_started_at: session.as_ref().map(|session| session.started_at),
             session_closed_at: session.as_ref().and_then(|session| session.closed_at),
             completion,
@@ -151,7 +181,7 @@ impl<'connection> IssueService<'connection> {
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
-        self.ensure_project_exists(input.project_id)?;
+        let project = self.require_project(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
         let transaction = self
@@ -166,36 +196,178 @@ impl<'connection> IssueService<'connection> {
             &description,
         )
         .map_err(issue_database_error)?;
+        let (created_files, saved_issue) = match persist_new_attachments(
+            &transaction,
+            &project.repo_path,
+            issue.id,
+            &input.attachments,
+        ) {
+            Ok((attachments, files)) => {
+                let saved_issue = if attachments.is_empty() {
+                    issue
+                } else {
+                    let rewritten_description =
+                        rewrite_attachment_tokens(&description, &attachments)?;
+                    update_issue_title_and_description_in_transaction(
+                        &transaction,
+                        input.project_id,
+                        issue.id,
+                        &title,
+                        &rewritten_description,
+                    )
+                    .map_err(issue_database_error)?
+                    .ok_or_else(|| issue_not_found(issue.id))?
+                };
+                (files, saved_issue)
+            }
+            Err(error) => {
+                cleanup_created_files(&[] as &[PathBuf]);
+                return Err(error);
+            }
+        };
         let payload_json = json!({
-            "title": issue.title,
-            "description": issue.description,
+            "title": saved_issue.title,
+            "description": saved_issue.description,
             "status": "backlog",
         })
         .to_string();
 
         EventRepository::insert_issue_action_in_transaction(
             &transaction,
-            issue.id,
+            saved_issue.id,
             IssueActionType::IssueCreated,
             &payload_json,
-            issue.created_at,
+            saved_issue.created_at,
         )
         .map_err(issue_database_error)?;
 
-        transaction.commit().map_err(issue_database_error)?;
+        if let Err(error) = transaction.commit() {
+            cleanup_created_files(&created_files);
+            return Err(issue_database_error(error));
+        }
 
-        Ok(issue)
+        self.issue_repository
+            .find_by_id(saved_issue.id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| issue_not_found(saved_issue.id))
+            .and_then(|issue| self.hydrate_issue(issue))
     }
 
     pub fn update_issue(&self, input: UpdateIssueInput) -> Result<IssueRecord, CommandError> {
-        self.ensure_project_exists(input.project_id)?;
+        let project = self.require_project(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+        let existing_attachments =
+            IssueAttachmentRepository::new(self.issue_repository.connection())
+                .list_by_issue_id(issue.id)
+                .map_err(issue_database_error)?;
+        let (new_attachments, created_files) = persist_new_attachments(
+            &transaction,
+            &project.repo_path,
+            issue.id,
+            &input.attachments,
+        )?;
+        let rewritten_description = rewrite_attachment_tokens(&description, &new_attachments)?;
+        let referenced_attachment_ids = parse_attachment_ids(&rewritten_description);
+        let removed_attachments = existing_attachments
+            .iter()
+            .filter(|attachment| !referenced_attachment_ids.contains(&attachment.id))
+            .cloned()
+            .collect::<Vec<_>>();
+        update_issue_title_and_description_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            &title,
+            &rewritten_description,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| issue_not_found(input.issue_id))?;
+        delete_attachment_files(&removed_attachments)?;
+        let removed_ids = removed_attachments
+            .iter()
+            .map(|attachment| attachment.id)
+            .collect::<Vec<_>>();
+        IssueAttachmentRepository::delete_by_ids_in_transaction(&transaction, &removed_ids)
+            .map_err(issue_database_error)?;
+
+        if let Err(error) = transaction.commit() {
+            cleanup_created_files(&created_files);
+            return Err(issue_database_error(error));
+        }
 
         self.issue_repository
-            .update_title_and_description(input.project_id, input.issue_id, &title, &description)
+            .find_by_id(input.issue_id)
             .map_err(issue_database_error)?
             .ok_or_else(|| issue_not_found(input.issue_id))
+            .and_then(|saved_issue| self.hydrate_issue(saved_issue))
+    }
+
+    pub fn preview_issue_attachment(
+        &self,
+        input: PreviewIssueAttachmentInput,
+    ) -> Result<IssueAttachmentPreview, CommandError> {
+        let source = self.resolve_attachment_source(
+            input.project_id,
+            input.attachment_id,
+            input.source_path,
+            input.display_name,
+        )?;
+
+        if !source.is_previewable {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前附件不支持预览。",
+            ));
+        }
+
+        let text_content = if source.kind == IssueAttachmentKind::Text {
+            Some(read_previewable_text_file(&source.absolute_path)?)
+        } else {
+            None
+        };
+        let absolute_path = if source.kind == IssueAttachmentKind::Image {
+            Some(source.absolute_path)
+        } else {
+            None
+        };
+
+        Ok(IssueAttachmentPreview {
+            attachment_id: source.attachment_id,
+            display_name: source.display_name,
+            kind: source.kind,
+            is_previewable: true,
+            text_content,
+            absolute_path,
+        })
+    }
+
+    pub fn export_issue_attachment(
+        &self,
+        input: ExportIssueAttachmentInput,
+    ) -> Result<(), CommandError> {
+        let source = self.resolve_attachment_source(
+            input.project_id,
+            input.attachment_id,
+            input.source_path,
+            input.display_name,
+        )?;
+        let target_path = PathBuf::from(input.target_path);
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent).map_err(issue_io_error)?;
+        }
+        fs::copy(&source.absolute_path, &target_path).map_err(issue_io_error)?;
+        Ok(())
     }
 
     pub fn mark_issue_review(
@@ -934,6 +1106,26 @@ impl<'connection> IssueService<'connection> {
         IssueService::new(issue_repository, project_repository).update_issue(input)
     }
 
+    pub fn preview_issue_attachment_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: PreviewIssueAttachmentInput,
+    ) -> Result<IssueAttachmentPreview, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).preview_issue_attachment(input)
+    }
+
+    pub fn export_issue_attachment_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ExportIssueAttachmentInput,
+    ) -> Result<(), CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).export_issue_attachment(input)
+    }
+
     pub fn mark_issue_review_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: MarkIssueReviewInput,
@@ -1020,6 +1212,92 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
                     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             })
+    }
+
+    fn require_project(
+        &self,
+        project_id: i64,
+    ) -> Result<crate::types::project::ProjectSummary, CommandError> {
+        self.project_repository
+            .find_by_id(project_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
+            })
+    }
+
+    fn hydrate_issue(&self, mut issue: IssueRecord) -> Result<IssueRecord, CommandError> {
+        issue.attachments = self
+            .issue_attachment_repository
+            .list_by_issue_id(issue.id)
+            .map_err(issue_database_error)?;
+        Ok(issue)
+    }
+
+    fn resolve_attachment_source(
+        &self,
+        project_id: i64,
+        attachment_id: Option<i64>,
+        source_path: Option<String>,
+        display_name: Option<String>,
+    ) -> Result<ResolvedAttachmentSource, CommandError> {
+        match (attachment_id, source_path) {
+            (Some(attachment_id), None) => {
+                let attachment = self
+                    .issue_attachment_repository
+                    .find_by_id(attachment_id)
+                    .map_err(issue_database_error)?
+                    .ok_or_else(|| {
+                        CommandError::new(CommandErrorCode::IssueNotFound, "附件不存在。")
+                            .with_detail(
+                                ErrorDetail::new("IssueAttachment")
+                                    .with_value("attachmentId", attachment_id),
+                            )
+                    })?;
+                let issue = self
+                    .issue_repository
+                    .find_by_id(attachment.issue_id)
+                    .map_err(issue_database_error)?
+                    .filter(|issue| issue.project_id == project_id)
+                    .ok_or_else(|| issue_not_found(attachment.issue_id))?;
+                let _ = issue;
+
+                Ok(ResolvedAttachmentSource {
+                    attachment_id: Some(attachment.id),
+                    display_name: attachment.display_name,
+                    absolute_path: attachment.absolute_path,
+                    kind: attachment.kind,
+                    is_previewable: attachment.is_previewable,
+                })
+            }
+            (None, Some(source_path)) => {
+                self.ensure_project_exists(project_id)?;
+                let path = PathBuf::from(&source_path);
+                let file_name = display_name
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| infer_display_name(&path));
+                let metadata = fs::metadata(&path).map_err(issue_io_error)?;
+                if !metadata.is_file() {
+                    return Err(CommandError::new(
+                        CommandErrorCode::IssueValidationFailed,
+                        "Draft 附件路径不可读取。",
+                    ));
+                }
+                let analysis = analyze_attachment(&file_name, None);
+                Ok(ResolvedAttachmentSource {
+                    attachment_id: None,
+                    display_name: file_name,
+                    absolute_path: path.to_string_lossy().to_string(),
+                    kind: analysis.kind,
+                    is_previewable: analysis.is_previewable,
+                })
+            }
+            _ => Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "附件预览或导出参数无效。",
+            )),
+        }
     }
 
     fn validate_agent_commit_context(
@@ -1425,4 +1703,283 @@ fn current_epoch_millis() -> Result<i64, CommandError> {
         CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
+}
+
+fn persist_new_attachments(
+    transaction: &rusqlite::Transaction<'_>,
+    repo_path: &str,
+    issue_id: i64,
+    attachments: &[IssueAttachmentInput],
+) -> Result<(Vec<NewAttachmentPersistence>, Vec<PathBuf>), CommandError> {
+    let mut persisted = Vec::new();
+    let mut created_files = Vec::new();
+
+    for attachment in attachments {
+        let Some(source_path) = attachment.source_path.as_ref() else {
+            continue;
+        };
+        let Some(temp_token) = attachment.temp_token.as_ref() else {
+            continue;
+        };
+
+        let source = PathBuf::from(source_path);
+        let metadata = fs::metadata(&source).map_err(|error| {
+            cleanup_created_files(&created_files);
+            issue_io_error(error)
+        })?;
+        if !metadata.is_file() {
+            cleanup_created_files(&created_files);
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "附件源文件不存在。",
+            ));
+        }
+
+        let display_name = attachment.display_name.trim();
+        let display_name = if display_name.is_empty() {
+            infer_display_name(&source)
+        } else {
+            display_name.to_string()
+        };
+        let created_at = current_epoch_millis()?;
+        let placeholder_name = format!(
+            "pending-{}-{}",
+            created_at,
+            sanitize_attachment_file_name(&display_name)
+        );
+        let relative_path = format!(".redwhisk/issues/{issue_id}/attachments/{placeholder_name}");
+        let absolute_path = Path::new(repo_path).join(&relative_path);
+        if let Some(parent) = absolute_path.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                cleanup_created_files(&created_files);
+                issue_io_error(error)
+            })?;
+        }
+        fs::copy(&source, &absolute_path).map_err(|error| {
+            cleanup_created_files(&created_files);
+            issue_io_error(error)
+        })?;
+        created_files.push(absolute_path.clone());
+
+        let analysis = analyze_attachment(&display_name, attachment.mime_type.as_deref());
+        let inserted = IssueAttachmentRepository::insert_in_transaction(
+            transaction,
+            issue_id,
+            &display_name,
+            &placeholder_name,
+            &relative_path,
+            &absolute_path.to_string_lossy(),
+            attachment.mime_type.as_deref(),
+            i64::try_from(metadata.len()).map_err(|_| {
+                cleanup_created_files(&created_files);
+                CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            })?,
+            analysis.kind,
+            analysis.is_previewable,
+            created_at,
+        )
+        .map_err(|error| {
+            cleanup_created_files(&created_files);
+            issue_database_error(error)
+        })?;
+
+        persisted.push(NewAttachmentPersistence {
+            temp_token: temp_token.clone(),
+            attachment_id: inserted.id,
+        });
+    }
+
+    Ok((persisted, created_files))
+}
+
+fn rewrite_attachment_tokens(
+    description: &str,
+    attachments: &[NewAttachmentPersistence],
+) -> Result<String, CommandError> {
+    let mut rewritten = description.to_string();
+    for attachment in attachments {
+        let from = format!("{{{{issue-attachment-temp:{}}}}}", attachment.temp_token);
+        let to = format!("{{{{issue-attachment:{}}}}}", attachment.attachment_id);
+        if !rewritten.contains(&from) {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "Issue description 缺少附件标记。",
+            ));
+        }
+        rewritten = rewritten.replace(&from, &to);
+    }
+    Ok(rewritten)
+}
+
+fn parse_attachment_ids(description: &str) -> HashSet<i64> {
+    let mut result = HashSet::new();
+    let needle = "{{issue-attachment:";
+    let mut remaining = description;
+
+    while let Some(start) = remaining.find(needle) {
+        let token = &remaining[start + needle.len()..];
+        let Some(end) = token.find("}}") else {
+            break;
+        };
+        if let Ok(id) = token[..end].parse::<i64>() {
+            result.insert(id);
+        }
+        remaining = &token[end + 2..];
+    }
+
+    result
+}
+
+fn update_issue_title_and_description_in_transaction(
+    transaction: &rusqlite::Transaction<'_>,
+    project_id: i64,
+    issue_id: i64,
+    title: &str,
+    description: &str,
+) -> rusqlite::Result<Option<IssueRecord>> {
+    let changed = transaction.execute(
+        "UPDATE issues
+         SET title = ?1,
+             description = ?2,
+             updated_at = MAX(
+               updated_at + 1,
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+             )
+         WHERE id = ?3 AND project_id = ?4",
+        rusqlite::params![title, description, issue_id, project_id],
+    )?;
+
+    if changed == 0 {
+        return Ok(None);
+    }
+
+    IssueRepository::find_by_id_in_transaction(transaction, issue_id)
+}
+
+fn analyze_attachment(display_name: &str, mime_type: Option<&str>) -> AttachmentAnalysis {
+    let extension = Path::new(display_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let mime_type = mime_type.unwrap_or_default().to_ascii_lowercase();
+
+    if matches!(
+        extension.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg"
+    ) || mime_type.starts_with("image/")
+    {
+        return AttachmentAnalysis {
+            kind: IssueAttachmentKind::Image,
+            is_previewable: true,
+        };
+    }
+
+    if extension == "pdf" || mime_type == "application/pdf" {
+        return AttachmentAnalysis {
+            kind: IssueAttachmentKind::Pdf,
+            is_previewable: false,
+        };
+    }
+
+    if matches!(extension.as_str(), "doc" | "docx") {
+        return AttachmentAnalysis {
+            kind: IssueAttachmentKind::Word,
+            is_previewable: false,
+        };
+    }
+
+    if matches!(
+        extension.as_str(),
+        "txt"
+            | "md"
+            | "markdown"
+            | "json"
+            | "yaml"
+            | "yml"
+            | "toml"
+            | "rs"
+            | "ts"
+            | "tsx"
+            | "js"
+            | "jsx"
+            | "css"
+            | "html"
+            | "xml"
+            | "sh"
+            | "sql"
+    ) || mime_type.starts_with("text/")
+        || mime_type.contains("json")
+        || mime_type.contains("xml")
+    {
+        return AttachmentAnalysis {
+            kind: IssueAttachmentKind::Text,
+            is_previewable: true,
+        };
+    }
+
+    AttachmentAnalysis {
+        kind: IssueAttachmentKind::Generic,
+        is_previewable: false,
+    }
+}
+
+fn infer_display_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("attachment")
+        .to_string()
+}
+
+fn sanitize_attachment_file_name(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|char| {
+            if char.is_ascii_alphanumeric() || matches!(char, '.' | '-' | '_') {
+                char
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let trimmed = sanitized.trim_matches('-');
+    if trimmed.is_empty() {
+        "attachment".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn cleanup_created_files(paths: &[PathBuf]) {
+    for path in paths {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn delete_attachment_files(attachments: &[IssueAttachmentRecord]) -> Result<(), CommandError> {
+    for attachment in attachments {
+        let path = Path::new(&attachment.absolute_path);
+        if path.exists() {
+            fs::remove_file(path).map_err(issue_io_error)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_previewable_text_file(path: &str) -> Result<String, CommandError> {
+    const MAX_PREVIEW_BYTES: u64 = 256 * 1024;
+    let metadata = fs::metadata(path).map_err(issue_io_error)?;
+    if metadata.len() > MAX_PREVIEW_BYTES {
+        return Err(CommandError::new(
+            CommandErrorCode::IssueValidationFailed,
+            "附件过大，暂不支持预览。",
+        ));
+    }
+
+    fs::read_to_string(path).map_err(issue_io_error)
+}
+
+fn issue_io_error(error: std::io::Error) -> CommandError {
+    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }

@@ -3,11 +3,49 @@ use serde::{Deserialize, Serialize};
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueAttachmentKind {
+    Image,
+    Pdf,
+    Word,
+    Text,
+    Generic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueAttachmentRecord {
+    pub id: i64,
+    pub issue_id: i64,
+    pub display_name: String,
+    pub stored_name: String,
+    pub relative_path: String,
+    pub absolute_path: String,
+    pub mime_type: Option<String>,
+    pub file_size: i64,
+    pub kind: IssueAttachmentKind,
+    pub is_previewable: bool,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueAttachmentInput {
+    pub attachment_id: Option<i64>,
+    pub temp_token: Option<String>,
+    pub source_path: Option<String>,
+    pub display_name: String,
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateIssueInput {
     pub project_id: i64,
     pub title: String,
     pub description: String,
+    #[serde(default)]
+    pub attachments: Vec<IssueAttachmentInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,6 +55,8 @@ pub struct UpdateIssueInput {
     pub issue_id: i64,
     pub title: String,
     pub description: String,
+    #[serde(default)]
+    pub attachments: Vec<IssueAttachmentInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -149,6 +189,8 @@ pub struct IssueRecord {
     pub project_id: i64,
     pub title: String,
     pub description: String,
+    #[serde(default)]
+    pub attachments: Vec<IssueAttachmentRecord>,
     pub status: IssueStatus,
     pub linked_session_id: Option<i64>,
     pub linked_session_status: Option<AgentSessionStatus>,
@@ -165,4 +207,34 @@ pub enum IssueStatus {
     Running,
     Review,
     Completed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewIssueAttachmentInput {
+    pub project_id: i64,
+    pub attachment_id: Option<i64>,
+    pub source_path: Option<String>,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportIssueAttachmentInput {
+    pub project_id: i64,
+    pub attachment_id: Option<i64>,
+    pub source_path: Option<String>,
+    pub display_name: Option<String>,
+    pub target_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueAttachmentPreview {
+    pub attachment_id: Option<i64>,
+    pub display_name: String,
+    pub kind: IssueAttachmentKind,
+    pub is_previewable: bool,
+    pub text_content: Option<String>,
+    pub absolute_path: Option<String>,
 }

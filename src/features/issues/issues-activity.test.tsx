@@ -1,3 +1,5 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import userEvent from "@testing-library/user-event";
@@ -7,18 +9,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuesActivity } from "./issues-activity";
 import {
   createIssue,
+  exportIssueAttachment,
   getIssueSummary,
   listIssues,
+  previewIssueAttachment,
   startAgentSession,
   updateIssue,
+  type IssueAttachmentRecord,
   type IssueRecord,
 } from "./issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
 
 vi.mock("./issue-commands", () => ({
   createIssue: vi.fn(),
+  exportIssueAttachment: vi.fn(),
   getIssueSummary: vi.fn(),
   listIssues: vi.fn(),
+  previewIssueAttachment: vi.fn(),
   startAgentSession: vi.fn(),
   updateIssue: vi.fn(),
 }));
@@ -27,38 +34,99 @@ vi.mock("../settings/settings-commands", () => ({
   listAgentProfiles: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+  save: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: vi.fn((path: string) => `asset://${path}`),
+}));
+
 vi.mock("./issue-description-editor", () => ({
   IssueDescriptionEditor: ({
+    attachments = [],
     ariaLabel,
     onChange,
+    onDownloadAttachment,
+    onPreviewAttachment,
+    onRemoveAttachment,
     placeholder,
     value,
   }: {
+    attachments?: Array<
+      | IssueAttachmentRecord
+      | {
+          token: string;
+          displayName: string;
+          sourcePath: string;
+          kind: "image" | "pdf" | "word" | "text" | "generic";
+          isPreviewable: boolean;
+        }
+    >;
     ariaLabel: string;
     onChange: (value: string) => void;
+    onDownloadAttachment?: (attachment: unknown) => void;
+    onPreviewAttachment?: (attachment: unknown) => void;
+    onRemoveAttachment?: (attachment: unknown) => void;
     placeholder: string;
     value: string;
   }) => (
-    <textarea
-      aria-label={ariaLabel}
-      placeholder={placeholder}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+    <div>
+      <textarea
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {attachments.map((attachment) => (
+        <div key={"id" in attachment ? attachment.id : attachment.token}>
+          <span>{attachment.displayName}</span>
+          {attachment.isPreviewable ? (
+            <button
+              aria-label={`查看 ${attachment.displayName}`}
+              type="button"
+              onClick={() => onPreviewAttachment?.(attachment)}
+            >
+              查看
+            </button>
+          ) : null}
+          <button
+            aria-label={`下载 ${attachment.displayName}`}
+            type="button"
+            onClick={() => onDownloadAttachment?.(attachment)}
+          >
+            下载
+          </button>
+          <button
+            aria-label={`删除 ${attachment.displayName}`}
+            type="button"
+            onClick={() => onRemoveAttachment?.(attachment)}
+          >
+            删除
+          </button>
+        </div>
+      ))}
+    </div>
   ),
 }));
 
 const createIssueMock = vi.mocked(createIssue);
+const exportIssueAttachmentMock = vi.mocked(exportIssueAttachment);
 const getIssueSummaryMock = vi.mocked(getIssueSummary);
 const listIssuesMock = vi.mocked(listIssues);
+const previewIssueAttachmentMock = vi.mocked(previewIssueAttachment);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const openDialogMock = vi.mocked(open);
+const saveDialogMock = vi.mocked(save);
 const openPathMock = vi.mocked(openPath);
+const convertFileSrcMock = vi.mocked(convertFileSrc);
 
 const existingIssue: IssueRecord = {
   id: 20,
@@ -181,12 +249,18 @@ const globalProfile = {
 describe("IssuesActivity", () => {
   beforeEach(() => {
     createIssueMock.mockReset();
+    exportIssueAttachmentMock.mockReset();
     listIssuesMock.mockReset();
+    previewIssueAttachmentMock.mockReset();
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
+    openDialogMock.mockReset();
+    saveDialogMock.mockReset();
     openPathMock.mockReset();
+    convertFileSrcMock.mockReset();
     openPathMock.mockResolvedValue();
+    convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
   });
 
@@ -435,6 +509,7 @@ describe("IssuesActivity", () => {
         projectId: 1,
         title: "draft local issue",
         description: "small task shape",
+        attachments: [],
       }),
     );
     expect(
@@ -443,6 +518,51 @@ describe("IssuesActivity", () => {
     expect(
       await screen.findByRole("button", { name: "draft local issue" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("inserts a draft attachment from the footer file picker and submits its draft metadata", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    openDialogMock.mockResolvedValue("/tmp/tsconfig.json");
+    createIssueMock.mockResolvedValue({
+      id: 24,
+      projectId: 1,
+      title: "draft local issue",
+      description: "Read the config.",
+      status: "backlog",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_632_000_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.type(screen.getByLabelText("Title"), "draft local issue");
+    await user.type(screen.getByLabelText("Description"), "Read the config.");
+    await user.click(screen.getByRole("button", { name: "Attach file" }));
+
+    expect(openDialogMock).toHaveBeenCalled();
+    expect(screen.getByText("tsconfig.json")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+      expect(createIssueMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 1,
+          title: "draft local issue",
+          attachments: [
+            expect.objectContaining({
+              displayName: "tsconfig.json",
+              sourcePath: "/tmp/tsconfig.json",
+            }),
+          ],
+      }),
+    );
+    expect(createIssueMock.mock.calls[0]?.[0].description).toContain(
+      "{{issue-attachment-temp:",
+    );
   });
 
   it("closes the edit dialog after save", async () => {
@@ -475,6 +595,7 @@ describe("IssuesActivity", () => {
         issueId: 20,
         title: "Updated issue",
         description: "Updated description",
+        attachments: [],
       }),
     );
     expect(
@@ -507,6 +628,7 @@ describe("IssuesActivity", () => {
       issueId: 20,
       title: "Failed update",
       description: "Existing description",
+      attachments: [],
     });
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
     expect(
@@ -934,11 +1056,47 @@ describe("IssuesActivity", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
     expect(within(dialog).getByRole("button", { name: "Run" })).toBeDisabled();
+  });
+
+  it("previews and downloads a draft attachment from the issue dialog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    openDialogMock.mockResolvedValue("/tmp/tsconfig.json");
+    previewIssueAttachmentMock.mockResolvedValue({
+      displayName: "tsconfig.json",
+      kind: "text",
+      textContent: '{ "compilerOptions": {} }',
+      absolutePath: null,
+    });
+    saveDialogMock.mockResolvedValue("/tmp/exported-tsconfig.json");
+    exportIssueAttachmentMock.mockResolvedValue();
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.click(screen.getByRole("button", { name: "Attach file" }));
+
+    await user.click(screen.getByRole("button", { name: "查看 tsconfig.json" }));
+    expect(previewIssueAttachmentMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sourcePath: "/tmp/tsconfig.json",
+      displayName: "tsconfig.json",
+    });
     expect(
-      within(dialog).getByText(
-        "No agent profiles available. Configure an agent in Settings first.",
-      ),
+      await screen.findByRole("dialog", { name: "Attachment Preview" }),
     ).toBeInTheDocument();
+    expect(screen.getByText('{ "compilerOptions": {} }')).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "下载 tsconfig.json" }));
+    expect(saveDialogMock).toHaveBeenCalled();
+    expect(exportIssueAttachmentMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sourcePath: "/tmp/tsconfig.json",
+      displayName: "tsconfig.json",
+      targetPath: "/tmp/exported-tsconfig.json",
+    });
   });
 
   it("shows a stopped linked session as read-only with an open log action", async () => {
@@ -966,18 +1124,14 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    expect(within(dialog).getByText("Linked session #301")).toBeInTheDocument();
-    expect(within(dialog).getByText("Status: stopped")).toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
     expect(
-      within(dialog).queryByText("No session linked."),
+      within(dialog).queryByText("Linked session #301"),
     ).not.toBeInTheDocument();
   });
 

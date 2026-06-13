@@ -7,8 +7,9 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
     CreateIssueInput, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
-    GetIssueSummaryInput, IssueListResponse, IssueRecord, IssueSummaryRecord, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse,
+    IssueRecord, IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
     UpdateIssueInput,
 };
 
@@ -45,6 +46,26 @@ pub fn update_issue(
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     IssueService::update_issue_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn preview_issue_attachment(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: PreviewIssueAttachmentInput,
+) -> Result<IssueAttachmentPreview, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    IssueService::preview_issue_attachment_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn export_issue_attachment(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ExportIssueAttachmentInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    IssueService::export_issue_attachment_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]
