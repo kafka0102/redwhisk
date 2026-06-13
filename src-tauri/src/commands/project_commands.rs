@@ -1,6 +1,7 @@
 use tauri::{Manager, State};
 
 use crate::app_state::AppState;
+use crate::commands::agent_skill_commands::trigger_project_skill_refresh;
 use crate::core::project_service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
@@ -15,7 +16,14 @@ pub fn create_project(
     input: CreateProjectInput,
 ) -> Result<ProjectSummary, CommandError> {
     let data_dir = prepare_project_data_dir(&app, &state)?;
-    ProjectService::create_project_in_data_dir(data_dir, input)
+    let project = ProjectService::create_project_in_data_dir(data_dir, input)?;
+    trigger_project_skill_refresh(
+        app,
+        state.agent_skills.clone(),
+        project.id,
+        std::path::PathBuf::from(&project.repo_path),
+    );
+    Ok(project)
 }
 
 #[tauri::command]
@@ -34,7 +42,14 @@ pub fn open_project(
     input: OpenProjectInput,
 ) -> Result<ProjectSummary, CommandError> {
     let data_dir = prepare_project_data_dir(&app, &state)?;
-    ProjectService::open_project_in_data_dir(data_dir, input)
+    let project = ProjectService::open_project_in_data_dir(data_dir, input)?;
+    trigger_project_skill_refresh(
+        app,
+        state.agent_skills.clone(),
+        project.id,
+        std::path::PathBuf::from(&project.repo_path),
+    );
+    Ok(project)
 }
 
 #[tauri::command]

@@ -9,6 +9,7 @@ pub mod types;
 
 use agent::latest_output_writer::LatestOutputWriter;
 use app_state::AppState;
+use commands::agent_skill_commands::trigger_global_skill_refresh;
 use core::local_data_service::LocalDataService;
 use tauri::{Emitter, Manager};
 
@@ -28,9 +29,12 @@ pub fn run() {
                 latest_output_writer.record_terminal_output(&event);
                 let _ = app_handle.emit(AGENT_SESSION_TERMINAL_OUTPUT_EVENT, event);
             });
+            trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::agent_skill_commands::list_agent_skills,
+            commands::agent_skill_commands::refresh_agent_skills,
             commands::core_commands::initialize_local_data,
             commands::project_commands::create_project,
             commands::project_commands::list_projects,
