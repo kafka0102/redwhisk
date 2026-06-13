@@ -345,75 +345,73 @@ export function ProjectSettingsActivity({
                     <p>No agents</p>
                   </div>
                 ) : (
-                  <table
-                    className="settings-agent-table"
-                    aria-label="Configured agents"
-                  >
-                    <thead>
-                      <tr>
-                        <th scope="col">Type</th>
-                        <th scope="col">Name</th>
-                        <th scope="col">Command</th>
-                        <th scope="col">Scope</th>
-                        <th scope="col">Workflow Skill</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentProfiles.map((profile) => {
-                        const agentLabel = formatAgentTypeLabel(
-                          profile.agentType,
-                        );
+                  <div className="settings-agent-table-scroll">
+                    <table
+                      className="settings-agent-table"
+                      aria-label="Configured agents"
+                    >
+                      <thead>
+                        <tr>
+                          <th scope="col">Type</th>
+                          <th scope="col">Name</th>
+                          <th scope="col">Command</th>
+                          <th scope="col">Scope</th>
+                          <th scope="col">Workflow Skill</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentProfiles.map((profile) => {
+                          const agentLabel = formatAgentTypeLabel(
+                            profile.agentType,
+                          );
 
-                        return (
-                          <tr
-                            key={profile.id}
-                            className="settings-agent-table__row"
-                            tabIndex={0}
-                            onClick={() => {
-                              setEditingProfile({
-                                contextProjectId: projectId,
-                                profile,
-                              });
-                              setAddForm(null);
-                            }}
-                            onKeyDown={(event) => {
-                              if (
-                                event.key !== "Enter" &&
-                                event.key !== " "
-                              ) {
-                                return;
-                              }
-
-                              event.preventDefault();
-                              setEditingProfile({
-                                contextProjectId: projectId,
-                                profile,
-                              });
-                              setAddForm(null);
-                            }}
-                          >
-                            <td>
-                              <img
-                                alt={`Agent 类型：${agentLabel}`}
-                                className="settings-agent-table__logo"
-                                src={getAgentLogoSrc(profile.agentType)}
-                              />
-                            </td>
-                            <td>{profile.name}</td>
-                            <td className="settings-agent-table__command">
-                              {formatCommandName(profile.command)}
-                            </td>
-                            <td>{profile.scope === "global" ? "Global" : "Project"}</td>
-                            <td>
-                              {profile.defaultSkill.trim().length > 0
-                                ? profile.defaultSkill
-                                : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                          return (
+                            <tr
+                              key={profile.id}
+                              className="settings-agent-table__row"
+                            >
+                              <td>
+                                <img
+                                  alt={`Agent 类型：${agentLabel}`}
+                                  className="settings-agent-table__logo"
+                                  src={getAgentLogoSrc(profile.agentType)}
+                                />
+                              </td>
+                              <td>
+                                <button
+                                  className="settings-agent-table__name-button"
+                                  type="button"
+                                  aria-label={`Edit ${profile.name}`}
+                                  onClick={() => {
+                                    setEditingProfile({
+                                      contextProjectId: projectId,
+                                      profile,
+                                    });
+                                    setAddForm(null);
+                                  }}
+                                >
+                                  {profile.name}
+                                </button>
+                              </td>
+                              <td className="settings-agent-table__command">
+                                {formatCommandName(profile.command)}
+                              </td>
+                              <td>
+                                {profile.scope === "global"
+                                  ? "Global"
+                                  : "Project"}
+                              </td>
+                              <td>
+                                {profile.defaultSkill.trim().length > 0
+                                  ? profile.defaultSkill
+                                  : "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {currentAddForm ? (
@@ -421,7 +419,7 @@ export function ProjectSettingsActivity({
                     key={`create-${currentAddForm.projectId}`}
                     mode="create"
                     scope="global"
-                    projectId={projectId}
+                    projectId={null}
                     onCancel={() => setAddForm(null)}
                     onSaved={handleProfileSaved}
                   />
