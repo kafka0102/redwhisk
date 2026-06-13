@@ -401,7 +401,7 @@ export function ProjectSettingsActivity({
                                   ? "Global"
                                   : "Project"}
                               </td>
-                              <td>
+                              <td className="settings-agent-table__skill">
                                 {profile.defaultSkill.trim().length > 0
                                   ? profile.defaultSkill
                                   : "—"}
