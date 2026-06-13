@@ -14,19 +14,29 @@ const IGNORED_DIRS: &[&str] = &[
     ".worktrees",
 ];
 
+#[derive(Debug, Default)]
+pub struct SkillScanResult {
+    pub skills: Vec<AgentSkillRecord>,
+    pub errors: Vec<String>,
+}
+
 pub fn scan_global_skills(home_dir: Option<&Path>) -> Vec<AgentSkillRecord> {
+    scan_global_skill_result(home_dir).skills
+}
+
+pub fn scan_global_skill_result(home_dir: Option<&Path>) -> SkillScanResult {
     let home_dir = home_dir
         .map(Path::to_path_buf)
         .or_else(|| std::env::var_os("HOME").map(PathBuf::from));
 
-    let mut skills = Vec::new();
+    let mut result = SkillScanResult::default();
     if let Some(home_dir) = home_dir {
         for root in [
             home_dir.join(".agents/skills"),
             home_dir.join(".codex/skills"),
             home_dir.join(".codex/superpowers/skills"),
         ] {
-            skills.extend(scan_skill_root(
+            result.append(scan_skill_root_result(
                 &root,
                 AgentType::Codex,
                 AgentSkillScope::Global,
@@ -34,7 +44,7 @@ pub fn scan_global_skills(home_dir: Option<&Path>) -> Vec<AgentSkillRecord> {
             ));
         }
 
-        skills.extend(scan_skill_root(
+        result.append(scan_skill_root_result(
             &home_dir.join(".claude/skills"),
             AgentType::Claude,
             AgentSkillScope::Global,
@@ -42,14 +52,14 @@ pub fn scan_global_skills(home_dir: Option<&Path>) -> Vec<AgentSkillRecord> {
         ));
     }
 
-    skills.extend(scan_skill_root(
+    result.append(scan_skill_root_result(
         Path::new("/etc/codex/skills"),
         AgentType::Codex,
         AgentSkillScope::Global,
         None,
     ));
-    sort_skills(&mut skills);
-    skills
+    sort_skills(&mut result.skills);
+    result
 }
 
 pub fn scan_project_skills(project_id: i64, project_path: &Path) -> Vec<AgentSkillRecord> {
@@ -85,19 +95,42 @@ pub fn scan_skill_root(
     scope: AgentSkillScope,
     project_id: Option<i64>,
 ) -> Vec<AgentSkillRecord> {
+    scan_skill_root_result(root, agent_type, scope, project_id).skills
+}
+
+fn scan_skill_root_result(
+    root: &Path,
+    agent_type: AgentType,
+    scope: AgentSkillScope,
+    project_id: Option<i64>,
+) -> SkillScanResult {
     if !root.is_dir() {
-        return Vec::new();
+        return SkillScanResult::default();
     }
 
     let source_root = match root.canonicalize() {
         Ok(path) => path.to_string_lossy().to_string(),
-        Err(_) => return Vec::new(),
+        Err(error) => {
+            return SkillScanResult {
+                skills: Vec::new(),
+                errors: vec![format!(
+                    "无法解析 skill root {}: {}",
+                    root.to_string_lossy(),
+                    error
+                )],
+            };
+        }
     };
 
     let mut skills = Vec::new();
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
-        Err(_) => return Vec::new(),
+        Err(error) => {
+            return SkillScanResult {
+                skills,
+                errors: vec![format!("无法读取 skill root {}: {}", source_root, error)],
+            };
+        }
     };
 
     for entry in entries.flatten() {
@@ -140,7 +173,17 @@ pub fn scan_skill_root(
     }
 
     sort_skills(&mut skills);
-    skills
+    SkillScanResult {
+        skills,
+        errors: Vec::new(),
+    }
+}
+
+impl SkillScanResult {
+    fn append(&mut self, mut result: SkillScanResult) {
+        self.skills.append(&mut result.skills);
+        self.errors.append(&mut result.errors);
+    }
 }
 
 pub fn find_project_skill_roots(project_path: &Path, suffix: &str) -> Vec<PathBuf> {
