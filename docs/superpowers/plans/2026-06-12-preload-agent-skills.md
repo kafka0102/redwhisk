@@ -350,7 +350,7 @@ git commit -m "feat: add agent skill cache types"
 - Modify: `src-tauri/src/lib.rs`
 - Test: `src-tauri/src/agent_skill/scanner.rs`, `src-tauri/src/agent_skill/service.rs`
 
-- [ ] **Step 1: Write failing scanner tests**
+- [x] **Step 1: Write failing scanner tests**
 
 In `src-tauri/src/agent_skill/scanner.rs`, add unit tests first. Use `tempfile::TempDir` which is already present in Rust dev dependencies.
 
@@ -408,13 +408,13 @@ fn finds_nested_project_skill_roots_without_descending_into_ignored_dirs() {
 
 Use a local `write_skill(path, contents)` test helper that creates directories and writes `SKILL.md`.
 
-- [ ] **Step 2: Run scanner tests and verify red**
+- [x] **Step 2: Run scanner tests and verify red**
 
 Run: `cargo test agent_skill::scanner --lib`
 
 Expected: FAIL because scanner functions are not implemented.
 
-- [ ] **Step 3: Implement scanner**
+- [x] **Step 3: Implement scanner**
 
 Implement public functions:
 
@@ -438,13 +438,13 @@ Rules:
 - Parse frontmatter only when file starts with `---`; read lines until closing `---`; parse `name:` by trimming whitespace and optional single/double quotes.
 - If no valid frontmatter name, fallback to skill directory name.
 
-- [ ] **Step 4: Run scanner tests green**
+- [x] **Step 4: Run scanner tests green**
 
 Run: `cargo test agent_skill::scanner --lib`
 
 Expected: PASS.
 
-- [ ] **Step 5: Write failing service/command tests**
+- [x] **Step 5: Write failing service/command tests**
 
 Add unit tests in `src-tauri/src/agent_skill/service.rs` for refresh orchestration without Tauri app handles:
 
@@ -480,7 +480,7 @@ fn refresh_project_replaces_only_target_project_cache() {
 }
 ```
 
-- [ ] **Step 6: Implement service**
+- [x] **Step 6: Implement service**
 
 Implement `src-tauri/src/agent_skill/service.rs`:
 
@@ -509,7 +509,7 @@ impl AgentSkillService {
 
 For production async refresh helpers, use `tauri::async_runtime::spawn` in commands/lib and call these synchronous service methods inside the spawned task.
 
-- [ ] **Step 7: Add Tauri commands**
+- [x] **Step 7: Add Tauri commands**
 
 Create `src-tauri/src/commands/agent_skill_commands.rs`:
 
@@ -560,7 +560,7 @@ pub fn trigger_project_skill_refresh(app: &tauri::AppHandle, index: AgentSkillIn
 
 Each helper must spawn, refresh, then emit `agent-skills-updated` with `AgentSkillsUpdatedEvent`.
 
-- [ ] **Step 8: Trigger refreshes from app setup and project lifecycle**
+- [x] **Step 8: Trigger refreshes from app setup and project lifecycle**
 
 Modify `src-tauri/src/lib.rs`:
 
@@ -580,7 +580,7 @@ Modify `src-tauri/src/commands/project_commands.rs`:
 - After `ProjectService::open_project_in_data_dir(...)` succeeds, call project refresh helper with returned `project`.
 - Keep command response immediate; do not await scan completion.
 
-- [ ] **Step 9: Run Rust tests**
+- [x] **Step 9: Run Rust tests**
 
 Run:
 
@@ -591,7 +591,7 @@ cargo test
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit Task 2**
+- [x] **Step 10: Commit Task 2**
 
 ```bash
 git add src-tauri/src/agent_skill src-tauri/src/commands/agent_skill_commands.rs src-tauri/src/commands/mod.rs src-tauri/src/commands/project_commands.rs src-tauri/src/lib.rs
@@ -608,7 +608,7 @@ git commit -m "feat: preload agent skill index"
 - Modify: `src/features/settings/project-settings-activity.test.tsx`
 - Test: `src/features/settings/project-settings-activity.test.tsx`
 
-- [ ] **Step 1: Write failing frontend tests**
+- [x] **Step 1: Write failing frontend tests**
 
 In `src/features/settings/project-settings-activity.test.tsx`, mock `listAgentSkills` and Tauri event subscribe if needed.
 
@@ -658,11 +658,13 @@ Use existing test helpers and style from this test file.
 
 - [ ] **Step 2: Run failing frontend test**
 
+Skipped: implementation landed before a separate red-run was captured. The final targeted test run is recorded in Step 5.
+
 Run: `pnpm test src/features/settings/project-settings-activity.test.tsx`
 
 Expected: FAIL because wrappers, Agent Type control, and skill loading do not exist.
 
-- [ ] **Step 3: Extend `settings-commands.ts`**
+- [x] **Step 3: Extend `settings-commands.ts`**
 
 Modify:
 
@@ -699,7 +701,7 @@ export function listAgentSkills(input: ListAgentSkillsInput): Promise<AgentSkill
 
 Add `refreshAgentSkills` wrapper only if the UI uses an explicit refresh action; otherwise keep it available for future command tests but no visible button is required.
 
-- [ ] **Step 4: Update `AgentProfileForm`**
+- [x] **Step 4: Update `AgentProfileForm`**
 
 Add state:
 
@@ -782,13 +784,13 @@ Render grouped options:
 
 Keep text concise; status can reuse the existing dialog status paragraph by composing command detection and skill loading messages if needed.
 
-- [ ] **Step 5: Run targeted frontend test green**
+- [x] **Step 5: Run targeted frontend test green**
 
 Run: `pnpm test src/features/settings/project-settings-activity.test.tsx`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add src/features/settings/settings-commands.ts src/features/settings/agent-profile-form.tsx src/features/settings/project-settings-activity.test.tsx

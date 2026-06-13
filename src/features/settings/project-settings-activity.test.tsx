@@ -6,8 +6,10 @@ import { ProjectSettingsActivity } from "./project-settings-activity";
 import {
   detectCodexCommand,
   listAgentProfiles,
+  listAgentSkills,
   saveAgentProfile,
   testAgentCommand,
+  type AgentSkillListResponse,
   type AgentProfileRecord,
 } from "./settings-commands";
 import { updateProjectSettings } from "../project/project-commands";
@@ -16,7 +18,37 @@ vi.mock("./settings-commands", () => ({
   detectCodexCommand: vi.fn(),
   testAgentCommand: vi.fn(),
   listAgentProfiles: vi.fn(),
+  listAgentSkills: vi.fn(),
   saveAgentProfile: vi.fn(),
+}));
+
+const settingsEventMocks = vi.hoisted(() => {
+  const listeners: Array<{
+    eventName: string;
+    callback: (event: {
+      payload: { scope: string; projectId: number | null };
+    }) => void;
+  }> = [];
+  const unlisten = vi.fn();
+
+  return {
+    listeners,
+    unlisten,
+  };
+});
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (
+      eventName: string,
+      callback: (event: {
+        payload: { scope: string; projectId: number | null };
+      }) => void,
+    ) => {
+      settingsEventMocks.listeners.push({ eventName, callback });
+      return Promise.resolve(settingsEventMocks.unlisten);
+    },
+  ),
 }));
 
 vi.mock("../project/project-commands", () => ({
@@ -26,6 +58,7 @@ vi.mock("../project/project-commands", () => ({
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const listAgentSkillsMock = vi.mocked(listAgentSkills);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const onProjectUpdated = vi.fn();
@@ -61,9 +94,15 @@ describe("ProjectSettingsActivity", () => {
     detectCodexCommandMock.mockReset();
     testAgentCommandMock.mockReset();
     listAgentProfilesMock.mockReset();
+    listAgentSkillsMock.mockReset();
     saveAgentProfileMock.mockReset();
     updateProjectSettingsMock.mockReset();
+    settingsEventMocks.listeners.length = 0;
+    settingsEventMocks.unlisten.mockReset();
     onProjectUpdated.mockReset();
+    detectCodexCommandMock.mockResolvedValue({
+      command: "/usr/local/bin/codex",
+    });
     updateProjectSettingsMock.mockResolvedValue({
       id: 1,
       name: "RedWhisk",
@@ -76,6 +115,30 @@ describe("ProjectSettingsActivity", () => {
       if (scope === "project") return { profiles: [projectProfile] };
       return { profiles: [globalProfile] };
     });
+    listAgentSkillsMock.mockImplementation(async ({ agentType, projectId }) =>
+      skillResponse([
+        {
+          name: `${agentType ?? "codex"}-global`,
+          path: `/home/me/.agents/skills/${agentType ?? "codex"}-global/SKILL.md`,
+          agentType: agentType ?? "codex",
+          scope: "global",
+          projectId: null,
+          sourceRoot: "/home/me/.agents/skills",
+        },
+        ...(projectId === null
+          ? []
+          : [
+              {
+                name: `${agentType ?? "codex"}-project`,
+                path: `/repo/.agents/skills/${agentType ?? "codex"}-project/SKILL.md`,
+                agentType: agentType ?? "codex",
+                scope: "project" as const,
+                projectId: projectId ?? null,
+                sourceRoot: "/repo/.agents/skills",
+              },
+            ]),
+      ]),
+    );
   });
 
   it("renders two-column layout with agents menu active by default", async () => {
@@ -337,6 +400,177 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 
+  it("shows cached Codex skills when creating a project agent", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    detectCodexCommandMock.mockRejectedValue({
+      code: "AGENT_COMMAND_UNAVAILABLE",
+      message: "Agent command 不可用。",
+    });
+    saveAgentProfileMock.mockResolvedValue({
+      ...projectProfile,
+      defaultSkill: "codex-project",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add project agent" }),
+    );
+
+    expect(listAgentSkillsMock).toHaveBeenCalledWith({
+      agentType: "codex",
+      projectId: 1,
+    });
+    expect(
+      await screen.findByRole("option", { name: "codex-project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "codex-global" }),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Agent profile name"), "Skill Agent");
+    await user.type(
+      screen.getByLabelText("Agent command"),
+      "/usr/local/bin/codex",
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Default skill"),
+      "codex-project",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: "codex",
+          defaultSkill: "codex-project",
+        }),
+      ),
+    );
+  });
+
+  it("reloads skills when switching to Claude without resetting other fields", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    detectCodexCommandMock.mockRejectedValue({
+      code: "AGENT_COMMAND_UNAVAILABLE",
+      message: "Agent command 不可用。",
+    });
+    saveAgentProfileMock.mockResolvedValue({
+      ...projectProfile,
+      agentType: "claude",
+      defaultSkill: "claude-project",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add project agent" }),
+    );
+    await user.type(
+      screen.getByLabelText("Agent profile name"),
+      "Claude Agent",
+    );
+    await user.type(
+      screen.getByLabelText("Agent command"),
+      "/usr/local/bin/claude",
+    );
+    await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
+
+    expect(
+      await screen.findByRole("option", { name: "claude-project" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent profile name")).toHaveValue(
+      "Claude Agent",
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Default skill"),
+      "claude-project",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: "claude",
+          defaultSkill: "claude-project",
+        }),
+      ),
+    );
+  });
+
+  it("refreshes the skill dropdown after agent skill update events", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    detectCodexCommandMock.mockRejectedValue({
+      code: "AGENT_COMMAND_UNAVAILABLE",
+      message: "Agent command 不可用。",
+    });
+    let skillNames = ["codex-project"];
+    listAgentSkillsMock.mockImplementation(async ({ agentType, projectId }) =>
+      skillResponse(
+        skillNames.map((name) => ({
+          name,
+          path: `/repo/.agents/skills/${name}/SKILL.md`,
+          agentType: agentType ?? "codex",
+          scope: "project",
+          projectId: projectId ?? null,
+          sourceRoot: "/repo/.agents/skills",
+        })),
+      ),
+    );
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add project agent" }),
+    );
+    await user.type(screen.getByLabelText("Agent profile name"), "Unsaved");
+    expect(
+      await screen.findByRole("option", { name: "codex-project" }),
+    ).toBeInTheDocument();
+
+    skillNames = ["codex-project", "codex-refreshed"];
+    await waitFor(() =>
+      expect(
+        settingsEventMocks.listeners.some(
+          (listener) => listener.eventName === "agent-skills-updated",
+        ),
+      ).toBe(true),
+    );
+    settingsEventMocks.listeners[0]?.callback({
+      payload: { scope: "global", projectId: null },
+    });
+
+    expect(
+      await screen.findByRole("option", { name: "codex-refreshed" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent profile name")).toHaveValue("Unsaved");
+  });
+
   it("reloads agents when project id changes", async () => {
     let resolveProjectProfiles:
       | ((value: { profiles: AgentProfileRecord[] }) => void)
@@ -471,3 +705,14 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 });
+
+function skillResponse(
+  skills: AgentSkillListResponse["skills"],
+): AgentSkillListResponse {
+  return {
+    skills,
+    globalStatus: "ready",
+    projectStatus: "ready",
+    lastError: null,
+  };
+}
