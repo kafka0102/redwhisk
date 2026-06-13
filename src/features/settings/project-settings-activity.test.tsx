@@ -294,6 +294,16 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("shows agents in a table below the new agent action card", async () => {
+    const projectProfileWithHigherId = { ...projectProfile, id: 20 };
+    const globalProfileWithLowerId = { ...globalProfile, id: 10 };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfileWithHigherId] };
+      }
+
+      return { profiles: [globalProfileWithLowerId] };
+    });
+
     render(
       <ProjectSettingsActivity
         completionPolicy="manual"
@@ -344,9 +354,15 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
     expect(within(table).getAllByRole("cell", { name: "—" })).toHaveLength(2);
     expect(screen.getAllByAltText("Agent 类型：Codex")).toHaveLength(2);
+
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(within(rows[0]).getByRole("cell", { name: "Global Codex" }))
+      .toBeInTheDocument();
+    expect(within(rows[1]).getByRole("cell", { name: "Project Codex" }))
+      .toBeInTheDocument();
   });
 
-  it("opens the edit form from table rows with keyboard shortcuts", async () => {
+  it("opens the edit form from table rows with click and keyboard shortcuts", async () => {
     const user = userEvent.setup();
 
     render(
@@ -362,6 +378,15 @@ describe("ProjectSettingsActivity", () => {
       name: "Project Codex",
     })).closest("tr");
     expect(projectRow).not.toBeNull();
+    if (!projectRow) throw new Error("Project agent row not found");
+
+    await user.click(projectRow);
+
+    expect(
+      screen.getByRole("heading", { name: "Edit Agent" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
     projectRow?.focus();
     await user.keyboard("{Enter}");
 
