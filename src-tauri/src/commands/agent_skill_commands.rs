@@ -60,7 +60,15 @@ pub fn refresh_agent_skills(
 
 pub fn trigger_global_skill_refresh(app: tauri::AppHandle, index: AgentSkillIndex) {
     tauri::async_runtime::spawn(async move {
-        AgentSkillService::refresh_global_from_home(&index, None);
+        let worker_index = index.clone();
+        if let Err(error) = tauri::async_runtime::spawn_blocking(move || {
+            AgentSkillService::refresh_global_from_home(&worker_index, None);
+        })
+        .await
+        {
+            index.mark_global_failed(format!("全局 skill 刷新任务失败: {error}"));
+        }
+
         let _ = app.emit(
             AGENT_SKILLS_UPDATED_EVENT,
             AgentSkillsUpdatedEvent {
@@ -78,7 +86,15 @@ pub fn trigger_project_skill_refresh(
     repo_path: PathBuf,
 ) {
     tauri::async_runtime::spawn(async move {
-        AgentSkillService::refresh_project(&index, project_id, &repo_path);
+        let worker_index = index.clone();
+        if let Err(error) = tauri::async_runtime::spawn_blocking(move || {
+            AgentSkillService::refresh_project(&worker_index, project_id, &repo_path);
+        })
+        .await
+        {
+            index.mark_project_failed(project_id, format!("Project skill 刷新任务失败: {error}"));
+        }
+
         let _ = app.emit(
             AGENT_SKILLS_UPDATED_EVENT,
             AgentSkillsUpdatedEvent {

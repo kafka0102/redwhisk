@@ -65,21 +65,10 @@ pub fn scan_global_skill_result(home_dir: Option<&Path>) -> SkillScanResult {
 pub fn scan_project_skills(project_id: i64, project_path: &Path) -> Vec<AgentSkillRecord> {
     let mut skills = Vec::new();
 
-    for suffix in [".agents/skills", ".codex/skills"] {
-        for root in find_project_skill_roots(project_path, suffix) {
-            skills.extend(scan_skill_root(
-                &root,
-                AgentType::Codex,
-                AgentSkillScope::Project,
-                Some(project_id),
-            ));
-        }
-    }
-
-    for root in find_project_skill_roots(project_path, ".claude/skills") {
+    for (root, agent_type) in find_project_skill_roots_with_types(project_path) {
         skills.extend(scan_skill_root(
             &root,
-            AgentType::Claude,
+            agent_type,
             AgentSkillScope::Project,
             Some(project_id),
         ));
@@ -134,11 +123,14 @@ fn scan_skill_root_result(
     };
 
     for entry in entries.flatten() {
-        let skill_dir = entry.path();
-        if !skill_dir.is_dir() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() || file_type.is_symlink() {
             continue;
         }
 
+        let skill_dir = entry.path();
         let skill_file = skill_dir.join("SKILL.md");
         if !skill_file.is_file() {
             continue;
@@ -187,44 +179,93 @@ impl SkillScanResult {
 }
 
 pub fn find_project_skill_roots(project_path: &Path, suffix: &str) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    let mut seen = HashSet::new();
     let suffix = Path::new(suffix);
-    collect_project_skill_roots(project_path, suffix, &mut seen, &mut roots);
+    let mut roots: Vec<PathBuf> = find_project_skill_roots_with_types(project_path)
+        .into_iter()
+        .map(|(root, _)| root)
+        .filter(|root| root.ends_with(suffix))
+        .collect();
     roots.sort();
+    roots
+}
+
+fn find_project_skill_roots_with_types(project_path: &Path) -> Vec<(PathBuf, AgentType)> {
+    let Ok(project_root) = project_path.canonicalize() else {
+        return Vec::new();
+    };
+
+    let mut roots = Vec::new();
+    let mut seen_dirs = HashSet::new();
+    let mut seen_roots = HashSet::new();
+    collect_project_skill_roots(
+        &project_root,
+        &project_root,
+        &mut seen_dirs,
+        &mut seen_roots,
+        &mut roots,
+    );
+    roots.sort_by(|(left, _), (right, _)| left.cmp(right));
     roots
 }
 
 fn collect_project_skill_roots(
     current: &Path,
-    suffix: &Path,
-    seen: &mut HashSet<PathBuf>,
-    roots: &mut Vec<PathBuf>,
+    project_root: &Path,
+    seen_dirs: &mut HashSet<PathBuf>,
+    seen_roots: &mut HashSet<PathBuf>,
+    roots: &mut Vec<(PathBuf, AgentType)>,
 ) {
-    if !current.is_dir() {
+    let metadata = match fs::symlink_metadata(current) {
+        Ok(metadata) => metadata,
+        Err(_) => return,
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return;
     }
 
-    if current.ends_with(suffix) {
-        if let Ok(root) = current.canonicalize() {
-            if seen.insert(root.clone()) {
-                roots.push(root);
-            }
+    let current = match current.canonicalize() {
+        Ok(current) => current,
+        Err(_) => return,
+    };
+    if !current.starts_with(project_root) || !seen_dirs.insert(current.clone()) {
+        return;
+    }
+
+    if let Some(agent_type) = project_skill_root_agent_type(&current) {
+        if seen_roots.insert(current.clone()) {
+            roots.push((current, agent_type));
         }
         return;
     }
 
-    let entries = match fs::read_dir(current) {
+    let entries = match fs::read_dir(&current) {
         Ok(entries) => entries,
         Err(_) => return,
     };
 
     for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() || is_ignored_dir(&path) {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() || file_type.is_symlink() {
             continue;
         }
-        collect_project_skill_roots(&path, suffix, seen, roots);
+
+        let path = entry.path();
+        if is_ignored_dir(&path) {
+            continue;
+        }
+        collect_project_skill_roots(&path, project_root, seen_dirs, seen_roots, roots);
+    }
+}
+
+fn project_skill_root_agent_type(path: &Path) -> Option<AgentType> {
+    if path.ends_with(".agents/skills") || path.ends_with(".codex/skills") {
+        Some(AgentType::Codex)
+    } else if path.ends_with(".claude/skills") {
+        Some(AgentType::Claude)
+    } else {
+        None
     }
 }
 
@@ -353,6 +394,33 @@ mod tests {
             .all(|skill| skill.agent_type == AgentType::Codex
                 && skill.scope == AgentSkillScope::Project
                 && skill.project_id == Some(7)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn agent_skill_scanner_does_not_follow_project_symlink_directories() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let project = temp_dir.path().join("project");
+        let external = temp_dir.path().join("external");
+        fs::create_dir_all(&project).expect("project dir");
+        write_skill(&project.join(".agents/skills/local-codex"), "Local Codex");
+        write_skill(
+            &external.join(".agents/skills/external-codex"),
+            "External Codex",
+        );
+        symlink(&external, project.join("linked-external")).expect("external symlink");
+
+        let roots = find_project_skill_roots(&project, ".agents/skills");
+        let skills = scan_project_skills(7, &project);
+
+        assert!(roots.contains(&project.join(".agents/skills").canonicalize().unwrap()));
+        assert!(!roots
+            .iter()
+            .any(|root| root.to_string_lossy().contains("external")));
+        assert!(skills.iter().any(|skill| skill.name == "local-codex"));
+        assert!(!skills.iter().any(|skill| skill.name == "external-codex"));
     }
 
     #[test]
