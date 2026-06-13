@@ -294,8 +294,14 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("shows agents in a table below the new agent action card", async () => {
+    const longWorkflowSkill =
+      "codex-global-skill-with-a-very-long-unbroken-name";
     const projectProfileWithHigherId = { ...projectProfile, id: 20 };
-    const globalProfileWithLowerId = { ...globalProfile, id: 10 };
+    const globalProfileWithLowerId = {
+      ...globalProfile,
+      id: 10,
+      defaultSkill: longWorkflowSkill,
+    };
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
         return { profiles: [projectProfileWithHigherId] };
@@ -352,7 +358,12 @@ describe("ProjectSettingsActivity", () => {
     expect(
       within(table).getByRole("cell", { name: "Global" }),
     ).toBeInTheDocument();
-    expect(within(table).getAllByRole("cell", { name: "—" })).toHaveLength(2);
+    expect(within(table).getByRole("cell", { name: "—" })).toHaveClass(
+      "settings-agent-table__skill",
+    );
+    expect(
+      within(table).getByRole("cell", { name: longWorkflowSkill }),
+    ).toHaveClass("settings-agent-table__skill");
     expect(screen.getAllByAltText("Agent 类型：Codex")).toHaveLength(2);
 
     const rows = within(table).getAllByRole("row").slice(1);
@@ -637,30 +648,30 @@ describe("ProjectSettingsActivity", () => {
       pendingSkills.claude?.(
         skillResponse([
           {
-            name: "claude-project",
-            path: "/repo/.claude/skills/claude-project/SKILL.md",
+            name: "claude-global",
+            path: "/home/me/.claude/skills/claude-global/SKILL.md",
             agentType: "claude",
-            scope: "project",
-            projectId: 1,
-            sourceRoot: "/repo/.claude/skills",
+            scope: "global",
+            projectId: null,
+            sourceRoot: "/home/me/.claude/skills",
           },
         ]),
       );
     });
     expect(
-      await screen.findByRole("option", { name: "claude-project" }),
+      await screen.findByRole("option", { name: "claude-global" }),
     ).toBeInTheDocument();
 
     await act(async () => {
       pendingSkills.codex?.(
         skillResponse([
           {
-            name: "codex-project",
-            path: "/repo/.agents/skills/codex-project/SKILL.md",
+            name: "codex-global",
+            path: "/home/me/.agents/skills/codex-global/SKILL.md",
             agentType: "codex",
-            scope: "project",
-            projectId: 1,
-            sourceRoot: "/repo/.agents/skills",
+            scope: "global",
+            projectId: null,
+            sourceRoot: "/home/me/.agents/skills",
           },
         ]),
       );
@@ -668,10 +679,10 @@ describe("ProjectSettingsActivity", () => {
 
     expect(screen.getByLabelText("Agent type")).toHaveValue("claude");
     expect(
-      screen.getByRole("option", { name: "claude-project" }),
+      screen.getByRole("option", { name: "claude-global" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: "codex-project" }),
+      screen.queryByRole("option", { name: "codex-global" }),
     ).not.toBeInTheDocument();
   });
 
@@ -682,16 +693,16 @@ describe("ProjectSettingsActivity", () => {
       code: "AGENT_COMMAND_UNAVAILABLE",
       message: "Agent command 不可用。",
     });
-    let skillNames = ["codex-project"];
+    let skillNames = ["codex-global"];
     listAgentSkillsMock.mockImplementation(async ({ agentType, projectId }) =>
       skillResponse(
         skillNames.map((name) => ({
           name,
-          path: `/repo/.agents/skills/${name}/SKILL.md`,
+          path: `/home/me/.agents/skills/${name}/SKILL.md`,
           agentType: agentType ?? "codex",
-          scope: "project",
+          scope: "global",
           projectId: projectId ?? null,
-          sourceRoot: "/repo/.agents/skills",
+          sourceRoot: "/home/me/.agents/skills",
         })),
       ),
     );
@@ -708,10 +719,10 @@ describe("ProjectSettingsActivity", () => {
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(screen.getByLabelText("Agent profile name"), "Unsaved");
     expect(
-      await screen.findByRole("option", { name: "codex-project" }),
+      await screen.findByRole("option", { name: "codex-global" }),
     ).toBeInTheDocument();
 
-    skillNames = ["codex-project", "codex-refreshed"];
+    skillNames = ["codex-global", "codex-refreshed"];
     await waitFor(() =>
       expect(
         settingsEventMocks.listeners.some(

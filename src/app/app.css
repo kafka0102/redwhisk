@@ -616,6 +616,12 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.settings-agent-table__skill {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-dialog__body {
   display: grid;
   align-content: start;
