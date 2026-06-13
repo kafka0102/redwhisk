@@ -806,7 +806,7 @@ git commit -m "feat: populate agent skill selector"
 - Possibly modify: `openspec/changes/preload-agent-skills/design.md` only if implementation materially differs from approved design
 - Modify: `openspec/changes/preload-agent-skills/.onespec.yaml`
 
-- [ ] **Step 1: Run full required verification**
+- [x] **Step 1: Run full required verification**
 
 Run:
 
@@ -820,7 +820,7 @@ cd .. && openspec validate preload-agent-skills --strict
 
 Expected: all pass. Note the known Vitest jsdom canvas/CSS warnings if still present, but do not treat them as failures if exit code is 0.
 
-- [ ] **Step 2: Inspect changed files**
+- [x] **Step 2: Inspect changed files**
 
 Run:
 
@@ -832,7 +832,7 @@ git diff -- openspec/changes/preload-agent-skills/tasks.md
 
 Confirm every changed file is tied to this change.
 
-- [ ] **Step 3: Backfill OpenSpec tasks**
+- [x] **Step 3: Backfill OpenSpec tasks**
 
 Mark all completed tasks in `openspec/changes/preload-agent-skills/tasks.md`:
 
@@ -842,7 +842,7 @@ Mark all completed tasks in `openspec/changes/preload-agent-skills/tasks.md`:
 
 Only check a task after corresponding implementation and verification are complete.
 
-- [ ] **Step 4: Track touched files in OneSpec**
+- [x] **Step 4: Track touched files in OneSpec**
 
 Run:
 
@@ -869,7 +869,7 @@ ONESPEC_ENV="${ONESPEC_ENV:-$(find . "$HOME"/.codex "$HOME"/.claude "$HOME"/.cur
   openspec/changes/preload-agent-skills/tasks.md
 ```
 
-- [ ] **Step 5: Commit final OpenSpec backfill**
+- [x] **Step 5: Commit final OpenSpec backfill**
 
 ```bash
 git add openspec/changes/preload-agent-skills/tasks.md openspec/changes/preload-agent-skills/.onespec.yaml docs/superpowers/plans/2026-06-12-preload-agent-skills.md
