@@ -16,14 +16,16 @@ import {
   type CSSProperties,
 } from "react";
 
-import claudeLogoSrc from "../../assets/images/claude.svg";
-import codexLogoSrc from "../../assets/images/codex.svg";
 import {
   listAgentSessions,
   setAgentSessionAttention,
   type StartStandaloneAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
+import {
+  formatAgentTypeLabel,
+  getAgentLogoSrc,
+} from "./agent-visuals";
 import { CodexTerminal } from "./codex-terminal";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueInspector } from "./issue-inspector";
@@ -1393,7 +1395,7 @@ function SessionGroup({
               viewedSessionActivity,
               selectedSessionId,
             );
-            const agentLabel = formatAgentType(session.agentType);
+            const agentLabel = formatAgentTypeLabel(session.agentType);
 
             return (
               <button
@@ -1449,28 +1451,6 @@ function SessionGroup({
 
 function formatSessionTitle(session: AgentSessionListItem): string {
   return session.issueTitle ?? session.title ?? `Session #${session.sessionId}`;
-}
-
-function formatAgentType(agentType: AgentSessionListItem["agentType"]): string {
-  switch (agentType) {
-    case "codex":
-      return "Codex";
-    case "claude":
-    case "claude_code":
-      return "Claude";
-    default:
-      return agentType;
-  }
-}
-
-function getAgentLogoSrc(
-  agentType: AgentSessionListItem["agentType"],
-): string {
-  if (agentType === "claude" || agentType === "claude_code") {
-    return claudeLogoSrc;
-  }
-
-  return codexLogoSrc;
 }
 
 function buildSessionStatusDotClassName(tone: string): string {
