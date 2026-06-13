@@ -46,12 +46,9 @@ export function AgentProfileForm({
     () => profile?.defaultSkill ?? "",
   );
   const [selectedSkillPath, setSelectedSkillPath] = useState("");
-  const [promptTemplate] = useState(
-    () => profile?.promptTemplate ?? "",
-  );
-  const [statusMessage, setStatusMessage] = useState<string | null>(() =>
-    mode === "create" && !profile ? "Detecting codex command..." : null,
-  );
+  const [promptTemplate] = useState(() => profile?.promptTemplate ?? "");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
@@ -115,11 +112,10 @@ export function AgentProfileForm({
         if (!isMounted) return;
         const commandName = toCommandName(result.command);
         setCommand(commandName);
-        setStatusMessage(`Detected: ${commandName}`);
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
-        setStatusMessage(toCommandError(error).message);
+        setToastMessage(toCommandError(error).message);
       })
       .finally(() => {
         if (isMounted) setIsDetecting(false);
@@ -185,15 +181,41 @@ export function AgentProfileForm({
   const isSelectedSkillMissing =
     defaultSkill.length > 0 && resolvedSelectedSkillPath.length === 0;
 
+  const workflowSkillOptions = useMemo(() => {
+    const options: SearchableSelectOption[] = [{ value: "", label: "None" }];
+
+    if (isSelectedSkillMissing) {
+      options.push({
+        value: `missing:${defaultSkill}`,
+        label: defaultSkill,
+      });
+    }
+
+    visibleSkills.forEach((skill) => {
+      options.push({
+        value: skill.path,
+        label: skill.name,
+        description: skill.path,
+      });
+    });
+
+    return options;
+  }, [defaultSkill, isSelectedSkillMissing, visibleSkills]);
+
+  const workflowSkillValue = isSelectedSkillMissing
+    ? `missing:${defaultSkill}`
+    : resolvedSelectedSkillPath;
+
   async function handleTestCommand() {
     setIsTesting(true);
     setStatusMessage(null);
+    setToastMessage(null);
 
     try {
       await testAgentCommand({ command });
-      setStatusMessage(`Command available: ${command}`);
+      setToastMessage(`Command available: ${command}`);
     } catch (error: unknown) {
-      setStatusMessage(toCommandError(error).message);
+      setToastMessage(toCommandError(error).message);
     } finally {
       setIsTesting(false);
     }
@@ -203,6 +225,7 @@ export function AgentProfileForm({
     event.preventDefault();
     setIsSaving(true);
     setStatusMessage(null);
+    setToastMessage(null);
 
     try {
       const effectiveProjectId = scopeValue === "project" ? projectId : null;
@@ -229,8 +252,7 @@ export function AgentProfileForm({
   const isSubmitDisabled =
     isSaving || name.trim().length === 0 || command.trim().length === 0;
 
-  const dialogTitle =
-    mode === "create" ? "New agent" : "Edit Agent";
+  const dialogTitle = mode === "create" ? "New agent" : "Edit Agent";
 
   return (
     <div
@@ -311,102 +333,50 @@ export function AgentProfileForm({
             </div>
           </label>
 
-          <fieldset className="agent-dialog__fieldset">
-            <legend>Scope</legend>
-            <div className="agent-dialog__segmented-options">
-              <label className="agent-dialog__radio-option">
-                <input
-                  checked={scopeValue === "global"}
-                  name="agent-scope"
-                  type="radio"
-                  value="global"
-                  onChange={() => {
-                    skillRequestSequenceRef.current += 1;
-                    setScopeValue("global");
-                    setDefaultSkill("");
-                    setSelectedSkillPath("");
-                    setSkills([]);
-                    setSkillLoadFailed(false);
-                  }}
-                />
-                <span>Global</span>
-              </label>
-              <label className="agent-dialog__radio-option">
-                <input
-                  checked={scopeValue === "project"}
-                  name="agent-scope"
-                  type="radio"
-                  value="project"
-                  onChange={() => {
-                    skillRequestSequenceRef.current += 1;
-                    setScopeValue("project");
-                    setDefaultSkill("");
-                    setSelectedSkillPath("");
-                    setSkills([]);
-                    setSkillLoadFailed(false);
-                  }}
-                />
-                <span>Project</span>
-              </label>
-            </div>
-          </fieldset>
+          <SearchableSelect
+            label="Scope"
+            ariaLabel="Scope"
+            value={scopeValue}
+            options={[
+              { value: "global", label: "Global" },
+              { value: "project", label: "Project" },
+            ]}
+            onChange={(nextScope) => {
+              skillRequestSequenceRef.current += 1;
+              setScopeValue(nextScope as AgentScope);
+              setDefaultSkill("");
+              setSelectedSkillPath("");
+              setSkills([]);
+              setSkillLoadFailed(false);
+            }}
+          />
 
-          <fieldset className="agent-dialog__fieldset">
-            <legend>Workflow Skill</legend>
+          <div className="agent-dialog__select-block">
+            <SearchableSelect
+              label="Workflow Skill"
+              ariaLabel="Workflow Skill"
+              value={workflowSkillValue}
+              options={workflowSkillOptions}
+              onChange={(nextSkillPath) => {
+                if (nextSkillPath === "") {
+                  setDefaultSkill("");
+                  setSelectedSkillPath("");
+                  return;
+                }
+
+                const selectedSkill = visibleSkills.find(
+                  (skill) => skill.path === nextSkillPath,
+                );
+                if (!selectedSkill) {
+                  setSelectedSkillPath("");
+                  return;
+                }
+
+                setDefaultSkill(selectedSkill.name);
+                setSelectedSkillPath(selectedSkill.path);
+              }}
+            />
             <div className="agent-dialog__skill-list">
-              <label className="agent-dialog__skill-option">
-                <input
-                  checked={defaultSkill === ""}
-                  name="default-skill"
-                  type="radio"
-                  value=""
-                  onChange={() => {
-                    setDefaultSkill("");
-                    setSelectedSkillPath("");
-                  }}
-                />
-                <span className="agent-dialog__skill-name">None</span>
-              </label>
-              {isSelectedSkillMissing ? (
-                <label className="agent-dialog__skill-option">
-                  <input
-                    checked
-                    name="default-skill"
-                    type="radio"
-                    value={defaultSkill}
-                    onChange={() => setSelectedSkillPath("")}
-                  />
-                  <span className="agent-dialog__skill-name">
-                    {defaultSkill}
-                  </span>
-                </label>
-              ) : null}
-              {visibleSkills.map((skill) => (
-                <label
-                  className="agent-dialog__skill-option"
-                  key={skill.path}
-                >
-                  <input
-                    aria-label={`${skill.name} ${skill.path}`}
-                    checked={resolvedSelectedSkillPath === skill.path}
-                    name="default-skill"
-                    type="radio"
-                    value={skill.name}
-                    onChange={() => {
-                      setDefaultSkill(skill.name);
-                      setSelectedSkillPath(skill.path);
-                    }}
-                  />
-                  <span className="agent-dialog__skill-copy">
-                    <span className="agent-dialog__skill-name">
-                      {skill.name}
-                    </span>
-                    <span className="agent-dialog__skill-path">
-                      {skill.path}
-                    </span>
-                  </span>
-                </label>
-              ))}
               {isLoadingSkills ? (
                 <p className="agent-dialog__skill-status">Loading skills...</p>
               ) : null}
@@ -414,21 +384,21 @@ export function AgentProfileForm({
                 <p className="agent-dialog__skill-status">No skills</p>
               ) : null}
               {skillLoadFailed ? (
-                <p className="agent-dialog__skill-status">
-                  Skill load failed
-                </p>
+                <p className="agent-dialog__skill-status">Skill load failed</p>
               ) : null}
             </div>
-          </fieldset>
+          </div>
         </div>
 
-        <p
-          className="issue-dialog__status"
-          role="status"
-          aria-label="Agent profile status"
-        >
-          {statusMessage}
-        </p>
+        {statusMessage ? (
+          <p
+            className="issue-dialog__status"
+            role="status"
+            aria-label="Agent profile status"
+          >
+            {statusMessage}
+          </p>
+        ) : null}
 
         <div className="issue-dialog__footer">
           <button
@@ -447,7 +417,153 @@ export function AgentProfileForm({
             {isSaving ? "Saving..." : "Save"}
           </button>
         </div>
+
+        {toastMessage ? (
+          <div className="agent-dialog__toast" role="status" aria-live="polite">
+            {toastMessage}
+          </div>
+        ) : null}
       </form>
+    </div>
+  );
+}
+
+interface SearchableSelectOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+function SearchableSelect({
+  ariaLabel,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  ariaLabel: string;
+  label: string;
+  onChange: (value: string) => void;
+  options: SearchableSelectOption[];
+  value: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedOption = options.find((option) => option.value === value);
+  const displayValue = isOpen ? query : (selectedOption?.label ?? "");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredOptions = normalizedQuery
+    ? options.filter((option) =>
+        option.label.toLowerCase().includes(normalizedQuery),
+      )
+    : options;
+
+  function commitOption(option: SearchableSelectOption) {
+    onChange(option.value);
+    setQuery("");
+    setIsOpen(false);
+  }
+
+  return (
+    <div
+      className="settings-search-select"
+      ref={rootRef}
+      onBlur={(event) => {
+        if (rootRef.current?.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+
+        setQuery("");
+        setIsOpen(false);
+      }}
+    >
+      <label className="settings-field">
+        <span>{label}</span>
+        <input
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-label={ariaLabel}
+          className="settings-input settings-search-select__input"
+          role="combobox"
+          value={displayValue}
+          onClick={() => {
+            setActiveIndex(0);
+            setIsOpen(true);
+          }}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActiveIndex(0);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            setActiveIndex(0);
+            setIsOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setIsOpen(true);
+              setActiveIndex((current) =>
+                Math.min(current + 1, filteredOptions.length - 1),
+              );
+            }
+
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setActiveIndex((current) => Math.max(current - 1, 0));
+            }
+
+            if (event.key === "Enter" && isOpen) {
+              event.preventDefault();
+              const option = filteredOptions[activeIndex];
+              if (option) commitOption(option);
+            }
+
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setQuery("");
+              setIsOpen(false);
+            }
+          }}
+        />
+      </label>
+      {isOpen ? (
+        <div className="settings-search-select__menu" role="listbox">
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => (
+              <button
+                aria-selected={option.value === value}
+                aria-label={
+                  option.description
+                    ? `${option.label} ${option.description}`
+                    : option.label
+                }
+                className="settings-search-select__option"
+                key={option.value}
+                role="option"
+                tabIndex={-1}
+                type="button"
+                data-active={index === activeIndex ? "true" : "false"}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => commitOption(option)}
+              >
+                <span className="settings-search-select__option-label">
+                  {option.label}
+                </span>
+                {option.description ? (
+                  <span className="settings-search-select__option-description">
+                    {option.description}
+                  </span>
+                ) : null}
+              </button>
+            ))
+          ) : (
+            <p className="settings-search-select__empty">No matches</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

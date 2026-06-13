@@ -472,11 +472,16 @@ describe("ProjectSettingsActivity", () => {
       "claude",
     );
     expect(await screen.findByLabelText("Agent command")).toHaveValue("codex");
-    expect(screen.getByLabelText("Global")).toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Scope" })).toHaveValue(
+      "Global",
+    );
+    expect(screen.queryByText(/Detected:/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Mode")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Prompt template")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Dangerous")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Detect" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Detect" }),
+    ).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Agent profile name"), "My Codex");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -519,7 +524,10 @@ describe("ProjectSettingsActivity", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "New agent" }));
-    await user.type(screen.getByLabelText("Agent profile name"), "Custom Codex");
+    await user.type(
+      screen.getByLabelText("Agent profile name"),
+      "Custom Codex",
+    );
     await user.clear(await screen.findByLabelText("Agent command"));
     await user.type(
       screen.getByLabelText("Agent command"),
@@ -530,6 +538,9 @@ describe("ProjectSettingsActivity", () => {
     expect(testAgentCommandMock).toHaveBeenCalledWith({
       command: "/opt/codex/bin/codex",
     });
+    expect(
+      screen.getByText("Command available: /opt/codex/bin/codex"),
+    ).toHaveClass("agent-dialog__toast");
     expect(screen.getByLabelText("Agent command")).toHaveValue(
       "/opt/codex/bin/codex",
     );
@@ -572,12 +583,17 @@ describe("ProjectSettingsActivity", () => {
         projectId: null,
       }),
     );
-    expect(await screen.findByText("/home/me/.agents/skills/codex-global/SKILL.md")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    expect(await screen.findByText("codex-global")).toBeInTheDocument();
+    expect(
+      screen.getByText("/home/me/.agents/skills/codex-global/SKILL.md"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("/repo/.agents/skills/codex-project/SKILL.md"),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Project"));
+    await user.click(screen.getByRole("combobox", { name: "Scope" }));
+    await user.click(screen.getByRole("option", { name: "Project" }));
 
     await waitFor(() =>
       expect(listAgentSkillsMock).toHaveBeenCalledWith({
@@ -585,7 +601,11 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
       }),
     );
-    expect(await screen.findByText("/repo/.agents/skills/codex-project/SKILL.md")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    expect(await screen.findByText("codex-project")).toBeInTheDocument();
+    expect(
+      screen.getByText("/repo/.agents/skills/codex-project/SKILL.md"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("/home/me/.agents/skills/codex-global/SKILL.md"),
     ).not.toBeInTheDocument();
@@ -631,6 +651,7 @@ describe("ProjectSettingsActivity", () => {
     );
     await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
 
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
     expect(await screen.findByText("claude-global")).toBeInTheDocument();
     expect(screen.getByLabelText("Agent profile name")).toHaveValue(
       "Claude Agent",
@@ -668,16 +689,21 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
     expect(await screen.findByText("None")).toBeInTheDocument();
     expect(screen.getByText("codex-global")).toHaveClass(
-      "agent-dialog__skill-name",
+      "settings-search-select__option-label",
     );
     expect(
       screen.getByText("/home/me/.agents/skills/codex-global/SKILL.md"),
-    ).toHaveClass("agent-dialog__skill-path");
+    ).toHaveClass("settings-search-select__option-description");
 
+    await user.click(
+      screen.getByRole("option", {
+        name: "codex-global /home/me/.agents/skills/codex-global/SKILL.md",
+      }),
+    );
     await user.type(screen.getByLabelText("Agent profile name"), "Skill Agent");
-    await user.click(screen.getByLabelText("codex-global /home/me/.agents/skills/codex-global/SKILL.md"));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -759,7 +785,8 @@ describe("ProjectSettingsActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
     );
-    await user.click(screen.getByLabelText("Project"));
+    await user.click(screen.getByRole("combobox", { name: "Scope" }));
+    await user.click(screen.getByRole("option", { name: "Project" }));
 
     await waitFor(() =>
       expect(listAgentSkillsMock).toHaveBeenCalledWith({
@@ -767,10 +794,11 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
       }),
     );
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
     await user.click(
-      await screen.findByLabelText(
-        "codex-project /repo/.agents/skills/codex-project/SKILL.md",
-      ),
+      await screen.findByRole("option", {
+        name: "codex-project /repo/.agents/skills/codex-project/SKILL.md",
+      }),
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -812,7 +840,8 @@ describe("ProjectSettingsActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
     );
-    await user.click(screen.getByLabelText("Project"));
+    await user.click(screen.getByRole("combobox", { name: "Scope" }));
+    await user.click(screen.getByRole("option", { name: "Project" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -827,7 +856,9 @@ describe("ProjectSettingsActivity", () => {
         name: "Edit Legacy Prompt Codex",
       }),
     ).toHaveLength(1);
-    expect(within(table).getByRole("cell", { name: "Project" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("cell", { name: "Project" }),
+    ).toBeInTheDocument();
     expect(
       within(table).queryByRole("cell", { name: "Global" }),
     ).not.toBeInTheDocument();
@@ -873,18 +904,25 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
-    const firstSkill = await screen.findByLabelText(
-      "shared-skill /home/me/.agents/skills/shared-a/SKILL.md",
-    );
-    const secondSkill = screen.getByLabelText(
-      "shared-skill /home/me/.agents/skills/shared-b/SKILL.md",
-    );
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    const firstSkill = await screen.findByRole("option", {
+      name: "shared-skill /home/me/.agents/skills/shared-a/SKILL.md",
+    });
+    const secondSkill = screen.getByRole("option", {
+      name: "shared-skill /home/me/.agents/skills/shared-b/SKILL.md",
+    });
 
     await user.click(secondSkill);
 
-    expect(firstSkill).not.toBeChecked();
-    expect(secondSkill).toBeChecked();
+    expect(firstSkill).toHaveAttribute("aria-selected", "false");
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    expect(
+      screen.getByRole("option", {
+        name: "shared-skill /home/me/.agents/skills/shared-b/SKILL.md",
+      }),
+    ).toHaveAttribute("aria-selected", "true");
 
+    await user.keyboard("{Escape}");
     await user.type(
       screen.getByLabelText("Agent profile name"),
       "Shared Skill Agent",
@@ -941,9 +979,8 @@ describe("ProjectSettingsActivity", () => {
         ]),
       );
     });
-    expect(
-      await screen.findByText("claude-global"),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    expect(await screen.findByText("claude-global")).toBeInTheDocument();
 
     await act(async () => {
       pendingSkills.codex?.(
@@ -993,7 +1030,9 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(screen.getByLabelText("Agent profile name"), "Unsaved");
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
     expect(await screen.findByText("codex-global")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
     skillNames = ["codex-global", "codex-refreshed"];
     await waitFor(() =>
@@ -1007,9 +1046,8 @@ describe("ProjectSettingsActivity", () => {
       payload: { scope: "global", projectId: null },
     });
 
-    expect(
-      await screen.findByText("codex-refreshed"),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    expect(await screen.findByText("codex-refreshed")).toBeInTheDocument();
     expect(screen.getByLabelText("Agent profile name")).toHaveValue("Unsaved");
   });
 
