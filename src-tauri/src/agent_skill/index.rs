@@ -77,6 +77,17 @@ impl AgentSkillIndex {
         state.global_error = None;
     }
 
+    pub fn replace_global_with_error(
+        &self,
+        skills: Vec<AgentSkillRecord>,
+        error: impl Into<String>,
+    ) {
+        let mut state = self.inner.write().expect("agent skill index poisoned");
+        state.global_skills = skills;
+        state.global_status = AgentSkillRefreshStatus::Failed;
+        state.global_error = Some(error.into());
+    }
+
     pub fn replace_project(&self, project_id: i64, skills: Vec<AgentSkillRecord>) {
         let mut state = self.inner.write().expect("agent skill index poisoned");
         state.project_skills.insert(project_id, skills);
