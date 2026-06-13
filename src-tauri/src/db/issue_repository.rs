@@ -323,6 +323,7 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
         project_id: row.get(1)?,
         title: row.get(2)?,
         description: row.get(3)?,
+        attachments: Vec::new(),
         status: issue_status_from_str(&row.get::<_, String>(4)?)?,
         linked_session_id: row.get(5)?,
         linked_session_status: row

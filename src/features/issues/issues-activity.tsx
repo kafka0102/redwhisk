@@ -1,4 +1,7 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { Paperclip, Play } from "lucide-react";
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -6,15 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   createIssue,
+  exportIssueAttachment,
   listIssues,
+  previewIssueAttachment,
   updateIssue,
   type AgentSessionStatus,
+  type IssueAttachmentRecord,
+  type IssueAttachmentPreviewRecord,
   type IssueRecord,
   type IssueStatus,
 } from "./issue-commands";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
-import { IssueDescriptionEditor } from "./issue-description-editor";
+import {
+  IssueDescriptionEditor,
+  type IssueAttachmentDraft,
+} from "./issue-description-editor";
 import { listAgentProfiles } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
@@ -27,6 +37,14 @@ interface IssuesActivityProps {
 interface IssueFormState {
   title: string;
   description: string;
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
+}
+
+interface AttachmentPreviewState {
+  displayName: string;
+  kind: "image" | "pdf" | "word" | "text" | "generic";
+  textContent?: string | null;
+  imageSrc?: string | null;
 }
 
 interface LaneDefinition {
@@ -37,6 +55,7 @@ interface LaneDefinition {
 const EMPTY_FORM: IssueFormState = {
   title: "",
   description: "",
+  attachments: [],
 };
 
 const ISSUE_LANES: LaneDefinition[] = [
@@ -70,8 +89,12 @@ export function IssuesActivity({
     requestedIssueId,
   );
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
-  const [isRunDialogOpen, setIsRunDialogOpen] = useState(false);
+  const [runDialogIssue, setRunDialogIssue] = useState<
+    Pick<IssueRecord, "id" | "title" | "description" | "attachments"> | null
+  >(null);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
+  const [attachmentPreview, setAttachmentPreview] =
+    useState<AttachmentPreviewState | null>(null);
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,11 +114,12 @@ export function IssuesActivity({
   const dialogFormRef = useRef<HTMLFormElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
-  const saveButtonRef = useRef<HTMLButtonElement | null>(null);
   const runButtonRef = useRef<HTMLButtonElement | null>(null);
+  const saveButtonRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef(new Map<number, HTMLButtonElement>());
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
+  const runDialogTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -110,7 +134,7 @@ export function IssuesActivity({
       setIssues([]);
       setSelectedIssueId(null);
       setDialogMode(null);
-      setIsRunDialogOpen(false);
+      setRunDialogIssue(null);
       setForm(EMPTY_FORM);
       setIsSaving(false);
       setDialogErrorMessage(null);
@@ -231,8 +255,9 @@ export function IssuesActivity({
 
     setDialogErrorMessage(null);
     setIsOpeningLog(false);
-    setIsRunDialogOpen(false);
+    setRunDialogIssue(null);
     setSummaryIssueId(null);
+    setAttachmentPreview(null);
     const closingMode = dialogMode;
     const previousSelectedIssue =
       issues.find((issue) => issue.id === previousSelectedIssueIdRef.current) ??
@@ -268,7 +293,8 @@ export function IssuesActivity({
         const createdIssue = await createIssue({
           projectId: requestProjectId,
           title: form.title,
-          description: form.description,
+          description: buildIssueDescription(form.description, form.attachments),
+          attachments: serializeAttachments(form.attachments),
         });
         if (activeProjectIdRef.current !== requestProjectId) {
           return;
@@ -283,7 +309,8 @@ export function IssuesActivity({
           projectId: requestProjectId,
           issueId: selectedIssue.id,
           title: form.title,
-          description: form.description,
+          description: buildIssueDescription(form.description, form.attachments),
+          attachments: serializeAttachments(form.attachments),
         });
         if (activeProjectIdRef.current !== requestProjectId) {
           return;
@@ -370,16 +397,19 @@ export function IssuesActivity({
     }
   }
 
-  function openRunDialog() {
-    if (
-      !selectedIssue ||
-      selectedIssue.status !== "backlog" ||
-      selectedIssue.linkedSessionId != null
-    ) {
+  function openRunDialog(
+    issue: Pick<
+      IssueRecord,
+      "id" | "title" | "description" | "attachments" | "status" | "linkedSessionId"
+    >,
+    trigger: HTMLElement | null,
+  ) {
+    if (!canRunIssueFor(issue)) {
       return;
     }
 
-    setIsRunDialogOpen(true);
+    runDialogTriggerRef.current = trigger;
+    setRunDialogIssue(issue);
   }
 
   function openLinkedSession() {
@@ -388,7 +418,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
-    setIsRunDialogOpen(false);
+    setRunDialogIssue(null);
     setDialogMode(null);
     setForm(EMPTY_FORM);
     onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
@@ -427,15 +457,15 @@ export function IssuesActivity({
   }
 
   function closeRunDialog() {
-    setIsRunDialogOpen(false);
-    runButtonRef.current?.focus();
+    setRunDialogIssue(null);
+    runDialogTriggerRef.current?.focus();
   }
 
   async function handleRunStarted(result: {
     issueId: number;
     sessionId?: number | null;
   }) {
-    setIsRunDialogOpen(false);
+    setRunDialogIssue(null);
 
     try {
       const response = await listIssues({ projectId });
@@ -460,20 +490,14 @@ export function IssuesActivity({
   }
 
   const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Detail";
-  const issueForRunPreview =
-    dialogMode === "edit" && selectedIssue
-      ? {
-          ...selectedIssue,
-          title: form.title,
-          description: form.description,
-        }
-      : null;
-  const canRunIssue =
-    selectedIssue?.status === "backlog" &&
-    selectedIssue.linkedSessionId == null &&
+  const isBacklogDialog =
+    dialogMode === "create" || selectedIssue?.status === "backlog";
+  const hasLinkedSession = selectedIssue?.linkedSessionId != null;
+  const canRunSelectedIssue =
+    selectedIssue != null &&
+    canRunIssueFor(selectedIssue) &&
     agentProfileCount > 0 &&
     !isLoadingAgentProfiles;
-  const hasLinkedSession = selectedIssue?.linkedSessionId != null;
   const canOpenSession =
     hasLinkedSession &&
     selectedIssue?.status !== "completed" &&
@@ -485,15 +509,92 @@ export function IssuesActivity({
       selectedIssue?.linkedSessionStatus === "stopped");
   const canViewSummary =
     dialogMode === "edit" && selectedIssue?.status === "completed";
-  const runStatusMessage =
-    agentProfileErrorMessage ??
-    (isLoadingAgentProfiles
-      ? "Loading agent profiles..."
-      : hasLinkedSession
-        ? "This issue already has a linked session."
-        : agentProfileCount === 0
-          ? "No agent profiles available. Configure an agent in Settings first."
-          : null);
+  const runStatusMessage = agentProfileErrorMessage;
+
+  async function handleSelectAttachment() {
+    const selectedPath = await open({
+      directory: false,
+      multiple: false,
+      title: "Select attachment",
+    });
+
+    if (typeof selectedPath !== "string") {
+      return;
+    }
+
+    const attachment = buildDraftAttachment(selectedPath);
+    setForm((currentForm) => ({
+      ...currentForm,
+      attachments: [...currentForm.attachments, attachment],
+    }));
+  }
+
+  function handleRemoveAttachment(
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      attachments: currentForm.attachments.filter((item) =>
+        "id" in attachment
+          ? !("id" in item && item.id === attachment.id)
+          : !("token" in item && item.token === attachment.token),
+      ),
+    }));
+  }
+
+  async function handlePreviewAttachment(
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) {
+    try {
+      const preview = await previewIssueAttachment(
+        "id" in attachment
+          ? {
+              projectId,
+              attachmentId: attachment.id,
+            }
+          : {
+              projectId,
+              sourcePath: attachment.sourcePath,
+              displayName: attachment.displayName,
+            },
+      );
+      setAttachmentPreview(toAttachmentPreviewState(preview));
+    } catch (error) {
+      setDialogErrorMessage(toCommandError(error).message);
+    }
+  }
+
+  async function handleDownloadAttachment(
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) {
+    const targetPath = await save({
+      defaultPath: attachment.displayName,
+      title: `Save ${attachment.displayName}`,
+    });
+
+    if (typeof targetPath !== "string") {
+      return;
+    }
+
+    try {
+      await exportIssueAttachment(
+        "id" in attachment
+          ? {
+              projectId,
+              attachmentId: attachment.id,
+              targetPath,
+            }
+          : {
+              projectId,
+              sourcePath: attachment.sourcePath,
+              displayName: attachment.displayName,
+              targetPath,
+            },
+      );
+    } catch (error) {
+      setDialogErrorMessage(toCommandError(error).message);
+    }
+  }
 
   return (
     <main className="activity-surface activity-surface--issues">
@@ -553,53 +654,69 @@ export function IssuesActivity({
 
                 return (
                   <div key={issue.id} role="listitem">
-                    <button
-                      ref={(element) => {
-                        if (element) {
-                          cardRefs.current.set(issue.id, element);
-                        } else {
-                          cardRefs.current.delete(issue.id);
+                    <div className="issue-card__shell">
+                      <button
+                        ref={(element) => {
+                          if (element) {
+                            cardRefs.current.set(issue.id, element);
+                          } else {
+                            cardRefs.current.delete(issue.id);
+                          }
+                        }}
+                        aria-describedby={describedBy}
+                        aria-label={issue.title}
+                        aria-pressed={issue.id === selectedIssueId}
+                        className="issue-card"
+                        type="button"
+                        onClick={(event) =>
+                          openIssueDialog(issue, event.currentTarget)
                         }
-                      }}
-                      aria-describedby={describedBy}
-                      aria-label={issue.title}
-                      aria-pressed={issue.id === selectedIssueId}
-                      className="issue-card"
-                      type="button"
-                      onClick={(event) =>
-                        openIssueDialog(issue, event.currentTarget)
-                      }
-                    >
-                      <span id={metaId} className="issue-card__meta-row">
-                        <span className="issue-card__id">#{issue.id}</span>
-                        <span className="issue-card__updated">
-                          {formatLocalTimestamp(issue.updatedAt)}
-                        </span>
-                      </span>
-                      <span className="issue-card__title">{issue.title}</span>
-                      {issue.linkedSessionAttention === "requested" ? (
-                        <span
-                          id={attentionId}
-                          className="attention-marker issue-card__attention"
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="attention-marker__dot"
-                          />
-                          <span className="attention-marker__text">
-                            Codex 需要确认
+                      >
+                        <span id={metaId} className="issue-card__meta-row">
+                          <span className="issue-card__id">#{issue.id}</span>
+                          <span className="issue-card__updated">
+                            {formatLocalTimestamp(issue.updatedAt)}
                           </span>
                         </span>
+                        <span className="issue-card__title">{issue.title}</span>
+                        {issue.linkedSessionAttention === "requested" ? (
+                          <span
+                            id={attentionId}
+                            className="attention-marker issue-card__attention"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="attention-marker__dot"
+                            />
+                            <span className="attention-marker__text">
+                              Codex 需要确认
+                            </span>
+                          </span>
+                        ) : null}
+                        {issue.description ? (
+                          <span
+                            id={descriptionId}
+                            className="issue-card__description"
+                          >
+                            {markdownToExcerpt(issue.description)}
+                          </span>
+                        ) : null}
+                      </button>
+                      {canRunIssueFor(issue) ? (
+                        <div className="issue-card__footer">
+                          <button
+                            aria-label={`Run ${issue.title}`}
+                            className="issue-card__run"
+                            type="button"
+                            onClick={(event) => {
+                              openRunDialog(issue, event.currentTarget);
+                            }}
+                          >
+                            <Play aria-hidden="true" size={14} strokeWidth={2} />
+                          </button>
+                        </div>
                       ) : null}
-                      {issue.description ? (
-                        <span
-                          id={descriptionId}
-                          className="issue-card__description"
-                        >
-                          {markdownToExcerpt(issue.description)}
-                        </span>
-                      ) : null}
-                    </button>
+                    </div>
                   </div>
                 );
               })}
@@ -624,7 +741,7 @@ export function IssuesActivity({
             ref={dialogFormRef}
             aria-label={dialogTitle}
             aria-modal="true"
-            className="issue-dialog"
+            className={`issue-dialog${isBacklogDialog ? " issue-dialog--backlog" : ""}`}
             role="dialog"
             onKeyDown={handleDialogKeyDown}
             onSubmit={handleSubmit}
@@ -642,7 +759,9 @@ export function IssuesActivity({
                 x
               </button>
             </div>
-            <div className="issue-dialog__body">
+            <div
+              className={`issue-dialog__body${isBacklogDialog ? " issue-dialog__body--single" : ""}`}
+            >
               <div className="issue-dialog__editor">
                 <div className="issue-field">
                   <Input
@@ -667,16 +786,21 @@ export function IssuesActivity({
                     ariaLabel="Description"
                     placeholder="Describe the task"
                     value={form.description}
+                    attachments={form.attachments}
+                    onDownloadAttachment={handleDownloadAttachment}
                     onChange={(description) =>
                       setForm((currentForm) => ({
                         ...currentForm,
                         description,
                       }))
                     }
+                    onPreviewAttachment={handlePreviewAttachment}
+                    onRemoveAttachment={handleRemoveAttachment}
                   />
                 </div>
               </div>
-              <aside className="issue-dialog__side" aria-label="Issue actions">
+              {!isBacklogDialog ? (
+                <aside className="issue-dialog__side" aria-label="Issue actions">
                 <section className="issue-dialog__panel">
                   <h4>Session</h4>
                   {hasLinkedSession ? (
@@ -749,23 +873,14 @@ export function IssuesActivity({
                     selectedIssue?.status === "backlog" &&
                     !hasLinkedSession ? (
                     <>
-                      <Button
-                        ref={runButtonRef}
-                        className="issues-button"
-                        type="button"
-                        variant="outline"
-                        disabled={!canRunIssue}
-                        onClick={openRunDialog}
-                      >
-                        Run
-                      </Button>
                       {runStatusMessage ? <p>{runStatusMessage}</p> : null}
                     </>
                   ) : (
                     <p>No actions available.</p>
                   )}
                 </section>
-              </aside>
+                </aside>
+              ) : null}
             </div>
             <p
               className="issue-dialog__status"
@@ -775,32 +890,77 @@ export function IssuesActivity({
               {dialogErrorMessage}
             </p>
             <div className="issue-dialog__footer">
-              <Button
-                ref={cancelButtonRef}
-                className="issues-button"
-                type="button"
-                variant="outline"
-                disabled={isSaving}
-                onClick={closeDialog}
-              >
-                Cancel
-              </Button>
-              <Button
-                ref={saveButtonRef}
-                className="issues-button issues-button--primary"
-                type="submit"
-                disabled={isSaving}
-              >
-                {dialogMode === "create" ? "Create Issue" : "Save"}
-              </Button>
+              <div className="issue-dialog__footer-start">
+                <Button
+                  aria-label="Attach file"
+                  className="issues-button issues-button--icon"
+                  type="button"
+                  variant="outline"
+                  disabled={isSaving}
+                  onClick={() => void handleSelectAttachment()}
+                >
+                  <Paperclip aria-hidden="true" size={15} strokeWidth={2} />
+                </Button>
+              </div>
+              <div className="issue-dialog__footer-end">
+                {dialogMode === "edit" &&
+                selectedIssue != null &&
+                canRunIssueFor(selectedIssue) ? (
+                  <Button
+                    ref={runButtonRef}
+                    className="issues-button"
+                    type="button"
+                    variant="outline"
+                    disabled={!canRunSelectedIssue}
+                    onClick={() =>
+                      openRunDialog(
+                        {
+                          ...selectedIssue,
+                          title: form.title,
+                          description: buildIssueDescription(
+                            form.description,
+                            form.attachments,
+                          ),
+                          attachments: form.attachments.filter(
+                            (
+                              attachment,
+                            ): attachment is IssueAttachmentRecord => "id" in attachment,
+                          ),
+                        },
+                        runButtonRef.current,
+                      )
+                    }
+                  >
+                    Run
+                  </Button>
+                ) : null}
+                <Button
+                  ref={cancelButtonRef}
+                  className="issues-button"
+                  type="button"
+                  variant="outline"
+                  disabled={isSaving}
+                  onClick={closeDialog}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  ref={saveButtonRef}
+                  className="issues-button issues-button--primary"
+                  type="submit"
+                  disabled={isSaving}
+                >
+                  {dialogMode === "create" ? "Create Issue" : "Save"}
+                </Button>
+              </div>
             </div>
           </form>
         </div>
       ) : null}
 
-      {isRunDialogOpen && issueForRunPreview ? (
+      {runDialogIssue ? (
         <IssueRunDialog
-          issue={issueForRunPreview}
+          issue={runDialogIssue}
           projectId={projectId}
           onClose={closeRunDialog}
           onStarted={handleRunStarted}
@@ -813,14 +973,70 @@ export function IssuesActivity({
           onClose={() => setSummaryIssueId(null)}
         />
       ) : null}
+      {attachmentPreview ? (
+        <div
+          className="issue-dialog-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setAttachmentPreview(null);
+            }
+          }}
+        >
+          <div
+            aria-label="Attachment Preview"
+            aria-modal="true"
+            className="issue-dialog issue-dialog--compact"
+            role="dialog"
+          >
+            <div className="issue-dialog__header">
+              <h3>{attachmentPreview.displayName}</h3>
+              <button
+                aria-label="Close attachment preview"
+                className="issue-dialog__close"
+                type="button"
+                onClick={() => setAttachmentPreview(null)}
+              >
+                x
+              </button>
+            </div>
+            <div className="issue-dialog__body issue-dialog__body--single">
+              <div className="issue-dialog__editor">
+                {attachmentPreview.imageSrc ? (
+                  <img
+                    alt={attachmentPreview.displayName}
+                    className="issue-attachment-preview__image"
+                    src={attachmentPreview.imageSrc}
+                  />
+                ) : (
+                  <pre className="completion-preview__prompt">
+                    {attachmentPreview.textContent}
+                  </pre>
+                )}
+              </div>
+            </div>
+            <div className="issue-dialog__footer">
+              <Button
+                className="issues-button"
+                type="button"
+                variant="outline"
+                onClick={() => setAttachmentPreview(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
 
 function issueToForm(issue: IssueRecord): IssueFormState {
+  const parsed = parseIssueDescription(issue.description, issue.attachments ?? []);
   return {
     title: issue.title,
-    description: issue.description,
+    description: parsed.description,
+    attachments: parsed.attachments,
   };
 }
 
@@ -841,6 +1057,7 @@ function formatLocalTimestamp(epochMilliseconds: number): string {
 
 function markdownToExcerpt(markdown: string): string {
   return markdown
+    .replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "")
     .replace(/\r\n/g, "\n")
     .replace(/```([\s\S]*?)```/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
@@ -854,6 +1071,150 @@ function markdownToExcerpt(markdown: string): string {
     .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function buildIssueDescription(
+  description: string,
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
+): string {
+  const trimmedDescription = description.trimEnd();
+  const attachmentTokens = attachments.map((attachment) =>
+    "id" in attachment
+      ? `{{issue-attachment:${attachment.id}}}`
+      : `{{issue-attachment-temp:${attachment.token}}}`,
+  );
+
+  return [trimmedDescription, ...attachmentTokens]
+    .filter((value) => value.length > 0)
+    .join("\n\n");
+}
+
+function serializeAttachments(
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
+): Array<{
+  attachmentId?: number | null;
+  tempToken?: string | null;
+  sourcePath?: string | null;
+  displayName: string;
+  mimeType?: string | null;
+}> {
+  return attachments.map((attachment) =>
+    "id" in attachment
+      ? {
+          attachmentId: attachment.id,
+          displayName: attachment.displayName,
+          mimeType: attachment.mimeType ?? null,
+        }
+      : {
+          tempToken: attachment.token,
+          sourcePath: attachment.sourcePath,
+          displayName: attachment.displayName,
+          mimeType: attachment.mimeType ?? null,
+        },
+  );
+}
+
+function parseIssueDescription(
+  description: string,
+  attachments: IssueAttachmentRecord[],
+): {
+  description: string;
+  attachments: IssueAttachmentRecord[];
+} {
+  const tokenMatches = Array.from(
+    description.matchAll(/\{\{issue-attachment:(\d+)\}\}/g),
+  );
+  const positionById = new Map<number, number>();
+  tokenMatches.forEach((match, index) => {
+    positionById.set(Number(match[1]), index);
+  });
+
+  const orderedAttachments = [...attachments].sort((left, right) => {
+    const leftIndex = positionById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = positionById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftIndex - rightIndex;
+  });
+
+  const visibleDescription = description
+    .replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    description: visibleDescription,
+    attachments: orderedAttachments,
+  };
+}
+
+function buildDraftAttachment(sourcePath: string): IssueAttachmentDraft {
+  const displayName = sourcePath.split(/[\\/]/).pop() ?? sourcePath;
+  const extension = displayName.split(".").pop()?.toLowerCase() ?? "";
+  const kind = attachmentKindFromExtension(extension);
+  return {
+    token: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    displayName,
+    sourcePath,
+    kind,
+    isPreviewable: isPreviewableAttachmentKind(kind),
+    absolutePath: sourcePath,
+  };
+}
+
+function attachmentKindFromExtension(
+  extension: string,
+): IssueAttachmentDraft["kind"] {
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) {
+    return "image";
+  }
+  if (extension === "pdf") {
+    return "pdf";
+  }
+  if (["doc", "docx"].includes(extension)) {
+    return "word";
+  }
+  if (
+    [
+      "md",
+      "json",
+      "txt",
+      "yaml",
+      "yml",
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "css",
+      "html",
+      "xml",
+      "csv",
+    ].includes(extension)
+  ) {
+    return "text";
+  }
+  return "generic";
+}
+
+function isPreviewableAttachmentKind(
+  kind: IssueAttachmentDraft["kind"],
+): boolean {
+  return kind === "image" || kind === "text";
+}
+
+function canRunIssueFor(
+  issue: Pick<IssueRecord, "status" | "linkedSessionId">,
+): boolean {
+  return issue.status === "backlog" && issue.linkedSessionId == null;
+}
+
+function toAttachmentPreviewState(
+  preview: IssueAttachmentPreviewRecord,
+): AttachmentPreviewState {
+  return {
+    displayName: preview.displayName,
+    kind: preview.kind,
+    textContent: preview.textContent,
+    imageSrc: preview.absolutePath ? convertFileSrc(preview.absolutePath) : null,
+  };
 }
 
 function getFocusableDialogElements(

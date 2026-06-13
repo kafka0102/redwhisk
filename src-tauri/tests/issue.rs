@@ -8,6 +8,7 @@ use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::completion_attempt_repository::CompletionAttemptRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::event_repository::EventRepository;
+use redwhisk_lib::db::issue_attachment_repository::IssueAttachmentRepository;
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
@@ -16,8 +17,10 @@ use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStat
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput,
-    DetectAgentCommitCompletionInput, GetIssueSummaryInput, IssueStatus, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, SendAgentCommitPromptInput, UpdateIssueInput,
+    DetectAgentCommitCompletionInput, ExportIssueAttachmentInput, GetIssueSummaryInput,
+    IssueAttachmentInput, IssueAttachmentKind, IssueStatus, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SendAgentCommitPromptInput,
+    UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
@@ -166,6 +169,56 @@ fn issue_action_migration_creates_issue_actions_schema_with_issue_index() {
 }
 
 #[test]
+fn issue_attachment_migration_creates_issue_attachments_schema_with_issue_index() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let table_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'issue_attachments'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("issue attachments table count");
+    assert_eq!(table_count, 1);
+
+    let columns = table_columns(&database.connection, "issue_attachments");
+    assert_eq!(
+        columns,
+        vec![
+            "id",
+            "issue_id",
+            "display_name",
+            "stored_name",
+            "relative_path",
+            "absolute_path",
+            "mime_type",
+            "file_size",
+            "kind",
+            "is_previewable",
+            "created_at"
+        ],
+    );
+
+    let index_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('issue_attachments') WHERE name = 'idx_issue_attachments_issue_id_created_at'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("issue attachment index count");
+    assert_eq!(index_count, 1);
+}
+
+#[test]
 fn create_issue_defaults_to_backlog_and_saves_timestamps() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -180,6 +233,7 @@ fn create_issue_defaults_to_backlog_and_saves_timestamps() {
             project_id,
             title: "  Write local issue  ".to_string(),
             description: "  Keep the shape small.  ".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
 
@@ -231,6 +285,7 @@ fn create_issue_rolls_back_issue_when_issue_action_insert_fails() {
             project_id,
             title: "Rollback me".to_string(),
             description: "Do not persist".to_string(),
+            attachments: Vec::new(),
         })
         .expect_err("issue action insert should fail");
 
@@ -263,6 +318,7 @@ fn update_issue_trims_fields_and_advances_updated_at() {
             project_id,
             title: "First title".to_string(),
             description: "First description".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -279,6 +335,7 @@ fn update_issue_trims_fields_and_advances_updated_at() {
             issue_id: issue.id,
             title: "  Next title  ".to_string(),
             description: "  Next description  ".to_string(),
+            attachments: Vec::new(),
         })
         .expect("updated issue");
 
@@ -304,6 +361,7 @@ fn update_issue_is_scoped_to_project() {
             project_id: first_project_id,
             title: "First project issue".to_string(),
             description: "Do not leak".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
 
@@ -313,6 +371,7 @@ fn update_issue_is_scoped_to_project() {
             issue_id: issue.id,
             title: "Wrong project update".to_string(),
             description: "Should fail".to_string(),
+            attachments: Vec::new(),
         })
         .expect_err("cross-project update should fail");
 
@@ -341,10 +400,291 @@ fn update_issue_rejects_missing_issue() {
             issue_id: 404,
             title: "Missing".to_string(),
             description: "Missing".to_string(),
+            attachments: Vec::new(),
         })
         .expect_err("missing issue should fail");
 
     assert_eq!(error.code, CommandErrorCode::IssueNotFound);
+}
+
+#[test]
+fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("attachment-create-repo");
+    fs::create_dir_all(&repo_dir).expect("create repo dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-create-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let source_path = temp_dir.path().join("draft-note.md");
+    fs::write(&source_path, "# Draft\n").expect("write draft attachment");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Issue with attachment".to_string(),
+            description: "See {{issue-attachment-temp:draft-1}}".to_string(),
+            attachments: vec![IssueAttachmentInput {
+                attachment_id: None,
+                temp_token: Some("draft-1".to_string()),
+                source_path: Some(source_path.to_string_lossy().to_string()),
+                display_name: "draft-note.md".to_string(),
+                mime_type: Some("text/markdown".to_string()),
+            }],
+        })
+        .expect("created issue");
+
+    assert!(issue.description.contains("{{issue-attachment:"));
+    assert_eq!(issue.attachments.len(), 1);
+    assert_eq!(issue.attachments[0].display_name, "draft-note.md");
+    assert_eq!(issue.attachments[0].kind, IssueAttachmentKind::Text);
+    assert!(issue.attachments[0].is_previewable);
+    assert_eq!(
+        issue.attachments[0].relative_path,
+        format!(
+            ".redwhisk/issues/{}/attachments/{}",
+            issue.id, issue.attachments[0].stored_name
+        )
+    );
+    assert!(Path::new(&issue.attachments[0].absolute_path).exists());
+    assert_eq!(
+        fs::read_to_string(&issue.attachments[0].absolute_path).expect("read saved attachment"),
+        "# Draft\n"
+    );
+
+    let attachments = IssueAttachmentRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("load attachments");
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].display_name, "draft-note.md");
+}
+
+#[test]
+fn update_issue_removes_deleted_attachments_and_keeps_referenced_ones() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("attachment-update-repo");
+    fs::create_dir_all(&repo_dir).expect("create repo dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-update-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let first_source = temp_dir.path().join("first.md");
+    let second_source = temp_dir.path().join("second.md");
+    fs::write(&first_source, "first").expect("write first attachment");
+    fs::write(&second_source, "second").expect("write second attachment");
+
+    let created = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Issue attachments".to_string(),
+            description: "A {{issue-attachment-temp:first}} B {{issue-attachment-temp:second}}"
+                .to_string(),
+            attachments: vec![
+                IssueAttachmentInput {
+                    attachment_id: None,
+                    temp_token: Some("first".to_string()),
+                    source_path: Some(first_source.to_string_lossy().to_string()),
+                    display_name: "first.md".to_string(),
+                    mime_type: Some("text/markdown".to_string()),
+                },
+                IssueAttachmentInput {
+                    attachment_id: None,
+                    temp_token: Some("second".to_string()),
+                    source_path: Some(second_source.to_string_lossy().to_string()),
+                    display_name: "second.md".to_string(),
+                    mime_type: Some("text/markdown".to_string()),
+                },
+            ],
+        })
+        .expect("create issue");
+    let removed_attachment = created.attachments[0].clone();
+    let kept_attachment = created.attachments[1].clone();
+
+    let updated = service
+        .update_issue(UpdateIssueInput {
+            project_id,
+            issue_id: created.id,
+            title: "Issue attachments updated".to_string(),
+            description: format!("Only keep {{{{issue-attachment:{}}}}}", kept_attachment.id),
+            attachments: vec![IssueAttachmentInput {
+                attachment_id: Some(kept_attachment.id),
+                temp_token: None,
+                source_path: None,
+                display_name: kept_attachment.display_name.clone(),
+                mime_type: kept_attachment.mime_type.clone(),
+            }],
+        })
+        .expect("update issue");
+
+    assert_eq!(updated.attachments.len(), 1);
+    assert_eq!(updated.attachments[0].id, kept_attachment.id);
+    assert!(!Path::new(&removed_attachment.absolute_path).exists());
+    assert!(Path::new(&kept_attachment.absolute_path).exists());
+}
+
+#[test]
+fn preview_issue_attachment_returns_text_for_saved_and_draft_files() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("attachment-preview-repo");
+    fs::create_dir_all(&repo_dir).expect("create repo dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-preview-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let source_path = temp_dir.path().join("preview.md");
+    fs::write(&source_path, "preview text").expect("write attachment");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Preview attachment".to_string(),
+            description: "See {{issue-attachment-temp:draft}}".to_string(),
+            attachments: vec![IssueAttachmentInput {
+                attachment_id: None,
+                temp_token: Some("draft".to_string()),
+                source_path: Some(source_path.to_string_lossy().to_string()),
+                display_name: "preview.md".to_string(),
+                mime_type: Some("text/markdown".to_string()),
+            }],
+        })
+        .expect("create issue");
+
+    let saved_preview = service
+        .preview_issue_attachment(PreviewIssueAttachmentInput {
+            project_id,
+            attachment_id: Some(issue.attachments[0].id),
+            source_path: None,
+            display_name: None,
+        })
+        .expect("saved preview");
+    assert_eq!(saved_preview.text_content.as_deref(), Some("preview text"));
+    assert_eq!(saved_preview.kind, IssueAttachmentKind::Text);
+
+    let draft_preview = service
+        .preview_issue_attachment(PreviewIssueAttachmentInput {
+            project_id,
+            attachment_id: None,
+            source_path: Some(source_path.to_string_lossy().to_string()),
+            display_name: Some("preview.md".to_string()),
+        })
+        .expect("draft preview");
+    assert_eq!(draft_preview.text_content.as_deref(), Some("preview text"));
+    assert_eq!(draft_preview.attachment_id, None);
+}
+
+#[test]
+fn preview_issue_attachment_rejects_non_previewable_binary_file() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("attachment-binary-repo");
+    fs::create_dir_all(&repo_dir).expect("create repo dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-binary-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let source_path = temp_dir.path().join("archive.bin");
+    fs::write(&source_path, [0_u8, 159, 146, 150]).expect("write binary attachment");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+
+    let error = service
+        .preview_issue_attachment(PreviewIssueAttachmentInput {
+            project_id,
+            attachment_id: None,
+            source_path: Some(source_path.to_string_lossy().to_string()),
+            display_name: Some("archive.bin".to_string()),
+        })
+        .expect_err("binary preview should fail");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+}
+
+#[test]
+fn export_issue_attachment_supports_saved_and_draft_files() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("attachment-export-repo");
+    fs::create_dir_all(&repo_dir).expect("create repo dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-export-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let source_path = temp_dir.path().join("export.txt");
+    fs::write(&source_path, "export me").expect("write source");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Export attachment".to_string(),
+            description: "See {{issue-attachment-temp:draft}}".to_string(),
+            attachments: vec![IssueAttachmentInput {
+                attachment_id: None,
+                temp_token: Some("draft".to_string()),
+                source_path: Some(source_path.to_string_lossy().to_string()),
+                display_name: "export.txt".to_string(),
+                mime_type: Some("text/plain".to_string()),
+            }],
+        })
+        .expect("create issue");
+    let saved_target = temp_dir.path().join("saved-copy.txt");
+    let draft_target = temp_dir.path().join("draft-copy.txt");
+
+    service
+        .export_issue_attachment(ExportIssueAttachmentInput {
+            project_id,
+            attachment_id: Some(issue.attachments[0].id),
+            source_path: None,
+            display_name: None,
+            target_path: saved_target.to_string_lossy().to_string(),
+        })
+        .expect("export saved attachment");
+    service
+        .export_issue_attachment(ExportIssueAttachmentInput {
+            project_id,
+            attachment_id: None,
+            source_path: Some(source_path.to_string_lossy().to_string()),
+            display_name: Some("export.txt".to_string()),
+            target_path: draft_target.to_string_lossy().to_string(),
+        })
+        .expect("export draft attachment");
+
+    assert_eq!(
+        fs::read_to_string(saved_target).expect("read saved copy"),
+        "export me"
+    );
+    assert_eq!(
+        fs::read_to_string(draft_target).expect("read draft copy"),
+        "export me"
+    );
 }
 
 #[test]
@@ -361,6 +701,7 @@ fn mark_issue_review_updates_running_issue_and_records_action_without_closing_se
             project_id,
             title: "Ready for review".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -428,6 +769,7 @@ fn mark_issue_review_rejects_non_running_issue_without_action() {
             project_id,
             title: "Already review".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -480,6 +822,7 @@ fn mark_issue_review_rejects_issue_without_running_linked_session() {
             project_id,
             title: "No session".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -524,6 +867,7 @@ fn mark_issue_review_rejects_cross_project_issue_without_action() {
             project_id: first_project_id,
             title: "Wrong project".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -575,6 +919,7 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
             project_id,
             title: "Ready to complete".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -651,6 +996,7 @@ fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
             project_id,
             title: "Still running".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -712,6 +1058,7 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
             project_id,
             title: "Manual completed issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -793,6 +1140,7 @@ fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_
             project_id,
             title: "Manual complete after failed attempt".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -907,6 +1255,7 @@ fn complete_issue_clean_closes_running_session_and_records_audit() {
             project_id,
             title: "Ready to complete cleanly".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1024,6 +1373,7 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
             project_id,
             title: "Dirty worktree should block".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1115,6 +1465,7 @@ fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progres
             project_id,
             title: "Blocked clean complete".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1194,6 +1545,7 @@ fn prepare_agent_commit_completion_returns_preview_for_dirty_review_issue() {
             project_id,
             title: "Review issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1253,6 +1605,7 @@ fn prepare_agent_commit_completion_rejects_clean_repo() {
             project_id,
             title: "Review issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1313,6 +1666,7 @@ fn prepare_agent_commit_completion_records_blocked_attempt_when_git_operation_is
             project_id,
             title: "Blocked agent commit".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1395,6 +1749,7 @@ fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
             project_id,
             title: "Review issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1499,6 +1854,7 @@ fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
             project_id,
             title: "Review issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1655,6 +2011,7 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
             project_id,
             title: "Review issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1785,6 +2142,7 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
             project_id,
             title: "Blocked detect".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1891,6 +2249,7 @@ fn get_issue_summary_reports_completed_session_state_mismatch() {
             project_id,
             title: "Completed mismatch".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1947,6 +2306,7 @@ fn update_issue_advances_timestamp_monotonically_from_future_timestamp() {
             project_id,
             title: "Future timestamp".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1963,6 +2323,7 @@ fn update_issue_advances_timestamp_monotonically_from_future_timestamp() {
             issue_id: issue.id,
             title: "Future timestamp updated".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("updated issue");
 
@@ -1983,6 +2344,7 @@ fn deleting_project_cascades_to_issues() {
             project_id,
             title: "Cascade issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
 
@@ -2019,6 +2381,7 @@ fn create_issue_rejects_empty_title_without_insert() {
             project_id,
             title: "   ".to_string(),
             description: "Description may exist".to_string(),
+            attachments: Vec::new(),
         })
         .expect_err("empty title should fail");
 
@@ -2045,6 +2408,7 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
             project_id: first_project_id,
             title: "Older".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("older issue");
     let newer_issue = service
@@ -2052,6 +2416,7 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
             project_id: first_project_id,
             title: "Newer".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("newer issue");
     service
@@ -2059,6 +2424,7 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
             project_id: second_project_id,
             title: "Other project".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("other project issue");
     database
@@ -2115,6 +2481,7 @@ fn list_issues_includes_linked_session_facts() {
             project_id,
             title: "Linked session issue".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     let profile_id = insert_agent_profile(&database.connection);
@@ -2175,6 +2542,7 @@ fn list_issues_ignores_standalone_sessions_in_same_project() {
             project_id,
             title: "Issue without linked session".to_string(),
             description: "".to_string(),
+            attachments: Vec::new(),
         })
         .expect("created issue");
     let profile_id = insert_agent_profile(&database.connection);

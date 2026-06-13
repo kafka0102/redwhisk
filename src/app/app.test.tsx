@@ -310,6 +310,7 @@ describe("App project entry", () => {
       projectId: 1,
       title: "draft local issue",
       description: "small task shape",
+      attachments: [],
     });
     expect(
       await screen.findByRole("button", { name: "draft local issue" }),
@@ -358,6 +359,7 @@ describe("App project entry", () => {
       issueId: 20,
       title: "Updated issue",
       description: "Updated description",
+      attachments: [],
     });
     expect(
       screen.queryByRole("dialog", { name: "Issue Detail" }),

@@ -4,6 +4,7 @@ import type { IssueRecord } from "./issue-commands";
 export interface RunPromptSource {
   id:
     | "issue-description"
+    | "issue-attachments"
     | "default-skill"
     | "prompt-template"
     | "app-instructions";
@@ -17,7 +18,7 @@ export interface RunPromptPreview {
 }
 
 interface BuildRunPromptPreviewInput {
-  issue: Pick<IssueRecord, "description">;
+  issue: Pick<IssueRecord, "description" | "attachments">;
   profile: Pick<AgentProfileRecord, "defaultSkill" | "promptTemplate">;
 }
 
@@ -27,7 +28,11 @@ const APP_INSTRUCTIONS =
 export function buildRunPromptPreview(
   input: BuildRunPromptPreviewInput,
 ): RunPromptPreview {
-  const issueDescription = input.issue.description.trim();
+  const issueDescription = stripAttachmentTokens(input.issue.description).trim();
+  const attachmentPaths =
+    input.issue.attachments
+      ?.map((attachment) => attachment.relativePath.trim())
+      .filter((path) => path.length > 0) ?? [];
   const defaultSkill = input.profile.defaultSkill.trim();
   const promptTemplate = input.profile.promptTemplate.trim();
   const sources: RunPromptSource[] = [];
@@ -37,6 +42,14 @@ export function buildRunPromptPreview(
       id: "issue-description",
       label: "Issue description",
       content: issueDescription,
+    });
+  }
+
+  if (attachmentPaths.length > 0) {
+    sources.push({
+      id: "issue-attachments",
+      label: "Issue attachments",
+      content: attachmentPaths.join("\n"),
     });
   }
 
@@ -62,8 +75,21 @@ export function buildRunPromptPreview(
     content: APP_INSTRUCTIONS,
   });
 
+  const finalPromptSections = [issueDescription];
+  if (attachmentPaths.length > 0) {
+    finalPromptSections.push([
+      "Attachments:",
+      ...attachmentPaths.map((path) => `- ${path}`),
+      "请先读取这些附件文件，再开始处理当前 issue。",
+    ].join("\n"));
+  }
+
   return {
-    finalPrompt: issueDescription,
+    finalPrompt: finalPromptSections.filter((section) => section.length > 0).join("\n\n"),
     sources,
   };
+}
+
+function stripAttachmentTokens(description: string): string {
+  return description.replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "");
 }
