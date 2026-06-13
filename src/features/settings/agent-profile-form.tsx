@@ -37,14 +37,15 @@ export function AgentProfileForm({
     () => profile?.agentType ?? "codex",
   );
   const [command, setCommand] = useState(() => profile?.command ?? "");
-  const [modeValue, setModeValue] = useState(
-    () => profile?.mode ?? "full-auto",
+  const [scopeValue, setScopeValue] = useState<AgentScope>(
+    () => profile?.scope ?? scope,
   );
-  const [dangerous, setDangerous] = useState(() => profile?.dangerous ?? true);
+  const [modeValue] = useState(() => profile?.mode ?? "default");
+  const [dangerous] = useState(() => profile?.dangerous ?? true);
   const [defaultSkill, setDefaultSkill] = useState(
     () => profile?.defaultSkill ?? "",
   );
-  const [promptTemplate, setPromptTemplate] = useState(
+  const [promptTemplate] = useState(
     () => profile?.promptTemplate ?? "",
   );
   const [statusMessage, setStatusMessage] = useState<string | null>(() =>
@@ -59,7 +60,7 @@ export function AgentProfileForm({
   const isMountedRef = useRef(true);
   const skillRequestSequenceRef = useRef(0);
 
-  const skillProjectId = scope === "project" ? projectId : null;
+  const skillProjectId = scopeValue === "project" ? projectId : null;
 
   const loadSkills = useCallback(() => {
     const requestSequence = skillRequestSequenceRef.current + 1;
@@ -111,8 +112,9 @@ export function AgentProfileForm({
     void detectCodexCommand()
       .then((result) => {
         if (!isMounted) return;
-        setCommand(result.command);
-        setStatusMessage(`Detected: ${result.command}`);
+        const commandName = toCommandName(result.command);
+        setCommand(commandName);
+        setStatusMessage(`Detected: ${commandName}`);
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
@@ -156,24 +158,13 @@ export function AgentProfileForm({
     };
   }, [loadSkills, skillProjectId]);
 
-  const projectSkills = useMemo(
-    () => skills.filter((skill) => skill.scope === "project"),
-    [skills],
+  const visibleSkills = useMemo(
+    () => skills.filter((skill) => skill.scope === scopeValue),
+    [skills, scopeValue],
   );
-  const globalSkills = useMemo(
-    () => skills.filter((skill) => skill.scope === "global"),
-    [skills],
-  );
-  const skillNameCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const skill of skills) {
-      counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
-    }
-    return counts;
-  }, [skills]);
   const isSelectedSkillMissing =
     defaultSkill.length > 0 &&
-    !skills.some((skill) => skill.name === defaultSkill);
+    !visibleSkills.some((skill) => skill.name === defaultSkill);
 
   async function handleTestCommand() {
     setIsTesting(true);
@@ -181,8 +172,9 @@ export function AgentProfileForm({
 
     try {
       const result = await testAgentCommand({ command });
-      setCommand(result.command);
-      setStatusMessage(`Command available: ${result.command}`);
+      const commandName = toCommandName(result.command);
+      setCommand(commandName);
+      setStatusMessage(`Command available: ${commandName}`);
     } catch (error: unknown) {
       setStatusMessage(toCommandError(error).message);
     } finally {
@@ -196,13 +188,14 @@ export function AgentProfileForm({
     setStatusMessage(null);
 
     try {
+      const effectiveProjectId = scopeValue === "project" ? projectId : null;
       const savedProfile = await saveAgentProfile({
         id: profile?.id,
         name,
         agentType,
         command,
-        scope,
-        projectId,
+        scope: scopeValue,
+        projectId: effectiveProjectId,
         mode: modeValue,
         dangerous,
         defaultSkill,
@@ -220,9 +213,7 @@ export function AgentProfileForm({
     isSaving || name.trim().length === 0 || command.trim().length === 0;
 
   const dialogTitle =
-    mode === "create"
-      ? `Add ${scope === "project" ? "Project" : "Global"} Agent`
-      : "Edit Agent";
+    mode === "create" ? "New agent" : "Edit Agent";
 
   return (
     <div
@@ -264,50 +255,7 @@ export function AgentProfileForm({
           </label>
 
           <label className="settings-field">
-            <span>Command</span>
-            <input
-              aria-label="Agent command"
-              className="settings-input"
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-            />
-          </label>
-
-          <div className="settings-form__actions-row">
-            <button
-              className="issues-button"
-              type="button"
-              disabled={isDetecting || isSaving}
-              onClick={() => {
-                setStatusMessage(null);
-                setIsDetecting(true);
-                void detectCodexCommand()
-                  .then((result) => {
-                    setCommand(result.command);
-                    setStatusMessage(`Detected: ${result.command}`);
-                  })
-                  .catch((error: unknown) => {
-                    setStatusMessage(toCommandError(error).message);
-                  })
-                  .finally(() => {
-                    setIsDetecting(false);
-                  });
-              }}
-            >
-              {isDetecting ? "Detecting..." : "Detect"}
-            </button>
-            <button
-              className="issues-button"
-              type="button"
-              disabled={isTesting || isSaving}
-              onClick={handleTestCommand}
-            >
-              {isTesting ? "Testing..." : "Test"}
-            </button>
-          </div>
-
-          <label className="settings-field">
-            <span>Agent Type</span>
+            <span>Type</span>
             <select
               aria-label="Agent type"
               className="settings-input"
@@ -321,90 +269,129 @@ export function AgentProfileForm({
               }}
             >
               <option value="codex">Codex</option>
-              <option value="claude">Claude</option>
+              <option value="claude">Claude Code</option>
             </select>
           </label>
 
           <label className="settings-field">
-            <span>Skill</span>
-            <select
-              aria-label="Default skill"
-              className="settings-input"
-              value={defaultSkill}
-              onChange={(event) => setDefaultSkill(event.target.value)}
-            >
-              <option value="">—</option>
+            <span>Command</span>
+            <div className="agent-dialog__command-row">
+              <input
+                aria-label="Agent command"
+                className="settings-input"
+                value={command}
+                onChange={(event) => setCommand(event.target.value)}
+              />
+              <button
+                className="issues-button agent-dialog__test-button"
+                type="button"
+                disabled={isDetecting || isTesting || isSaving}
+                onClick={handleTestCommand}
+              >
+                {isTesting ? "测试中..." : "测试"}
+              </button>
+            </div>
+          </label>
+
+          <fieldset className="agent-dialog__fieldset">
+            <legend>Scope</legend>
+            <div className="agent-dialog__segmented-options">
+              <label className="agent-dialog__radio-option">
+                <input
+                  checked={scopeValue === "global"}
+                  name="agent-scope"
+                  type="radio"
+                  value="global"
+                  onChange={() => {
+                    setScopeValue("global");
+                    setDefaultSkill("");
+                    setSkills([]);
+                    setSkillLoadFailed(false);
+                  }}
+                />
+                <span>Global</span>
+              </label>
+              <label className="agent-dialog__radio-option">
+                <input
+                  checked={scopeValue === "project"}
+                  name="agent-scope"
+                  type="radio"
+                  value="project"
+                  onChange={() => {
+                    setScopeValue("project");
+                    setDefaultSkill("");
+                    setSkills([]);
+                    setSkillLoadFailed(false);
+                  }}
+                />
+                <span>Project</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="agent-dialog__fieldset">
+            <legend>Workflow Skill</legend>
+            <div className="agent-dialog__skill-list">
+              <label className="agent-dialog__skill-option">
+                <input
+                  checked={defaultSkill === ""}
+                  name="default-skill"
+                  type="radio"
+                  value=""
+                  onChange={() => setDefaultSkill("")}
+                />
+                <span className="agent-dialog__skill-name">None</span>
+              </label>
               {isSelectedSkillMissing ? (
-                <option value={defaultSkill}>{defaultSkill}</option>
+                <label className="agent-dialog__skill-option">
+                  <input
+                    checked
+                    name="default-skill"
+                    type="radio"
+                    value={defaultSkill}
+                    onChange={() => setDefaultSkill(defaultSkill)}
+                  />
+                  <span className="agent-dialog__skill-name">
+                    {defaultSkill}
+                  </span>
+                </label>
               ) : null}
-              {projectSkills.length > 0 ? (
-                <optgroup label="Project">
-                  {projectSkills.map((skill) => (
-                    <option key={skill.path} value={skill.name}>
-                      {formatSkillOption(skill, skillNameCounts)}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {globalSkills.length > 0 ? (
-                <optgroup label="Global">
-                  {globalSkills.map((skill) => (
-                    <option key={skill.path} value={skill.name}>
-                      {formatSkillOption(skill, skillNameCounts)}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
+              {visibleSkills.map((skill) => (
+                <label
+                  className="agent-dialog__skill-option"
+                  key={skill.path}
+                >
+                  <input
+                    aria-label={`${skill.name} ${skill.path}`}
+                    checked={defaultSkill === skill.name}
+                    name="default-skill"
+                    type="radio"
+                    value={skill.name}
+                    onChange={() => setDefaultSkill(skill.name)}
+                  />
+                  <span className="agent-dialog__skill-copy">
+                    <span className="agent-dialog__skill-name">
+                      {skill.name}
+                    </span>
+                    <span className="agent-dialog__skill-path">
+                      {skill.path}
+                    </span>
+                  </span>
+                </label>
+              ))}
               {isLoadingSkills ? (
-                <option disabled value="__loading">
-                  Loading skills...
-                </option>
+                <p className="agent-dialog__skill-status">Loading skills...</p>
               ) : null}
-              {!isLoadingSkills && skills.length === 0 ? (
-                <option disabled value="__empty">
-                  No skills
-                </option>
+              {!isLoadingSkills && visibleSkills.length === 0 ? (
+                <p className="agent-dialog__skill-status">No skills</p>
               ) : null}
               {skillLoadFailed ? (
-                <option disabled value="__failed">
+                <p className="agent-dialog__skill-status">
                   Skill load failed
-                </option>
+                </p>
               ) : null}
-            </select>
-          </label>
-
-          <label className="settings-field">
-            <span>使用模式</span>
-            <select
-              aria-label="Mode"
-              className="settings-input"
-              value={modeValue}
-              onChange={(event) => setModeValue(event.target.value)}
-            >
-              <option value="full-auto">Full Auto</option>
-            </select>
-          </label>
-
-          <label className="settings-checkbox">
-            <input
-              aria-label="Dangerous"
-              checked={dangerous}
-              type="checkbox"
-              onChange={(event) => setDangerous(event.target.checked)}
-            />
-            <span>启用 Dangerous 参数</span>
-          </label>
-
-          <label className="settings-field">
-            <span>Prompt template</span>
-            <textarea
-              aria-label="Prompt template"
-              className="settings-textarea"
-              rows={4}
-              value={promptTemplate}
-              onChange={(event) => setPromptTemplate(event.target.value)}
-            />
-          </label>
+            </div>
+          </fieldset>
         </div>
 
         <p
@@ -445,12 +432,10 @@ function shouldReloadSkillsForEvent(
   return projectId !== null && event.projectId === projectId;
 }
 
-function formatSkillOption(
-  skill: AgentSkillRecord,
-  nameCounts: Map<string, number>,
-): string {
-  if ((nameCounts.get(skill.name) ?? 0) <= 1) {
-    return skill.name;
-  }
-  return `${skill.name} (${skill.path})`;
+function toCommandName(commandPath: string): string {
+  const trimmedCommand = commandPath.trim();
+  if (trimmedCommand.length === 0) return "";
+  const normalizedCommand = trimmedCommand.replace(/\\/g, "/");
+  const commandParts = normalizedCommand.split("/").filter(Boolean);
+  return commandParts[commandParts.length - 1] ?? trimmedCommand;
 }
