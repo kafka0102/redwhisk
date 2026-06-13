@@ -300,7 +300,7 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows agents in a table below the new agent action card", async () => {
+  it("shows agents in a table below the header action", async () => {
     const longWorkflowSkill =
       "codex-global-skill-with-a-very-long-unbroken-name";
     const projectProfileWithHigherId = { ...projectProfile, id: 20 };
@@ -332,6 +332,9 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByRole("button", { name: "New agent" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Agent profiles" }),
+    ).not.toBeInTheDocument();
 
     const table = screen.getByRole("table", { name: "Configured agents" });
     expect(table).toBeInTheDocument();

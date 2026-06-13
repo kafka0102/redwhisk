@@ -299,8 +299,27 @@ export function ProjectSettingsActivity({
           }}
         />
 
-        <div className="settings-content">
-          <SettingsContentFrame item={activeMenuItem}>
+        <div className={`settings-content settings-content--${activeMenu}`}>
+          <SettingsContentFrame
+            item={activeMenuItem}
+            headerAction={
+              activeMenu === "agents" ? (
+                <Button
+                  className="settings-section__header-action"
+                  variant="secondary"
+                  type="button"
+                  aria-label="New agent"
+                  onClick={() => {
+                    setAddForm({ projectId });
+                    setEditingProfile(null);
+                  }}
+                >
+                  <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                  <span>New agent</span>
+                </Button>
+              ) : null
+            }
+          >
             {activeMenu === "general" ? (
               <GeneralSettingsForm
                 key={`${projectId}:${projectName}:${completionPolicy}`}
@@ -321,27 +340,6 @@ export function ProjectSettingsActivity({
                     {currentErrorMessage}
                   </p>
                 ) : null}
-
-                <section
-                  className="settings-agent-action-card"
-                  aria-label="Agent actions"
-                >
-                  <div>
-                    <h4>Agent profiles</h4>
-                  </div>
-                  <Button
-                    className="settings-agent-action-card__button"
-                    type="button"
-                    aria-label="New agent"
-                    onClick={() => {
-                      setAddForm({ projectId });
-                      setEditingProfile(null);
-                    }}
-                  >
-                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
-                    <span>New agent</span>
-                  </Button>
-                </section>
 
                 {currentLoadState === "loading" ? (
                   <p className="settings-agent-section__loading">Loading...</p>
@@ -452,9 +450,11 @@ export function ProjectSettingsActivity({
 
 function SettingsContentFrame({
   children,
+  headerAction,
   item,
 }: {
   children: ReactNode;
+  headerAction?: ReactNode;
   item: (typeof SETTINGS_MENU_ITEMS)[number];
 }) {
   return (
@@ -464,6 +464,7 @@ function SettingsContentFrame({
     >
       <div className="settings-section__header">
         <h3>{item.label}</h3>
+        {headerAction}
       </div>
       <div className="settings-section__body">{children}</div>
     </section>
