@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -513,6 +513,81 @@ describe("ProjectSettingsActivity", () => {
         }),
       ),
     );
+  });
+
+  it("keeps the latest agent type skills when older requests finish later", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    detectCodexCommandMock.mockRejectedValue({
+      code: "AGENT_COMMAND_UNAVAILABLE",
+      message: "Agent command 不可用。",
+    });
+    const pendingSkills: Partial<
+      Record<"codex" | "claude", (response: AgentSkillListResponse) => void>
+    > = {};
+    listAgentSkillsMock.mockImplementation(
+      ({ agentType }) =>
+        new Promise((resolve) => {
+          pendingSkills[agentType ?? "codex"] = resolve;
+        }),
+    );
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add project agent" }),
+    );
+    await waitFor(() => expect(pendingSkills.codex).toBeDefined());
+    await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
+    await waitFor(() => expect(pendingSkills.claude).toBeDefined());
+
+    await act(async () => {
+      pendingSkills.claude?.(
+        skillResponse([
+          {
+            name: "claude-project",
+            path: "/repo/.claude/skills/claude-project/SKILL.md",
+            agentType: "claude",
+            scope: "project",
+            projectId: 1,
+            sourceRoot: "/repo/.claude/skills",
+          },
+        ]),
+      );
+    });
+    expect(
+      await screen.findByRole("option", { name: "claude-project" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      pendingSkills.codex?.(
+        skillResponse([
+          {
+            name: "codex-project",
+            path: "/repo/.agents/skills/codex-project/SKILL.md",
+            agentType: "codex",
+            scope: "project",
+            projectId: 1,
+            sourceRoot: "/repo/.agents/skills",
+          },
+        ]),
+      );
+    });
+
+    expect(screen.getByLabelText("Agent type")).toHaveValue("claude");
+    expect(
+      screen.getByRole("option", { name: "claude-project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "codex-project" }),
+    ).not.toBeInTheDocument();
   });
 
   it("refreshes the skill dropdown after agent skill update events", async () => {

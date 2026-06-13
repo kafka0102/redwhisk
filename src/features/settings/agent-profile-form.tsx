@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import {
@@ -56,10 +56,14 @@ export function AgentProfileForm({
   const [skills, setSkills] = useState<AgentSkillRecord[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
   const [skillLoadFailed, setSkillLoadFailed] = useState(false);
+  const isMountedRef = useRef(true);
+  const skillRequestSequenceRef = useRef(0);
 
   const skillProjectId = scope === "project" ? projectId : null;
 
   const loadSkills = useCallback(() => {
+    const requestSequence = skillRequestSequenceRef.current + 1;
+    skillRequestSequenceRef.current = requestSequence;
     setIsLoadingSkills(true);
     setSkillLoadFailed(false);
 
@@ -68,17 +72,36 @@ export function AgentProfileForm({
       projectId: skillProjectId,
     })
       .then((response) => {
+        if (!isCurrentSkillRequest()) return;
         setSkills(response.skills);
         setSkillLoadFailed(false);
       })
       .catch(() => {
+        if (!isCurrentSkillRequest()) return;
         setSkills([]);
         setSkillLoadFailed(true);
       })
       .finally(() => {
+        if (!isCurrentSkillRequest()) return;
         setIsLoadingSkills(false);
       });
+
+    function isCurrentSkillRequest() {
+      return (
+        isMountedRef.current &&
+        skillRequestSequenceRef.current === requestSequence
+      );
+    }
   }, [agentType, skillProjectId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      skillRequestSequenceRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     if (mode !== "create" || profile) return;
@@ -290,8 +313,11 @@ export function AgentProfileForm({
               className="settings-input"
               value={agentType}
               onChange={(event) => {
+                skillRequestSequenceRef.current += 1;
                 setAgentType(event.target.value as AgentType);
                 setDefaultSkill("");
+                setSkills([]);
+                setSkillLoadFailed(false);
               }}
             >
               <option value="codex">Codex</option>
