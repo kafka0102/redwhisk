@@ -1,7 +1,9 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
-export type AgentType = "codex";
+export type AgentType = "codex" | "claude";
 export type AgentScope = "project" | "global";
+export type AgentSkillScope = "project" | "global";
+export type AgentSkillRefreshStatus = "idle" | "loading" | "ready" | "failed";
 
 export interface AgentProfileRecord {
   id: number;
@@ -38,6 +40,36 @@ export interface AgentProfileListResponse {
   profiles: AgentProfileRecord[];
 }
 
+export interface AgentSkillRecord {
+  name: string;
+  path: string;
+  agentType: AgentType;
+  scope: AgentSkillScope;
+  projectId: number | null;
+  sourceRoot: string;
+}
+
+export interface ListAgentSkillsInput {
+  agentType?: AgentType;
+  projectId?: number | null;
+}
+
+export interface RefreshAgentSkillsInput {
+  projectId?: number | null;
+}
+
+export interface AgentSkillListResponse {
+  skills: AgentSkillRecord[];
+  globalStatus: AgentSkillRefreshStatus;
+  projectStatus: AgentSkillRefreshStatus;
+  lastError: string | null;
+}
+
+export interface AgentSkillsUpdatedEvent {
+  scope: AgentSkillScope;
+  projectId: number | null;
+}
+
 export interface AgentCommandCheckResult {
   command: string;
 }
@@ -70,6 +102,22 @@ export function saveAgentProfile(
   input: SaveAgentProfileInput,
 ): Promise<AgentProfileRecord> {
   return invokeCommand<AgentProfileRecord>("save_agent_profile", {
+    input,
+  });
+}
+
+export function listAgentSkills(
+  input: ListAgentSkillsInput,
+): Promise<AgentSkillListResponse> {
+  return invokeCommand<AgentSkillListResponse>("list_agent_skills", {
+    input,
+  });
+}
+
+export function refreshAgentSkills(
+  input: RefreshAgentSkillsInput,
+): Promise<void> {
+  return invokeCommand("refresh_agent_skills", {
     input,
   });
 }

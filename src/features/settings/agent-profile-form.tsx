@@ -1,12 +1,17 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 
 import {
   detectCodexCommand,
+  listAgentSkills,
   saveAgentProfile,
   testAgentCommand,
+  type AgentSkillRecord,
+  type AgentSkillsUpdatedEvent,
   type AgentProfileRecord,
   type AgentScope,
+  type AgentType,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
@@ -28,6 +33,9 @@ export function AgentProfileForm({
   onSaved,
 }: AgentProfileFormProps) {
   const [name, setName] = useState(() => profile?.name ?? "");
+  const [agentType, setAgentType] = useState<AgentType>(
+    () => profile?.agentType ?? "codex",
+  );
   const [command, setCommand] = useState(() => profile?.command ?? "");
   const [modeValue, setModeValue] = useState(
     () => profile?.mode ?? "full-auto",
@@ -45,6 +53,32 @@ export function AgentProfileForm({
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
+  const [skills, setSkills] = useState<AgentSkillRecord[]>([]);
+  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
+  const [skillLoadFailed, setSkillLoadFailed] = useState(false);
+
+  const skillProjectId = scope === "project" ? projectId : null;
+
+  const loadSkills = useCallback(() => {
+    setIsLoadingSkills(true);
+    setSkillLoadFailed(false);
+
+    return listAgentSkills({
+      agentType,
+      projectId: skillProjectId,
+    })
+      .then((response) => {
+        setSkills(response.skills);
+        setSkillLoadFailed(false);
+      })
+      .catch(() => {
+        setSkills([]);
+        setSkillLoadFailed(true);
+      })
+      .finally(() => {
+        setIsLoadingSkills(false);
+      });
+  }, [agentType, skillProjectId]);
 
   useEffect(() => {
     if (mode !== "create" || profile) return;
@@ -70,6 +104,54 @@ export function AgentProfileForm({
     };
   }, [mode, profile]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadSkills();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadSkills]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listen<AgentSkillsUpdatedEvent>("agent-skills-updated", (event) => {
+      if (!shouldReloadSkillsForEvent(event.payload, skillProjectId)) return;
+      void loadSkills();
+    }).then((cleanup) => {
+      if (isDisposed) {
+        cleanup();
+        return;
+      }
+      unlisten = cleanup;
+    });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, [loadSkills, skillProjectId]);
+
+  const projectSkills = useMemo(
+    () => skills.filter((skill) => skill.scope === "project"),
+    [skills],
+  );
+  const globalSkills = useMemo(
+    () => skills.filter((skill) => skill.scope === "global"),
+    [skills],
+  );
+  const skillNameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const skill of skills) {
+      counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
+    }
+    return counts;
+  }, [skills]);
+  const isSelectedSkillMissing =
+    defaultSkill.length > 0 &&
+    !skills.some((skill) => skill.name === defaultSkill);
+
   async function handleTestCommand() {
     setIsTesting(true);
     setStatusMessage(null);
@@ -94,7 +176,7 @@ export function AgentProfileForm({
       const savedProfile = await saveAgentProfile({
         id: profile?.id,
         name,
-        agentType: "codex",
+        agentType,
         command,
         scope,
         projectId,
@@ -202,6 +284,22 @@ export function AgentProfileForm({
           </div>
 
           <label className="settings-field">
+            <span>Agent Type</span>
+            <select
+              aria-label="Agent type"
+              className="settings-input"
+              value={agentType}
+              onChange={(event) => {
+                setAgentType(event.target.value as AgentType);
+                setDefaultSkill("");
+              }}
+            >
+              <option value="codex">Codex</option>
+              <option value="claude">Claude</option>
+            </select>
+          </label>
+
+          <label className="settings-field">
             <span>Skill</span>
             <select
               aria-label="Default skill"
@@ -210,6 +308,42 @@ export function AgentProfileForm({
               onChange={(event) => setDefaultSkill(event.target.value)}
             >
               <option value="">—</option>
+              {isSelectedSkillMissing ? (
+                <option value={defaultSkill}>{defaultSkill}</option>
+              ) : null}
+              {projectSkills.length > 0 ? (
+                <optgroup label="Project">
+                  {projectSkills.map((skill) => (
+                    <option key={skill.path} value={skill.name}>
+                      {formatSkillOption(skill, skillNameCounts)}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {globalSkills.length > 0 ? (
+                <optgroup label="Global">
+                  {globalSkills.map((skill) => (
+                    <option key={skill.path} value={skill.name}>
+                      {formatSkillOption(skill, skillNameCounts)}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {isLoadingSkills ? (
+                <option disabled value="__loading">
+                  Loading skills...
+                </option>
+              ) : null}
+              {!isLoadingSkills && skills.length === 0 ? (
+                <option disabled value="__empty">
+                  No skills
+                </option>
+              ) : null}
+              {skillLoadFailed ? (
+                <option disabled value="__failed">
+                  Skill load failed
+                </option>
+              ) : null}
             </select>
           </label>
 
@@ -275,4 +409,22 @@ export function AgentProfileForm({
       </form>
     </div>
   );
+}
+
+function shouldReloadSkillsForEvent(
+  event: AgentSkillsUpdatedEvent,
+  projectId: number | null,
+): boolean {
+  if (event.scope === "global") return true;
+  return projectId !== null && event.projectId === projectId;
+}
+
+function formatSkillOption(
+  skill: AgentSkillRecord,
+  nameCounts: Map<string, number>,
+): string {
+  if ((nameCounts.get(skill.name) ?? 0) <= 1) {
+    return skill.name;
+  }
+  return `${skill.name} (${skill.path})`;
 }
