@@ -190,10 +190,8 @@ export function AgentProfileForm({
     setStatusMessage(null);
 
     try {
-      const result = await testAgentCommand({ command });
-      const commandName = toCommandName(result.command);
-      setCommand(commandName);
-      setStatusMessage(`Command available: ${commandName}`);
+      await testAgentCommand({ command });
+      setStatusMessage(`Command available: ${command}`);
     } catch (error: unknown) {
       setStatusMessage(toCommandError(error).message);
     } finally {

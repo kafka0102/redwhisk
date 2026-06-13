@@ -438,12 +438,9 @@ describe("ProjectSettingsActivity", () => {
     expect(await screen.findAllByText("No agents")).toHaveLength(1);
   });
 
-  it("opens the new agent form with the streamlined creation fields and saves defaults after command test", async () => {
+  it("opens the new agent form with the streamlined creation fields and saves the detected command basename by default", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
-    testAgentCommandMock.mockResolvedValue({
-      command: "/opt/codex/bin/codex",
-    });
     saveAgentProfileMock.mockResolvedValue({
       ...globalProfile,
       name: "My Codex",
@@ -479,8 +476,6 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.queryByRole("button", { name: "Detect" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Agent profile name"), "My Codex");
-    await user.click(screen.getByRole("button", { name: "测试" }));
-    expect(await screen.findByLabelText("Agent command")).toHaveValue("codex");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -494,6 +489,55 @@ describe("ProjectSettingsActivity", () => {
           mode: "default",
           dangerous: true,
           promptTemplate: "",
+        }),
+      ),
+    );
+  });
+
+  it("keeps a manually entered command path after testing and saves it unchanged", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    testAgentCommandMock.mockResolvedValue({
+      command: "/opt/codex/bin/codex",
+    });
+    saveAgentProfileMock.mockResolvedValue({
+      ...globalProfile,
+      name: "Custom Codex",
+      command: "/opt/codex/bin/codex",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
+    await user.type(screen.getByLabelText("Agent profile name"), "Custom Codex");
+    await user.clear(await screen.findByLabelText("Agent command"));
+    await user.type(
+      screen.getByLabelText("Agent command"),
+      "/opt/codex/bin/codex",
+    );
+    await user.click(screen.getByRole("button", { name: "测试" }));
+
+    expect(testAgentCommandMock).toHaveBeenCalledWith({
+      command: "/opt/codex/bin/codex",
+    });
+    expect(screen.getByLabelText("Agent command")).toHaveValue(
+      "/opt/codex/bin/codex",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Custom Codex",
+          command: "/opt/codex/bin/codex",
         }),
       ),
     );
