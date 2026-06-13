@@ -10,11 +10,7 @@ import {
 import { Bot, Info, Plus } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
-import {
-  listAgentProfiles,
-  type AgentProfileRecord,
-  type AgentScope,
-} from "./settings-commands";
+import { listAgentProfiles, type AgentProfileRecord } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
@@ -23,12 +19,15 @@ import {
   updateProjectSettings,
 } from "../project/project-commands";
 import type { ProjectSummary } from "../../app/app";
+import {
+  formatAgentTypeLabel,
+  getAgentLogoSrc,
+} from "../agents/agent-visuals";
 
 type SettingsMenu = "general" | "agents";
 
 interface AddFormState {
   projectId: number;
-  scope: AgentScope;
 }
 
 interface EditingProfileState {
@@ -111,6 +110,10 @@ export function ProjectSettingsActivity({
   const isProfilesCurrent = profilesProjectId === projectId;
   const currentProjectProfiles = isProfilesCurrent ? projectProfiles : [];
   const currentGlobalProfiles = isProfilesCurrent ? globalProfiles : [];
+  const currentProfiles = [
+    ...currentProjectProfiles,
+    ...currentGlobalProfiles,
+  ].sort((left, right) => left.id - right.id);
   const currentErrorMessage = isProfilesCurrent ? errorMessage : null;
   const currentLoadState = isProfilesCurrent ? loadState : "loading";
   const currentAddForm = addForm?.projectId === projectId ? addForm : null;
@@ -315,125 +318,110 @@ export function ProjectSettingsActivity({
                 ) : null}
 
                 <section
-                  className="settings-agent-section"
-                  aria-label="Project Agents"
+                  className="settings-agent-action-card"
+                  aria-label="Agent actions"
                 >
-                  <div className="settings-agent-section__header">
-                    <h3>Project Agents</h3>
-                    <button
-                      className="settings-agent-section__add"
-                      type="button"
-                      aria-label="Add project agent"
-                      onClick={() => {
-                        setAddForm({ projectId, scope: "project" });
-                        setEditingProfile(null);
-                      }}
-                    >
-                      <Plus size={14} strokeWidth={2} />
-                    </button>
+                  <div>
+                    <h4>Agent profiles</h4>
                   </div>
-                  {currentLoadState === "loading" ? (
-                    <p className="settings-agent-section__loading">
-                      Loading...
-                    </p>
-                  ) : currentProjectProfiles.length === 0 ? (
-                    <div className="settings-agent-list settings-agent-list--empty">
-                      <p>No agents</p>
-                    </div>
-                  ) : (
-                    <div className="settings-agent-list">
-                      {currentProjectProfiles.map((profile) => (
-                        <button
-                          key={profile.id}
-                          className="settings-agent-row"
-                          type="button"
-                          onClick={() => {
-                            setEditingProfile({
-                              contextProjectId: projectId,
-                              profile,
-                            });
-                            setAddForm(null);
-                          }}
-                        >
-                          <span className="settings-agent-row__name">
-                            {profile.name}
-                          </span>
-                          <span className="settings-agent-row__command">
-                            {profile.command}
-                          </span>
-                          <span className="settings-agent-row__mode">
-                            {profile.mode}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <Button
+                    className="settings-agent-action-card__button"
+                    type="button"
+                    aria-label="New agent"
+                    onClick={() => {
+                      setAddForm({ projectId });
+                      setEditingProfile(null);
+                    }}
+                  >
+                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                    <span>New agent</span>
+                  </Button>
                 </section>
 
-                <section
-                  className="settings-agent-section"
-                  aria-label="Global Agents"
-                >
-                  <div className="settings-agent-section__header">
-                    <h3>Global Agents</h3>
-                    <button
-                      className="settings-agent-section__add"
-                      type="button"
-                      aria-label="Add global agent"
-                      onClick={() => {
-                        setAddForm({ projectId, scope: "global" });
-                        setEditingProfile(null);
-                      }}
-                    >
-                      <Plus size={14} strokeWidth={2} />
-                    </button>
+                {currentLoadState === "loading" ? (
+                  <p className="settings-agent-section__loading">Loading...</p>
+                ) : currentProfiles.length === 0 ? (
+                  <div className="settings-agent-table-empty">
+                    <p>No agents</p>
                   </div>
-                  {currentLoadState === "loading" ? (
-                    <p className="settings-agent-section__loading">
-                      Loading...
-                    </p>
-                  ) : currentGlobalProfiles.length === 0 ? (
-                    <div className="settings-agent-list settings-agent-list--empty">
-                      <p>No agents</p>
-                    </div>
-                  ) : (
-                    <div className="settings-agent-list">
-                      {currentGlobalProfiles.map((profile) => (
-                        <button
-                          key={profile.id}
-                          className="settings-agent-row"
-                          type="button"
-                          onClick={() => {
-                            setEditingProfile({
-                              contextProjectId: projectId,
-                              profile,
-                            });
-                            setAddForm(null);
-                          }}
-                        >
-                          <span className="settings-agent-row__name">
-                            {profile.name}
-                          </span>
-                          <span className="settings-agent-row__command">
-                            {profile.command}
-                          </span>
-                          <span className="settings-agent-row__mode">
-                            {profile.mode}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </section>
+                ) : (
+                  <table
+                    className="settings-agent-table"
+                    aria-label="Configured agents"
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col">Type</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Command</th>
+                        <th scope="col">Scope</th>
+                        <th scope="col">Workflow Skill</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentProfiles.map((profile) => {
+                        const agentLabel = formatAgentTypeLabel(
+                          profile.agentType,
+                        );
+
+                        return (
+                          <tr
+                            key={profile.id}
+                            className="settings-agent-table__row"
+                            tabIndex={0}
+                            onClick={() => {
+                              setEditingProfile({
+                                contextProjectId: projectId,
+                                profile,
+                              });
+                              setAddForm(null);
+                            }}
+                            onKeyDown={(event) => {
+                              if (
+                                event.key !== "Enter" &&
+                                event.key !== " "
+                              ) {
+                                return;
+                              }
+
+                              event.preventDefault();
+                              setEditingProfile({
+                                contextProjectId: projectId,
+                                profile,
+                              });
+                              setAddForm(null);
+                            }}
+                          >
+                            <td>
+                              <img
+                                alt={`Agent 类型：${agentLabel}`}
+                                className="settings-agent-table__logo"
+                                src={getAgentLogoSrc(profile.agentType)}
+                              />
+                            </td>
+                            <td>{profile.name}</td>
+                            <td className="settings-agent-table__command">
+                              {formatCommandName(profile.command)}
+                            </td>
+                            <td>{profile.scope === "global" ? "Global" : "Project"}</td>
+                            <td>
+                              {profile.defaultSkill.trim().length > 0
+                                ? profile.defaultSkill
+                                : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
 
                 {currentAddForm ? (
                   <AgentProfileForm
-                    key={`create-${currentAddForm.projectId}-${currentAddForm.scope}`}
+                    key={`create-${currentAddForm.projectId}`}
                     mode="create"
-                    scope={currentAddForm.scope}
-                    projectId={
-                      currentAddForm.scope === "project" ? projectId : null
-                    }
+                    scope="global"
+                    projectId={projectId}
                     onCancel={() => setAddForm(null)}
                     onSaved={handleProfileSaved}
                   />
@@ -579,6 +567,15 @@ function mergeProfile(
     (profile) => profile.id !== savedProfile.id,
   );
   return [...remaining, savedProfile].sort((left, right) => left.id - right.id);
+}
+
+function formatCommandName(command: string): string {
+  const trimmedCommand = command.trim();
+  if (trimmedCommand.length === 0) return "—";
+
+  const normalizedCommand = trimmedCommand.replace(/\\/g, "/");
+  const commandParts = normalizedCommand.split("/").filter(Boolean);
+  return commandParts[commandParts.length - 1] ?? trimmedCommand;
 }
 
 function clampSettingsMenuWidth(width: number) {

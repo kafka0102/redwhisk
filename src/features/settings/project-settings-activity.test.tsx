@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -169,10 +169,7 @@ describe("ProjectSettingsActivity", () => {
     );
     expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Project Agents" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("region", { name: "Global Agents" }),
+      screen.getByRole("button", { name: "New agent" }),
     ).toBeInTheDocument();
   });
 
@@ -292,11 +289,11 @@ describe("ProjectSettingsActivity", () => {
     );
     expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Project Agents" }),
+      screen.getByRole("table", { name: "Configured agents" }),
     ).toBeInTheDocument();
   });
 
-  it("shows project and global agents in separate sections", async () => {
+  it("shows agents in a table below the new agent action card", async () => {
     render(
       <ProjectSettingsActivity
         completionPolicy="manual"
@@ -306,8 +303,83 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    expect(await screen.findByText("Project Codex")).toBeInTheDocument();
-    expect(screen.getByText("Global Codex")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Agents" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "New agent" }),
+    ).toBeInTheDocument();
+
+    const table = screen.getByRole("table", { name: "Configured agents" });
+    expect(table).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Type" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Command" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Scope" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Workflow Skill" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "Project Codex" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "Global Codex" }),
+    ).toBeInTheDocument();
+    expect(within(table).getAllByRole("cell", { name: "codex" })).toHaveLength(
+      2,
+    );
+    expect(
+      within(table).getByRole("cell", { name: "Project" }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("cell", { name: "Global" }),
+    ).toBeInTheDocument();
+    expect(within(table).getAllByRole("cell", { name: "—" })).toHaveLength(2);
+    expect(screen.getAllByAltText("Agent 类型：Codex")).toHaveLength(2);
+  });
+
+  it("opens the edit form from table rows with keyboard shortcuts", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    const projectRow = (await screen.findByRole("cell", {
+      name: "Project Codex",
+    })).closest("tr");
+    expect(projectRow).not.toBeNull();
+    projectRow?.focus();
+    await user.keyboard("{Enter}");
+
+    expect(
+      screen.getByRole("heading", { name: "Edit Agent" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    const globalRow = screen
+      .getByRole("cell", { name: "Global Codex" })
+      .closest("tr");
+    expect(globalRow).not.toBeNull();
+    globalRow?.focus();
+    await user.keyboard(" ");
+
+    expect(
+      screen.getByRole("heading", { name: "Edit Agent" }),
+    ).toBeInTheDocument();
   });
 
   it("shows No agents for empty project and global lists", async () => {
@@ -322,10 +394,10 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    expect(await screen.findAllByText("No agents")).toHaveLength(2);
+    expect(await screen.findAllByText("No agents")).toHaveLength(1);
   });
 
-  it("opens the add form for project scope when clicking the project add button", async () => {
+  it("opens the add form when clicking the new agent button", async () => {
     const user = userEvent.setup();
     detectCodexCommandMock.mockRejectedValue({
       code: "AGENT_COMMAND_UNAVAILABLE",
@@ -341,12 +413,10 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add project agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
 
     expect(
-      screen.getByRole("heading", { name: "Add Project Agent" }),
+      screen.getByRole("heading", { name: "Add Global Agent" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
@@ -376,9 +446,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add global agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(screen.getByLabelText("Agent profile name"), "My Codex");
     await user.clear(screen.getByLabelText("Agent command"));
     await user.type(
@@ -394,13 +462,13 @@ describe("ProjectSettingsActivity", () => {
           name: "My Codex",
           command: "/opt/codex/bin/codex",
           scope: "global",
-          projectId: null,
+          projectId: 1,
         }),
       ),
     );
   });
 
-  it("shows cached Codex skills when creating a project agent", async () => {
+  it("shows cached Codex skills when creating a new agent", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     detectCodexCommandMock.mockRejectedValue({
@@ -408,8 +476,8 @@ describe("ProjectSettingsActivity", () => {
       message: "Agent command 不可用。",
     });
     saveAgentProfileMock.mockResolvedValue({
-      ...projectProfile,
-      defaultSkill: "codex-project",
+      ...globalProfile,
+      defaultSkill: "codex-global",
     });
 
     render(
@@ -421,20 +489,18 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add project agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
 
     expect(listAgentSkillsMock).toHaveBeenCalledWith({
       agentType: "codex",
-      projectId: 1,
+      projectId: null,
     });
     expect(
-      await screen.findByRole("option", { name: "codex-project" }),
+      await screen.findByRole("option", { name: "codex-global" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "codex-global" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("option", { name: "codex-project" }),
+    ).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Agent profile name"), "Skill Agent");
     await user.type(
@@ -443,7 +509,7 @@ describe("ProjectSettingsActivity", () => {
     );
     await user.selectOptions(
       screen.getByLabelText("Default skill"),
-      "codex-project",
+      "codex-global",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -451,7 +517,7 @@ describe("ProjectSettingsActivity", () => {
       expect(saveAgentProfileMock).toHaveBeenCalledWith(
         expect.objectContaining({
           agentType: "codex",
-          defaultSkill: "codex-project",
+          defaultSkill: "codex-global",
         }),
       ),
     );
@@ -465,9 +531,9 @@ describe("ProjectSettingsActivity", () => {
       message: "Agent command 不可用。",
     });
     saveAgentProfileMock.mockResolvedValue({
-      ...projectProfile,
+      ...globalProfile,
       agentType: "claude",
-      defaultSkill: "claude-project",
+      defaultSkill: "claude-global",
     });
 
     render(
@@ -479,9 +545,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add project agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(
       screen.getByLabelText("Agent profile name"),
       "Claude Agent",
@@ -493,7 +557,7 @@ describe("ProjectSettingsActivity", () => {
     await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
 
     expect(
-      await screen.findByRole("option", { name: "claude-project" }),
+      await screen.findByRole("option", { name: "claude-global" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Agent profile name")).toHaveValue(
       "Claude Agent",
@@ -501,7 +565,7 @@ describe("ProjectSettingsActivity", () => {
 
     await user.selectOptions(
       screen.getByLabelText("Default skill"),
-      "claude-project",
+      "claude-global",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -509,7 +573,7 @@ describe("ProjectSettingsActivity", () => {
       expect(saveAgentProfileMock).toHaveBeenCalledWith(
         expect.objectContaining({
           agentType: "claude",
-          defaultSkill: "claude-project",
+          defaultSkill: "claude-global",
         }),
       ),
     );
@@ -541,9 +605,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add project agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
     await waitFor(() => expect(pendingSkills.codex).toBeDefined());
     await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
     await waitFor(() => expect(pendingSkills.claude).toBeDefined());
@@ -620,9 +682,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add project agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(screen.getByLabelText("Agent profile name"), "Unsaved");
     expect(
       await screen.findByRole("option", { name: "codex-project" }),
@@ -695,7 +755,7 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.queryByText("Project Codex")).not.toBeInTheDocument();
 
     resolveProjectProfiles?.({ profiles: [] });
-    await screen.findAllByText("No agents");
+    await screen.findByText("Global Codex");
   });
 
   it("clears open agent dialogs when project id changes", async () => {
@@ -714,11 +774,9 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Add project agent" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
     expect(
-      screen.getByRole("heading", { name: "Add Project Agent" }),
+      screen.getByRole("heading", { name: "Add Global Agent" }),
     ).toBeInTheDocument();
 
     rerender(
@@ -731,7 +789,7 @@ describe("ProjectSettingsActivity", () => {
     );
 
     expect(
-      screen.queryByRole("heading", { name: "Add Project Agent" }),
+      screen.queryByRole("heading", { name: "Add Global Agent" }),
     ).not.toBeInTheDocument();
   });
 
