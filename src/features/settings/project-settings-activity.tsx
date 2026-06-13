@@ -430,7 +430,7 @@ export function ProjectSettingsActivity({
                     key={`edit-${currentEditingProfile.profile.id}`}
                     mode="edit"
                     scope={currentEditingProfile.profile.scope}
-                    projectId={currentEditingProfile.profile.projectId}
+                    projectId={projectId}
                     profile={currentEditingProfile.profile}
                     onCancel={() => setEditingProfile(null)}
                     onSaved={handleProfileSaved}
