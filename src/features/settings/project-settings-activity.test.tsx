@@ -338,10 +338,10 @@ describe("ProjectSettingsActivity", () => {
       screen.getByRole("columnheader", { name: "Workflow Skill" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("cell", { name: "Project Codex" }),
+      screen.getByRole("button", { name: "Edit Project Codex" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("cell", { name: "Global Codex" }),
+      screen.getByRole("button", { name: "Edit Global Codex" }),
     ).toBeInTheDocument();
     expect(within(table).getAllByRole("cell", { name: "codex" })).toHaveLength(
       2,
@@ -356,13 +356,15 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.getAllByAltText("Agent 类型：Codex")).toHaveLength(2);
 
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(within(rows[0]).getByRole("cell", { name: "Global Codex" }))
-      .toBeInTheDocument();
-    expect(within(rows[1]).getByRole("cell", { name: "Project Codex" }))
-      .toBeInTheDocument();
+    expect(
+      within(rows[0]).getByRole("button", { name: "Edit Global Codex" }),
+    ).toBeInTheDocument();
+    expect(
+      within(rows[1]).getByRole("button", { name: "Edit Project Codex" }),
+    ).toBeInTheDocument();
   });
 
-  it("opens the edit form from table rows with click and keyboard shortcuts", async () => {
+  it("opens the edit form from table row action buttons with click and keyboard shortcuts", async () => {
     const user = userEvent.setup();
 
     render(
@@ -374,20 +376,17 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
-    const projectRow = (await screen.findByRole("cell", {
-      name: "Project Codex",
-    })).closest("tr");
-    expect(projectRow).not.toBeNull();
-    if (!projectRow) throw new Error("Project agent row not found");
-
-    await user.click(projectRow);
+    const projectButton = await screen.findByRole("button", {
+      name: "Edit Project Codex",
+    });
+    await user.click(projectButton);
 
     expect(
       screen.getByRole("heading", { name: "Edit Agent" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close" }));
 
-    projectRow?.focus();
+    projectButton.focus();
     await user.keyboard("{Enter}");
 
     expect(
@@ -395,11 +394,10 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close" }));
 
-    const globalRow = screen
-      .getByRole("cell", { name: "Global Codex" })
-      .closest("tr");
-    expect(globalRow).not.toBeNull();
-    globalRow?.focus();
+    const globalButton = screen.getByRole("button", {
+      name: "Edit Global Codex",
+    });
+    globalButton.focus();
     await user.keyboard(" ");
 
     expect(
@@ -487,7 +485,7 @@ describe("ProjectSettingsActivity", () => {
           name: "My Codex",
           command: "/opt/codex/bin/codex",
           scope: "global",
-          projectId: 1,
+          projectId: null,
         }),
       ),
     );
