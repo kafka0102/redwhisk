@@ -687,6 +687,59 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 
+  it("keeps the current project context when editing a global agent and switching scope to project", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [] };
+      return { profiles: [legacyPromptProfile] };
+    });
+    saveAgentProfileMock.mockResolvedValue({
+      ...legacyPromptProfile,
+      scope: "project",
+      projectId: 1,
+      defaultSkill: "codex-project",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
+    );
+    await user.click(screen.getByLabelText("Project"));
+
+    await waitFor(() =>
+      expect(listAgentSkillsMock).toHaveBeenCalledWith({
+        agentType: "codex",
+        projectId: 1,
+      }),
+    );
+    await user.click(
+      await screen.findByLabelText(
+        "codex-project /repo/.agents/skills/codex-project/SKILL.md",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: legacyPromptProfile.id,
+          scope: "project",
+          projectId: 1,
+          defaultSkill: "codex-project",
+          promptTemplate: "Keep this legacy prompt",
+        }),
+      ),
+    );
+  });
+
   it("keeps the latest agent type skills when older requests finish later", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
