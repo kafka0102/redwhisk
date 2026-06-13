@@ -45,6 +45,7 @@ export function AgentProfileForm({
   const [defaultSkill, setDefaultSkill] = useState(
     () => profile?.defaultSkill ?? "",
   );
+  const [selectedSkillPath, setSelectedSkillPath] = useState("");
   const [promptTemplate] = useState(
     () => profile?.promptTemplate ?? "",
   );
@@ -162,9 +163,27 @@ export function AgentProfileForm({
     () => skills.filter((skill) => skill.scope === scopeValue),
     [skills, scopeValue],
   );
+  const resolvedSelectedSkillPath = useMemo(() => {
+    if (defaultSkill.length === 0) return "";
+
+    if (
+      selectedSkillPath.length > 0 &&
+      visibleSkills.some(
+        (skill) =>
+          skill.path === selectedSkillPath && skill.name === defaultSkill,
+      )
+    ) {
+      return selectedSkillPath;
+    }
+
+    const matchingSkill = visibleSkills.find(
+      (skill) => skill.name === defaultSkill,
+    );
+    return matchingSkill?.path ?? "";
+  }, [defaultSkill, selectedSkillPath, visibleSkills]);
+
   const isSelectedSkillMissing =
-    defaultSkill.length > 0 &&
-    !visibleSkills.some((skill) => skill.name === defaultSkill);
+    defaultSkill.length > 0 && resolvedSelectedSkillPath.length === 0;
 
   async function handleTestCommand() {
     setIsTesting(true);
@@ -264,6 +283,7 @@ export function AgentProfileForm({
                 skillRequestSequenceRef.current += 1;
                 setAgentType(event.target.value as AgentType);
                 setDefaultSkill("");
+                setSelectedSkillPath("");
                 setSkills([]);
                 setSkillLoadFailed(false);
               }}
@@ -303,8 +323,10 @@ export function AgentProfileForm({
                   type="radio"
                   value="global"
                   onChange={() => {
+                    skillRequestSequenceRef.current += 1;
                     setScopeValue("global");
                     setDefaultSkill("");
+                    setSelectedSkillPath("");
                     setSkills([]);
                     setSkillLoadFailed(false);
                   }}
@@ -318,8 +340,10 @@ export function AgentProfileForm({
                   type="radio"
                   value="project"
                   onChange={() => {
+                    skillRequestSequenceRef.current += 1;
                     setScopeValue("project");
                     setDefaultSkill("");
+                    setSelectedSkillPath("");
                     setSkills([]);
                     setSkillLoadFailed(false);
                   }}
@@ -338,7 +362,10 @@ export function AgentProfileForm({
                   name="default-skill"
                   type="radio"
                   value=""
-                  onChange={() => setDefaultSkill("")}
+                  onChange={() => {
+                    setDefaultSkill("");
+                    setSelectedSkillPath("");
+                  }}
                 />
                 <span className="agent-dialog__skill-name">None</span>
               </label>
@@ -349,7 +376,7 @@ export function AgentProfileForm({
                     name="default-skill"
                     type="radio"
                     value={defaultSkill}
-                    onChange={() => setDefaultSkill(defaultSkill)}
+                    onChange={() => setSelectedSkillPath("")}
                   />
                   <span className="agent-dialog__skill-name">
                     {defaultSkill}
@@ -363,11 +390,14 @@ export function AgentProfileForm({
                 >
                   <input
                     aria-label={`${skill.name} ${skill.path}`}
-                    checked={defaultSkill === skill.name}
+                    checked={resolvedSelectedSkillPath === skill.path}
                     name="default-skill"
                     type="radio"
                     value={skill.name}
-                    onChange={() => setDefaultSkill(skill.name)}
+                    onChange={() => {
+                      setDefaultSkill(skill.name);
+                      setSelectedSkillPath(skill.path);
+                    }}
                   />
                   <span className="agent-dialog__skill-copy">
                     <span className="agent-dialog__skill-name">

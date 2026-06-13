@@ -185,11 +185,16 @@ export function ProjectSettingsActivity({
   }, [clearDragState]);
 
   function handleProfileSaved(savedProfile: AgentProfileRecord) {
-    if (savedProfile.scope === "project") {
-      setProjectProfiles((current) => mergeProfile(current, savedProfile));
-    } else {
-      setGlobalProfiles((current) => mergeProfile(current, savedProfile));
-    }
+    setProjectProfiles((current) => {
+      const remaining = removeProfile(current, savedProfile.id);
+      if (savedProfile.scope !== "project") return remaining;
+      return mergeProfile(remaining, savedProfile);
+    });
+    setGlobalProfiles((current) => {
+      const remaining = removeProfile(current, savedProfile.id);
+      if (savedProfile.scope !== "global") return remaining;
+      return mergeProfile(remaining, savedProfile);
+    });
     setAddForm(null);
     setEditingProfile(null);
   }
@@ -561,10 +566,15 @@ function mergeProfile(
   currentProfiles: AgentProfileRecord[],
   savedProfile: AgentProfileRecord,
 ): AgentProfileRecord[] {
-  const remaining = currentProfiles.filter(
-    (profile) => profile.id !== savedProfile.id,
-  );
+  const remaining = removeProfile(currentProfiles, savedProfile.id);
   return [...remaining, savedProfile].sort((left, right) => left.id - right.id);
+}
+
+function removeProfile(
+  currentProfiles: AgentProfileRecord[],
+  profileId: number,
+): AgentProfileRecord[] {
+  return currentProfiles.filter((profile) => profile.id !== profileId);
 }
 
 function formatCommandName(command: string): string {

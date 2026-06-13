@@ -740,6 +740,119 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 
+  it("moves an edited global agent into the project table without leaving a stale global row", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [] };
+      return { profiles: [legacyPromptProfile] };
+    });
+    saveAgentProfileMock.mockResolvedValue({
+      ...legacyPromptProfile,
+      scope: "project",
+      projectId: 1,
+      defaultSkill: "codex-project",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
+    );
+    await user.click(screen.getByLabelText("Project"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Edit Agent" }),
+      ).not.toBeInTheDocument(),
+    );
+
+    const table = screen.getByRole("table", { name: "Configured agents" });
+    expect(
+      within(table).getAllByRole("button", {
+        name: "Edit Legacy Prompt Codex",
+      }),
+    ).toHaveLength(1);
+    expect(within(table).getByRole("cell", { name: "Project" })).toBeInTheDocument();
+    expect(
+      within(table).queryByRole("cell", { name: "Global" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tracks workflow skill selection by path when visible skills share the same name", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    listAgentSkillsMock.mockResolvedValue(
+      skillResponse([
+        {
+          name: "shared-skill",
+          path: "/home/me/.agents/skills/shared-a/SKILL.md",
+          agentType: "codex",
+          scope: "global",
+          projectId: null,
+          sourceRoot: "/home/me/.agents/skills",
+        },
+        {
+          name: "shared-skill",
+          path: "/home/me/.agents/skills/shared-b/SKILL.md",
+          agentType: "codex",
+          scope: "global",
+          projectId: null,
+          sourceRoot: "/home/me/.agents/skills",
+        },
+      ]),
+    );
+    saveAgentProfileMock.mockResolvedValue({
+      ...globalProfile,
+      name: "Shared Skill Agent",
+      defaultSkill: "shared-skill",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
+
+    const firstSkill = await screen.findByLabelText(
+      "shared-skill /home/me/.agents/skills/shared-a/SKILL.md",
+    );
+    const secondSkill = screen.getByLabelText(
+      "shared-skill /home/me/.agents/skills/shared-b/SKILL.md",
+    );
+
+    await user.click(secondSkill);
+
+    expect(firstSkill).not.toBeChecked();
+    expect(secondSkill).toBeChecked();
+
+    await user.type(
+      screen.getByLabelText("Agent profile name"),
+      "Shared Skill Agent",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultSkill: "shared-skill",
+        }),
+      ),
+    );
+  });
+
   it("keeps the latest agent type skills when older requests finish later", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
