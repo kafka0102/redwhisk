@@ -1,12 +1,8 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { Paperclip, Play } from "lucide-react";
-import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   createIssue,
   exportIssueAttachment,
@@ -19,12 +15,18 @@ import {
   type IssueRecord,
   type IssueStatus,
 } from "./issue-commands";
+import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog";
+import {
+  EMPTY_FORM,
+  type AttachmentPreviewState,
+  type DialogMode,
+  type IssueFormState,
+} from "./issue-activity-types";
+import { IssueFormDialog } from "./issue-form-dialog";
+import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
-import {
-  IssueDescriptionEditor,
-  type IssueAttachmentDraft,
-} from "./issue-description-editor";
+import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { listAgentProfiles } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
@@ -34,29 +36,10 @@ interface IssuesActivityProps {
   requestedIssueId?: number | null;
 }
 
-interface IssueFormState {
-  title: string;
-  description: string;
-  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
-}
-
-interface AttachmentPreviewState {
-  displayName: string;
-  kind: "image" | "pdf" | "word" | "text" | "generic";
-  textContent?: string | null;
-  imageSrc?: string | null;
-}
-
 interface LaneDefinition {
   status: IssueStatus;
   label: string;
 }
-
-const EMPTY_FORM: IssueFormState = {
-  title: "",
-  description: "",
-  attachments: [],
-};
 
 const ISSUE_LANES: LaneDefinition[] = [
   {
@@ -77,8 +60,6 @@ const ISSUE_LANES: LaneDefinition[] = [
   },
 ];
 
-type DialogMode = "create" | "edit";
-
 export function IssuesActivity({
   projectId,
   onOpenAgentsActivity,
@@ -89,9 +70,10 @@ export function IssuesActivity({
     requestedIssueId,
   );
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
-  const [runDialogIssue, setRunDialogIssue] = useState<
-    Pick<IssueRecord, "id" | "title" | "description" | "attachments"> | null
-  >(null);
+  const [runDialogIssue, setRunDialogIssue] = useState<Pick<
+    IssueRecord,
+    "id" | "title" | "description" | "attachments"
+  > | null>(null);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [attachmentPreview, setAttachmentPreview] =
     useState<AttachmentPreviewState | null>(null);
@@ -293,7 +275,10 @@ export function IssuesActivity({
         const createdIssue = await createIssue({
           projectId: requestProjectId,
           title: form.title,
-          description: buildIssueDescription(form.description, form.attachments),
+          description: buildIssueDescription(
+            form.description,
+            form.attachments,
+          ),
           attachments: serializeAttachments(form.attachments),
         });
         if (activeProjectIdRef.current !== requestProjectId) {
@@ -309,7 +294,10 @@ export function IssuesActivity({
           projectId: requestProjectId,
           issueId: selectedIssue.id,
           title: form.title,
-          description: buildIssueDescription(form.description, form.attachments),
+          description: buildIssueDescription(
+            form.description,
+            form.attachments,
+          ),
           attachments: serializeAttachments(form.attachments),
         });
         if (activeProjectIdRef.current !== requestProjectId) {
@@ -400,7 +388,12 @@ export function IssuesActivity({
   function openRunDialog(
     issue: Pick<
       IssueRecord,
-      "id" | "title" | "description" | "attachments" | "status" | "linkedSessionId"
+      | "id"
+      | "title"
+      | "description"
+      | "attachments"
+      | "status"
+      | "linkedSessionId"
     >,
     trigger: HTMLElement | null,
   ) {
@@ -489,7 +482,6 @@ export function IssuesActivity({
     }
   }
 
-  const dialogTitle = dialogMode === "create" ? "New Issue" : "Issue Detail";
   const isBacklogDialog =
     dialogMode === "create" || selectedIssue?.status === "backlog";
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
@@ -606,356 +598,62 @@ export function IssuesActivity({
           {errorMessage}
         </p>
       ) : null}
-      <section className="issues-kanban" aria-label="Issues kanban">
-        {isLoading ? (
-          <p className="issues-loading" role="status">
-            Loading issues...
-          </p>
-        ) : null}
-        {lanes.map((lane) => (
-          <section
-            key={lane.status}
-            aria-label={lane.label}
-            className={`issue-lane issue-lane--${lane.status}`}
-          >
-            <div className="issue-lane__header">
-              <div className="issue-lane__title-row">
-                <span className="issue-lane__status-dot" aria-hidden="true" />
-                <h3>{lane.label}</h3>
-                <span className="issue-lane__count">{lane.issues.length}</span>
-                {lane.status === "backlog" ? (
-                  <button
-                    ref={createButtonRef}
-                    aria-label="New Issue"
-                    className="issue-lane__create"
-                    title="New Issue"
-                    type="button"
-                    onClick={(event) => openCreateDialog(event.currentTarget)}
-                  >
-                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="issue-lane__cards" role="list">
-              {lane.issues.map((issue) => {
-                const metaId = `issue-card-meta-${issue.id}`;
-                const attentionId = `issue-card-attention-${issue.id}`;
-                const descriptionId = `issue-card-description-${issue.id}`;
-                const describedBy = [
-                  metaId,
-                  issue.linkedSessionAttention === "requested"
-                    ? attentionId
-                    : null,
-                  issue.description ? descriptionId : null,
-                ]
-                  .filter((value): value is string => value != null)
-                  .join(" ");
-
-                return (
-                  <div key={issue.id} role="listitem">
-                    <div className="issue-card__shell">
-                      <button
-                        ref={(element) => {
-                          if (element) {
-                            cardRefs.current.set(issue.id, element);
-                          } else {
-                            cardRefs.current.delete(issue.id);
-                          }
-                        }}
-                        aria-describedby={describedBy}
-                        aria-label={issue.title}
-                        aria-pressed={issue.id === selectedIssueId}
-                        className="issue-card"
-                        type="button"
-                        onClick={(event) =>
-                          openIssueDialog(issue, event.currentTarget)
-                        }
-                      >
-                        <span id={metaId} className="issue-card__meta-row">
-                          <span className="issue-card__id">#{issue.id}</span>
-                          <span className="issue-card__updated">
-                            {formatLocalTimestamp(issue.updatedAt)}
-                          </span>
-                        </span>
-                        <span className="issue-card__title">{issue.title}</span>
-                        {issue.linkedSessionAttention === "requested" ? (
-                          <span
-                            id={attentionId}
-                            className="attention-marker issue-card__attention"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="attention-marker__dot"
-                            />
-                            <span className="attention-marker__text">
-                              Codex 需要确认
-                            </span>
-                          </span>
-                        ) : null}
-                        {issue.description ? (
-                          <span
-                            id={descriptionId}
-                            className="issue-card__description"
-                          >
-                            {markdownToExcerpt(issue.description)}
-                          </span>
-                        ) : null}
-                      </button>
-                      {canRunIssueFor(issue) ? (
-                        <div className="issue-card__footer">
-                          <button
-                            aria-label={`Run ${issue.title}`}
-                            className="issue-card__run"
-                            type="button"
-                            onClick={(event) => {
-                              openRunDialog(issue, event.currentTarget);
-                            }}
-                          >
-                            <Play aria-hidden="true" size={14} strokeWidth={2} />
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-              {!isLoading && lane.issues.length === 0 ? (
-                <p className="issue-lane__empty">no issues</p>
-              ) : null}
-            </div>
-          </section>
-        ))}
-      </section>
+      <IssuesKanban
+        isLoading={isLoading}
+        lanes={lanes}
+        selectedIssueId={selectedIssueId}
+        cardRefs={cardRefs}
+        createButtonRef={createButtonRef}
+        canRunIssue={canRunIssueFor}
+        formatTimestamp={formatLocalTimestamp}
+        toDescriptionExcerpt={markdownToExcerpt}
+        onCreateIssue={openCreateDialog}
+        onOpenIssue={openIssueDialog}
+        onRunIssue={openRunDialog}
+      />
 
       {dialogMode ? (
-        <div
-          className="issue-dialog-overlay"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              closeDialog();
-            }
-          }}
-        >
-          <form
-            ref={dialogFormRef}
-            aria-label={dialogTitle}
-            aria-modal="true"
-            className={`issue-dialog${isBacklogDialog ? " issue-dialog--backlog" : ""}`}
-            role="dialog"
-            onKeyDown={handleDialogKeyDown}
-            onSubmit={handleSubmit}
-          >
-            <div className="issue-dialog__header">
-              <h3>{dialogTitle}</h3>
-              <button
-                ref={closeButtonRef}
-                aria-label="Close issue dialog"
-                className="issue-dialog__close"
-                type="button"
-                disabled={isSaving}
-                onClick={closeDialog}
-              >
-                x
-              </button>
-            </div>
-            <div
-              className={`issue-dialog__body${isBacklogDialog ? " issue-dialog__body--single" : ""}`}
-            >
-              <div className="issue-dialog__editor">
-                <div className="issue-field">
-                  <Input
-                    ref={titleInputRef}
-                    aria-label="Title"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    name="title"
-                    placeholder="Issue title"
-                    spellCheck={false}
-                    value={form.title}
-                    onChange={(event) =>
-                      setForm((currentForm) => ({
-                        ...currentForm,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="issue-field">
-                  <IssueDescriptionEditor
-                    ariaLabel="Description"
-                    placeholder="Describe the task"
-                    value={form.description}
-                    attachments={form.attachments}
-                    onDownloadAttachment={handleDownloadAttachment}
-                    onChange={(description) =>
-                      setForm((currentForm) => ({
-                        ...currentForm,
-                        description,
-                      }))
-                    }
-                    onPreviewAttachment={handlePreviewAttachment}
-                    onRemoveAttachment={handleRemoveAttachment}
-                  />
-                </div>
-              </div>
-              {!isBacklogDialog ? (
-                <aside className="issue-dialog__side" aria-label="Issue actions">
-                <section className="issue-dialog__panel">
-                  <h4>Session</h4>
-                  {hasLinkedSession ? (
-                    <>
-                      <p>{`Linked session #${selectedIssue?.linkedSessionId}`}</p>
-                      <p>
-                        {`Status: ${formatAgentSessionStatus(
-                          selectedIssue?.linkedSessionStatus ?? null,
-                        )}`}
-                      </p>
-                      {selectedIssue?.linkedSessionLogPath ? (
-                        <p>{`Log path: ${selectedIssue.linkedSessionLogPath}`}</p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p>No session linked.</p>
-                  )}
-                </section>
-                <section className="issue-dialog__panel">
-                  <h4>Actions</h4>
-                  {dialogMode === "edit" && canOpenSession ? (
-                    <>
-                      <Button
-                        className="issues-button"
-                        type="button"
-                        variant="outline"
-                        disabled={!onOpenAgentsActivity}
-                        onClick={openLinkedSession}
-                      >
-                        Open Session
-                      </Button>
-                      <p>Continue this issue from Agents.</p>
-                    </>
-                  ) : canViewSummary ? (
-                    <>
-                      <Button
-                        className="issues-button"
-                        type="button"
-                        variant="outline"
-                        onClick={handleOpenSummary}
-                      >
-                        View Summary
-                      </Button>
-                      <p>Review the completed issue summary.</p>
-                      <Button
-                        className="issues-button"
-                        type="button"
-                        variant="outline"
-                        disabled={isOpeningLog}
-                        onClick={() => void handleOpenLog()}
-                      >
-                        {isOpeningLog ? "打开中..." : "Open Log"}
-                      </Button>
-                      <p>Open the completed session log for review.</p>
-                    </>
-                  ) : dialogMode === "edit" && canOpenLog ? (
-                    <>
-                      <Button
-                        className="issues-button"
-                        type="button"
-                        variant="outline"
-                        disabled={isOpeningLog}
-                        onClick={() => void handleOpenLog()}
-                      >
-                        {isOpeningLog ? "打开中..." : "Open Log"}
-                      </Button>
-                      <p>Open the abnormal session log for diagnosis.</p>
-                    </>
-                  ) : dialogMode === "edit" &&
-                    selectedIssue?.status === "backlog" &&
-                    !hasLinkedSession ? (
-                    <>
-                      {runStatusMessage ? <p>{runStatusMessage}</p> : null}
-                    </>
-                  ) : (
-                    <p>No actions available.</p>
-                  )}
-                </section>
-                </aside>
-              ) : null}
-            </div>
-            <p
-              className="issue-dialog__status"
-              role="status"
-              aria-label="Dialog status"
-            >
-              {dialogErrorMessage}
-            </p>
-            <div className="issue-dialog__footer">
-              <div className="issue-dialog__footer-start">
-                <Button
-                  aria-label="Attach file"
-                  className="issues-button issues-button--icon"
-                  type="button"
-                  variant="outline"
-                  disabled={isSaving}
-                  onClick={() => void handleSelectAttachment()}
-                >
-                  <Paperclip aria-hidden="true" size={15} strokeWidth={2} />
-                </Button>
-              </div>
-              <div className="issue-dialog__footer-end">
-                {dialogMode === "edit" &&
-                selectedIssue != null &&
-                canRunIssueFor(selectedIssue) ? (
-                  <Button
-                    ref={runButtonRef}
-                    className="issues-button"
-                    type="button"
-                    variant="outline"
-                    disabled={!canRunSelectedIssue}
-                    onClick={() =>
-                      openRunDialog(
-                        {
-                          ...selectedIssue,
-                          title: form.title,
-                          description: buildIssueDescription(
-                            form.description,
-                            form.attachments,
-                          ),
-                          attachments: form.attachments.filter(
-                            (
-                              attachment,
-                            ): attachment is IssueAttachmentRecord => "id" in attachment,
-                          ),
-                        },
-                        runButtonRef.current,
-                      )
-                    }
-                  >
-                    Run
-                  </Button>
-                ) : null}
-                <Button
-                  ref={cancelButtonRef}
-                  className="issues-button"
-                  type="button"
-                  variant="outline"
-                  disabled={isSaving}
-                  onClick={closeDialog}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  ref={saveButtonRef}
-                  className="issues-button issues-button--primary"
-                  type="submit"
-                  disabled={isSaving}
-                >
-                  {dialogMode === "create" ? "Create Issue" : "Save"}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </div>
+        <IssueFormDialog
+          mode={dialogMode}
+          form={form}
+          selectedIssue={selectedIssue}
+          isSaving={isSaving}
+          isOpeningLog={isOpeningLog}
+          errorMessage={dialogErrorMessage}
+          hasLinkedSession={hasLinkedSession}
+          isBacklogDialog={isBacklogDialog}
+          canOpenSession={canOpenSession}
+          canOpenLog={canOpenLog}
+          canViewSummary={canViewSummary}
+          canRunSelectedIssue={canRunSelectedIssue}
+          runStatusMessage={runStatusMessage}
+          titleInputRef={titleInputRef}
+          dialogFormRef={dialogFormRef}
+          closeButtonRef={closeButtonRef}
+          cancelButtonRef={cancelButtonRef}
+          runButtonRef={runButtonRef}
+          saveButtonRef={saveButtonRef}
+          canOpenAgentsActivity={Boolean(onOpenAgentsActivity)}
+          canRunIssue={canRunIssueFor}
+          buildDescription={buildIssueDescription}
+          formatSessionStatus={formatAgentSessionStatus}
+          onClose={closeDialog}
+          onSubmit={handleSubmit}
+          onKeyDown={handleDialogKeyDown}
+          onFormChange={setForm}
+          onSelectAttachment={() => void handleSelectAttachment()}
+          onPreviewAttachment={(attachment) =>
+            void handlePreviewAttachment(attachment)
+          }
+          onDownloadAttachment={(attachment) =>
+            void handleDownloadAttachment(attachment)
+          }
+          onRemoveAttachment={handleRemoveAttachment}
+          onOpenLinkedSession={openLinkedSession}
+          onOpenLog={() => void handleOpenLog()}
+          onOpenSummary={handleOpenSummary}
+          onRunIssue={openRunDialog}
+        />
       ) : null}
 
       {runDialogIssue ? (
@@ -974,65 +672,20 @@ export function IssuesActivity({
         />
       ) : null}
       {attachmentPreview ? (
-        <div
-          className="issue-dialog-overlay"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setAttachmentPreview(null);
-            }
-          }}
-        >
-          <div
-            aria-label="Attachment Preview"
-            aria-modal="true"
-            className="issue-dialog issue-dialog--compact"
-            role="dialog"
-          >
-            <div className="issue-dialog__header">
-              <h3>{attachmentPreview.displayName}</h3>
-              <button
-                aria-label="Close attachment preview"
-                className="issue-dialog__close"
-                type="button"
-                onClick={() => setAttachmentPreview(null)}
-              >
-                x
-              </button>
-            </div>
-            <div className="issue-dialog__body issue-dialog__body--single">
-              <div className="issue-dialog__editor">
-                {attachmentPreview.imageSrc ? (
-                  <img
-                    alt={attachmentPreview.displayName}
-                    className="issue-attachment-preview__image"
-                    src={attachmentPreview.imageSrc}
-                  />
-                ) : (
-                  <pre className="completion-preview__prompt">
-                    {attachmentPreview.textContent}
-                  </pre>
-                )}
-              </div>
-            </div>
-            <div className="issue-dialog__footer">
-              <Button
-                className="issues-button"
-                type="button"
-                variant="outline"
-                onClick={() => setAttachmentPreview(null)}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
+        <IssueAttachmentPreviewDialog
+          preview={attachmentPreview}
+          onClose={() => setAttachmentPreview(null)}
+        />
       ) : null}
     </main>
   );
 }
 
 function issueToForm(issue: IssueRecord): IssueFormState {
-  const parsed = parseIssueDescription(issue.description, issue.attachments ?? []);
+  const parsed = parseIssueDescription(
+    issue.description,
+    issue.attachments ?? [],
+  );
   return {
     title: issue.title,
     description: parsed.description,
@@ -1213,7 +866,9 @@ function toAttachmentPreviewState(
     displayName: preview.displayName,
     kind: preview.kind,
     textContent: preview.textContent,
-    imageSrc: preview.absolutePath ? convertFileSrc(preview.absolutePath) : null,
+    imageSrc: preview.absolutePath
+      ? convertFileSrc(preview.absolutePath)
+      : null,
   };
 }
 
