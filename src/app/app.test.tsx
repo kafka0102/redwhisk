@@ -75,6 +75,7 @@ describe("App project entry", () => {
 
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
+    window.localStorage.clear();
     openDialogMock.mockReset();
     createProjectMock.mockReset();
     initializeLocalDataMock.mockReset();
@@ -238,6 +239,24 @@ describe("App project entry", () => {
     );
   });
 
+  it("uses English as the default UI language in a project workbench", async () => {
+    window.history.replaceState(null, "", "/?projectId=1");
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("navigation", { name: "Activity Bar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Project Settings" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Global Settings" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows URL project open failures as project open errors", async () => {
     window.history.replaceState(null, "", "/?projectId=2");
 
@@ -272,10 +291,17 @@ describe("App project entry", () => {
       "Issues",
       "Agents",
       "Settings",
+      "",
     ]);
     expect(
       within(activityBar).getByRole("button", { name: "Issues" }),
     ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(activityBar).getByRole("button", { name: "Project Settings" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(activityBar).getByRole("button", { name: "Global Settings" }),
+    ).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Current project RedWhisk" }),
@@ -289,6 +315,35 @@ describe("App project entry", () => {
     ).not.toBeInTheDocument();
     await waitFor(() =>
       expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
+    );
+  });
+
+  it("opens global settings from the bottom activity bar icon without resetting project activities", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/?projectId=1");
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("button", { name: "Issues" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(screen.getByRole("button", { name: "Global Settings" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Preferences" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Global Settings" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Project Settings" }),
+    ).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(screen.getByRole("button", { name: "Issues" }));
+    expect(screen.getByRole("button", { name: "Issues" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
   });
 

@@ -17,7 +17,6 @@ import {
 } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
-import { getSettingsMessages } from "../../shared/i18n/settings-messages";
 import {
   type ProjectCompletionPolicy,
   type UpdateProjectSettingsInput,
@@ -28,6 +27,8 @@ import {
   formatAgentTypeLabel,
   getAgentLogoSrc,
 } from "../agents/agent-visuals";
+import { useI18n } from "../../shared/i18n/i18n";
+import type { I18nMessages } from "../../shared/i18n/messages";
 
 type SettingsMenu = "general" | "agents";
 
@@ -48,24 +49,19 @@ const SETTINGS_MENU_STEP = 16;
 const SETTINGS_MENU_ITEMS: {
   iconTestId: string;
   key: SettingsMenu;
-  label: string;
   MenuIcon: typeof Info;
 }[] = [
   {
     iconTestId: "settings-menu-icon-general",
     key: "general",
-    label: "General",
     MenuIcon: Info,
   },
   {
     iconTestId: "settings-menu-icon-agents",
     key: "agents",
-    label: "Agents",
     MenuIcon: Bot,
   },
 ];
-
-const settingsMessages = getSettingsMessages();
 
 interface ProjectSettingsActivityProps {
   completionPolicy: ProjectCompletionPolicy;
@@ -76,6 +72,7 @@ interface ProjectSettingsActivityProps {
 
 interface GeneralSettingsFormProps {
   completionPolicy: ProjectCompletionPolicy;
+  messages: I18nMessages;
   onSave: (
     input: Pick<UpdateProjectSettingsInput, "name" | "completionPolicy">,
   ) => Promise<void>;
@@ -88,6 +85,7 @@ export function ProjectSettingsActivity({
   projectId,
   projectName,
 }: ProjectSettingsActivityProps) {
+  const { messages } = useI18n();
   const [activeMenu, setActiveMenu] = useState<SettingsMenu>("agents");
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
@@ -117,6 +115,7 @@ export function ProjectSettingsActivity({
   const activeMenuItem =
     SETTINGS_MENU_ITEMS.find((item) => item.key === activeMenu) ??
     SETTINGS_MENU_ITEMS[0];
+  const activeMenuLabel = getSettingsMenuLabel(activeMenuItem.key, messages);
   const isProfilesCurrent = profilesProjectId === projectId;
   const currentProjectProfiles = isProfilesCurrent ? projectProfiles : [];
   const currentGlobalProfiles = isProfilesCurrent ? globalProfiles : [];
@@ -229,7 +228,7 @@ export function ProjectSettingsActivity({
 
   async function handleDeleteProfile(profile: AgentProfileRecord) {
     const isConfirmed = window.confirm(
-      settingsMessages.deleteAgentProfileConfirm(profile.name),
+      messages.settings.deleteConfirm(profile.name),
     );
     if (!isConfirmed) {
       return;
@@ -262,9 +261,10 @@ export function ProjectSettingsActivity({
       }
     >
       <div className="settings-layout">
-        <nav className="settings-menu" aria-label="Settings menu">
+        <nav className="settings-menu" aria-label={messages.settings.menuLabel}>
           {SETTINGS_MENU_ITEMS.map((item) => {
             const Icon = item.MenuIcon;
+            const itemLabel = getSettingsMenuLabel(item.key, messages);
             return (
               <button
                 key={item.key}
@@ -279,14 +279,14 @@ export function ProjectSettingsActivity({
                   size={15}
                   strokeWidth={1.9}
                 />
-                <span>{item.label}</span>
+                <span>{itemLabel}</span>
               </button>
             );
           })}
         </nav>
 
         <div
-          aria-label="Resize settings menu"
+          aria-label={messages.settings.splitterLabel}
           aria-orientation="vertical"
           aria-valuemax={SETTINGS_MENU_MAX_WIDTH}
           aria-valuemin={SETTINGS_MENU_MIN_WIDTH}
@@ -337,20 +337,21 @@ export function ProjectSettingsActivity({
         <div className={`settings-content settings-content--${activeMenu}`}>
           <SettingsContentFrame
             item={activeMenuItem}
+            label={activeMenuLabel}
             headerAction={
               activeMenu === "agents" ? (
                 <Button
                   className="settings-section__header-action"
                   variant="secondary"
                   type="button"
-                  aria-label="New agent"
+                  aria-label={messages.settings.newAgent}
                   onClick={() => {
                     setAddForm({ projectId });
                     setEditingProfile(null);
                   }}
                 >
                   <Plus aria-hidden="true" size={14} strokeWidth={2} />
-                  <span>New agent</span>
+                  <span>{messages.settings.newAgent}</span>
                 </Button>
               ) : null
             }
@@ -359,6 +360,7 @@ export function ProjectSettingsActivity({
               <GeneralSettingsForm
                 key={`${projectId}:${projectName}:${completionPolicy}`}
                 completionPolicy={completionPolicy}
+                messages={messages}
                 onSave={handleGeneralSettingsSave}
                 projectName={projectName}
               />
@@ -370,33 +372,35 @@ export function ProjectSettingsActivity({
                   <p
                     className="settings-status"
                     role="status"
-                    aria-label="Settings status"
+                    aria-label={messages.settings.status}
                   >
                     {currentErrorMessage}
                   </p>
                 ) : null}
 
                 {currentLoadState === "loading" ? (
-                  <p className="settings-agent-section__loading">Loading...</p>
+                  <p className="settings-agent-section__loading">
+                    {messages.settings.loading}
+                  </p>
                 ) : currentProfiles.length === 0 ? (
                   <div className="settings-agent-table-empty">
-                    <p>No agents</p>
+                    <p>{messages.settings.noAgents}</p>
                   </div>
                 ) : (
                   <div className="settings-agent-table-scroll">
                     <table
                       className="settings-agent-table"
-                      aria-label="Configured agents"
+                      aria-label={messages.settings.configuredAgents}
                     >
                       <thead>
                         <tr>
-                          <th scope="col">Type</th>
-                          <th scope="col">Name</th>
-                          <th scope="col">Command</th>
-                          <th scope="col">Scope</th>
-                          <th scope="col">Workflow Skill</th>
+                          <th scope="col">{messages.settings.type}</th>
+                          <th scope="col">{messages.settings.name}</th>
+                          <th scope="col">{messages.settings.command}</th>
+                          <th scope="col">{messages.settings.scope}</th>
+                          <th scope="col">{messages.settings.workflowSkill}</th>
                           <th scope="col">
-                            {settingsMessages.agentActionsColumn}
+                            {messages.settings.actions}
                           </th>
                         </tr>
                       </thead>
@@ -439,8 +443,8 @@ export function ProjectSettingsActivity({
                               </td>
                               <td>
                                 {profile.scope === "global"
-                                  ? "Global"
-                                  : "Project"}
+                                  ? messages.settings.globalScope
+                                  : messages.settings.projectScope}
                               </td>
                               <td className="settings-agent-table__skill">
                                 {profile.defaultSkill.trim().length > 0
@@ -450,7 +454,7 @@ export function ProjectSettingsActivity({
                               <td>
                                 <div className="settings-agent-table__actions">
                                   <button
-                                    aria-label={`${settingsMessages.deleteAgentProfile} ${profile.name}`}
+                                    aria-label={`${messages.settings.delete} ${profile.name}`}
                                     className="settings-agent-table__delete-link"
                                     disabled={deletingProfileId === profile.id}
                                     type="button"
@@ -458,7 +462,7 @@ export function ProjectSettingsActivity({
                                       void handleDeleteProfile(profile);
                                     }}
                                   >
-                                    {settingsMessages.deleteAgentProfile}
+                                    {messages.settings.delete}
                                   </button>
                                 </div>
                               </td>
@@ -505,18 +509,20 @@ function SettingsContentFrame({
   children,
   headerAction,
   item,
+  label,
 }: {
   children: ReactNode;
   headerAction?: ReactNode;
   item: (typeof SETTINGS_MENU_ITEMS)[number];
+  label: string;
 }) {
   return (
     <section
       className={`settings-section settings-section--${item.key}`}
-      aria-label={item.label}
+      aria-label={label}
     >
       <div className="settings-section__header">
-        <h3>{item.label}</h3>
+        <h3>{label}</h3>
         {headerAction}
       </div>
       <div className="settings-section__body">{children}</div>
@@ -526,6 +532,7 @@ function SettingsContentFrame({
 
 function GeneralSettingsForm({
   completionPolicy,
+  messages,
   onSave,
   projectName,
 }: GeneralSettingsFormProps) {
@@ -568,9 +575,9 @@ function GeneralSettingsForm({
       onSubmit={handleSubmit}
     >
       <label className="settings-field">
-        <span>Project Name</span>
+        <span>{messages.settings.projectName}</span>
         <input
-          aria-label="Project Name"
+          aria-label={messages.settings.projectName}
           className="settings-input settings-input--form-control"
           disabled={isSaving}
           value={projectNameValue}
@@ -578,9 +585,9 @@ function GeneralSettingsForm({
         />
       </label>
       <label className="settings-field">
-        <span>Git completion strategy</span>
+        <span>{messages.settings.completionStrategy}</span>
         <select
-          aria-label="Git completion strategy"
+          aria-label={messages.settings.completionStrategy}
           className="settings-input settings-input--form-control"
           disabled={isSaving}
           value={completionPolicyValue}
@@ -590,15 +597,17 @@ function GeneralSettingsForm({
             )
           }
         >
-          <option value="agent_auto_commit">Auto Commit</option>
-          <option value="manual">Manual</option>
+          <option value="agent_auto_commit">
+            {messages.settings.autoCommit}
+          </option>
+          <option value="manual">{messages.settings.manual}</option>
         </select>
       </label>
       {errorMessage ? (
         <p
           className="settings-status"
           role="status"
-          aria-label="General settings status"
+          aria-label={`${messages.settings.general} ${messages.settings.status}`}
         >
           {errorMessage}
         </p>
@@ -609,7 +618,7 @@ function GeneralSettingsForm({
           disabled={isSaveDisabled}
           type="submit"
         >
-          {isSaving ? "Saving..." : "Save"}
+          {isSaving ? messages.settings.saving : messages.settings.save}
         </Button>
       </div>
     </form>
@@ -645,4 +654,11 @@ function clampSettingsMenuWidth(width: number) {
     SETTINGS_MENU_MAX_WIDTH,
     Math.max(SETTINGS_MENU_MIN_WIDTH, width),
   );
+}
+
+function getSettingsMenuLabel(
+  key: SettingsMenu,
+  messages: I18nMessages,
+): string {
+  return key === "general" ? messages.settings.general : messages.settings.agents;
 }
