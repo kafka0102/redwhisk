@@ -60,6 +60,9 @@ const ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_SQL: &str =
 const ISSUE_ATTACHMENTS_MIGRATION_VERSION: &str = "0018_issue_attachments";
 const ISSUE_ATTACHMENTS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0018_issue_attachments.sql");
+const AGENT_PROFILES_DEL_MIGRATION_VERSION: &str = "0019_agent_profiles_del";
+const AGENT_PROFILES_DEL_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0019_agent_profiles_del.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -201,6 +204,10 @@ impl MigrationRunner {
                 Migration {
                     version: ISSUE_ATTACHMENTS_MIGRATION_VERSION,
                     sql: ISSUE_ATTACHMENTS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_PROFILES_DEL_MIGRATION_VERSION,
+                    sql: AGENT_PROFILES_DEL_MIGRATION_SQL,
                 },
             ];
         }

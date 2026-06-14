@@ -16,6 +16,7 @@ export interface AgentProfileRecord {
   dangerous: boolean;
   defaultSkill: string;
   promptTemplate: string;
+  del: number;
 }
 
 export interface ListAgentProfilesInput {
@@ -38,6 +39,10 @@ export interface SaveAgentProfileInput {
 
 export interface AgentProfileListResponse {
   profiles: AgentProfileRecord[];
+}
+
+export interface DeleteAgentProfileInput {
+  id: number;
 }
 
 export interface AgentSkillRecord {
@@ -102,6 +107,14 @@ export function saveAgentProfile(
   input: SaveAgentProfileInput,
 ): Promise<AgentProfileRecord> {
   return invokeCommand<AgentProfileRecord>("save_agent_profile", {
+    input,
+  });
+}
+
+export function deleteAgentProfile(
+  input: DeleteAgentProfileInput,
+): Promise<void> {
+  return invokeCommand("delete_agent_profile", {
     input,
   });
 }

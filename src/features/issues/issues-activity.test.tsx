@@ -231,6 +231,7 @@ const projectProfile = {
   dangerous: true,
   defaultSkill: "bmad-dev-story",
   promptTemplate: "Review {{issue.description}} in {{project.name}}.",
+  del: 0,
 };
 
 const globalProfile = {
@@ -244,6 +245,7 @@ const globalProfile = {
   dangerous: false,
   defaultSkill: "",
   promptTemplate: "",
+  del: 0,
 };
 
 describe("IssuesActivity", () => {

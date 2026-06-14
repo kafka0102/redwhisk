@@ -547,6 +547,7 @@ impl<'connection> AgentSessionService<'connection> {
                 )
             })?;
 
+        validate_profile_not_deleted(&profile)?;
         validate_profile_scope(&profile, project_id)?;
 
         let started_at = current_epoch_millis()?;
@@ -1404,6 +1405,18 @@ fn validate_profile_scope(profile: &AgentProfileRow, project_id: i64) -> Result<
             }
         }
     }
+}
+
+fn validate_profile_not_deleted(profile: &AgentProfileRow) -> Result<(), CommandError> {
+    if profile.del == 0 {
+        return Ok(());
+    }
+
+    Err(CommandError::new(
+        CommandErrorCode::AgentProfileValidationFailed,
+        "Agent Profile 已删除。",
+    )
+    .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile.id)))
 }
 
 fn session_log_has_new_output(log_path: &str, last_active_at: i64) -> bool {

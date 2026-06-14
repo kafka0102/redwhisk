@@ -168,6 +168,40 @@ fn start_agent_session_rejects_project_profile_from_another_project() {
 }
 
 #[test]
+fn start_agent_session_rejects_deleted_agent_profile() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id =
+        insert_agent_profile(&database.connection, AgentScope::Project, Some(project_id));
+    AgentProfileRepository::new(&database.connection)
+        .soft_delete_profile(profile_id)
+        .expect("soft delete profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+            },
+        )
+        .expect_err("deleted profile should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    assert_eq!(error.message, "Agent Profile 已删除。");
+}
+
+#[test]
 fn start_agent_session_creates_session_updates_issue_and_records_events() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

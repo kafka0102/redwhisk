@@ -3,8 +3,8 @@ use tauri::{Manager, State};
 use crate::app_state::AppState;
 use crate::core::settings_service::SettingsService;
 use crate::types::agent_profile::{
-    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, ListAgentProfilesInput,
-    SaveAgentProfileInput, TestAgentCommandInput,
+    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, DeleteAgentProfileInput,
+    ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -45,6 +45,16 @@ pub fn save_agent_profile(
 ) -> Result<AgentProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::save_agent_profile_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn delete_agent_profile(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteAgentProfileInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::delete_agent_profile_in_data_dir(data_dir, input)
 }
 
 fn prepare_settings_data_dir(
