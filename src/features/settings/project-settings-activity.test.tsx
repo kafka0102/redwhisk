@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectSettingsActivity } from "./project-settings-activity";
 import {
+  deleteAgentProfile,
   detectCodexCommand,
   listAgentProfiles,
   listAgentSkills,
@@ -16,6 +17,7 @@ import { updateProjectSettings } from "../project/project-commands";
 
 vi.mock("./settings-commands", () => ({
   detectCodexCommand: vi.fn(),
+  deleteAgentProfile: vi.fn(),
   testAgentCommand: vi.fn(),
   listAgentProfiles: vi.fn(),
   listAgentSkills: vi.fn(),
@@ -56,12 +58,14 @@ vi.mock("../project/project-commands", () => ({
 }));
 
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
+const deleteAgentProfileMock = vi.mocked(deleteAgentProfile);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listAgentSkillsMock = vi.mocked(listAgentSkills);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const onProjectUpdated = vi.fn();
+const confirmSpy = vi.spyOn(window, "confirm");
 
 const projectProfile: AgentProfileRecord = {
   id: 1,
@@ -74,6 +78,7 @@ const projectProfile: AgentProfileRecord = {
   dangerous: true,
   defaultSkill: "",
   promptTemplate: "",
+  del: 0,
 };
 
 const globalProfile: AgentProfileRecord = {
@@ -87,6 +92,7 @@ const globalProfile: AgentProfileRecord = {
   dangerous: true,
   defaultSkill: "",
   promptTemplate: "",
+  del: 0,
 };
 
 const legacyPromptProfile: AgentProfileRecord = {
@@ -99,6 +105,7 @@ const legacyPromptProfile: AgentProfileRecord = {
 describe("ProjectSettingsActivity", () => {
   beforeEach(() => {
     detectCodexCommandMock.mockReset();
+    deleteAgentProfileMock.mockReset();
     testAgentCommandMock.mockReset();
     listAgentProfilesMock.mockReset();
     listAgentSkillsMock.mockReset();
@@ -110,6 +117,9 @@ describe("ProjectSettingsActivity", () => {
     detectCodexCommandMock.mockResolvedValue({
       command: "/usr/local/bin/codex",
     });
+    deleteAgentProfileMock.mockResolvedValue(undefined);
+    confirmSpy.mockReset();
+    confirmSpy.mockReturnValue(true);
     updateProjectSettingsMock.mockResolvedValue({
       id: 1,
       name: "RedWhisk",
@@ -354,6 +364,9 @@ describe("ProjectSettingsActivity", () => {
       screen.getByRole("columnheader", { name: "Workflow Skill" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("columnheader", { name: "操作" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Edit Project Codex" }),
     ).toBeInTheDocument();
     expect(
@@ -381,8 +394,65 @@ describe("ProjectSettingsActivity", () => {
       within(rows[0]).getByRole("button", { name: "Edit Global Codex" }),
     ).toBeInTheDocument();
     expect(
+      within(rows[0]).getByRole("button", { name: "删除 Global Codex" }),
+    ).toBeInTheDocument();
+    expect(
+      within(rows[0]).getByRole("button", {
+        name: "Danger 删除 Global Codex",
+      }),
+    ).toBeInTheDocument();
+    expect(
       within(rows[1]).getByRole("button", { name: "Edit Project Codex" }),
     ).toBeInTheDocument();
+  });
+
+  it("confirms before deleting an agent profile from the table", async () => {
+    const user = userEvent.setup();
+    confirmSpy.mockReturnValue(false);
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "删除 Project Codex" }),
+    );
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "确认删除 Agent Profile「Project Codex」吗？",
+    );
+    expect(deleteAgentProfileMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Project Codex")).toBeInTheDocument();
+  });
+
+  it("soft deletes an agent profile after confirmation", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Danger 删除 Project Codex",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(deleteAgentProfileMock).toHaveBeenCalledWith({ id: 1 }),
+    );
+    expect(screen.queryByText("Project Codex")).not.toBeInTheDocument();
+    expect(screen.getByText("Global Codex")).toBeInTheDocument();
   });
 
   it("opens the edit form from table row action buttons with click and keyboard shortcuts", async () => {

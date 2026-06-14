@@ -10,7 +10,11 @@ import {
 import { Bot, Info, Plus } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
-import { listAgentProfiles, type AgentProfileRecord } from "./settings-commands";
+import {
+  deleteAgentProfile,
+  listAgentProfiles,
+  type AgentProfileRecord,
+} from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
@@ -99,6 +103,9 @@ export function ProjectSettingsActivity({
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
   const [editingProfile, setEditingProfile] =
     useState<EditingProfileState | null>(null);
+  const [deletingProfileId, setDeletingProfileId] = useState<number | null>(
+    null,
+  );
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
@@ -215,6 +222,31 @@ export function ProjectSettingsActivity({
       recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
       status: "available",
     });
+  }
+
+  async function handleDeleteProfile(profile: AgentProfileRecord) {
+    const isConfirmed = window.confirm(
+      `确认删除 Agent Profile「${profile.name}」吗？`,
+    );
+    if (!isConfirmed) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setDeletingProfileId(profile.id);
+
+    try {
+      await deleteAgentProfile({ id: profile.id });
+      setProjectProfiles((current) => removeProfile(current, profile.id));
+      setGlobalProfiles((current) => removeProfile(current, profile.id));
+      setEditingProfile((current) =>
+        current?.profile.id === profile.id ? null : current,
+      );
+    } catch (error: unknown) {
+      setErrorMessage(toCommandError(error).message);
+    } finally {
+      setDeletingProfileId(null);
+    }
   }
 
   return (
@@ -360,6 +392,7 @@ export function ProjectSettingsActivity({
                           <th scope="col">Command</th>
                           <th scope="col">Scope</th>
                           <th scope="col">Workflow Skill</th>
+                          <th scope="col">操作</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -408,6 +441,33 @@ export function ProjectSettingsActivity({
                                 {profile.defaultSkill.trim().length > 0
                                   ? profile.defaultSkill
                                   : "—"}
+                              </td>
+                              <td>
+                                <div className="settings-agent-table__actions">
+                                  <button
+                                    aria-label={`删除 ${profile.name}`}
+                                    className="settings-agent-table__delete-link"
+                                    disabled={deletingProfileId === profile.id}
+                                    type="button"
+                                    onClick={() => {
+                                      void handleDeleteProfile(profile);
+                                    }}
+                                  >
+                                    删除
+                                  </button>
+                                  <Button
+                                    aria-label={`Danger 删除 ${profile.name}`}
+                                    disabled={deletingProfileId === profile.id}
+                                    size="sm"
+                                    type="button"
+                                    variant="danger"
+                                    onClick={() => {
+                                      void handleDeleteProfile(profile);
+                                    }}
+                                  >
+                                    删除
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           );

@@ -25,6 +25,7 @@ import {
   startAgentSession,
 } from "../../features/issues/issue-commands";
 import {
+  deleteAgentProfile,
   detectCodexCommand,
   listAgentProfiles,
   saveAgentProfile,
@@ -419,6 +420,7 @@ describe("command client", () => {
           dangerous: true,
           defaultSkill: "",
           promptTemplate: "",
+          del: 0,
         },
       ],
     });
@@ -438,6 +440,7 @@ describe("command client", () => {
           dangerous: true,
           defaultSkill: "",
           promptTemplate: "",
+          del: 0,
         },
       ],
     });
@@ -458,6 +461,7 @@ describe("command client", () => {
       dangerous: true,
       defaultSkill: "",
       promptTemplate: "",
+      del: 0,
     });
 
     await expect(
@@ -483,6 +487,7 @@ describe("command client", () => {
       dangerous: true,
       defaultSkill: "",
       promptTemplate: "",
+      del: 0,
     });
     expect(invokeMock).toHaveBeenCalledWith("save_agent_profile", {
       input: {
@@ -496,6 +501,15 @@ describe("command client", () => {
         defaultSkill: "",
         promptTemplate: "",
       },
+    });
+  });
+
+  it("invokes Rust Core through the delete agent profile command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(deleteAgentProfile({ id: 1 })).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("delete_agent_profile", {
+      input: { id: 1 },
     });
   });
 

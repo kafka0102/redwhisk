@@ -1,0 +1,2 @@
+ALTER TABLE agent_profiles
+ADD COLUMN del INTEGER NOT NULL DEFAULT 0 CHECK (del IN (0, 1));

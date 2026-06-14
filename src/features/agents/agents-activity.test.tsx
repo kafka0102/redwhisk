@@ -97,6 +97,7 @@ const defaultProfiles = {
       dangerous: true,
       defaultSkill: "",
       promptTemplate: "",
+      del: 0,
     },
   ],
   global: [
@@ -111,6 +112,7 @@ const defaultProfiles = {
       dangerous: true,
       defaultSkill: "",
       promptTemplate: "",
+      del: 0,
     },
   ],
 };

@@ -35,7 +35,8 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
             "mode",
             "dangerous",
             "default_skill",
-            "prompt_template"
+            "prompt_template",
+            "del"
         ],
     );
 
@@ -130,6 +131,63 @@ fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
         .expect("list profiles")
         .profiles;
     assert_eq!(stored_profiles, vec![profile]);
+}
+
+#[test]
+fn delete_agent_profile_marks_profile_deleted_and_excludes_from_lists() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("codex", Ok("/usr/local/bin/codex")),
+    );
+
+    let profile = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "Codex Default".to_string(),
+            agent_type: AgentType::Codex,
+            command: "codex".to_string(),
+            scope: AgentScope::Global,
+            project_id: None,
+            mode: "full-auto".to_string(),
+            dangerous: true,
+            default_skill: "".to_string(),
+            prompt_template: "".to_string(),
+        })
+        .expect("saved agent profile");
+
+    service
+        .delete_agent_profile(
+            redwhisk_lib::types::agent_profile::DeleteAgentProfileInput { id: profile.id },
+        )
+        .expect("delete agent profile");
+
+    let stored_del: i64 = database
+        .connection
+        .query_row(
+            "SELECT del FROM agent_profiles WHERE id = ?1",
+            [profile.id],
+            |row| row.get(0),
+        )
+        .expect("stored del");
+    assert_eq!(stored_del, 1);
+
+    let listed_profiles = service
+        .list_agent_profiles(ListAgentProfilesInput {
+            scope: AgentScope::Global,
+            project_id: None,
+        })
+        .expect("list profiles")
+        .profiles;
+    assert!(listed_profiles.is_empty());
+
+    let historical_profile = AgentProfileRepository::new(&database.connection)
+        .find_profile_by_id(profile.id)
+        .expect("find profile")
+        .expect("historical profile");
+    assert_eq!(historical_profile.id, profile.id);
+    assert_eq!(historical_profile.del, 1);
 }
 
 #[test]

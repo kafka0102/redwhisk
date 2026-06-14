@@ -19,9 +19,9 @@ impl<'connection> AgentProfileRepository<'connection> {
         match scope {
             AgentScope::Global => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
+                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
                      FROM agent_profiles
-                     WHERE scope = 'global'
+                     WHERE scope = 'global' AND del = 0
                      ORDER BY id ASC",
                 )?;
                 let rows = statement
@@ -31,9 +31,9 @@ impl<'connection> AgentProfileRepository<'connection> {
             }
             AgentScope::Project => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
+                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
                      FROM agent_profiles
-                     WHERE scope = 'project' AND project_id = ?1
+                     WHERE scope = 'project' AND project_id = ?1 AND del = 0
                      ORDER BY id ASC",
                 )?;
                 let rows = statement
@@ -47,7 +47,7 @@ impl<'connection> AgentProfileRepository<'connection> {
     pub fn find_profile_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentProfileRow>> {
         self.connection
             .query_row(
-                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
+                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
                  FROM agent_profiles
                  WHERE id = ?1",
                 params![id],
@@ -85,7 +85,8 @@ impl<'connection> AgentProfileRepository<'connection> {
                          mode = ?6,
                          dangerous = ?7,
                          default_skill = ?8,
-                         prompt_template = ?9
+                         prompt_template = ?9,
+                         del = 0
                      WHERE id = ?10",
                     params![
                         name,
@@ -107,8 +108,8 @@ impl<'connection> AgentProfileRepository<'connection> {
             None => {
                 self.connection.execute(
                     "INSERT INTO agent_profiles (
-                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)",
                     params![
                         name,
                         agent_type_str,
@@ -128,6 +129,15 @@ impl<'connection> AgentProfileRepository<'connection> {
             }
         }
     }
+
+    pub fn soft_delete_profile(&self, id: i64) -> rusqlite::Result<bool> {
+        let affected = self.connection.execute(
+            "UPDATE agent_profiles SET del = 1 WHERE id = ?1 AND del = 0",
+            params![id],
+        )?;
+
+        Ok(affected > 0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,6 +152,7 @@ pub struct AgentProfileRow {
     pub dangerous: bool,
     pub default_skill: String,
     pub prompt_template: String,
+    pub del: i64,
 }
 
 fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProfileRow> {
@@ -156,6 +167,7 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
         dangerous: sqlite_to_bool(row.get(7)?),
         default_skill: row.get(8)?,
         prompt_template: row.get(9)?,
+        del: row.get(10)?,
     })
 }
 

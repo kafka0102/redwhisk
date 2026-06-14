@@ -66,7 +66,8 @@ pub fn run() {
             commands::settings_commands::detect_codex_command,
             commands::settings_commands::test_agent_command,
             commands::settings_commands::list_agent_profiles,
-            commands::settings_commands::save_agent_profile
+            commands::settings_commands::save_agent_profile,
+            commands::settings_commands::delete_agent_profile
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

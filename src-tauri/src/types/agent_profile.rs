@@ -27,6 +27,7 @@ pub struct AgentProfileRecord {
     pub dangerous: bool,
     pub default_skill: String,
     pub prompt_template: String,
+    pub del: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -67,4 +68,10 @@ pub struct TestAgentCommandInput {
 pub struct ListAgentProfilesInput {
     pub scope: AgentScope,
     pub project_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAgentProfileInput {
+    pub id: i64,
 }

@@ -7,7 +7,7 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
-    ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
+    DeleteAgentProfileInput, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -116,6 +116,23 @@ where
         Ok(agent_profile_record_from_row(row))
     }
 
+    pub fn delete_agent_profile(&self, input: DeleteAgentProfileInput) -> Result<(), CommandError> {
+        let deleted = self
+            .repository
+            .soft_delete_profile(input.id)
+            .map_err(settings_database_error)?;
+
+        if deleted {
+            return Ok(());
+        }
+
+        Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Agent Profile 不存在或已删除。",
+        )
+        .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", input.id)))
+    }
+
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
         self.project_repository
             .find_by_id(project_id)
@@ -187,6 +204,21 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         )
         .save_agent_profile(input)
     }
+
+    pub fn delete_agent_profile_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteAgentProfileInput,
+    ) -> Result<(), CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .delete_agent_profile(input)
+    }
 }
 
 fn open_settings_database(
@@ -222,6 +254,7 @@ fn agent_profile_record_from_row(
         dangerous: row.dangerous,
         default_skill: row.default_skill,
         prompt_template: row.prompt_template,
+        del: row.del,
     }
 }
 

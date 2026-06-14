@@ -528,7 +528,7 @@ button:focus-visible {
 
 .settings-agent-table {
   width: 100%;
-  min-width: 680px;
+  min-width: 820px;
   table-layout: fixed;
   border: 0;
   border-collapse: separate;
@@ -567,6 +567,11 @@ button:focus-visible {
 .settings-agent-table th:nth-child(4),
 .settings-agent-table td:nth-child(4) {
   width: 96px;
+}
+
+.settings-agent-table th:last-child,
+.settings-agent-table td:last-child {
+  width: 160px;
 }
 
 .settings-agent-table tbody tr:last-child td {
@@ -620,6 +625,31 @@ button:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-agent-table__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-agent-table__delete-link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.settings-agent-table__delete-link:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .agent-dialog__body {
