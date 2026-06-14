@@ -364,7 +364,7 @@ describe("ProjectSettingsActivity", () => {
       screen.getByRole("columnheader", { name: "Workflow Skill" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "操作" }),
+      screen.getByRole("columnheader", { name: "Actions" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Edit Project Codex" }),
@@ -394,13 +394,11 @@ describe("ProjectSettingsActivity", () => {
       within(rows[0]).getByRole("button", { name: "Edit Global Codex" }),
     ).toBeInTheDocument();
     expect(
-      within(rows[0]).getByRole("button", { name: "删除 Global Codex" }),
+      within(rows[0]).getByRole("button", { name: "Delete Global Codex" }),
     ).toBeInTheDocument();
     expect(
-      within(rows[0]).getByRole("button", {
-        name: "Danger 删除 Global Codex",
-      }),
-    ).toBeInTheDocument();
+      within(rows[0]).getAllByRole("button", { name: "Delete Global Codex" }),
+    ).toHaveLength(1);
     expect(
       within(rows[1]).getByRole("button", { name: "Edit Project Codex" }),
     ).toBeInTheDocument();
@@ -420,11 +418,11 @@ describe("ProjectSettingsActivity", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "删除 Project Codex" }),
+      await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
 
     expect(confirmSpy).toHaveBeenCalledWith(
-      "确认删除 Agent Profile「Project Codex」吗？",
+      'Are you sure you want to delete Agent Profile "Project Codex"?',
     );
     expect(deleteAgentProfileMock).not.toHaveBeenCalled();
     expect(screen.getByText("Project Codex")).toBeInTheDocument();
@@ -443,9 +441,7 @@ describe("ProjectSettingsActivity", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", {
-        name: "Danger 删除 Project Codex",
-      }),
+      await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
 
     await waitFor(() =>

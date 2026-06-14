@@ -16,8 +16,6 @@ const buttonVariants = cva(
           "border-border bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground",
         ghost:
           "border-transparent bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
-        danger:
-          "border-[var(--color-danger)] bg-[var(--color-danger)] text-white hover:brightness-[0.96]",
       },
       size: {
         default: "min-h-8 px-3 py-1.5",

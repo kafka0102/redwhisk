@@ -17,6 +17,7 @@ import {
 } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { toCommandError } from "../../shared/commands/command-error";
+import { getSettingsMessages } from "../../shared/i18n/settings-messages";
 import {
   type ProjectCompletionPolicy,
   type UpdateProjectSettingsInput,
@@ -63,6 +64,8 @@ const SETTINGS_MENU_ITEMS: {
     MenuIcon: Bot,
   },
 ];
+
+const settingsMessages = getSettingsMessages();
 
 interface ProjectSettingsActivityProps {
   completionPolicy: ProjectCompletionPolicy;
@@ -226,7 +229,7 @@ export function ProjectSettingsActivity({
 
   async function handleDeleteProfile(profile: AgentProfileRecord) {
     const isConfirmed = window.confirm(
-      `确认删除 Agent Profile「${profile.name}」吗？`,
+      settingsMessages.deleteAgentProfileConfirm(profile.name),
     );
     if (!isConfirmed) {
       return;
@@ -392,7 +395,9 @@ export function ProjectSettingsActivity({
                           <th scope="col">Command</th>
                           <th scope="col">Scope</th>
                           <th scope="col">Workflow Skill</th>
-                          <th scope="col">操作</th>
+                          <th scope="col">
+                            {settingsMessages.agentActionsColumn}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -445,7 +450,7 @@ export function ProjectSettingsActivity({
                               <td>
                                 <div className="settings-agent-table__actions">
                                   <button
-                                    aria-label={`删除 ${profile.name}`}
+                                    aria-label={`${settingsMessages.deleteAgentProfile} ${profile.name}`}
                                     className="settings-agent-table__delete-link"
                                     disabled={deletingProfileId === profile.id}
                                     type="button"
@@ -453,20 +458,8 @@ export function ProjectSettingsActivity({
                                       void handleDeleteProfile(profile);
                                     }}
                                   >
-                                    删除
+                                    {settingsMessages.deleteAgentProfile}
                                   </button>
-                                  <Button
-                                    aria-label={`Danger 删除 ${profile.name}`}
-                                    disabled={deletingProfileId === profile.id}
-                                    size="sm"
-                                    type="button"
-                                    variant="danger"
-                                    onClick={() => {
-                                      void handleDeleteProfile(profile);
-                                    }}
-                                  >
-                                    删除
-                                  </Button>
                                 </div>
                               </td>
                             </tr>
