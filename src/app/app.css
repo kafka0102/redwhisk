@@ -504,7 +504,7 @@ button:focus-visible {
 
 .settings-section--global-preferences .settings-section__header,
 .settings-section--global-preferences .settings-section__body {
-  width: min(100%, clamp(620px, 80%, 900px));
+  width: min(100%, clamp(760px, 84%, 980px));
 }
 
 .settings-general-card {
@@ -514,7 +514,7 @@ button:focus-visible {
 
 .global-preferences-card {
   display: grid;
-  gap: 30px;
+  gap: 26px;
   width: 100%;
   padding: 28px;
 }
@@ -570,13 +570,14 @@ button:focus-visible {
 
 .global-theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 220px));
-  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
 }
 
 .global-theme-option {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -599,7 +600,7 @@ button:focus-visible {
 
   display: grid;
   grid-template-rows: 28px minmax(0, 1fr);
-  height: 126px;
+  height: clamp(108px, 12vw, 126px);
   overflow: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-dialog);
@@ -640,6 +641,7 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 32% minmax(0, 1fr);
   min-height: 0;
+  background: var(--theme-preview-surface);
 }
 
 .global-theme-preview__side,
@@ -649,6 +651,7 @@ button:focus-visible {
   gap: 9px;
   min-width: 0;
   padding: 20px 14px;
+  background: var(--theme-preview-surface);
 }
 
 .global-theme-preview__side {
@@ -663,14 +666,14 @@ button:focus-visible {
 }
 
 .global-theme-preview--dark {
-  --theme-preview-surface: #0b0b0c;
-  --theme-preview-muted: #141416;
+  --theme-preview-surface: #0c0d10;
+  --theme-preview-muted: #151820;
   --theme-preview-border: #272a30;
   --theme-preview-line: #3a3f47;
 }
 
 .global-theme-preview--system {
-  --theme-preview-surface: linear-gradient(90deg, #ffffff 0 50%, #0b0b0c 50%);
+  --theme-preview-surface: #ffffff;
   --theme-preview-muted: #f1f2f4;
   --theme-preview-border: #a8adb7;
   --theme-preview-line: #8a8f98;
@@ -686,6 +689,30 @@ button:focus-visible {
 
 .global-theme-preview--system .global-theme-preview__main .global-theme-preview__line {
   background: #3a3f47;
+}
+
+.global-theme-preview--light .global-theme-preview__body {
+  background: #ffffff;
+}
+
+.global-theme-preview--light .global-theme-preview__side {
+  background: #ffffff;
+}
+
+.global-theme-preview--light .global-theme-preview__main {
+  background: #ffffff;
+}
+
+.global-theme-preview--dark .global-theme-preview__body {
+  background: #0c0d10;
+}
+
+.global-theme-preview--dark .global-theme-preview__side {
+  background: #0c0d10;
+}
+
+.global-theme-preview--dark .global-theme-preview__main {
+  background: #0c0d10;
 }
 
 .global-theme-preview__line--short {
@@ -2016,12 +2043,21 @@ button:focus-visible {
   height: 100%;
   padding: 12px;
   overflow: hidden;
+  background: var(--color-surface);
 }
 
 .agents-terminal-host {
   grid-row: 3;
   min-height: 0;
   height: 100%;
+}
+
+:root[data-theme="dark"] .agents-terminal-pane {
+  background: var(--color-surface-muted);
+}
+
+:root[data-theme="dark"] .agents-terminal-host {
+  background: #050506;
 }
 
 .agents-session-toolbar {
@@ -2135,7 +2171,7 @@ button:focus-visible {
   min-height: 0;
   height: 100%;
   padding: 0;
-  background: #ffffff;
+  background: var(--color-surface);
 }
 
 .codex-terminal-shell__status {
@@ -2155,7 +2191,11 @@ button:focus-visible {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--color-surface);
+}
+
+:root[data-theme="dark"] .codex-terminal {
+  background: #050506;
 }
 
 .codex-terminal .xterm {

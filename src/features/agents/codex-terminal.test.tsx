@@ -1,7 +1,8 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTerminal } from "./codex-terminal";
+import { I18nProvider, useI18n } from "../../shared/i18n/i18n";
 import {
   readAgentSessionTerminal,
   restoreAgentSessionTerminal,
@@ -29,6 +30,9 @@ const terminalMocks = vi.hoisted(() => {
     getSelection: ReturnType<typeof vi.fn>;
     scrollToBottom: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    options: {
+      theme?: Record<string, string>;
+    };
   }> = [];
   const terminalOptions: unknown[] = [];
   const dataHandlers: Array<(data: string) => void> = [];
@@ -79,6 +83,7 @@ vi.mock("@xterm/xterm", () => ({
       getSelection: vi.fn(() => ""),
       scrollToBottom: vi.fn(),
       dispose: vi.fn(),
+      options: { ...(options as Record<string, unknown>) },
     };
     terminalMocks.terminalOptions.push(options);
     terminalMocks.terminals.push(terminal);
@@ -255,6 +260,31 @@ describe("CodexTerminal", () => {
     expect(
       terminalMocks.terminals[0].attachCustomKeyEventHandler,
     ).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates the terminal theme without recreating the terminal when the app theme changes", async () => {
+    render(
+      <I18nProvider>
+        <ThemeTerminalHarness />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(terminalMocks.terminals).toHaveLength(1);
+    });
+
+    expect(terminalMocks.terminals[0].options.theme).toMatchObject({
+      background: "#ffffff",
+      foreground: "#161515",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark mode" }));
+
+    expect(terminalMocks.terminals).toHaveLength(1);
+    expect(terminalMocks.terminals[0].options.theme).toMatchObject({
+      background: "#050506",
+      foreground: "#f2f3f5",
+    });
   });
 
   it("copies the selected terminal output with the platform copy shortcut", async () => {
@@ -639,3 +669,16 @@ describe("CodexTerminal", () => {
     expect(resolveSnapshotUpdate("same snapshot", "same snapshot")).toBeNull();
   });
 });
+
+function ThemeTerminalHarness() {
+  const { setThemePreference } = useI18n();
+
+  return (
+    <>
+      <button type="button" onClick={() => setThemePreference("dark")}>
+        Dark mode
+      </button>
+      <CodexTerminal projectId={1} sessionId={301} />
+    </>
+  );
+}
