@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { GlobalSettingsActivity } from "./global-settings-activity";
@@ -16,6 +16,8 @@ function renderGlobalSettings() {
 describe("GlobalSettingsActivity", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
+    vi.stubGlobal("matchMedia", createMatchMedia(false));
   });
 
   it("renders Preferences with English language and Light theme by default", () => {
@@ -39,12 +41,44 @@ describe("GlobalSettingsActivity", () => {
       "aria-pressed",
       "true",
     );
-    expect(
-      screen.queryByRole("button", { name: "Dark" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "System" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("persists Dark theme and applies it to the document root", async () => {
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "Dark" }));
+
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(window.localStorage.getItem("redwhisk.theme")).toBe("dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+
+  it("persists System theme and follows the current system color scheme", async () => {
+    vi.stubGlobal("matchMedia", createMatchMedia(true));
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "System" }));
+
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(window.localStorage.getItem("redwhisk.theme")).toBe("system");
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
   });
 
   it("switches Preferences labels to Chinese immediately", async () => {
@@ -61,3 +95,16 @@ describe("GlobalSettingsActivity", () => {
     expect(window.localStorage.getItem("redwhisk.locale")).toBe("zh");
   });
 });
+
+function createMatchMedia(matches: boolean) {
+  return vi.fn().mockImplementation((query: string) => ({
+    addEventListener: vi.fn(),
+    addListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    matches,
+    media: query,
+    onchange: null,
+    removeEventListener: vi.fn(),
+    removeListener: vi.fn(),
+  }));
+}
