@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-本文约束 Project Settings 页面后续所有模块的外层布局。Settings 当前包含 `General` 和 `Agents` 两个模块，后续新增模块必须复用同一套布局模板，不为单个模块重新设计页面骨架。
+本文约束 Project Settings 页面后续所有模块的外层布局。Settings 当前包含 `General` 和 `Agents` 两个模块，后续新增模块必须复用同一套布局模板，不为单个模块重新设计页面骨架。Global Settings 可以复用同一套两栏视觉语言，但它是应用级设置入口，不属于 Project Settings 模块列表。
 
 ## 布局结构
 
@@ -41,4 +41,4 @@ General、Agents 以及后续新增 Settings 菜单项都必须复用该右侧�
 
 ## 非目标
 
-本规范不新增 Settings 业务字段，不改变 Project Settings 与 Global Settings 的产品边界，不调整 Agent Profile 的数据模型和状态流。
+本规范不新增 Project Settings 业务字段，不调整 Agent Profile 的数据模型和状态流。Global Settings 复用布局时仍必须保持应用级偏好与项目级设置的产品边界。
