@@ -91,11 +91,6 @@ export function AppShell({
                 setActiveActivity("agents");
                 setIsGlobalSettingsOpen(false);
               }}
-              onOpenIssuesActivity={(issueId) => {
-                setRequestedIssueId(issueId);
-                setActiveActivity("issues");
-                setIsGlobalSettingsOpen(false);
-              }}
               onProjectUpdated={onProjectUpdated}
               onSelectAgentSession={setActiveAgentSessionId}
               projectCompletionPolicy={project.completionPolicy}
