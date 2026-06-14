@@ -178,7 +178,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Project Home 是首屏；未选择 Project 前不显示 Activity Bar。
 - Project 工作台 Activity Bar 只包含 `Issues`、`Agents`、`Settings`。
 - Project Switcher 属于窗口顶部 chrome，不属于内容 Header。
-- Activity Bar 的 `Settings` 是 Project Settings；Global Settings 不放入 Activity Bar。
+- Activity Bar 主分组里的 `Settings` 是 Project Settings；Global Settings 是左侧菜单底部的仅图标 shell action，不属于 Project Activity 列表。
 - Agents Activity 使用左右两栏：左侧 Session list，右侧 Codex Native Session View。
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。
