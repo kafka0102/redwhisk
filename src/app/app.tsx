@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { AppShell } from "./app-shell";
 import "./app.css";
 import { ProjectHome } from "../features/project/project-home";
+import { I18nProvider } from "../shared/i18n/i18n";
 import {
   createProject,
   initializeLocalData,
@@ -184,12 +185,14 @@ export function App() {
   }
 
   return (
-    <AppShell
-      onProjectUpdated={handleProjectUpdated}
-      project={selectedProject}
-      projects={projects}
-      onProjectsRefresh={refreshProjects}
-    />
+    <I18nProvider>
+      <AppShell
+        onProjectUpdated={handleProjectUpdated}
+        project={selectedProject}
+        projects={projects}
+        onProjectsRefresh={refreshProjects}
+      />
+    </I18nProvider>
   );
 }
 

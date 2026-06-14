@@ -75,6 +75,7 @@ describe("App project entry", () => {
 
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
+    window.localStorage.clear();
     openDialogMock.mockReset();
     createProjectMock.mockReset();
     initializeLocalDataMock.mockReset();
@@ -236,6 +237,21 @@ describe("App project entry", () => {
     await waitFor(() =>
       expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
     );
+  });
+
+  it("uses English as the default UI language in a project workbench", async () => {
+    window.history.replaceState(null, "", "/?projectId=1");
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("navigation", { name: "Activity Bar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Project Settings" }),
+    ).toBeInTheDocument();
   });
 
   it("shows URL project open failures as project open errors", async () => {
