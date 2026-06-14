@@ -400,15 +400,7 @@ export function AgentProfileForm({
           </p>
         ) : null}
 
-        <div className="issue-dialog__footer">
-          <button
-            className="issues-button"
-            type="button"
-            disabled={isSaving}
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
+        <div className="issue-dialog__footer issue-dialog__footer--end">
           <button
             className="issues-button issues-button--primary"
             type="submit"

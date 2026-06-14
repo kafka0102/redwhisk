@@ -282,16 +282,7 @@ export function IssueRunDialog({
         >
           {statusMessage}
         </p>
-        <div className="issue-dialog__footer">
-          <Button
-            className="issues-button"
-            type="button"
-            variant="outline"
-            disabled={isStarting}
-            onClick={onClose}
-          >
-            Cancel
-          </Button>
+        <div className="issue-dialog__footer issue-dialog__footer--end">
           <Button
             className="issues-button issues-button--primary"
             type="button"

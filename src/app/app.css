@@ -2546,6 +2546,10 @@ button:focus-visible {
   border-top: 1px solid var(--color-border);
 }
 
+.issue-dialog__footer--end {
+  justify-content: flex-end;
+}
+
 .issue-dialog__attach-button {
   border-color: transparent;
   background: transparent;
