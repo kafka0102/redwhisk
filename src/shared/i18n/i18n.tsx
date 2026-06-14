@@ -1,5 +1,6 @@
 import {
   createContext,
+  useEffect,
   useContext,
   useMemo,
   useState,
@@ -22,6 +23,7 @@ interface I18nContextValue {
   messages: I18nMessages;
   setLocale: (locale: Locale) => void;
   setThemePreference: (themePreference: ThemePreference) => void;
+  theme: "light" | "dark";
   themePreference: ThemePreference;
 }
 
@@ -36,6 +38,7 @@ const DEFAULT_I18N_CONTEXT: I18nContextValue = {
   setThemePreference() {
     // Components rendered in isolated tests can read the Light theme without a provider.
   },
+  theme: "light",
   themePreference: "light",
 };
 
@@ -43,6 +46,31 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
   const [themePreference, setThemePreferenceState] =
     useState<ThemePreference>(getInitialThemePreference);
+  const [systemTheme, setSystemTheme] = useState<"light" | "dark">(
+    getSystemTheme,
+  );
+  const theme = themePreference === "system" ? systemTheme : themePreference;
+
+  useEffect(() => {
+    if (themePreference !== "system" || !canMatchDarkScheme()) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    function handleChange(event: MediaQueryListEvent) {
+      setSystemTheme(event.matches ? "dark" : "light");
+    }
+
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, [themePreference]);
+
+  useEffect(() => {
+    window.document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const value = useMemo<I18nContextValue>(
     () => ({
@@ -57,6 +85,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         }
       },
       setThemePreference(nextThemePreference) {
+        if (nextThemePreference === "system") {
+          setSystemTheme(getSystemTheme());
+        }
         setThemePreferenceState(nextThemePreference);
         try {
           window.localStorage.setItem(THEME_STORAGE_KEY, nextThemePreference);
@@ -64,9 +95,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           // Ignore persistence failures; runtime state still updates.
         }
       },
+      theme,
       themePreference,
     }),
-    [locale, themePreference],
+    [locale, theme, themePreference],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
@@ -80,4 +112,21 @@ export function useI18n(): I18nContextValue {
   }
 
   return context;
+}
+
+function getSystemTheme(): "light" | "dark" {
+  if (!canMatchDarkScheme()) {
+    return "light";
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function canMatchDarkScheme() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function"
+  );
 }

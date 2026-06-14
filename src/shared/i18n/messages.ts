@@ -1,5 +1,5 @@
 export type Locale = "en" | "zh";
-export type ThemePreference = "light";
+export type ThemePreference = "light" | "dark" | "system";
 
 export interface I18nMessages {
   app: {
@@ -14,10 +14,12 @@ export interface I18nMessages {
     chinese: string;
     english: string;
     language: string;
+    dark: string;
     light: string;
     preferences: string;
     settings: string;
     settingsMenu: string;
+    system: string;
     theme: string;
   };
   settings: {
@@ -80,12 +82,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     globalSettings: {
       chinese: "中文",
+      dark: "Dark",
       english: "English",
       language: "Language",
       light: "Light",
       preferences: "Preferences",
       settings: "Settings",
       settingsMenu: "Global Settings menu",
+      system: "System",
       theme: "Theme",
     },
     settings: {
@@ -144,12 +148,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     globalSettings: {
       chinese: "中文",
+      dark: "Dark",
       english: "English",
       language: "语言",
       light: "Light",
       preferences: "偏好设置",
       settings: "设置",
       settingsMenu: "全局设置菜单",
+      system: "System",
       theme: "主题",
     },
     settings: {
@@ -185,7 +191,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       inProgress: "进行中",
       newIssue: "新建议题",
       review: "待验收",
-      title: "议题",
+      title: "Issues",
     },
     agentsFeature: {
       done: "已完成",
@@ -210,8 +216,12 @@ export function getInitialLocale(): Locale {
 export function getInitialThemePreference(): ThemePreference {
   try {
     const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return storedTheme === "light" ? storedTheme : "light";
+    return isThemePreference(storedTheme) ? storedTheme : "light";
   } catch {
     return "light";
   }
+}
+
+function isThemePreference(value: string | null): value is ThemePreference {
+  return value === "light" || value === "dark" || value === "system";
 }

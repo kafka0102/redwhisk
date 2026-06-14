@@ -592,13 +592,18 @@ button:focus-visible {
 }
 
 .global-theme-preview {
+  --theme-preview-surface: var(--color-surface);
+  --theme-preview-muted: var(--color-surface-muted);
+  --theme-preview-border: var(--color-border);
+  --theme-preview-line: var(--color-border-strong);
+
   display: grid;
   grid-template-rows: 28px minmax(0, 1fr);
   height: 126px;
   overflow: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-dialog);
-  background: var(--color-surface);
+  background: var(--theme-preview-surface);
 }
 
 .global-theme-option[aria-pressed="true"] .global-theme-preview {
@@ -647,14 +652,40 @@ button:focus-visible {
 }
 
 .global-theme-preview__side {
-  border-right: 1px solid var(--color-border);
+  border-right: 1px solid var(--theme-preview-border);
 }
 
 .global-theme-preview__line {
   display: block;
   height: 7px;
   border-radius: 999px;
-  background: var(--color-border-strong);
+  background: var(--theme-preview-line);
+}
+
+.global-theme-preview--dark {
+  --theme-preview-surface: #0b0b0c;
+  --theme-preview-muted: #141416;
+  --theme-preview-border: #272a30;
+  --theme-preview-line: #3a3f47;
+}
+
+.global-theme-preview--system {
+  --theme-preview-surface: linear-gradient(90deg, #ffffff 0 50%, #0b0b0c 50%);
+  --theme-preview-muted: #f1f2f4;
+  --theme-preview-border: #a8adb7;
+  --theme-preview-line: #8a8f98;
+}
+
+.global-theme-preview--system .global-theme-preview__body {
+  background: linear-gradient(90deg, #ffffff 0 50%, #0b0b0c 50%);
+}
+
+.global-theme-preview--system .global-theme-preview__side {
+  border-right-color: #272a30;
+}
+
+.global-theme-preview--system .global-theme-preview__main .global-theme-preview__line {
+  background: #3a3f47;
 }
 
 .global-theme-preview__line--short {

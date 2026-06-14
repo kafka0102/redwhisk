@@ -19,6 +19,7 @@ import {
   type IssueRecord,
 } from "./issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
+import { I18nProvider } from "../../shared/i18n/i18n";
 
 vi.mock("./issue-commands", () => ({
   createIssue: vi.fn(),
@@ -261,6 +262,8 @@ describe("IssuesActivity", () => {
     saveDialogMock.mockReset();
     openPathMock.mockReset();
     convertFileSrcMock.mockReset();
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
     openPathMock.mockResolvedValue();
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
@@ -294,6 +297,20 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
     expect(
       within(backlogLane).queryByRole("button", { name: "Running issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the Issues title in English when Chinese is selected", async () => {
+    window.localStorage.setItem("redwhisk.locale", "zh");
+    listIssuesMock.mockResolvedValue({ issues: [] });
+
+    renderIssuesActivity();
+
+    expect(
+      await screen.findByRole("heading", { name: "Issues" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "议题" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1336,7 +1353,11 @@ describe("IssuesActivity", () => {
 function renderIssuesActivity(
   props?: Partial<ComponentProps<typeof IssuesActivity>>,
 ) {
-  return render(<IssuesActivity projectId={1} {...props} />);
+  return render(
+    <I18nProvider>
+      <IssuesActivity projectId={1} {...props} />
+    </I18nProvider>,
+  );
 }
 
 function formatTestTimestamp(epochMilliseconds: number): string {

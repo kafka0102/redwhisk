@@ -92,53 +92,51 @@
   --ring: #4d84ff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f2f3f5;
-    background: #000000;
+:root[data-theme="dark"] {
+  color: #f2f3f5;
+  background: #000000;
 
-    --color-app: #000000;
-    --color-surface: #0b0b0c;
-    --color-surface-muted: #141416;
-    --color-surface-panel: #1b1c1f;
-    --color-border: #272a30;
-    --color-border-strong: #3a3f47;
-    --color-text: #f5f5f5;
-    --color-text-muted: #b8bdc7;
-    --color-text-subtle: #757b86;
-    --color-accent: #ffffff;
-    --color-accent-muted: #24262b;
-    --color-focus-ring: #6ea0ff;
-    --color-focus-offset: #000000;
-    --color-danger: #f87171;
-    --color-danger-border: #5c332d;
-    --color-danger-muted: #2d1c18;
-    --color-lane-backlog: #141416;
-    --color-lane-running: #1c1710;
-    --color-lane-review: #101915;
-    --color-lane-completed: #111821;
-    --color-popover-shadow: rgb(0 0 0 / 46%);
-    --color-dialog-shadow: rgb(0 0 0 / 54%);
-    --color-overlay: rgb(0 0 0 / 54%);
-    --shadow-focus:
-      0 0 0 2px var(--color-focus-offset), 0 0 0 4px var(--color-focus-ring);
-    --background: #000000;
-    --foreground: #f5f5f5;
-    --card: #0b0b0c;
-    --card-foreground: #f5f5f5;
-    --popover: #0b0b0c;
-    --popover-foreground: #f5f5f5;
-    --primary: #ffffff;
-    --primary-foreground: #000000;
-    --secondary: #141416;
-    --secondary-foreground: #f5f5f5;
-    --muted: #141416;
-    --muted-foreground: #b8bdc7;
-    --accent: #24262b;
-    --accent-foreground: #f5f5f5;
-    --destructive: #f87171;
-    --border: #272a30;
-    --input: #3a3f47;
-    --ring: #6ea0ff;
-  }
+  --color-app: #000000;
+  --color-surface: #0b0b0c;
+  --color-surface-muted: #141416;
+  --color-surface-panel: #1b1c1f;
+  --color-border: #272a30;
+  --color-border-strong: #3a3f47;
+  --color-text: #f5f5f5;
+  --color-text-muted: #b8bdc7;
+  --color-text-subtle: #757b86;
+  --color-accent: #ffffff;
+  --color-accent-muted: #24262b;
+  --color-focus-ring: #6ea0ff;
+  --color-focus-offset: #000000;
+  --color-danger: #f87171;
+  --color-danger-border: #5c332d;
+  --color-danger-muted: #2d1c18;
+  --color-lane-backlog: #141416;
+  --color-lane-running: #1c1710;
+  --color-lane-review: #101915;
+  --color-lane-completed: #111821;
+  --color-popover-shadow: rgb(0 0 0 / 46%);
+  --color-dialog-shadow: rgb(0 0 0 / 54%);
+  --color-overlay: rgb(0 0 0 / 54%);
+  --shadow-focus:
+    0 0 0 2px var(--color-focus-offset), 0 0 0 4px var(--color-focus-ring);
+  --background: #000000;
+  --foreground: #f5f5f5;
+  --card: #0b0b0c;
+  --card-foreground: #f5f5f5;
+  --popover: #0b0b0c;
+  --popover-foreground: #f5f5f5;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #141416;
+  --secondary-foreground: #f5f5f5;
+  --muted: #141416;
+  --muted-foreground: #b8bdc7;
+  --accent: #24262b;
+  --accent-foreground: #f5f5f5;
+  --destructive: #f87171;
+  --border: #272a30;
+  --input: #3a3f47;
+  --ring: #6ea0ff;
 }
