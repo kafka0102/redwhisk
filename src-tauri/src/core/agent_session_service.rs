@@ -620,6 +620,7 @@ impl<'connection> AgentSessionService<'connection> {
                     issue_id: row.issue_id,
                     issue_title: row.issue_title,
                     issue_status: row.issue_status,
+                    agent_profile_id: row.agent_profile_id,
                     can_complete_clean,
                     can_complete_agent_commit,
                     title: row.title,

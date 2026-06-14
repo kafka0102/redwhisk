@@ -10,6 +10,7 @@ pub struct AgentSessionListRow {
     pub issue_id: Option<i64>,
     pub issue_title: Option<String>,
     pub issue_status: Option<IssueStatus>,
+    pub agent_profile_id: i64,
     pub title: Option<String>,
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,
@@ -64,6 +65,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.issue_id,
                 issues.title,
                 issues.status,
+                agent_sessions.agent_profile_id,
                 agent_sessions.title,
                 agent_profiles.agent_type,
                 agent_sessions.status,
@@ -322,15 +324,16 @@ fn agent_session_list_row_from_row(
             .get::<_, Option<String>>(3)?
             .map(|value| issue_status_from_str(&value))
             .transpose()?,
-        title: row.get(4)?,
-        agent_type: agent_type_from_str(&row.get::<_, String>(5)?)?,
-        status: agent_session_status_from_str(&row.get::<_, String>(6)?)?,
-        attention: agent_session_attention_from_str(&row.get::<_, String>(7)?)?,
-        log_path: row.get(8)?,
-        latest_output: row.get(9)?,
-        last_active_at: row.get(10)?,
-        started_at: row.get(11)?,
-        closed_at: row.get(12)?,
+        agent_profile_id: row.get(4)?,
+        title: row.get(5)?,
+        agent_type: agent_type_from_str(&row.get::<_, String>(6)?)?,
+        status: agent_session_status_from_str(&row.get::<_, String>(7)?)?,
+        attention: agent_session_attention_from_str(&row.get::<_, String>(8)?)?,
+        log_path: row.get(9)?,
+        latest_output: row.get(10)?,
+        last_active_at: row.get(11)?,
+        started_at: row.get(12)?,
+        closed_at: row.get(13)?,
     })
 }
 
