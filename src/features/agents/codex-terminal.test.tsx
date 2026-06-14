@@ -399,6 +399,41 @@ describe("CodexTerminal", () => {
     expect(terminalMocks.terminals[0].write).not.toHaveBeenCalled();
   });
 
+  it("renders the saved terminal snapshot when a selected session is no longer active", async () => {
+    restoreAgentSessionTerminalMock.mockResolvedValue({
+      sessionId: 301,
+      sequence: 0,
+      chunks: [],
+      isComplete: false,
+      isActive: false,
+    });
+    readAgentSessionTerminalMock.mockResolvedValue({
+      sessionId: 301,
+      snapshot: "historic session output\nfinal line",
+      isActive: false,
+    });
+
+    render(<CodexTerminal projectId={1} sessionId={301} />);
+
+    await waitFor(() => {
+      expect(readAgentSessionTerminalMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 301,
+        maxBytes: 1024 * 1024,
+      });
+    });
+
+    expect(terminalMocks.terminals[0].write).toHaveBeenCalledWith(
+      "historic session output\nfinal line",
+    );
+    expect(terminalMocks.terminals[0].scrollToBottom).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText(
+        "Session terminal is no longer active. Open the session log to inspect output.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("flushes queued live output after a degraded restore without dropping bytes", async () => {
     let resolveRestore:
       | ((
@@ -506,7 +541,7 @@ describe("CodexTerminal", () => {
 
     expect(
       await screen.findByText(
-        "Session terminal is no longer active. Open the session log to inspect output.",
+        "Session terminal is no longer active. Showing the saved session output.",
       ),
     ).toBeInTheDocument();
     expect(readAgentSessionTerminalMock).toHaveBeenCalledTimes(2);
