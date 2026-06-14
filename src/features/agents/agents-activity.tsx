@@ -5,7 +5,6 @@ import {
   LoaderCircle,
   Plus,
 } from "lucide-react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import {
   useCallback,
   useEffect,
@@ -68,9 +67,6 @@ export function AgentsActivity({
   const [attentionErrorMessage, setAttentionErrorMessage] = useState<
     string | null
   >(null);
-  const [sessionActionErrorMessage, setSessionActionErrorMessage] = useState<
-    string | null
-  >(null);
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
   const [isMarkingReview, setIsMarkingReview] = useState(false);
   const [isCompletingManual, setIsCompletingManual] = useState(false);
@@ -82,7 +78,6 @@ export function AgentsActivity({
     isDetectingAgentCommitCompletion,
     setIsDetectingAgentCommitCompletion,
   ] = useState(false);
-  const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
     string | null
   >(null);
@@ -256,10 +251,6 @@ export function AgentsActivity({
     linkedIssue?.issueStatus === "review" &&
     projectCompletionPolicy === "agent_auto_commit" &&
     selectedSession?.canCompleteAgentCommit === true;
-  const canOpenLog =
-    linkedIssue?.issueStatus === "completed" ||
-    selectedSession?.status === "crashed" ||
-    selectedSession?.status === "stopped";
   const canViewSummary = linkedIssue?.issueStatus === "completed";
 
   function markSessionViewed(session: AgentSessionListItem) {
@@ -627,29 +618,6 @@ export function AgentsActivity({
     }
   }
 
-  async function handleOpenLog() {
-    if (!selectedSession || isOpeningLog) {
-      return;
-    }
-
-    setSessionActionErrorMessage(null);
-
-    if (!selectedSession.logPath) {
-      setSessionActionErrorMessage("No log path recorded for this session.");
-      return;
-    }
-
-    setIsOpeningLog(true);
-
-    try {
-      await openPath(selectedSession.logPath);
-    } catch (error) {
-      setSessionActionErrorMessage(toCommandError(error).message);
-    } finally {
-      setIsOpeningLog(false);
-    }
-  }
-
   function handleOpenSummary() {
     if (!linkedIssue || linkedIssue.issueStatus !== "completed") {
       return;
@@ -871,16 +839,6 @@ export function AgentsActivity({
                       : "Complete with Agent Commit"}
                   </button>
                 ) : null}
-                {canOpenLog ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    disabled={isOpeningLog}
-                    type="button"
-                    onClick={() => void handleOpenLog()}
-                  >
-                    {isOpeningLog ? "打开中..." : "Open Log"}
-                  </button>
-                ) : null}
                 {canViewSummary ? (
                   <button
                     className="agents-session-toolbar__action"
@@ -917,11 +875,6 @@ export function AgentsActivity({
             {attentionErrorMessage ? (
               <p className="issues-status" role="status">
                 {attentionErrorMessage}
-              </p>
-            ) : null}
-            {sessionActionErrorMessage ? (
-              <p className="issues-status" role="status">
-                {sessionActionErrorMessage}
               </p>
             ) : null}
           </div>

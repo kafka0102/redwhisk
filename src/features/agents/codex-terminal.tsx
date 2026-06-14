@@ -20,6 +20,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 const TERMINAL_STATUS_MAX_BYTES = 1;
 const TERMINAL_STATUS_POLL_MS = 2_000;
 const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
+const TERMINAL_HISTORY_MAX_BYTES = 1024 * 1024;
 const TERMINAL_WORD_SEPARATOR = " ()[]{}',\"`";
 
 type TerminalStatusSource =
@@ -272,10 +273,20 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
 
         if (!result.isActive) {
           discardPendingOutput();
-          showStatusMessage(
-            "inactive",
-            "Session terminal is no longer active. Open the session log to inspect output.",
-          );
+          const snapshotResult = await readAgentSessionTerminal({
+            projectId,
+            sessionId,
+            maxBytes: TERMINAL_HISTORY_MAX_BYTES,
+          });
+          if (isDisposed) {
+            return;
+          }
+
+          if (snapshotResult.snapshot) {
+            terminal.write(snapshotResult.snapshot);
+            terminal.scrollToBottom();
+          }
+          clearStatusMessage("inactive");
           hasRestored = true;
           return;
         }
@@ -321,7 +332,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         if (!result.isActive) {
           showStatusMessage(
             "inactive",
-            "Session terminal is no longer active. Open the session log to inspect output.",
+            "Session terminal is no longer active. Showing the saved session output.",
           );
           return;
         }

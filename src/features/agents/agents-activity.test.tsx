@@ -1134,8 +1134,7 @@ describe("AgentsActivity", () => {
     expect(completedRow).toHaveTextContent("closed");
   });
 
-  it("shows crashed status and opens the session log from the header", async () => {
-    const user = userEvent.setup();
+  it("shows crashed status without exposing a header log opener", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -1166,47 +1165,16 @@ describe("AgentsActivity", () => {
 
     expect(crashedRow).toHaveTextContent("crashed");
     expect(await screen.findByText("Status: crashed")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Open Log" }));
-
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/crashed.log");
+    expect(
+      screen.queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
+    expect(openPathMock).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
   });
 
-  it("surfaces open log failures for crashed sessions", async () => {
-    const user = userEvent.setup();
-    openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 402,
-          issueId: 23,
-          issueTitle: "Crashed issue",
-          issueStatus: "review",
-          title: null,
-          agentType: "codex",
-          status: "crashed",
-          attention: "none",
-          logPath: "/tmp/crashed.log",
-          lastActiveAt: 1_780_632_000_000,
-          startedAt: 1_780_631_000_000,
-          closedAt: 1_780_633_000_000,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={402} projectId={1} />);
-
-    await screen.findByText("Status: crashed");
-    await user.click(screen.getByRole("button", { name: "Open Log" }));
-
-    expect(await screen.findByText("log unavailable")).toBeInTheDocument();
-  });
-
-  it("shows stopped status and opens the session log from the header", async () => {
-    const user = userEvent.setup();
+  it("shows stopped status without exposing a header log opener", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -1237,10 +1205,10 @@ describe("AgentsActivity", () => {
 
     expect(stoppedRow).toHaveTextContent("stopped");
     expect(await screen.findByText("Status: stopped")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Open Log" }));
-
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
+    expect(
+      screen.queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
+    expect(openPathMock).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
@@ -2807,8 +2775,7 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
-  it("opens the linked session log from the header for abnormal sessions", async () => {
-    const user = userEvent.setup();
+  it("keeps abnormal linked sessions on the terminal without a header log opener", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -2832,40 +2799,10 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open Log" }));
-
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
-  });
-
-  it("surfaces header open log failures for abnormal sessions", async () => {
-    const user = userEvent.setup();
-    openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          title: null,
-          agentType: "codex",
-          status: "crashed",
-          attention: "none",
-          logPath: "/tmp/crashed.log",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: 1_780_638_000_000,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
     expect(
-      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open Log" }));
-
-    expect(await screen.findByText("log unavailable")).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
+    expect(openPathMock).not.toHaveBeenCalled();
   });
 
   it("does not render issue inspector controls for linked sessions", async () => {
@@ -2999,14 +2936,12 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={601} projectId={1} />);
 
     expect(
-      await screen.findByRole("button", { name: "Open Log" }),
+      await screen.findByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open Log" }));
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/completed.log");
-
     expect(
-      screen.getByRole("button", { name: "View Summary" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
+    expect(openPathMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "View Summary" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
@@ -3086,8 +3021,7 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a factual error when completed header log path is missing", async () => {
-    const user = userEvent.setup();
+  it("omits the completed header log opener when the log path is missing", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -3109,11 +3043,12 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={601} projectId={1} />);
 
-    await user.click(await screen.findByRole("button", { name: "Open Log" }));
-
     expect(
-      await screen.findByText("No log path recorded for this session."),
+      await screen.findByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
     expect(openPathMock).not.toHaveBeenCalled();
   });
 
