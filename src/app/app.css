@@ -1129,14 +1129,7 @@ button:focus-visible {
 }
 
 .issue-card__shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 8px;
-}
-
-.issue-card__shell .issue-card {
-  min-width: 0;
+  position: relative;
 }
 
 .issue-card:hover {
@@ -1180,6 +1173,7 @@ button:focus-visible {
   display: -webkit-box;
   overflow: hidden;
   min-width: 0;
+  max-width: calc(100% - 34px);
   color: var(--color-text-muted);
   font-size: 11px;
   line-height: 1.2;
@@ -1189,10 +1183,11 @@ button:focus-visible {
 }
 
 .issue-card__footer {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
   display: flex;
   justify-content: flex-end;
-  align-self: end;
-  padding-bottom: 2px;
 }
 
 .issue-card__run {
