@@ -395,14 +395,14 @@ describe("AgentsActivity", () => {
       screen.getByRole("separator", { name: "Resize session list" }),
     ).toHaveAttribute("aria-valuenow", "230");
     expect(
-      screen.getByRole("separator", { name: "Resize session info" }),
-    ).toHaveAttribute("aria-valuenow", "0");
+      screen.queryByRole("separator", { name: "Resize session info" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("complementary", { name: "Issue Inspector" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /#issue20.*Existing issue/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.getByRole("heading", { name: "#issue20 Existing issue" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
@@ -1004,7 +1004,7 @@ describe("AgentsActivity", () => {
     expect(existingIssueRow).toHaveAttribute("aria-pressed", "false");
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /#issue21.*Running issue/i }),
+        screen.getByRole("heading", { name: "#issue21 Running issue" }),
       ).toBeInTheDocument(),
     );
   });
@@ -1506,7 +1506,7 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", {
         level: 3,
-        name: "Review candidate",
+        name: "#issue21 Review candidate",
       }),
     ).toBeInTheDocument();
 
@@ -1785,7 +1785,7 @@ describe("AgentsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: /Review issue/i }));
     expect(
-      await screen.findByRole("heading", { level: 3, name: "Review issue" }),
+      await screen.findByRole("heading", { name: "#issue22 Review issue" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark Review" }),
@@ -1805,7 +1805,7 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", {
         level: 3,
-        name: "Completed issue",
+        name: "#issue23 Completed issue",
       }),
     ).toBeInTheDocument();
     expect(
@@ -1851,14 +1851,17 @@ describe("AgentsActivity", () => {
       name: "Review sessions",
     });
     expect(
-      await screen.findByRole("heading", { level: 3, name: "Review issue" }),
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "#issue22 Review issue",
+      }),
     ).toBeInTheDocument();
     expect(
       within(reviewGroup).getByRole("button", { name: /Review issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.getByRole("button", { name: /#issue22.*Review issue/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.queryByRole("button", { name: /#issue22.*Review issue/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark Review" }),
     ).not.toBeInTheDocument();
@@ -1902,11 +1905,11 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     expect(
-      await screen.findByRole("heading", { level: 3, name: "Review issue" }),
+      await screen.findByRole("heading", { name: "#issue22 Review issue" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /#issue22.*Review issue/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.queryByRole("button", { name: /#issue22.*Review issue/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark Review" }),
     ).not.toBeInTheDocument();
@@ -2638,8 +2641,8 @@ describe("AgentsActivity", () => {
       }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.getByRole("button", { name: /#issue21.*Newest running issue/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.getByRole("heading", { name: "#issue21 Newest running issue" }),
+    ).toBeInTheDocument();
   });
 
   it("falls back to the first completed session when no running session exists", async () => {
@@ -2769,9 +2772,7 @@ describe("AgentsActivity", () => {
     expect(screen.queryByText("No linked issue")).not.toBeInTheDocument();
   });
 
-  it("opens the issue inspector from the session header and can route to issues from inspector actions", async () => {
-    const user = userEvent.setup();
-    const onOpenIssuesActivity = vi.fn();
+  it("shows linked issue details in the session header without an inspector pane", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -2789,29 +2790,24 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={301}
-        onOpenIssuesActivity={onOpenIssuesActivity}
-        projectId={1}
-      />,
-    );
-
-    await user.click(
-      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
-    );
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      await screen.findByRole("complementary", { name: "Issue Inspector" }),
+      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize session info" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Issue Inspector" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /#issue20.*Existing issue/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open in Issues" }));
-
-    expect(onOpenIssuesActivity).toHaveBeenCalledTimes(1);
-    expect(onOpenIssuesActivity).toHaveBeenNthCalledWith(1, 20);
   });
 
-  it("opens the linked session log from the inspector for abnormal sessions", async () => {
+  it("opens the linked session log from the header for abnormal sessions", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
@@ -2833,21 +2829,15 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
-    );
-
-    const inspector = await screen.findByRole("complementary", {
-      name: "Issue Inspector",
-    });
-    await user.click(
-      within(inspector).getByRole("button", { name: "Open Log" }),
-    );
+    expect(
+      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Log" }));
 
     expect(openPathMock).toHaveBeenCalledWith("/tmp/stopped.log");
   });
 
-  it("surfaces inspector open log failures for abnormal sessions", async () => {
+  it("surfaces header open log failures for abnormal sessions", async () => {
     const user = userEvent.setup();
     openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
     listAgentSessionsMock.mockResolvedValue({
@@ -2870,19 +2860,118 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
-    );
+    expect(
+      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Log" }));
 
-    const inspector = await screen.findByRole("complementary", {
-      name: "Issue Inspector",
+    expect(await screen.findByText("log unavailable")).toBeInTheDocument();
+  });
+
+  it("does not render issue inspector controls for linked sessions", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
     });
-    await user.click(
-      within(inspector).getByRole("button", { name: "Open Log" }),
-    );
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      await within(inspector).findByText("log unavailable"),
+      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Expand issue inspector" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Collapse issue inspector" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Close issue inspector" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize session info" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the terminal visible after linked issue header actions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Mark Review" }));
+
+    expect(
+      screen.queryByRole("complementary", { name: "Issue Inspector" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+  });
+
+  it("opens completed issue summary from the header", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 601,
+          issueId: 23,
+          issueTitle: "Newest completed issue",
+          issueStatus: "completed",
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          logPath: "/tmp/completed.log",
+          lastActiveAt: 1_780_639_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: 1_780_639_000_000,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={601} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "#issue23 Newest completed issue",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "View Summary" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
+    expect(
+      within(dialog).getByText("Commit hash: abc1234"),
     ).toBeInTheDocument();
   });
 
@@ -3026,339 +3115,6 @@ describe("AgentsActivity", () => {
       await screen.findByText("No log path recorded for this session."),
     ).toBeInTheDocument();
     expect(openPathMock).not.toHaveBeenCalled();
-  });
-
-  it("opens completed issue summary from the inspector", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 601,
-          issueId: 23,
-          issueTitle: "Newest completed issue",
-          issueStatus: "completed",
-          title: null,
-          agentType: "codex",
-          status: "closed",
-          attention: "none",
-          logPath: "/tmp/completed.log",
-          lastActiveAt: 1_780_639_000_000,
-          startedAt: 1_780_638_000_000,
-          closedAt: 1_780_639_000_000,
-        },
-      ],
-    });
-    listIssuesMock.mockResolvedValue({
-      issues: [
-        {
-          id: 23,
-          projectId: 1,
-          title: "Newest completed issue",
-          description: "Completed description",
-          status: "completed",
-          linkedSessionId: 601,
-          linkedSessionStatus: "closed",
-          linkedSessionAttention: "none",
-          linkedSessionLogPath: "/tmp/completed.log",
-          createdAt: 1_780_632_000_000,
-          updatedAt: 1_780_639_000_000,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={601} projectId={1} />);
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /#issue23.*Newest completed issue/i,
-      }),
-    );
-
-    const inspector = await screen.findByRole("complementary", {
-      name: "Issue Inspector",
-    });
-    await user.click(
-      within(inspector).getByRole("button", { name: "Open Log" }),
-    );
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/completed.log");
-
-    await user.click(
-      within(inspector).getByRole("button", { name: "View Summary" }),
-    );
-
-    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
-    expect(
-      within(dialog).getByText("Commit hash: abc1234"),
-    ).toBeInTheDocument();
-  });
-
-  it("opens and closes the issue inspector from the splitter toggle", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    const toggle = await screen.findByRole("button", {
-      name: "Expand issue inspector",
-    });
-    const separator = screen.getByRole("separator", {
-      name: "Resize session info",
-    });
-
-    await user.click(toggle);
-
-    expect(
-      await screen.findByRole("complementary", { name: "Issue Inspector" }),
-    ).toBeInTheDocument();
-    expect(separator).toHaveAttribute("aria-valuenow", "200");
-    expect(
-      screen.getByRole("button", { name: "Collapse issue inspector" }),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Collapse issue inspector" }),
-    );
-
-    expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
-    ).not.toBeInTheDocument();
-    expect(separator).toHaveAttribute("aria-valuenow", "0");
-  });
-
-  it("resizes the info pane with keyboard and dragging interactions", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    const separator = await screen.findByRole("separator", {
-      name: "Resize session info",
-    });
-
-    separator.focus();
-    await user.keyboard("{ArrowLeft}");
-    expect(
-      await screen.findByRole("complementary", { name: "Issue Inspector" }),
-    ).toBeInTheDocument();
-    expect(separator).toHaveAttribute("aria-valuenow", "216");
-
-    await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "200");
-
-    await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "0");
-    expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
-    ).not.toBeInTheDocument();
-
-    fireEvent.mouseDown(separator, { clientX: 300 });
-    fireEvent.mouseMove(window, { clientX: 220 });
-    expect(separator).toHaveAttribute("aria-valuenow", "200");
-    expect(
-      screen.getByRole("complementary", { name: "Issue Inspector" }),
-    ).toBeInTheDocument();
-
-    fireEvent.mouseUp(window);
-  });
-
-  it("saves linked issue edits inside the inspector without unmounting terminal", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          issueStatus: "running",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    await user.click(
-      await screen.findByRole("button", { name: /#issue20.*Existing issue/i }),
-    );
-
-    const titleInput = await screen.findByLabelText("Issue title");
-    await user.clear(titleInput);
-    await user.type(titleInput, "Updated issue");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(updateIssueMock).toHaveBeenCalledWith({
-        projectId: 1,
-        issueId: 20,
-        title: "Updated issue",
-        description: "Existing description",
-      }),
-    );
-    expect(
-      screen.getByRole("button", { name: /#issue20.*Updated issue/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
-  });
-
-  it("closes the issue inspector with escape and restores focus to the title trigger", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          issueStatus: "running",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    const trigger = await screen.findByRole("button", {
-      name: /#issue20.*Existing issue/i,
-    });
-    await user.click(trigger);
-    await screen.findByRole("complementary", { name: "Issue Inspector" });
-
-    await user.keyboard("{Escape}");
-
-    expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
-    ).not.toBeInTheDocument();
-    await waitFor(() => expect(trigger).toHaveFocus());
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
-  });
-
-  it("closes the issue inspector when the user clicks the title trigger again", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          issueStatus: "running",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    const trigger = await screen.findByRole("button", {
-      name: /#issue20.*Existing issue/i,
-    });
-    await user.click(trigger);
-    await screen.findByRole("complementary", { name: "Issue Inspector" });
-
-    await user.click(trigger);
-
-    expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
-  });
-
-  it("closes the issue inspector from the close button and outside click without switching session", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          issueId: 20,
-          issueTitle: "Existing issue",
-          issueStatus: "running",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    const trigger = await screen.findByRole("button", {
-      name: /#issue20.*Existing issue/i,
-    });
-    await user.click(trigger);
-    await screen.findByRole("complementary", { name: "Issue Inspector" });
-
-    await user.click(
-      screen.getByRole("button", { name: "Close issue inspector" }),
-    );
-    expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(trigger);
-    await screen.findByRole("complementary", { name: "Issue Inspector" });
-    fireEvent.mouseDown(screen.getByLabelText("Codex Session terminal"));
-
-    expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
-    ).not.toBeInTheDocument();
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    const runningGroup = screen.getByRole("region", {
-      name: "In Progress sessions",
-    });
-    expect(
-      within(runningGroup).getByRole("button", { name: /Existing issue/i }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
   it("shows a factual empty state when no sessions exist", async () => {

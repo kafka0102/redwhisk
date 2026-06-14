@@ -10,7 +10,6 @@ interface ActivityRouterProps {
   activeActivity: ActivityKey;
   activeAgentSessionId: number | null;
   onOpenAgentsActivity: (sessionId: number) => void;
-  onOpenIssuesActivity: (issueId: number) => void;
   onProjectUpdated: (project: ProjectSummary) => void;
   onSelectAgentSession: (sessionId: number) => void;
   projectCompletionPolicy: ProjectCompletionPolicy;
@@ -23,7 +22,6 @@ export function ActivityRouter({
   activeActivity,
   activeAgentSessionId,
   onOpenAgentsActivity,
-  onOpenIssuesActivity,
   onProjectUpdated,
   onSelectAgentSession,
   projectCompletionPolicy,
@@ -38,7 +36,6 @@ export function ActivityRouter({
         onSelectSession={onSelectAgentSession}
         projectCompletionPolicy={projectCompletionPolicy}
         projectId={projectId}
-        onOpenIssuesActivity={onOpenIssuesActivity}
       />
     );
   }
