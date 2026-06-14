@@ -15,6 +15,7 @@ import {
   subscribeAgentSessionTerminalOutput,
 } from "./agent-terminal-events";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 
 const TERMINAL_STATUS_MAX_BYTES = 1;
 const TERMINAL_STATUS_POLL_MS = 2_000;
@@ -36,13 +37,25 @@ interface CodexTerminalProps {
 }
 
 export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
+  const { theme } = useI18n();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const themeRef = useRef(theme);
   const latestSequenceRef = useRef(0);
   const statusSourceRef = useRef<TerminalStatusSource | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const canBootXterm = supportsXtermRuntime();
+
+  useEffect(() => {
+    themeRef.current = theme;
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    terminal.options.theme = getTerminalTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -87,31 +100,7 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         scrollOnUserInput: true,
         scrollback: 10_000,
         smoothScrollDuration: 0,
-        theme: {
-          background: "#ffffff",
-          cursor: "#161515",
-          cursorAccent: "#ffffff",
-          foreground: "#161515",
-          selectionBackground: "#dbeafe",
-          selectionForeground: "#0f172a",
-          selectionInactiveBackground: "#e5e7eb",
-          black: "#0f172a",
-          red: "#a12d24",
-          green: "#1f6b44",
-          yellow: "#9b6b16",
-          blue: "#275dad",
-          magenta: "#8a3b8f",
-          cyan: "#1b6f78",
-          white: "#d4d4d4",
-          brightBlack: "#64748b",
-          brightRed: "#c2410c",
-          brightGreen: "#15803d",
-          brightYellow: "#a16207",
-          brightBlue: "#1d4ed8",
-          brightMagenta: "#a21caf",
-          brightCyan: "#0f766e",
-          brightWhite: "#f8fafc",
-        },
+        theme: getTerminalTheme(themeRef.current),
         wordSeparator: TERMINAL_WORD_SEPARATOR,
       });
       fitAddon = new FitAddon();
@@ -411,6 +400,62 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
       ) : null}
     </div>
   );
+}
+
+function getTerminalTheme(theme: "light" | "dark") {
+  if (theme === "dark") {
+    return {
+      background: "#050506",
+      cursor: "#f5f5f5",
+      cursorAccent: "#050506",
+      foreground: "#f2f3f5",
+      selectionBackground: "#25324a",
+      selectionForeground: "#f8fafc",
+      selectionInactiveBackground: "#20242b",
+      black: "#0f172a",
+      red: "#f87171",
+      green: "#4ade80",
+      yellow: "#facc15",
+      blue: "#60a5fa",
+      magenta: "#c084fc",
+      cyan: "#22d3ee",
+      white: "#d4d4d4",
+      brightBlack: "#747b86",
+      brightRed: "#fb7185",
+      brightGreen: "#86efac",
+      brightYellow: "#fde047",
+      brightBlue: "#93c5fd",
+      brightMagenta: "#d8b4fe",
+      brightCyan: "#67e8f9",
+      brightWhite: "#f8fafc",
+    };
+  }
+
+  return {
+    background: "#ffffff",
+    cursor: "#161515",
+    cursorAccent: "#ffffff",
+    foreground: "#161515",
+    selectionBackground: "#dbeafe",
+    selectionForeground: "#0f172a",
+    selectionInactiveBackground: "#e5e7eb",
+    black: "#0f172a",
+    red: "#a12d24",
+    green: "#1f6b44",
+    yellow: "#9b6b16",
+    blue: "#275dad",
+    magenta: "#8a3b8f",
+    cyan: "#1b6f78",
+    white: "#d4d4d4",
+    brightBlack: "#64748b",
+    brightRed: "#c2410c",
+    brightGreen: "#15803d",
+    brightYellow: "#a16207",
+    brightBlue: "#1d4ed8",
+    brightMagenta: "#a21caf",
+    brightCyan: "#0f766e",
+    brightWhite: "#f8fafc",
+  };
 }
 
 function supportsXtermRuntime(): boolean {
