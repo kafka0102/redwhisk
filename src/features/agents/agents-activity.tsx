@@ -42,6 +42,7 @@ import {
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
+import { useI18n } from "../../shared/i18n/i18n";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = 230;
@@ -59,28 +60,6 @@ interface AgentsActivityProps {
 type DragPane = "info" | "sidebar";
 type SessionIssueGroup = "inProcess" | "review" | "done";
 
-const SESSION_GROUPS: Array<{
-  key: SessionIssueGroup;
-  label: string;
-  emptyCopy: string;
-}> = [
-  {
-    key: "inProcess",
-    label: "In Progress",
-    emptyCopy: "No in-progress sessions.",
-  },
-  {
-    key: "review",
-    label: "Review",
-    emptyCopy: "No review sessions.",
-  },
-  {
-    key: "done",
-    label: "Done",
-    emptyCopy: "No done sessions.",
-  },
-];
-
 export function AgentsActivity({
   activeSessionId,
   onSelectSession,
@@ -88,6 +67,7 @@ export function AgentsActivity({
   projectCompletionPolicy = "manual",
   projectId,
 }: AgentsActivityProps) {
+  const { messages } = useI18n();
   const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
   const infoPaneDefaultWidth = 200;
   const infoPaneMinWidth = 200;
@@ -221,13 +201,37 @@ export function AgentsActivity({
 
   const sessionsByGroup = useMemo(
     () =>
-      SESSION_GROUPS.map((group) => ({
+      [
+        {
+          key: "inProcess" as const,
+          label: messages.agentsFeature.inProgress,
+          emptyCopy: messages.agentsFeature.noInProgressSessions,
+        },
+        {
+          key: "review" as const,
+          label: messages.agentsFeature.review,
+          emptyCopy: messages.agentsFeature.noReviewSessions,
+        },
+        {
+          key: "done" as const,
+          label: messages.agentsFeature.done,
+          emptyCopy: messages.agentsFeature.noDoneSessions,
+        },
+      ].map((group) => ({
         ...group,
         sessions: sessions.filter(
           (session) => getSessionIssueGroup(session) === group.key,
         ),
       })),
-    [sessions],
+    [
+      messages.agentsFeature.done,
+      messages.agentsFeature.inProgress,
+      messages.agentsFeature.noDoneSessions,
+      messages.agentsFeature.noInProgressSessions,
+      messages.agentsFeature.noReviewSessions,
+      messages.agentsFeature.review,
+      sessions,
+    ],
   );
 
   const currentSessionId =
@@ -843,7 +847,7 @@ export function AgentsActivity({
       <aside className="agents-sidebar" aria-label="Agent sessions">
         <div className="agents-sidebar__header">
           <div className="agents-sidebar__header-main">
-            <h2>Agents</h2>
+            <h2>{messages.app.agents}</h2>
           </div>
           <div
             className="agents-sidebar__toolbar"

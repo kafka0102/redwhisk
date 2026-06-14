@@ -13,7 +13,6 @@ import {
   type IssueAttachmentRecord,
   type IssueAttachmentPreviewRecord,
   type IssueRecord,
-  type IssueStatus,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog";
 import {
@@ -29,6 +28,7 @@ import { IssueSummaryDialog } from "./issue-summary-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { listAgentProfiles } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssuesActivityProps {
   projectId: number;
@@ -36,35 +36,12 @@ interface IssuesActivityProps {
   requestedIssueId?: number | null;
 }
 
-interface LaneDefinition {
-  status: IssueStatus;
-  label: string;
-}
-
-const ISSUE_LANES: LaneDefinition[] = [
-  {
-    status: "backlog",
-    label: "Backlog",
-  },
-  {
-    status: "running",
-    label: "In Progress",
-  },
-  {
-    status: "review",
-    label: "Review",
-  },
-  {
-    status: "completed",
-    label: "Done",
-  },
-];
-
 export function IssuesActivity({
   projectId,
   onOpenAgentsActivity,
   requestedIssueId = null,
 }: IssuesActivityProps) {
+  const { messages } = useI18n();
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
     requestedIssueId,
@@ -205,11 +182,34 @@ export function IssuesActivity({
 
   const lanes = useMemo(
     () =>
-      ISSUE_LANES.map((lane) => ({
+      [
+        {
+          status: "backlog" as const,
+          label: messages.issues.backlog,
+        },
+        {
+          status: "running" as const,
+          label: messages.issues.inProgress,
+        },
+        {
+          status: "review" as const,
+          label: messages.issues.review,
+        },
+        {
+          status: "completed" as const,
+          label: messages.issues.done,
+        },
+      ].map((lane) => ({
         ...lane,
         issues: issues.filter((issue) => issue.status === lane.status),
       })),
-    [issues],
+    [
+      issues,
+      messages.issues.backlog,
+      messages.issues.done,
+      messages.issues.inProgress,
+      messages.issues.review,
+    ],
   );
 
   function openCreateDialog(trigger: HTMLElement | null) {
@@ -591,7 +591,7 @@ export function IssuesActivity({
   return (
     <main className="activity-surface activity-surface--issues">
       <div className="issues-header">
-        <h2>Issues</h2>
+        <h2>{messages.issues.title}</h2>
       </div>
       {errorMessage ? (
         <p className="issues-status" role="status" aria-label="Issues status">
