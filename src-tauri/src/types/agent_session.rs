@@ -128,6 +128,7 @@ pub struct AgentSessionListItem {
     pub issue_id: Option<i64>,
     pub issue_title: Option<String>,
     pub issue_status: Option<IssueStatus>,
+    pub agent_profile_id: i64,
     pub can_complete_clean: bool,
     pub can_complete_agent_commit: bool,
     pub title: Option<String>,

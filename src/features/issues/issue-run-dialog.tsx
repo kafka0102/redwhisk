@@ -5,6 +5,10 @@ import {
   listAgentProfiles,
   type AgentProfileRecord,
 } from "../settings/settings-commands";
+import {
+  listAgentSessions,
+  type AgentSessionListItem,
+} from "../agents/agent-session-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
   startAgentSession,
@@ -32,7 +36,6 @@ export function IssueRunDialog({
     null,
   );
   const [promptDraft, setPromptDraft] = useState("");
-  const [hasEditedPrompt, setHasEditedPrompt] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -46,10 +49,12 @@ export function IssueRunDialog({
       setStatusMessage(null);
 
       try {
-        const [projectResponse, globalResponse] = await Promise.all([
-          listAgentProfiles({ scope: "project", projectId }),
-          listAgentProfiles({ scope: "global", projectId: null }),
-        ]);
+        const [projectResponse, globalResponse, sessionsResponse] =
+          await Promise.all([
+            listAgentProfiles({ scope: "project", projectId }),
+            listAgentProfiles({ scope: "global", projectId: null }),
+            listAgentSessions(projectId),
+          ]);
 
         if (!isMounted) {
           return;
@@ -59,10 +64,14 @@ export function IssueRunDialog({
           ...projectResponse.profiles,
           ...globalResponse.profiles,
         ];
-        const initialProfile = mergedProfiles[0] ?? null;
+        const initialProfile = resolveInitialProfile({
+          profiles: mergedProfiles,
+          projectProfiles: projectResponse.profiles,
+          globalProfiles: globalResponse.profiles,
+          sessions: sessionsResponse.sessions,
+        });
         setProfiles(mergedProfiles);
         setSelectedProfileId(initialProfile?.id ?? null);
-        setHasEditedPrompt(false);
         setPromptDraft(
           initialProfile
             ? buildRunPromptPreview({
@@ -199,14 +208,14 @@ export function IssueRunDialog({
     >
       <div
         ref={dialogRef}
-        aria-label="Run Dialog"
+        aria-label={`Run Issue #${issue.id}`}
         aria-modal="true"
         className="issue-dialog issue-dialog--compact"
         role="dialog"
         onKeyDown={handleKeyDown}
       >
         <div className="issue-dialog__header">
-          <h3>Run Dialog</h3>
+          <h3>Run Issue #{issue.id}</h3>
           <button
             ref={closeButtonRef}
             aria-label="Close run dialog"
@@ -235,16 +244,14 @@ export function IssueRunDialog({
                     null;
 
                   setSelectedProfileId(nextProfileId);
-                  if (!hasEditedPrompt) {
-                    setPromptDraft(
-                      nextProfile
-                        ? buildRunPromptPreview({
-                            issue,
-                            profile: nextProfile,
-                          }).finalPrompt
-                        : "",
-                    );
-                  }
+                  setPromptDraft(
+                    nextProfile
+                      ? buildRunPromptPreview({
+                          issue,
+                          profile: nextProfile,
+                        }).finalPrompt
+                      : "",
+                  );
                 }}
               >
                 {profiles.map((profile) => (
@@ -261,47 +268,12 @@ export function IssueRunDialog({
               <textarea
                 aria-label="Final prompt"
                 className="settings-textarea"
+                readOnly
                 rows={12}
                 value={promptDraft}
-                onChange={(event) => {
-                  setPromptDraft(event.target.value);
-                  setHasEditedPrompt(true);
-                }}
               />
             </label>
-
-            <details className="settings-panel">
-              <summary>Prompt sources</summary>
-              <div className="settings-list">
-                {preview?.sources.map((source) => (
-                  <div key={source.id} className="settings-list__item">
-                    <div>
-                      <h5>{source.label}</h5>
-                      <p>{source.content}</p>
-                    </div>
-                  </div>
-                )) ?? null}
-              </div>
-            </details>
           </div>
-
-          <aside className="issue-dialog__side" aria-label="Run summary">
-            <section className="issue-dialog__panel">
-              <h4>Issue</h4>
-              <p>#{issue.id}</p>
-              <p>{issue.title}</p>
-            </section>
-            <section className="issue-dialog__panel">
-              <h4>Profile scope</h4>
-              <p>
-                {selectedProfile
-                  ? selectedProfile.scope === "project"
-                    ? "Project"
-                    : "Global"
-                  : "No profile selected"}
-              </p>
-            </section>
-          </aside>
         </div>
         <p
           className="issue-dialog__status"
@@ -342,6 +314,51 @@ function getExistingSessionId(
   );
   const sessionId = sessionDetail?.sessionId;
   return typeof sessionId === "number" ? sessionId : null;
+}
+
+function resolveInitialProfile({
+  profiles,
+  projectProfiles,
+  globalProfiles,
+  sessions,
+}: {
+  profiles: AgentProfileRecord[];
+  projectProfiles: AgentProfileRecord[];
+  globalProfiles: AgentProfileRecord[];
+  sessions: AgentSessionListItem[];
+}): AgentProfileRecord | null {
+  const latestIssueSession = sessions
+    .filter(
+      (session) =>
+        session.issueId !== null && typeof session.agentProfileId === "number",
+    )
+    .sort(compareSessionsByMostRecent)[0];
+  const historicalProfile = latestIssueSession
+    ? profiles.find(
+        (profile) => profile.id === latestIssueSession.agentProfileId,
+      )
+    : null;
+
+  return (
+    historicalProfile ??
+    projectProfiles[projectProfiles.length - 1] ??
+    globalProfiles[globalProfiles.length - 1] ??
+    null
+  );
+}
+
+function compareSessionsByMostRecent(
+  left: AgentSessionListItem,
+  right: AgentSessionListItem,
+): number {
+  return (
+    sessionSortTime(right) - sessionSortTime(left) ||
+    right.sessionId - left.sessionId
+  );
+}
+
+function sessionSortTime(session: AgentSessionListItem): number {
+  return session.closedAt ?? session.lastActiveAt ?? session.startedAt;
 }
 
 function getFocusableDialogElements(
