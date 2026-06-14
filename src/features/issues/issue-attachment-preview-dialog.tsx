@@ -1,5 +1,3 @@
-import { Button } from "@/components/ui/button";
-
 import type { AttachmentPreviewState } from "./issue-activity-types";
 
 interface IssueAttachmentPreviewDialogProps {
@@ -51,16 +49,6 @@ export function IssueAttachmentPreviewDialog({
               </pre>
             )}
           </div>
-        </div>
-        <div className="issue-dialog__footer">
-          <Button
-            className="issues-button"
-            type="button"
-            variant="outline"
-            onClick={onClose}
-          >
-            Close
-          </Button>
         </div>
       </div>
     </div>

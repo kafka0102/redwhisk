@@ -1058,7 +1058,12 @@ describe("IssuesActivity", () => {
     });
     await user.click(runButton);
     const runDialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    await user.click(within(runDialog).getByRole("button", { name: "Cancel" }));
+    expect(
+      within(runDialog).queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(runDialog).getByRole("button", { name: "Close run dialog" }),
+    );
 
     expect(
       screen.queryByRole("dialog", { name: "Run Issue #20" }),

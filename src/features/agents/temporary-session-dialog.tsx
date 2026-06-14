@@ -255,10 +255,7 @@ export function TemporarySessionDialog({
           {statusMessage}
         </p>
 
-        <div className="issue-dialog__footer">
-          <button className="issues-button" type="button" onClick={onClose}>
-            Cancel
-          </button>
+        <div className="issue-dialog__footer issue-dialog__footer--end">
           <button
             className="issues-button issues-button--primary"
             type="submit"

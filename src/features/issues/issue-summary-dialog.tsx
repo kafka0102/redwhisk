@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-
 import { getIssueSummary, type IssueSummaryRecord } from "./issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 
@@ -193,16 +191,6 @@ export function IssueSummaryDialog({
         >
           {errorMessage}
         </p>
-        <div className="issue-dialog__footer">
-          <Button
-            className="issues-button"
-            type="button"
-            variant="outline"
-            onClick={onClose}
-          >
-            Close
-          </Button>
-        </div>
       </div>
     </div>
   );

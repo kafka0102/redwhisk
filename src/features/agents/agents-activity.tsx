@@ -1247,16 +1247,7 @@ export function AgentsActivity({
                 </details>
               </div>
             </div>
-            <div className="issue-dialog__footer">
-              <button
-                disabled={
-                  isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion
-                }
-                type="button"
-                onClick={handleCloseAgentCommitPreview}
-              >
-                Cancel
-              </button>
+            <div className="issue-dialog__footer issue-dialog__footer--end">
               <button
                 disabled={
                   isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion

@@ -499,7 +499,10 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Agent profile")).toBeInTheDocument();
     expect(screen.getByLabelText("Initial prompt")).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "Cancel" }),
+      within(dialog).queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Close session dialog" }),
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("button", { name: "Start" }),
@@ -581,7 +584,9 @@ describe("AgentsActivity", () => {
     });
     await user.click(newSessionButton);
 
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(
+      screen.getByRole("button", { name: "Close session dialog" }),
+    );
 
     expect(
       screen.queryByRole("dialog", { name: "Session Dialog" }),
@@ -1993,7 +1998,14 @@ describe("AgentsActivity", () => {
       ),
     ).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(
+      within(dialog).queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Close completion confirmation",
+      }),
+    );
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Completion Confirmation" }),
