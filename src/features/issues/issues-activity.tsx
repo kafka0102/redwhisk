@@ -149,18 +149,23 @@ export function IssuesActivity({
     };
   }, [projectId]);
 
+  const selectedIssue = useMemo(
+    () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
+    [issues, selectedIssueId],
+  );
+
   useEffect(() => {
     if (!dialogMode) {
       return;
     }
 
-    titleInputRef.current?.focus();
-  }, [dialogMode]);
+    if (dialogMode === "create" || selectedIssue?.status === "backlog") {
+      titleInputRef.current?.focus();
+      return;
+    }
 
-  const selectedIssue = useMemo(
-    () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
-    [issues, selectedIssueId],
-  );
+    closeButtonRef.current?.focus();
+  }, [dialogMode, selectedIssue?.status]);
 
   const lanes = useMemo(
     () =>

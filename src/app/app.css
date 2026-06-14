@@ -1529,7 +1529,7 @@ button:focus-visible {
 .issue-description-editor {
   width: 100%;
   min-width: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
@@ -1666,8 +1666,8 @@ button:focus-visible {
 .issue-description-editor:focus-within,
 .issue-description-editor__content:focus {
   outline: none;
-  border-color: transparent;
-  box-shadow: none;
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 2px var(--color-accent-muted);
 }
 
 .issue-form__actions {
@@ -2466,9 +2466,37 @@ button:focus-visible {
   min-width: 0;
 }
 
+.issue-dialog__editor--readonly {
+  gap: 0;
+}
+
 .issue-dialog__side {
   border-left: 1px solid var(--color-border);
   padding-left: 14px;
+}
+
+.issue-detail__title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.issue-detail__divider {
+  height: 1px;
+  margin: 12px 0;
+  background: var(--color-border);
+}
+
+.issue-detail__description {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .issue-dialog__panel {
