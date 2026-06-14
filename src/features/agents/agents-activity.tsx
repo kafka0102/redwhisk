@@ -95,9 +95,6 @@ export function AgentsActivity({
     useState(false);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
-  const [viewedSessionActivity, setViewedSessionActivity] = useState<
-    Record<number, number>
-  >({});
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
   );
@@ -253,17 +250,6 @@ export function AgentsActivity({
     selectedSession?.canCompleteAgentCommit === true;
   const canViewSummary = linkedIssue?.issueStatus === "completed";
 
-  function markSessionViewed(session: AgentSessionListItem) {
-    if (session.status !== "running" || session.attention !== "none") {
-      return;
-    }
-
-    setViewedSessionActivity((currentViewedSessionActivity) => ({
-      ...currentViewedSessionActivity,
-      [session.sessionId]: session.lastActiveAt,
-    }));
-  }
-
   async function acknowledgeSessionAttention(sessionId: number) {
     const targetSession = sessions.find(
       (session) => session.sessionId === sessionId,
@@ -289,12 +275,6 @@ export function AgentsActivity({
         const response = await listAgentSessions(projectId);
         const nextSessions = applySessionListOverlays(response.sessions);
         setSessions(nextSessions);
-        const refreshedSession = nextSessions.find(
-          (session) => session.sessionId === sessionId,
-        );
-        if (refreshedSession) {
-          markSessionViewed(refreshedSession);
-        }
       } catch (error) {
         setAttentionErrorMessage(toCommandError(error).message);
       } finally {
@@ -303,8 +283,6 @@ export function AgentsActivity({
 
       return;
     }
-
-    markSessionViewed(targetSession);
   }
 
   function handleSelectSession(sessionId: number) {
@@ -737,7 +715,6 @@ export function AgentsActivity({
                 onSelect={handleSelectSession}
                 selectedSessionId={selectedSession?.sessionId ?? null}
                 sessions={group.sessions}
-                viewedSessionActivity={viewedSessionActivity}
               />
             ))}
           </div>
@@ -792,7 +769,6 @@ export function AgentsActivity({
                 {shouldShowExplicitSessionStatus(selectedSession) ? (
                   <p className="agents-session-toolbar__status">{`Status: ${formatSessionStatusLabel(
                     selectedSession,
-                    viewedSessionActivity,
                   )}`}</p>
                 ) : null}
               </div>
@@ -1051,7 +1027,6 @@ interface SessionGroupProps {
   onSelect: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
-  viewedSessionActivity: Record<number, number>;
 }
 
 function SessionGroup({
@@ -1062,7 +1037,6 @@ function SessionGroup({
   onSelect,
   selectedSessionId,
   sessions,
-  viewedSessionActivity,
 }: SessionGroupProps) {
   const [isExpanded, setIsExpanded] = useState(groupKey !== "done");
 
@@ -1092,16 +1066,8 @@ function SessionGroup({
         <div className="agents-session-list">
           {sessions.map((session) => {
             const outputLine = formatSessionOutputLine(session.latestOutput);
-            const statusTone = getSessionStatusTone(
-              session,
-              viewedSessionActivity,
-              selectedSessionId,
-            );
-            const statusLabel = formatSessionStatusLabel(
-              session,
-              viewedSessionActivity,
-              selectedSessionId,
-            );
+            const statusTone = getSessionStatusTone(session);
+            const statusLabel = formatSessionStatusLabel(session);
             const agentLabel = formatAgentTypeLabel(session.agentType);
 
             return (
@@ -1166,8 +1132,6 @@ function buildSessionStatusDotClassName(tone: string): string {
 
 function formatSessionStatusLabel(
   session: AgentSessionListItem,
-  viewedSessionActivity: Record<number, number>,
-  selectedSessionId: number | null = null,
 ): string {
   if (session.status === "crashed") {
     return "crashed";
@@ -1190,24 +1154,13 @@ function formatSessionStatusLabel(
   }
 
   if (session.status === "running") {
-    if (
-      selectedSessionId === session.sessionId ||
-      isViewedSession(session, viewedSessionActivity)
-    ) {
-      return "已查看";
-    }
-
     return "运行中";
   }
 
   return "closed";
 }
 
-function getSessionStatusTone(
-  session: AgentSessionListItem,
-  viewedSessionActivity: Record<number, number>,
-  selectedSessionId: number | null,
-): string {
+function getSessionStatusTone(session: AgentSessionListItem): string {
   if (session.issueStatus === "completed") {
     return "done";
   }
@@ -1220,18 +1173,7 @@ function getSessionStatusTone(
     return "done";
   }
 
-  if (session.attention === "requested") {
-    return "viewed";
-  }
-
-  if (
-    selectedSessionId === session.sessionId ||
-    isViewedSession(session, viewedSessionActivity)
-  ) {
-    return "viewed";
-  }
-
-  return "running";
+  return session.attention === "requested" ? "viewed" : "running";
 }
 
 function formatSessionOutputLine(output: string | null | undefined): string {
@@ -1275,12 +1217,4 @@ function shouldShowExplicitSessionStatus(
 
 function shouldShowSessionRowStatus(session: AgentSessionListItem): boolean {
   return session.status === "crashed";
-}
-
-function isViewedSession(
-  session: AgentSessionListItem,
-  viewedSessionActivity: Record<number, number>,
-): boolean {
-  const viewedAt = viewedSessionActivity[session.sessionId];
-  return viewedAt != null && viewedAt >= session.lastActiveAt;
 }

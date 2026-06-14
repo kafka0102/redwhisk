@@ -1304,7 +1304,7 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("turns a running session blue after the user clicks it", async () => {
+  it("keeps a running session green after the user clicks it", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
@@ -1347,16 +1347,22 @@ describe("AgentsActivity", () => {
     expect(
       within(sessionRow).getByLabelText("Session 状态：运行中"),
     ).toHaveClass("agents-session-row__status-dot--running");
+    expect(
+      within(sessionRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
 
     await user.click(sessionRow);
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：已查看"),
-    ).toHaveClass("agents-session-row__status-dot--viewed");
+      within(sessionRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+    expect(
+      within(sessionRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
     expect(setAgentSessionAttentionMock).not.toHaveBeenCalled();
   });
 
-  it("keeps the current session row blue after new session activity arrives", async () => {
+  it("keeps the current session row green while new session activity arrives", async () => {
     vi.useFakeTimers();
     listAgentSessionsMock
       .mockResolvedValueOnce({
@@ -1407,16 +1413,22 @@ describe("AgentsActivity", () => {
 
     fireEvent.click(sessionRow);
     expect(
-      within(sessionRow).getByLabelText("Session 状态：已查看"),
-    ).toHaveClass("agents-session-row__status-dot--viewed");
+      within(sessionRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+    expect(
+      within(sessionRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_500);
     });
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：已查看"),
-    ).toHaveClass("agents-session-row__status-dot--viewed");
+      within(sessionRow).getByLabelText("Session 状态：运行中"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+    expect(
+      within(sessionRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
   });
 
   it("marks a linked running issue for review from the session header and refreshes sessions", async () => {
@@ -2498,9 +2510,12 @@ describe("AgentsActivity", () => {
 
     await waitFor(() =>
       expect(
-        within(attentionRow).getByLabelText("Session 状态：已查看"),
-      ).toHaveClass("agents-session-row__status-dot--viewed"),
+        within(attentionRow).getByLabelText("Session 状态：运行中"),
+      ).toHaveClass("agents-session-row__status-dot--running"),
     );
+    expect(
+      within(attentionRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
   });
 
   it("resizes the session list with the keyboard separator control", async () => {
