@@ -643,8 +643,6 @@ button:focus-visible {
   cursor: pointer;
   font: inherit;
   font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .settings-agent-table__delete-link:disabled {
