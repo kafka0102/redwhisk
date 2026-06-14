@@ -2542,8 +2542,20 @@ button:focus-visible {
 }
 
 .issue-dialog__footer {
-  justify-content: flex-end;
+  justify-content: space-between;
   border-top: 1px solid var(--color-border);
+}
+
+.issue-dialog__attach-button {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.issue-dialog__attach-button:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-accent);
 }
 
 .issue-dialog__footer-start,

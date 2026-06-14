@@ -58,8 +58,6 @@ export function IssuesActivity({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
-  const [isLoadingAgentProfiles, setIsLoadingAgentProfiles] = useState(true);
-  const [agentProfileCount, setAgentProfileCount] = useState(0);
   const [agentProfileErrorMessage, setAgentProfileErrorMessage] = useState<
     string | null
   >(null);
@@ -72,8 +70,6 @@ export function IssuesActivity({
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const dialogFormRef = useRef<HTMLFormElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
-  const runButtonRef = useRef<HTMLButtonElement | null>(null);
   const saveButtonRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef(new Map<number, HTMLButtonElement>());
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -132,30 +128,16 @@ export function IssuesActivity({
     let isMounted = true;
 
     async function loadAgentProfiles() {
-      setIsLoadingAgentProfiles(true);
       setAgentProfileErrorMessage(null);
-      setAgentProfileCount(0);
 
       try {
-        const [projectResponse, globalResponse] = await Promise.all([
+        await Promise.all([
           listAgentProfiles({ scope: "project", projectId }),
           listAgentProfiles({ scope: "global", projectId: null }),
         ]);
-
-        if (!isMounted || activeProjectIdRef.current !== projectId) {
-          return;
-        }
-
-        setAgentProfileCount(
-          projectResponse.profiles.length + globalResponse.profiles.length,
-        );
       } catch (error) {
         if (isMounted && activeProjectIdRef.current === projectId) {
           setAgentProfileErrorMessage(toCommandError(error).message);
-        }
-      } finally {
-        if (isMounted && activeProjectIdRef.current === projectId) {
-          setIsLoadingAgentProfiles(false);
         }
       }
     }
@@ -348,17 +330,16 @@ export function IssuesActivity({
 
     const activeElement = document.activeElement;
     const closeButton = closeButtonRef.current;
-    const cancelButton = cancelButtonRef.current;
     const saveButton = saveButtonRef.current;
 
     if (
       event.shiftKey &&
       activeElement === titleInputRef.current &&
-      cancelButton &&
-      !cancelButton.disabled
+      saveButton &&
+      !saveButton.disabled
     ) {
       event.preventDefault();
-      cancelButton.focus();
+      saveButton.focus();
       return;
     }
 
@@ -485,11 +466,6 @@ export function IssuesActivity({
   const isBacklogDialog =
     dialogMode === "create" || selectedIssue?.status === "backlog";
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
-  const canRunSelectedIssue =
-    selectedIssue != null &&
-    canRunIssueFor(selectedIssue) &&
-    agentProfileCount > 0 &&
-    !isLoadingAgentProfiles;
   const canOpenSession =
     hasLinkedSession &&
     selectedIssue?.status !== "completed" &&
@@ -625,17 +601,12 @@ export function IssuesActivity({
           canOpenSession={canOpenSession}
           canOpenLog={canOpenLog}
           canViewSummary={canViewSummary}
-          canRunSelectedIssue={canRunSelectedIssue}
           runStatusMessage={runStatusMessage}
           titleInputRef={titleInputRef}
           dialogFormRef={dialogFormRef}
           closeButtonRef={closeButtonRef}
-          cancelButtonRef={cancelButtonRef}
-          runButtonRef={runButtonRef}
           saveButtonRef={saveButtonRef}
           canOpenAgentsActivity={Boolean(onOpenAgentsActivity)}
-          canRunIssue={canRunIssueFor}
-          buildDescription={buildIssueDescription}
           formatSessionStatus={formatAgentSessionStatus}
           onClose={closeDialog}
           onSubmit={handleSubmit}
@@ -652,7 +623,6 @@ export function IssuesActivity({
           onOpenLinkedSession={openLinkedSession}
           onOpenLog={() => void handleOpenLog()}
           onOpenSummary={handleOpenSummary}
-          onRunIssue={openRunDialog}
         />
       ) : null}
 
