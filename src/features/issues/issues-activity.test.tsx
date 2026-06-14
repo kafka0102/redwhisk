@@ -408,7 +408,9 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByText(formatTestTimestamp(existingIssue.updatedAt)),
     ).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Run" })).toBeDisabled();
+    expect(
+      within(dialog).queryByRole("button", { name: "Run" }),
+    ).not.toBeInTheDocument();
   });
 
   it("closes the detail dialog with Escape and restores focus to the triggering card", async () => {
@@ -442,11 +444,6 @@ describe("IssuesActivity", () => {
     expect(within(dialog).getByLabelText("Title")).toHaveFocus();
 
     await user.tab({ shift: true });
-    expect(
-      within(dialog).getByRole("button", { name: "Cancel" }),
-    ).toHaveFocus();
-
-    await user.tab();
     expect(within(dialog).getByRole("button", { name: "Save" })).toHaveFocus();
 
     await user.tab();
@@ -501,7 +498,9 @@ describe("IssuesActivity", () => {
       screen.getByRole("dialog", { name: "New Issue" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps lowercase input and closes the create dialog after save", async () => {
@@ -740,7 +739,9 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     ).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "New Issue" }));
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(
+      screen.getByRole("button", { name: "Close issue dialog" }),
+    );
 
     expect(
       screen.getByRole("button", { name: "Existing issue" }),
@@ -800,9 +801,13 @@ describe("IssuesActivity", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     expect(
@@ -849,9 +854,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     const promptField = within(dialog).getByLabelText(
@@ -905,9 +914,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
@@ -949,9 +962,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     const profileSelect = within(dialog).getByLabelText(
@@ -998,9 +1015,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     const profileSelect = within(dialog).getByLabelText(
@@ -1027,10 +1048,14 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
 
-    const runButton = screen.getByRole("button", { name: "Run" });
+    const runButton = screen.getByRole("button", {
+      name: "Run Existing issue",
+    });
     await user.click(runButton);
     const runDialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     await user.click(within(runDialog).getByRole("button", { name: "Cancel" }));
@@ -1063,9 +1088,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
@@ -1113,9 +1142,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Run" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
     await user.click(
       within(screen.getByRole("dialog", { name: "Run Issue #20" })).getByRole(
         "button",
@@ -1143,7 +1176,9 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    expect(within(dialog).getByRole("button", { name: "Run" })).toBeDisabled();
+    expect(
+      within(dialog).queryByRole("button", { name: "Run" }),
+    ).not.toBeInTheDocument();
   });
 
   it("previews and downloads a draft attachment from the issue dialog", async () => {

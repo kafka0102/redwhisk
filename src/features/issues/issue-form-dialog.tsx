@@ -24,13 +24,10 @@ interface IssueFormDialogProps {
   canOpenSession: boolean;
   canOpenLog: boolean;
   canViewSummary: boolean;
-  canRunSelectedIssue: boolean;
   runStatusMessage: string | null;
   titleInputRef: React.RefObject<HTMLInputElement | null>;
   dialogFormRef: React.RefObject<HTMLFormElement | null>;
   closeButtonRef: React.RefObject<HTMLButtonElement | null>;
-  cancelButtonRef: React.RefObject<HTMLButtonElement | null>;
-  runButtonRef: React.RefObject<HTMLButtonElement | null>;
   saveButtonRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -49,25 +46,6 @@ interface IssueFormDialogProps {
   onOpenLinkedSession: () => void;
   onOpenLog: () => void;
   onOpenSummary: () => void;
-  onRunIssue: (
-    issue: Pick<
-      IssueRecord,
-      | "id"
-      | "title"
-      | "description"
-      | "attachments"
-      | "status"
-      | "linkedSessionId"
-    >,
-    trigger: HTMLElement | null,
-  ) => void;
-  canRunIssue: (
-    issue: Pick<IssueRecord, "status" | "linkedSessionId">,
-  ) => boolean;
-  buildDescription: (
-    description: string,
-    attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-  ) => string;
   formatSessionStatus: (status: AgentSessionStatus | null) => string;
   canOpenAgentsActivity: boolean;
 }
@@ -84,13 +62,10 @@ export function IssueFormDialog({
   canOpenSession,
   canOpenLog,
   canViewSummary,
-  canRunSelectedIssue,
   runStatusMessage,
   titleInputRef,
   dialogFormRef,
   closeButtonRef,
-  cancelButtonRef,
-  runButtonRef,
   saveButtonRef,
   onClose,
   onSubmit,
@@ -103,9 +78,6 @@ export function IssueFormDialog({
   onOpenLinkedSession,
   onOpenLog,
   onOpenSummary,
-  onRunIssue,
-  canRunIssue,
-  buildDescription,
   formatSessionStatus,
   canOpenAgentsActivity,
 }: IssueFormDialogProps) {
@@ -211,9 +183,9 @@ export function IssueFormDialog({
           <div className="issue-dialog__footer-start">
             <Button
               aria-label="Attach file"
-              className="issues-button issues-button--icon"
+              className="issues-button issues-button--icon issue-dialog__attach-button"
               type="button"
-              variant="outline"
+              variant="ghost"
               disabled={isSaving}
               onClick={onSelectAttachment}
             >
@@ -221,46 +193,6 @@ export function IssueFormDialog({
             </Button>
           </div>
           <div className="issue-dialog__footer-end">
-            {mode === "edit" &&
-            selectedIssue != null &&
-            canRunIssue(selectedIssue) ? (
-              <Button
-                ref={runButtonRef}
-                className="issues-button"
-                type="button"
-                variant="outline"
-                disabled={!canRunSelectedIssue}
-                onClick={() =>
-                  onRunIssue(
-                    {
-                      ...selectedIssue,
-                      title: form.title,
-                      description: buildDescription(
-                        form.description,
-                        form.attachments,
-                      ),
-                      attachments: form.attachments.filter(
-                        (attachment): attachment is IssueAttachmentRecord =>
-                          "id" in attachment,
-                      ),
-                    },
-                    runButtonRef.current,
-                  )
-                }
-              >
-                Run
-              </Button>
-            ) : null}
-            <Button
-              ref={cancelButtonRef}
-              className="issues-button"
-              type="button"
-              variant="outline"
-              disabled={isSaving}
-              onClick={onClose}
-            >
-              Cancel
-            </Button>
             <Button
               ref={saveButtonRef}
               className="issues-button issues-button--primary"
