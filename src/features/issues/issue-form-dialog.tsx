@@ -81,7 +81,13 @@ export function IssueFormDialog({
   formatSessionStatus,
   canOpenAgentsActivity,
 }: IssueFormDialogProps) {
-  const dialogTitle = mode === "create" ? "New Issue" : "Issue Detail";
+  const isEditableDialog = mode === "create" || isBacklogDialog;
+  let dialogTitle = "Issue Detail";
+  if (mode === "create") {
+    dialogTitle = "New Issue";
+  } else if (isBacklogDialog) {
+    dialogTitle = "Edit Issue";
+  }
 
   return (
     <div
@@ -117,43 +123,18 @@ export function IssueFormDialog({
         <div
           className={`issue-dialog__body${isBacklogDialog ? " issue-dialog__body--single" : ""}`}
         >
-          <div className="issue-dialog__editor">
-            <div className="issue-field">
-              <Input
-                ref={titleInputRef}
-                aria-label="Title"
-                autoCapitalize="none"
-                autoCorrect="off"
-                name="title"
-                placeholder="Issue title"
-                spellCheck={false}
-                value={form.title}
-                onChange={(event) =>
-                  onFormChange({
-                    ...form,
-                    title: event.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="issue-field">
-              <IssueDescriptionEditor
-                ariaLabel="Description"
-                placeholder="Describe the task"
-                value={form.description}
-                attachments={form.attachments}
-                onDownloadAttachment={onDownloadAttachment}
-                onChange={(description) =>
-                  onFormChange({
-                    ...form,
-                    description,
-                  })
-                }
-                onPreviewAttachment={onPreviewAttachment}
-                onRemoveAttachment={onRemoveAttachment}
-              />
-            </div>
-          </div>
+          {isEditableDialog ? (
+            <IssueEditableFields
+              form={form}
+              titleInputRef={titleInputRef}
+              onFormChange={onFormChange}
+              onDownloadAttachment={onDownloadAttachment}
+              onPreviewAttachment={onPreviewAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+            />
+          ) : (
+            <IssueReadOnlyDetails form={form} />
+          )}
           {!isBacklogDialog ? (
             <IssueActionsAside
               mode={mode}
@@ -179,31 +160,105 @@ export function IssueFormDialog({
         >
           {errorMessage}
         </p>
-        <div className="issue-dialog__footer">
-          <div className="issue-dialog__footer-start">
-            <Button
-              aria-label="Attach file"
-              className="issues-button issues-button--icon issue-dialog__attach-button"
-              type="button"
-              variant="ghost"
-              disabled={isSaving}
-              onClick={onSelectAttachment}
-            >
-              <Paperclip aria-hidden="true" size={15} strokeWidth={2} />
-            </Button>
+        {isEditableDialog ? (
+          <div className="issue-dialog__footer">
+            <div className="issue-dialog__footer-start">
+              <Button
+                aria-label="Attach file"
+                className="issues-button issues-button--icon issue-dialog__attach-button"
+                type="button"
+                variant="ghost"
+                disabled={isSaving}
+                onClick={onSelectAttachment}
+              >
+                <Paperclip aria-hidden="true" size={15} strokeWidth={2} />
+              </Button>
+            </div>
+            <div className="issue-dialog__footer-end">
+              <Button
+                ref={saveButtonRef}
+                className="issues-button issues-button--primary"
+                type="submit"
+                disabled={isSaving}
+              >
+                {mode === "create" ? "Create Issue" : "Save"}
+              </Button>
+            </div>
           </div>
-          <div className="issue-dialog__footer-end">
-            <Button
-              ref={saveButtonRef}
-              className="issues-button issues-button--primary"
-              type="submit"
-              disabled={isSaving}
-            >
-              {mode === "create" ? "Create Issue" : "Save"}
-            </Button>
-          </div>
-        </div>
+        ) : null}
       </form>
+    </div>
+  );
+}
+
+function IssueEditableFields({
+  form,
+  titleInputRef,
+  onFormChange,
+  onDownloadAttachment,
+  onPreviewAttachment,
+  onRemoveAttachment,
+}: {
+  form: IssueFormState;
+  titleInputRef: React.RefObject<HTMLInputElement | null>;
+  onFormChange: (form: IssueFormState) => void;
+  onPreviewAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+  onDownloadAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+  onRemoveAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+}) {
+  return (
+    <div className="issue-dialog__editor">
+      <div className="issue-field">
+        <Input
+          ref={titleInputRef}
+          aria-label="Title"
+          autoCapitalize="none"
+          autoCorrect="off"
+          name="title"
+          placeholder="Issue title"
+          spellCheck={false}
+          value={form.title}
+          onChange={(event) =>
+            onFormChange({
+              ...form,
+              title: event.target.value,
+            })
+          }
+        />
+      </div>
+      <div className="issue-field">
+        <IssueDescriptionEditor
+          ariaLabel="Description"
+          placeholder="Describe the task"
+          value={form.description}
+          attachments={form.attachments}
+          onDownloadAttachment={onDownloadAttachment}
+          onChange={(description) =>
+            onFormChange({
+              ...form,
+              description,
+            })
+          }
+          onPreviewAttachment={onPreviewAttachment}
+          onRemoveAttachment={onRemoveAttachment}
+        />
+      </div>
+    </div>
+  );
+}
+
+function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
+  return (
+    <div className="issue-dialog__editor issue-dialog__editor--readonly">
+      <p className="issue-detail__title">{form.title}</p>
+      <div className="issue-detail__divider" aria-hidden="true" />
+      <div className="issue-detail__description">{form.description}</div>
     </div>
   );
 }

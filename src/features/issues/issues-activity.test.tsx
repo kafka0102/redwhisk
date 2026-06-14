@@ -376,7 +376,7 @@ describe("IssuesActivity", () => {
     expect(normalCard).not.toHaveTextContent("Codex 需要确认");
   });
 
-  it("opens an issue detail dialog without status or updated-at fields", async () => {
+  it("opens a backlog issue edit dialog without status or updated-at fields", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -387,7 +387,7 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", {
-      name: "Issue Detail",
+      name: "Edit Issue",
     });
     expect(within(dialog).getByLabelText("Title")).toHaveValue(
       "Existing issue",
@@ -410,6 +410,37 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["in-progress", runningIssue],
+    ["review", reviewIssue],
+    ["done", completedIssue],
+  ])("opens %s issues as read-only details", async (_label, issue) => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [issue] });
+
+    renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: issue.title }));
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    expect(
+      within(dialog).getByRole("button", { name: "Close issue dialog" }),
+    ).toHaveFocus();
+    expect(within(dialog).getByText(issue.title)).toBeInTheDocument();
+    expect(within(dialog).getByText(issue.description)).toBeInTheDocument();
+    expect(dialog.querySelector(".issue-detail__divider")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText("Description"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Attach file" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
   });
 
@@ -440,7 +471,7 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
     expect(within(dialog).getByLabelText("Title")).toHaveFocus();
 
     await user.tab({ shift: true });
@@ -626,7 +657,7 @@ describe("IssuesActivity", () => {
       }),
     );
     expect(
-      screen.queryByRole("dialog", { name: "Issue Detail" }),
+      screen.queryByRole("dialog", { name: "Edit Issue" }),
     ).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Updated issue" }),
@@ -657,7 +688,7 @@ describe("IssuesActivity", () => {
       description: "Existing description",
       attachments: [],
     });
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
     expect(
       await within(dialog).findByRole("status", { name: "Dialog status" }),
     ).toHaveTextContent("Issue 不存在。");
@@ -1180,7 +1211,7 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
@@ -1231,7 +1262,7 @@ describe("IssuesActivity", () => {
     });
   });
 
-  it("shows a stopped linked session as read-only with an open log action", async () => {
+  it("keeps a stopped backlog linked session in the backlog edit form", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({
       issues: [
@@ -1255,7 +1286,7 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Linked session issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
