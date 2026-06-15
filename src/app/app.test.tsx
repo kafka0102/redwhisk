@@ -258,6 +258,9 @@ describe("App project entry", () => {
     expect(screen.getByRole("button", { name: "Issues" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(
+      screen.getByRole("button", { name: "Terminals" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Project Settings" }),
     ).toBeInTheDocument();
     expect(
@@ -298,6 +301,7 @@ describe("App project entry", () => {
     expect(activityButtons.map((button) => button.textContent)).toEqual([
       "Issues",
       "Agents",
+      "Terminals",
       "Settings",
       "",
     ]);

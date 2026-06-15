@@ -12,11 +12,14 @@ import {
 
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ThemePreference } from "../../shared/i18n/messages";
+import {
+  DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
+  SIDEBAR_RESIZE_STEP,
+} from "../../shared/layout/sidebar-width";
 
-const SETTINGS_MENU_DEFAULT_WIDTH = 180;
+const SETTINGS_MENU_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const SETTINGS_MENU_MIN_WIDTH = 180;
 const SETTINGS_MENU_MAX_WIDTH = 420;
-const SETTINGS_MENU_STEP = 16;
 const THEME_OPTIONS: ThemePreference[] = ["light", "dark", "system"];
 
 export function GlobalSettingsActivity() {
@@ -115,14 +118,14 @@ export function GlobalSettingsActivity() {
             if (event.key === "ArrowLeft") {
               event.preventDefault();
               setSettingsMenuWidth((currentWidth) =>
-                clampSettingsMenuWidth(currentWidth - SETTINGS_MENU_STEP),
+                clampSettingsMenuWidth(currentWidth - SIDEBAR_RESIZE_STEP),
               );
             }
 
             if (event.key === "ArrowRight") {
               event.preventDefault();
               setSettingsMenuWidth((currentWidth) =>
-                clampSettingsMenuWidth(currentWidth + SETTINGS_MENU_STEP),
+                clampSettingsMenuWidth(currentWidth + SIDEBAR_RESIZE_STEP),
               );
             }
 

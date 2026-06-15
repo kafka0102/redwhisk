@@ -9,6 +9,7 @@ export interface I18nMessages {
     issues: string;
     projectSettings: string;
     settings: string;
+    terminals: string;
   };
   globalSettings: {
     chinese: string;
@@ -85,6 +86,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       issues: "Issues",
       projectSettings: "Project Settings",
       settings: "Settings",
+      terminals: "Terminals",
     },
     globalSettings: {
       chinese: "中文",
@@ -157,6 +159,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       issues: "Issues",
       projectSettings: "项目设置",
       settings: "Settings",
+      terminals: "Terminals",
     },
     globalSettings: {
       chinese: "中文",

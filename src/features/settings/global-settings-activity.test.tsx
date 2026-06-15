@@ -94,6 +94,18 @@ describe("GlobalSettingsActivity", () => {
     expect(screen.getByText("主题")).toBeInTheDocument();
     expect(window.localStorage.getItem("redwhisk.locale")).toBe("zh");
   });
+
+  it("uses the shared sidebar width by default", () => {
+    renderGlobalSettings();
+
+    const splitter = screen.getByRole("separator", {
+      name: "Resize settings menu",
+    });
+
+    expect(splitter).toHaveAttribute("aria-valuemin", "180");
+    expect(splitter).toHaveAttribute("aria-valuemax", "420");
+    expect(splitter).toHaveAttribute("aria-valuenow", "230");
+  });
 });
 
 function createMatchMedia(matches: boolean) {

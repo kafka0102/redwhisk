@@ -1,10 +1,11 @@
 import { AgentsActivity } from "../features/agents/agents-activity";
 import { IssuesActivity } from "../features/issues/issues-activity";
 import { ProjectSettingsActivity } from "../features/settings/project-settings-activity";
+import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
 import type { ProjectCompletionPolicy } from "../features/project/project-commands";
 import type { ProjectSummary } from "./app";
 
-export type ActivityKey = "issues" | "agents" | "settings";
+export type ActivityKey = "issues" | "agents" | "terminals" | "settings";
 
 interface ActivityRouterProps {
   activeActivity: ActivityKey;
@@ -38,6 +39,17 @@ export function ActivityRouter({
         onSelectSession={onSelectAgentSession}
         projectCompletionPolicy={projectCompletionPolicy}
         projectId={projectId}
+      />
+    );
+  }
+
+  if (activeActivity === "terminals") {
+    return (
+      <ProjectTerminalsActivity
+        key={projectId}
+        projectId={projectId}
+        projectName={projectName}
+        projectPath={projectPath}
       />
     );
   }

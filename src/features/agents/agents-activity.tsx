@@ -21,6 +21,10 @@ import {
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import {
+  DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
+  SIDEBAR_RESIZE_STEP,
+} from "../../shared/layout/sidebar-width";
+import {
   formatAgentTypeLabel,
   getAgentLogoSrc,
 } from "./agent-visuals";
@@ -43,8 +47,8 @@ import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
-const AGENTS_SIDEBAR_DEFAULT_WIDTH = 230;
-const AGENTS_SIDEBAR_MIN_WIDTH = 230;
+const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
+const AGENTS_SIDEBAR_MIN_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MAX_WIDTH = 450;
 
 interface AgentsActivityProps {
@@ -800,14 +804,20 @@ export function AgentsActivity({
           if (event.key === "ArrowLeft") {
             event.preventDefault();
             setSidebarWidth((currentWidth) =>
-              Math.max(AGENTS_SIDEBAR_MIN_WIDTH, currentWidth - 16),
+              Math.max(
+                AGENTS_SIDEBAR_MIN_WIDTH,
+                currentWidth - SIDEBAR_RESIZE_STEP,
+              ),
             );
           }
 
           if (event.key === "ArrowRight") {
             event.preventDefault();
             setSidebarWidth((currentWidth) =>
-              Math.min(AGENTS_SIDEBAR_MAX_WIDTH, currentWidth + 16),
+              Math.min(
+                AGENTS_SIDEBAR_MAX_WIDTH,
+                currentWidth + SIDEBAR_RESIZE_STEP,
+              ),
             );
           }
         }}
