@@ -363,6 +363,14 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.activity-surface--terminals-empty {
+  place-items: center;
+  align-content: center;
+  height: 100%;
+  padding: 24px;
+  overflow: hidden;
+}
+
 .settings-layout {
   display: grid;
   grid-template-columns: var(--settings-menu-width, 230px) 8px minmax(0, 1fr);

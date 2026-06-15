@@ -106,6 +106,23 @@ export function ProjectTerminalsActivity({
     };
   }, [clearDragState]);
 
+  if (terminalCards.length === 0) {
+    return (
+      <main className="activity-surface activity-surface--terminals-empty">
+        <Button
+          disabled={creatingTerminal}
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            void handleCreateTerminal();
+          }}
+        >
+          <span>+ {messages.settings.newTerminal}</span>
+        </Button>
+      </main>
+    );
+  }
+
   async function handleCreateTerminal() {
     if (creatingTerminal) {
       return;
@@ -198,65 +215,59 @@ export function ProjectTerminalsActivity({
           </p>
         ) : null}
 
-        {terminalCards.length === 0 ? (
-          <div className="project-terminals-empty-list">
-            <p>{messages.settings.noTerminals}</p>
-          </div>
-        ) : (
-          <div className="project-terminals-card-list">
-            {terminalCards.map((terminalCard) => {
-              const isActive = activeTerminal?.sessionId === terminalCard.sessionId;
+        <div className="project-terminals-card-list">
+          {terminalCards.map((terminalCard) => {
+            const isActive = activeTerminal?.sessionId === terminalCard.sessionId;
 
-              return (
-                <section
-                  key={terminalCard.sessionId}
-                  className="project-terminals-card-shell"
-                  style={
-                    {
-                      "--project-terminal-card-background":
-                        isActive
-                          ? selectedTerminalColor
-                          : DEFAULT_TERMINAL_CARD_BACKGROUND,
-                      "--project-terminal-card-border":
-                        isActive
-                          ? selectedTerminalColor
-                          : DEFAULT_TERMINAL_CARD_BORDER,
-                    } as CSSProperties
-                  }
+            return (
+              <section
+                key={terminalCard.sessionId}
+                className="project-terminals-card-shell"
+                style={
+                  {
+                    "--project-terminal-card-background":
+                      isActive
+                        ? selectedTerminalColor
+                        : DEFAULT_TERMINAL_CARD_BACKGROUND,
+                    "--project-terminal-card-border":
+                      isActive
+                        ? selectedTerminalColor
+                        : DEFAULT_TERMINAL_CARD_BORDER,
+                  } as CSSProperties
+                }
+              >
+                <button
+                  aria-label={terminalCard.name}
+                  aria-pressed={isActive}
+                  className="project-terminals-card"
+                  type="button"
+                  onClick={() => {
+                    selectTerminal(terminalCard.sessionId);
+                  }}
                 >
-                  <button
-                    aria-label={terminalCard.name}
-                    aria-pressed={isActive}
-                    className="project-terminals-card"
-                    type="button"
-                    onClick={() => {
-                      selectTerminal(terminalCard.sessionId);
-                    }}
-                  >
-                    <span className="project-terminals-card__copy">
-                      <span className="project-terminals-card__name">
-                        {terminalCard.name}
-                      </span>
+                  <span className="project-terminals-card__copy">
+                    <span className="project-terminals-card__name">
+                      {terminalCard.name}
                     </span>
-                  </button>
-                  <button
-                    aria-label={messages.settings.deleteTerminal(
-                      terminalCard.name,
-                    )}
-                    className="project-terminals-card__delete"
-                    disabled={closingTerminalId === terminalCard.sessionId}
-                    type="button"
-                    onClick={() => {
-                      void handleDeleteTerminal(terminalCard.sessionId);
-                    }}
-                  >
-                    <X size={14} strokeWidth={2} />
-                  </button>
-                </section>
-              );
-            })}
-          </div>
-        )}
+                  </span>
+                </button>
+                <button
+                  aria-label={messages.settings.deleteTerminal(
+                    terminalCard.name,
+                  )}
+                  className="project-terminals-card__delete"
+                  disabled={closingTerminalId === terminalCard.sessionId}
+                  type="button"
+                  onClick={() => {
+                    void handleDeleteTerminal(terminalCard.sessionId);
+                  }}
+                >
+                  <X size={14} strokeWidth={2} />
+                </button>
+              </section>
+            );
+          })}
+        </div>
       </aside>
 
       <div
