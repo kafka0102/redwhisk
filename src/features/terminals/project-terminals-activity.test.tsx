@@ -46,7 +46,7 @@ describe("ProjectTerminalsActivity", () => {
     closeProjectTerminalMock.mockResolvedValue(undefined);
   });
 
-  it("renders an empty terminal workspace with the shared sidebar width by default", () => {
+  it("renders only a centered new terminal button when there are no terminals", () => {
     render(
       <ProjectTerminalsActivity
         projectId={1}
@@ -56,19 +56,20 @@ describe("ProjectTerminalsActivity", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Terminals", level: 2 }),
+      screen.getByRole("button", { name: "+ New terminal" }),
     ).toBeInTheDocument();
-    const sidebar = screen.getByLabelText("Project terminals");
     expect(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    ).toBeInTheDocument();
-    expect(within(sidebar).getByText("No terminals yet.")).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Terminals", level: 2 }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Terminal workspace" }),
-    ).toHaveTextContent("No terminals yet.");
+      screen.queryByLabelText("Project terminals"),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("separator", { name: "Resize terminals list" }),
-    ).toHaveAttribute("aria-valuenow", "230");
+      screen.queryByRole("separator", { name: "Resize terminals list" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Terminal workspace" }),
+    ).not.toBeInTheDocument();
   });
 
   it("creates terminals in the left card list and switches the right workspace", async () => {
@@ -82,15 +83,13 @@ describe("ProjectTerminalsActivity", () => {
       />,
     );
 
-    const sidebar = screen.getByLabelText("Project terminals");
-    await user.click(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    );
+    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
     await waitFor(() => {
       expect(createProjectTerminalMock).toHaveBeenCalledWith({ projectId: 1 });
     });
 
+    const sidebar = screen.getByLabelText("Project terminals");
     expect(
       within(sidebar).getByRole("button", { name: "local-dev-web" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -134,11 +133,9 @@ describe("ProjectTerminalsActivity", () => {
       />,
     );
 
-    const sidebar = screen.getByLabelText("Project terminals");
-    await user.click(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    );
+    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
+    const sidebar = screen.getByLabelText("Project terminals");
     const terminalButton = within(sidebar).getByRole("button", {
       name: "local-dev-web",
     });
@@ -162,10 +159,7 @@ describe("ProjectTerminalsActivity", () => {
       />,
     );
 
-    const sidebar = screen.getByLabelText("Project terminals");
-    await user.click(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    );
+    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
     const workspace = screen.getByRole("region", {
       name: "Terminal workspace",
@@ -192,10 +186,9 @@ describe("ProjectTerminalsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
+
     const sidebar = screen.getByLabelText("Project terminals");
-    await user.click(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    );
     await user.click(
       within(sidebar).getByRole("button", { name: "New terminal" }),
     );
