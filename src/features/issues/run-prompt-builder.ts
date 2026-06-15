@@ -18,7 +18,7 @@ export interface RunPromptPreview {
 }
 
 interface BuildRunPromptPreviewInput {
-  issue: Pick<IssueRecord, "description" | "attachments">;
+  issue: Pick<IssueRecord, "title" | "description" | "attachments">;
   profile: Pick<AgentProfileRecord, "defaultSkill" | "promptTemplate">;
 }
 
@@ -28,6 +28,7 @@ const APP_INSTRUCTIONS =
 export function buildRunPromptPreview(
   input: BuildRunPromptPreviewInput,
 ): RunPromptPreview {
+  const issueTitle = input.issue.title.trim();
   const issueDescription = stripAttachmentTokens(input.issue.description).trim();
   const attachmentPaths =
     input.issue.attachments
@@ -75,7 +76,21 @@ export function buildRunPromptPreview(
     content: APP_INSTRUCTIONS,
   });
 
-  const finalPromptSections = [issueDescription];
+  const finalPromptSections: string[] = [];
+
+  if (defaultSkill.length > 0) {
+    finalPromptSections.push(
+      buildSkillInstruction(defaultSkill, {
+        title: issueTitle,
+        description: issueDescription,
+      }),
+    );
+  }
+
+  if (issueDescription.length > 0) {
+    finalPromptSections.push(issueDescription);
+  }
+
   if (attachmentPaths.length > 0) {
     finalPromptSections.push([
       "Attachments:",
@@ -92,4 +107,17 @@ export function buildRunPromptPreview(
 
 function stripAttachmentTokens(description: string): string {
   return description.replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "");
+}
+
+function buildSkillInstruction(
+  skillName: string,
+  issue: Pick<IssueRecord, "title" | "description">,
+): string {
+  return containsChinese(`${issue.title}\n${issue.description}`)
+    ? `使用skill ${skillName} 执行任务：`
+    : `using skill ${skillName} for task:`;
+}
+
+function containsChinese(value: string): boolean {
+  return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(value);
 }

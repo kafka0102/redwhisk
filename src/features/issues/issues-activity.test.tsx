@@ -255,6 +255,11 @@ const globalProfile = {
   del: 0,
 };
 
+const existingIssueRunPrompt = [
+  "using skill bmad-dev-story for task:",
+  "Existing description",
+].join("\n\n");
+
 describe("IssuesActivity", () => {
   beforeEach(() => {
     createIssueMock.mockReset();
@@ -854,7 +859,7 @@ describe("IssuesActivity", () => {
     const promptField = within(dialog).getByLabelText(
       "Final prompt",
     ) as HTMLTextAreaElement;
-    expect(promptField.value).toBe("Existing description");
+    expect(promptField.value).toBe(existingIssueRunPrompt);
     expect(promptField).toHaveAttribute("readonly");
     expect(
       within(dialog).queryByText("Prompt sources"),
@@ -905,7 +910,7 @@ describe("IssuesActivity", () => {
       projectId: 1,
       issueId: 20,
       agentProfileId: 100,
-      promptSnapshot: "Existing description",
+      promptSnapshot: existingIssueRunPrompt,
     });
     expect(
       within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
