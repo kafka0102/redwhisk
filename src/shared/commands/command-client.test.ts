@@ -8,6 +8,7 @@ import {
   openProject,
   openProjectWindow,
   updateProjectSettings,
+  validateProjectRepoPath,
 } from "../../features/project/project-commands";
 import {
   injectAgentSessionPrompt,
@@ -70,7 +71,9 @@ describe("command client", () => {
 
     await expect(
       createProject({
+        name: "redwhisk",
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+        completionPolicy: "agent_auto_commit",
       }),
     ).resolves.toEqual({
       id: 1,
@@ -80,6 +83,29 @@ describe("command client", () => {
       lastOpenedAt: 1_780_581_600_000,
     });
     expect(invokeMock).toHaveBeenCalledWith("create_project", {
+      input: {
+        name: "redwhisk",
+        repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+        completionPolicy: "agent_auto_commit",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the validate project repo path command", async () => {
+    invokeMock.mockResolvedValue({
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      suggestedName: "redwhisk",
+    });
+
+    await expect(
+      validateProjectRepoPath({
+        repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      }),
+    ).resolves.toEqual({
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      suggestedName: "redwhisk",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("validate_project_repo_path", {
       input: {
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       },
@@ -165,6 +191,7 @@ describe("command client", () => {
       updateProjectSettings({
         projectId: 1,
         name: "RedWhisk Desktop",
+        repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
         completionPolicy: "agent_auto_commit",
       }),
     ).resolves.toEqual({
@@ -179,6 +206,7 @@ describe("command client", () => {
       input: {
         projectId: 1,
         name: "RedWhisk Desktop",
+        repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
         completionPolicy: "agent_auto_commit",
       },
     });

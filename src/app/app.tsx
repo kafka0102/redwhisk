@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { AppShell } from "./app-shell";
 import "./app.css";
+import { ProjectDetailsForm } from "../features/project/project-details-form";
 import { ProjectHome } from "../features/project/project-home";
 import { I18nProvider } from "../shared/i18n/i18n";
 import {
@@ -10,6 +11,8 @@ import {
   initializeLocalData,
   listProjects,
   openProject,
+  validateProjectRepoPath,
+  type CreateProjectInput,
   type ProjectCompletionPolicy,
   type ProjectRecord,
   type ProjectListItem,
@@ -25,12 +28,21 @@ export interface ProjectSummary {
   status: "available" | "missing";
 }
 
+interface CreateProjectDraft {
+  completionPolicy: ProjectCompletionPolicy;
+  name: string;
+  repoPath: string;
+  suggestedName: string;
+}
+
 export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(
     null,
   );
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [createProjectDraft, setCreateProjectDraft] =
+    useState<CreateProjectDraft | null>(null);
   const [localDataError, setLocalDataError] = useState<string | null>(null);
   const [projectCreationError, setProjectCreationError] = useState<
     string | null
@@ -98,12 +110,15 @@ export function App() {
         return;
       }
 
-      const project = await createProject({ repoPath: selectedPath });
-      const projectSummary = toProjectSummary(project);
-      setProjects((currentProjects) =>
-        mergeProject(currentProjects, projectSummary),
-      );
-      setSelectedProject(projectSummary);
+      const validatedProject = await validateProjectRepoPath({
+        repoPath: selectedPath,
+      });
+      setCreateProjectDraft({
+        completionPolicy: "agent_auto_commit",
+        name: validatedProject.suggestedName,
+        repoPath: validatedProject.repoPath,
+        suggestedName: validatedProject.suggestedName,
+      });
     } catch (error) {
       setProjectCreationError(toCommandError(error).message);
     } finally {
@@ -138,6 +153,19 @@ export function App() {
     );
     setProjects((currentProjects) => mergeProject(currentProjects, project));
   }, []);
+
+  const handleCreateProjectConfirmed = useCallback(
+    async (input: CreateProjectInput) => {
+      const project = await createProject(input);
+      const projectSummary = toProjectSummary(project);
+      setProjects((currentProjects) =>
+        mergeProject(currentProjects, projectSummary),
+      );
+      setSelectedProject(projectSummary);
+      setCreateProjectDraft(null);
+    },
+    [],
+  );
 
   if (!selectedProject) {
     const statusMessages = [
@@ -180,6 +208,14 @@ export function App() {
           onCreateProject={handleCreateProject}
           onProjectOpen={handleProjectOpen}
         />
+        {createProjectDraft ? (
+          <CreateProjectDialog
+            key={createProjectDraft.repoPath}
+            initialDraft={createProjectDraft}
+            onClose={() => setCreateProjectDraft(null)}
+            onCreate={handleCreateProjectConfirmed}
+          />
+        ) : null}
       </>
     );
   }
@@ -242,4 +278,126 @@ function openInitialProjectFromUrl(): Promise<ProjectRecord | null> {
   }
 
   return openProject({ projectId });
+}
+
+interface CreateProjectDialogProps {
+  initialDraft: CreateProjectDraft;
+  onClose: () => void;
+  onCreate: (input: CreateProjectInput) => Promise<void>;
+}
+
+function CreateProjectDialog({
+  initialDraft,
+  onClose,
+  onCreate,
+}: CreateProjectDialogProps) {
+  const [projectNameValue, setProjectNameValue] = useState(initialDraft.name);
+  const [projectPathValue, setProjectPathValue] = useState(initialDraft.repoPath);
+  const [completionPolicyValue, setCompletionPolicyValue] =
+    useState<ProjectCompletionPolicy>(initialDraft.completionPolicy);
+  const [suggestedName, setSuggestedName] = useState(initialDraft.suggestedName);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isChoosingRepoPath, setIsChoosingRepoPath] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const trimmedProjectName = projectNameValue.trim();
+  const trimmedProjectPath = projectPathValue.trim();
+  const isSubmitDisabled =
+    isSubmitting ||
+    isChoosingRepoPath ||
+    trimmedProjectName.length === 0 ||
+    trimmedProjectPath.length === 0;
+
+  async function handleChooseRepoPath() {
+    setErrorMessage(null);
+    setIsChoosingRepoPath(true);
+
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Git Repository",
+      });
+
+      if (typeof selectedPath !== "string") {
+        return;
+      }
+
+      const validatedProject = await validateProjectRepoPath({
+        repoPath: selectedPath,
+      });
+      const shouldReplaceName =
+        trimmedProjectName.length === 0 || trimmedProjectName === suggestedName;
+
+      setProjectPathValue(validatedProject.repoPath);
+      setSuggestedName(validatedProject.suggestedName);
+      if (shouldReplaceName) {
+        setProjectNameValue(validatedProject.suggestedName);
+      }
+    } catch (error: unknown) {
+      setErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsChoosingRepoPath(false);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitDisabled) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      await onCreate({
+        name: trimmedProjectName,
+        repoPath: trimmedProjectPath,
+        completionPolicy: completionPolicyValue,
+      });
+    } catch (error: unknown) {
+      setErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="issue-dialog-overlay" role="presentation">
+      <div
+        className="issue-dialog issue-dialog--compact"
+        role="dialog"
+        aria-label="New Project"
+      >
+        <div className="issue-dialog__header">
+          <h3>New Project</h3>
+        </div>
+        <div className="issue-dialog__body issue-dialog__body--single">
+          <ProjectDetailsForm
+            ariaStatusLabel="Project creation status"
+            cancelLabel="Cancel"
+            chooseFolderLabel="Choose folder"
+            className="settings-card settings-general-card project-details-card"
+            completionPolicy={completionPolicyValue}
+            completionStrategyLabel="Git completion strategy"
+            errorMessage={errorMessage}
+            isChoosingRepoPath={isChoosingRepoPath}
+            isSubmitting={isSubmitting}
+            onCancel={onClose}
+            onChooseRepoPath={handleChooseRepoPath}
+            onCompletionPolicyChange={setCompletionPolicyValue}
+            onNameChange={setProjectNameValue}
+            onSubmit={handleSubmit}
+            projectName={projectNameValue}
+            projectNameLabel="Project Name"
+            repoPath={projectPathValue}
+            repoPathLabel="Repository path"
+            submitDisabled={isSubmitDisabled}
+            submitLabel="Create Project"
+            submittingLabel="Creating Project"
+          />
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -29,6 +29,7 @@ export interface I18nMessages {
     command: string;
     completionStrategy: string;
     configuredAgents: string;
+    chooseFolder: string;
     delete: string;
     deleteConfirm: (profileName: string) => string;
     general: string;
@@ -40,6 +41,7 @@ export interface I18nMessages {
     newAgent: string;
     noAgents: string;
     projectName: string;
+    repositoryPath: string;
     projectScope: string;
     save: string;
     saving: string;
@@ -99,6 +101,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       command: "Command",
       completionStrategy: "Git completion strategy",
       configuredAgents: "Configured agents",
+      chooseFolder: "Choose folder",
       delete: "Delete",
       deleteConfirm: (profileName) =>
         `Are you sure you want to delete Agent Profile "${profileName}"?`,
@@ -111,6 +114,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newAgent: "New agent",
       noAgents: "No agents",
       projectName: "Project Name",
+      repositoryPath: "Repository path",
       projectScope: "Project",
       save: "Save",
       saving: "Saving...",
@@ -165,6 +169,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       command: "命令",
       completionStrategy: "Git 完成策略",
       configuredAgents: "已配置 agents",
+      chooseFolder: "选择目录",
       delete: "删除",
       deleteConfirm: (profileName) => `确认删除 Agent Profile「${profileName}」吗？`,
       general: "通用",
@@ -176,6 +181,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newAgent: "New agent",
       noAgents: "暂无 agents",
       projectName: "Project 名称",
+      repositoryPath: "仓库路径",
       projectScope: "Project",
       save: "保存",
       saving: "保存中...",

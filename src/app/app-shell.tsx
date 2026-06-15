@@ -96,6 +96,7 @@ export function AppShell({
               projectCompletionPolicy={project.completionPolicy}
               projectId={project.id}
               projectName={project.name}
+              projectPath={project.path}
               requestedIssueId={requestedIssueId}
             />
           )}

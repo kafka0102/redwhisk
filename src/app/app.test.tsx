@@ -16,6 +16,7 @@ import {
   listProjects,
   openProject,
   openProjectWindow,
+  validateProjectRepoPath,
   type ProjectListResponse,
 } from "../features/project/project-commands";
 
@@ -29,6 +30,7 @@ vi.mock("../features/project/project-commands", () => ({
   listProjects: vi.fn(),
   openProject: vi.fn(),
   openProjectWindow: vi.fn(),
+  validateProjectRepoPath: vi.fn(),
 }));
 
 vi.mock("../features/issues/issue-commands", () => ({
@@ -68,6 +70,7 @@ const initializeLocalDataMock = vi.mocked(initializeLocalData);
 const listProjectsMock = vi.mocked(listProjects);
 const openProjectMock = vi.mocked(openProject);
 const openProjectWindowMock = vi.mocked(openProjectWindow);
+const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
 
 describe("App project entry", () => {
   let currentProjectList: ProjectListResponse;
@@ -82,6 +85,7 @@ describe("App project entry", () => {
     listProjectsMock.mockReset();
     openProjectMock.mockReset();
     openProjectWindowMock.mockReset();
+    validateProjectRepoPathMock.mockReset();
     createIssueMock.mockReset();
     listIssuesMock.mockReset();
     updateIssueMock.mockReset();
@@ -175,6 +179,10 @@ describe("App project entry", () => {
       projectId: 3,
       windowLabel: "project-3",
     });
+    validateProjectRepoPathMock.mockImplementation(async ({ repoPath }) => ({
+      repoPath,
+      suggestedName: repoPath.split("/").pop() ?? "repo",
+    }));
   });
 
   it("initializes local data on app start", async () => {
@@ -488,8 +496,31 @@ describe("App project entry", () => {
       multiple: false,
       title: "Select Git Repository",
     });
-    expect(createProjectMock).toHaveBeenCalledWith({
+    expect(validateProjectRepoPathMock).toHaveBeenCalledWith({
       repoPath: "/Users/kafka0102/workspace/new-repo",
+    });
+    expect(
+      await screen.findByRole("dialog", { name: "New Project" }),
+    ).toBeInTheDocument();
+    const projectDialog = screen.getByRole("dialog", { name: "New Project" });
+    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
+      "new-repo",
+    );
+    expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
+      "/Users/kafka0102/workspace/new-repo",
+    );
+    expect(
+      within(projectDialog).getByLabelText("Git completion strategy"),
+    ).toHaveValue(
+      "agent_auto_commit",
+    );
+    await user.click(
+      within(projectDialog).getByRole("button", { name: "Create Project" }),
+    );
+    expect(createProjectMock).toHaveBeenCalledWith({
+      name: "new-repo",
+      repoPath: "/Users/kafka0102/workspace/new-repo",
+      completionPolicy: "agent_auto_commit",
     });
     expect(
       await screen.findByRole("heading", { name: "Issues" }),
@@ -502,7 +533,7 @@ describe("App project entry", () => {
   it("shows project creation failure without opening the Activity Bar", async () => {
     const user = userEvent.setup();
     openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/plain-dir");
-    createProjectMock.mockRejectedValue({
+    validateProjectRepoPathMock.mockRejectedValue({
       code: "PROJECT_REPO_NOT_GIT_REPOSITORY",
       message: "所选目录不是 Git Repository。",
       details: [
@@ -522,6 +553,9 @@ describe("App project entry", () => {
     expect(
       await screen.findByRole("status", { name: "Project creation status" }),
     ).toHaveTextContent("所选目录不是 Git Repository。");
+    expect(
+      screen.queryByRole("dialog", { name: "New Project" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("navigation", { name: "Activity Bar" }),
     ).not.toBeInTheDocument();
@@ -572,6 +606,37 @@ describe("App project entry", () => {
     expect(
       await screen.findByRole("button", { name: "Create Project" }),
     ).toBeEnabled();
+  });
+
+  it("keeps project creation failures inside the confirmation dialog", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/new-repo");
+    createProjectMock.mockRejectedValue({
+      code: "PROJECT_PERSISTENCE_FAILED",
+      message: "Project 保存失败。",
+    });
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Create Project" }),
+    );
+    const projectDialog = await screen.findByRole("dialog", {
+      name: "New Project",
+    });
+    await user.click(
+      within(projectDialog).getByRole("button", { name: "Create Project" }),
+    );
+
+    expect(
+      await screen.findByRole("status", { name: "Project creation status" }),
+    ).toHaveTextContent("Project 保存失败。");
+    expect(
+      screen.getByRole("dialog", { name: "New Project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Activity Bar" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a local data initialization failure without hiding Project Home", async () => {

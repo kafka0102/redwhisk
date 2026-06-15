@@ -7,6 +7,7 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,
     ProjectSummary, UpdateProjectCompletionPolicyInput, UpdateProjectSettingsInput,
+    ValidateProjectRepoPathInput, ValidateProjectRepoPathResponse,
 };
 
 #[tauri::command]
@@ -70,6 +71,13 @@ pub fn update_project_settings(
 ) -> Result<ProjectSummary, CommandError> {
     let data_dir = prepare_project_data_dir(&app, &state)?;
     ProjectService::update_project_settings_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn validate_project_repo_path(
+    input: ValidateProjectRepoPathInput,
+) -> Result<ValidateProjectRepoPathResponse, CommandError> {
+    ProjectService::validate_project_repo_path(&input.repo_path)
 }
 
 #[tauri::command]

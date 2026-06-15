@@ -10,7 +10,9 @@ pub enum ProjectCompletionPolicy {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectInput {
+    pub name: String,
     pub repo_path: String,
+    pub completion_policy: ProjectCompletionPolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -31,7 +33,21 @@ pub struct UpdateProjectCompletionPolicyInput {
 pub struct UpdateProjectSettingsInput {
     pub project_id: i64,
     pub name: String,
+    pub repo_path: String,
     pub completion_policy: ProjectCompletionPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateProjectRepoPathInput {
+    pub repo_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateProjectRepoPathResponse {
+    pub repo_path: String,
+    pub suggested_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

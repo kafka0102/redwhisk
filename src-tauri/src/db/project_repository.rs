@@ -45,14 +45,19 @@ impl<'connection> ProjectRepository<'connection> {
         Ok(projects)
     }
 
-    pub fn insert(&self, name: &str, repo_path: &str) -> rusqlite::Result<ProjectSummary> {
+    pub fn insert(
+        &self,
+        name: &str,
+        repo_path: &str,
+        completion_policy: ProjectCompletionPolicy,
+    ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
             "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
              VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?3)",
             params![
                 name,
                 repo_path,
-                project_completion_policy_to_str(&ProjectCompletionPolicy::AgentAutoCommit),
+                project_completion_policy_to_str(&completion_policy),
             ],
         )?;
 
@@ -64,6 +69,7 @@ impl<'connection> ProjectRepository<'connection> {
         &self,
         name: &str,
         repo_path: &str,
+        completion_policy: ProjectCompletionPolicy,
     ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
             "INSERT OR IGNORE INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
@@ -71,7 +77,7 @@ impl<'connection> ProjectRepository<'connection> {
             params![
                 name,
                 repo_path,
-                project_completion_policy_to_str(&ProjectCompletionPolicy::AgentAutoCommit),
+                project_completion_policy_to_str(&completion_policy),
             ],
         )?;
 
@@ -83,6 +89,7 @@ impl<'connection> ProjectRepository<'connection> {
         &self,
         name: &str,
         repo_path: &std::path::Path,
+        completion_policy: ProjectCompletionPolicy,
     ) -> rusqlite::Result<ProjectSummary> {
         let repo_path = repo_path.to_string_lossy().to_string();
 
@@ -90,7 +97,7 @@ impl<'connection> ProjectRepository<'connection> {
             return Ok(project);
         }
 
-        self.insert_or_get_existing(name, &repo_path)
+        self.insert_or_get_existing(name, &repo_path, completion_policy)
     }
 
     pub fn update_last_opened_at(&self, id: i64) -> rusqlite::Result<ProjectSummary> {
@@ -125,15 +132,18 @@ impl<'connection> ProjectRepository<'connection> {
         &self,
         id: i64,
         name: &str,
+        repo_path: &str,
         completion_policy: ProjectCompletionPolicy,
     ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
             "UPDATE projects
              SET name = ?1,
-                 completion_policy = ?2
-             WHERE id = ?3",
+                 repo_path = ?2,
+                 completion_policy = ?3
+             WHERE id = ?4",
             params![
                 name,
+                repo_path,
                 project_completion_policy_to_str(&completion_policy),
                 id
             ],
