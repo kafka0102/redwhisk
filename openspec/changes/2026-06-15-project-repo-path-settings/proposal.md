@@ -1,4 +1,4 @@
-## 为什么
+## Why
 
 当前 Project Settings 的 `General` 只能修改项目名和 completion strategy，无法在应用内更换仓库目录，也没有在修改时重新校验目录是否仍然是有效 Git 仓库。Project Home 的创建流程则是在用户选完目录后立即创建项目，缺少一个可确认和可编辑的表单步骤，用户也无法在创建前看到默认项目名和 completion strategy。
 
@@ -7,7 +7,7 @@
 - 仓库路径相关配置分散在“创建时一次性决定”和“之后无法在 Settings 中维护”之间，无法形成一致的项目元数据编辑入口。
 - 创建流程虽然在后端会拒绝非 Git 目录，但前端交互不够完整，无法让用户在确认前调整项目名，也无法把默认 completion strategy 固定为这次需求要求的 `auto commit`。
 
-## 变更内容
+## What Changes
 
 - 在 Project Settings 的 `General` 表单中新增 `Repository path` 字段，提供目录选择入口，并在保存前校验所选目录是 Git 仓库。
 - 扩展项目设置更新接口，使其支持同时更新项目名、仓库路径和 Git completion strategy；后端在更新时继续做路径规范化和 Git 仓校验。
