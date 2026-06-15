@@ -10,19 +10,7 @@ The Settings page SHALL render every selected settings module inside a centered 
 - **WHEN** the user selects `General`
 - **THEN** the General form card is horizontally centered in the right pane
 - **AND** the card uses 80% of the right pane width without a fixed height
-
-#### Scenario: Agents settings is selected
-- **WHEN** the user selects `Agents`
-- **THEN** the Agents content uses the same centered 80% right-content container as General
-
-#### Scenario: Global preferences is selected
-- **WHEN** the user opens Global Settings and selects `Preferences`
-- **THEN** the Preferences form uses the same centered 80% right-content container as Project Settings modules
-- **AND** the Preferences page does not render Project Settings fields such as Project Name, Completion Policy, or Agent Profiles
-
-#### Scenario: Future settings modules are added
-- **WHEN** a new Settings menu item renders right-pane content
-- **THEN** it uses the shared Settings right-content container instead of defining a module-specific page width
+- **AND** the form shows `Project Name`, `Repository path`, and `Git completion strategy` in that order
 
 ### Requirement: Agents settings table
 The Settings Agents module SHALL present agent profiles in a table below a top action card.
@@ -145,4 +133,23 @@ Global Preferences SHALL present a Theme setting whose MVP behavior supports Lig
 - **WHEN** the MVP chooses not to show unavailable themes
 - **THEN** the Theme section may show only the Light option
 - **AND** the UI must not imply that Dark or System mode is currently supported
+
+### Requirement: Project General settings form
+The Project Settings `General` form SHALL allow the user to maintain the project name, repository path, and Git completion strategy together.
+
+#### Scenario: Choosing a new repository path
+- **WHEN** the user clicks the `Repository path` chooser in `General`
+- **THEN** the app opens a directory picker
+- **AND** the selected path is shown in the form before save
+
+#### Scenario: Saving a valid repository path
+- **WHEN** the user changes the repository path to a valid Git repository
+- **AND** clicks `Save`
+- **THEN** the frontend submits `name`, `repoPath`, and `completionPolicy` together
+- **AND** the updated project summary reflects the new repository path
+
+#### Scenario: Rejecting a non-git repository path
+- **WHEN** the selected repository path is not a Git repository
+- **THEN** the form shows an error
+- **AND** the `Save` action is blocked until the path is valid
 
