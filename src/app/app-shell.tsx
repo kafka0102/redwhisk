@@ -6,6 +6,10 @@ import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
+import {
+  getDefaultProjectTerminalsActivityState,
+  type ProjectTerminalsActivityState,
+} from "../features/terminals/project-terminals-activity-state";
 import { useI18n } from "../shared/i18n/i18n";
 
 interface AppShellProps {
@@ -39,7 +43,12 @@ export function AppShell({
   const [activeAgentSessionId, setActiveAgentSessionId] = useState<
     number | null
   >(null);
+  const [projectTerminalsStateByProjectId, setProjectTerminalsStateByProjectId] =
+    useState<Record<number, ProjectTerminalsActivityState>>({});
   const [requestedIssueId, setRequestedIssueId] = useState<number | null>(null);
+  const projectTerminalsState =
+    projectTerminalsStateByProjectId[project.id] ??
+    getDefaultProjectTerminalsActivityState();
 
   async function handleWorkbenchHeaderClick(
     event: React.MouseEvent<HTMLElement>,
@@ -133,11 +142,27 @@ export function AppShell({
                 setIsGlobalSettingsOpen(false);
               }}
               onProjectUpdated={onProjectUpdated}
+              onProjectTerminalsStateChange={(nextState) => {
+                setProjectTerminalsStateByProjectId((currentStateByProjectId) => {
+                  const currentState =
+                    currentStateByProjectId[project.id] ??
+                    getDefaultProjectTerminalsActivityState();
+
+                  return {
+                    ...currentStateByProjectId,
+                    [project.id]:
+                      typeof nextState === "function"
+                        ? nextState(currentState)
+                        : nextState,
+                  };
+                });
+              }}
               onSelectAgentSession={setActiveAgentSessionId}
               projectCompletionPolicy={project.completionPolicy}
               projectId={project.id}
               projectName={project.name}
               projectPath={project.path}
+              projectTerminalsState={projectTerminalsState}
               requestedIssueId={requestedIssueId}
             />
           )}

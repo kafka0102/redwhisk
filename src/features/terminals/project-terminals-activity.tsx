@@ -1,4 +1,6 @@
 import {
+  type Dispatch,
+  type SetStateAction,
   useCallback,
   useEffect,
   useRef,
@@ -14,42 +16,33 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
+import {
+  DEFAULT_TERMINAL_CARD_BACKGROUND,
+  type ProjectTerminalsActivityState,
+} from "./project-terminals-activity-state";
 import { ProjectTerminal } from "./project-terminal";
 import {
   closeProjectTerminal,
   createProjectTerminal,
 } from "./project-terminal-commands";
 
-interface ProjectTerminalCardState {
-  name: string;
-  sessionId: number;
-}
-
 interface ProjectTerminalsActivityProps {
+  onStateChange: Dispatch<SetStateAction<ProjectTerminalsActivityState>>;
   projectId: number;
   projectName: string;
   projectPath?: string;
+  state: ProjectTerminalsActivityState;
 }
 
 const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
 
 export function ProjectTerminalsActivity({
+  onStateChange,
   projectId,
+  state,
 }: ProjectTerminalsActivityProps) {
   const { messages } = useI18n();
-  const [sidebarWidth, setSidebarWidth] = useState(
-    DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
-  );
   const [creatingTerminal, setCreatingTerminal] = useState(false);
-  const [terminalCards, setTerminalCards] = useState<ProjectTerminalCardState[]>(
-    [],
-  );
-  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
-    null,
-  );
-  const [selectedTerminalColor, setSelectedTerminalColor] = useState(
-    DEFAULT_TERMINAL_CARD_BACKGROUND,
-  );
   const [terminalStatusMessage, setTerminalStatusMessage] = useState<
     string | null
   >(null);
@@ -60,6 +53,12 @@ export function ProjectTerminalsActivity({
     startWidth: number;
     startX: number;
   } | null>(null);
+  const {
+    selectedSessionId,
+    selectedTerminalColor,
+    sidebarWidth,
+    terminalCards,
+  } = state;
 
   const activeTerminal =
     terminalCards.find((card) => card.sessionId === selectedSessionId) ??
@@ -67,9 +66,25 @@ export function ProjectTerminalsActivity({
     null;
 
   function selectTerminal(sessionId: number) {
-    setSelectedSessionId(sessionId);
-    setSelectedTerminalColor(getRandomSelectedTerminalColor());
+    onStateChange((currentState) => ({
+      ...currentState,
+      selectedSessionId: sessionId,
+      selectedTerminalColor: getRandomSelectedTerminalColor(),
+    }));
   }
+
+  const setSidebarWidth = useCallback(
+    (width: SetStateAction<number>) => {
+      onStateChange((currentState) => ({
+        ...currentState,
+        sidebarWidth:
+          typeof width === "function"
+            ? width(currentState.sidebarWidth)
+            : width,
+      }));
+    },
+    [onStateChange],
+  );
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
@@ -104,7 +119,7 @@ export function ProjectTerminalsActivity({
       window.removeEventListener("blur", clearDragState);
       clearDragState();
     };
-  }, [clearDragState]);
+  }, [clearDragState, setSidebarWidth]);
 
   if (terminalCards.length === 0) {
     return (
@@ -133,14 +148,18 @@ export function ProjectTerminalsActivity({
 
     try {
       const terminal = await createProjectTerminal({ projectId });
-      setTerminalCards((currentCards) => [
-        ...currentCards,
-        {
-          sessionId: terminal.sessionId,
-          name: terminal.name,
-        },
-      ]);
-      selectTerminal(terminal.sessionId);
+      onStateChange((currentState) => ({
+        ...currentState,
+        selectedSessionId: terminal.sessionId,
+        selectedTerminalColor: getRandomSelectedTerminalColor(),
+        terminalCards: [
+          ...currentState.terminalCards,
+          {
+            sessionId: terminal.sessionId,
+            name: terminal.name,
+          },
+        ],
+      }));
     } catch (error: unknown) {
       setTerminalStatusMessage(toCommandError(error).message);
     } finally {
@@ -154,25 +173,25 @@ export function ProjectTerminalsActivity({
 
     try {
       await closeProjectTerminal({ projectId, sessionId });
-      let nextSelectedSessionId: number | null = selectedSessionId;
-      let remainingCardsAfterDelete: ProjectTerminalCardState[] = [];
-
-      setTerminalCards((currentCards) => {
-        remainingCardsAfterDelete = currentCards.filter(
+      onStateChange((currentState) => {
+        const remainingCards = currentState.terminalCards.filter(
           (card) => card.sessionId !== sessionId,
         );
-        if (selectedSessionId === sessionId) {
-          nextSelectedSessionId = remainingCardsAfterDelete[0]?.sessionId ?? null;
-        }
-        return remainingCardsAfterDelete;
-      });
+        const nextSelectedSessionId =
+          currentState.selectedSessionId === sessionId
+            ? remainingCards[0]?.sessionId ?? null
+            : currentState.selectedSessionId;
 
-      setSelectedSessionId(nextSelectedSessionId);
-      setSelectedTerminalColor(
-        nextSelectedSessionId === null
-          ? DEFAULT_TERMINAL_CARD_BACKGROUND
-          : getRandomSelectedTerminalColor(),
-      );
+        return {
+          ...currentState,
+          selectedSessionId: nextSelectedSessionId,
+          selectedTerminalColor:
+            nextSelectedSessionId === null
+              ? DEFAULT_TERMINAL_CARD_BACKGROUND
+              : getRandomSelectedTerminalColor(),
+          terminalCards: remainingCards,
+        };
+      });
     } catch (error: unknown) {
       setTerminalStatusMessage(toCommandError(error).message);
     } finally {
@@ -361,8 +380,6 @@ function clampProjectTerminalsSidebarWidth(width: number) {
     Math.max(DEFAULT_ACTIVITY_SIDEBAR_WIDTH, width),
   );
 }
-
-const DEFAULT_TERMINAL_CARD_BACKGROUND = "#ffffff";
 const DEFAULT_TERMINAL_CARD_BORDER = "var(--color-border)";
 const SELECTED_TERMINAL_CARD_COLORS = [
   "#fde68a",
