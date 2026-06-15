@@ -9,6 +9,8 @@ The Settings page SHALL render every selected settings module inside a centered 
 - **AND** the card uses 80% of the right pane width without a fixed height
 - **AND** the form shows `Project Name`, `Repository path`, and `Git completion strategy` in that order
 
+## ADDED Requirements
+
 ### Requirement: Project General settings form
 The Project Settings `General` form SHALL allow the user to maintain the project name, repository path, and Git completion strategy together.
 
