@@ -1447,7 +1447,7 @@ button:focus-visible {
 }
 
 .issue-card__description {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   min-width: 0;
   max-width: calc(100% - 34px);
@@ -1455,8 +1455,7 @@ button:focus-visible {
   font-size: 11px;
   line-height: 1.2;
   text-overflow: ellipsis;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  white-space: nowrap;
 }
 
 .issue-card__footer {
