@@ -24,6 +24,15 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
 
+const mockAppWindow = {
+  isMaximized: vi.fn(),
+  maximize: vi.fn(),
+};
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => mockAppWindow),
+}));
+
 vi.mock("../features/project/project-commands", () => ({
   createProject: vi.fn(),
   initializeLocalData: vi.fn(),
@@ -61,7 +70,9 @@ vi.mock("../features/issues/issue-description-editor", () => ({
 }));
 
 const { open } = await import("@tauri-apps/plugin-dialog");
+const { getCurrentWindow } = await import("@tauri-apps/api/window");
 const openDialogMock = vi.mocked(open);
+const getCurrentWindowMock = vi.mocked(getCurrentWindow);
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
 const updateIssueMock = vi.mocked(updateIssue);
@@ -89,6 +100,11 @@ describe("App project entry", () => {
     createIssueMock.mockReset();
     listIssuesMock.mockReset();
     updateIssueMock.mockReset();
+    getCurrentWindowMock.mockClear();
+    mockAppWindow.isMaximized.mockReset();
+    mockAppWindow.maximize.mockReset();
+    mockAppWindow.isMaximized.mockResolvedValue(false);
+    mockAppWindow.maximize.mockResolvedValue(undefined);
     initializeLocalDataMock.mockResolvedValue({
       databaseExists: true,
       currentVersion: "0001_core",
@@ -245,6 +261,44 @@ describe("App project entry", () => {
     await waitFor(() =>
       expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
     );
+  });
+
+  it("maximizes the current window when clicking empty header space", async () => {
+    window.history.replaceState(null, "", "/?projectId=1");
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const switcher = await screen.findByRole("button", {
+      name: "Current project RedWhisk",
+    });
+    const header = switcher.closest(".workbench__header");
+
+    expect(header).not.toBeNull();
+
+    await user.click(header!);
+
+    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
+    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.maximize).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not maximize the window when clicking the project switcher trigger", async () => {
+    window.history.replaceState(null, "", "/?projectId=1");
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const switcher = await screen.findByRole("button", {
+      name: "Current project RedWhisk",
+    });
+
+    await user.click(switcher);
+
+    expect(getCurrentWindowMock).not.toHaveBeenCalled();
+    expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
+    expect(mockAppWindow.maximize).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu", { name: "Project Switcher" })).toBeVisible();
   });
 
   it("uses English as the default UI language in a project workbench", async () => {
