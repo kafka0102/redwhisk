@@ -1,5 +1,6 @@
 import { Bot, CircleDot, Settings, Terminal } from "lucide-react";
 import { useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
@@ -39,6 +40,25 @@ export function AppShell({
     number | null
   >(null);
   const [requestedIssueId, setRequestedIssueId] = useState<number | null>(null);
+
+  async function handleWorkbenchHeaderClick(
+    event: React.MouseEvent<HTMLElement>,
+  ) {
+    if (
+      event.target instanceof Element &&
+      event.target.closest(".project-switcher")
+    ) {
+      return;
+    }
+
+    const currentWindow = getCurrentWindow();
+
+    if (await currentWindow.isMaximized()) {
+      return;
+    }
+
+    await currentWindow.maximize();
+  }
 
   return (
     <div className="app-shell">
@@ -86,7 +106,13 @@ export function AppShell({
         </button>
       </nav>
       <section className="workbench" aria-label={`${project.name} workbench`}>
-        <header className="workbench__header" data-tauri-drag-region>
+        <header
+          className="workbench__header"
+          data-tauri-drag-region
+          onClick={(event) => {
+            void handleWorkbenchHeaderClick(event);
+          }}
+        >
           <ProjectSwitcher
             currentProject={project}
             onCreateProject={onCreateProject}
