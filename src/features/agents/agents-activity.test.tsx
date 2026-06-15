@@ -403,6 +403,39 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
+  it("uses a full-height split layout for the session list and workspace", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(
+      <AgentsActivity
+        activeSessionId={301}
+        projectCompletionPolicy="manual"
+        projectId={1}
+      />,
+    );
+
+    const activity = (
+      await screen.findByRole("separator", { name: "Resize session list" })
+    ).closest(".activity-surface--agents");
+
+    expect(activity).toHaveStyle({ "--agents-sidebar-width": "230px" });
+  });
+
   it("renders agent type icons without visible text labels", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [

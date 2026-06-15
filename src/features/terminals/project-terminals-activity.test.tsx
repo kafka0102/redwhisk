@@ -122,6 +122,36 @@ describe("ProjectTerminalsActivity", () => {
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
   });
 
+  it("renders the selected terminal as the full workspace without an activity header", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectTerminalsActivity
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    const sidebar = screen.getByLabelText("Project terminals");
+    await user.click(
+      within(sidebar).getByRole("button", { name: "New terminal" }),
+    );
+
+    const workspace = screen.getByRole("region", {
+      name: "Terminal workspace",
+    });
+
+    expect(workspace.firstElementChild).toHaveClass(
+      "project-terminals-workspace__surface",
+    );
+    expect(
+      within(workspace).queryByRole("heading", { name: "local-dev-web" }),
+    ).not.toBeInTheDocument();
+    expect(within(workspace).queryByText("/tmp/redwhisk")).not.toBeInTheDocument();
+    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+  });
+
   it("deletes the selected terminal and falls back to the remaining workspace", async () => {
     const user = userEvent.setup();
 
