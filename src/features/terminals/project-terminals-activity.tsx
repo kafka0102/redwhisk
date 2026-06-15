@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -37,7 +36,6 @@ const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
 export function ProjectTerminalsActivity({
   projectId,
   projectName,
-  projectPath = "",
 }: ProjectTerminalsActivityProps) {
   const { messages, theme } = useI18n();
   const [sidebarWidth, setSidebarWidth] = useState(
@@ -65,11 +63,6 @@ export function ProjectTerminalsActivity({
     terminalCards.find((card) => card.sessionId === selectedSessionId) ??
     terminalCards[0] ??
     null;
-
-  const workspaceMeta = useMemo(() => {
-    const trimmedPath = projectPath.trim();
-    return trimmedPath.length > 0 ? trimmedPath : projectName;
-  }, [projectName, projectPath]);
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
@@ -307,23 +300,12 @@ export function ProjectTerminalsActivity({
 
       <section className="project-terminals-workspace" aria-label="Terminal workspace">
         {activeTerminal ? (
-          <>
-            <header className="project-terminals-workspace__header">
-              <div className="project-terminals-workspace__copy">
-                <p className="project-terminals-workspace__eyebrow">
-                  {messages.settings.terminals}
-                </p>
-                <h3>{activeTerminal.name}</h3>
-                <p className="project-terminals-workspace__meta">{workspaceMeta}</p>
-              </div>
-            </header>
-            <div className="project-terminals-workspace__surface">
-              <ProjectTerminal
-                projectId={projectId}
-                sessionId={activeTerminal.sessionId}
-              />
-            </div>
-          </>
+          <div className="project-terminals-workspace__surface">
+            <ProjectTerminal
+              projectId={projectId}
+              sessionId={activeTerminal.sessionId}
+            />
+          </div>
         ) : (
           <div className="project-terminals-workspace__empty">
             <div className="project-terminals-workspace__empty-copy">
