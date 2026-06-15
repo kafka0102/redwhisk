@@ -5,7 +5,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Plus, Terminal, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -35,9 +35,8 @@ const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
 
 export function ProjectTerminalsActivity({
   projectId,
-  projectName,
 }: ProjectTerminalsActivityProps) {
-  const { messages, theme } = useI18n();
+  const { messages } = useI18n();
   const [sidebarWidth, setSidebarWidth] = useState(
     DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   );
@@ -47,6 +46,9 @@ export function ProjectTerminalsActivity({
   );
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     null,
+  );
+  const [selectedTerminalColor, setSelectedTerminalColor] = useState(
+    DEFAULT_TERMINAL_CARD_BACKGROUND,
   );
   const [terminalStatusMessage, setTerminalStatusMessage] = useState<
     string | null
@@ -63,6 +65,11 @@ export function ProjectTerminalsActivity({
     terminalCards.find((card) => card.sessionId === selectedSessionId) ??
     terminalCards[0] ??
     null;
+
+  function selectTerminal(sessionId: number) {
+    setSelectedSessionId(sessionId);
+    setSelectedTerminalColor(getRandomSelectedTerminalColor());
+  }
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
@@ -116,7 +123,7 @@ export function ProjectTerminalsActivity({
           name: terminal.name,
         },
       ]);
-      setSelectedSessionId(terminal.sessionId);
+      selectTerminal(terminal.sessionId);
     } catch (error: unknown) {
       setTerminalStatusMessage(toCommandError(error).message);
     } finally {
@@ -130,11 +137,24 @@ export function ProjectTerminalsActivity({
 
     try {
       await closeProjectTerminal({ projectId, sessionId });
-      setTerminalCards((currentCards) =>
-        currentCards.filter((card) => card.sessionId !== sessionId),
-      );
-      setSelectedSessionId((currentSelectedSessionId) =>
-        currentSelectedSessionId === sessionId ? null : currentSelectedSessionId,
+      let nextSelectedSessionId: number | null = selectedSessionId;
+      let remainingCardsAfterDelete: ProjectTerminalCardState[] = [];
+
+      setTerminalCards((currentCards) => {
+        remainingCardsAfterDelete = currentCards.filter(
+          (card) => card.sessionId !== sessionId,
+        );
+        if (selectedSessionId === sessionId) {
+          nextSelectedSessionId = remainingCardsAfterDelete[0]?.sessionId ?? null;
+        }
+        return remainingCardsAfterDelete;
+      });
+
+      setSelectedSessionId(nextSelectedSessionId);
+      setSelectedTerminalColor(
+        nextSelectedSessionId === null
+          ? DEFAULT_TERMINAL_CARD_BACKGROUND
+          : getRandomSelectedTerminalColor(),
       );
     } catch (error: unknown) {
       setTerminalStatusMessage(toCommandError(error).message);
@@ -156,7 +176,6 @@ export function ProjectTerminalsActivity({
         <div className="project-terminals-sidebar__header">
           <div className="project-terminals-sidebar__header-copy">
             <h2>{messages.settings.terminals}</h2>
-            <p>{projectName}</p>
           </div>
           <Button
             aria-label={messages.settings.newTerminal}
@@ -186,10 +205,6 @@ export function ProjectTerminalsActivity({
         ) : (
           <div className="project-terminals-card-list">
             {terminalCards.map((terminalCard) => {
-              const cardPalette = getTerminalCardPalette(
-                theme,
-                terminalCard.sessionId,
-              );
               const isActive = activeTerminal?.sessionId === terminalCard.sessionId;
 
               return (
@@ -198,11 +213,14 @@ export function ProjectTerminalsActivity({
                   className="project-terminals-card-shell"
                   style={
                     {
-                      "--project-terminal-card-background": cardPalette.background,
-                      "--project-terminal-card-border": cardPalette.border,
-                      "--project-terminal-card-icon-background":
-                        cardPalette.iconBackground,
-                      "--project-terminal-card-icon-color": cardPalette.iconColor,
+                      "--project-terminal-card-background":
+                        isActive
+                          ? selectedTerminalColor
+                          : DEFAULT_TERMINAL_CARD_BACKGROUND,
+                      "--project-terminal-card-border":
+                        isActive
+                          ? selectedTerminalColor
+                          : DEFAULT_TERMINAL_CARD_BORDER,
                     } as CSSProperties
                   }
                 >
@@ -212,23 +230,19 @@ export function ProjectTerminalsActivity({
                     className="project-terminals-card"
                     type="button"
                     onClick={() => {
-                      setSelectedSessionId(terminalCard.sessionId);
+                      selectTerminal(terminalCard.sessionId);
                     }}
                   >
-                    <span className="project-terminals-card__icon" aria-hidden="true">
-                      <Terminal size={15} strokeWidth={1.9} />
-                    </span>
                     <span className="project-terminals-card__copy">
                       <span className="project-terminals-card__name">
                         {terminalCard.name}
                       </span>
-                      <span className="project-terminals-card__meta">
-                        {projectName}
-                      </span>
                     </span>
                   </button>
                   <button
-                    aria-label={messages.settings.deleteTerminal(terminalCard.name)}
+                    aria-label={messages.settings.deleteTerminal(
+                      terminalCard.name,
+                    )}
                     className="project-terminals-card__delete"
                     disabled={closingTerminalId === terminalCard.sessionId}
                     type="button"
@@ -337,60 +351,20 @@ function clampProjectTerminalsSidebarWidth(width: number) {
   );
 }
 
-function getTerminalCardPalette(theme: "light" | "dark", seed: number) {
-  const lightPalettes = [
-    {
-      background: "#f7f1e7",
-      border: "#dccab0",
-      iconBackground: "rgba(120, 82, 38, 0.12)",
-      iconColor: "#7a5226",
-    },
-    {
-      background: "#eaf4ee",
-      border: "#bfd6c5",
-      iconBackground: "rgba(42, 108, 68, 0.12)",
-      iconColor: "#2a6c44",
-    },
-    {
-      background: "#edf2fb",
-      border: "#c5d1ea",
-      iconBackground: "rgba(44, 87, 146, 0.12)",
-      iconColor: "#2c5792",
-    },
-    {
-      background: "#f8ecef",
-      border: "#e1c2cb",
-      iconBackground: "rgba(138, 57, 83, 0.12)",
-      iconColor: "#8a3953",
-    },
-  ];
-  const darkPalettes = [
-    {
-      background: "#2a231b",
-      border: "#4d3e2f",
-      iconBackground: "rgba(239, 213, 180, 0.12)",
-      iconColor: "#efd5b4",
-    },
-    {
-      background: "#1c2923",
-      border: "#355443",
-      iconBackground: "rgba(191, 225, 206, 0.12)",
-      iconColor: "#bfe1ce",
-    },
-    {
-      background: "#1d2430",
-      border: "#364660",
-      iconBackground: "rgba(198, 215, 243, 0.12)",
-      iconColor: "#c6d7f3",
-    },
-    {
-      background: "#2f1e25",
-      border: "#613646",
-      iconBackground: "rgba(241, 204, 217, 0.12)",
-      iconColor: "#f1ccd9",
-    },
-  ];
-  const palettes = theme === "dark" ? darkPalettes : lightPalettes;
-  const paletteIndex = Math.abs(seed) % palettes.length;
-  return palettes[paletteIndex] ?? palettes[0];
+const DEFAULT_TERMINAL_CARD_BACKGROUND = "#ffffff";
+const DEFAULT_TERMINAL_CARD_BORDER = "var(--color-border)";
+const SELECTED_TERMINAL_CARD_COLORS = [
+  "#fde68a",
+  "#bfdbfe",
+  "#c7f9cc",
+  "#fecdd3",
+  "#ddd6fe",
+  "#fdba74",
+];
+
+function getRandomSelectedTerminalColor() {
+  const colorIndex = Math.floor(
+    Math.random() * SELECTED_TERMINAL_CARD_COLORS.length,
+  );
+  return SELECTED_TERMINAL_CARD_COLORS[colorIndex] ?? "#fde68a";
 }

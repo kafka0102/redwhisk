@@ -122,6 +122,35 @@ describe("ProjectTerminalsActivity", () => {
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
   });
 
+  it("hides the project name in terminal cards and applies a selected color", async () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    const user = userEvent.setup();
+
+    render(
+      <ProjectTerminalsActivity
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    const sidebar = screen.getByLabelText("Project terminals");
+    await user.click(
+      within(sidebar).getByRole("button", { name: "New terminal" }),
+    );
+
+    const terminalButton = within(sidebar).getByRole("button", {
+      name: "local-dev-web",
+    });
+    expect(within(sidebar).queryByText("RedWhisk")).not.toBeInTheDocument();
+    expect(terminalButton.parentElement).toHaveAttribute(
+      "style",
+      expect.stringContaining("--project-terminal-card-background: #fde68a"),
+    );
+
+    randomSpy.mockRestore();
+  });
+
   it("renders the selected terminal as the full workspace without an activity header", async () => {
     const user = userEvent.setup();
 
