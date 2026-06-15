@@ -82,6 +82,7 @@ export function ProjectDetailsForm({
             className="settings-field__repo-button"
             disabled={isSubmitting || isChoosingRepoPath}
             type="button"
+            variant="outline"
             onClick={onChooseRepoPath}
           >
             {isChoosingRepoPath ? choosingFolderLabel : chooseFolderLabel}

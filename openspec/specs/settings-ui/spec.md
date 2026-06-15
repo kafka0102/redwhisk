@@ -142,6 +142,11 @@ The Project Settings `General` form SHALL allow the user to maintain the project
 - **THEN** the app opens a directory picker
 - **AND** the selected path is shown in the form before save
 
+#### Scenario: Distinguishing auxiliary and primary actions
+- **WHEN** the `General` form renders action buttons
+- **THEN** only submit or execution-focused primary actions such as `Save` use primary emphasis
+- **AND** ordinary auxiliary actions such as the `Repository path` chooser use the default non-primary button style
+
 #### Scenario: Saving a valid repository path
 - **WHEN** the user changes the repository path to a valid Git repository
 - **AND** clicks `Save`
@@ -152,4 +157,3 @@ The Project Settings `General` form SHALL allow the user to maintain the project
 - **WHEN** the selected repository path is not a Git repository
 - **THEN** the form shows an error
 - **AND** the `Save` action is blocked until the path is valid
-
