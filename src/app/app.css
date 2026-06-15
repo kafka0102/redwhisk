@@ -2778,11 +2778,13 @@ button:focus-visible {
 
 .issue-dialog__meta-row {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
 }
 
 .issue-dialog__meta-label {
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 650;
 }
@@ -2791,6 +2793,7 @@ button:focus-visible {
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.4;
+  white-space: nowrap;
 }
 
 .issue-dialog__session-link {
@@ -2802,6 +2805,7 @@ button:focus-visible {
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .issue-dialog__session-link:hover {
@@ -2817,26 +2821,28 @@ button:focus-visible {
 
 .issue-dialog__status-menu {
   position: relative;
+  width: fit-content;
 }
 
 .issue-dialog__status-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text);
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .issue-dialog__status-trigger:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .issue-dialog__status-popup {

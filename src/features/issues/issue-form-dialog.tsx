@@ -18,11 +18,9 @@ interface IssueFormDialogProps {
   form: IssueFormState;
   selectedIssue: IssueRecord | null;
   isSaving: boolean;
-  isOpeningLog: boolean;
   errorMessage: string | null;
   hasLinkedSession: boolean;
   isBacklogDialog: boolean;
-  canOpenLog: boolean;
   canViewSummary: boolean;
   titleInputRef: React.RefObject<HTMLInputElement | null>;
   dialogFormRef: React.RefObject<HTMLFormElement | null>;
@@ -45,7 +43,6 @@ interface IssueFormDialogProps {
   onAdvanceStatus: (targetStatus: IssueStatus) => void;
   onDeleteIssue: () => void;
   onOpenLinkedSession: () => void;
-  onOpenLog: () => void;
   onOpenSummary: () => void;
   canOpenAgentsActivity: boolean;
 }
@@ -55,11 +52,9 @@ export function IssueFormDialog({
   form,
   selectedIssue,
   isSaving,
-  isOpeningLog,
   errorMessage,
   hasLinkedSession,
   isBacklogDialog,
-  canOpenLog,
   canViewSummary,
   titleInputRef,
   dialogFormRef,
@@ -76,7 +71,6 @@ export function IssueFormDialog({
   onAdvanceStatus,
   onDeleteIssue,
   onOpenLinkedSession,
-  onOpenLog,
   onOpenSummary,
   canOpenAgentsActivity,
 }: IssueFormDialogProps) {
@@ -139,15 +133,12 @@ export function IssueFormDialog({
               key={`${selectedIssue?.id ?? "none"}:${selectedIssue?.status ?? "backlog"}`}
               selectedIssue={selectedIssue}
               hasLinkedSession={hasLinkedSession}
-              canOpenLog={canOpenLog}
               canViewSummary={canViewSummary}
               isSaving={isSaving}
-              isOpeningLog={isOpeningLog}
               canOpenAgentsActivity={canOpenAgentsActivity}
               onAdvanceStatus={onAdvanceStatus}
               onDeleteIssue={onDeleteIssue}
               onOpenLinkedSession={onOpenLinkedSession}
-              onOpenLog={onOpenLog}
               onOpenSummary={onOpenSummary}
             />
           ) : null}
@@ -265,28 +256,22 @@ function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
 function IssueActionsAside({
   selectedIssue,
   hasLinkedSession,
-  canOpenLog,
   canViewSummary,
   isSaving,
-  isOpeningLog,
   canOpenAgentsActivity,
   onAdvanceStatus,
   onDeleteIssue,
   onOpenLinkedSession,
-  onOpenLog,
   onOpenSummary,
 }: {
   selectedIssue: IssueRecord | null;
   hasLinkedSession: boolean;
-  canOpenLog: boolean;
   canViewSummary: boolean;
   isSaving: boolean;
-  isOpeningLog: boolean;
   canOpenAgentsActivity: boolean;
   onAdvanceStatus: (targetStatus: IssueStatus) => void;
   onDeleteIssue: () => void;
   onOpenLinkedSession: () => void;
-  onOpenLog: () => void;
   onOpenSummary: () => void;
 }) {
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
@@ -316,12 +301,13 @@ function IssueActionsAside({
           <span className="issue-dialog__meta-label">Linked session</span>
           {hasLinkedSession && selectedIssue?.linkedSessionId != null ? (
             <button
+              aria-label={`Open linked session #${selectedIssue.linkedSessionId}`}
               className="issue-dialog__session-link"
               type="button"
               disabled={isSaving || !canOpenAgentsActivity}
               onClick={onOpenLinkedSession}
             >
-              {`Linked session #${selectedIssue.linkedSessionId}`}
+              {`#${selectedIssue.linkedSessionId}`}
             </button>
           ) : (
             <span className="issue-dialog__meta-value">No session linked.</span>
@@ -383,17 +369,6 @@ function IssueActionsAside({
             onClick={onOpenSummary}
           >
             View Summary
-          </Button>
-        ) : null}
-        {canOpenLog ? (
-          <Button
-            className="issues-button"
-            type="button"
-            variant="outline"
-            disabled={isSaving || isOpeningLog}
-            onClick={onOpenLog}
-          >
-            {isOpeningLog ? "打开中..." : "Open Log"}
           </Button>
         ) : null}
         <button
