@@ -2673,16 +2673,55 @@ button:focus-visible {
   top: calc(100% + 6px);
   left: 0;
   z-index: 2;
-  width: min(600px, calc(100vw - 80px));
+  width: min(460px, calc(100vw - 80px));
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-dialog);
   background: var(--color-surface);
   box-shadow: 0 8px 22px var(--color-popover-shadow);
 }
 
+.project-switcher__actions {
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.project-switcher__create {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  transition: background-color 160ms ease-out;
+}
+
+.project-switcher__create:hover {
+  background: var(--color-surface-muted);
+}
+
+.project-switcher__create-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
 .project-switcher__list {
   display: grid;
-  padding: 6px;
+  padding: 6px 8px 8px;
 }
 
 .project-switcher__item {

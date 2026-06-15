@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { ProjectSummary } from "../../app/app";
@@ -7,6 +7,7 @@ import { toCommandError } from "../../shared/commands/command-error";
 
 interface ProjectSwitcherProps {
   currentProject: ProjectSummary;
+  onCreateProject: () => void;
   projects: ProjectSummary[];
   onProjectsRefresh: () => Promise<void>;
 }
@@ -22,6 +23,7 @@ const ICON_COLORS = [
 
 export function ProjectSwitcher({
   currentProject,
+  onCreateProject,
   onProjectsRefresh,
   projects,
 }: ProjectSwitcherProps) {
@@ -97,6 +99,12 @@ export function ProjectSwitcher({
     }
   }
 
+  function handleCreateProject() {
+    setError(null);
+    setIsOpen(false);
+    onCreateProject();
+  }
+
   return (
     <div className="project-switcher" ref={switcherRef}>
       <button
@@ -114,12 +122,26 @@ export function ProjectSwitcher({
         <ChevronDown aria-hidden="true" size={16} strokeWidth={1.8} />
       </button>
       {isOpen ? (
-        <div className="project-switcher__popover" id={popoverId}>
-          <div
-            className="project-switcher__list"
-            role="menu"
-            aria-label="Project Switcher"
-          >
+        <div
+          className="project-switcher__popover"
+          id={popoverId}
+          role="menu"
+          aria-label="Project Switcher"
+        >
+          <div className="project-switcher__actions">
+            <button
+              className="project-switcher__create"
+              role="menuitem"
+              type="button"
+              onClick={handleCreateProject}
+            >
+              <span className="project-switcher__create-icon" aria-hidden="true">
+                <Plus size={15} strokeWidth={2} />
+              </span>
+              <span>Create Project</span>
+            </button>
+          </div>
+          <div className="project-switcher__list">
             {projects.map((project) => (
               <button
                 className="project-switcher__item"
