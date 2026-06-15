@@ -352,12 +352,14 @@ describe("App project entry", () => {
     });
     const activityButtons = within(activityBar).getAllByRole("button");
 
-    expect(activityButtons.map((button) => button.textContent)).toEqual([
+    expect(
+      activityButtons.map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
       "Issues",
       "Agents",
       "Terminals",
-      "Settings",
-      "",
+      "Project Settings",
+      "Global Settings",
     ]);
     expect(
       within(activityBar).getByRole("button", { name: "Issues" }),
