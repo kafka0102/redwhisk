@@ -6,6 +6,7 @@ describe("buildRunPromptPreview", () => {
   it("uses the raw issue description as the final prompt preview", () => {
     const preview = buildRunPromptPreview({
       issue: {
+        title: "Prompt preview",
         description: "Make the preview reflect the selected profile.",
         attachments: [],
       },
@@ -16,13 +17,17 @@ describe("buildRunPromptPreview", () => {
     });
 
     expect(preview.finalPrompt).toBe(
-      "Make the preview reflect the selected profile.",
+      [
+        "using skill bmad-dev-story for task:",
+        "Make the preview reflect the selected profile.",
+      ].join("\n\n"),
     );
   });
 
   it("always exposes the expected prompt sources in a stable order", () => {
     const preview = buildRunPromptPreview({
       issue: {
+        title: "Prompt preview",
         description: "Make the preview reflect the selected profile.",
         attachments: [
           {
@@ -57,6 +62,7 @@ describe("buildRunPromptPreview", () => {
   it("lists saved attachment paths in the final prompt and sources", () => {
     const preview = buildRunPromptPreview({
       issue: {
+        title: "Read config",
         description:
           "Read the config.\n\n{{issue-attachment:12}}\n\n{{issue-attachment:13}}",
         attachments: [
@@ -103,5 +109,25 @@ describe("buildRunPromptPreview", () => {
       preview.sources.find((source) => source.id === "issue-attachments")
         ?.content,
     ).toContain(".redwhisk/issues/1/attachments/12-tsconfig.json");
+  });
+
+  it("uses a Chinese skill instruction when the issue title or description contains Chinese", () => {
+    const preview = buildRunPromptPreview({
+      issue: {
+        title: "修复 preview",
+        description: "Make the preview reflect the selected profile.",
+        attachments: [],
+      },
+      profile: {
+        defaultSkill: "bmad-dev-story",
+        promptTemplate: "",
+      },
+    });
+
+    expect(preview.finalPrompt).toBe(
+      ["使用skill bmad-dev-story 执行任务：", "Make the preview reflect the selected profile."].join(
+        "\n\n",
+      ),
+    );
   });
 });
