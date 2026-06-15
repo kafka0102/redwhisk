@@ -1562,6 +1562,12 @@ button:focus-visible {
   font-weight: 600;
 }
 
+.issue-field--grow {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .issue-field input,
 .issue-description-editor {
   width: 100%;
@@ -1584,9 +1590,25 @@ button:focus-visible {
 
 .issue-description-editor {
   position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-height: 120px;
   padding: 0;
   font-weight: 400;
+  overflow: hidden;
+}
+
+.issue-description-editor__surface {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.issue-description-editor__surface > div {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .issue-description-editor__placeholder {
@@ -1615,7 +1637,8 @@ button:focus-visible {
 
 .issue-description-editor__content {
   min-width: 0;
-  min-height: 120px;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 8px;
   color: var(--color-text);
   font: inherit;
@@ -1627,8 +1650,8 @@ button:focus-visible {
 }
 
 .issue-description-editor__content {
-  min-height: 104px;
   outline: none;
+  overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -2718,6 +2741,12 @@ button:focus-visible {
   align-content: start;
   gap: 12px;
   min-width: 0;
+}
+
+.issue-dialog__editor--editable {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .issue-dialog__editor--readonly {

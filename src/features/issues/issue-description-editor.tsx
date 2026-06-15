@@ -116,7 +116,9 @@ export function IssueDescriptionEditor({
       <span className="issue-description-editor__placeholder">
         {placeholder}
       </span>
-      <EditorContent editor={editor} />
+      <div className="issue-description-editor__surface">
+        <EditorContent editor={editor} />
+      </div>
       {attachments.length > 0 ? (
         <div className="issue-description-editor__attachments">
           {attachments.map((attachment) => (

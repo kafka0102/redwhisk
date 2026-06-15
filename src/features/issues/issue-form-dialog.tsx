@@ -18,6 +18,7 @@ interface IssueFormDialogProps {
   form: IssueFormState;
   selectedIssue: IssueRecord | null;
   isSaving: boolean;
+  canDismissWithoutCloseButton: boolean;
   errorMessage: string | null;
   hasLinkedSession: boolean;
   isBacklogDialog: boolean;
@@ -52,6 +53,7 @@ export function IssueFormDialog({
   form,
   selectedIssue,
   isSaving,
+  canDismissWithoutCloseButton,
   errorMessage,
   hasLinkedSession,
   isBacklogDialog,
@@ -86,7 +88,10 @@ export function IssueFormDialog({
     <div
       className="issue-dialog-overlay"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (
+          event.target === event.currentTarget &&
+          canDismissWithoutCloseButton
+        ) {
           onClose();
         }
       }}
@@ -203,7 +208,7 @@ function IssueEditableFields({
   ) => void;
 }) {
   return (
-    <div className="issue-dialog__editor">
+    <div className="issue-dialog__editor issue-dialog__editor--editable">
       <div className="issue-field">
         <Input
           ref={titleInputRef}
@@ -222,7 +227,7 @@ function IssueEditableFields({
           }
         />
       </div>
-      <div className="issue-field">
+      <div className="issue-field issue-field--grow">
         <IssueDescriptionEditor
           ariaLabel="Description"
           placeholder="Describe the task"

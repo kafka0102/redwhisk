@@ -296,8 +296,10 @@ export function IssuesActivity({
 
   function handleDialogKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
     if (event.key === "Escape") {
-      event.preventDefault();
-      closeDialog();
+      if (canDismissWithoutCloseButton) {
+        event.preventDefault();
+        closeDialog();
+      }
       return;
     }
 
@@ -423,6 +425,11 @@ export function IssuesActivity({
   const canViewSummary =
     dialogMode === "edit" && selectedIssue?.status === "completed";
   const canOpenLinkedSession = hasLinkedSession && Boolean(onOpenAgentsActivity);
+  const canDismissWithoutCloseButton = !hasUnsavedDialogChanges(
+    dialogMode,
+    form,
+    selectedIssue,
+  );
 
   async function handleSelectAttachment() {
     const selectedPath = await open({
@@ -675,6 +682,7 @@ export function IssuesActivity({
           form={form}
           selectedIssue={selectedIssue}
           isSaving={isSaving}
+          canDismissWithoutCloseButton={canDismissWithoutCloseButton}
           errorMessage={dialogErrorMessage}
           hasLinkedSession={hasLinkedSession}
           isBacklogDialog={isBacklogDialog}
@@ -917,6 +925,50 @@ function toAttachmentPreviewState(
       ? convertFileSrc(preview.absolutePath)
       : null,
   };
+}
+
+function hasUnsavedDialogChanges(
+  dialogMode: DialogMode | null,
+  form: IssueFormState,
+  selectedIssue: IssueRecord | null,
+): boolean {
+  if (dialogMode === null) {
+    return false;
+  }
+
+  const baseline =
+    dialogMode === "edit" && selectedIssue ? issueToForm(selectedIssue) : EMPTY_FORM;
+
+  return (
+    form.title !== baseline.title ||
+    form.description !== baseline.description ||
+    !haveSameAttachments(form.attachments, baseline.attachments)
+  );
+}
+
+function haveSameAttachments(
+  left: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
+  right: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every(
+    (attachment, index) =>
+      getAttachmentIdentity(attachment) ===
+      getAttachmentIdentity(right[index]),
+  );
+}
+
+function getAttachmentIdentity(
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+): string {
+  if ("id" in attachment) {
+    return `saved:${attachment.id}`;
+  }
+
+  return `draft:${attachment.token}`;
 }
 
 function getFocusableDialogElements(

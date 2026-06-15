@@ -793,6 +793,75 @@ describe("IssuesActivity", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("allows clicking outside to close an untouched create dialog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(screen.getByRole("button", { name: "New Issue" }));
+    const dialog = screen.getByRole("dialog", { name: "New Issue" });
+
+    await user.click(dialog.parentElement as HTMLElement);
+
+    expect(
+      screen.queryByRole("dialog", { name: "New Issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a dirty create dialog open on outside click and Escape until the close button is used", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(screen.getByRole("button", { name: "New Issue" }));
+    await user.type(screen.getByLabelText("Title"), "dirty draft");
+    const dialog = screen.getByRole("dialog", { name: "New Issue" });
+
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(
+      screen.getByRole("dialog", { name: "New Issue" }),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByRole("dialog", { name: "New Issue" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Close issue dialog" }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "New Issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats reverted edit values as clean and allows outside click to close", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    const title = screen.getByLabelText("Title");
+    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
+
+    await user.clear(title);
+    await user.type(title, "Changed once");
+    await user.clear(title);
+    await user.type(title, existingIssue.title);
+
+    await user.click(dialog.parentElement as HTMLElement);
+
+    expect(
+      screen.queryByRole("dialog", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses the requested issue as the initial selection when provided", async () => {
     listIssuesMock.mockResolvedValue({
       issues: [existingIssue, runningIssue, reviewIssue],
