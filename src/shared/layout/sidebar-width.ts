@@ -1,0 +1,2 @@
+export const DEFAULT_ACTIVITY_SIDEBAR_WIDTH = 230;
+export const SIDEBAR_RESIZE_STEP = 16;

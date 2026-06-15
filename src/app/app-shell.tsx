@@ -1,4 +1,4 @@
-import { Bot, CircleDot, Settings } from "lucide-react";
+import { Bot, CircleDot, Settings, Terminal } from "lucide-react";
 import { useState } from "react";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
@@ -17,12 +17,12 @@ interface AppShellProps {
 
 const ACTIVITIES: Array<{
   key: ActivityKey;
-  label: string;
   Icon: typeof CircleDot;
 }> = [
-  { key: "issues", label: "Issues", Icon: CircleDot },
-  { key: "agents", label: "Agents", Icon: Bot },
-  { key: "settings", label: "Settings", Icon: Settings },
+  { key: "issues", Icon: CircleDot },
+  { key: "agents", Icon: Bot },
+  { key: "terminals", Icon: Terminal },
+  { key: "settings", Icon: Settings },
 ];
 
 export function AppShell({
@@ -43,22 +43,35 @@ export function AppShell({
   return (
     <div className="app-shell">
       <nav className="activity-bar" aria-label={messages.app.activityBarLabel}>
-        {ACTIVITIES.map(({ key, label, Icon }) => (
-          <button
-            className="activity-bar__button"
-            type="button"
-            key={key}
-            aria-label={key === "settings" ? messages.app.projectSettings : label}
-            aria-pressed={activeActivity === key}
-            onClick={() => {
-              setActiveActivity(key);
-              setIsGlobalSettingsOpen(false);
-            }}
-          >
-            <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
-            <span>{label}</span>
-          </button>
-        ))}
+        {ACTIVITIES.map(({ key, Icon }) => {
+          const label =
+            key === "issues"
+              ? messages.app.issues
+              : key === "agents"
+                ? messages.app.agents
+                : key === "terminals"
+                  ? messages.app.terminals
+                  : messages.app.settings;
+          const ariaLabel =
+            key === "settings" ? messages.app.projectSettings : label;
+
+          return (
+            <button
+              className="activity-bar__button"
+              type="button"
+              key={key}
+              aria-label={ariaLabel}
+              aria-pressed={activeActivity === key}
+              onClick={() => {
+                setActiveActivity(key);
+                setIsGlobalSettingsOpen(false);
+              }}
+            >
+              <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+              <span>{label}</span>
+            </button>
+          );
+        })}
         <div className="activity-bar__spacer" aria-hidden="true" />
         <button
           className="activity-bar__button activity-bar__button--icon-only"
