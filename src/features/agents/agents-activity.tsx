@@ -31,10 +31,12 @@ import {
   completeIssueClean,
   completeIssueManual,
   detectAgentCommitCompletion,
+  listIssues,
   markIssueReview,
   prepareAgentCommitCompletion,
   sendAgentCommitPrompt,
   type AgentCommitCompletionPreview,
+  type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
@@ -53,6 +55,7 @@ interface AgentsActivityProps {
 }
 
 type SessionIssueGroup = "inProcess" | "review" | "done";
+type SessionIssueTransition = "review" | "done";
 
 export function AgentsActivity({
   activeSessionId,
@@ -94,6 +97,8 @@ export function AgentsActivity({
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
     useState(false);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
+  const [isIssueDrawerOpen, setIsIssueDrawerOpen] = useState(false);
+  const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
@@ -231,24 +236,40 @@ export function AgentsActivity({
         : null,
     [selectedSession],
   );
-  const canMarkReview =
-    selectedSession?.status === "running" &&
-    linkedIssue?.issueStatus === "running";
-  const canCompleteManual =
-    selectedSession?.status === "running" &&
-    linkedIssue?.issueStatus === "review" &&
-    projectCompletionPolicy === "manual";
-  const canCompleteClean =
-    selectedSession?.status === "running" &&
-    linkedIssue?.issueStatus === "review" &&
-    projectCompletionPolicy === "agent_auto_commit" &&
-    selectedSession?.canCompleteClean === true;
-  const canCompleteAgentCommit =
-    selectedSession?.status === "running" &&
-    linkedIssue?.issueStatus === "review" &&
-    projectCompletionPolicy === "agent_auto_commit" &&
-    selectedSession?.canCompleteAgentCommit === true;
+  const sessionTransitionPhase = getSessionTransitionPhase(selectedSession);
+  const transitionButtonLabel =
+    sessionTransitionPhase === "running"
+      ? "Mark review"
+      : sessionTransitionPhase === "review"
+        ? "Mark done"
+        : null;
+  const transitionMenuOptions =
+    sessionTransitionPhase === "running"
+      ? ([
+          { action: "review", label: "Review" },
+          { action: "done", label: "Done" },
+        ] satisfies Array<{
+          action: SessionIssueTransition;
+          label: string;
+        }>)
+      : [];
+  const canRenderTransitionButton = transitionButtonLabel !== null;
+  const canRenderTransitionMenu = transitionMenuOptions.length > 0;
+  const isTransitionPending =
+    isMarkingReview ||
+    isCompletingManual ||
+    isCompletingClean ||
+    isPreparingAgentCommit ||
+    isSendingAgentCommitPrompt ||
+    isDetectingAgentCommitCompletion;
   const canViewSummary = linkedIssue?.issueStatus === "completed";
+
+  const refreshSessions = useCallback(async () => {
+    const response = await listAgentSessions(projectId);
+    const nextSessions = applySessionListOverlays(response.sessions);
+    setSessions(nextSessions);
+    return nextSessions;
+  }, [applySessionListOverlays, projectId]);
 
   async function acknowledgeSessionAttention(sessionId: number) {
     const targetSession = sessions.find(
@@ -286,16 +307,17 @@ export function AgentsActivity({
   }
 
   function handleSelectSession(sessionId: number) {
+    setIsTransitionMenuOpen(false);
     setSelectedSessionId(sessionId);
     onSelectSession?.(sessionId);
     void acknowledgeSessionAttention(sessionId);
   }
 
-  async function handleMarkReview() {
-    if (!linkedIssue) {
-      return;
-    }
-
+  async function markLinkedIssueReview(issue: NonNullable<typeof linkedIssue>) {
+    setIsTransitionMenuOpen(false);
+    setCompleteManualErrorMessage(null);
+    setCompleteCleanErrorMessage(null);
+    setCompleteAgentCommitErrorMessage(null);
     setMarkReviewErrorMessage(null);
     setIsMarkingReview(true);
 
@@ -304,7 +326,7 @@ export function AgentsActivity({
     try {
       const reviewedIssue = await markIssueReview({
         projectId,
-        issueId: linkedIssue.issueId,
+        issueId: issue.issueId,
       });
       reviewedIssueId = reviewedIssue.id;
       reviewedIssueIdsRef.current.add(reviewedIssue.id);
@@ -325,8 +347,7 @@ export function AgentsActivity({
     } catch (error) {
       setMarkReviewErrorMessage(toCommandError(error).message);
       try {
-        const response = await listAgentSessions(projectId);
-        setSessions(applySessionListOverlays(response.sessions));
+        await refreshSessions();
       } catch {
         // Keep the command failure visible; polling can retry the refresh.
       }
@@ -337,31 +358,33 @@ export function AgentsActivity({
     }
 
     if (reviewedIssueId == null) {
-      return;
+      return null;
     }
 
     try {
-      const response = await listAgentSessions(projectId);
-      setSessions(applySessionListOverlays(response.sessions));
+      return await refreshSessions();
     } catch (error) {
       setMarkReviewErrorMessage(toCommandError(error).message);
+      return null;
     } finally {
       setIsMarkingReview(false);
     }
   }
 
-  async function handleCompleteManual() {
-    if (!linkedIssue || !selectedSession) {
+  async function handleMarkReview() {
+    if (!linkedIssue) {
       return;
     }
 
-    const isConfirmed = window.confirm(
-      `确认手动完成 #issue${linkedIssue.issueId} ${linkedIssue.issueTitle} 吗？`,
-    );
-    if (!isConfirmed) {
-      return;
-    }
+    await markLinkedIssueReview(linkedIssue);
+  }
 
+  async function completeLinkedIssueManual(
+    issue: NonNullable<typeof linkedIssue>,
+    session: AgentSessionListItem,
+  ) {
+    const targetSessionId = session.sessionId;
+    setIsTransitionMenuOpen(false);
     setCompleteManualErrorMessage(null);
     setIsCompletingManual(true);
 
@@ -371,19 +394,19 @@ export function AgentsActivity({
     try {
       const completedIssue = await completeIssueManual({
         projectId,
-        issueId: linkedIssue.issueId,
+        issueId: issue.issueId,
       });
       completedIssueId = completedIssue.id;
-      completedSessionId = selectedSession.sessionId;
+      completedSessionId = session.sessionId;
       completedIssueIdsRef.current.add(completedIssue.id);
-      closedSessionIdsRef.current.add(selectedSession.sessionId);
+      closedSessionIdsRef.current.add(session.sessionId);
       setSessions((currentSessions) =>
         currentSessions.map((session) =>
           session.issueId === completedIssue.id
             ? {
                 ...session,
                 status:
-                  session.sessionId === selectedSession.sessionId
+                  session.sessionId === targetSessionId
                     ? ("closed" as const)
                     : session.status,
                 issueStatus: completedIssue.status,
@@ -392,7 +415,7 @@ export function AgentsActivity({
                   completedIssue.updatedAt,
                 ),
                 closedAt:
-                  session.sessionId === selectedSession.sessionId
+                  session.sessionId === targetSessionId
                     ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
                     : session.closedAt,
               }
@@ -402,8 +425,7 @@ export function AgentsActivity({
     } catch (error) {
       setCompleteManualErrorMessage(toCommandError(error).message);
       try {
-        const response = await listAgentSessions(projectId);
-        setSessions(applySessionListOverlays(response.sessions));
+        await refreshSessions();
       } catch {
         // Keep the command failure visible; polling can retry the refresh.
       }
@@ -418,8 +440,7 @@ export function AgentsActivity({
     }
 
     try {
-      const response = await listAgentSessions(projectId);
-      setSessions(applySessionListOverlays(response.sessions));
+      await refreshSessions();
     } catch (error) {
       setCompleteManualErrorMessage(toCommandError(error).message);
     } finally {
@@ -427,18 +448,12 @@ export function AgentsActivity({
     }
   }
 
-  async function handleCompleteClean() {
-    if (!linkedIssue || !selectedSession) {
-      return;
-    }
-
-    const isConfirmed = window.confirm(
-      `确认直接完成 #issue${linkedIssue.issueId} ${linkedIssue.issueTitle} 吗？`,
-    );
-    if (!isConfirmed) {
-      return;
-    }
-
+  async function completeLinkedIssueClean(
+    issue: NonNullable<typeof linkedIssue>,
+    session: AgentSessionListItem,
+  ) {
+    const targetSessionId = session.sessionId;
+    setIsTransitionMenuOpen(false);
     setCompleteCleanErrorMessage(null);
     setIsCompletingClean(true);
 
@@ -448,19 +463,19 @@ export function AgentsActivity({
     try {
       const completedIssue = await completeIssueClean({
         projectId,
-        issueId: linkedIssue.issueId,
+        issueId: issue.issueId,
       });
       completedIssueId = completedIssue.id;
-      completedSessionId = selectedSession.sessionId;
+      completedSessionId = session.sessionId;
       completedIssueIdsRef.current.add(completedIssue.id);
-      closedSessionIdsRef.current.add(selectedSession.sessionId);
+      closedSessionIdsRef.current.add(session.sessionId);
       setSessions((currentSessions) =>
         currentSessions.map((session) =>
           session.issueId === completedIssue.id
             ? {
                 ...session,
                 status:
-                  session.sessionId === selectedSession.sessionId
+                  session.sessionId === targetSessionId
                     ? ("closed" as const)
                     : session.status,
                 issueStatus: completedIssue.status,
@@ -469,7 +484,7 @@ export function AgentsActivity({
                   completedIssue.updatedAt,
                 ),
                 closedAt:
-                  session.sessionId === selectedSession.sessionId
+                  session.sessionId === targetSessionId
                     ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
                     : session.closedAt,
               }
@@ -479,8 +494,7 @@ export function AgentsActivity({
     } catch (error) {
       setCompleteCleanErrorMessage(toCommandError(error).message);
       try {
-        const response = await listAgentSessions(projectId);
-        setSessions(applySessionListOverlays(response.sessions));
+        await refreshSessions();
       } catch {
         // Keep the command failure visible; polling can retry the refresh.
       }
@@ -495,8 +509,7 @@ export function AgentsActivity({
     }
 
     try {
-      const response = await listAgentSessions(projectId);
-      setSessions(applySessionListOverlays(response.sessions));
+      await refreshSessions();
     } catch (error) {
       setCompleteCleanErrorMessage(toCommandError(error).message);
     } finally {
@@ -504,18 +517,17 @@ export function AgentsActivity({
     }
   }
 
-  async function handlePrepareAgentCommit() {
-    if (!linkedIssue) {
-      return;
-    }
-
+  async function prepareLinkedIssueAgentCommit(
+    issue: NonNullable<typeof linkedIssue>,
+  ) {
+    setIsTransitionMenuOpen(false);
     setCompleteAgentCommitErrorMessage(null);
     setIsPreparingAgentCommit(true);
 
     try {
       const preview = await prepareAgentCommitCompletion({
         projectId,
-        issueId: linkedIssue.issueId,
+        issueId: issue.issueId,
       });
       setAgentCommitPreview(preview);
     } catch (error) {
@@ -523,6 +535,52 @@ export function AgentsActivity({
     } finally {
       setIsPreparingAgentCommit(false);
     }
+  }
+
+  async function handleMarkDone() {
+    if (!linkedIssue || !selectedSession) {
+      return;
+    }
+
+    const currentSession =
+      sessions.find((session) => session.sessionId === selectedSession.sessionId) ??
+      selectedSession;
+    let nextSession = currentSession;
+
+    if (currentSession.issueStatus === "running") {
+      const refreshedSessions = await markLinkedIssueReview(linkedIssue);
+      if (!refreshedSessions) {
+        return;
+      }
+
+      nextSession =
+        refreshedSessions.find(
+          (session) => session.sessionId === currentSession.sessionId,
+        ) ?? { ...currentSession, issueStatus: "review" as const };
+    }
+
+    if (projectCompletionPolicy === "manual") {
+      await completeLinkedIssueManual(linkedIssue, nextSession);
+      return;
+    }
+
+    if (nextSession.canCompleteClean) {
+      await completeLinkedIssueClean(linkedIssue, nextSession);
+      return;
+    }
+
+    if (nextSession.canCompleteAgentCommit) {
+      await prepareLinkedIssueAgentCommit(linkedIssue);
+    }
+  }
+
+  async function handleTransitionAction(action: SessionIssueTransition) {
+    if (action === "review") {
+      await handleMarkReview();
+      return;
+    }
+
+    await handleMarkDone();
   }
 
   function handleCloseAgentCommitPreview() {
@@ -755,7 +813,12 @@ export function AgentsActivity({
         }}
       />
 
-      <section className="agents-workspace" aria-label="Session workspace">
+      <section
+        className={`agents-workspace${
+          isIssueDrawerOpen && linkedIssue ? " agents-workspace--with-issue-drawer" : ""
+        }`}
+        aria-label="Session workspace"
+      >
         <div className="agents-terminal-pane">
           {selectedSession ? (
             <div className="agents-session-toolbar">
@@ -773,46 +836,69 @@ export function AgentsActivity({
                 ) : null}
               </div>
               <div className="agents-session-toolbar__actions">
-                {canMarkReview ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    disabled={isMarkingReview}
-                    type="button"
-                    onClick={() => void handleMarkReview()}
-                  >
-                    {isMarkingReview ? "更新中..." : "Mark Review"}
-                  </button>
+                {canRenderTransitionButton ? (
+                  <div className="agents-session-toolbar__split-action">
+                    <button
+                      className="agents-session-toolbar__action agents-session-toolbar__action--split-main"
+                      disabled={isTransitionPending}
+                      type="button"
+                      onClick={() =>
+                        void handleTransitionAction(
+                          sessionTransitionPhase === "running" ? "review" : "done",
+                        )
+                      }
+                    >
+                      {transitionButtonLabel}
+                    </button>
+                    {canRenderTransitionMenu ? (
+                      <div className="agents-session-toolbar__split-menu">
+                        <button
+                          aria-expanded={isTransitionMenuOpen}
+                          aria-haspopup="menu"
+                          aria-label="Open status options"
+                          className="agents-session-toolbar__action agents-session-toolbar__action--split-toggle"
+                          disabled={isTransitionPending}
+                          type="button"
+                          onClick={() =>
+                            setIsTransitionMenuOpen(
+                              (currentIsTransitionMenuOpen) =>
+                                !currentIsTransitionMenuOpen,
+                            )
+                          }
+                        >
+                          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />
+                        </button>
+                        {isTransitionMenuOpen ? (
+                          <div
+                            className="agents-session-toolbar__menu"
+                            role="menu"
+                          >
+                            {transitionMenuOptions.map((option) => (
+                              <button
+                                key={option.action}
+                                className="agents-session-toolbar__menu-item"
+                                role="menuitem"
+                                type="button"
+                                onClick={() =>
+                                  void handleTransitionAction(option.action)
+                                }
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
-                {canCompleteManual ? (
+                {linkedIssue ? (
                   <button
                     className="agents-session-toolbar__action"
-                    disabled={isCompletingManual}
                     type="button"
-                    onClick={() => void handleCompleteManual()}
+                    onClick={() => setIsIssueDrawerOpen(true)}
                   >
-                    {isCompletingManual ? "完成中..." : "Complete Manually"}
-                  </button>
-                ) : null}
-                {canCompleteClean ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    disabled={isCompletingClean}
-                    type="button"
-                    onClick={() => void handleCompleteClean()}
-                  >
-                    {isCompletingClean ? "完成中..." : "Complete"}
-                  </button>
-                ) : null}
-                {canCompleteAgentCommit ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    disabled={isPreparingAgentCommit}
-                    type="button"
-                    onClick={() => void handlePrepareAgentCommit()}
-                  >
-                    {isPreparingAgentCommit
-                      ? "准备中..."
-                      : "Complete with Agent Commit"}
+                    Open Issue
                   </button>
                 ) : null}
                 {canViewSummary ? (
@@ -875,6 +961,14 @@ export function AgentsActivity({
             )}
           </div>
         </div>
+        {isIssueDrawerOpen && linkedIssue ? (
+          <SessionIssueDrawer
+            issueId={linkedIssue.issueId}
+            issueTitle={linkedIssue.issueTitle}
+            projectId={projectId}
+            onClose={() => setIsIssueDrawerOpen(false)}
+          />
+        ) : null}
 
       </section>
 
@@ -962,6 +1056,108 @@ export function AgentsActivity({
   );
 }
 
+interface SessionIssueDrawerProps {
+  issueId: number;
+  issueTitle: string;
+  projectId: number;
+  onClose: () => void;
+}
+
+function SessionIssueDrawer({
+  issueId,
+  issueTitle,
+  projectId,
+  onClose,
+}: SessionIssueDrawerProps) {
+  const [issue, setIssue] = useState<IssueRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadIssue() {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const response = await listIssues({ projectId });
+        if (!isMounted) {
+          return;
+        }
+
+        const nextIssue =
+          response.issues.find((candidate) => candidate.id === issueId) ?? null;
+        setIssue(nextIssue);
+        if (!nextIssue) {
+          setErrorMessage("Linked issue no longer exists.");
+        }
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setIssue(null);
+        setErrorMessage(toCommandError(error).message);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadIssue();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [issueId, projectId]);
+
+  const description =
+    issue?.description?.trim().length ? issue.description : "No details provided.";
+
+  return (
+    <aside className="agents-issue-drawer" aria-label="Issue details">
+      <div className="agents-issue-drawer__header">
+        <div className="agents-issue-drawer__copy">
+          <p className="agents-issue-drawer__eyebrow">Issue</p>
+          <h4>{issue?.title ?? issueTitle}</h4>
+        </div>
+        <button
+          aria-label="Close issue details"
+          className="issue-dialog__close"
+          type="button"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </div>
+      <div className="agents-issue-drawer__body">
+        {isLoading ? (
+          <p className="issues-status" role="status">
+            Loading issue...
+          </p>
+        ) : errorMessage ? (
+          <p className="issues-status" role="status">
+            {errorMessage}
+          </p>
+        ) : (
+          <>
+            <section className="issue-dialog__panel">
+              <h4>Title</h4>
+              <p className="issue-detail__title">{issue?.title ?? issueTitle}</p>
+            </section>
+            <section className="issue-dialog__panel">
+              <h4>Details</h4>
+              <div className="issue-detail__description">{description}</div>
+            </section>
+          </>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 function applySessionOverlay(
   session: AgentSessionListItem,
   reviewedIssueIds: Set<number>,
@@ -1017,6 +1213,23 @@ function getSessionIssueGroup(
   }
 
   return session.status === "running" ? "inProcess" : "done";
+}
+
+function getSessionTransitionPhase(
+  session: AgentSessionListItem | null,
+): "running" | "review" | "completed" | null {
+  if (!session?.issueId || !session.issueStatus) {
+    return null;
+  }
+
+  switch (session.issueStatus) {
+    case "running":
+    case "review":
+    case "completed":
+      return session.issueStatus;
+    default:
+      return null;
+  }
 }
 
 interface SessionGroupProps {

@@ -82,7 +82,6 @@ const prepareAgentCommitCompletionMock = vi.mocked(
 const sendAgentCommitPromptMock = vi.mocked(sendAgentCommitPrompt);
 const updateIssueMock = vi.mocked(updateIssue);
 const openPathMock = vi.mocked(openPath);
-const confirmSpy = vi.spyOn(window, "confirm");
 
 const defaultProfiles = {
   project: [
@@ -135,8 +134,6 @@ describe("AgentsActivity", () => {
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     openPathMock.mockReset();
-    confirmSpy.mockReset();
-    confirmSpy.mockReturnValue(true);
     readAgentSessionTerminalMock.mockResolvedValue({
       sessionId: 301,
       snapshot: "",
@@ -398,7 +395,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("separator", { name: "Resize session info" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
+      screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "#issue20 Existing issue" }),
@@ -1491,7 +1488,7 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
 
     const markReviewButton = screen.getByRole("button", {
-      name: "Mark Review",
+      name: "Mark review",
     });
     await user.click(markReviewButton);
 
@@ -1501,7 +1498,7 @@ describe("AgentsActivity", () => {
     });
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
@@ -1544,13 +1541,13 @@ describe("AgentsActivity", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Mark Review",
+        name: "Mark review",
       }),
     );
 
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
@@ -1605,21 +1602,21 @@ describe("AgentsActivity", () => {
       await Promise.resolve();
     });
     expect(
-      screen.getByRole("button", { name: "Mark Review" }),
+      screen.getByRole("button", { name: "Mark review" }),
     ).toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(1_500);
     });
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mark Review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark review" }));
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(3);
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
 
     await act(async () => {
@@ -1643,7 +1640,7 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
@@ -1692,14 +1689,14 @@ describe("AgentsActivity", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Mark Review",
+        name: "Mark review",
       }),
     );
 
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(screen.getByText("already review")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
@@ -1759,7 +1756,7 @@ describe("AgentsActivity", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
 
@@ -1768,7 +1765,7 @@ describe("AgentsActivity", () => {
       await screen.findByRole("heading", { name: "#issue22 Review issue" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
 
     const completedGroup = screen.getByRole("region", {
@@ -1789,7 +1786,7 @@ describe("AgentsActivity", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1843,16 +1840,16 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: /#issue22.*Review issue/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Complete Manually" }),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete with Agent Commit" }),
+      screen.queryByRole("button", { name: "Open status options" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "View Summary" }),
@@ -1891,16 +1888,16 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: /#issue22.*Review issue/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Complete Manually" }),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete with Agent Commit" }),
+      screen.queryByRole("button", { name: "Open status options" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "View Summary" }),
@@ -1942,18 +1939,16 @@ describe("AgentsActivity", () => {
     );
 
     expect(
-      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+      await screen.findByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete" }),
+      screen.queryByRole("button", { name: "Open status options" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete Manually" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "Complete with Agent Commit" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Mark done" }));
 
     expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -2065,7 +2060,7 @@ describe("AgentsActivity", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+      await screen.findByRole("button", { name: "Mark done" }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
@@ -2086,7 +2081,7 @@ describe("AgentsActivity", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("button", { name: "Complete with Agent Commit" }),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("尚未检测到新的 commit，Issue 保持待验收。"),
@@ -2162,7 +2157,7 @@ describe("AgentsActivity", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+      await screen.findByRole("button", { name: "Mark done" }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
@@ -2175,7 +2170,7 @@ describe("AgentsActivity", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("button", { name: "Complete with Agent Commit" }),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -2209,8 +2204,6 @@ describe("AgentsActivity", () => {
         },
       ],
     });
-    confirmSpy.mockReturnValueOnce(true);
-
     render(
       <AgentsActivity
         activeSessionId={502}
@@ -2219,13 +2212,13 @@ describe("AgentsActivity", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Complete" }));
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
 
     expect(
       await screen.findByText("当前 Git 正在进行中的操作阻止直接完成。"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Complete" }),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
   });
 
@@ -2280,7 +2273,7 @@ describe("AgentsActivity", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Complete with Agent Commit" }),
+      await screen.findByRole("button", { name: "Mark done" }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
@@ -2301,13 +2294,13 @@ describe("AgentsActivity", () => {
     );
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
-      screen.queryByRole("button", { name: "Complete with Agent Commit" }),
+      screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Complete Manually" }),
+      screen.queryByRole("button", { name: "Open status options" }),
     ).not.toBeInTheDocument();
   });
 
@@ -2352,29 +2345,26 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     expect(
-      await screen.findByRole("button", { name: "Complete Manually" }),
+      await screen.findByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Complete Manually" }));
+    await user.click(screen.getByRole("button", { name: "Mark done" }));
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      "确认手动完成 #issue22 Review issue 吗？",
-    );
     expect(completeIssueManualMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 22,
     });
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
-      screen.queryByRole("button", { name: "Complete Manually" }),
+      screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Mark Review" }),
+      screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
-  it("keeps complete manually hidden after command success when refreshing sessions fails", async () => {
+  it("keeps mark done hidden after command success when refreshing sessions fails", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock
       .mockResolvedValueOnce({
@@ -2398,53 +2388,114 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Complete Manually" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
 
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
-      screen.queryByRole("button", { name: "Complete Manually" }),
+      screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
-  it("does not complete manually when the confirmation is cancelled", async () => {
+  it("completes a linked running issue directly to done from the status menu", async () => {
     const user = userEvent.setup();
-    confirmSpy.mockReturnValue(false);
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 502,
-          issueId: 22,
-          issueTitle: "Review issue",
-          issueStatus: "review",
-          title: null,
-          agentType: "codex",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-        },
-      ],
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "review",
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_001_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            issueId: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "completed",
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_638_002_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: 1_780_638_002_000,
+          },
+        ],
+      });
+    markIssueReviewMock.mockResolvedValueOnce({
+      id: 21,
+      projectId: 1,
+      title: "Review candidate",
+      description: "",
+      status: "review",
+      linkedSessionId: 302,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_001_000,
+    });
+    completeIssueManualMock.mockResolvedValueOnce({
+      id: 21,
+      projectId: 1,
+      title: "Review candidate",
+      description: "",
+      status: "completed",
+      linkedSessionId: 302,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_002_000,
     });
 
-    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Complete Manually" }),
+      await screen.findByRole("button", { name: "Open status options" }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      "确认手动完成 #issue22 Review issue 吗？",
-    );
-    expect(completeIssueManualMock).not.toHaveBeenCalled();
-    expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
+    expect(markIssueReviewMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 21,
+    });
+    expect(completeIssueManualMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 21,
+    });
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(3));
     expect(
-      screen.getByRole("button", { name: "Complete Manually" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Mark done" }),
+    ).not.toBeInTheDocument();
   });
 
   it("clears requested attention from the selected running session", async () => {
@@ -2782,7 +2833,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("separator", { name: "Resize session info" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
+      screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /#issue20.*Existing issue/i }),
@@ -2820,7 +2871,8 @@ describe("AgentsActivity", () => {
     expect(openPathMock).not.toHaveBeenCalled();
   });
 
-  it("does not render issue inspector controls for linked sessions", async () => {
+  it("opens linked issue details in the right drawer", async () => {
+    const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -2844,18 +2896,21 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Expand issue inspector" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Collapse issue inspector" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Close issue inspector" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Issue" })).toBeInTheDocument();
     expect(
       screen.queryByRole("separator", { name: "Resize session info" }),
     ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open Issue" }));
+
+    const drawer = await screen.findByRole("complementary", {
+      name: "Issue details",
+    });
+    expect(
+      within(drawer).getByRole("heading", { level: 4, name: "Existing issue" }),
+    ).toBeInTheDocument();
+    expect(within(drawer).getByText("Existing description")).toBeInTheDocument();
+    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });
 
   it("keeps the terminal visible after linked issue header actions", async () => {
@@ -2883,10 +2938,10 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Mark Review" }));
+    await user.click(screen.getByRole("button", { name: "Mark review" }));
 
     expect(
-      screen.queryByRole("complementary", { name: "Issue Inspector" }),
+      screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
   });

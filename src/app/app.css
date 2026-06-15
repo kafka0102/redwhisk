@@ -2031,6 +2031,10 @@ button:focus-visible {
   background: var(--color-app);
 }
 
+.agents-workspace--with-issue-drawer {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+}
+
 .agents-terminal-pane {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -2104,6 +2108,17 @@ button:focus-visible {
   gap: 8px;
 }
 
+.agents-session-toolbar__split-action {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.agents-session-toolbar__split-menu {
+  position: relative;
+  display: flex;
+}
+
 .agents-session-toolbar__action {
   flex: 0 0 auto;
   min-width: 88px;
@@ -2120,6 +2135,50 @@ button:focus-visible {
 .agents-session-toolbar__action:disabled {
   opacity: 0.72;
   cursor: wait;
+}
+
+.agents-session-toolbar__action--split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.agents-session-toolbar__action--split-toggle {
+  min-width: 30px;
+  padding: 0 8px;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.agents-session-toolbar__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 2;
+  display: grid;
+  min-width: 120px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
+}
+
+.agents-session-toolbar__menu-item {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.agents-session-toolbar__menu-item:hover,
+.agents-session-toolbar__menu-item:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
 }
 
 .agents-session-status-stack {
@@ -2202,6 +2261,53 @@ button:focus-visible {
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-height: 0;
   height: 100%;
+}
+
+.agents-issue-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  padding: 12px;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.agents-issue-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agents-issue-drawer__copy {
+  min-width: 0;
+}
+
+.agents-issue-drawer__eyebrow {
+  margin: 0 0 2px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.agents-issue-drawer__copy h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.agents-issue-drawer__body {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .issue-inspector__header,
@@ -2691,6 +2797,15 @@ button:focus-visible {
     grid-template-columns:
       minmax(230px, var(--agents-sidebar-width, 230px))
       8px minmax(0, 1fr);
+  }
+
+  .agents-workspace--with-issue-drawer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agents-issue-drawer {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
   }
 
   .issues-kanban {
