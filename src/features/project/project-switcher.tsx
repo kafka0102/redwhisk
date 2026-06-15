@@ -138,7 +138,7 @@ export function ProjectSwitcher({
               <span className="project-switcher__create-icon" aria-hidden="true">
                 <Plus size={15} strokeWidth={2} />
               </span>
-              <span>Create Project</span>
+              <span>创建项目</span>
             </button>
           </div>
           <div className="project-switcher__list">

@@ -747,7 +747,7 @@ describe("App project entry", () => {
       screen.getByRole("button", { name: "Current project RedWhisk" }),
     );
     await user.click(
-      screen.getByRole("menuitem", { name: "Create Project" }),
+      screen.getByRole("menuitem", { name: "创建项目" }),
     );
 
     const projectDialog = await screen.findByRole("dialog", {
