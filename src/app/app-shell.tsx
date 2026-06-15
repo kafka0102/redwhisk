@@ -88,7 +88,6 @@ export function AppShell({
               }}
             >
               <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
-              <span>{label}</span>
             </button>
           );
         })}
