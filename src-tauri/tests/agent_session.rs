@@ -53,7 +53,8 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "started_at",
             "closed_at",
             "project_id",
-            "latest_output"
+            "latest_output",
+            "del"
         ]
     );
 

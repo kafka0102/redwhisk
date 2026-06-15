@@ -27,14 +27,14 @@ use crate::types::completion_attempt::{
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    AgentCommitChangedFileSummary, AgentCommitCompletionPreview, CompleteIssueCleanInput,
-    CompleteIssueManualInput, CreateIssueInput, DetectAgentCommitCompletionInput,
-    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult,
-    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind,
-    IssueAttachmentPreview, IssueAttachmentRecord, IssueListResponse, IssueRecord, IssueStatus,
-    IssueSummaryCompletionInfo, IssueSummaryRecord, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SendAgentCommitPromptInput,
-    SendAgentCommitPromptResult, UpdateIssueInput,
+    AdvanceIssueStatusInput, AgentCommitChangedFileSummary, AgentCommitCompletionPreview,
+    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput,
+    DeleteIssueResult, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionOutcome,
+    DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
+    IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord,
+    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
+    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -450,6 +450,43 @@ impl<'connection> IssueService<'connection> {
         Ok(reviewed_issue)
     }
 
+    pub fn advance_issue_status(
+        &self,
+        input: AdvanceIssueStatusInput,
+    ) -> Result<IssueRecord, CommandError> {
+        self.ensure_project_exists(input.project_id)?;
+        let issue = self
+            .issue_repository
+            .find_by_id(input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if issue.status == input.target_status {
+            return self.hydrate_issue(issue);
+        }
+
+        if issue_status_rank(&input.target_status) < issue_status_rank(&issue.status) {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "Issue 状态只能向前推进，不能回退。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status))
+                    .with_value("targetStatus", issue_status_to_str(&input.target_status)),
+            ));
+        }
+
+        match input.target_status {
+            IssueStatus::Backlog => self.hydrate_issue(issue),
+            IssueStatus::Running | IssueStatus::Review | IssueStatus::Completed => {
+                self.advance_issue_status_with_transaction(input, issue)
+            }
+        }
+    }
+
     pub fn complete_issue_manual(
         &self,
         input: CompleteIssueManualInput,
@@ -563,6 +600,92 @@ impl<'connection> IssueService<'connection> {
         transaction.commit().map_err(issue_database_error)?;
 
         Ok(completed_issue)
+    }
+
+    pub fn delete_issue(&self, input: DeleteIssueInput) -> Result<DeleteIssueResult, CommandError> {
+        self.ensure_project_exists(input.project_id)?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+        let deleted_at = current_epoch_millis()?;
+
+        if let Some(session_id) = issue.linked_session_id {
+            if issue.linked_session_status == Some(AgentSessionStatus::Running) {
+                let closed = AgentSessionRepository::mark_terminated_without_fetch_in_transaction(
+                    &transaction,
+                    session_id,
+                    AgentSessionStatus::Closed,
+                    deleted_at,
+                )
+                .map_err(issue_database_error)?;
+                if !closed {
+                    return Err(CommandError::new(
+                        CommandErrorCode::IssueValidationFailed,
+                        "删除 Issue 时关闭关联 Session 失败。",
+                    )
+                    .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
+                }
+
+                let session_event_payload = json!({
+                    "sessionId": session_id,
+                    "issueId": issue.id,
+                    "status": "closed",
+                    "reason": "issue_deleted",
+                    "logPath": issue.linked_session_log_path,
+                })
+                .to_string();
+                EventRepository::insert_session_event_in_transaction(
+                    &transaction,
+                    session_id,
+                    SessionEventType::SessionClosed,
+                    &session_event_payload,
+                    deleted_at,
+                )
+                .map_err(issue_database_error)?;
+            }
+
+            AgentSessionRepository::soft_delete_in_transaction(&transaction, session_id, deleted_at)
+                .map_err(issue_database_error)?;
+        }
+
+        let deleted = IssueRepository::soft_delete_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            deleted_at,
+        )
+        .map_err(issue_database_error)?;
+        if !deleted {
+            return Err(issue_not_found(input.issue_id));
+        }
+
+        let payload_json = json!({
+            "issueId": issue.id,
+            "status": issue_status_to_str(&issue.status),
+            "linkedSessionId": issue.linked_session_id,
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            issue.id,
+            IssueActionType::IssueDeleted,
+            &payload_json,
+            deleted_at,
+        )
+        .map_err(issue_database_error)?;
+
+        transaction.commit().map_err(issue_database_error)?;
+
+        Ok(DeleteIssueResult {
+            issue_id: issue.id,
+            linked_session_id: issue.linked_session_id,
+        })
     }
 
     pub fn complete_issue_clean(
@@ -1136,6 +1259,16 @@ impl<'connection> IssueService<'connection> {
         IssueService::new(issue_repository, project_repository).mark_issue_review(input)
     }
 
+    pub fn advance_issue_status_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: AdvanceIssueStatusInput,
+    ) -> Result<IssueRecord, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).advance_issue_status(input)
+    }
+
     pub fn complete_issue_manual_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: CompleteIssueManualInput,
@@ -1201,6 +1334,16 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).get_issue_summary(input)
+    }
+
+    pub fn delete_issue_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteIssueInput,
+    ) -> Result<DeleteIssueResult, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).delete_issue(input)
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
@@ -1433,6 +1576,346 @@ impl<'connection> IssueService<'connection> {
 }
 
 impl<'connection> IssueService<'connection> {
+    fn advance_issue_status_with_transaction(
+        &self,
+        input: AdvanceIssueStatusInput,
+        issue: IssueRecord,
+    ) -> Result<IssueRecord, CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+
+        let updated_issue = match input.target_status {
+            IssueStatus::Running => self.update_issue_status_with_audit_in_transaction(
+                &transaction,
+                input.project_id,
+                input.issue_id,
+                issue.status.clone(),
+                IssueStatus::Running,
+                IssueActionType::IssueStatusChanged,
+                None,
+            )?,
+            IssueStatus::Review => {
+                let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+                    &transaction,
+                    input.project_id,
+                    input.issue_id,
+                )
+                .map_err(issue_database_error)?;
+
+                if issue.status == IssueStatus::Running {
+                    if let Some(linked_session_id) = linked_session_id {
+                        let reviewed_issue =
+                            IssueRepository::mark_running_issue_review_in_transaction(
+                                &transaction,
+                                input.project_id,
+                                input.issue_id,
+                                linked_session_id,
+                            )
+                            .map_err(issue_database_error)?
+                            .ok_or_else(|| {
+                                CommandError::new(
+                                    CommandErrorCode::IssueValidationFailed,
+                                    "只有运行中的 Issue 可以标记待验收。",
+                                )
+                                .with_detail(
+                                    ErrorDetail::new("IssueStatus")
+                                        .with_value("issueId", input.issue_id)
+                                        .with_value("status", issue_status_to_str(&issue.status)),
+                                )
+                            })?;
+
+                        let payload_json = json!({
+                            "fromStatus": "running",
+                            "toStatus": "review",
+                            "linkedSessionId": linked_session_id,
+                        })
+                        .to_string();
+                        EventRepository::insert_issue_action_in_transaction(
+                            &transaction,
+                            reviewed_issue.id,
+                            IssueActionType::IssueReviewMarked,
+                            &payload_json,
+                            reviewed_issue.updated_at,
+                        )
+                        .map_err(issue_database_error)?;
+
+                        reviewed_issue
+                    } else {
+                        self.update_issue_status_with_audit_in_transaction(
+                            &transaction,
+                            input.project_id,
+                            input.issue_id,
+                            issue.status.clone(),
+                            IssueStatus::Review,
+                            IssueActionType::IssueStatusChanged,
+                            None,
+                        )?
+                    }
+                } else {
+                    self.update_issue_status_with_audit_in_transaction(
+                        &transaction,
+                        input.project_id,
+                        input.issue_id,
+                        issue.status.clone(),
+                        IssueStatus::Review,
+                        IssueActionType::IssueStatusChanged,
+                        None,
+                    )?
+                }
+            }
+            IssueStatus::Completed => {
+                let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+                    &transaction,
+                    input.project_id,
+                    input.issue_id,
+                )
+                .map_err(issue_database_error)?;
+
+                match (issue.status.clone(), linked_session_id) {
+                    (IssueStatus::Running, Some(linked_session_id)) => {
+                        let reviewed_issue =
+                            IssueRepository::mark_running_issue_review_in_transaction(
+                                &transaction,
+                                input.project_id,
+                                input.issue_id,
+                                linked_session_id,
+                            )
+                            .map_err(issue_database_error)?
+                            .ok_or_else(|| {
+                                CommandError::new(
+                                    CommandErrorCode::IssueValidationFailed,
+                                    "只有运行中的 Issue 可以标记待验收。",
+                                )
+                                .with_detail(
+                                    ErrorDetail::new("IssueStatus")
+                                        .with_value("issueId", input.issue_id)
+                                        .with_value("status", issue_status_to_str(&issue.status)),
+                                )
+                            })?;
+                        let review_payload = json!({
+                            "fromStatus": "running",
+                            "toStatus": "review",
+                            "linkedSessionId": linked_session_id,
+                        })
+                        .to_string();
+                        EventRepository::insert_issue_action_in_transaction(
+                            &transaction,
+                            reviewed_issue.id,
+                            IssueActionType::IssueReviewMarked,
+                            &review_payload,
+                            reviewed_issue.updated_at,
+                        )
+                        .map_err(issue_database_error)?;
+
+                        self.complete_issue_from_review_in_transaction(
+                            &transaction,
+                            input.project_id,
+                            input.issue_id,
+                            linked_session_id,
+                        )?
+                    }
+                    (IssueStatus::Review, Some(linked_session_id)) => {
+                        self.complete_issue_from_review_in_transaction(
+                            &transaction,
+                            input.project_id,
+                            input.issue_id,
+                            linked_session_id,
+                        )?
+                    }
+                    (_, Some(linked_session_id)) => self.complete_issue_without_review_in_transaction(
+                        &transaction,
+                        input.project_id,
+                        input.issue_id,
+                        issue.status.clone(),
+                        Some(linked_session_id),
+                    )?,
+                    (_, None) => self.complete_issue_without_review_in_transaction(
+                        &transaction,
+                        input.project_id,
+                        input.issue_id,
+                        issue.status.clone(),
+                        None,
+                    )?,
+                }
+            }
+            IssueStatus::Backlog => issue,
+        };
+
+        transaction.commit().map_err(issue_database_error)?;
+        self.hydrate_issue(updated_issue)
+    }
+
+    fn update_issue_status_with_audit_in_transaction(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        from_status: IssueStatus,
+        to_status: IssueStatus,
+        action_type: IssueActionType,
+        linked_session_id: Option<i64>,
+    ) -> Result<IssueRecord, CommandError> {
+        let updated_issue = IssueRepository::update_status_in_transaction(
+            transaction,
+            project_id,
+            issue_id,
+            to_status.clone(),
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| issue_not_found(issue_id))?;
+
+        let payload_json = json!({
+            "fromStatus": issue_status_to_str(&from_status),
+            "toStatus": issue_status_to_str(&to_status),
+            "linkedSessionId": linked_session_id,
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            transaction,
+            updated_issue.id,
+            action_type,
+            &payload_json,
+            updated_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        Ok(updated_issue)
+    }
+
+    fn complete_issue_from_review_in_transaction(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        linked_session_id: i64,
+    ) -> Result<IssueRecord, CommandError> {
+        let completed_issue = IssueRepository::complete_review_issue_manually_in_transaction(
+            transaction,
+            project_id,
+            issue_id,
+            linked_session_id,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| issue_not_found(issue_id))?;
+
+        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
+            transaction,
+            linked_session_id,
+            AgentSessionStatus::Closed,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id))
+        })?;
+
+        let issue_action_payload = json!({
+            "fromStatus": "review",
+            "toStatus": "completed",
+            "linkedSessionId": linked_session_id,
+            "option": "status_menu",
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            transaction,
+            completed_issue.id,
+            IssueActionType::IssueCompleted,
+            &issue_action_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        let session_event_payload = json!({
+            "sessionId": closed_session.id,
+            "issueId": closed_session.issue_id,
+            "status": "closed",
+            "reason": "status_menu_completion",
+            "logPath": closed_session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            transaction,
+            closed_session.id,
+            SessionEventType::SessionClosed,
+            &session_event_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        Ok(completed_issue)
+    }
+
+    fn complete_issue_without_review_in_transaction(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        from_status: IssueStatus,
+        linked_session_id: Option<i64>,
+    ) -> Result<IssueRecord, CommandError> {
+        let completed_issue = IssueRepository::update_status_in_transaction(
+            transaction,
+            project_id,
+            issue_id,
+            IssueStatus::Completed,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| issue_not_found(issue_id))?;
+
+        if let Some(linked_session_id) = linked_session_id {
+            if let Some(closed_session) = AgentSessionRepository::mark_terminated_in_transaction(
+                transaction,
+                linked_session_id,
+                AgentSessionStatus::Closed,
+                completed_issue.updated_at,
+            )
+            .map_err(issue_database_error)?
+            {
+                let session_event_payload = json!({
+                    "sessionId": closed_session.id,
+                    "issueId": closed_session.issue_id,
+                    "status": "closed",
+                    "reason": "status_menu_completion",
+                    "logPath": closed_session.log_path,
+                })
+                .to_string();
+                EventRepository::insert_session_event_in_transaction(
+                    transaction,
+                    closed_session.id,
+                    SessionEventType::SessionClosed,
+                    &session_event_payload,
+                    completed_issue.updated_at,
+                )
+                .map_err(issue_database_error)?;
+            }
+        }
+
+        let issue_action_payload = json!({
+            "fromStatus": issue_status_to_str(&from_status),
+            "toStatus": "completed",
+            "linkedSessionId": linked_session_id,
+            "option": "status_menu",
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            transaction,
+            completed_issue.id,
+            IssueActionType::IssueCompleted,
+            &issue_action_payload,
+            completed_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        Ok(completed_issue)
+    }
+
     fn load_review_completion_context_in_transaction(
         &self,
         transaction: &rusqlite::Transaction<'_>,
@@ -1530,6 +2013,15 @@ fn issue_status_to_str(status: &IssueStatus) -> &'static str {
         IssueStatus::Running => "running",
         IssueStatus::Review => "review",
         IssueStatus::Completed => "completed",
+    }
+}
+
+fn issue_status_rank(status: &IssueStatus) -> u8 {
+    match status {
+        IssueStatus::Backlog => 0,
+        IssueStatus::Running => 1,
+        IssueStatus::Review => 2,
+        IssueStatus::Completed => 3,
     }
 }
 

@@ -16,11 +16,11 @@ use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
-    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput,
-    DetectAgentCommitCompletionInput, ExportIssueAttachmentInput, GetIssueSummaryInput,
-    IssueAttachmentInput, IssueAttachmentKind, IssueStatus, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SendAgentCommitPromptInput,
-    UpdateIssueInput,
+    AdvanceIssueStatusInput, CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput,
+    DeleteIssueInput, DetectAgentCommitCompletionInput, ExportIssueAttachmentInput,
+    GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind, IssueStatus,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
+    SendAgentCommitPromptInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
@@ -57,7 +57,8 @@ fn issue_migration_creates_issues_schema_with_project_index() {
             "description",
             "status",
             "created_at",
-            "updated_at"
+            "updated_at",
+            "del"
         ],
     );
     assert_eq!(
@@ -96,6 +97,27 @@ fn issue_migration_creates_issues_schema_with_project_index() {
         )
         .expect("project foreign key count");
     assert_eq!(project_foreign_key_count, 1);
+}
+
+#[test]
+fn issue_and_agent_session_soft_delete_columns_exist() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    assert_eq!(
+        table_column_type(&database.connection, "issues", "del"),
+        "INTEGER"
+    );
+    assert_eq!(
+        table_column_type(&database.connection, "agent_sessions", "del"),
+        "INTEGER"
+    );
 }
 
 #[test]
@@ -2498,9 +2520,10 @@ fn list_issues_includes_linked_session_facts() {
                 command_snapshot,
                 prompt_snapshot,
                 log_path,
+                latest_output,
                 last_active_at,
                 started_at
-            ) VALUES (?1, ?2, 'stopped', 'requested', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
+            ) VALUES (?1, ?2, 'stopped', 'requested', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 'latest chunk', 1780628400000, 1780628400000)",
             rusqlite::params![issue.id, profile_id],
         )
         .expect("insert linked session");
@@ -2526,6 +2549,160 @@ fn list_issues_includes_linked_session_facts() {
         response.issues[0].linked_session_log_path.as_deref(),
         Some("/tmp/log")
     );
+    assert_eq!(
+        response.issues[0].linked_session_latest_output.as_deref(),
+        Some("latest chunk")
+    );
+}
+
+#[test]
+fn advance_issue_status_completes_running_issue_and_closes_linked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "advance-status-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Advance to done".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let completed = service
+        .advance_issue_status(AdvanceIssueStatusInput {
+            project_id,
+            issue_id: issue.id,
+            target_status: IssueStatus::Completed,
+        })
+        .expect("advance running issue to completed");
+
+    assert_eq!(completed.status, IssueStatus::Completed);
+    assert_eq!(
+        AgentSessionRepository::new(&database.connection)
+            .find_by_id(session_id)
+            .expect("query session")
+            .expect("session exists")
+            .status,
+        AgentSessionStatus::Closed
+    );
+}
+
+#[test]
+fn advance_issue_status_rejects_backward_transition() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "advance-backward-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "No backward".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+
+    let error = service
+        .advance_issue_status(AdvanceIssueStatusInput {
+            project_id,
+            issue_id: issue.id,
+            target_status: IssueStatus::Running,
+        })
+        .expect_err("backward transition should fail");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+}
+
+#[test]
+fn delete_issue_soft_deletes_issue_and_linked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "delete-issue-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Delete me".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+        })
+        .expect("created issue");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    service
+        .delete_issue(DeleteIssueInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("soft delete issue");
+
+    let issue_del: i64 = database
+        .connection
+        .query_row("SELECT del FROM issues WHERE id = ?1", [issue.id], |row| row.get(0))
+        .expect("issue del");
+    assert_eq!(issue_del, 1);
+
+    let session_del: i64 = database
+        .connection
+        .query_row(
+            "SELECT del FROM agent_sessions WHERE id = ?1",
+            [session_id],
+            |row| row.get(0),
+        )
+        .expect("session del");
+    assert_eq!(session_del, 1);
+
+    assert!(service
+        .list_issues(project_id)
+        .expect("project issues")
+        .issues
+        .iter()
+        .all(|item| item.id != issue.id));
+    assert!(AgentSessionRepository::new(&database.connection)
+        .list_by_project_id(project_id)
+        .expect("project sessions")
+        .iter()
+        .all(|item| item.session_id != session_id));
 }
 
 #[test]

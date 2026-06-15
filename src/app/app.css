@@ -2758,6 +2758,10 @@ button:focus-visible {
   gap: 7px;
 }
 
+.issue-dialog__panel--stack {
+  gap: 10px;
+}
+
 .issue-dialog__panel h4 {
   margin: 0;
   color: var(--color-text);
@@ -2770,6 +2774,127 @@ button:focus-visible {
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.issue-dialog__meta-row {
+  display: grid;
+  gap: 6px;
+}
+
+.issue-dialog__meta-label {
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.issue-dialog__meta-value {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.issue-dialog__session-link {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #7fc9ff;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.issue-dialog__session-link:hover {
+  color: #a7dbff;
+  text-decoration: underline;
+}
+
+.issue-dialog__session-link:disabled {
+  color: var(--color-text-subtle);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.issue-dialog__status-menu {
+  position: relative;
+}
+
+.issue-dialog__status-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.issue-dialog__status-trigger:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.issue-dialog__status-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-dialog);
+  background: var(--color-surface-elevated);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.issue-dialog__status-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.issue-dialog__status-option:hover {
+  background: var(--color-surface-muted);
+}
+
+.issue-dialog__status-option:disabled {
+  color: var(--color-text-subtle);
+  cursor: not-allowed;
+}
+
+.issue-dialog__delete-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ff6b6b;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.issue-dialog__delete-button:hover {
+  color: #ff8787;
 }
 
 .completion-preview__files {

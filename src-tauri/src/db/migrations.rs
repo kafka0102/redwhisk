@@ -63,6 +63,9 @@ const ISSUE_ATTACHMENTS_MIGRATION_SQL: &str =
 const AGENT_PROFILES_DEL_MIGRATION_VERSION: &str = "0019_agent_profiles_del";
 const AGENT_PROFILES_DEL_MIGRATION_SQL: &str =
     include_str!("../../migrations/0019_agent_profiles_del.sql");
+const ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_VERSION: &str = "0020_issues_and_agent_sessions_del";
+const ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0020_issues_and_agent_sessions_del.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -208,6 +211,10 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_PROFILES_DEL_MIGRATION_VERSION,
                     sql: AGENT_PROFILES_DEL_MIGRATION_SQL,
+                },
+                Migration {
+                    version: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_VERSION,
+                    sql: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL,
                 },
             ];
         }

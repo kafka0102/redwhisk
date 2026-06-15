@@ -4,12 +4,16 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  advanceIssueStatus,
+  completeIssueManual,
   createIssue,
+  deleteIssue,
   exportIssueAttachment,
   listIssues,
+  markIssueReview,
   previewIssueAttachment,
   updateIssue,
-  type AgentSessionStatus,
+  type IssueStatus,
   type IssueAttachmentRecord,
   type IssueAttachmentPreviewRecord,
   type IssueRecord,
@@ -26,7 +30,6 @@ import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
-import { listAgentProfiles } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -58,9 +61,6 @@ export function IssuesActivity({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isOpeningLog, setIsOpeningLog] = useState(false);
-  const [agentProfileErrorMessage, setAgentProfileErrorMessage] = useState<
-    string | null
-  >(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
@@ -123,31 +123,6 @@ export function IssuesActivity({
       isMounted = false;
     };
   }, [projectId, requestedIssueId]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadAgentProfiles() {
-      setAgentProfileErrorMessage(null);
-
-      try {
-        await Promise.all([
-          listAgentProfiles({ scope: "project", projectId }),
-          listAgentProfiles({ scope: "global", projectId: null }),
-        ]);
-      } catch (error) {
-        if (isMounted && activeProjectIdRef.current === projectId) {
-          setAgentProfileErrorMessage(toCommandError(error).message);
-        }
-      }
-    }
-
-    void loadAgentProfiles();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId]);
 
   const selectedIssue = useMemo(
     () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
@@ -471,10 +446,6 @@ export function IssuesActivity({
   const isBacklogDialog =
     dialogMode === "create" || selectedIssue?.status === "backlog";
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
-  const canOpenSession =
-    hasLinkedSession &&
-    selectedIssue?.status !== "completed" &&
-    selectedIssue?.linkedSessionStatus === "running";
   const canOpenLog =
     hasLinkedSession &&
     (selectedIssue?.status === "completed" ||
@@ -482,7 +453,7 @@ export function IssuesActivity({
       selectedIssue?.linkedSessionStatus === "stopped");
   const canViewSummary =
     dialogMode === "edit" && selectedIssue?.status === "completed";
-  const runStatusMessage = agentProfileErrorMessage;
+  const canOpenLinkedSession = hasLinkedSession && Boolean(onOpenAgentsActivity);
 
   async function handleSelectAttachment() {
     const selectedPath = await open({
@@ -569,6 +540,142 @@ export function IssuesActivity({
     }
   }
 
+  async function handleAdvanceStatus(targetStatus: IssueStatus) {
+    if (!selectedIssue || isSaving) {
+      return;
+    }
+
+    if (targetStatus === selectedIssue.status) {
+      return;
+    }
+
+    if (
+      targetStatus === "completed" &&
+      selectedIssue.linkedSessionStatus === "running" &&
+      selectedIssue.linkedSessionLatestOutput?.trim()
+    ) {
+      const isConfirmed = window.confirm("session 未结束，确认要完成吗？");
+      if (!isConfirmed) {
+        return;
+      }
+    }
+
+    setDialogErrorMessage(null);
+    setIsSaving(true);
+    const requestProjectId = projectId;
+    const currentIssue = selectedIssue;
+
+    try {
+      let updatedIssue: IssueRecord;
+
+      if (
+        targetStatus === "review" &&
+        currentIssue.status === "running" &&
+        currentIssue.linkedSessionStatus === "running"
+      ) {
+        updatedIssue = await markIssueReview({
+          projectId: requestProjectId,
+          issueId: currentIssue.id,
+        });
+      } else if (
+        targetStatus === "completed" &&
+        currentIssue.status === "running" &&
+        currentIssue.linkedSessionStatus === "running"
+      ) {
+        const reviewedIssue = await markIssueReview({
+          projectId: requestProjectId,
+          issueId: currentIssue.id,
+        });
+        if (activeProjectIdRef.current !== requestProjectId) {
+          return;
+        }
+        setIssues((currentIssues) => mergeIssue(currentIssues, reviewedIssue));
+        setSelectedIssueId(reviewedIssue.id);
+        setForm(issueToForm(reviewedIssue));
+        updatedIssue = await completeIssueManual({
+          projectId: requestProjectId,
+          issueId: currentIssue.id,
+        });
+      } else if (
+        targetStatus === "completed" &&
+        currentIssue.status === "review" &&
+        currentIssue.linkedSessionStatus === "running"
+      ) {
+        updatedIssue = await completeIssueManual({
+          projectId: requestProjectId,
+          issueId: currentIssue.id,
+        });
+      } else {
+        updatedIssue = await advanceIssueStatus({
+          projectId: requestProjectId,
+          issueId: currentIssue.id,
+          targetStatus,
+        });
+      }
+
+      if (activeProjectIdRef.current !== requestProjectId) {
+        return;
+      }
+
+      setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
+      setSelectedIssueId(updatedIssue.id);
+      setForm(issueToForm(updatedIssue));
+    } catch (error) {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setDialogErrorMessage(toCommandError(error).message);
+      }
+    } finally {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setIsSaving(false);
+      }
+    }
+  }
+
+  async function handleDeleteIssue() {
+    if (!selectedIssue || isSaving) {
+      return;
+    }
+
+    const isConfirmed = window.confirm("确认删除这个 issue 吗？");
+    if (!isConfirmed) {
+      return;
+    }
+
+    setDialogErrorMessage(null);
+    setIsSaving(true);
+    const requestProjectId = projectId;
+    const issueToDelete = selectedIssue;
+
+    try {
+      await deleteIssue({
+        projectId: requestProjectId,
+        issueId: issueToDelete.id,
+      });
+
+      if (activeProjectIdRef.current !== requestProjectId) {
+        return;
+      }
+
+      const remainingIssues = issues.filter((issue) => issue.id !== issueToDelete.id);
+      setIssues(remainingIssues);
+      setSelectedIssueId(remainingIssues[0]?.id ?? null);
+      setDialogMode(null);
+      setRunDialogIssue(null);
+      setSummaryIssueId(null);
+      setAttachmentPreview(null);
+      setForm(EMPTY_FORM);
+      restoreDialogTriggerFocus(remainingIssues[0] ?? null);
+    } catch (error) {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setDialogErrorMessage(toCommandError(error).message);
+      }
+    } finally {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setIsSaving(false);
+      }
+    }
+  }
+
   return (
     <main className="activity-surface activity-surface--issues">
       <div className="issues-header">
@@ -603,16 +710,13 @@ export function IssuesActivity({
           errorMessage={dialogErrorMessage}
           hasLinkedSession={hasLinkedSession}
           isBacklogDialog={isBacklogDialog}
-          canOpenSession={canOpenSession}
           canOpenLog={canOpenLog}
           canViewSummary={canViewSummary}
-          runStatusMessage={runStatusMessage}
           titleInputRef={titleInputRef}
           dialogFormRef={dialogFormRef}
           closeButtonRef={closeButtonRef}
           saveButtonRef={saveButtonRef}
-          canOpenAgentsActivity={Boolean(onOpenAgentsActivity)}
-          formatSessionStatus={formatAgentSessionStatus}
+          canOpenAgentsActivity={canOpenLinkedSession}
           onClose={closeDialog}
           onSubmit={handleSubmit}
           onKeyDown={handleDialogKeyDown}
@@ -625,6 +729,8 @@ export function IssuesActivity({
             void handleDownloadAttachment(attachment)
           }
           onRemoveAttachment={handleRemoveAttachment}
+          onAdvanceStatus={(targetStatus) => void handleAdvanceStatus(targetStatus)}
+          onDeleteIssue={() => void handleDeleteIssue()}
           onOpenLinkedSession={openLinkedSession}
           onOpenLog={() => void handleOpenLog()}
           onOpenSummary={handleOpenSummary}
@@ -859,19 +965,4 @@ function getFocusableDialogElements(
       'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], a[href], [tabindex]:not([tabindex="-1"])',
     ),
   ).filter((element) => element.tabIndex >= 0);
-}
-
-function formatAgentSessionStatus(status: AgentSessionStatus | null): string {
-  switch (status) {
-    case "running":
-      return "running";
-    case "closed":
-      return "closed";
-    case "crashed":
-      return "crashed";
-    case "stopped":
-      return "stopped";
-    default:
-      return "unknown";
-  }
 }

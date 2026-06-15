@@ -36,7 +36,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             .query_row(
                 "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
                  FROM agent_sessions
-                 WHERE id = ?1",
+                 WHERE id = ?1 AND del = 0",
                 params![id],
                 agent_session_from_row,
             )
@@ -48,7 +48,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             .query_row(
                 "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
                  FROM agent_sessions
-                 WHERE issue_id = ?1",
+                 WHERE issue_id = ?1 AND del = 0",
                 params![issue_id],
                 agent_session_from_row,
             )
@@ -79,8 +79,10 @@ impl<'connection> AgentSessionRepository<'connection> {
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
               AND issues.project_id = agent_sessions.project_id
+              AND issues.del = 0
              INNER JOIN agent_profiles ON agent_profiles.id = agent_sessions.agent_profile_id
-             WHERE agent_sessions.project_id = ?1",
+             WHERE agent_sessions.project_id = ?1
+               AND agent_sessions.del = 0",
         )?;
 
         let sessions = statement
@@ -97,7 +99,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         let mut statement = self.connection.prepare(
             "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
              FROM agent_sessions
-             WHERE project_id = ?1 AND status = 'running'
+             WHERE project_id = ?1 AND status = 'running' AND del = 0
              ORDER BY last_active_at DESC, started_at DESC, id DESC",
         )?;
 
@@ -106,6 +108,13 @@ impl<'connection> AgentSessionRepository<'connection> {
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(sessions)
+    }
+
+    pub fn find_by_id_in_transaction(
+        transaction: &Transaction<'_>,
+        id: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        find_by_id_on_connection(transaction, id)
     }
 
     pub fn insert_in_transaction(
@@ -202,7 +211,7 @@ impl<'connection> AgentSessionRepository<'connection> {
              SET status = ?1,
                  last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
-             WHERE id = ?3 AND closed_at IS NULL",
+             WHERE id = ?3 AND closed_at IS NULL AND del = 0",
             params![
                 agent_session_status_to_str(&status),
                 terminated_at,
@@ -217,6 +226,28 @@ impl<'connection> AgentSessionRepository<'connection> {
         find_by_id_on_connection(transaction, session_id)
     }
 
+    pub fn mark_terminated_without_fetch_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        status: AgentSessionStatus,
+        terminated_at: i64,
+    ) -> rusqlite::Result<bool> {
+        let changed = transaction.execute(
+            "UPDATE agent_sessions
+             SET status = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2),
+                 closed_at = COALESCE(closed_at, ?2)
+             WHERE id = ?3 AND closed_at IS NULL AND del = 0",
+            params![
+                agent_session_status_to_str(&status),
+                terminated_at,
+                session_id
+            ],
+        )?;
+
+        Ok(changed > 0)
+    }
+
     pub fn update_codex_session_id(
         &self,
         session_id: i64,
@@ -225,7 +256,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         let changed = self.connection.execute(
             "UPDATE agent_sessions
              SET codex_session_id = ?1
-             WHERE id = ?2 AND codex_session_id IS NULL",
+             WHERE id = ?2 AND codex_session_id IS NULL AND del = 0",
             params![codex_session_id, session_id],
         )?;
 
@@ -246,7 +277,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             "UPDATE agent_sessions
              SET attention = ?1,
                  last_active_at = MAX(last_active_at + 1, ?2)
-             WHERE id = ?3 AND status = 'running'",
+             WHERE id = ?3 AND status = 'running' AND del = 0",
             params![
                 agent_session_attention_to_str(&attention),
                 updated_at,
@@ -271,9 +302,25 @@ impl<'connection> AgentSessionRepository<'connection> {
             "UPDATE agent_sessions
              SET latest_output = ?1,
                  last_active_at = MAX(last_active_at + 1, ?2)
-             WHERE id = ?3 AND status = 'running'",
+             WHERE id = ?3 AND status = 'running' AND del = 0",
             params![latest_output, updated_at, session_id],
         )
+    }
+
+    pub fn soft_delete_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        deleted_at: i64,
+    ) -> rusqlite::Result<bool> {
+        let changed = transaction.execute(
+            "UPDATE agent_sessions
+             SET del = 1,
+                 last_active_at = MAX(last_active_at + 1, ?1)
+             WHERE id = ?2 AND del = 0",
+            params![deleted_at, session_id],
+        )?;
+
+        Ok(changed > 0)
     }
 }
 
@@ -285,7 +332,7 @@ fn find_by_id_on_connection(
         .query_row(
             "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
              FROM agent_sessions
-             WHERE id = ?1",
+             WHERE id = ?1 AND del = 0",
             params![id],
             agent_session_from_row,
         )

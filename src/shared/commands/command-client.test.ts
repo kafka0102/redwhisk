@@ -19,6 +19,8 @@ import {
   writeAgentSessionTerminal,
 } from "../../features/agents/agent-session-commands";
 import {
+  advanceIssueStatus,
+  deleteIssue,
   detectAgentCommitCompletion,
   getIssueSummary,
   prepareAgentCommitCompletion,
@@ -884,6 +886,74 @@ describe("command client", () => {
       diagnostics: [],
     });
     expect(invokeMock).toHaveBeenCalledWith("get_issue_summary", {
+      input: {
+        projectId: 1,
+        issueId: 3,
+      },
+    });
+  });
+
+  it("invokes Rust Core through the advance issue status command", async () => {
+    invokeMock.mockResolvedValue({
+      id: 3,
+      projectId: 1,
+      title: "Review issue",
+      description: "",
+      status: "review",
+      linkedSessionId: 7,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      linkedSessionLogPath: "/tmp/session.log",
+      linkedSessionLatestOutput: "latest output",
+      createdAt: 1_780_700_000_000,
+      updatedAt: 1_780_700_100_000,
+    });
+
+    await expect(
+      advanceIssueStatus({
+        projectId: 1,
+        issueId: 3,
+        targetStatus: "review",
+      }),
+    ).resolves.toEqual({
+      id: 3,
+      projectId: 1,
+      title: "Review issue",
+      description: "",
+      status: "review",
+      linkedSessionId: 7,
+      linkedSessionStatus: "running",
+      linkedSessionAttention: "none",
+      linkedSessionLogPath: "/tmp/session.log",
+      linkedSessionLatestOutput: "latest output",
+      createdAt: 1_780_700_000_000,
+      updatedAt: 1_780_700_100_000,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("advance_issue_status", {
+      input: {
+        projectId: 1,
+        issueId: 3,
+        targetStatus: "review",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the delete issue command", async () => {
+    invokeMock.mockResolvedValue({
+      issueId: 3,
+      linkedSessionId: 7,
+    });
+
+    await expect(
+      deleteIssue({
+        projectId: 1,
+        issueId: 3,
+      }),
+    ).resolves.toEqual({
+      issueId: 3,
+      linkedSessionId: 7,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("delete_issue", {
       input: {
         projectId: 1,
         issueId: 3,
