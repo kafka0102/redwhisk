@@ -1,0 +1,71 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectTerminalInput {
+    pub project_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectTerminalResult {
+    pub session_id: i64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadProjectTerminalInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub max_bytes: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadProjectTerminalResult {
+    pub session_id: i64,
+    pub snapshot: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreProjectTerminalInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreProjectTerminalResult {
+    pub session_id: i64,
+    pub sequence: u64,
+    pub chunks: Vec<Vec<u8>>,
+    pub is_complete: bool,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteProjectTerminalInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub data: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResizeProjectTerminalInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub rows: u16,
+    pub cols: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseProjectTerminalInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}

@@ -899,6 +899,130 @@ button:focus-visible {
   opacity: 0.55;
 }
 
+.settings-terminals-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-terminal-card {
+  position: relative;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  border: 1px solid var(--settings-terminal-card-border, var(--color-border));
+  border-radius: var(--radius-card);
+  background: var(
+    --settings-terminal-card-background,
+    var(--color-surface)
+  );
+  overflow: hidden;
+}
+
+.settings-terminal-card__header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  padding-right: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-terminal-card__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-terminal-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-icon);
+  background: var(
+    --settings-terminal-card-icon-background,
+    var(--color-accent-muted)
+  );
+  color: var(--settings-terminal-card-icon-color, var(--color-accent));
+  flex-shrink: 0;
+}
+
+.settings-terminal-card__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-terminal-card__delete {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms ease-out,
+    background-color 140ms ease-out,
+    color 140ms ease-out;
+}
+
+.settings-terminal-card:hover .settings-terminal-card__delete,
+.settings-terminal-card__delete:focus-visible {
+  opacity: 1;
+}
+
+.settings-terminal-card__delete:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text);
+}
+
+:root[data-theme="dark"] .settings-terminal-card__delete:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-terminal-card__delete:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.settings-terminal-card__body {
+  min-width: 0;
+  padding: 0 14px 14px;
+}
+
+.settings-terminal-card__body .terminal-surface-shell {
+  min-height: 320px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: calc(var(--radius-card) - 2px);
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+:root[data-theme="dark"] .settings-terminal-card__body .terminal-surface-shell {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(5, 5, 6, 0.52);
+}
+
 .agent-dialog__body {
   display: grid;
   align-content: start;
@@ -2207,7 +2331,7 @@ button:focus-visible {
   display: none;
 }
 
-.codex-terminal-shell {
+.terminal-surface-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 8px;
@@ -2217,7 +2341,7 @@ button:focus-visible {
   background: var(--color-surface);
 }
 
-.codex-terminal-shell__status {
+.terminal-surface-shell__status {
   margin: 0;
   padding: 0 4px;
   color: var(--color-text-muted);
@@ -2225,7 +2349,7 @@ button:focus-visible {
   line-height: 1.5;
 }
 
-.codex-terminal {
+.terminal-surface {
   display: grid;
   grid-row: 2;
   position: relative;
@@ -2237,25 +2361,25 @@ button:focus-visible {
   background: var(--color-surface);
 }
 
-:root[data-theme="dark"] .codex-terminal {
+:root[data-theme="dark"] .terminal-surface {
   background: #050506;
 }
 
-.codex-terminal .xterm {
+.terminal-surface .xterm {
   position: relative;
   width: 100%;
   height: 100%;
   padding: 0;
 }
 
-.codex-terminal .xterm,
-.codex-terminal .xterm-viewport,
-.codex-terminal .xterm-screen,
-.codex-terminal .xterm-helpers {
+.terminal-surface .xterm,
+.terminal-surface .xterm-viewport,
+.terminal-surface .xterm-screen,
+.terminal-surface .xterm-helpers {
   background: transparent;
 }
 
-.codex-terminal .xterm-viewport {
+.terminal-surface .xterm-viewport {
   background-color: transparent;
 }
 
