@@ -32,6 +32,14 @@ import {
   saveAgentProfile,
   testAgentCommand,
 } from "../../features/settings/settings-commands";
+import {
+  closeProjectTerminal,
+  createProjectTerminal,
+  readProjectTerminal,
+  resizeProjectTerminal,
+  restoreProjectTerminal,
+  writeProjectTerminal,
+} from "../../features/terminals/project-terminal-commands";
 import { isCommandError, toCommandError } from "./command-error";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -248,6 +256,96 @@ describe("command client", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("list_agent_sessions", {
       projectId: 1,
+    });
+  });
+
+  it("invokes Rust Core through the create project terminal command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: -1,
+      name: "New Terminal",
+    });
+
+    await expect(createProjectTerminal({ projectId: 1 })).resolves.toEqual({
+      sessionId: -1,
+      name: "New Terminal",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("create_project_terminal", {
+      input: { projectId: 1 },
+    });
+  });
+
+  it("invokes Rust Core through the read project terminal command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: -1,
+      snapshot: "hello",
+      isActive: true,
+    });
+
+    await expect(
+      readProjectTerminal({ projectId: 1, sessionId: -1, maxBytes: 128 }),
+    ).resolves.toEqual({
+      sessionId: -1,
+      snapshot: "hello",
+      isActive: true,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("read_project_terminal", {
+      input: { projectId: 1, sessionId: -1, maxBytes: 128 },
+    });
+  });
+
+  it("invokes Rust Core through the restore project terminal command", async () => {
+    invokeMock.mockResolvedValue({
+      sessionId: -1,
+      sequence: 4,
+      chunks: [[65]],
+      isComplete: true,
+      isActive: true,
+    });
+
+    await expect(
+      restoreProjectTerminal({ projectId: 1, sessionId: -1 }),
+    ).resolves.toEqual({
+      sessionId: -1,
+      sequence: 4,
+      chunks: [[65]],
+      isComplete: true,
+      isActive: true,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("restore_project_terminal", {
+      input: { projectId: 1, sessionId: -1 },
+    });
+  });
+
+  it("invokes Rust Core through the write project terminal command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(
+      writeProjectTerminal({ projectId: 1, sessionId: -1, data: "ls\r" }),
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("write_project_terminal", {
+      input: { projectId: 1, sessionId: -1, data: "ls\r" },
+    });
+  });
+
+  it("invokes Rust Core through the resize project terminal command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(
+      resizeProjectTerminal({ projectId: 1, sessionId: -1, rows: 40, cols: 120 }),
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("resize_project_terminal", {
+      input: { projectId: 1, sessionId: -1, rows: 40, cols: 120 },
+    });
+  });
+
+  it("invokes Rust Core through the close project terminal command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await expect(
+      closeProjectTerminal({ projectId: 1, sessionId: -1 }),
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("close_project_terminal", {
+      input: { projectId: 1, sessionId: -1 },
     });
   });
 

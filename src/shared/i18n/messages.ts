@@ -40,6 +40,7 @@ export interface I18nMessages {
     name: string;
     newAgent: string;
     noAgents: string;
+    noTerminals: string;
     projectName: string;
     repositoryPath: string;
     projectScope: string;
@@ -48,8 +49,11 @@ export interface I18nMessages {
     scope: string;
     splitterLabel: string;
     status: string;
+    terminals: string;
     type: string;
     workflowSkill: string;
+    newTerminal: string;
+    deleteTerminal: (terminalName: string) => string;
   };
   issues: {
     backlog: string;
@@ -112,7 +116,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       menuLabel: "Settings menu",
       name: "Name",
       newAgent: "New agent",
+      newTerminal: "New terminal",
       noAgents: "No agents",
+      noTerminals: "No terminals yet.",
       projectName: "Project Name",
       repositoryPath: "Repository path",
       projectScope: "Project",
@@ -121,8 +127,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       scope: "Scope",
       splitterLabel: "Resize settings menu",
       status: "Settings status",
+      terminals: "Terminals",
       type: "Type",
       workflowSkill: "Workflow Skill",
+      deleteTerminal: (terminalName) => `Delete terminal "${terminalName}"`,
     },
     issues: {
       backlog: "Backlog",
@@ -179,7 +187,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       menuLabel: "设置菜单",
       name: "名称",
       newAgent: "New agent",
+      newTerminal: "新建终端",
       noAgents: "暂无 agents",
+      noTerminals: "暂无终端。",
       projectName: "Project 名称",
       repositoryPath: "仓库路径",
       projectScope: "Project",
@@ -188,8 +198,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       scope: "范围",
       splitterLabel: "调整设置菜单宽度",
       status: "设置状态",
+      terminals: "Terminals",
       type: "类型",
       workflowSkill: "Workflow Skill",
+      deleteTerminal: (terminalName) => `删除终端「${terminalName}」`,
     },
     issues: {
       backlog: "待办",

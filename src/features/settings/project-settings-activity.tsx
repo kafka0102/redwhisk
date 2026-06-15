@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, Info, Plus } from "lucide-react";
+import { Bot, Info, Plus, Terminal, X } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import {
@@ -30,10 +30,15 @@ import {
   formatAgentTypeLabel,
   getAgentLogoSrc,
 } from "../agents/agent-visuals";
+import {
+  closeProjectTerminal,
+  createProjectTerminal,
+} from "../terminals/project-terminal-commands";
+import { ProjectTerminal } from "../terminals/project-terminal";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
 
-type SettingsMenu = "general" | "agents";
+type SettingsMenu = "general" | "agents" | "terminals";
 
 interface AddFormState {
   projectId: number;
@@ -42,6 +47,12 @@ interface AddFormState {
 interface EditingProfileState {
   contextProjectId: number;
   profile: AgentProfileRecord;
+}
+
+interface ProjectTerminalCardState {
+  isExpanded: boolean;
+  name: string;
+  sessionId: number;
 }
 
 const SETTINGS_MENU_DEFAULT_WIDTH = 180;
@@ -63,6 +74,11 @@ const SETTINGS_MENU_ITEMS: {
     iconTestId: "settings-menu-icon-agents",
     key: "agents",
     MenuIcon: Bot,
+  },
+  {
+    iconTestId: "settings-menu-icon-terminals",
+    key: "terminals",
+    MenuIcon: Terminal,
   },
 ];
 
@@ -94,7 +110,7 @@ export function ProjectSettingsActivity({
   projectName,
   projectPath = "",
 }: ProjectSettingsActivityProps) {
-  const { messages } = useI18n();
+  const { messages, theme } = useI18n();
   const [activeMenu, setActiveMenu] = useState<SettingsMenu>("agents");
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
@@ -114,6 +130,16 @@ export function ProjectSettingsActivity({
   const [editingProfile, setEditingProfile] =
     useState<EditingProfileState | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<number | null>(
+    null,
+  );
+  const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const [terminalCards, setTerminalCards] = useState<ProjectTerminalCardState[]>(
+    [],
+  );
+  const [terminalStatusMessage, setTerminalStatusMessage] = useState<
+    string | null
+  >(null);
+  const [closingTerminalId, setClosingTerminalId] = useState<number | null>(
     null,
   );
   const dragStateRef = useRef<{
@@ -264,6 +290,47 @@ export function ProjectSettingsActivity({
     }
   }
 
+  async function handleCreateTerminal() {
+    if (creatingTerminal) {
+      return;
+    }
+
+    setTerminalStatusMessage(null);
+    setCreatingTerminal(true);
+
+    try {
+      const terminal = await createProjectTerminal({ projectId });
+      setTerminalCards((currentCards) => [
+        ...currentCards,
+        {
+          sessionId: terminal.sessionId,
+          name: terminal.name,
+          isExpanded: true,
+        },
+      ]);
+    } catch (error: unknown) {
+      setTerminalStatusMessage(toCommandError(error).message);
+    } finally {
+      setCreatingTerminal(false);
+    }
+  }
+
+  async function handleDeleteTerminal(sessionId: number) {
+    setTerminalStatusMessage(null);
+    setClosingTerminalId(sessionId);
+
+    try {
+      await closeProjectTerminal({ projectId, sessionId });
+      setTerminalCards((currentCards) =>
+        currentCards.filter((card) => card.sessionId !== sessionId),
+      );
+    } catch (error: unknown) {
+      setTerminalStatusMessage(toCommandError(error).message);
+    } finally {
+      setClosingTerminalId(null);
+    }
+  }
+
   return (
     <main
       className="activity-surface activity-surface--settings"
@@ -365,6 +432,20 @@ export function ProjectSettingsActivity({
                 >
                   <Plus aria-hidden="true" size={14} strokeWidth={2} />
                   <span>{messages.settings.newAgent}</span>
+                </Button>
+              ) : activeMenu === "terminals" ? (
+                <Button
+                  className="settings-section__header-action"
+                  variant="secondary"
+                  size="icon"
+                  type="button"
+                  aria-label={messages.settings.newTerminal}
+                  disabled={creatingTerminal}
+                  onClick={() => {
+                    void handleCreateTerminal();
+                  }}
+                >
+                  <Plus aria-hidden="true" size={15} strokeWidth={2} />
                 </Button>
               ) : null
             }
@@ -510,6 +591,107 @@ export function ProjectSettingsActivity({
                     onSaved={handleProfileSaved}
                   />
                 ) : null}
+              </>
+            ) : null}
+
+            {activeMenu === "terminals" ? (
+              <>
+                {terminalStatusMessage ? (
+                  <p
+                    className="settings-status"
+                    role="status"
+                    aria-label={messages.settings.status}
+                  >
+                    {terminalStatusMessage}
+                  </p>
+                ) : null}
+
+                {terminalCards.length === 0 ? (
+                  <div className="settings-agent-table-empty">
+                    <p>{messages.settings.noTerminals}</p>
+                  </div>
+                ) : (
+                  <div className="settings-terminals-list">
+                    {terminalCards.map((terminalCard) => {
+                      const cardPalette = getTerminalCardPalette(
+                        theme,
+                        terminalCard.sessionId,
+                      );
+
+                      return (
+                        <section
+                          key={terminalCard.sessionId}
+                          className="settings-terminal-card"
+                          style={
+                            {
+                              "--settings-terminal-card-background":
+                                cardPalette.background,
+                              "--settings-terminal-card-border":
+                                cardPalette.border,
+                              "--settings-terminal-card-icon-background":
+                                cardPalette.iconBackground,
+                              "--settings-terminal-card-icon-color":
+                                cardPalette.iconColor,
+                            } as CSSProperties
+                          }
+                        >
+                          <button
+                            className="settings-terminal-card__header"
+                            type="button"
+                            aria-expanded={terminalCard.isExpanded}
+                            onClick={() => {
+                              setTerminalCards((currentCards) =>
+                                currentCards.map((card) =>
+                                  card.sessionId === terminalCard.sessionId
+                                    ? {
+                                        ...card,
+                                        isExpanded: !card.isExpanded,
+                                      }
+                                    : card,
+                                ),
+                              );
+                            }}
+                          >
+                            <span className="settings-terminal-card__summary">
+                              <span
+                                className="settings-terminal-card__icon"
+                                aria-hidden="true"
+                              >
+                                <Terminal size={15} strokeWidth={1.9} />
+                              </span>
+                              <span className="settings-terminal-card__name">
+                                {terminalCard.name}
+                              </span>
+                            </span>
+                          </button>
+                          <button
+                            className="settings-terminal-card__delete"
+                            type="button"
+                            aria-label={messages.settings.deleteTerminal(
+                              terminalCard.name,
+                            )}
+                            disabled={closingTerminalId === terminalCard.sessionId}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleDeleteTerminal(terminalCard.sessionId);
+                            }}
+                          >
+                            <X size={14} strokeWidth={2} />
+                          </button>
+
+                          {terminalCard.isExpanded ? (
+                            <div className="settings-terminal-card__body">
+                              <ProjectTerminal
+                                projectId={projectId}
+                                sessionId={terminalCard.sessionId}
+                              />
+                            </div>
+                          ) : null}
+                        </section>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             ) : null}
           </SettingsContentFrame>
@@ -681,5 +863,71 @@ function getSettingsMenuLabel(
   key: SettingsMenu,
   messages: I18nMessages,
 ): string {
-  return key === "general" ? messages.settings.general : messages.settings.agents;
+  if (key === "general") {
+    return messages.settings.general;
+  }
+
+  if (key === "agents") {
+    return messages.settings.agents;
+  }
+
+  return messages.settings.terminals;
+}
+
+function getTerminalCardPalette(theme: "light" | "dark", seed: number) {
+  const lightPalettes = [
+    {
+      background: "#f7f1e7",
+      border: "#dccab0",
+      iconBackground: "rgba(120, 82, 38, 0.12)",
+      iconColor: "#7a5226",
+    },
+    {
+      background: "#eaf4ee",
+      border: "#bfd6c5",
+      iconBackground: "rgba(42, 108, 68, 0.12)",
+      iconColor: "#2a6c44",
+    },
+    {
+      background: "#edf2fb",
+      border: "#c5d1ea",
+      iconBackground: "rgba(44, 87, 146, 0.12)",
+      iconColor: "#2c5792",
+    },
+    {
+      background: "#f8ecef",
+      border: "#e1c2cb",
+      iconBackground: "rgba(138, 57, 83, 0.12)",
+      iconColor: "#8a3953",
+    },
+  ];
+  const darkPalettes = [
+    {
+      background: "#2a231b",
+      border: "#4d3e2f",
+      iconBackground: "rgba(239, 213, 180, 0.12)",
+      iconColor: "#efd5b4",
+    },
+    {
+      background: "#1c2923",
+      border: "#355443",
+      iconBackground: "rgba(191, 225, 206, 0.12)",
+      iconColor: "#bfe1ce",
+    },
+    {
+      background: "#1d2430",
+      border: "#364660",
+      iconBackground: "rgba(198, 215, 243, 0.12)",
+      iconColor: "#c6d7f3",
+    },
+    {
+      background: "#2c2026",
+      border: "#553746",
+      iconBackground: "rgba(239, 204, 216, 0.12)",
+      iconColor: "#efccd8",
+    },
+  ];
+  const palettes = theme === "dark" ? darkPalettes : lightPalettes;
+  const paletteIndex = Math.abs(seed) % palettes.length;
+  return palettes[paletteIndex];
 }

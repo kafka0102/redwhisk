@@ -17,9 +17,27 @@ import {
   updateProjectSettings,
   validateProjectRepoPath,
 } from "../project/project-commands";
+import {
+  closeProjectTerminal,
+  createProjectTerminal,
+} from "../terminals/project-terminal-commands";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
+}));
+
+vi.mock("../terminals/project-terminal", () => ({
+  ProjectTerminal: ({
+    projectId,
+    sessionId,
+  }: {
+    projectId: number;
+    sessionId: number;
+  }) => (
+    <div data-testid={`project-terminal:${projectId}:${sessionId}`}>
+      terminal {sessionId}
+    </div>
+  ),
 }));
 
 vi.mock("./settings-commands", () => ({
@@ -65,6 +83,11 @@ vi.mock("../project/project-commands", () => ({
   validateProjectRepoPath: vi.fn(),
 }));
 
+vi.mock("../terminals/project-terminal-commands", () => ({
+  closeProjectTerminal: vi.fn(),
+  createProjectTerminal: vi.fn(),
+}));
+
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const deleteAgentProfileMock = vi.mocked(deleteAgentProfile);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
@@ -73,6 +96,8 @@ const listAgentSkillsMock = vi.mocked(listAgentSkills);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
+const createProjectTerminalMock = vi.mocked(createProjectTerminal);
+const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
 const { open } = await import("@tauri-apps/plugin-dialog");
 const openDialogMock = vi.mocked(open);
 const onProjectUpdated = vi.fn();
@@ -123,6 +148,8 @@ describe("ProjectSettingsActivity", () => {
     saveAgentProfileMock.mockReset();
     updateProjectSettingsMock.mockReset();
     validateProjectRepoPathMock.mockReset();
+    createProjectTerminalMock.mockReset();
+    closeProjectTerminalMock.mockReset();
     openDialogMock.mockReset();
     settingsEventMocks.listeners.length = 0;
     settingsEventMocks.unlisten.mockReset();
@@ -145,6 +172,11 @@ describe("ProjectSettingsActivity", () => {
       repoPath,
       suggestedName: repoPath.split("/").pop() ?? "repo",
     }));
+    createProjectTerminalMock.mockResolvedValue({
+      sessionId: -1,
+      name: "New Terminal",
+    });
+    closeProjectTerminalMock.mockResolvedValue(undefined);
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") return { profiles: [projectProfile] };
       return { profiles: [globalProfile] };
@@ -202,10 +234,67 @@ describe("ProjectSettingsActivity", () => {
       "aria-pressed",
       "true",
     );
+    expect(
+      screen.getByRole("button", { name: "Terminals" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "New agent" }),
     ).toBeInTheDocument();
+  });
+
+  it("creates, expands, and deletes a project terminal card", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Terminals" }));
+    expect(
+      screen.getByRole("heading", { name: "Terminals" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No terminals yet.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New terminal" }));
+
+    await waitFor(() => {
+      expect(createProjectTerminalMock).toHaveBeenCalledWith({ projectId: 1 });
+    });
+
+    expect(screen.getByRole("button", { name: "New Terminal" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(
+      screen.getByTestId("project-terminal:1:-1"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New Terminal" }));
+    expect(screen.getByRole("button", { name: "New Terminal" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: 'Delete terminal "New Terminal"' }),
+    );
+
+    await waitFor(() => {
+      expect(closeProjectTerminalMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: -1,
+      });
+    });
+    expect(
+      screen.queryByTestId("project-terminal:1:-1"),
+    ).not.toBeInTheDocument();
   });
 
   it("exposes and updates the settings menu splitter width", async () => {

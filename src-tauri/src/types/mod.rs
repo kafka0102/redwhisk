@@ -7,4 +7,5 @@ pub mod issue;
 pub mod issue_action;
 pub mod local_data;
 pub mod project;
+pub mod project_terminal;
 pub mod session_event;

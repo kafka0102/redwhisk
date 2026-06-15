@@ -2,12 +2,14 @@ use std::sync::Mutex;
 
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent_skill::index::AgentSkillIndex;
+use crate::core::project_terminal_service::ProjectTerminalRegistry;
 use crate::core::local_data_service::LocalDataService;
 
 pub struct AppState {
     pub agent_skills: AgentSkillIndex,
     pub local_data: Mutex<LocalDataService>,
     pub pty_sessions: PtySessionManager,
+    pub project_terminals: ProjectTerminalRegistry,
 }
 
 impl AppState {
@@ -16,6 +18,7 @@ impl AppState {
             agent_skills: AgentSkillIndex::default(),
             local_data: Mutex::new(local_data),
             pty_sessions: PtySessionManager::new(),
+            project_terminals: ProjectTerminalRegistry::new(),
         }
     }
 }
