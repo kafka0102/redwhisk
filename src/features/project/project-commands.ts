@@ -7,7 +7,18 @@ export interface LocalDataStatus {
 }
 
 export interface CreateProjectInput {
+  name: string;
   repoPath: string;
+  completionPolicy: ProjectCompletionPolicy;
+}
+
+export interface ValidateProjectRepoPathInput {
+  repoPath: string;
+}
+
+export interface ValidateProjectRepoPathResponse {
+  repoPath: string;
+  suggestedName: string;
 }
 
 export interface OpenProjectInput {
@@ -24,6 +35,7 @@ export interface UpdateProjectCompletionPolicyInput {
 export interface UpdateProjectSettingsInput {
   projectId: number;
   name: string;
+  repoPath: string;
   completionPolicy: ProjectCompletionPolicy;
 }
 
@@ -57,6 +69,15 @@ export function createProject(
   input: CreateProjectInput,
 ): Promise<ProjectRecord> {
   return invokeCommand<ProjectRecord>("create_project", { input });
+}
+
+export function validateProjectRepoPath(
+  input: ValidateProjectRepoPathInput,
+): Promise<ValidateProjectRepoPathResponse> {
+  return invokeCommand<ValidateProjectRepoPathResponse>(
+    "validate_project_repo_path",
+    { input },
+  );
 }
 
 export function listProjects(): Promise<ProjectListResponse> {

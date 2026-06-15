@@ -1061,6 +1061,17 @@ button:focus-visible {
   font-weight: 400;
 }
 
+.settings-field__control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-field__repo-button {
+  white-space: nowrap;
+}
+
 .settings-input,
 .settings-textarea {
   width: 100%;
@@ -1196,6 +1207,10 @@ button:focus-visible {
 
 .settings-save-button {
   justify-self: start;
+}
+
+.project-details-card {
+  width: 100%;
 }
 
 .settings-form__actions-row {

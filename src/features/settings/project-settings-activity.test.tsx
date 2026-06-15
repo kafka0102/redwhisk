@@ -13,7 +13,14 @@ import {
   type AgentSkillListResponse,
   type AgentProfileRecord,
 } from "./settings-commands";
-import { updateProjectSettings } from "../project/project-commands";
+import {
+  updateProjectSettings,
+  validateProjectRepoPath,
+} from "../project/project-commands";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+}));
 
 vi.mock("./settings-commands", () => ({
   detectCodexCommand: vi.fn(),
@@ -55,6 +62,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../project/project-commands", () => ({
   updateProjectSettings: vi.fn(),
+  validateProjectRepoPath: vi.fn(),
 }));
 
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
@@ -64,6 +72,9 @@ const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listAgentSkillsMock = vi.mocked(listAgentSkills);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
+const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
+const { open } = await import("@tauri-apps/plugin-dialog");
+const openDialogMock = vi.mocked(open);
 const onProjectUpdated = vi.fn();
 const confirmSpy = vi.spyOn(window, "confirm");
 
@@ -111,6 +122,8 @@ describe("ProjectSettingsActivity", () => {
     listAgentSkillsMock.mockReset();
     saveAgentProfileMock.mockReset();
     updateProjectSettingsMock.mockReset();
+    validateProjectRepoPathMock.mockReset();
+    openDialogMock.mockReset();
     settingsEventMocks.listeners.length = 0;
     settingsEventMocks.unlisten.mockReset();
     onProjectUpdated.mockReset();
@@ -128,6 +141,10 @@ describe("ProjectSettingsActivity", () => {
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
     });
+    validateProjectRepoPathMock.mockImplementation(async ({ repoPath }) => ({
+      repoPath,
+      suggestedName: repoPath.split("/").pop() ?? "repo",
+    }));
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") return { profiles: [projectProfile] };
       return { profiles: [globalProfile] };
@@ -165,6 +182,7 @@ describe("ProjectSettingsActivity", () => {
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
       />,
     );
 
@@ -199,6 +217,7 @@ describe("ProjectSettingsActivity", () => {
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
       />,
     );
 
@@ -228,6 +247,7 @@ describe("ProjectSettingsActivity", () => {
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
       />,
     );
 
@@ -270,6 +290,7 @@ describe("ProjectSettingsActivity", () => {
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
       />,
     );
 
@@ -289,6 +310,9 @@ describe("ProjectSettingsActivity", () => {
       screen.getByLabelText("General").querySelector(".settings-section__body"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
+    expect(screen.getByLabelText("Repository path")).toHaveValue(
+      "/tmp/redwhisk",
+    );
     expect(screen.getByLabelText("Git completion strategy")).toHaveValue(
       "manual",
     );
@@ -1221,6 +1245,7 @@ describe("ProjectSettingsActivity", () => {
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
       />,
     );
 
@@ -1237,6 +1262,7 @@ describe("ProjectSettingsActivity", () => {
       expect(updateProjectSettingsMock).toHaveBeenCalledWith({
         projectId: 1,
         name: "RedWhisk Desktop",
+        repoPath: "/tmp/redwhisk",
         completionPolicy: "agent_auto_commit",
       }),
     );
@@ -1247,6 +1273,78 @@ describe("ProjectSettingsActivity", () => {
         completionPolicy: "agent_auto_commit",
       }),
     );
+  });
+
+  it("updates repository path in general settings after choosing a valid git directory", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/tmp/other-repo");
+    updateProjectSettingsMock.mockResolvedValue({
+      id: 1,
+      name: "RedWhisk",
+      repoPath: "/tmp/other-repo",
+      completionPolicy: "manual",
+      createdAt: 1_780_624_800_000,
+      lastOpenedAt: 1_780_628_400_000,
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "General" }));
+    await user.click(screen.getByRole("button", { name: "Choose folder" }));
+
+    expect(validateProjectRepoPathMock).toHaveBeenCalledWith({
+      repoPath: "/tmp/other-repo",
+    });
+    expect(await screen.findByLabelText("Repository path")).toHaveValue(
+      "/tmp/other-repo",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateProjectSettingsMock).toHaveBeenCalledWith({
+        projectId: 1,
+        name: "RedWhisk",
+        repoPath: "/tmp/other-repo",
+        completionPolicy: "manual",
+      }),
+    );
+  });
+
+  it("shows repository validation errors in general settings and blocks save", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/tmp/plain-dir");
+    validateProjectRepoPathMock.mockRejectedValue({
+      code: "PROJECT_REPO_NOT_GIT_REPOSITORY",
+      message: "所选目录不是 Git Repository。",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "General" }));
+    await user.click(screen.getByRole("button", { name: "Choose folder" }));
+
+    expect(
+      await screen.findByRole("status", { name: "General Settings status" }),
+    ).toHaveTextContent("所选目录不是 Git Repository。");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(updateProjectSettingsMock).not.toHaveBeenCalled();
   });
 });
 

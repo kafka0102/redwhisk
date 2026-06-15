@@ -8,6 +8,7 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
     ProjectSummary, UpdateProjectCompletionPolicyInput, UpdateProjectSettingsInput,
+    ValidateProjectRepoPathResponse,
 };
 
 pub struct ProjectService<'connection> {
@@ -23,36 +24,15 @@ impl<'connection> ProjectService<'connection> {
         &self,
         input: CreateProjectInput,
     ) -> Result<ProjectSummary, CommandError> {
-        let repo_path = normalize_repo_path(&input.repo_path)?;
-
-        if !is_git_repository(&repo_path) {
-            return Err(CommandError::new(
-                CommandErrorCode::ProjectRepoNotGitRepository,
-                "所选目录不是 Git Repository。",
-            )
-            .with_detail(
-                ErrorDetail::new("RepoPath")
-                    .with_value("path", repo_path.to_string_lossy().to_string()),
-            ));
-        }
-
-        let name = repo_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::ProjectRepoPathInvalid,
-                    "Project 路径无效。",
-                )
-                .with_detail(
-                    ErrorDetail::new("RepoPath")
-                        .with_value("path", repo_path.to_string_lossy().to_string()),
-                )
-            })?;
+        let validated_repo = validate_repo_path(&input.repo_path)?;
+        let name = normalize_project_name(&input.name, &validated_repo.repo_path)?;
 
         self.repository
-            .insert_or_get_existing_for_path(name, &repo_path)
+            .insert_or_get_existing_for_path(
+                &name,
+                &validated_repo.repo_path,
+                input.completion_policy,
+            )
             .map_err(project_database_error)
     }
 
@@ -104,19 +84,30 @@ impl<'connection> ProjectService<'connection> {
         &self,
         input: UpdateProjectSettingsInput,
     ) -> Result<ProjectSummary, CommandError> {
-        let project_name = input.name.trim();
-        if project_name.is_empty() {
-            return Err(CommandError::new(
-                CommandErrorCode::ProjectRepoPathInvalid,
-                "Project 名称不能为空。",
-            ));
-        }
+        let validated_repo = validate_repo_path(&input.repo_path)?;
+        let project_name = normalize_project_name(&input.name, &validated_repo.repo_path)?;
 
         self.project_by_id(input.project_id)?;
 
         self.repository
-            .update_settings(input.project_id, project_name, input.completion_policy)
+            .update_settings(
+                input.project_id,
+                &project_name,
+                &validated_repo.repo_path.to_string_lossy(),
+                input.completion_policy,
+            )
             .map_err(project_database_error)
+    }
+
+    pub fn validate_project_repo_path(
+        repo_path: &str,
+    ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
+        let validated_repo = validate_repo_path(repo_path)?;
+
+        Ok(ValidateProjectRepoPathResponse {
+            repo_path: validated_repo.repo_path.to_string_lossy().to_string(),
+            suggested_name: validated_repo.suggested_name,
+        })
     }
 
     pub fn create_project_in_data_dir(
@@ -210,6 +201,11 @@ impl<'connection> ProjectService<'connection> {
     }
 }
 
+struct ValidatedRepoPath {
+    repo_path: PathBuf,
+    suggested_name: String,
+}
+
 fn open_project_database(
     data_dir: impl AsRef<Path>,
 ) -> Result<crate::db::connection::Database, CommandError> {
@@ -259,6 +255,58 @@ fn normalize_repo_path(path: &str) -> Result<PathBuf, CommandError> {
     }
 
     Ok(repo_path)
+}
+
+fn validate_repo_path(path: &str) -> Result<ValidatedRepoPath, CommandError> {
+    let repo_path = normalize_repo_path(path)?;
+
+    if !is_git_repository(&repo_path) {
+        return Err(CommandError::new(
+            CommandErrorCode::ProjectRepoNotGitRepository,
+            "所选目录不是 Git Repository。",
+        )
+        .with_detail(
+            ErrorDetail::new("RepoPath")
+                .with_value("path", repo_path.to_string_lossy().to_string()),
+        ));
+    }
+
+    let suggested_name = repo_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::ProjectRepoPathInvalid,
+                "Project 路径无效。",
+            )
+            .with_detail(
+                ErrorDetail::new("RepoPath")
+                    .with_value("path", repo_path.to_string_lossy().to_string()),
+            )
+        })?
+        .to_string();
+
+    Ok(ValidatedRepoPath {
+        repo_path,
+        suggested_name,
+    })
+}
+
+fn normalize_project_name(name: &str, repo_path: &Path) -> Result<String, CommandError> {
+    let project_name = name.trim();
+    if project_name.is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::ProjectRepoPathInvalid,
+            "Project 名称不能为空。",
+        )
+        .with_detail(
+            ErrorDetail::new("RepoPath")
+                .with_value("path", repo_path.to_string_lossy().to_string()),
+        ));
+    }
+
+    Ok(project_name.to_string())
 }
 
 fn project_list_item(project: ProjectSummary) -> ProjectListItem {

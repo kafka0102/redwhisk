@@ -2605,7 +2605,7 @@ fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection
 fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
     let repo_path = format!("/tmp/{name}");
     ProjectRepository::new(connection)
-        .insert(name, &repo_path)
+        .insert(name, &repo_path, ProjectCompletionPolicy::AgentAutoCommit)
         .expect("insert project")
         .id
 }

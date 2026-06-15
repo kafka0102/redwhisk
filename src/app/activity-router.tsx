@@ -15,6 +15,7 @@ interface ActivityRouterProps {
   projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   projectName: string;
+  projectPath: string;
   requestedIssueId: number | null;
 }
 
@@ -27,6 +28,7 @@ export function ActivityRouter({
   projectCompletionPolicy,
   projectId,
   projectName,
+  projectPath,
   requestedIssueId,
 }: ActivityRouterProps) {
   if (activeActivity === "agents") {
@@ -48,6 +50,7 @@ export function ActivityRouter({
         onProjectUpdated={onProjectUpdated}
         projectId={projectId}
         projectName={projectName}
+        projectPath={projectPath}
       />
     );
   }

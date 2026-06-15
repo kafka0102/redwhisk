@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Bot, Info, Plus } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
@@ -21,7 +22,9 @@ import {
   type ProjectCompletionPolicy,
   type UpdateProjectSettingsInput,
   updateProjectSettings,
+  validateProjectRepoPath,
 } from "../project/project-commands";
+import { ProjectDetailsForm } from "../project/project-details-form";
 import type { ProjectSummary } from "../../app/app";
 import {
   formatAgentTypeLabel,
@@ -68,15 +71,20 @@ interface ProjectSettingsActivityProps {
   onProjectUpdated?: (project: ProjectSummary) => void;
   projectId: number;
   projectName: string;
+  projectPath?: string;
 }
 
 interface GeneralSettingsFormProps {
   completionPolicy: ProjectCompletionPolicy;
   messages: I18nMessages;
   onSave: (
-    input: Pick<UpdateProjectSettingsInput, "name" | "completionPolicy">,
+    input: Pick<
+      UpdateProjectSettingsInput,
+      "name" | "repoPath" | "completionPolicy"
+    >,
   ) => Promise<void>;
   projectName: string;
+  projectPath: string;
 }
 
 export function ProjectSettingsActivity({
@@ -84,6 +92,7 @@ export function ProjectSettingsActivity({
   onProjectUpdated,
   projectId,
   projectName,
+  projectPath = "",
 }: ProjectSettingsActivityProps) {
   const { messages } = useI18n();
   const [activeMenu, setActiveMenu] = useState<SettingsMenu>("agents");
@@ -209,11 +218,15 @@ export function ProjectSettingsActivity({
   }
 
   async function handleGeneralSettingsSave(
-    input: Pick<UpdateProjectSettingsInput, "name" | "completionPolicy">,
+    input: Pick<
+      UpdateProjectSettingsInput,
+      "name" | "repoPath" | "completionPolicy"
+    >,
   ) {
     const updatedProject = await updateProjectSettings({
       projectId,
       name: input.name,
+      repoPath: input.repoPath,
       completionPolicy: input.completionPolicy,
     });
     onProjectUpdated?.({
@@ -358,11 +371,12 @@ export function ProjectSettingsActivity({
           >
             {activeMenu === "general" ? (
               <GeneralSettingsForm
-                key={`${projectId}:${projectName}:${completionPolicy}`}
+                key={`${projectId}:${projectName}:${projectPath}:${completionPolicy}`}
                 completionPolicy={completionPolicy}
                 messages={messages}
                 onSave={handleGeneralSettingsSave}
                 projectName={projectName}
+                projectPath={projectPath}
               />
             ) : null}
 
@@ -535,18 +549,53 @@ function GeneralSettingsForm({
   messages,
   onSave,
   projectName,
+  projectPath,
 }: GeneralSettingsFormProps) {
   const [projectNameValue, setProjectNameValue] = useState(projectName);
+  const [projectPathValue, setProjectPathValue] = useState(projectPath);
   const [completionPolicyValue, setCompletionPolicyValue] =
     useState<ProjectCompletionPolicy>(completionPolicy);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isChoosingRepoPath, setIsChoosingRepoPath] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const trimmedProjectName = projectNameValue.trim();
+  const trimmedProjectPath = projectPathValue.trim();
   const isDirty =
     trimmedProjectName !== projectName ||
+    trimmedProjectPath !== projectPath ||
     completionPolicyValue !== completionPolicy;
   const isSaveDisabled =
-    isSaving || trimmedProjectName.length === 0 || !isDirty;
+    isSaving ||
+    isChoosingRepoPath ||
+    trimmedProjectName.length === 0 ||
+    trimmedProjectPath.length === 0 ||
+    !isDirty;
+
+  async function handleChooseRepoPath() {
+    setErrorMessage(null);
+    setIsChoosingRepoPath(true);
+
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Git Repository",
+      });
+
+      if (typeof selectedPath !== "string") {
+        return;
+      }
+
+      const validatedPath = await validateProjectRepoPath({
+        repoPath: selectedPath,
+      });
+      setProjectPathValue(validatedPath.repoPath);
+    } catch (error: unknown) {
+      setErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsChoosingRepoPath(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -560,6 +609,7 @@ function GeneralSettingsForm({
     try {
       await onSave({
         name: trimmedProjectName,
+        repoPath: trimmedProjectPath,
         completionPolicy: completionPolicyValue,
       });
     } catch (error: unknown) {
@@ -570,58 +620,29 @@ function GeneralSettingsForm({
   }
 
   return (
-    <form
+    <ProjectDetailsForm
+      ariaStatusLabel={`${messages.settings.general} ${messages.settings.status}`}
+      autoCommitLabel={messages.settings.autoCommit}
+      chooseFolderLabel={messages.settings.chooseFolder}
       className="settings-card settings-general-card"
+      completionPolicy={completionPolicyValue}
+      completionStrategyLabel={messages.settings.completionStrategy}
+      errorMessage={errorMessage}
+      isChoosingRepoPath={isChoosingRepoPath}
+      isSubmitting={isSaving}
+      onChooseRepoPath={handleChooseRepoPath}
+      onCompletionPolicyChange={setCompletionPolicyValue}
+      onNameChange={setProjectNameValue}
       onSubmit={handleSubmit}
-    >
-      <label className="settings-field">
-        <span>{messages.settings.projectName}</span>
-        <input
-          aria-label={messages.settings.projectName}
-          className="settings-input settings-input--form-control"
-          disabled={isSaving}
-          value={projectNameValue}
-          onChange={(event) => setProjectNameValue(event.target.value)}
-        />
-      </label>
-      <label className="settings-field">
-        <span>{messages.settings.completionStrategy}</span>
-        <select
-          aria-label={messages.settings.completionStrategy}
-          className="settings-input settings-input--form-control"
-          disabled={isSaving}
-          value={completionPolicyValue}
-          onChange={(event) =>
-            setCompletionPolicyValue(
-              event.target.value as ProjectCompletionPolicy,
-            )
-          }
-        >
-          <option value="agent_auto_commit">
-            {messages.settings.autoCommit}
-          </option>
-          <option value="manual">{messages.settings.manual}</option>
-        </select>
-      </label>
-      {errorMessage ? (
-        <p
-          className="settings-status"
-          role="status"
-          aria-label={`${messages.settings.general} ${messages.settings.status}`}
-        >
-          {errorMessage}
-        </p>
-      ) : null}
-      <div className="settings-form__actions-row settings-form__actions-row--footer">
-        <Button
-          className="settings-save-button"
-          disabled={isSaveDisabled}
-          type="submit"
-        >
-          {isSaving ? messages.settings.saving : messages.settings.save}
-        </Button>
-      </div>
-    </form>
+      projectName={projectNameValue}
+      projectNameLabel={messages.settings.projectName}
+      repoPath={projectPathValue}
+      repoPathLabel={messages.settings.repositoryPath}
+      manualLabel={messages.settings.manual}
+      submitDisabled={isSaveDisabled}
+      submitLabel={messages.settings.save}
+      submittingLabel={messages.settings.saving}
+    />
   );
 }
 

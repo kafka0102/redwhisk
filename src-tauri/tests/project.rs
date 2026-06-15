@@ -4,7 +4,8 @@ use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
-    CreateProjectInput, OpenProjectInput, ProjectPathStatus, UpdateProjectSettingsInput,
+    CreateProjectInput, OpenProjectInput, ProjectCompletionPolicy, ProjectPathStatus,
+    UpdateProjectSettingsInput,
 };
 use std::fs;
 
@@ -182,7 +183,7 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
 }
 
 #[test]
-fn create_project_persists_git_repo_and_derives_name() {
+fn create_project_persists_git_repo_with_confirmed_name() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = DatabaseConfig::new(temp_dir.path())
         .open()
@@ -196,7 +197,9 @@ fn create_project_persists_git_repo_and_derives_name() {
 
     let project = service
         .create_project(CreateProjectInput {
+            name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         })
         .expect("created project");
 
@@ -238,12 +241,16 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
 
     let direct_project = service
         .create_project(CreateProjectInput {
+            name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         })
         .expect("direct project");
     let equivalent_project = service
         .create_project(CreateProjectInput {
+            name: "sample-repo".to_string(),
             repo_path: repo_dir.join(".").to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         })
         .expect("equivalent project");
 
@@ -277,7 +284,9 @@ fn create_project_rejects_non_git_directory_without_insert() {
 
     let error = service
         .create_project(CreateProjectInput {
+            name: "plain-dir".to_string(),
             repo_path: non_git_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         })
         .expect_err("non git repo should be rejected");
 
@@ -303,7 +312,9 @@ fn create_project_reports_missing_path_as_invalid_without_insert() {
 
     let error = service
         .create_project(CreateProjectInput {
+            name: "missing-repo".to_string(),
             repo_path: missing_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         })
         .expect_err("missing path should be rejected");
 
@@ -328,7 +339,9 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
     let input = CreateProjectInput {
+        name: "sample-repo".to_string(),
         repo_path: repo_dir.to_string_lossy().to_string(),
+        completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
     };
 
     let first_project = service
@@ -356,10 +369,18 @@ fn repository_insert_is_idempotent_for_existing_repo_path() {
     let repository = ProjectRepository::new(&database.connection);
 
     let first_project = repository
-        .insert_or_get_existing("sample-repo", "/tmp/sample-repo")
+        .insert_or_get_existing(
+            "sample-repo",
+            "/tmp/sample-repo",
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("first insert");
     let second_project = repository
-        .insert_or_get_existing("sample-repo", "/tmp/sample-repo")
+        .insert_or_get_existing(
+            "sample-repo",
+            "/tmp/sample-repo",
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("second insert");
 
     assert_eq!(first_project.id, second_project.id);
@@ -388,10 +409,18 @@ fn repository_generates_unique_project_ids_for_multiple_repos() {
     let repository = ProjectRepository::new(&database.connection);
 
     let first_project = repository
-        .insert_or_get_existing("first-repo", "/tmp/first-repo")
+        .insert_or_get_existing(
+            "first-repo",
+            "/tmp/first-repo",
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("first insert");
     let second_project = repository
-        .insert_or_get_existing("second-repo", "/tmp/second-repo")
+        .insert_or_get_existing(
+            "second-repo",
+            "/tmp/second-repo",
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("second insert");
 
     assert_ne!(first_project.id, second_project.id);
@@ -413,14 +442,22 @@ fn list_projects_returns_all_projects_with_path_status_in_recent_order() {
     let missing_repo = temp_dir.path().join("missing-repo");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert("available-repo", available_repo.to_str().unwrap())
+        .insert(
+            "available-repo",
+            available_repo.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("insert available project");
     let old_project = repository
         .find_by_repo_path(available_repo.to_str().unwrap())
         .expect("query available project")
         .expect("available project");
     repository
-        .insert("missing-repo", missing_repo.to_str().unwrap())
+        .insert(
+            "missing-repo",
+            missing_repo.to_str().unwrap(),
+            ProjectCompletionPolicy::Manual,
+        )
         .expect("insert missing project");
     let new_project = repository
         .find_by_repo_path(missing_repo.to_str().unwrap())
@@ -467,7 +504,11 @@ fn open_project_updates_last_opened_at_for_available_project() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert("sample-repo", repo_dir.to_str().unwrap())
+        .insert(
+            "sample-repo",
+            repo_dir.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(repo_dir.to_str().unwrap())
@@ -505,7 +546,11 @@ fn open_project_rejects_missing_path_without_deleting_or_updating_project() {
     let missing_repo = temp_dir.path().join("missing-repo");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert("missing-repo", missing_repo.to_str().unwrap())
+        .insert(
+            "missing-repo",
+            missing_repo.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(missing_repo.to_str().unwrap())
@@ -547,7 +592,11 @@ fn prepare_project_window_open_validates_target_without_updating_last_opened_at(
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert("target-repo", repo_dir.to_str().unwrap())
+        .insert(
+            "target-repo",
+            repo_dir.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(repo_dir.to_str().unwrap())
@@ -585,7 +634,11 @@ fn record_project_opened_updates_last_opened_at_after_window_success() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert("target-repo", repo_dir.to_str().unwrap())
+        .insert(
+            "target-repo",
+            repo_dir.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(repo_dir.to_str().unwrap())
@@ -618,9 +671,15 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
     MigrationRunner::default()
         .run(&database.connection)
         .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     let stored_project = repository
-        .insert("sample-repo", "/tmp/sample-repo")
+        .insert(
+            "sample-repo",
+            repo_dir.to_str().unwrap(),
+            ProjectCompletionPolicy::Manual,
+        )
         .expect("insert project");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
 
@@ -628,16 +687,20 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
         .update_project_settings(UpdateProjectSettingsInput {
             project_id: stored_project.id,
             name: "RedWhisk Desktop".to_string(),
-            completion_policy:
-                redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit,
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         })
         .expect("update project settings");
 
     assert_eq!(updated.id, stored_project.id);
     assert_eq!(updated.name, "RedWhisk Desktop");
     assert_eq!(
+        updated.repo_path,
+        repo_dir.canonicalize().expect("canonical repo").to_string_lossy()
+    );
+    assert_eq!(
         updated.completion_policy,
-        redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
+        ProjectCompletionPolicy::AgentAutoCommit
     );
 }
 
@@ -650,9 +713,15 @@ fn update_project_settings_rejects_blank_name() {
     MigrationRunner::default()
         .run(&database.connection)
         .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     let stored_project = repository
-        .insert("sample-repo", "/tmp/sample-repo")
+        .insert(
+            "sample-repo",
+            repo_dir.to_str().unwrap(),
+            ProjectCompletionPolicy::Manual,
+        )
         .expect("insert project");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
 
@@ -660,7 +729,8 @@ fn update_project_settings_rejects_blank_name() {
         .update_project_settings(UpdateProjectSettingsInput {
             project_id: stored_project.id,
             name: "   ".to_string(),
-            completion_policy: redwhisk_lib::types::project::ProjectCompletionPolicy::Manual,
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::Manual,
         })
         .expect_err("blank name should fail");
 
@@ -670,6 +740,106 @@ fn update_project_settings_rejects_blank_name() {
         .expect("query project")
         .expect("project");
     assert_eq!(persisted.name, "sample-repo");
+}
+
+#[test]
+fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let initial_repo_dir = temp_dir.path().join("initial-repo");
+    fs::create_dir_all(initial_repo_dir.join(".git")).expect("initial git dir");
+    let moved_repo_dir = temp_dir.path().join("moved-repo");
+    fs::create_dir_all(moved_repo_dir.join(".git")).expect("moved git dir");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+    let project = service
+        .create_project(CreateProjectInput {
+            name: "initial-repo".to_string(),
+            repo_path: initial_repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::Manual,
+        })
+        .expect("created project");
+
+    let updated_project = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: project.id,
+            name: "Moved Repo".to_string(),
+            repo_path: moved_repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+        })
+        .expect("updated project");
+
+    assert_eq!(updated_project.name, "Moved Repo");
+    assert_eq!(
+        updated_project.repo_path,
+        moved_repo_dir
+            .canonicalize()
+            .expect("canonical moved repo")
+            .to_string_lossy()
+    );
+    assert_eq!(
+        updated_project.completion_policy,
+        ProjectCompletionPolicy::AgentAutoCommit
+    );
+}
+
+#[test]
+fn update_project_settings_rejects_non_git_repo_path() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let initial_repo_dir = temp_dir.path().join("initial-repo");
+    fs::create_dir_all(initial_repo_dir.join(".git")).expect("initial git dir");
+    let invalid_repo_dir = temp_dir.path().join("plain-dir");
+    fs::create_dir_all(&invalid_repo_dir).expect("plain dir");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+    let project = service
+        .create_project(CreateProjectInput {
+            name: "initial-repo".to_string(),
+            repo_path: initial_repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::Manual,
+        })
+        .expect("created project");
+
+    let error = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: project.id,
+            name: "Initial Repo".to_string(),
+            repo_path: invalid_repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::Manual,
+        })
+        .expect_err("non git repo should be rejected");
+
+    assert_eq!(error.code, CommandErrorCode::ProjectRepoNotGitRepository);
+}
+
+#[test]
+fn validate_project_repo_path_returns_canonical_path_and_suggested_name() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+
+    let response = ProjectService::validate_project_repo_path(
+        repo_dir.join(".").to_string_lossy().as_ref(),
+    )
+    .expect("validated repo");
+
+    assert_eq!(
+        response.repo_path,
+        repo_dir
+            .canonicalize()
+            .expect("canonical repo")
+            .to_string_lossy()
+    );
+    assert_eq!(response.suggested_name, "sample-repo");
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {
