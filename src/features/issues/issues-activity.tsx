@@ -1,6 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -60,7 +59,6 @@ export function IssuesActivity({
   const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isOpeningLog, setIsOpeningLog] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
@@ -198,7 +196,6 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
-    setIsOpeningLog(false);
     setRunDialogIssue(null);
     setSummaryIssueId(null);
     setAttachmentPreview(null);
@@ -378,29 +375,6 @@ export function IssuesActivity({
     onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
   }
 
-  async function handleOpenLog() {
-    if (!selectedIssue || isOpeningLog) {
-      return;
-    }
-
-    setDialogErrorMessage(null);
-
-    if (!selectedIssue.linkedSessionLogPath) {
-      setDialogErrorMessage("No log path recorded for this session.");
-      return;
-    }
-
-    setIsOpeningLog(true);
-
-    try {
-      await openPath(selectedIssue.linkedSessionLogPath);
-    } catch (error) {
-      setDialogErrorMessage(toCommandError(error).message);
-    } finally {
-      setIsOpeningLog(false);
-    }
-  }
-
   function handleOpenSummary() {
     if (selectedIssue?.status !== "completed") {
       return;
@@ -446,11 +420,6 @@ export function IssuesActivity({
   const isBacklogDialog =
     dialogMode === "create" || selectedIssue?.status === "backlog";
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
-  const canOpenLog =
-    hasLinkedSession &&
-    (selectedIssue?.status === "completed" ||
-      selectedIssue?.linkedSessionStatus === "crashed" ||
-      selectedIssue?.linkedSessionStatus === "stopped");
   const canViewSummary =
     dialogMode === "edit" && selectedIssue?.status === "completed";
   const canOpenLinkedSession = hasLinkedSession && Boolean(onOpenAgentsActivity);
@@ -706,11 +675,9 @@ export function IssuesActivity({
           form={form}
           selectedIssue={selectedIssue}
           isSaving={isSaving}
-          isOpeningLog={isOpeningLog}
           errorMessage={dialogErrorMessage}
           hasLinkedSession={hasLinkedSession}
           isBacklogDialog={isBacklogDialog}
-          canOpenLog={canOpenLog}
           canViewSummary={canViewSummary}
           titleInputRef={titleInputRef}
           dialogFormRef={dialogFormRef}
@@ -732,7 +699,6 @@ export function IssuesActivity({
           onAdvanceStatus={(targetStatus) => void handleAdvanceStatus(targetStatus)}
           onDeleteIssue={() => void handleDeleteIssue()}
           onOpenLinkedSession={openLinkedSession}
-          onOpenLog={() => void handleOpenLog()}
           onOpenSummary={handleOpenSummary}
         />
       ) : null}

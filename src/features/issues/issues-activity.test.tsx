@@ -1,7 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,10 +50,6 @@ vi.mock("../settings/settings-commands", () => ({
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
   save: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openPath: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -144,7 +139,6 @@ const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
-const openPathMock = vi.mocked(openPath);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
 
 const existingIssue: IssueRecord = {
@@ -289,11 +283,9 @@ describe("IssuesActivity", () => {
     listAgentProfilesMock.mockReset();
     openDialogMock.mockReset();
     saveDialogMock.mockReset();
-    openPathMock.mockReset();
     convertFileSrcMock.mockReset();
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
-    openPathMock.mockResolvedValue();
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
@@ -985,7 +977,7 @@ describe("IssuesActivity", () => {
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
     expect(
-      screen.getByRole("button", { name: "Linked session #301" }),
+      screen.getByRole("button", { name: "Open linked session #301" }),
     ).toBeEnabled();
   });
 
@@ -1222,7 +1214,7 @@ describe("IssuesActivity", () => {
     );
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
     expect(
-      screen.getByRole("button", { name: "Linked session #301" }),
+      screen.getByRole("button", { name: "Open linked session #301" }),
     ).toBeEnabled();
   });
 
@@ -1319,7 +1311,7 @@ describe("IssuesActivity", () => {
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByText("Linked session #301"),
+      within(dialog).queryByText("#301"),
     ).not.toBeInTheDocument();
   });
 
@@ -1338,7 +1330,7 @@ describe("IssuesActivity", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
     await user.click(
-      within(dialog).getByRole("button", { name: "Linked session #401" }),
+      within(dialog).getByRole("button", { name: "Open linked session #401" }),
     );
 
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
@@ -1438,7 +1430,7 @@ describe("IssuesActivity", () => {
     confirmSpy.mockRestore();
   });
 
-  it("does not show Open Session for completed issues with linked sessions", async () => {
+  it("shows summary action and inline linked session entry for completed issues", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
     getIssueSummaryMock.mockResolvedValue({
@@ -1480,57 +1472,14 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "Open Log" }),
+      within(dialog).getByRole("button", { name: "Open linked session #401" }),
     ).toBeInTheDocument();
-  });
-
-  it("opens completed issue log from the issue detail dialog", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({
-      issues: [
-        {
-          ...completedLinkedSessionIssue,
-          linkedSessionLogPath: "/tmp/completed.log",
-        } as IssueRecord,
-      ],
-    });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Completed linked session issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
-
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/completed.log");
-  });
-
-  it("shows a factual error when completed issue log path is missing", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Completed linked session issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
-
     expect(
-      await within(dialog).findByText("No log path recorded for this session."),
-    ).toBeInTheDocument();
-    expect(openPathMock).not.toHaveBeenCalled();
+      within(dialog).queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows open log instead of open session for crashed sessions", async () => {
+  it("keeps the linked session entry available for crashed sessions without open log", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({
       issues: [
@@ -1553,36 +1502,12 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/crashed.log");
-  });
-
-  it("surfaces open log failures for abnormal linked sessions", async () => {
-    const user = userEvent.setup();
-    openPathMock.mockRejectedValueOnce(new Error("log unavailable"));
-    listIssuesMock.mockResolvedValue({
-      issues: [
-        {
-          ...crashedRunningIssue,
-          linkedSessionLogPath: "/tmp/crashed.log",
-        } as IssueRecord,
-      ],
-    });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Crashed running issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Open Log" }));
-
     expect(
-      await within(dialog).findByText("log unavailable"),
+      within(dialog).getByRole("button", { name: "Open linked session #402" }),
     ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Open Log" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens completed issue summary from the issue detail dialog", async () => {
