@@ -5,10 +5,11 @@ use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::IssueService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
-    CreateIssueInput, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
-    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse,
-    IssueRecord, IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    AdvanceIssueStatusInput, AgentCommitCompletionPreview, CompleteIssueCleanInput,
+    CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput, DeleteIssueResult,
+    DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult, ExportIssueAttachmentInput,
+    GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse, IssueRecord,
+    IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
     PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
     UpdateIssueInput,
 };
@@ -79,6 +80,26 @@ pub fn mark_issue_review(
 }
 
 #[tauri::command]
+pub fn advance_issue_status(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: AdvanceIssueStatusInput,
+) -> Result<IssueRecord, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let issue = IssueService::advance_issue_status_in_data_dir(data_dir, input)?;
+
+    if let Some(session_id) = issue.linked_session_id {
+        if issue.linked_session_status == Some(crate::types::agent_session::AgentSessionStatus::Closed)
+            && state.pty_sessions.contains(session_id)
+        {
+            let _ = state.pty_sessions.kill(session_id);
+        }
+    }
+
+    Ok(issue)
+}
+
+#[tauri::command]
 pub fn complete_issue_manual(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -146,6 +167,24 @@ pub fn get_issue_summary(
         &state.pty_sessions,
     )?;
     IssueService::get_issue_summary_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn delete_issue(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteIssueInput,
+) -> Result<DeleteIssueResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let result = IssueService::delete_issue_in_data_dir(data_dir, input)?;
+
+    if let Some(session_id) = result.linked_session_id {
+        if state.pty_sessions.contains(session_id) {
+            let _ = state.pty_sessions.kill(session_id);
+        }
+    }
+
+    Ok(result)
 }
 
 fn prepare_issue_data_dir(

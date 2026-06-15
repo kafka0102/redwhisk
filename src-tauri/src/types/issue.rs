@@ -68,6 +68,14 @@ pub struct MarkIssueReviewInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AdvanceIssueStatusInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+    pub target_status: IssueStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompleteIssueManualInput {
     pub project_id: i64,
     pub issue_id: i64,
@@ -106,6 +114,20 @@ pub struct DetectAgentCommitCompletionInput {
 pub struct GetIssueSummaryInput {
     pub project_id: i64,
     pub issue_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteIssueInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteIssueResult {
+    pub issue_id: i64,
+    pub linked_session_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -196,11 +218,12 @@ pub struct IssueRecord {
     pub linked_session_status: Option<AgentSessionStatus>,
     pub linked_session_attention: Option<AgentSessionAttention>,
     pub linked_session_log_path: Option<String>,
+    pub linked_session_latest_output: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum IssueStatus {
     Backlog,

@@ -13,26 +13,37 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
         SELECT agent_sessions.id
         FROM agent_sessions
         WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
         LIMIT 1
     ) AS linked_session_id,
     (
         SELECT agent_sessions.status
         FROM agent_sessions
         WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
         LIMIT 1
     ) AS linked_session_status,
     (
         SELECT agent_sessions.attention
         FROM agent_sessions
         WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
         LIMIT 1
     ) AS linked_session_attention,
     (
         SELECT agent_sessions.log_path
         FROM agent_sessions
         WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
         LIMIT 1
     ) AS linked_session_log_path,
+    (
+        SELECT agent_sessions.latest_output
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
+        LIMIT 1
+    ) AS linked_session_latest_output,
     issues.created_at,
     issues.updated_at
  FROM issues";
@@ -54,6 +65,7 @@ impl<'connection> IssueRepository<'connection> {
         let mut statement = self.connection.prepare(&format!(
             "{ISSUE_SELECT_COLUMNS}
              WHERE issues.project_id = ?1
+               AND issues.del = 0
              ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC"
         ))?;
 
@@ -136,7 +148,7 @@ impl<'connection> IssueRepository<'connection> {
                    updated_at + 1,
                    CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
                  )
-             WHERE id = ?3 AND project_id = ?4",
+             WHERE id = ?3 AND project_id = ?4 AND del = 0",
             params![title, description, issue_id, project_id],
         )?;
 
@@ -159,7 +171,9 @@ impl<'connection> IssueRepository<'connection> {
                  INNER JOIN issues ON issues.id = agent_sessions.issue_id
                  WHERE issues.id = ?1
                    AND issues.project_id = ?2
+                   AND issues.del = 0
                    AND agent_sessions.project_id = ?2
+                   AND agent_sessions.del = 0
                    AND agent_sessions.status = 'running'
                  LIMIT 1",
                 params![issue_id, project_id],
@@ -187,7 +201,9 @@ impl<'connection> IssueRepository<'connection> {
                  INNER JOIN issues ON issues.id = agent_sessions.issue_id
                  WHERE issues.id = ?1
                    AND issues.project_id = ?2
+                   AND issues.del = 0
                    AND agent_sessions.project_id = ?2
+                   AND agent_sessions.del = 0
                    AND agent_sessions.status = 'running'
                  LIMIT 1",
                 params![issue_id, project_id],
@@ -209,7 +225,7 @@ impl<'connection> IssueRepository<'connection> {
                    updated_at + 1,
                    CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
                  )
-             WHERE id = ?2 AND project_id = ?3",
+             WHERE id = ?2 AND project_id = ?3 AND del = 0",
             params![issue_status_to_str(&status), issue_id, project_id],
         )?;
 
@@ -235,6 +251,7 @@ impl<'connection> IssueRepository<'connection> {
                  )
              WHERE id = ?1
                AND project_id = ?2
+               AND del = 0
                AND status = 'running'
                AND EXISTS (
                  SELECT 1
@@ -242,6 +259,7 @@ impl<'connection> IssueRepository<'connection> {
                  WHERE agent_sessions.id = ?3
                    AND agent_sessions.issue_id = issues.id
                    AND agent_sessions.project_id = ?2
+                   AND agent_sessions.del = 0
                    AND agent_sessions.status = 'running'
                )",
             params![issue_id, project_id, linked_session_id],
@@ -269,6 +287,7 @@ impl<'connection> IssueRepository<'connection> {
                  )
              WHERE id = ?1
                AND project_id = ?2
+               AND del = 0
                AND status = 'review'
                AND EXISTS (
                  SELECT 1
@@ -276,6 +295,7 @@ impl<'connection> IssueRepository<'connection> {
                  WHERE agent_sessions.id = ?3
                    AND agent_sessions.issue_id = issues.id
                    AND agent_sessions.project_id = ?2
+                   AND agent_sessions.del = 0
                    AND agent_sessions.status = 'running'
                    AND agent_sessions.closed_at IS NULL
                )",
@@ -302,6 +322,23 @@ impl<'connection> IssueRepository<'connection> {
             linked_session_id,
         )
     }
+
+    pub fn soft_delete_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        deleted_at: i64,
+    ) -> rusqlite::Result<bool> {
+        let changed = transaction.execute(
+            "UPDATE issues
+             SET del = 1,
+                 updated_at = MAX(updated_at + 1, ?1)
+             WHERE id = ?2 AND project_id = ?3 AND del = 0",
+            params![deleted_at, issue_id, project_id],
+        )?;
+
+        Ok(changed > 0)
+    }
 }
 
 fn find_by_id_on_connection(
@@ -310,7 +347,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<IssueRecord>> {
     connection
         .query_row(
-            &format!("{ISSUE_SELECT_COLUMNS} WHERE issues.id = ?1"),
+            &format!("{ISSUE_SELECT_COLUMNS} WHERE issues.id = ?1 AND issues.del = 0"),
             params![id],
             issue_from_row,
         )
@@ -335,8 +372,9 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
             .map(|value| agent_session_attention_from_str(&value))
             .transpose()?,
         linked_session_log_path: row.get(8)?,
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
+        linked_session_latest_output: row.get(9)?,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
     })
 }
 

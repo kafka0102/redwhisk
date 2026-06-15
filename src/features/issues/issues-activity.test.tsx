@@ -8,10 +8,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
 import {
+  advanceIssueStatus,
+  completeIssueManual,
   createIssue,
+  deleteIssue,
   exportIssueAttachment,
   getIssueSummary,
   listIssues,
+  markIssueReview,
   previewIssueAttachment,
   startAgentSession,
   updateIssue,
@@ -23,10 +27,14 @@ import { listAgentProfiles } from "../settings/settings-commands";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 vi.mock("./issue-commands", () => ({
+  advanceIssueStatus: vi.fn(),
+  completeIssueManual: vi.fn(),
   createIssue: vi.fn(),
+  deleteIssue: vi.fn(),
   exportIssueAttachment: vi.fn(),
   getIssueSummary: vi.fn(),
   listIssues: vi.fn(),
+  markIssueReview: vi.fn(),
   previewIssueAttachment: vi.fn(),
   startAgentSession: vi.fn(),
   updateIssue: vi.fn(),
@@ -121,11 +129,15 @@ vi.mock("./issue-description-editor", () => ({
   ),
 }));
 
+const advanceIssueStatusMock = vi.mocked(advanceIssueStatus);
+const completeIssueManualMock = vi.mocked(completeIssueManual);
 const createIssueMock = vi.mocked(createIssue);
+const deleteIssueMock = vi.mocked(deleteIssue);
 const exportIssueAttachmentMock = vi.mocked(exportIssueAttachment);
 const getIssueSummaryMock = vi.mocked(getIssueSummary);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const listIssuesMock = vi.mocked(listIssues);
+const markIssueReviewMock = vi.mocked(markIssueReview);
 const previewIssueAttachmentMock = vi.mocked(previewIssueAttachment);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
@@ -262,11 +274,15 @@ const existingIssueRunPrompt = [
 
 describe("IssuesActivity", () => {
   beforeEach(() => {
+    advanceIssueStatusMock.mockReset();
+    completeIssueManualMock.mockReset();
     createIssueMock.mockReset();
+    deleteIssueMock.mockReset();
     exportIssueAttachmentMock.mockReset();
     getIssueSummaryMock.mockReset();
     listAgentSessionsMock.mockReset();
     listIssuesMock.mockReset();
+    markIssueReviewMock.mockReset();
     previewIssueAttachmentMock.mockReset();
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
@@ -968,7 +984,9 @@ describe("IssuesActivity", () => {
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
-    expect(screen.getByRole("button", { name: "Open Session" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Linked session #301" }),
+    ).toBeEnabled();
   });
 
   it("uses the latest available project profile before global fallback", async () => {
@@ -1203,7 +1221,9 @@ describe("IssuesActivity", () => {
       ).not.toBeInTheDocument(),
     );
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
-    expect(screen.getByRole("button", { name: "Open Session" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Linked session #301" }),
+    ).toBeEnabled();
   });
 
   it("shows a factual prompt when no agent profiles are available", async () => {
@@ -1301,6 +1321,121 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByText("Linked session #301"),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens the linked session from the issue detail link even when the session is closed", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Linked session #401" }),
+    );
+
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
+    expect(screen.queryByRole("dialog", { name: "Issue Detail" })).not.toBeInTheDocument();
+  });
+
+  it("shows a forward-only status menu and completes a running issue after confirmation", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...attentionIssue,
+          linkedSessionLatestOutput: "agent produced output",
+        } as IssueRecord,
+      ],
+    });
+    markIssueReviewMock.mockResolvedValueOnce({
+      ...attentionIssue,
+      status: "review",
+      linkedSessionLatestOutput: "agent produced output",
+      updatedAt: attentionIssue.updatedAt + 1_000,
+    });
+    completeIssueManualMock.mockResolvedValueOnce({
+      ...attentionIssue,
+      status: "completed",
+      linkedSessionStatus: "closed",
+      linkedSessionLatestOutput: "agent produced output",
+      updatedAt: attentionIssue.updatedAt + 2_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Attention issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: "Backlog" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("menuitem", { name: "In progress" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "In review" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Done" })).toBeEnabled();
+
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("session 未结束，确认要完成吗？");
+    expect(markIssueReviewMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: attentionIssue.id,
+    });
+    expect(completeIssueManualMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: attentionIssue.id,
+    });
+    expect(screen.getByRole("button", { name: "View Summary" })).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("soft deletes an issue after confirmation and removes it from the list", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
+    deleteIssueMock.mockResolvedValue({ issueId: runningIssue.id });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Running issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete issue" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("确认删除这个 issue 吗？");
+    expect(deleteIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: runningIssue.id,
+    });
+    expect(screen.queryByRole("dialog", { name: "Issue Detail" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Running issue" }),
+    ).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
   });
 
   it("does not show Open Session for completed issues with linked sessions", async () => {

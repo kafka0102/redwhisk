@@ -126,7 +126,9 @@ fn issue_action_type_from_str(value: &str) -> rusqlite::Result<IssueActionType> 
         "issue_created" => Ok(IssueActionType::IssueCreated),
         "agent_session_started" => Ok(IssueActionType::AgentSessionStarted),
         "issue_review_marked" => Ok(IssueActionType::IssueReviewMarked),
+        "issue_status_changed" => Ok(IssueActionType::IssueStatusChanged),
         "issue_completed" => Ok(IssueActionType::IssueCompleted),
+        "issue_deleted" => Ok(IssueActionType::IssueDeleted),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

@@ -50,6 +50,7 @@ export interface IssueRecord {
   linkedSessionStatus?: AgentSessionStatus | null;
   linkedSessionAttention?: AgentSessionAttention | null;
   linkedSessionLogPath?: string | null;
+  linkedSessionLatestOutput?: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -82,6 +83,12 @@ export interface MarkIssueReviewInput {
   issueId: number;
 }
 
+export interface AdvanceIssueStatusInput {
+  projectId: number;
+  issueId: number;
+  targetStatus: IssueStatus;
+}
+
 export interface CompleteIssueManualInput {
   projectId: number;
   issueId: number;
@@ -110,6 +117,16 @@ export interface DetectAgentCommitCompletionInput {
 export interface GetIssueSummaryInput {
   projectId: number;
   issueId: number;
+}
+
+export interface DeleteIssueInput {
+  projectId: number;
+  issueId: number;
+}
+
+export interface DeleteIssueResult {
+  issueId: number;
+  linkedSessionId?: number | null;
 }
 
 export interface PreviewIssueAttachmentInput {
@@ -212,6 +229,12 @@ export function markIssueReview(
   return invokeCommand<IssueRecord>("mark_issue_review", { input });
 }
 
+export function advanceIssueStatus(
+  input: AdvanceIssueStatusInput,
+): Promise<IssueRecord> {
+  return invokeCommand<IssueRecord>("advance_issue_status", { input });
+}
+
 export function completeIssueManual(
   input: CompleteIssueManualInput,
 ): Promise<IssueRecord> {
@@ -259,6 +282,12 @@ export function getIssueSummary(
   input: GetIssueSummaryInput,
 ): Promise<IssueSummaryRecord> {
   return invokeCommand<IssueSummaryRecord>("get_issue_summary", {
+    input,
+  });
+}
+
+export function deleteIssue(input: DeleteIssueInput): Promise<DeleteIssueResult> {
+  return invokeCommand<DeleteIssueResult>("delete_issue", {
     input,
   });
 }
