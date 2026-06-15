@@ -1,8 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectTerminalsActivity } from "./project-terminals-activity";
+import { getDefaultProjectTerminalsActivityState } from "./project-terminals-activity-state";
 import {
   closeProjectTerminal,
   createProjectTerminal,
@@ -30,6 +32,24 @@ vi.mock("./project-terminal-commands", () => ({
 const createProjectTerminalMock = vi.mocked(createProjectTerminal);
 const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
 
+function renderProjectTerminalsActivity() {
+  function Harness() {
+    const [state, setState] = useState(getDefaultProjectTerminalsActivityState);
+
+    return (
+      <ProjectTerminalsActivity
+        onStateChange={setState}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+        state={state}
+      />
+    );
+  }
+
+  return render(<Harness />);
+}
+
 describe("ProjectTerminalsActivity", () => {
   beforeEach(() => {
     createProjectTerminalMock.mockReset();
@@ -47,13 +67,7 @@ describe("ProjectTerminalsActivity", () => {
   });
 
   it("renders only a centered new terminal button when there are no terminals", () => {
-    render(
-      <ProjectTerminalsActivity
-        projectId={1}
-        projectName="RedWhisk"
-        projectPath="/tmp/redwhisk"
-      />,
-    );
+    renderProjectTerminalsActivity();
 
     expect(
       screen.getByRole("button", { name: "+ New terminal" }),
@@ -75,13 +89,7 @@ describe("ProjectTerminalsActivity", () => {
   it("creates terminals in the left card list and switches the right workspace", async () => {
     const user = userEvent.setup();
 
-    render(
-      <ProjectTerminalsActivity
-        projectId={1}
-        projectName="RedWhisk"
-        projectPath="/tmp/redwhisk"
-      />,
-    );
+    renderProjectTerminalsActivity();
 
     await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
@@ -125,13 +133,7 @@ describe("ProjectTerminalsActivity", () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     const user = userEvent.setup();
 
-    render(
-      <ProjectTerminalsActivity
-        projectId={1}
-        projectName="RedWhisk"
-        projectPath="/tmp/redwhisk"
-      />,
-    );
+    renderProjectTerminalsActivity();
 
     await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
@@ -151,13 +153,7 @@ describe("ProjectTerminalsActivity", () => {
   it("renders the selected terminal as the full workspace without an activity header", async () => {
     const user = userEvent.setup();
 
-    render(
-      <ProjectTerminalsActivity
-        projectId={1}
-        projectName="RedWhisk"
-        projectPath="/tmp/redwhisk"
-      />,
-    );
+    renderProjectTerminalsActivity();
 
     await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
@@ -178,13 +174,7 @@ describe("ProjectTerminalsActivity", () => {
   it("deletes the selected terminal and falls back to the remaining workspace", async () => {
     const user = userEvent.setup();
 
-    render(
-      <ProjectTerminalsActivity
-        projectId={1}
-        projectName="RedWhisk"
-        projectPath="/tmp/redwhisk"
-      />,
-    );
+    renderProjectTerminalsActivity();
 
     await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
