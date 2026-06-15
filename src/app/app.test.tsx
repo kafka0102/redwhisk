@@ -723,6 +723,76 @@ describe("App project entry", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("creates a project from the switcher and opens it in a new window", async () => {
+    const user = userEvent.setup();
+    createProjectMock.mockResolvedValue({
+      id: 4,
+      name: "new-repo",
+      repoPath: "/Users/kafka0102/workspace/new-repo",
+      completionPolicy: "agent_auto_commit",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_581_600_000,
+    });
+    openProjectWindowMock.mockResolvedValue({
+      projectId: 4,
+      windowLabel: "project-4",
+    });
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Current project RedWhisk" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Create Project" }),
+    );
+
+    const projectDialog = await screen.findByRole("dialog", {
+      name: "New Project",
+    });
+    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue("");
+    expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
+      "",
+    );
+
+    openDialogMock.mockResolvedValueOnce("/Users/kafka0102/workspace/new-repo");
+    await user.click(
+      within(projectDialog).getByRole("button", { name: "Choose folder" }),
+    );
+
+    expect(validateProjectRepoPathMock).toHaveBeenCalledWith({
+      repoPath: "/Users/kafka0102/workspace/new-repo",
+    });
+    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
+      "new-repo",
+    );
+    expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
+      "/Users/kafka0102/workspace/new-repo",
+    );
+
+    await user.click(
+      within(projectDialog).getByRole("button", { name: "Create Project" }),
+    );
+
+    expect(createProjectMock).toHaveBeenCalledWith({
+      name: "new-repo",
+      repoPath: "/Users/kafka0102/workspace/new-repo",
+      completionPolicy: "agent_auto_commit",
+    });
+    expect(openProjectWindowMock).toHaveBeenCalledWith({
+      projectId: 4,
+    });
+    expect(
+      screen.getByRole("button", { name: "Current project RedWhisk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "New Project" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the switcher in the current window when selecting the current project", async () => {
     const user = userEvent.setup();
     render(<App />);

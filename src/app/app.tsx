@@ -11,6 +11,7 @@ import {
   initializeLocalData,
   listProjects,
   openProject,
+  openProjectWindow,
   validateProjectRepoPath,
   type CreateProjectInput,
   type ProjectCompletionPolicy,
@@ -31,6 +32,7 @@ export interface ProjectSummary {
 interface CreateProjectDraft {
   completionPolicy: ProjectCompletionPolicy;
   name: string;
+  openInNewWindow: boolean;
   repoPath: string;
   suggestedName: string;
 }
@@ -116,6 +118,7 @@ export function App() {
       setCreateProjectDraft({
         completionPolicy: "agent_auto_commit",
         name: validatedProject.suggestedName,
+        openInNewWindow: false,
         repoPath: validatedProject.repoPath,
         suggestedName: validatedProject.suggestedName,
       });
@@ -161,11 +164,29 @@ export function App() {
       setProjects((currentProjects) =>
         mergeProject(currentProjects, projectSummary),
       );
-      setSelectedProject(projectSummary);
+
+      if (createProjectDraft?.openInNewWindow) {
+        await openProjectWindow({ projectId: project.id });
+      } else {
+        setSelectedProject(projectSummary);
+      }
+
       setCreateProjectDraft(null);
     },
-    [],
+    [createProjectDraft],
   );
+
+  const handleCreateProjectFromSwitcher = useCallback(() => {
+    setProjectCreationError(null);
+    setProjectOpenError(null);
+    setCreateProjectDraft({
+      completionPolicy: "agent_auto_commit",
+      name: "",
+      openInNewWindow: true,
+      repoPath: "",
+      suggestedName: "",
+    });
+  }, []);
 
   if (!selectedProject) {
     const statusMessages = [
@@ -222,12 +243,23 @@ export function App() {
 
   return (
     <I18nProvider>
-      <AppShell
-        onProjectUpdated={handleProjectUpdated}
-        project={selectedProject}
-        projects={projects}
-        onProjectsRefresh={refreshProjects}
-      />
+      <>
+        <AppShell
+          onCreateProject={handleCreateProjectFromSwitcher}
+          onProjectUpdated={handleProjectUpdated}
+          project={selectedProject}
+          projects={projects}
+          onProjectsRefresh={refreshProjects}
+        />
+        {createProjectDraft ? (
+          <CreateProjectDialog
+            key={createProjectDraft.repoPath}
+            initialDraft={createProjectDraft}
+            onClose={() => setCreateProjectDraft(null)}
+            onCreate={handleCreateProjectConfirmed}
+          />
+        ) : null}
+      </>
     </I18nProvider>
   );
 }

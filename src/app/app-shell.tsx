@@ -8,6 +8,7 @@ import { GlobalSettingsActivity } from "../features/settings/global-settings-act
 import { useI18n } from "../shared/i18n/i18n";
 
 interface AppShellProps {
+  onCreateProject: () => void;
   onProjectUpdated: (project: ProjectSummary) => void;
   project: ProjectSummary;
   projects: ProjectSummary[];
@@ -25,6 +26,7 @@ const ACTIVITIES: Array<{
 ];
 
 export function AppShell({
+  onCreateProject,
   onProjectUpdated,
   onProjectsRefresh,
   project,
@@ -74,6 +76,7 @@ export function AppShell({
         <header className="workbench__header" data-tauri-drag-region>
           <ProjectSwitcher
             currentProject={project}
+            onCreateProject={onCreateProject}
             projects={projects}
             onProjectsRefresh={onProjectsRefresh}
           />
