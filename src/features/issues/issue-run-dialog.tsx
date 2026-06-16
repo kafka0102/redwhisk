@@ -133,12 +133,19 @@ export function IssueRunDialog({
   }, [selectedProfile]);
   const shouldShowWorkflowSkill =
     selectedProfile !== null && workflowSkillOptions.length > 0;
-  const workflowSkillValue =
+  const defaultWorkflowSkill = workflowSkillOptions[0] ?? null;
+  const effectiveWorkflowSkill =
     selectedWorkflowSkill === null
-      ? (workflowSkillOptions[0] ?? NO_WORKFLOW_SKILL_VALUE)
+      ? defaultWorkflowSkill
       : selectedWorkflowSkill.length === 0
-        ? NO_WORKFLOW_SKILL_VALUE
+        ? ""
         : selectedWorkflowSkill;
+  const workflowSkillValue =
+    effectiveWorkflowSkill === null
+      ? NO_WORKFLOW_SKILL_VALUE
+      : effectiveWorkflowSkill.length === 0
+        ? NO_WORKFLOW_SKILL_VALUE
+        : effectiveWorkflowSkill;
 
   const preview = useMemo(() => {
     if (!selectedProfile) {
@@ -148,9 +155,9 @@ export function IssueRunDialog({
     return buildRunPromptPreview({
       issue,
       profile: selectedProfile,
-      selectedWorkflowSkill,
+      selectedWorkflowSkill: effectiveWorkflowSkill,
     });
-  }, [issue, selectedProfile, selectedWorkflowSkill]);
+  }, [effectiveWorkflowSkill, issue, selectedProfile]);
   const promptDraft = preview?.finalPrompt ?? "";
 
   const isStartDisabled =
@@ -374,7 +381,7 @@ function resolveInitialWorkflowSkill({
     profileId: profile.id,
   });
   if (recentWorkflowSkill === null) {
-    return null;
+    return configuredSkills[0] ?? null;
   }
 
   if (recentWorkflowSkill.length === 0) {
