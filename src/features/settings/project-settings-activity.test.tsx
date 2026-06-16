@@ -684,7 +684,7 @@ describe("ProjectSettingsActivity", () => {
       screen.getByLabelText("Worktree path"),
       "/custom/worktrees",
     );
-    await user.tab();
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(validateAgentWorktreePathMock).toHaveBeenLastCalledWith({
@@ -692,7 +692,6 @@ describe("ProjectSettingsActivity", () => {
       }),
     );
     expect(screen.getByText("Worktree path does not exist.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(saveAgentProfileMock).not.toHaveBeenCalled();
   });
 

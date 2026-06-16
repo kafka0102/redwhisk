@@ -21,21 +21,24 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::read_git_snapshot;
+use crate::git::worktree::{create_worktree_for_issue, list_local_branches, GitBranchInfo};
 use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
+    ProjectGitBranchListInput, ProjectGitBranchListResult,
     ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
     RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
     StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
-    WriteAgentSessionTerminalInput,
+    WorkspaceMode, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, IssueRecord, IssueStatus,
 };
 use crate::types::issue_action::IssueActionType;
+use crate::types::project::ProjectCompletionPolicy;
 use crate::types::session_event::SessionEventType;
 
 const SESSION_LOG_DIR_NAME: &str = "session-logs";
@@ -44,6 +47,20 @@ const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
 const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
 const ATTENTION_SNAPSHOT_MAX_BYTES: usize = 32_768;
+
+struct SessionLaunchContext {
+    profile: AgentProfileRow,
+    working_dir: String,
+    log_path: String,
+    command_snapshot: String,
+    started_at: i64,
+    workspace_mode: WorkspaceMode,
+    target_branch: Option<String>,
+    workspace_branch: Option<String>,
+    workspace_path: Option<String>,
+    completion_policy: Option<ProjectCompletionPolicy>,
+    worktree_root_path: Option<String>,
+}
 
 pub struct AgentSessionService<'connection> {
     issue_repository: IssueRepository<'connection>,
@@ -108,13 +125,7 @@ impl<'connection> AgentSessionService<'connection> {
         pty_sessions: Option<&PtySessionManager>,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
-        let (profile, working_dir, log_path, command_snapshot, started_at) = self
-            .prepare_session_launch(
-                data_dir.as_ref(),
-                input.project_id,
-                input.agent_profile_id,
-                &format!("issue-{}", input.issue_id),
-            )?;
+        let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
 
         let issue = self
             .issue_repository
@@ -166,7 +177,8 @@ impl<'connection> AgentSessionService<'connection> {
             ));
         }
 
-        let command_accepts_prompt_argument = command_supports_prompt_argument(&profile.command);
+        let command_accepts_prompt_argument =
+            command_supports_prompt_argument(&launch.profile.command);
         let initial_prompt_argument =
             command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
 
@@ -174,9 +186,9 @@ impl<'connection> AgentSessionService<'connection> {
             Some(
                 pty_sessions
                     .spawn_pending(&PtySpawnRequest {
-                        command: profile.command.clone(),
-                        working_dir: working_dir.clone(),
-                        log_path: log_path.clone(),
+                        command: launch.profile.command.clone(),
+                        working_dir: launch.working_dir.clone(),
+                        log_path: launch.log_path.clone(),
                         initial_prompt: initial_prompt_argument.clone(),
                         rows: 32,
                         cols: 120,
@@ -191,12 +203,12 @@ impl<'connection> AgentSessionService<'connection> {
         let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
         let mut child = if pending_pty.is_none() {
             let mut child = spawn_agent_process(
-                &profile,
-                &working_dir,
-                &log_path,
+                &launch.profile,
+                &launch.working_dir,
+                &launch.log_path,
                 initial_prompt_argument.as_deref(),
             )?;
-            ensure_process_started(&mut child, &profile.command)?;
+            ensure_process_started(&mut child, &launch.profile.command)?;
             Some(child)
         } else {
             None
@@ -222,11 +234,17 @@ impl<'connection> AgentSessionService<'connection> {
                 input.project_id,
                 issue.id,
                 input.agent_profile_id,
-                &working_dir,
-                &command_snapshot,
+                &launch.working_dir,
+                &launch.command_snapshot,
                 &prompt_snapshot,
-                &log_path,
-                started_at,
+                &launch.workspace_mode,
+                launch.target_branch.as_deref(),
+                launch.workspace_branch.as_deref(),
+                launch.workspace_path.as_deref(),
+                launch.completion_policy,
+                launch.worktree_root_path.as_deref(),
+                &launch.log_path,
+                launch.started_at,
             )?;
 
             let updated_issue = IssueRepository::update_status_in_transaction(
@@ -242,7 +260,7 @@ impl<'connection> AgentSessionService<'connection> {
                 "issueId": issue.id,
                 "agentProfileId": input.agent_profile_id,
                 "status": "running",
-                "logPath": log_path,
+                "logPath": launch.log_path,
             })
             .to_string();
             EventRepository::insert_session_event_in_transaction(
@@ -250,7 +268,7 @@ impl<'connection> AgentSessionService<'connection> {
                 session.id,
                 SessionEventType::SessionStarted,
                 &session_event_payload,
-                started_at,
+                launch.started_at,
             )?;
 
             let issue_action_payload = json!({
@@ -278,16 +296,16 @@ impl<'connection> AgentSessionService<'connection> {
 
         match transaction_result {
             Ok(result) => {
-                if should_attempt_codex_session_capture(&profile.command) {
+                if should_attempt_codex_session_capture(&launch.profile.command) {
                     let data_dir = data_dir.as_ref().to_path_buf();
-                    let working_dir = working_dir.clone();
+                    let working_dir = launch.working_dir.clone();
                     let session_id = result.session_id;
                     thread::spawn(move || {
                         refresh_codex_session_id_in_data_dir(
                             &data_dir,
                             session_id,
                             &working_dir,
-                            started_at,
+                            launch.started_at,
                         );
                     });
                 }
@@ -429,6 +447,12 @@ impl<'connection> AgentSessionService<'connection> {
                     &working_dir,
                     &command_snapshot,
                     &prompt_snapshot,
+                    &WorkspaceMode::CurrentBranch,
+                    None,
+                    None,
+                    Some(working_dir.as_str()),
+                    None,
+                    None,
                     &log_path,
                     started_at,
                 )?;
@@ -574,6 +598,89 @@ impl<'connection> AgentSessionService<'connection> {
         Ok((profile, working_dir, log_path, command_snapshot, started_at))
     }
 
+    fn prepare_issue_session_launch(
+        &self,
+        data_dir: &Path,
+        input: &StartAgentSessionInput,
+    ) -> Result<SessionLaunchContext, CommandError> {
+        let project = self.project_by_id(input.project_id)?;
+        let profile = self
+            .agent_profile_repository
+            .find_profile_by_id(input.agent_profile_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "Agent Profile 不存在。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentProfile")
+                        .with_value("agentProfileId", input.agent_profile_id),
+                )
+            })?;
+
+        validate_profile_not_deleted(&profile)?;
+        validate_profile_scope(&profile, input.project_id)?;
+
+        let started_at = current_epoch_millis()?;
+        let log_path = build_log_path(
+            data_dir,
+            &format!("issue-{}", input.issue_id),
+            input.agent_profile_id,
+            started_at,
+        )?;
+        let command_snapshot = build_command_snapshot(&profile);
+        let branch_info = list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
+        let workspace_mode = input.workspace_mode.clone().unwrap_or(WorkspaceMode::CurrentBranch);
+        let completion_policy = Some(
+            input
+                .completion_policy_override
+                .unwrap_or(project.completion_policy),
+        );
+
+        match workspace_mode {
+            WorkspaceMode::CurrentBranch => Ok(SessionLaunchContext {
+                profile,
+                working_dir: validate_working_dir(&project.repo_path)?,
+                log_path,
+                command_snapshot,
+                started_at,
+                workspace_mode: WorkspaceMode::CurrentBranch,
+                target_branch: Some(branch_info.current_branch.clone()),
+                workspace_branch: Some(branch_info.current_branch),
+                workspace_path: Some(project.repo_path.clone()),
+                completion_policy,
+                worktree_root_path: None,
+            }),
+            WorkspaceMode::Worktree => {
+                let target_branch =
+                    resolve_target_branch(&branch_info, input.target_branch.as_deref())?;
+                let worktree_root_path = resolve_worktree_root_path(&profile, &project.repo_path)?;
+                let created = create_worktree_for_issue(
+                    &project.repo_path,
+                    &worktree_root_path,
+                    input.issue_id,
+                    &target_branch,
+                )
+                .map_err(agent_session_start_error)?;
+
+                Ok(SessionLaunchContext {
+                    profile,
+                    working_dir: created.workspace_path.clone(),
+                    log_path,
+                    command_snapshot,
+                    started_at,
+                    workspace_mode: WorkspaceMode::Worktree,
+                    target_branch: Some(created.target_branch),
+                    workspace_branch: Some(created.workspace_branch),
+                    workspace_path: Some(created.workspace_path),
+                    completion_policy,
+                    worktree_root_path: Some(created.worktree_root_path),
+                })
+            }
+        }
+    }
+
     pub fn list_agent_sessions(
         &self,
         project_id: i64,
@@ -653,6 +760,19 @@ impl<'connection> AgentSessionService<'connection> {
             .collect();
 
         Ok(AgentSessionListResponse { sessions })
+    }
+
+    pub fn get_project_git_branches(
+        &self,
+        input: ProjectGitBranchListInput,
+    ) -> Result<ProjectGitBranchListResult, CommandError> {
+        let project = self.project_by_id(input.project_id)?;
+        let branch_info = list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
+
+        Ok(ProjectGitBranchListResult {
+            current_branch: branch_info.current_branch,
+            local_branches: branch_info.local_branches,
+        })
     }
 
     pub fn reconcile_unrecoverable_running_sessions(
@@ -1063,6 +1183,26 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .list_agent_sessions(project_id)
+    }
+
+    pub fn get_project_git_branches_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ProjectGitBranchListInput,
+    ) -> Result<ProjectGitBranchListResult, CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .get_project_git_branches(input)
     }
 
     pub fn complete_issue_manual_in_data_dir(
@@ -1548,6 +1688,40 @@ fn validate_working_dir(repo_path: &str) -> Result<String, CommandError> {
     }
 
     Ok(path.to_string_lossy().to_string())
+}
+
+fn resolve_target_branch(
+    branch_info: &GitBranchInfo,
+    target_branch: Option<&str>,
+) -> Result<String, CommandError> {
+    let target_branch = target_branch
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(branch_info.current_branch.as_str());
+
+    if branch_info.local_branches.iter().any(|branch| branch == target_branch) {
+        return Ok(target_branch.to_string());
+    }
+
+    Err(CommandError::new(
+        CommandErrorCode::AgentSessionValidationFailed,
+        "目标分支不存在。",
+    )
+    .with_detail(ErrorDetail::new("GitBranch").with_value("targetBranch", target_branch)))
+}
+
+fn resolve_worktree_root_path(
+    profile: &AgentProfileRow,
+    repo_path: &str,
+) -> Result<String, CommandError> {
+    let trimmed = profile.worktree_path.trim();
+    let path = if trimmed.is_empty() {
+        format!("{repo_path}.worktrees")
+    } else {
+        trimmed.to_string()
+    };
+
+    Ok(path)
 }
 
 fn build_command_snapshot(profile: &AgentProfileRow) -> String {

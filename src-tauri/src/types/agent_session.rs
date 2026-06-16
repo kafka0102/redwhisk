@@ -2,6 +2,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::agent_profile::AgentType;
 use crate::types::issue::IssueStatus;
+use crate::types::project::ProjectCompletionPolicy;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceMode {
+    CurrentBranch,
+    Worktree,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,6 +18,9 @@ pub struct StartAgentSessionInput {
     pub issue_id: i64,
     pub agent_profile_id: i64,
     pub prompt_snapshot: String,
+    pub completion_policy_override: Option<ProjectCompletionPolicy>,
+    pub workspace_mode: Option<WorkspaceMode>,
+    pub target_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -156,6 +167,12 @@ pub struct AgentSessionRecord {
     pub working_dir: String,
     pub command_snapshot: String,
     pub prompt_snapshot: String,
+    pub workspace_mode: WorkspaceMode,
+    pub target_branch: Option<String>,
+    pub workspace_branch: Option<String>,
+    pub workspace_path: Option<String>,
+    pub completion_policy: Option<ProjectCompletionPolicy>,
+    pub worktree_root_path: Option<String>,
     pub log_path: String,
     pub latest_output: Option<String>,
     pub last_active_at: i64,
@@ -184,4 +201,17 @@ pub enum AgentSessionAttention {
 pub enum AgentSessionPromptKind {
     FollowUp,
     Completion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitBranchListInput {
+    pub project_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitBranchListResult {
+    pub current_branch: String,
+    pub local_branches: Vec<String>,
 }
