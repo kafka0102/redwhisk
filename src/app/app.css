@@ -2165,17 +2165,17 @@ button:focus-visible {
 .project-terminals-card-list {
   display: grid;
   align-content: start;
-  gap: 0;
+  gap: 4px;
   min-height: 0;
   overflow: auto;
-  padding: 0;
+  padding: 0 8px;
 }
 
 .project-terminals-card-shell {
   position: relative;
   min-width: 0;
   margin: 0;
-  background: #fff;
+  background: transparent;
 }
 
 .project-terminals-card {
@@ -2185,8 +2185,8 @@ button:focus-visible {
   gap: 0;
   width: 100%;
   min-width: 0;
-  min-height: 72px;
-  padding: 10px 38px 10px 12px;
+  min-height: 62px;
+  padding: 9px 38px 9px 34px;
   border: 1px solid var(--project-terminal-card-border, var(--color-border));
   border-radius: var(--radius-card);
   background: var(
@@ -2208,7 +2208,7 @@ button:focus-visible {
 
 .project-terminals-card__copy {
   display: grid;
-  gap: 0;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -2247,23 +2247,63 @@ button:focus-visible {
     color 140ms ease-out;
 }
 
+.project-terminals-card__edit {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity 140ms ease-out,
+    background-color 140ms ease-out,
+    color 140ms ease-out;
+}
+
 .project-terminals-card-shell:hover .project-terminals-card__delete,
-.project-terminals-card__delete:focus-visible {
+.project-terminals-card__delete:focus-visible,
+.project-terminals-card-shell:hover .project-terminals-card__edit,
+.project-terminals-card__edit:focus-visible {
   opacity: 1;
 }
 
+.project-terminals-card__edit:hover,
 .project-terminals-card__delete:hover {
   background: rgba(0, 0, 0, 0.08);
   color: var(--color-text);
 }
 
+:root[data-theme="dark"] .project-terminals-card__edit:hover,
 :root[data-theme="dark"] .project-terminals-card__delete:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.project-terminals-card__edit:disabled,
 .project-terminals-card__delete:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.project-terminals-card-shell:hover .project-terminals-card,
+.project-terminals-card__edit:focus-visible ~ .project-terminals-card,
+.project-terminals-card__delete:focus-visible ~ .project-terminals-card {
+  padding-left: 32px;
+}
+
+.project-terminals-card-shell:hover .project-terminals-card__copy,
+.project-terminals-card__edit:focus-visible ~ .project-terminals-card .project-terminals-card__copy {
+  transform: translateX(0);
 }
 
 .project-terminals-splitter {
@@ -2354,6 +2394,21 @@ button:focus-visible {
   min-height: 0;
   padding: 24px;
   text-align: center;
+}
+
+.project-terminals-loading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.terminal-edit-dialog {
+  width: min(560px, calc(100vw - 56px));
+  min-height: 0;
+}
+
+.terminal-edit-dialog__body {
+  min-height: 0;
 }
 
 .agents-workspace {

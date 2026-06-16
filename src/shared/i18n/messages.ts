@@ -28,14 +28,17 @@ export interface I18nMessages {
     agents: string;
     autoCommit: string;
     command: string;
+    closeTerminalDialog: string;
     completionStrategy: string;
     configuredAgents: string;
     chooseFolder: string;
     delete: string;
     deleteConfirm: (profileName: string) => string;
+    editTerminal: (terminalName: string) => string;
     general: string;
     globalScope: string;
     loading: string;
+    loadingTerminals: string;
     manual: string;
     menuLabel: string;
     name: string;
@@ -44,12 +47,14 @@ export interface I18nMessages {
     noTerminals: string;
     projectName: string;
     repositoryPath: string;
+    terminalPath: string;
     projectScope: string;
     save: string;
     saving: string;
     scope: string;
     splitterLabel: string;
     status: string;
+    terminalUnavailable: string;
     terminals: string;
     type: string;
     workflowSkill: string;
@@ -105,15 +110,18 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       agents: "Agents",
       autoCommit: "Auto Commit",
       command: "Command",
+      closeTerminalDialog: "Close terminal dialog",
       completionStrategy: "Git completion strategy",
       configuredAgents: "Configured agents",
       chooseFolder: "Choose folder",
       delete: "Delete",
       deleteConfirm: (profileName) =>
         `Are you sure you want to delete Agent Profile "${profileName}"?`,
+      editTerminal: (terminalName) => `Edit terminal "${terminalName}"`,
       general: "General",
       globalScope: "Global",
       loading: "Loading...",
+      loadingTerminals: "Loading terminals...",
       manual: "Manual",
       menuLabel: "Settings menu",
       name: "Name",
@@ -123,12 +131,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       noTerminals: "No terminals yet.",
       projectName: "Project Name",
       repositoryPath: "Repository path",
+      terminalPath: "Terminal path",
       projectScope: "Project",
       save: "Save",
       saving: "Saving...",
       scope: "Scope",
       splitterLabel: "Resize settings menu",
       status: "Settings status",
+      terminalUnavailable: "This terminal is not running right now.",
       terminals: "Terminals",
       type: "Type",
       workflowSkill: "Workflow Skill",
@@ -178,14 +188,17 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       agents: "Agents",
       autoCommit: "自动提交",
       command: "命令",
+      closeTerminalDialog: "关闭终端弹窗",
       completionStrategy: "Git 完成策略",
       configuredAgents: "已配置 agents",
       chooseFolder: "选择目录",
       delete: "删除",
       deleteConfirm: (profileName) => `确认删除 Agent Profile「${profileName}」吗？`,
+      editTerminal: (terminalName) => `编辑终端「${terminalName}」`,
       general: "通用",
       globalScope: "Global",
       loading: "加载中...",
+      loadingTerminals: "正在加载终端...",
       manual: "手动",
       menuLabel: "设置菜单",
       name: "名称",
@@ -195,12 +208,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       noTerminals: "暂无终端。",
       projectName: "Project 名称",
       repositoryPath: "仓库路径",
+      terminalPath: "终端路径",
       projectScope: "Project",
       save: "保存",
       saving: "保存中...",
       scope: "范围",
       splitterLabel: "调整设置菜单宽度",
       status: "设置状态",
+      terminalUnavailable: "该终端当前未运行。",
       terminals: "Terminals",
       type: "类型",
       workflowSkill: "Workflow Skill",

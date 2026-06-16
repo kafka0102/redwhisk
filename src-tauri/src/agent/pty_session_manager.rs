@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+#[cfg(test)]
+use std::collections::HashSet;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -20,6 +22,8 @@ pub struct PtySessionManager {
 struct PtySessionStore {
     sessions: Mutex<HashMap<i64, Arc<PtySessionHandle>>>,
     output_sink: Mutex<Option<Arc<dyn Fn(PtyOutputEvent) + Send + Sync>>>,
+    #[cfg(test)]
+    kill_failures: Mutex<HashSet<i64>>,
 }
 
 struct PtySessionHandle {
@@ -98,6 +102,8 @@ impl PtySessionManager {
             store: Arc::new(PtySessionStore {
                 sessions: Mutex::new(HashMap::new()),
                 output_sink: Mutex::new(None),
+                #[cfg(test)]
+                kill_failures: Mutex::new(HashSet::new()),
             }),
         }
     }
@@ -288,6 +294,19 @@ impl PtySessionManager {
     }
 
     pub fn kill(&self, session_id: i64) -> Result<(), String> {
+        #[cfg(test)]
+        {
+            let should_fail = self
+                .store
+                .kill_failures
+                .lock()
+                .map_err(|_| "failed to lock PTY kill failures".to_string())?
+                .remove(&session_id);
+            if should_fail {
+                return Err("failed to kill PTY session".to_string());
+            }
+        }
+
         let session = self.lookup(session_id)?;
         let result = session
             .killer
@@ -333,6 +352,15 @@ impl PtySessionManager {
             panic!("poison PTY session store");
         })
         .join();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_kill_for_session_for_test(&self, session_id: i64) {
+        self.store
+            .kill_failures
+            .lock()
+            .expect("lock kill failures")
+            .insert(session_id);
     }
 }
 
