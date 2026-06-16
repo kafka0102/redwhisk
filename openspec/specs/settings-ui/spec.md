@@ -168,19 +168,28 @@ Project Settings SHALL expose a `Terminals` menu entry directly below `Agents` i
 - **AND** the left menu width and splitter behavior remain consistent with other Project Settings modules
 
 ### Requirement: Project Settings Terminals page layout
-The `Terminals` module SHALL keep the existing two-column Settings layout and render a compact stack of expandable terminal cards.
+The `Terminals` module SHALL keep the existing two-column Settings layout and render a compact stack of editable terminal cards.
 
 #### Scenario: Terminals page is opened
 - **WHEN** the user selects `Terminals`
 - **THEN** the right pane shows the title `Terminals`
 - **AND** a plus button is shown at the far right of the first row
-- **AND** terminal cards are rendered below in a tightly stacked list
+- **AND** terminal cards are rendered below in a tightly stacked list with only 4px vertical spacing
 
-#### Scenario: Terminal card is expanded
-- **WHEN** the user opens a terminal card
-- **THEN** the card header shows a terminal icon and the terminal name on the left
-- **AND** the card body shows the terminal content region on the right
-- **AND** the page keeps the same shared Settings content width rules used by other modules
+#### Scenario: Terminal card is selected
+- **WHEN** the user clicks a terminal card
+- **THEN** the selected card uses a darker background and border variant of the shared terminal card color
+- **AND** unselected cards keep a stable non-random background
+
+#### Scenario: Terminal card is hovered
+- **WHEN** the pointer hovers a terminal card
+- **THEN** an edit button is shown on the left side of the card header
+- **AND** the delete button remains available for removing the card
+
+#### Scenario: Editing a terminal card
+- **WHEN** the user clicks the terminal card edit button
+- **THEN** a dialog opens
+- **AND** the dialog allows editing `Name`, `Path`, and `Launch command`
 
 ### Requirement: Project terminal item lifecycle
 The `Terminals` module SHALL let the user create and remove project terminal cards from the page.
@@ -196,15 +205,15 @@ The `Terminals` module SHALL let the user create and remove project terminal car
 - **AND** clicking the delete icon removes only that terminal item
 
 ### Requirement: Theme-aware terminal card colors
-Each terminal card SHALL use a randomized background chosen from a palette that remains legible in both light and dark themes.
+Each terminal card SHALL use a stable non-random background and distinguish the active card by darkening that shared visual treatment.
 
-#### Scenario: Light theme terminal colors
-- **WHEN** the application theme is `light`
-- **THEN** each terminal card uses one randomly selected light-compatible background color
-- **AND** card text and terminal chrome remain readable against that background
+#### Scenario: Stable terminal colors
+- **WHEN** the application theme is rendered
+- **THEN** terminal cards use a fixed, legible background treatment instead of a random color per terminal
+- **AND** card text and terminal chrome remain readable
 
-#### Scenario: Dark theme terminal colors
-- **WHEN** the application theme is `dark`
-- **THEN** each terminal card uses one randomly selected dark-compatible background color
-- **AND** card text and terminal chrome remain readable against that background
+#### Scenario: Active terminal contrast
+- **WHEN** a terminal card is active
+- **THEN** its background and border are darkened relative to the inactive state
+- **AND** the active state remains readable in the supported theme
 
