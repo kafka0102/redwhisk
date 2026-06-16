@@ -11,11 +11,11 @@ origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
 origin_workspace_mode: current-branch
 plan: docs/superpowers/plans/2026-06-16-persist-project-terminals.md
 handoff_context: openspec/changes/2026-06-16-persist-project-terminals/.onespec.yaml
-handoff_purpose: plan
-handoff_summary: plan handoff from 5 file(s); primary artifact: openspec/changes/2026-06-16-persist-project-terminals/proposal.md
-handoff_hash: b64a7c1f27d08a117171b562eee4d00f0147658174cf7349cf9d5273d781a929
+handoff_purpose: review
+handoff_summary: review handoff from 5 file(s); primary artifact: openspec/changes/2026-06-16-persist-project-terminals/proposal.md
+handoff_hash: c8b094b882a0941bf1c32748e24cb971e4f46404f30770455b4810f404ec1155
 touched_files_b64: ZG9jcy9zdXBlcnBvd2Vycy9wbGFucy8yMDI2LTA2LTE2LXBlcnNpc3QtcHJvamVjdC10ZXJtaW5hbHMubWQKb3BlbnNwZWMvY2hhbmdlcy8yMDI2LTA2LTE2LXBlcnNpc3QtcHJvamVjdC10ZXJtaW5hbHMK
 review_result: ready
 archive: pending
 created_at: 2026-06-16
-updated_at: 2026-06-16T02:10:51Z
+updated_at: 2026-06-16T05:37:23Z
