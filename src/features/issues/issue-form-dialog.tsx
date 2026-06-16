@@ -284,6 +284,7 @@ function IssueActionsAside({
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const currentStatus = selectedIssue?.status ?? "backlog";
   const currentStatusIndex = ISSUE_STATUS_ORDER.indexOf(currentStatus);
+  const deleteConfirmMessage = "确认删除这个 issue 吗？";
 
   useEffect(() => {
     if (!isStatusMenuOpen) {
@@ -381,7 +382,14 @@ function IssueActionsAside({
           className="issue-dialog__delete-button"
           disabled={isSaving}
           type="button"
-          onClick={onDeleteIssue}
+          onClick={() => {
+            const isConfirmed = window.confirm(deleteConfirmMessage);
+            if (!isConfirmed) {
+              return;
+            }
+
+            onDeleteIssue();
+          }}
         >
           <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
           <span>Delete issue</span>
