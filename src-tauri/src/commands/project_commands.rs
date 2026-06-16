@@ -43,7 +43,12 @@ pub fn open_project(
     input: OpenProjectInput,
 ) -> Result<ProjectSummary, CommandError> {
     let data_dir = prepare_project_data_dir(&app, &state)?;
-    let project = ProjectService::open_project_in_data_dir(data_dir, input)?;
+    let project = ProjectService::open_project_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )?;
     trigger_project_skill_refresh(
         app,
         state.agent_skills.clone(),
@@ -87,7 +92,12 @@ pub async fn open_project_window(
     input: OpenProjectInput,
 ) -> Result<OpenProjectWindowResponse, CommandError> {
     let data_dir = prepare_project_data_dir(&app, &state)?;
-    let project = ProjectService::open_project_for_window_in_data_dir(&data_dir, input)?;
+    let project = ProjectService::open_project_for_window_in_data_dir(
+        &data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )?;
     let window_label = format!("project-{}", project.id);
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {

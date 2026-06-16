@@ -1,4 +1,8 @@
+use redwhisk_lib::agent::pty_session_manager::PtySessionManager;
 use redwhisk_lib::core::project_service::ProjectService;
+use redwhisk_lib::core::project_terminal_service::{
+    ProjectTerminalRegistry, ProjectTerminalService,
+};
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
@@ -7,7 +11,23 @@ use redwhisk_lib::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectCompletionPolicy, ProjectPathStatus,
     UpdateProjectSettingsInput,
 };
+use redwhisk_lib::types::project_terminal::{
+    CreateProjectTerminalInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
+};
 use std::fs;
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+fn terminal_test_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn lock_terminal_test_env() -> MutexGuard<'static, ()> {
+    match terminal_test_env_lock().lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    }
+}
 
 #[test]
 fn project_migration_creates_projects_schema_with_unique_repo_path() {
@@ -741,6 +761,204 @@ fn open_project_updates_last_opened_at_for_available_project() {
     assert_eq!(opened.id, stored_project.id);
     assert_ne!(opened.last_opened_at, 1_780_624_800_000);
     assert!(opened.last_opened_at > 1_700_000_000_000);
+}
+
+#[test]
+fn open_project_restores_saved_project_terminals_without_duplicate_launches() {
+    let _env_lock = lock_terminal_test_env();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let repository = ProjectRepository::new(&database.connection);
+    let stored_project = repository
+        .insert(
+            "sample-repo",
+            repo_dir.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
+        .expect("insert project");
+    let terminal_service =
+        ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+    let registry = ProjectTerminalRegistry::new();
+    let manager = PtySessionManager::new();
+
+    let created = terminal_service
+        .create_terminal(
+            temp_dir.path(),
+            CreateProjectTerminalInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("create terminal");
+
+    terminal_service
+        .close_terminal(
+            redwhisk_lib::types::project_terminal::CloseProjectTerminalInput {
+                project_id: stored_project.id,
+                session_id: created.session_id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("close initial terminal session");
+
+    let opened = ProjectService::open_project_in_data_dir(
+        temp_dir.path(),
+        OpenProjectInput {
+            project_id: stored_project.id,
+        },
+        &registry,
+        &manager,
+    )
+    .expect("open project with restored terminals");
+
+    assert_eq!(opened.id, stored_project.id);
+
+    let listed = terminal_service
+        .list_project_terminals(
+            ListProjectTerminalsInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("list restored terminals");
+    assert_eq!(listed.terminals.len(), 1);
+    assert_eq!(listed.terminals[0].config_id, created.config_id);
+    assert_ne!(listed.terminals[0].session_id, created.session_id);
+    assert!(manager.contains(listed.terminals[0].session_id));
+
+    let reopened = ProjectService::open_project_in_data_dir(
+        temp_dir.path(),
+        OpenProjectInput {
+            project_id: stored_project.id,
+        },
+        &registry,
+        &manager,
+    )
+    .expect("reopen project should not duplicate terminal");
+    assert_eq!(reopened.id, stored_project.id);
+
+    let relisted = terminal_service
+        .list_project_terminals(
+            ListProjectTerminalsInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("list terminals after reopen");
+    assert_eq!(relisted.terminals.len(), 1);
+    assert_eq!(relisted.terminals[0].config_id, created.config_id);
+    assert_eq!(
+        relisted.terminals[0].session_id,
+        listed.terminals[0].session_id
+    );
+
+    let snapshot = terminal_service
+        .read_terminal_snapshot(
+            ReadProjectTerminalInput {
+                project_id: stored_project.id,
+                session_id: relisted.terminals[0].session_id,
+                max_bytes: Some(1024),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("read restored snapshot");
+    assert!(snapshot.is_active);
+}
+
+#[test]
+fn open_project_ignores_individual_terminal_restore_failures() {
+    let _env_lock = lock_terminal_test_env();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let healthy_repo = temp_dir.path().join("healthy-repo");
+    fs::create_dir_all(healthy_repo.join(".git")).expect("healthy git dir");
+    let broken_repo = temp_dir.path().join("broken-repo");
+    fs::create_dir_all(broken_repo.join(".git")).expect("broken git dir");
+    let repository = ProjectRepository::new(&database.connection);
+    let stored_project = repository
+        .insert(
+            "healthy-repo",
+            healthy_repo.to_str().unwrap(),
+            ProjectCompletionPolicy::AgentAutoCommit,
+        )
+        .expect("insert project");
+    repository
+        .insert_project_terminal_config(
+            stored_project.id,
+            "Healthy",
+            healthy_repo.to_str().unwrap(),
+            "",
+        )
+        .expect("insert healthy terminal config");
+    repository
+        .insert_project_terminal_config(
+            stored_project.id,
+            "Broken",
+            broken_repo.to_str().unwrap(),
+            "false",
+        )
+        .expect("insert broken terminal config");
+
+    let terminal_service =
+        ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+    let registry = ProjectTerminalRegistry::new();
+    let manager = PtySessionManager::new();
+
+    let opened = ProjectService::open_project_in_data_dir(
+        temp_dir.path(),
+        OpenProjectInput {
+            project_id: stored_project.id,
+        },
+        &registry,
+        &manager,
+    )
+    .expect("open project should succeed");
+
+    assert_eq!(opened.id, stored_project.id);
+
+    let listed = terminal_service
+        .list_project_terminals(
+            ListProjectTerminalsInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("list terminals after partial restore");
+    assert_eq!(listed.terminals.len(), 2);
+    assert_eq!(
+        listed
+            .terminals
+            .iter()
+            .filter(|terminal| terminal.session_id != 0)
+            .count(),
+        1
+    );
+    assert!(listed
+        .terminals
+        .iter()
+        .any(|terminal| terminal.name == "Healthy" && manager.contains(terminal.session_id)));
+    assert!(listed
+        .terminals
+        .iter()
+        .any(|terminal| terminal.name == "Broken" && terminal.session_id == 0));
 }
 
 #[test]

@@ -103,6 +103,14 @@ export function readProjectTerminal(
   });
 }
 
+export function listProjectTerminals(
+  input: ListProjectTerminalsInput,
+): Promise<ListProjectTerminalsResult> {
+  return invokeCommand<ListProjectTerminalsResult>("list_project_terminals", {
+    input,
+  });
+}
+
 export function restoreProjectTerminal(
   input: RestoreProjectTerminalInput,
 ): Promise<RestoreProjectTerminalResult> {
@@ -127,4 +135,22 @@ export function closeProjectTerminal(
   input: CloseProjectTerminalInput,
 ): Promise<void> {
   return invokeCommand("close_project_terminal", { input });
+}
+
+export function updateProjectTerminalConfig(
+  input: UpdateProjectTerminalConfigInput,
+): Promise<UpdateProjectTerminalConfigResult> {
+  return invokeCommand<UpdateProjectTerminalConfigResult>(
+    "update_project_terminal_config",
+    { input },
+  );
+}
+
+export function deleteProjectTerminalConfig(
+  input: DeleteProjectTerminalConfigInput,
+): Promise<DeleteProjectTerminalConfigResult> {
+  return invokeCommand<DeleteProjectTerminalConfigResult>(
+    "delete_project_terminal_config",
+    { input },
+  );
 }

@@ -13,9 +13,13 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::ProjectSummary;
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
-    ReadProjectTerminalInput, ReadProjectTerminalResult, ResizeProjectTerminalInput,
-    RestoreProjectTerminalInput, RestoreProjectTerminalResult, WriteProjectTerminalInput,
+    DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
+    ListProjectTerminalsResult, ProjectTerminalSummary, ReadProjectTerminalInput,
+    ReadProjectTerminalResult, ResizeProjectTerminalInput, RestoreProjectTerminalInput,
+    RestoreProjectTerminalResult, UpdateProjectTerminalConfigInput,
+    UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
 };
+use crate::types::project_terminal_config::ProjectTerminalConfig;
 
 const DEFAULT_PROJECT_TERMINAL_NAME: &str = "New Terminal";
 const PROJECT_TERMINAL_LOG_DIR_NAME: &str = "project-terminal-logs";
@@ -31,6 +35,7 @@ pub struct ProjectTerminalRegistry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProjectTerminalSession {
     project_id: i64,
+    config_id: i64,
     name: String,
     log_path: String,
     is_active: bool,
@@ -87,6 +92,72 @@ impl ProjectTerminalRegistry {
                     ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id),
                 )
             })
+    }
+
+    fn sessions_by_config_id(
+        &self,
+        project_id: i64,
+        config_id: i64,
+    ) -> Result<Vec<(i64, ProjectTerminalSession)>, CommandError> {
+        let session = self
+            .sessions
+            .lock()
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 查询失败。"))?
+            .iter()
+            .filter(|(_, session)| {
+                session.project_id == project_id && session.config_id == config_id
+            })
+            .map(|(session_id, session)| (*session_id, session.clone()))
+            .collect();
+
+        Ok(session)
+    }
+
+    fn rename_session(
+        &self,
+        project_id: i64,
+        config_id: i64,
+        name: &str,
+    ) -> Result<(), CommandError> {
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+        for (_, session) in sessions.iter_mut().filter(|(_, session)| {
+            session.project_id == project_id && session.config_id == config_id
+        }) {
+            session.name = name.to_string();
+        }
+
+        Ok(())
+    }
+
+    fn remove_sessions_by_config_id(
+        &self,
+        project_id: i64,
+        config_id: i64,
+    ) -> Result<Vec<(i64, ProjectTerminalSession)>, CommandError> {
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 删除失败。"))?;
+        let session_ids = sessions
+            .iter()
+            .filter(|(_, session)| {
+                session.project_id == project_id && session.config_id == config_id
+            })
+            .map(|(session_id, _)| *session_id)
+            .collect::<Vec<_>>();
+        let removed = session_ids
+            .into_iter()
+            .filter_map(|session_id| {
+                sessions
+                    .remove(&session_id)
+                    .map(|session| (session_id, session))
+            })
+            .collect();
+
+        Ok(removed)
     }
 
     pub fn mark_inactive(&self, session_id: i64) {
@@ -177,6 +248,7 @@ impl<'connection> ProjectTerminalService<'connection> {
             session_id,
             ProjectTerminalSession {
                 project_id: project.id,
+                config_id: config.id,
                 name: DEFAULT_PROJECT_TERMINAL_NAME.to_string(),
                 log_path: log_path.to_string_lossy().to_string(),
                 is_active: true,
@@ -204,6 +276,133 @@ impl<'connection> ProjectTerminalService<'connection> {
             working_dir: config.working_dir,
             launch_command: config.launch_command,
         })
+    }
+
+    pub fn list_project_terminals(
+        &self,
+        input: ListProjectTerminalsInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ListProjectTerminalsResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let configs = self
+            .project_repository
+            .list_project_terminal_configs(input.project_id)
+            .map_err(project_terminal_database_error)?;
+        let mut terminals = Vec::with_capacity(configs.len());
+
+        for config in configs {
+            let session = preferred_project_terminal_session(
+                registry.sessions_by_config_id(input.project_id, config.id)?,
+                pty_sessions,
+            );
+            terminals.push(project_terminal_summary(config, session, pty_sessions));
+        }
+
+        Ok(ListProjectTerminalsResult { terminals })
+    }
+
+    pub fn update_project_terminal_config(
+        &self,
+        input: UpdateProjectTerminalConfigInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<UpdateProjectTerminalConfigResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let config = self
+            .project_repository
+            .update_project_terminal_config(
+                input.project_id,
+                input.config_id,
+                &input.name,
+                &input.working_dir,
+                &input.launch_command,
+            )
+            .map_err(project_terminal_database_error)?;
+        registry.rename_session(input.project_id, config.id, &config.name)?;
+        let session = preferred_project_terminal_session(
+            registry.sessions_by_config_id(input.project_id, config.id)?,
+            pty_sessions,
+        );
+
+        Ok(UpdateProjectTerminalConfigResult {
+            terminal: project_terminal_summary(config, session, pty_sessions),
+        })
+    }
+
+    pub fn delete_project_terminal_config(
+        &self,
+        input: DeleteProjectTerminalConfigInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<DeleteProjectTerminalConfigResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let sessions = registry.sessions_by_config_id(input.project_id, input.config_id)?;
+
+        self.project_repository
+            .delete_project_terminal_config(input.project_id, input.config_id)
+            .map_err(project_terminal_database_error)?;
+
+        let session_id = if let Some((session_id, _)) =
+            preferred_project_terminal_session(sessions.clone(), pty_sessions)
+        {
+            let removed =
+                registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
+            for (removed_session_id, removed_session) in removed {
+                if removed_session.is_active && pty_sessions.contains(removed_session_id) {
+                    let _ = pty_sessions.kill(removed_session_id);
+                }
+            }
+            Some(session_id)
+        } else if !sessions.is_empty() {
+            let removed =
+                registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
+            for (removed_session_id, removed_session) in removed {
+                if removed_session.is_active && pty_sessions.contains(removed_session_id) {
+                    let _ = pty_sessions.kill(removed_session_id);
+                }
+            }
+            sessions.first().map(|(session_id, _)| *session_id)
+        } else {
+            None
+        };
+
+        Ok(DeleteProjectTerminalConfigResult {
+            config_id: input.config_id,
+            session_id,
+        })
+    }
+
+    pub fn restore_project_terminals(
+        &self,
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        self.project_by_id(project_id)?;
+        let configs = self
+            .project_repository
+            .list_project_terminal_configs(project_id)
+            .map_err(project_terminal_database_error)?;
+
+        for config in configs {
+            let sessions = registry.sessions_by_config_id(project_id, config.id)?;
+            if let Some((session_id, session)) =
+                preferred_project_terminal_session(sessions.clone(), pty_sessions)
+            {
+                if session.is_active && pty_sessions.contains(session_id) {
+                    continue;
+                }
+            }
+
+            let _ = registry.remove_sessions_by_config_id(project_id, config.id);
+
+            let _ =
+                self.start_terminal_for_config(data_dir.as_ref(), &config, registry, pty_sessions);
+        }
+
+        Ok(())
     }
 
     pub fn read_terminal_snapshot(
@@ -397,6 +596,67 @@ impl<'connection> ProjectTerminalService<'connection> {
         ProjectTerminalService::new(repository).close_terminal(input, registry, pty_sessions)
     }
 
+    pub fn list_project_terminals_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ListProjectTerminalsInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ListProjectTerminalsResult, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).list_project_terminals(
+            input,
+            registry,
+            pty_sessions,
+        )
+    }
+
+    pub fn update_project_terminal_config_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: UpdateProjectTerminalConfigInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<UpdateProjectTerminalConfigResult, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).update_project_terminal_config(
+            input,
+            registry,
+            pty_sessions,
+        )
+    }
+
+    pub fn delete_project_terminal_config_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteProjectTerminalConfigInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<DeleteProjectTerminalConfigResult, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).delete_project_terminal_config(
+            input,
+            registry,
+            pty_sessions,
+        )
+    }
+
+    pub fn restore_project_terminals_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        let database = open_project_database(data_dir.as_ref())?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).restore_project_terminals(
+            data_dir,
+            project_id,
+            registry,
+            pty_sessions,
+        )
+    }
+
     fn project_by_id(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
         self.project_repository
             .find_by_id(project_id)
@@ -421,6 +681,94 @@ impl<'connection> ProjectTerminalService<'connection> {
             .delete_project_terminal_config(project_id, config_id)
             .map_err(project_terminal_database_error)
     }
+
+    fn start_terminal_for_config(
+        &self,
+        data_dir: &Path,
+        config: &ProjectTerminalConfig,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<i64, CommandError> {
+        let session_id = registry.allocate_session_id();
+        let log_path = terminal_log_path(data_dir, config.project_id, session_id)?;
+        let command = if config.launch_command.trim().is_empty() {
+            std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+        } else {
+            config.launch_command.clone()
+        };
+
+        let pending = pty_sessions
+            .spawn_pending(&PtySpawnRequest {
+                command,
+                working_dir: config.working_dir.clone(),
+                log_path: log_path.to_string_lossy().to_string(),
+                initial_prompt: None,
+                rows: 32,
+                cols: 120,
+                startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+                startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+            })
+            .map_err(project_terminal_start_error)?;
+
+        if let Err(error) = registry.insert(
+            session_id,
+            ProjectTerminalSession {
+                project_id: config.project_id,
+                config_id: config.id,
+                name: config.name.clone(),
+                log_path: log_path.to_string_lossy().to_string(),
+                is_active: true,
+            },
+        ) {
+            pending.terminate();
+            return Err(error);
+        }
+
+        let registry_on_exit = registry.clone();
+        if let Err(PtyRegisterError { message, pending }) =
+            pty_sessions.register_for_project(config.project_id, session_id, pending, move |_| {
+                registry_on_exit.mark_inactive(session_id);
+            })
+        {
+            let _ = registry.remove(config.project_id, session_id);
+            pending.terminate();
+            return Err(project_terminal_start_error(message));
+        }
+
+        Ok(session_id)
+    }
+}
+
+fn project_terminal_summary(
+    config: ProjectTerminalConfig,
+    session: Option<(i64, ProjectTerminalSession)>,
+    pty_sessions: &PtySessionManager,
+) -> ProjectTerminalSummary {
+    let session_id = match session {
+        Some((session_id, session)) if session.is_active && pty_sessions.contains(session_id) => {
+            session_id
+        }
+        _ => 0,
+    };
+
+    ProjectTerminalSummary {
+        config_id: config.id,
+        session_id,
+        name: config.name,
+        working_dir: config.working_dir,
+        launch_command: config.launch_command,
+    }
+}
+
+fn preferred_project_terminal_session(
+    sessions: Vec<(i64, ProjectTerminalSession)>,
+    pty_sessions: &PtySessionManager,
+) -> Option<(i64, ProjectTerminalSession)> {
+    sessions
+        .iter()
+        .find(|(session_id, session)| session.is_active && pty_sessions.contains(*session_id))
+        .cloned()
+        .or_else(|| sessions.into_iter().next())
 }
 
 fn open_project_database(
@@ -495,7 +843,7 @@ fn project_terminal_persistence_error(message: &str) -> CommandError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
 
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::core::project_service::ProjectService;
@@ -503,8 +851,9 @@ mod tests {
     use crate::db::project_repository::ProjectRepository;
     use crate::types::project::{CreateProjectInput, ProjectCompletionPolicy};
     use crate::types::project_terminal::{
-        CloseProjectTerminalInput, CreateProjectTerminalInput, ReadProjectTerminalInput,
-        ResizeProjectTerminalInput, RestoreProjectTerminalInput, WriteProjectTerminalInput,
+        CloseProjectTerminalInput, CreateProjectTerminalInput, DeleteProjectTerminalConfigInput,
+        ListProjectTerminalsInput, ReadProjectTerminalInput, ResizeProjectTerminalInput,
+        RestoreProjectTerminalInput, UpdateProjectTerminalConfigInput, WriteProjectTerminalInput,
     };
 
     use super::{ProjectTerminalRegistry, ProjectTerminalService};
@@ -512,6 +861,13 @@ mod tests {
     fn terminal_test_env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn lock_terminal_test_env() -> MutexGuard<'static, ()> {
+        match terminal_test_env_lock().lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        }
     }
 
     struct ShellEnvGuard {
@@ -537,7 +893,7 @@ mod tests {
 
     #[test]
     fn project_terminal_create_write_restore_and_close() {
-        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let _env_lock = lock_terminal_test_env();
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let project = ProjectService::create_project_in_data_dir(
             temp_dir.path(),
@@ -664,7 +1020,7 @@ mod tests {
 
     #[test]
     fn project_terminal_create_rolls_back_config_when_pty_start_fails() {
-        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let _env_lock = lock_terminal_test_env();
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let repo_dir = temp_dir.path().join("transient-repo");
         std::fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
@@ -713,7 +1069,7 @@ mod tests {
 
     #[test]
     fn project_terminal_create_rolls_back_config_when_registry_insert_fails() {
-        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let _env_lock = lock_terminal_test_env();
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let current_repo = std::env::current_dir()
             .expect("cwd")
@@ -770,7 +1126,7 @@ mod tests {
 
     #[test]
     fn project_terminal_create_rolls_back_config_when_pty_session_register_fails() {
-        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let _env_lock = lock_terminal_test_env();
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let current_repo = std::env::current_dir()
             .expect("cwd")
@@ -822,7 +1178,7 @@ mod tests {
 
     #[test]
     fn project_terminal_close_rejects_cross_project_session_without_removing_owner_session() {
-        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let _env_lock = lock_terminal_test_env();
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let current_repo = std::env::current_dir()
             .expect("cwd")
@@ -911,5 +1267,227 @@ mod tests {
                 &manager,
             )
             .expect("owner project should still close session");
+    }
+
+    #[test]
+    fn project_terminal_service_lists_updates_and_deletes_configs_with_project_ownership() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let other_repo = temp_dir.path().join("other-repo");
+        std::fs::create_dir_all(other_repo.join(".git")).expect("other git dir");
+
+        let owner_project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "owner".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create owner project");
+        let other_project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "other".to_string(),
+                repo_path: other_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create other project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: owner_project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        let listed = service
+            .list_project_terminals(
+                ListProjectTerminalsInput {
+                    project_id: owner_project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("list terminals");
+        assert_eq!(listed.terminals.len(), 1);
+        assert_eq!(listed.terminals[0].config_id, created.config_id);
+        assert_eq!(listed.terminals[0].session_id, created.session_id);
+
+        let updated = service
+            .update_project_terminal_config(
+                UpdateProjectTerminalConfigInput {
+                    project_id: owner_project.id,
+                    config_id: created.config_id,
+                    name: "API".to_string(),
+                    working_dir: current_repo.join("src").to_string_lossy().to_string(),
+                    launch_command: "pnpm dev".to_string(),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("update terminal");
+        assert_eq!(updated.terminal.config_id, created.config_id);
+        assert_eq!(updated.terminal.session_id, created.session_id);
+        assert_eq!(updated.terminal.name, "API");
+        assert_eq!(updated.terminal.launch_command, "pnpm dev");
+
+        let cross_project_update = service.update_project_terminal_config(
+            UpdateProjectTerminalConfigInput {
+                project_id: other_project.id,
+                config_id: created.config_id,
+                name: "Worker".to_string(),
+                working_dir: other_repo.to_string_lossy().to_string(),
+                launch_command: "pnpm worker".to_string(),
+            },
+            &registry,
+            &manager,
+        );
+        assert!(cross_project_update.is_err());
+
+        let deleted = service
+            .delete_project_terminal_config(
+                DeleteProjectTerminalConfigInput {
+                    project_id: owner_project.id,
+                    config_id: created.config_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("delete terminal config");
+        assert_eq!(deleted.config_id, created.config_id);
+        assert_eq!(deleted.session_id, Some(created.session_id));
+        let mut removed_from_manager = false;
+        for _ in 0..20 {
+            if !manager.contains(created.session_id) {
+                removed_from_manager = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(
+            removed_from_manager,
+            "expected PTY session to exit after delete"
+        );
+
+        let listed_after_delete = service
+            .list_project_terminals(
+                ListProjectTerminalsInput {
+                    project_id: owner_project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("list terminals after delete");
+        assert!(listed_after_delete.terminals.is_empty());
+
+        let cross_project_delete = service.delete_project_terminal_config(
+            DeleteProjectTerminalConfigInput {
+                project_id: other_project.id,
+                config_id: created.config_id,
+            },
+            &registry,
+            &manager,
+        );
+        assert!(cross_project_delete.is_err());
+    }
+
+    #[test]
+    fn project_terminal_restore_replaces_stale_session_for_same_config() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        manager
+            .kill(created.session_id)
+            .expect("kill initial PTY session");
+        for _ in 0..20 {
+            if !manager.contains(created.session_id) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+
+        service
+            .restore_project_terminals(temp_dir.path(), project.id, &registry, &manager)
+            .expect("restore project terminals");
+
+        let matching_sessions = registry
+            .sessions
+            .lock()
+            .expect("registry sessions")
+            .values()
+            .filter(|session| {
+                session.project_id == project.id && session.config_id == created.config_id
+            })
+            .count();
+        assert_eq!(matching_sessions, 1);
+
+        let listed = service
+            .list_project_terminals(
+                ListProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("list restored terminals");
+        assert_eq!(listed.terminals.len(), 1);
+        assert_ne!(listed.terminals[0].session_id, 0);
+        assert_ne!(listed.terminals[0].session_id, created.session_id);
     }
 }
