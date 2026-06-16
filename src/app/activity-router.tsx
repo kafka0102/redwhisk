@@ -82,6 +82,7 @@ export function ActivityRouter({
   return (
     <IssuesActivity
       onOpenAgentsActivity={onOpenAgentsActivity}
+      projectCompletionPolicy={projectCompletionPolicy}
       projectId={projectId}
       requestedIssueId={requestedIssueId}
     />

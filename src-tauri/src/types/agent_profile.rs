@@ -21,6 +21,7 @@ pub struct AgentProfileRecord {
     pub name: String,
     pub agent_type: AgentType,
     pub command: String,
+    pub worktree_path: String,
     pub scope: AgentScope,
     pub project_id: Option<i64>,
     pub mode: String,
@@ -37,6 +38,7 @@ pub struct SaveAgentProfileInput {
     pub name: String,
     pub agent_type: AgentType,
     pub command: String,
+    pub worktree_path: String,
     pub scope: AgentScope,
     pub project_id: Option<i64>,
     pub mode: String,
@@ -74,4 +76,17 @@ pub struct ListAgentProfilesInput {
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAgentProfileInput {
     pub id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateAgentWorktreePathInput {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateAgentWorktreePathResult {
+    pub path: String,
+    pub exists: bool,
 }

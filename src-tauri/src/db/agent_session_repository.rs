@@ -1,8 +1,11 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::types::agent_profile::AgentType;
-use crate::types::agent_session::{AgentSessionAttention, AgentSessionRecord, AgentSessionStatus};
+use crate::types::agent_session::{
+    AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode,
+};
 use crate::types::issue::IssueStatus;
+use crate::types::project::ProjectCompletionPolicy;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentSessionListRow {
@@ -34,7 +37,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, completion_policy, worktree_root_path, log_path, latest_output, last_active_at, started_at, closed_at
                  FROM agent_sessions
                  WHERE id = ?1 AND del = 0",
                 params![id],
@@ -46,7 +49,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_issue_id(&self, issue_id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, completion_policy, worktree_root_path, log_path, latest_output, last_active_at, started_at, closed_at
                  FROM agent_sessions
                  WHERE issue_id = ?1 AND del = 0",
                 params![issue_id],
@@ -97,7 +100,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         project_id: i64,
     ) -> rusqlite::Result<Vec<AgentSessionRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
+            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, completion_policy, worktree_root_path, log_path, latest_output, last_active_at, started_at, closed_at
              FROM agent_sessions
              WHERE project_id = ?1 AND status = 'running' AND del = 0
              ORDER BY last_active_at DESC, started_at DESC, id DESC",
@@ -125,6 +128,12 @@ impl<'connection> AgentSessionRepository<'connection> {
         working_dir: &str,
         command_snapshot: &str,
         prompt_snapshot: &str,
+        workspace_mode: &WorkspaceMode,
+        target_branch: Option<&str>,
+        workspace_branch: Option<&str>,
+        workspace_path: Option<&str>,
+        completion_policy: Option<ProjectCompletionPolicy>,
+        worktree_root_path: Option<&str>,
         log_path: &str,
         started_at: i64,
     ) -> rusqlite::Result<AgentSessionRecord> {
@@ -138,10 +147,16 @@ impl<'connection> AgentSessionRepository<'connection> {
                working_dir,
                command_snapshot,
                prompt_snapshot,
+               workspace_mode,
+               target_branch,
+               workspace_branch,
+               workspace_path,
+               completion_policy,
+               worktree_root_path,
                log_path,
                last_active_at,
                started_at
-             ) VALUES (?1, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?8)",
+             ) VALUES (?1, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 project_id,
                 issue_id,
@@ -149,7 +164,14 @@ impl<'connection> AgentSessionRepository<'connection> {
                 working_dir,
                 command_snapshot,
                 prompt_snapshot,
+                workspace_mode_to_str(workspace_mode),
+                target_branch,
+                workspace_branch,
+                workspace_path,
+                completion_policy.map(|value| project_completion_policy_to_str(&value)),
+                worktree_root_path,
                 log_path,
+                started_at,
                 started_at
             ],
         )?;
@@ -166,6 +188,12 @@ impl<'connection> AgentSessionRepository<'connection> {
         working_dir: &str,
         command_snapshot: &str,
         prompt_snapshot: &str,
+        workspace_mode: &WorkspaceMode,
+        target_branch: Option<&str>,
+        workspace_branch: Option<&str>,
+        workspace_path: Option<&str>,
+        completion_policy: Option<ProjectCompletionPolicy>,
+        worktree_root_path: Option<&str>,
         log_path: &str,
         started_at: i64,
     ) -> rusqlite::Result<AgentSessionRecord> {
@@ -180,10 +208,16 @@ impl<'connection> AgentSessionRepository<'connection> {
                working_dir,
                command_snapshot,
                prompt_snapshot,
+               workspace_mode,
+               target_branch,
+               workspace_branch,
+               workspace_path,
+               completion_policy,
+               worktree_root_path,
                log_path,
                last_active_at,
                started_at
-             ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?8)",
+             ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 project_id,
                 title,
@@ -191,7 +225,14 @@ impl<'connection> AgentSessionRepository<'connection> {
                 working_dir,
                 command_snapshot,
                 prompt_snapshot,
+                workspace_mode_to_str(workspace_mode),
+                target_branch,
+                workspace_branch,
+                workspace_path,
+                completion_policy.map(|value| project_completion_policy_to_str(&value)),
+                worktree_root_path,
                 log_path,
+                started_at,
                 started_at
             ],
         )?;
@@ -330,7 +371,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<AgentSessionRecord>> {
     connection
         .query_row(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, log_path, latest_output, last_active_at, started_at, closed_at
+            "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, completion_policy, worktree_root_path, log_path, latest_output, last_active_at, started_at, closed_at
              FROM agent_sessions
              WHERE id = ?1 AND del = 0",
             params![id],
@@ -352,11 +393,20 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSess
         working_dir: row.get(8)?,
         command_snapshot: row.get(9)?,
         prompt_snapshot: row.get(10)?,
-        log_path: row.get(11)?,
-        latest_output: row.get(12)?,
-        last_active_at: row.get(13)?,
-        started_at: row.get(14)?,
-        closed_at: row.get(15)?,
+        workspace_mode: workspace_mode_from_str(&row.get::<_, String>(11)?)?,
+        target_branch: row.get(12)?,
+        workspace_branch: row.get(13)?,
+        workspace_path: row.get(14)?,
+        completion_policy: row
+            .get::<_, Option<String>>(15)?
+            .map(|value| project_completion_policy_from_str(&value))
+            .transpose()?,
+        worktree_root_path: row.get(16)?,
+        log_path: row.get(17)?,
+        latest_output: row.get(18)?,
+        last_active_at: row.get(19)?,
+        started_at: row.get(20)?,
+        closed_at: row.get(21)?,
     })
 }
 
@@ -433,5 +483,37 @@ fn agent_session_attention_to_str(value: &AgentSessionAttention) -> &'static str
     match value {
         AgentSessionAttention::None => "none",
         AgentSessionAttention::Requested => "requested",
+    }
+}
+
+fn workspace_mode_from_str(value: &str) -> rusqlite::Result<WorkspaceMode> {
+    match value {
+        "current_branch" => Ok(WorkspaceMode::CurrentBranch),
+        "worktree" => Ok(WorkspaceMode::Worktree),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn workspace_mode_to_str(value: &WorkspaceMode) -> &'static str {
+    match value {
+        WorkspaceMode::CurrentBranch => "current_branch",
+        WorkspaceMode::Worktree => "worktree",
+    }
+}
+
+fn project_completion_policy_from_str(
+    value: &str,
+) -> rusqlite::Result<ProjectCompletionPolicy> {
+    match value {
+        "manual" => Ok(ProjectCompletionPolicy::Manual),
+        "agent_auto_commit" => Ok(ProjectCompletionPolicy::AgentAutoCommit),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn project_completion_policy_to_str(value: &ProjectCompletionPolicy) -> &'static str {
+    match value {
+        ProjectCompletionPolicy::Manual => "manual",
+        ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
     }
 }

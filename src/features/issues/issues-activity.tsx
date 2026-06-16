@@ -31,14 +31,17 @@ import { IssueSummaryDialog } from "./issue-summary-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 interface IssuesActivityProps {
+  projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   onOpenAgentsActivity?: (sessionId: number) => void;
   requestedIssueId?: number | null;
 }
 
 export function IssuesActivity({
+  projectCompletionPolicy,
   projectId,
   onOpenAgentsActivity,
   requestedIssueId = null,
@@ -709,6 +712,7 @@ export function IssuesActivity({
       {runDialogIssue ? (
         <IssueRunDialog
           issue={runDialogIssue}
+          projectCompletionPolicy={projectCompletionPolicy}
           projectId={projectId}
           onClose={closeRunDialog}
           onStarted={handleRunStarted}

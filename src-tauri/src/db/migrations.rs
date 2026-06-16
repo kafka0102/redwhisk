@@ -69,6 +69,9 @@ const ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL: &str =
 const PROJECT_TERMINAL_CONFIGS_MIGRATION_VERSION: &str = "0021_project_terminal_configs";
 const PROJECT_TERMINAL_CONFIGS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0021_project_terminal_configs.sql");
+const AGENT_WORKTREE_EXECUTION_MIGRATION_VERSION: &str = "0022_agent_worktree_execution";
+const AGENT_WORKTREE_EXECUTION_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0022_agent_worktree_execution.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -222,6 +225,10 @@ impl MigrationRunner {
                 Migration {
                     version: PROJECT_TERMINAL_CONFIGS_MIGRATION_VERSION,
                     sql: PROJECT_TERMINAL_CONFIGS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_WORKTREE_EXECUTION_MIGRATION_VERSION,
+                    sql: AGENT_WORKTREE_EXECUTION_MIGRATION_SQL,
                 },
             ];
         }

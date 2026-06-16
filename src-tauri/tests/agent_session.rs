@@ -13,9 +13,11 @@ use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentSessionAttention, AgentSessionPromptKind, AgentSessionStatus,
-    InjectAgentSessionPromptInput, RestoreAgentSessionTerminalInput, SetAgentSessionAttentionInput,
-    StartAgentSessionInput, StartStandaloneAgentSessionInput,
+    InjectAgentSessionPromptInput, ProjectGitBranchListInput, RestoreAgentSessionTerminalInput,
+    SetAgentSessionAttentionInput, StartAgentSessionInput, StartStandaloneAgentSessionInput,
+    WorkspaceMode,
 };
+use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::IssueStatus;
 use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
@@ -54,7 +56,13 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "closed_at",
             "project_id",
             "latest_output",
-            "del"
+            "del",
+            "workspace_mode",
+            "target_branch",
+            "workspace_branch",
+            "workspace_path",
+            "completion_policy",
+            "worktree_root_path",
         ]
     );
 
@@ -94,6 +102,9 @@ fn start_agent_session_rejects_blank_prompt_snapshot() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "   ".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("blank prompt should be rejected");
@@ -125,6 +136,9 @@ fn start_agent_session_rejects_non_backlog_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("review issue should be rejected");
@@ -160,6 +174,9 @@ fn start_agent_session_rejects_project_profile_from_another_project() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("project profile should be bound to the same project");
@@ -194,6 +211,9 @@ fn start_agent_session_rejects_deleted_agent_profile() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("deleted profile should be rejected");
@@ -229,6 +249,9 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect("start should succeed");
@@ -459,6 +482,9 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect("first start should succeed");
@@ -471,6 +497,9 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Retry snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("second start should be rejected");
@@ -534,6 +563,9 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("start should fail when command cannot start");
@@ -647,6 +679,9 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
         )
         .expect_err("insert-time unique violation should map to existing-session error");
@@ -690,6 +725,9 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "please start working".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
             &manager,
         )
@@ -712,6 +750,113 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
 
     assert!(snapshot.contains("please start working"));
     manager.kill(result.session_id).expect("kill session");
+}
+
+#[test]
+fn get_project_git_branches_returns_current_and_local_branches() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "branch-list-project");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    git(&repo_path, &["checkout", "-b", "develop"]);
+    git(&repo_path, &["checkout", "main"]);
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .get_project_git_branches(ProjectGitBranchListInput { project_id })
+        .expect("git branches");
+
+    assert_eq!(result.current_branch, "main");
+    assert!(result.local_branches.contains(&"main".to_string()));
+    assert!(result.local_branches.contains(&"develop".to_string()));
+}
+
+#[test]
+fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-session-project");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let worktree_root = temp_dir.path().join("agent-worktrees");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            worktree_root.to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: Some(ProjectCompletionPolicy::AgentAutoCommit),
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+            },
+        )
+        .expect("start worktree session");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session exists");
+
+    assert_eq!(session.workspace_mode, WorkspaceMode::Worktree);
+    assert_eq!(session.target_branch.as_deref(), Some("main"));
+    assert_eq!(session.completion_policy, Some(ProjectCompletionPolicy::AgentAutoCommit));
+    assert_eq!(
+        session.worktree_root_path.as_deref(),
+        Some(worktree_root.to_string_lossy().as_ref())
+    );
+    let workspace_path = session.workspace_path.expect("workspace path");
+    assert!(std::path::Path::new(&workspace_path).is_dir());
+    assert_ne!(workspace_path, repo_path.to_string_lossy());
+    assert!(session
+        .workspace_branch
+        .as_deref()
+        .is_some_and(|value| value.starts_with("issue-")));
+    assert_eq!(session.working_dir, workspace_path);
 }
 
 #[test]
@@ -742,6 +887,9 @@ fn complete_issue_manual_with_pty_terminates_tracked_session() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "ready to complete".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
             },
             &manager,
         )
@@ -949,6 +1097,7 @@ fn agent_session_repository_reads_sessions_for_claude_profiles() {
             "Claude",
             AgentType::Claude,
             "/usr/local/bin/claude",
+            "",
             &AgentScope::Global,
             None,
             "default",
@@ -2191,8 +2340,15 @@ fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection
 }
 
 fn insert_project(connection: &rusqlite::Connection, repo_name: &str) -> i64 {
-    let repo_dir = std::env::temp_dir().join(repo_name);
+    let repo_dir = std::env::temp_dir().join(format!(
+        "{repo_name}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos()
+    ));
     std::fs::create_dir_all(&repo_dir).expect("create repo dir");
+    init_repo(&repo_dir);
     connection
         .execute(
             "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
@@ -2327,11 +2483,17 @@ fn insert_standalone_agent_session_row(
                 working_dir,
                 command_snapshot,
                 prompt_snapshot,
+                workspace_mode,
+                target_branch,
+                workspace_branch,
+                workspace_path,
+                completion_policy,
+                worktree_root_path,
                 log_path,
                 last_active_at,
                 started_at,
                 closed_at
-            ) VALUES (?1, NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', ?5, ?6, ?6, ?7)",
+            ) VALUES (?1, NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', 'current_branch', NULL, NULL, '/tmp/repo', NULL, NULL, ?5, ?6, ?6, ?7)",
             rusqlite::params![
                 project_id,
                 agent_profile_id,
@@ -2367,6 +2529,7 @@ fn insert_agent_profile_with_command(
             "Codex",
             AgentType::Codex,
             command,
+            "",
             &scope,
             project_id,
             "full-auto",
@@ -2383,6 +2546,24 @@ fn success_command(base_dir: &std::path::Path) -> std::path::PathBuf {
     std::fs::write(&path, "#!/bin/sh\nsleep 1\n").expect("write success script");
     set_executable(&path);
     path
+}
+
+fn init_repo(path: &std::path::Path) {
+    git(path, &["init", "-b", "main"]);
+    git(path, &["config", "user.name", "RedWhisk Test"]);
+    git(path, &["config", "user.email", "redwhisk@example.test"]);
+    std::fs::write(path.join(".gitignore"), "target/\n").expect("write gitignore");
+    git(path, &["add", ".gitignore"]);
+    git(path, &["commit", "-m", "initial"]);
+}
+
+fn git(repo: &std::path::Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .status()
+        .expect("run git");
+    assert!(status.success(), "git command failed: git {}", args.join(" "));
 }
 
 fn echo_stdin_command(base_dir: &std::path::Path) -> std::path::PathBuf {
