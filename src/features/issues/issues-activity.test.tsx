@@ -266,6 +266,8 @@ const existingIssueRunPrompt = [
   "Existing description",
 ].join("\n\n");
 
+const existingIssueRunPromptWithoutSkill = "Existing description";
+
 describe("IssuesActivity", () => {
   beforeEach(() => {
     advanceIssueStatusMock.mockReset();
@@ -926,6 +928,9 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("heading", { name: "Run Issue #20" }),
     ).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Agent profile")).toHaveValue("100");
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
+      "bmad-dev-story",
+    );
     expect(
       within(dialog).queryByLabelText("Working directory"),
     ).not.toBeInTheDocument();
@@ -1175,6 +1180,131 @@ describe("IssuesActivity", () => {
     ) as HTMLSelectElement;
 
     expect(profileSelect).toHaveValue("200");
+  });
+
+  it("hides the workflow skill field when the selected agent profile has no configured skill", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(
+      within(dialog).queryByLabelText("Workflow skill"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("allows selecting none for workflow skill and updates the final prompt", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Workflow skill"),
+      "__none__",
+    );
+
+    expect(
+      within(dialog).getByLabelText("Final prompt"),
+    ).toHaveValue(existingIssueRunPromptWithoutSkill);
+  });
+
+  it("restores the most recently used workflow skill for the selected agent profile", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          profiles: [
+            {
+              ...projectProfile,
+              defaultSkill: JSON.stringify(["bmad-dev-story", "review-skill"]),
+            },
+          ],
+        };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+
+    let dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Workflow skill"),
+      "review-skill",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Close run dialog" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
+      "review-skill",
+    );
+  });
+
+  it("falls back to the first configured workflow skill when there is no recent selection", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          profiles: [
+            {
+              ...projectProfile,
+              defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+            },
+          ],
+        };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
+      "skill-a",
+    );
   });
 
   it("restores focus to the Run button after canceling the run dialog", async () => {

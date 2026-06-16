@@ -2853,6 +2853,10 @@ button:focus-visible {
   min-height: auto;
 }
 
+.issue-dialog--compact .issue-dialog__body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .issue-dialog__body--single {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -2863,6 +2867,10 @@ button:focus-visible {
   align-content: start;
   gap: 12px;
   min-width: 0;
+}
+
+.issue-dialog__editor--full {
+  width: 100%;
 }
 
 .issue-dialog__editor--editable {

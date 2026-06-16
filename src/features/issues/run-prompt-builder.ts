@@ -21,6 +21,7 @@ export interface RunPromptPreview {
 interface BuildRunPromptPreviewInput {
   issue: Pick<IssueRecord, "title" | "description" | "attachments">;
   profile: Pick<AgentProfileRecord, "defaultSkill" | "promptTemplate">;
+  selectedWorkflowSkill?: string | null;
 }
 
 const APP_INSTRUCTIONS =
@@ -35,7 +36,14 @@ export function buildRunPromptPreview(
     input.issue.attachments
       ?.map((attachment) => attachment.relativePath.trim())
       .filter((path) => path.length > 0) ?? [];
-  const defaultSkills = parseDefaultSkills(input.profile.defaultSkill);
+  const configuredSkills = parseDefaultSkills(input.profile.defaultSkill);
+  const selectedWorkflowSkill = input.selectedWorkflowSkill ?? null;
+  const defaultSkills =
+    selectedWorkflowSkill === null
+      ? configuredSkills
+      : selectedWorkflowSkill.trim().length > 0
+        ? [selectedWorkflowSkill.trim()]
+        : [];
   const promptTemplate = input.profile.promptTemplate.trim();
   const sources: RunPromptSource[] = [];
 
