@@ -1,4 +1,5 @@
 import { invokeCommand } from "../../shared/commands/command-client";
+import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
@@ -202,11 +203,25 @@ export interface StartAgentSessionInput {
   issueId: number;
   agentProfileId: number;
   promptSnapshot: string;
+  completionPolicyOverride?: ProjectCompletionPolicy | null;
+  workspaceMode?: WorkspaceMode;
+  targetBranch?: string | null;
 }
 
 export interface StartAgentSessionResult {
   sessionId?: number | null;
   issueId: number;
+}
+
+export type WorkspaceMode = "current_branch" | "worktree";
+
+export interface ProjectGitBranchListInput {
+  projectId: number;
+}
+
+export interface ProjectGitBranchListResult {
+  currentBranch: string;
+  localBranches: string[];
 }
 
 export function listIssues(input: ListIssuesInput): Promise<IssueListResponse> {
@@ -312,6 +327,14 @@ export function startAgentSession(
   input: StartAgentSessionInput,
 ): Promise<StartAgentSessionResult> {
   return invokeCommand<StartAgentSessionResult>("start_agent_session", {
+    input,
+  });
+}
+
+export function getProjectGitBranches(
+  input: ProjectGitBranchListInput,
+): Promise<ProjectGitBranchListResult> {
+  return invokeCommand<ProjectGitBranchListResult>("get_project_git_branches", {
     input,
   });
 }

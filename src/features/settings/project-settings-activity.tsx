@@ -498,6 +498,7 @@ export function ProjectSettingsActivity({
                     mode="create"
                     scope="global"
                     projectId={currentAddForm.projectId}
+                    projectPath={projectPath}
                     onCancel={() => setAddForm(null)}
                     onSaved={handleProfileSaved}
                   />
@@ -509,6 +510,7 @@ export function ProjectSettingsActivity({
                     mode="edit"
                     scope={currentEditingProfile.profile.scope}
                     projectId={projectId}
+                    projectPath={projectPath}
                     profile={currentEditingProfile.profile}
                     onCancel={() => setEditingProfile(null)}
                     onSaved={handleProfileSaved}

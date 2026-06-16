@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
 import {
+  getProjectGitBranches,
   advanceIssueStatus,
   completeIssueManual,
   createIssue,
@@ -32,6 +33,7 @@ vi.mock("./issue-commands", () => ({
   deleteIssue: vi.fn(),
   exportIssueAttachment: vi.fn(),
   getIssueSummary: vi.fn(),
+  getProjectGitBranches: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
   previewIssueAttachment: vi.fn(),
@@ -130,6 +132,7 @@ const createIssueMock = vi.mocked(createIssue);
 const deleteIssueMock = vi.mocked(deleteIssue);
 const exportIssueAttachmentMock = vi.mocked(exportIssueAttachment);
 const getIssueSummaryMock = vi.mocked(getIssueSummary);
+const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
@@ -238,6 +241,7 @@ const projectProfile = {
   name: "Project Codex",
   agentType: "codex" as const,
   command: "/usr/local/bin/codex",
+  worktreePath: "/tmp/redwhisk.worktrees",
   scope: "project" as const,
   projectId: 1,
   mode: "full-auto",
@@ -252,6 +256,7 @@ const globalProfile = {
   name: "Global Codex",
   agentType: "codex" as const,
   command: "/usr/local/bin/codex",
+  worktreePath: "/tmp/redwhisk.worktrees",
   scope: "global" as const,
   projectId: null,
   mode: "full-auto",
@@ -276,6 +281,7 @@ describe("IssuesActivity", () => {
     deleteIssueMock.mockReset();
     exportIssueAttachmentMock.mockReset();
     getIssueSummaryMock.mockReset();
+    getProjectGitBranchesMock.mockReset();
     listAgentSessionsMock.mockReset();
     listIssuesMock.mockReset();
     markIssueReviewMock.mockReset();
@@ -291,6 +297,10 @@ describe("IssuesActivity", () => {
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
+    getProjectGitBranchesMock.mockResolvedValue({
+      currentBranch: "main",
+      localBranches: ["main", "develop", "release"],
+    });
   });
 
   it("renders four persistent lanes and groups issues by status", async () => {
@@ -726,7 +736,12 @@ describe("IssuesActivity", () => {
       code: "PROJECT_NOT_FOUND",
       message: "Project 不存在。",
     });
-    rerender(<IssuesActivity projectId={2} />);
+    rerender(
+      <IssuesActivity
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={2}
+      />,
+    );
 
     expect(
       await screen.findByRole("status", { name: "Issues status" }),
@@ -756,7 +771,12 @@ describe("IssuesActivity", () => {
     );
     await user.type(screen.getByLabelText("Title"), "Late issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
-    rerender(<IssuesActivity projectId={2} />);
+    rerender(
+      <IssuesActivity
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={2}
+      />,
+    );
     resolveCreate({
       id: 24,
       projectId: 1,
@@ -931,6 +951,14 @@ describe("IssuesActivity", () => {
     expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
       "bmad-dev-story",
     );
+    expect(within(dialog).getByLabelText("Commit strategy")).toHaveValue(
+      "agent_auto_commit",
+    );
+    expect(within(dialog).getByLabelText("Development mode")).toHaveValue(
+      "current_branch",
+    );
+    expect(within(dialog).getByLabelText("Target branch")).toHaveValue("main");
+    expect(within(dialog).getByLabelText("Target branch")).toBeDisabled();
     expect(
       within(dialog).queryByLabelText("Working directory"),
     ).not.toBeInTheDocument();
@@ -1024,10 +1052,76 @@ describe("IssuesActivity", () => {
       issueId: 20,
       agentProfileId: 100,
       promptSnapshot: existingIssueRunPrompt,
+      completionPolicyOverride: "agent_auto_commit",
+      workspaceMode: "current_branch",
+      targetBranch: "main",
     });
     expect(
       within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
     ).toBeInTheDocument();
+  });
+
+  it("enables target branch selection in worktree mode and submits remembered selections", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+
+    let dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Development mode"),
+      "worktree",
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Target branch"),
+      "develop",
+    );
+    await user.selectOptions(
+      within(dialog).getByLabelText("Commit strategy"),
+      "manual",
+    );
+    expect(within(dialog).getByLabelText("Target branch")).toBeEnabled();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Close run dialog" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Development mode")).toHaveValue(
+      "worktree",
+    );
+    expect(within(dialog).getByLabelText("Target branch")).toHaveValue(
+      "develop",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 20,
+      agentProfileId: 100,
+      promptSnapshot: existingIssueRunPrompt,
+      completionPolicyOverride: "agent_auto_commit",
+      workspaceMode: "worktree",
+      targetBranch: "develop",
+    });
   });
 
   it("closes the run dialog and refreshes issues when start succeeds", async () => {
@@ -1817,7 +1911,11 @@ function renderIssuesActivity(
 ) {
   return render(
     <I18nProvider>
-      <IssuesActivity projectId={1} {...props} />
+      <IssuesActivity
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+        {...props}
+      />
     </I18nProvider>,
   );
 }
