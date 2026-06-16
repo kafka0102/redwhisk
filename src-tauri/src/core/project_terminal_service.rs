@@ -106,7 +106,7 @@ impl ProjectTerminalRegistry {
             .sessions
             .lock()
             .map_err(|_| project_terminal_persistence_error("Project Terminal 删除失败。"))?;
-        let session = sessions.remove(&session_id).ok_or_else(|| {
+        let session = sessions.get(&session_id).cloned().ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "Project Terminal 不存在。",
@@ -123,6 +123,8 @@ impl ProjectTerminalRegistry {
             .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             .with_detail(ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id)));
         }
+
+        sessions.remove(&session_id);
 
         Ok(session)
     }
@@ -758,5 +760,98 @@ mod tests {
             .expect("list terminal configs after registry insert failure");
         assert!(configs.is_empty());
         assert!(!manager.contains(-1));
+    }
+
+    #[test]
+    fn project_terminal_close_rejects_cross_project_session_without_removing_owner_session() {
+        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let other_repo = temp_dir.path().join("other-repo");
+        std::fs::create_dir_all(other_repo.join(".git")).expect("other git dir");
+
+        let owner_project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "owner".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create owner project");
+        let other_project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "other".to_string(),
+                repo_path: other_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create other project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: owner_project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        let error = service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: other_project.id,
+                    session_id: created.session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect_err("cross-project close should fail");
+
+        assert_eq!(
+            error.code,
+            crate::types::errors::CommandErrorCode::ProjectTerminalValidationFailed
+        );
+
+        let snapshot = service
+            .read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: owner_project.id,
+                    session_id: created.session_id,
+                    max_bytes: Some(1024),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("owner project should still read session");
+        assert_eq!(snapshot.session_id, created.session_id);
+
+        service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: owner_project.id,
+                    session_id: created.session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("owner project should still close session");
     }
 }
