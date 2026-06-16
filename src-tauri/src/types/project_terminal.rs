@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTerminalSummary {
+    pub config_id: i64,
+    pub session_id: i64,
+    pub name: String,
+    pub working_dir: String,
+    pub launch_command: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectTerminalInput {
@@ -9,8 +19,23 @@ pub struct CreateProjectTerminalInput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectTerminalResult {
+    pub config_id: i64,
     pub session_id: i64,
     pub name: String,
+    pub working_dir: String,
+    pub launch_command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListProjectTerminalsInput {
+    pub project_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListProjectTerminalsResult {
+    pub terminals: Vec<ProjectTerminalSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -68,4 +93,21 @@ pub struct ResizeProjectTerminalInput {
 pub struct CloseProjectTerminalInput {
     pub project_id: i64,
     pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProjectTerminalConfigInput {
+    pub project_id: i64,
+    pub config_id: i64,
+    pub name: String,
+    pub working_dir: String,
+    pub launch_command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteProjectTerminalConfigInput {
+    pub project_id: i64,
+    pub config_id: i64,
 }

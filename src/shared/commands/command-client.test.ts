@@ -263,13 +263,19 @@ describe("command client", () => {
 
   it("invokes Rust Core through the create project terminal command", async () => {
     invokeMock.mockResolvedValue({
+      configId: 101,
       sessionId: -1,
       name: "New Terminal",
+      workingDir: "/tmp/redwhisk",
+      launchCommand: "/bin/zsh",
     });
 
     await expect(createProjectTerminal({ projectId: 1 })).resolves.toEqual({
+      configId: 101,
       sessionId: -1,
       name: "New Terminal",
+      workingDir: "/tmp/redwhisk",
+      launchCommand: "/bin/zsh",
     });
     expect(invokeMock).toHaveBeenCalledWith("create_project_terminal", {
       input: { projectId: 1 },
