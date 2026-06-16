@@ -92,8 +92,7 @@ where
             self.ensure_project_exists(project_id)?;
         }
 
-        let command_to_save = self
-            .detector
+        self.detector
             .test_command(&command)
             .map_err(agent_command_error)?;
 
@@ -103,7 +102,7 @@ where
                 input.id,
                 &name,
                 input.agent_type,
-                &command_to_save,
+                &command,
                 &input.scope,
                 input.project_id,
                 &input.mode,

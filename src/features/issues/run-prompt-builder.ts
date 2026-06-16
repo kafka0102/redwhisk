@@ -1,4 +1,5 @@
 import type { AgentProfileRecord } from "../settings/settings-commands";
+import { parseDefaultSkills } from "../settings/agent-profile-skills";
 import type { IssueRecord } from "./issue-commands";
 
 export interface RunPromptSource {
@@ -34,7 +35,7 @@ export function buildRunPromptPreview(
     input.issue.attachments
       ?.map((attachment) => attachment.relativePath.trim())
       .filter((path) => path.length > 0) ?? [];
-  const defaultSkill = input.profile.defaultSkill.trim();
+  const defaultSkills = parseDefaultSkills(input.profile.defaultSkill);
   const promptTemplate = input.profile.promptTemplate.trim();
   const sources: RunPromptSource[] = [];
 
@@ -54,11 +55,11 @@ export function buildRunPromptPreview(
     });
   }
 
-  if (defaultSkill.length > 0) {
+  if (defaultSkills.length > 0) {
     sources.push({
       id: "default-skill",
-      label: "Default skill",
-      content: defaultSkill,
+      label: "Default skills",
+      content: defaultSkills.join("\n"),
     });
   }
 
@@ -78,12 +79,14 @@ export function buildRunPromptPreview(
 
   const finalPromptSections: string[] = [];
 
-  if (defaultSkill.length > 0) {
+  if (defaultSkills.length > 0) {
     finalPromptSections.push(
-      buildSkillInstruction(defaultSkill, {
-        title: issueTitle,
-        description: issueDescription,
-      }),
+      ...defaultSkills.map((defaultSkill) =>
+        buildSkillInstruction(defaultSkill, {
+          title: issueTitle,
+          description: issueDescription,
+        }),
+      ),
     );
   }
 

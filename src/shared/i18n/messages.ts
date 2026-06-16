@@ -141,7 +141,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       terminalUnavailable: "This terminal is not running right now.",
       terminals: "Terminals",
       type: "Type",
-      workflowSkill: "Workflow Skill",
+      workflowSkill: "Workflow Skills",
       deleteTerminal: (terminalName) => `Delete terminal "${terminalName}"`,
     },
     issues: {
@@ -218,7 +218,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       terminalUnavailable: "该终端当前未运行。",
       terminals: "Terminals",
       type: "类型",
-      workflowSkill: "Workflow Skill",
+      workflowSkill: "Workflow Skills",
       deleteTerminal: (terminalName) => `删除终端「${terminalName}」`,
     },
     issues: {

@@ -81,7 +81,7 @@ fn save_global_agent_profile_resolves_command() {
 
     assert!(profile.id > 0);
     assert_eq!(profile.name, "Codex Default");
-    assert_eq!(profile.command, "/usr/local/bin/codex");
+    assert_eq!(profile.command, "codex");
     assert_eq!(profile.scope, AgentScope::Global);
     assert_eq!(profile.mode, "full-auto");
     assert!(profile.dangerous);
@@ -121,7 +121,7 @@ fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
         .expect("saved claude agent profile");
 
     assert_eq!(profile.agent_type, AgentType::Claude);
-    assert_eq!(profile.command, "/usr/local/bin/claude");
+    assert_eq!(profile.command, "claude");
 
     let stored_profiles = service
         .list_agent_profiles(ListAgentProfilesInput {

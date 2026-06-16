@@ -14,6 +14,10 @@ import {
   type AgentType,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import {
+  parseDefaultSkills,
+  serializeDefaultSkills,
+} from "./agent-profile-skills";
 
 interface AgentProfileFormProps {
   mode: "create" | "edit";
@@ -42,10 +46,9 @@ export function AgentProfileForm({
   );
   const [modeValue] = useState(() => profile?.mode ?? "default");
   const [dangerous] = useState(() => profile?.dangerous ?? true);
-  const [defaultSkill, setDefaultSkill] = useState(
-    () => profile?.defaultSkill ?? "",
+  const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>(
+    () => parseDefaultSkills(profile?.defaultSkill ?? "").map(toMissingSkillKey),
   );
-  const [selectedSkillPath, setSelectedSkillPath] = useState("");
   const [promptTemplate] = useState(() => profile?.promptTemplate ?? "");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -57,6 +60,7 @@ export function AgentProfileForm({
   const [skillLoadFailed, setSkillLoadFailed] = useState(false);
   const isMountedRef = useRef(true);
   const skillRequestSequenceRef = useRef(0);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   const skillProjectId = scopeValue === "project" ? projectId : null;
 
@@ -99,7 +103,22 @@ export function AgentProfileForm({
     return () => {
       isMountedRef.current = false;
       skillRequestSequenceRef.current += 1;
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
     };
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimeoutRef.current = null;
+    }, 5000);
   }, []);
 
   useEffect(() => {
@@ -115,7 +134,7 @@ export function AgentProfileForm({
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
-        setToastMessage(toCommandError(error).message);
+        showToast(toCommandError(error).message);
       })
       .finally(() => {
         if (isMounted) setIsDetecting(false);
@@ -124,7 +143,35 @@ export function AgentProfileForm({
     return () => {
       isMounted = false;
     };
-  }, [mode, profile]);
+  }, [mode, profile, showToast]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const profileCommand = profile.command.trim();
+    if (profileCommand.length === 0 || !/[\\/]/.test(profileCommand)) {
+      return;
+    }
+
+    const commandName = toCommandName(profileCommand);
+    if (commandName === profileCommand) {
+      return;
+    }
+
+    let isMounted = true;
+    void testAgentCommand({ command: commandName })
+      .then(() => {
+        if (!isMounted) return;
+        setCommand(commandName);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profile]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -159,52 +206,58 @@ export function AgentProfileForm({
     () => skills.filter((skill) => skill.scope === scopeValue),
     [skills, scopeValue],
   );
-  const resolvedSelectedSkillPath = useMemo(() => {
-    if (defaultSkill.length === 0) return "";
+  const visibleSkillNames = useMemo(
+    () => new Set(visibleSkills.map((skill) => skill.name)),
+    [visibleSkills],
+  );
+  const effectiveSelectedSkillKeys = useMemo(
+    () =>
+      selectedSkillKeys.map((key) => {
+        if (!isMissingSkillKey(key)) {
+          return key;
+        }
 
-    if (
-      selectedSkillPath.length > 0 &&
-      visibleSkills.some(
-        (skill) =>
-          skill.path === selectedSkillPath && skill.name === defaultSkill,
-      )
-    ) {
-      return selectedSkillPath;
-    }
-
-    const matchingSkill = visibleSkills.find(
-      (skill) => skill.name === defaultSkill,
-    );
-    return matchingSkill?.path ?? "";
-  }, [defaultSkill, selectedSkillPath, visibleSkills]);
-
-  const isSelectedSkillMissing =
-    defaultSkill.length > 0 && resolvedSelectedSkillPath.length === 0;
-
+        const matchingSkill = visibleSkills.find(
+          (skill) => skill.name === fromMissingSkillKey(key),
+        );
+        return matchingSkill?.path ?? key;
+      }),
+    [selectedSkillKeys, visibleSkills],
+  );
+  const selectedSkillNames = useMemo(
+    () =>
+      dedupeStrings(
+        effectiveSelectedSkillKeys
+          .map((key) => resolveSkillNameFromKey(key, visibleSkills))
+          .filter((skillName) => skillName.length > 0),
+      ),
+    [effectiveSelectedSkillKeys, visibleSkills],
+  );
+  const missingSkillNames = useMemo(
+    () => {
+      const names = selectedSkillKeys
+        .filter((key) => isMissingSkillKey(key))
+        .map(fromMissingSkillKey);
+      return dedupeStrings(
+        names.filter((skillName) => !visibleSkillNames.has(skillName)),
+      );
+    },
+    [selectedSkillKeys, visibleSkillNames],
+  );
   const workflowSkillOptions = useMemo(() => {
-    const options: SearchableSelectOption[] = [{ value: "", label: "None" }];
+    const missingOptions = missingSkillNames.map((skillName) => ({
+      value: toMissingSkillKey(skillName),
+      label: skillName,
+      description: "Unavailable in current scope",
+    }));
+    const visibleOptions = visibleSkills.map((skill) => ({
+      value: skill.path,
+      label: skill.name,
+      description: skill.path,
+    }));
 
-    if (isSelectedSkillMissing) {
-      options.push({
-        value: `missing:${defaultSkill}`,
-        label: defaultSkill,
-      });
-    }
-
-    visibleSkills.forEach((skill) => {
-      options.push({
-        value: skill.path,
-        label: skill.name,
-        description: skill.path,
-      });
-    });
-
-    return options;
-  }, [defaultSkill, isSelectedSkillMissing, visibleSkills]);
-
-  const workflowSkillValue = isSelectedSkillMissing
-    ? `missing:${defaultSkill}`
-    : resolvedSelectedSkillPath;
+    return dedupeOptionsByValue([...missingOptions, ...visibleOptions]);
+  }, [missingSkillNames, visibleSkills]);
 
   async function handleTestCommand() {
     setIsTesting(true);
@@ -212,10 +265,12 @@ export function AgentProfileForm({
     setToastMessage(null);
 
     try {
-      await testAgentCommand({ command });
-      setToastMessage(`Command available: ${command}`);
+      const testedCommand = command.trim();
+      const testedCommandName = toCommandName(testedCommand);
+      await testAgentCommand({ command: testedCommand });
+      showToast(`Command available: ${testedCommandName}`);
     } catch (error: unknown) {
-      setToastMessage(toCommandError(error).message);
+      showToast(toCommandError(error).message);
     } finally {
       setIsTesting(false);
     }
@@ -238,7 +293,7 @@ export function AgentProfileForm({
         projectId: effectiveProjectId,
         mode: modeValue,
         dangerous,
-        defaultSkill,
+        defaultSkill: serializeDefaultSkills(selectedSkillNames),
         promptTemplate,
       });
       onSaved(savedProfile);
@@ -302,8 +357,7 @@ export function AgentProfileForm({
               onChange={(event) => {
                 skillRequestSequenceRef.current += 1;
                 setAgentType(event.target.value as AgentType);
-                setDefaultSkill("");
-                setSelectedSkillPath("");
+                setSelectedSkillKeys([]);
                 setSkills([]);
                 setSkillLoadFailed(false);
               }}
@@ -344,37 +398,19 @@ export function AgentProfileForm({
             onChange={(nextScope) => {
               skillRequestSequenceRef.current += 1;
               setScopeValue(nextScope as AgentScope);
-              setDefaultSkill("");
-              setSelectedSkillPath("");
+              setSelectedSkillKeys([]);
               setSkills([]);
               setSkillLoadFailed(false);
             }}
           />
 
           <div className="agent-dialog__select-block">
-            <SearchableSelect
-              label="Workflow Skill"
-              ariaLabel="Workflow Skill"
-              value={workflowSkillValue}
+            <SearchableMultiSelect
+              label="Workflow Skills"
+              ariaLabel="Workflow Skills"
+              values={effectiveSelectedSkillKeys}
               options={workflowSkillOptions}
-              onChange={(nextSkillPath) => {
-                if (nextSkillPath === "") {
-                  setDefaultSkill("");
-                  setSelectedSkillPath("");
-                  return;
-                }
-
-                const selectedSkill = visibleSkills.find(
-                  (skill) => skill.path === nextSkillPath,
-                );
-                if (!selectedSkill) {
-                  setSelectedSkillPath("");
-                  return;
-                }
-
-                setDefaultSkill(selectedSkill.name);
-                setSelectedSkillPath(selectedSkill.path);
-              }}
+              onChange={setSelectedSkillKeys}
             />
             <div className="agent-dialog__skill-list">
               {isLoadingSkills ? (
@@ -412,7 +448,21 @@ export function AgentProfileForm({
 
         {toastMessage ? (
           <div className="agent-dialog__toast" role="status" aria-live="polite">
-            {toastMessage}
+            <span>{toastMessage}</span>
+            <button
+              aria-label="Close message"
+              className="agent-dialog__toast-close"
+              type="button"
+              onClick={() => {
+                if (toastTimeoutRef.current !== null) {
+                  window.clearTimeout(toastTimeoutRef.current);
+                  toastTimeoutRef.current = null;
+                }
+                setToastMessage(null);
+              }}
+            >
+              &times;
+            </button>
           </div>
         ) : null}
       </form>
@@ -560,6 +610,181 @@ function SearchableSelect({
   );
 }
 
+function SearchableMultiSelect({
+  ariaLabel,
+  label,
+  onChange,
+  options,
+  values,
+}: {
+  ariaLabel: string;
+  label: string;
+  onChange: (values: string[]) => void;
+  options: SearchableSelectOption[];
+  values: string[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredOptions = normalizedQuery
+    ? options.filter((option) =>
+        `${option.label} ${option.description ?? ""}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : options;
+  const selectedOptions = values
+    .map((value) => options.find((option) => option.value === value))
+    .filter((option): option is SearchableSelectOption => option !== undefined);
+  const selectedValuesLabel =
+    selectedOptions.length > 0
+      ? selectedOptions.map((option) => option.label).join(", ")
+      : "";
+  const displayValue = isOpen ? query : selectedValuesLabel;
+
+  function toggleOption(option: SearchableSelectOption) {
+    const nextValues = values.includes(option.value)
+      ? values.filter((value) => value !== option.value)
+      : [...values, option.value];
+    onChange(nextValues);
+    setQuery("");
+  }
+
+  return (
+    <div
+      className="settings-search-select"
+      ref={rootRef}
+      onBlur={(event) => {
+        if (rootRef.current?.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+
+        setQuery("");
+        setIsOpen(false);
+      }}
+    >
+      <label className="settings-field">
+        <span>{label}</span>
+        <input
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-label={ariaLabel}
+          className="settings-input settings-search-select__input"
+          role="combobox"
+          value={displayValue}
+          onClick={() => {
+            setActiveIndex(0);
+            setIsOpen(true);
+          }}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActiveIndex(0);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            setActiveIndex(0);
+            setIsOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setIsOpen(true);
+              setActiveIndex((current) =>
+                Math.min(current + 1, filteredOptions.length - 1),
+              );
+            }
+
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setIsOpen(true);
+              setActiveIndex((current) => Math.max(current - 1, 0));
+            }
+
+            if (event.key === "Enter" && isOpen) {
+              event.preventDefault();
+              const option = filteredOptions[activeIndex];
+              if (option) {
+                toggleOption(option);
+              }
+            }
+
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setQuery("");
+              setIsOpen(false);
+            }
+          }}
+        />
+      </label>
+      {selectedOptions.length > 0 ? (
+        <div className="settings-search-select__chips" aria-label={`${ariaLabel} selected`}>
+          {selectedOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className="settings-search-select__chip"
+              onClick={() => toggleOption(option)}
+            >
+              <span>{option.label}</span>
+              <span aria-hidden="true">&times;</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {isOpen ? (
+        <div
+          className="settings-search-select__menu settings-search-select__menu--top"
+          role="listbox"
+          aria-multiselectable="true"
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option, index) => {
+              const isSelected = values.includes(option.value);
+
+              return (
+                <button
+                  aria-selected={isSelected}
+                  aria-label={
+                    option.description
+                      ? `${option.label} ${option.description}`
+                      : option.label
+                  }
+                  className="settings-search-select__option"
+                  key={option.value}
+                  role="option"
+                  tabIndex={-1}
+                  type="button"
+                  data-active={index === activeIndex ? "true" : "false"}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => toggleOption(option)}
+                >
+                  <span className="settings-search-select__option-row">
+                    <span className="settings-search-select__option-label">
+                      {option.label}
+                    </span>
+                    <span className="settings-search-select__option-check">
+                      {isSelected ? "✓" : ""}
+                    </span>
+                  </span>
+                  {option.description ? (
+                    <span className="settings-search-select__option-description">
+                      {option.description}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })
+          ) : (
+            <p className="settings-search-select__empty">No matches</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function shouldReloadSkillsForEvent(
   event: AgentSkillsUpdatedEvent,
   projectId: number | null,
@@ -574,4 +799,45 @@ function toCommandName(commandPath: string): string {
   const normalizedCommand = trimmedCommand.replace(/\\/g, "/");
   const commandParts = normalizedCommand.split("/").filter(Boolean);
   return commandParts[commandParts.length - 1] ?? trimmedCommand;
+}
+
+function dedupeOptionsByValue(
+  options: SearchableSelectOption[],
+): SearchableSelectOption[] {
+  const seenValues = new Set<string>();
+  return options.filter((option) => {
+    if (seenValues.has(option.value)) {
+      return false;
+    }
+
+    seenValues.add(option.value);
+    return true;
+  });
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function resolveSkillNameFromKey(
+  key: string,
+  visibleSkills: AgentSkillRecord[],
+): string {
+  if (isMissingSkillKey(key)) {
+    return fromMissingSkillKey(key);
+  }
+
+  return visibleSkills.find((skill) => skill.path === key)?.name ?? "";
+}
+
+function toMissingSkillKey(skillName: string): string {
+  return `missing:${skillName}`;
+}
+
+function fromMissingSkillKey(key: string): string {
+  return key.replace(/^missing:/, "");
+}
+
+function isMissingSkillKey(key: string): boolean {
+  return key.startsWith("missing:");
 }
