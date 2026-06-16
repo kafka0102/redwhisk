@@ -1,0 +1,21 @@
+version: 1
+change: 2026-06-16-persist-project-terminals
+phase: approved
+ambiguity: low
+complexity: medium
+implementation_path: superpowers
+execution_method: subagent
+workspace: worktree
+origin_branch: devlop
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
+origin_workspace_mode: current-branch
+plan: null
+handoff_context: openspec/changes/2026-06-16-persist-project-terminals/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: proposal handoff from 5 file(s); primary artifact: openspec/changes/2026-06-16-persist-project-terminals/proposal.md
+handoff_hash: b64a7c1f27d08a117171b562eee4d00f0147658174cf7349cf9d5273d781a929
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-06-16
+updated_at: 2026-06-16T02:05:39Z
