@@ -612,11 +612,6 @@ export function IssuesActivity({
       return;
     }
 
-    const isConfirmed = window.confirm("确认删除这个 issue 吗？");
-    if (!isConfirmed) {
-      return;
-    }
-
     setDialogErrorMessage(null);
     setIsSaving(true);
     const requestProjectId = projectId;

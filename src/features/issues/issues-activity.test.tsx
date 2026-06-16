@@ -1530,6 +1530,29 @@ describe("IssuesActivity", () => {
     confirmSpy.mockRestore();
   });
 
+  it("does not delete an issue when deletion confirmation is canceled", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Running issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete issue" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("确认删除这个 issue 吗？");
+    expect(deleteIssueMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Issue Detail" })).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
   it("shows summary action and inline linked session entry for completed issues", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
