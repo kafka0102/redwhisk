@@ -6,8 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectTerminalsActivity } from "./project-terminals-activity";
 import { getDefaultProjectTerminalsActivityState } from "./project-terminals-activity-state";
 import {
-  closeProjectTerminal,
   createProjectTerminal,
+  deleteProjectTerminalConfig,
+  listProjectTerminals,
+  updateProjectTerminalConfig,
 } from "./project-terminal-commands";
 
 vi.mock("./project-terminal", () => ({
@@ -25,12 +27,16 @@ vi.mock("./project-terminal", () => ({
 }));
 
 vi.mock("./project-terminal-commands", () => ({
-  closeProjectTerminal: vi.fn(),
   createProjectTerminal: vi.fn(),
+  deleteProjectTerminalConfig: vi.fn(),
+  listProjectTerminals: vi.fn(),
+  updateProjectTerminalConfig: vi.fn(),
 }));
 
 const createProjectTerminalMock = vi.mocked(createProjectTerminal);
-const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
+const deleteProjectTerminalConfigMock = vi.mocked(deleteProjectTerminalConfig);
+const listProjectTerminalsMock = vi.mocked(listProjectTerminals);
+const updateProjectTerminalConfigMock = vi.mocked(updateProjectTerminalConfig);
 
 function renderProjectTerminalsActivity() {
   function Harness() {
@@ -53,49 +59,68 @@ function renderProjectTerminalsActivity() {
 describe("ProjectTerminalsActivity", () => {
   beforeEach(() => {
     createProjectTerminalMock.mockReset();
-    closeProjectTerminalMock.mockReset();
-    createProjectTerminalMock
-      .mockResolvedValueOnce({
-        configId: 101,
-        sessionId: -1,
-        name: "local-dev-web",
-        workingDir: "/tmp/redwhisk",
-        launchCommand: "/bin/zsh",
-      })
-      .mockResolvedValueOnce({
-        configId: 102,
-        sessionId: -2,
-        name: "local-dev-incident",
-        workingDir: "/tmp/redwhisk/apps/api",
-        launchCommand: "pnpm dev",
-      });
-    closeProjectTerminalMock.mockResolvedValue(undefined);
+    deleteProjectTerminalConfigMock.mockReset();
+    listProjectTerminalsMock.mockReset();
+    updateProjectTerminalConfigMock.mockReset();
+    deleteProjectTerminalConfigMock.mockResolvedValue({
+      configId: 102,
+      sessionId: -2,
+    });
   });
 
-  it("renders only a centered new terminal button when there are no terminals", () => {
+  it("loads persisted terminals on mount and renders the active workspace", async () => {
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/tmp/redwhisk/apps/api",
+          launchCommand: "pnpm dev",
+        },
+        {
+          configId: 102,
+          sessionId: 0,
+          name: "Worker",
+          workingDir: "/tmp/redwhisk/apps/worker",
+          launchCommand: "pnpm worker",
+        },
+      ],
+    });
+
     renderProjectTerminalsActivity();
 
-    expect(
-      screen.getByRole("button", { name: "+ New terminal" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Terminals", level: 2 }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Project terminals"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("separator", { name: "Resize terminals list" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("region", { name: "Terminal workspace" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading terminals...");
+
+    await waitFor(() => {
+      expect(listProjectTerminalsMock).toHaveBeenCalledWith({ projectId: 1 });
+    });
+
+    const sidebar = screen.getByLabelText("Project terminals");
+    expect(within(sidebar).getByRole("button", { name: "API" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+    expect(within(sidebar).getByText("/tmp/redwhisk/apps/api")).toBeInTheDocument();
   });
 
-  it("creates terminals in the left card list and switches the right workspace", async () => {
+  it("creates terminals, selects by config id, and keeps a stable active background", async () => {
     const user = userEvent.setup();
+    listProjectTerminalsMock.mockResolvedValue({ terminals: [] });
+    createProjectTerminalMock.mockResolvedValue({
+      configId: 101,
+      sessionId: -1,
+      name: "API",
+      workingDir: "/tmp/redwhisk/apps/api",
+      launchCommand: "pnpm dev",
+    });
 
     renderProjectTerminalsActivity();
+
+    await waitFor(() => {
+      expect(listProjectTerminalsMock).toHaveBeenCalledTimes(1);
+    });
 
     await user.click(screen.getByRole("button", { name: "+ New terminal" }));
 
@@ -104,111 +129,148 @@ describe("ProjectTerminalsActivity", () => {
     });
 
     const sidebar = screen.getByLabelText("Project terminals");
-    expect(
-      within(sidebar).getByRole("button", { name: "local-dev-web" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
-
-    await user.click(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    );
-
-    await waitFor(() => {
-      expect(createProjectTerminalMock).toHaveBeenCalledTimes(2);
-    });
-
-    expect(
-      within(sidebar).getByRole("button", { name: "local-dev-incident" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.queryByTestId("project-terminal:1:-1"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("project-terminal:1:-2")).toBeInTheDocument();
-
-    await user.click(
-      within(sidebar).getByRole("button", { name: "local-dev-web" }),
-    );
-
-    expect(
-      within(sidebar).getByRole("button", { name: "local-dev-web" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
-  });
-
-  it("hides the project name in terminal cards and applies a selected color", async () => {
-    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
-    const user = userEvent.setup();
-
-    renderProjectTerminalsActivity();
-
-    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
-
-    const sidebar = screen.getByLabelText("Project terminals");
-    const terminalButton = within(sidebar).getByRole("button", {
-      name: "local-dev-web",
-    });
-    expect(within(sidebar).queryByText("RedWhisk")).not.toBeInTheDocument();
+    const terminalButton = within(sidebar).getByRole("button", { name: "API" });
+    expect(terminalButton).toHaveAttribute("aria-pressed", "true");
     expect(terminalButton.parentElement).toHaveAttribute(
       "style",
-      expect.stringContaining("--project-terminal-card-background: #fde68a"),
+      expect.stringContaining("--project-terminal-card-background: color-mix("),
     );
-
-    randomSpy.mockRestore();
-  });
-
-  it("renders the selected terminal as the full workspace without an activity header", async () => {
-    const user = userEvent.setup();
-
-    renderProjectTerminalsActivity();
-
-    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
-
-    const workspace = screen.getByRole("region", {
-      name: "Terminal workspace",
-    });
-
-    expect(workspace.firstElementChild).toHaveClass(
-      "project-terminals-workspace__surface",
-    );
-    expect(
-      within(workspace).queryByRole("heading", { name: "local-dev-web" }),
-    ).not.toBeInTheDocument();
-    expect(within(workspace).queryByText("/tmp/redwhisk")).not.toBeInTheDocument();
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
   });
 
-  it("deletes the selected terminal and falls back to the remaining workspace", async () => {
+  it("shows unavailable state when persisted terminal has no running session", async () => {
     const user = userEvent.setup();
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/tmp/redwhisk/apps/api",
+          launchCommand: "pnpm dev",
+        },
+        {
+          configId: 102,
+          sessionId: 0,
+          name: "Worker",
+          workingDir: "/tmp/redwhisk/apps/worker",
+          launchCommand: "pnpm worker",
+        },
+      ],
+    });
 
     renderProjectTerminalsActivity();
 
-    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
-
-    const sidebar = screen.getByLabelText("Project terminals");
-    await user.click(
-      within(sidebar).getByRole("button", { name: "New terminal" }),
-    );
-
     await waitFor(() => {
-      expect(createProjectTerminalMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("button", { name: "Worker" })).toBeInTheDocument();
     });
 
-    await user.click(
-      screen.getByRole("button", {
-        name: 'Delete terminal "local-dev-incident"',
-      }),
-    );
+    await user.click(screen.getByRole("button", { name: "Worker" }));
+
+    expect(screen.getByText("This terminal is not running right now.")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-terminal:1:-1")).not.toBeInTheDocument();
+  });
+
+  it("opens the edit dialog and saves terminal config updates", async () => {
+    const user = userEvent.setup();
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/tmp/redwhisk/apps/api",
+          launchCommand: "pnpm dev",
+        },
+      ],
+    });
+    updateProjectTerminalConfigMock.mockResolvedValue({
+      terminal: {
+        configId: 101,
+        sessionId: -1,
+        name: "API Dev",
+        workingDir: "/tmp/redwhisk/services/api",
+        launchCommand: "pnpm start:dev",
+      },
+    });
+
+    renderProjectTerminalsActivity();
+
+    const editButton = await screen.findByRole("button", {
+      name: 'Edit terminal "API"',
+    });
+    await user.click(editButton);
+
+    const dialog = screen.getByRole("dialog", { name: 'Edit terminal "API"' });
+    const nameInput = within(dialog).getByLabelText("Name");
+    const pathInput = within(dialog).getByLabelText("Terminal path");
+    const commandInput = within(dialog).getByLabelText("Command");
+
+    await user.clear(nameInput);
+    await user.type(nameInput, "API Dev");
+    await user.clear(pathInput);
+    await user.type(pathInput, "/tmp/redwhisk/services/api");
+    await user.clear(commandInput);
+    await user.type(commandInput, "pnpm start:dev");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(closeProjectTerminalMock).toHaveBeenCalledWith({
+      expect(updateProjectTerminalConfigMock).toHaveBeenCalledWith({
         projectId: 1,
-        sessionId: -2,
+        configId: 101,
+        name: "API Dev",
+        workingDir: "/tmp/redwhisk/services/api",
+        launchCommand: "pnpm start:dev",
       });
     });
 
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "API Dev" })).toBeInTheDocument();
+    expect(screen.getByText("/tmp/redwhisk/services/api")).toBeInTheDocument();
+  });
+
+  it("deletes terminal configs through the config delete command and falls back to the next terminal", async () => {
+    const user = userEvent.setup();
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/tmp/redwhisk/apps/api",
+          launchCommand: "pnpm dev",
+        },
+        {
+          configId: 102,
+          sessionId: -2,
+          name: "Worker",
+          workingDir: "/tmp/redwhisk/apps/worker",
+          launchCommand: "pnpm worker",
+        },
+      ],
+    });
+
+    renderProjectTerminalsActivity();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Worker" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Worker" }));
+    await user.click(screen.getByRole("button", { name: 'Delete terminal "Worker"' }));
+
+    await waitFor(() => {
+      expect(deleteProjectTerminalConfigMock).toHaveBeenCalledWith({
+        projectId: 1,
+        configId: 102,
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "API" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "local-dev-incident" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Worker" })).not.toBeInTheDocument();
   });
 });

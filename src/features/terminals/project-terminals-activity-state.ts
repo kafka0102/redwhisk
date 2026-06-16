@@ -3,23 +3,24 @@ import {
 } from "../../shared/layout/sidebar-width";
 
 export interface ProjectTerminalCardState {
+  configId: number;
+  launchCommand: string;
   name: string;
   sessionId: number;
+  workingDir: string;
 }
 
 export interface ProjectTerminalsActivityState {
-  selectedSessionId: number | null;
-  selectedTerminalColor: string;
+  hasHydrated: boolean;
+  selectedConfigId: number | null;
   sidebarWidth: number;
   terminalCards: ProjectTerminalCardState[];
 }
 
-export const DEFAULT_TERMINAL_CARD_BACKGROUND = "#ffffff";
-
 export function getDefaultProjectTerminalsActivityState(): ProjectTerminalsActivityState {
   return {
-    selectedSessionId: null,
-    selectedTerminalColor: DEFAULT_TERMINAL_CARD_BACKGROUND,
+    hasHydrated: false,
+    selectedConfigId: null,
     sidebarWidth: DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
     terminalCards: [],
   };

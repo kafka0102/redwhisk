@@ -37,9 +37,12 @@ import {
 import {
   closeProjectTerminal,
   createProjectTerminal,
+  deleteProjectTerminalConfig,
+  listProjectTerminals,
   readProjectTerminal,
   resizeProjectTerminal,
   restoreProjectTerminal,
+  updateProjectTerminalConfig,
   writeProjectTerminal,
 } from "../../features/terminals/project-terminal-commands";
 import { isCommandError, toCommandError } from "./command-error";
@@ -301,6 +304,35 @@ describe("command client", () => {
     });
   });
 
+  it("invokes Rust Core through the list project terminals command", async () => {
+    invokeMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "pnpm dev",
+        },
+      ],
+    });
+
+    await expect(listProjectTerminals({ projectId: 1 })).resolves.toEqual({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "pnpm dev",
+        },
+      ],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("list_project_terminals", {
+      input: { projectId: 1 },
+    });
+  });
+
   it("invokes Rust Core through the restore project terminal command", async () => {
     invokeMock.mockResolvedValue({
       sessionId: -1,
@@ -354,6 +386,68 @@ describe("command client", () => {
     ).resolves.toBeUndefined();
     expect(invokeMock).toHaveBeenCalledWith("close_project_terminal", {
       input: { projectId: 1, sessionId: -1 },
+    });
+  });
+
+  it("invokes Rust Core through the update project terminal config command", async () => {
+    invokeMock.mockResolvedValue({
+      terminal: {
+        configId: 101,
+        sessionId: -1,
+        name: "API",
+        workingDir: "/tmp/redwhisk/apps/api",
+        launchCommand: "pnpm dev",
+      },
+    });
+
+    await expect(
+      updateProjectTerminalConfig({
+        projectId: 1,
+        configId: 101,
+        name: "API",
+        workingDir: "/tmp/redwhisk/apps/api",
+        launchCommand: "pnpm dev",
+      }),
+    ).resolves.toEqual({
+      terminal: {
+        configId: 101,
+        sessionId: -1,
+        name: "API",
+        workingDir: "/tmp/redwhisk/apps/api",
+        launchCommand: "pnpm dev",
+      },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("update_project_terminal_config", {
+      input: {
+        projectId: 1,
+        configId: 101,
+        name: "API",
+        workingDir: "/tmp/redwhisk/apps/api",
+        launchCommand: "pnpm dev",
+      },
+    });
+  });
+
+  it("invokes Rust Core through the delete project terminal config command", async () => {
+    invokeMock.mockResolvedValue({
+      configId: 101,
+      sessionId: -1,
+    });
+
+    await expect(
+      deleteProjectTerminalConfig({
+        projectId: 1,
+        configId: 101,
+      }),
+    ).resolves.toEqual({
+      configId: 101,
+      sessionId: -1,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("delete_project_terminal_config", {
+      input: {
+        projectId: 1,
+        configId: 101,
+      },
     });
   });
 
