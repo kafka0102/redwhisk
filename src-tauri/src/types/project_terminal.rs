@@ -105,9 +105,22 @@ pub struct UpdateProjectTerminalConfigInput {
     pub launch_command: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProjectTerminalConfigResult {
+    pub terminal: ProjectTerminalSummary,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteProjectTerminalConfigInput {
     pub project_id: i64,
     pub config_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteProjectTerminalConfigResult {
+    pub config_id: i64,
+    pub session_id: Option<i64>,
 }
