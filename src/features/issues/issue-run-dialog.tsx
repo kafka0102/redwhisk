@@ -16,6 +16,10 @@ import {
   type StartAgentSessionResult,
 } from "./issue-commands";
 import { buildRunPromptPreview } from "./run-prompt-builder";
+import { parseDefaultSkills } from "../settings/agent-profile-skills";
+
+const NO_WORKFLOW_SKILL_VALUE = "__none__";
+const RECENT_WORKFLOW_SKILL_STORAGE_KEY = "redwhisk.issue-run.recent-workflow-skill";
 
 interface IssueRunDialogProps {
   issue: Pick<IssueRecord, "id" | "title" | "description" | "attachments">;
@@ -35,7 +39,9 @@ export function IssueRunDialog({
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
     null,
   );
-  const [promptDraft, setPromptDraft] = useState("");
+  const [selectedWorkflowSkill, setSelectedWorkflowSkill] = useState<
+    string | null
+  >(null);
   const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -73,14 +79,13 @@ export function IssueRunDialog({
         });
         setProfiles(mergedProfiles);
         setSelectedProfileId(initialProfile?.id ?? null);
-        setPromptDraft(
-          initialProfile
-            ? buildRunPromptPreview({
-                issue,
-                profile: initialProfile,
-              }).finalPrompt
-            : "",
-        );
+        const initialWorkflowSkill = initialProfile
+          ? resolveInitialWorkflowSkill({
+              profile: initialProfile,
+              projectId,
+            })
+          : null;
+        setSelectedWorkflowSkill(initialWorkflowSkill);
 
         if (mergedProfiles.length === 0) {
           setStatusMessage(
@@ -119,6 +124,21 @@ export function IssueRunDialog({
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+  const workflowSkillOptions = useMemo(() => {
+    if (!selectedProfile) {
+      return [];
+    }
+
+    return parseDefaultSkills(selectedProfile.defaultSkill);
+  }, [selectedProfile]);
+  const shouldShowWorkflowSkill =
+    selectedProfile !== null && workflowSkillOptions.length > 0;
+  const workflowSkillValue =
+    selectedWorkflowSkill === null
+      ? (workflowSkillOptions[0] ?? NO_WORKFLOW_SKILL_VALUE)
+      : selectedWorkflowSkill.length === 0
+        ? NO_WORKFLOW_SKILL_VALUE
+        : selectedWorkflowSkill;
 
   const preview = useMemo(() => {
     if (!selectedProfile) {
@@ -128,8 +148,10 @@ export function IssueRunDialog({
     return buildRunPromptPreview({
       issue,
       profile: selectedProfile,
+      selectedWorkflowSkill,
     });
-  }, [issue, selectedProfile]);
+  }, [issue, selectedProfile, selectedWorkflowSkill]);
+  const promptDraft = preview?.finalPrompt ?? "";
 
   const isStartDisabled =
     isLoadingProfiles ||
@@ -232,7 +254,7 @@ export function IssueRunDialog({
           </button>
         </div>
         <div className="issue-dialog__body">
-          <div className="issue-dialog__editor">
+          <div className="issue-dialog__editor issue-dialog__editor--full">
             <label className="settings-field">
               <span>Agent profile</span>
               <select
@@ -250,13 +272,13 @@ export function IssueRunDialog({
                     null;
 
                   setSelectedProfileId(nextProfileId);
-                  setPromptDraft(
+                  setSelectedWorkflowSkill(
                     nextProfile
-                      ? buildRunPromptPreview({
-                          issue,
+                      ? resolveInitialWorkflowSkill({
                           profile: nextProfile,
-                        }).finalPrompt
-                      : "",
+                          projectId,
+                        })
+                      : null,
                   );
                 }}
               >
@@ -268,6 +290,38 @@ export function IssueRunDialog({
                 ))}
               </select>
             </label>
+
+            {shouldShowWorkflowSkill ? (
+              <label className="settings-field">
+                <span>Workflow skill</span>
+                <select
+                  aria-label="Workflow skill"
+                  className="settings-input"
+                  disabled={isLoadingProfiles || isStarting}
+                  value={workflowSkillValue}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    const nextWorkflowSkill =
+                      nextValue === NO_WORKFLOW_SKILL_VALUE ? "" : nextValue;
+                    setSelectedWorkflowSkill(nextWorkflowSkill);
+                    if (selectedProfile) {
+                      saveRecentWorkflowSkill({
+                        projectId,
+                        profileId: selectedProfile.id,
+                        workflowSkill: nextWorkflowSkill,
+                      });
+                    }
+                  }}
+                >
+                  <option value={NO_WORKFLOW_SKILL_VALUE}>None</option>
+                  {workflowSkillOptions.map((skill) => (
+                    <option key={skill} value={skill}>
+                      {skill}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label className="settings-field">
               <span>Final prompt</span>
@@ -301,6 +355,87 @@ export function IssueRunDialog({
       </div>
     </div>
   );
+}
+
+function resolveInitialWorkflowSkill({
+  profile,
+  projectId,
+}: {
+  profile: Pick<AgentProfileRecord, "defaultSkill" | "id">;
+  projectId: number;
+}): string | null {
+  const configuredSkills = parseDefaultSkills(profile.defaultSkill);
+  if (configuredSkills.length === 0) {
+    return null;
+  }
+
+  const recentWorkflowSkill = readRecentWorkflowSkill({
+    projectId,
+    profileId: profile.id,
+  });
+  if (recentWorkflowSkill === null) {
+    return null;
+  }
+
+  if (recentWorkflowSkill.length === 0) {
+    return "";
+  }
+
+  return configuredSkills.includes(recentWorkflowSkill)
+    ? recentWorkflowSkill
+    : null;
+}
+
+function readRecentWorkflowSkill({
+  profileId,
+  projectId,
+}: {
+  profileId: number;
+  projectId: number;
+}): string | null {
+  try {
+    const rawValue = window.localStorage.getItem(RECENT_WORKFLOW_SKILL_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+
+    const records = JSON.parse(rawValue) as Record<string, string | null>;
+    const key = workflowSkillStorageKey(projectId, profileId);
+    return typeof records[key] === "string" || records[key] === null
+      ? records[key]
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveRecentWorkflowSkill({
+  profileId,
+  projectId,
+  workflowSkill,
+}: {
+  profileId: number;
+  projectId: number;
+  workflowSkill: string | null;
+}) {
+  try {
+    const rawValue = window.localStorage.getItem(RECENT_WORKFLOW_SKILL_STORAGE_KEY);
+    const records =
+      rawValue === null
+        ? {}
+        : (JSON.parse(rawValue) as Record<string, string | null>);
+    records[workflowSkillStorageKey(projectId, profileId)] = workflowSkill;
+    window.localStorage.setItem(
+      RECENT_WORKFLOW_SKILL_STORAGE_KEY,
+      JSON.stringify(records),
+    );
+  } catch {
+    // Ignore local storage failures and fall back to default ordering.
+  }
+}
+
+function workflowSkillStorageKey(projectId: number, profileId: number): string {
+  return `${projectId}:${profileId}`;
 }
 
 function getExistingSessionId(
