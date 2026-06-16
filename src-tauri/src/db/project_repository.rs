@@ -198,50 +198,64 @@ impl<'connection> ProjectRepository<'connection> {
             params![project_id, name, working_dir, launch_command],
         )?;
 
-        self.find_project_terminal_config_by_id(self.connection.last_insert_rowid())?
+        self.find_project_terminal_config_by_id(project_id, self.connection.last_insert_rowid())?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
     pub fn update_project_terminal_config(
         &self,
+        project_id: i64,
         id: i64,
         name: &str,
         working_dir: &str,
         launch_command: &str,
     ) -> rusqlite::Result<ProjectTerminalConfig> {
-        self.connection.execute(
+        let updated_rows = self.connection.execute(
             "UPDATE project_terminal_configs
              SET name = ?1,
                  working_dir = ?2,
                  launch_command = ?3,
                  updated_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
-             WHERE id = ?4",
-            params![name, working_dir, launch_command, id],
+             WHERE project_id = ?4
+               AND id = ?5",
+            params![name, working_dir, launch_command, project_id, id],
         )?;
 
-        self.find_project_terminal_config_by_id(id)?
+        if updated_rows == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+
+        self.find_project_terminal_config_by_id(project_id, id)?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
-    pub fn delete_project_terminal_config(&self, id: i64) -> rusqlite::Result<()> {
-        self.connection.execute(
-            "DELETE FROM project_terminal_configs WHERE id = ?1",
-            params![id],
+    pub fn delete_project_terminal_config(&self, project_id: i64, id: i64) -> rusqlite::Result<()> {
+        let deleted_rows = self.connection.execute(
+            "DELETE FROM project_terminal_configs
+             WHERE project_id = ?1
+               AND id = ?2",
+            params![project_id, id],
         )?;
+
+        if deleted_rows == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
 
         Ok(())
     }
 
     fn find_project_terminal_config_by_id(
         &self,
+        project_id: i64,
         id: i64,
     ) -> rusqlite::Result<Option<ProjectTerminalConfig>> {
         self.connection
             .query_row(
                 "SELECT id, project_id, name, working_dir, launch_command, created_at, updated_at
                  FROM project_terminal_configs
-                 WHERE id = ?1",
-                params![id],
+                 WHERE project_id = ?1
+                   AND id = ?2",
+                params![project_id, id],
                 project_terminal_config_from_row,
             )
             .optional()

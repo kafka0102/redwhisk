@@ -154,18 +154,24 @@ impl<'connection> ProjectTerminalService<'connection> {
             )
             .map_err(project_terminal_database_error)?;
 
-        let pending = pty_sessions
-            .spawn_pending(&PtySpawnRequest {
-                command: config.launch_command.clone(),
-                working_dir: config.working_dir.clone(),
-                log_path: log_path.to_string_lossy().to_string(),
-                initial_prompt: None,
-                rows: 32,
-                cols: 120,
-                startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
-                startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
-            })
-            .map_err(project_terminal_start_error)?;
+        let pending = match pty_sessions.spawn_pending(&PtySpawnRequest {
+            command: config.launch_command.clone(),
+            working_dir: config.working_dir.clone(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 32,
+            cols: 120,
+            startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+            startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+        }) {
+            Ok(pending) => pending,
+            Err(error) => {
+                self.project_repository
+                    .delete_project_terminal_config(project.id, config.id)
+                    .map_err(project_terminal_database_error)?;
+                return Err(project_terminal_start_error(error));
+            }
+        };
 
         registry.insert(
             session_id,
@@ -465,6 +471,8 @@ fn project_terminal_persistence_error(message: &str) -> CommandError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, OnceLock};
+
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::core::project_service::ProjectService;
     use crate::db::connection::DatabaseConfig;
@@ -477,8 +485,35 @@ mod tests {
 
     use super::{ProjectTerminalRegistry, ProjectTerminalService};
 
+    fn terminal_test_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct ShellEnvGuard {
+        original_shell: Option<std::ffi::OsString>,
+    }
+
+    impl ShellEnvGuard {
+        fn set_invalid_shell() -> Self {
+            let original_shell = std::env::var_os("SHELL");
+            std::env::set_var("SHELL", "/path/that/does/not/exist/redwhisk-shell");
+            Self { original_shell }
+        }
+    }
+
+    impl Drop for ShellEnvGuard {
+        fn drop(&mut self) {
+            match self.original_shell.take() {
+                Some(value) => std::env::set_var("SHELL", value),
+                None => std::env::remove_var("SHELL"),
+            }
+        }
+    }
+
     #[test]
     fn project_terminal_create_write_restore_and_close() {
+        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let project = ProjectService::create_project_in_data_dir(
             temp_dir.path(),
@@ -601,5 +636,54 @@ mod tests {
                 &manager,
             )
             .expect("close terminal");
+    }
+
+    #[test]
+    fn project_terminal_create_rolls_back_config_when_pty_start_fails() {
+        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("transient-repo");
+        std::fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "transient-repo".to_string(),
+                repo_path: repo_dir.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create project");
+
+        let _shell_guard = ShellEnvGuard::set_invalid_shell();
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let error = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect_err("starting terminal with missing repo should fail");
+
+        assert_eq!(
+            error.code,
+            crate::types::errors::CommandErrorCode::ProjectTerminalStartFailed
+        );
+        let configs = ProjectRepository::new(&database.connection)
+            .list_project_terminal_configs(project.id)
+            .expect("list terminal configs after failed create");
+        assert!(configs.is_empty());
     }
 }
