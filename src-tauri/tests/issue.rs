@@ -1198,7 +1198,9 @@ fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending");
-    pty_sessions.register(session_id, pending, |_| {});
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     service
         .send_agent_commit_prompt(
@@ -1807,7 +1809,9 @@ fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending");
-    pty_sessions.register(session_id, pending, |_| {});
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     let result = service
         .send_agent_commit_prompt(
@@ -1912,7 +1916,9 @@ fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending");
-    pty_sessions.register(session_id, pending, |_| {});
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     service
         .send_agent_commit_prompt(
@@ -2069,7 +2075,9 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending");
-    pty_sessions.register(session_id, pending, |_| {});
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     service
         .send_agent_commit_prompt(
@@ -2200,7 +2208,9 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending");
-    pty_sessions.register(session_id, pending, |_| {});
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     service
         .send_agent_commit_prompt(
@@ -2678,7 +2688,9 @@ fn delete_issue_soft_deletes_issue_and_linked_session() {
 
     let issue_del: i64 = database
         .connection
-        .query_row("SELECT del FROM issues WHERE id = ?1", [issue.id], |row| row.get(0))
+        .query_row("SELECT del FROM issues WHERE id = ?1", [issue.id], |row| {
+            row.get(0)
+        })
         .expect("issue del");
     assert_eq!(issue_del, 1);
 

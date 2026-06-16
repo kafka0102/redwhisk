@@ -1190,7 +1190,9 @@ fn write_terminal_input_clears_requested_attention_after_successful_write() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register(session_id, pending, |_| {});
+    manager
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     let service = AgentSessionService::new(
         IssueRepository::new(&database.connection),
@@ -1253,7 +1255,9 @@ fn write_terminal_input_keeps_review_issue_bound_to_same_running_session() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register(session_id, pending, |_| {});
+    manager
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     let service = AgentSessionService::new(
         IssueRepository::new(&database.connection),
@@ -1770,7 +1774,9 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register(77, pending, |_| {});
+    manager
+        .register(77, pending, |_| {})
+        .expect("register session");
 
     manager
         .write_input(77, "hello from pty\r")
@@ -1813,7 +1819,9 @@ fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register_for_project(42, 77, pending, |_| {});
+    manager
+        .register_for_project(42, 77, pending, |_| {})
+        .expect("register project session");
 
     manager
         .write_input(77, "hello event stream\r")
@@ -1866,7 +1874,9 @@ fn pty_session_manager_restores_complete_output_chunks_for_active_session() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register_for_project(42, 77, pending, |_| {});
+    manager
+        .register_for_project(42, 77, pending, |_| {})
+        .expect("register project session");
 
     manager
         .write_input(77, "restore me\r")
@@ -1995,7 +2005,9 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register(session_id, pending, |_| {});
+    manager
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     let service = AgentSessionService::new(
         IssueRepository::new(&database.connection),
@@ -2084,7 +2096,9 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
             startup_check_interval_ms: 25,
         })
         .expect("spawn pending pty");
-    manager.register(session_id, pending, |_| {});
+    manager
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 
     let service = AgentSessionService::new(
         IssueRepository::new(&database.connection),
