@@ -161,6 +161,7 @@ fn repository_persists_project_terminal_config_lifecycle() {
 
     let updated = repository
         .update_project_terminal_config(
+            project.id,
             inserted.id,
             "Server",
             "/tmp/sample-repo/apps/api",
@@ -181,12 +182,104 @@ fn repository_persists_project_terminal_config_lifecycle() {
     assert_eq!(listed_after_update, vec![updated]);
 
     repository
-        .delete_project_terminal_config(inserted.id)
+        .delete_project_terminal_config(project.id, inserted.id)
         .expect("delete terminal config");
     let listed_after_delete = repository
         .list_project_terminal_configs(project.id)
         .expect("list after delete");
     assert!(listed_after_delete.is_empty());
+}
+
+#[test]
+fn repository_rejects_project_terminal_config_update_from_other_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let repository = ProjectRepository::new(&database.connection);
+    let first_project = repository
+        .insert(
+            "first-repo",
+            "/tmp/first-repo",
+            ProjectCompletionPolicy::Manual,
+        )
+        .expect("insert first project");
+    let second_project = repository
+        .insert(
+            "second-repo",
+            "/tmp/second-repo",
+            ProjectCompletionPolicy::Manual,
+        )
+        .expect("insert second project");
+    let inserted = repository
+        .insert_project_terminal_config(first_project.id, "API", "/tmp/first-repo", "pnpm dev")
+        .expect("insert terminal config");
+
+    let error = repository
+        .update_project_terminal_config(
+            second_project.id,
+            inserted.id,
+            "Worker",
+            "/tmp/second-repo",
+            "pnpm worker",
+        )
+        .expect_err("cross-project update should fail");
+    assert!(matches!(error, rusqlite::Error::QueryReturnedNoRows));
+
+    let listed = repository
+        .list_project_terminal_configs(first_project.id)
+        .expect("list first project terminal configs");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].name, "API");
+    assert_eq!(listed[0].working_dir, "/tmp/first-repo");
+    assert_eq!(listed[0].launch_command, "pnpm dev");
+}
+
+#[test]
+fn repository_rejects_project_terminal_config_delete_from_other_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let repository = ProjectRepository::new(&database.connection);
+    let first_project = repository
+        .insert(
+            "first-repo",
+            "/tmp/first-repo",
+            ProjectCompletionPolicy::Manual,
+        )
+        .expect("insert first project");
+    let second_project = repository
+        .insert(
+            "second-repo",
+            "/tmp/second-repo",
+            ProjectCompletionPolicy::Manual,
+        )
+        .expect("insert second project");
+    let inserted = repository
+        .insert_project_terminal_config(first_project.id, "API", "/tmp/first-repo", "pnpm dev")
+        .expect("insert terminal config");
+
+    let error = repository
+        .delete_project_terminal_config(second_project.id, inserted.id)
+        .expect_err("cross-project delete should fail");
+    assert!(matches!(error, rusqlite::Error::QueryReturnedNoRows));
+
+    let listed = repository
+        .list_project_terminal_configs(first_project.id)
+        .expect("list first project terminal configs");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, inserted.id);
 }
 
 #[test]
