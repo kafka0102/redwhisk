@@ -66,6 +66,9 @@ const AGENT_PROFILES_DEL_MIGRATION_SQL: &str =
 const ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_VERSION: &str = "0020_issues_and_agent_sessions_del";
 const ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL: &str =
     include_str!("../../migrations/0020_issues_and_agent_sessions_del.sql");
+const PROJECT_TERMINAL_CONFIGS_MIGRATION_VERSION: &str = "0021_project_terminal_configs";
+const PROJECT_TERMINAL_CONFIGS_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0021_project_terminal_configs.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -215,6 +218,10 @@ impl MigrationRunner {
                 Migration {
                     version: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_VERSION,
                     sql: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL,
+                },
+                Migration {
+                    version: PROJECT_TERMINAL_CONFIGS_MIGRATION_VERSION,
+                    sql: PROJECT_TERMINAL_CONFIGS_MIGRATION_SQL,
                 },
             ];
         }

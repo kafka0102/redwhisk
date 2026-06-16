@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+#[cfg(test)]
+use std::collections::HashSet;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -20,6 +22,8 @@ pub struct PtySessionManager {
 struct PtySessionStore {
     sessions: Mutex<HashMap<i64, Arc<PtySessionHandle>>>,
     output_sink: Mutex<Option<Arc<dyn Fn(PtyOutputEvent) + Send + Sync>>>,
+    #[cfg(test)]
+    kill_failures: Mutex<HashSet<i64>>,
 }
 
 struct PtySessionHandle {
@@ -79,12 +83,27 @@ pub struct PtyExitStatus {
     pub exit_code: Option<i32>,
 }
 
+pub struct PtyRegisterError {
+    pub message: String,
+    pub pending: PendingPtySession,
+}
+
+impl std::fmt::Debug for PtyRegisterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PtyRegisterError")
+            .field("message", &self.message)
+            .finish()
+    }
+}
+
 impl PtySessionManager {
     pub fn new() -> Self {
         Self {
             store: Arc::new(PtySessionStore {
                 sessions: Mutex::new(HashMap::new()),
                 output_sink: Mutex::new(None),
+                #[cfg(test)]
+                kill_failures: Mutex::new(HashSet::new()),
             }),
         }
     }
@@ -145,11 +164,16 @@ impl PtySessionManager {
         })
     }
 
-    pub fn register<F>(&self, session_id: i64, pending: PendingPtySession, on_exit: F)
+    pub fn register<F>(
+        &self,
+        session_id: i64,
+        pending: PendingPtySession,
+        on_exit: F,
+    ) -> Result<(), PtyRegisterError>
     where
         F: FnOnce(PtyExitStatus) + Send + 'static,
     {
-        self.register_for_project(0, session_id, pending, on_exit);
+        self.register_for_project(0, session_id, pending, on_exit)
     }
 
     pub fn register_for_project<F>(
@@ -158,9 +182,20 @@ impl PtySessionManager {
         session_id: i64,
         pending: PendingPtySession,
         on_exit: F,
-    ) where
+    ) -> Result<(), PtyRegisterError>
+    where
         F: FnOnce(PtyExitStatus) + Send + 'static,
     {
+        let mut sessions = match self.store.sessions.lock() {
+            Ok(sessions) => sessions,
+            Err(_) => {
+                return Err(PtyRegisterError {
+                    message: "failed to lock PTY sessions".to_string(),
+                    pending,
+                });
+            }
+        };
+
         let handle = Arc::new(PtySessionHandle {
             master: Mutex::new(pending.master),
             writer: Mutex::new(pending.writer),
@@ -168,9 +203,8 @@ impl PtySessionManager {
             restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
         });
 
-        if let Ok(mut sessions) = self.store.sessions.lock() {
-            sessions.insert(session_id, Arc::clone(&handle));
-        }
+        sessions.insert(session_id, Arc::clone(&handle));
+        drop(sessions);
 
         let reader_store = Arc::clone(&self.store);
         let reader_handle = Arc::clone(&handle);
@@ -227,6 +261,8 @@ impl PtySessionManager {
             }
             on_exit(PtyExitStatus { exit_code });
         });
+
+        Ok(())
     }
 
     pub fn write_input(&self, session_id: i64, data: &str) -> Result<(), String> {
@@ -258,6 +294,19 @@ impl PtySessionManager {
     }
 
     pub fn kill(&self, session_id: i64) -> Result<(), String> {
+        #[cfg(test)]
+        {
+            let should_fail = self
+                .store
+                .kill_failures
+                .lock()
+                .map_err(|_| "failed to lock PTY kill failures".to_string())?
+                .remove(&session_id);
+            if should_fail {
+                return Err("failed to kill PTY session".to_string());
+            }
+        }
+
         let session = self.lookup(session_id)?;
         let result = session
             .killer
@@ -293,6 +342,25 @@ impl PtySessionManager {
             .get(&session_id)
             .cloned()
             .ok_or_else(|| "session not found".to_string())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn poison_sessions_for_test(&self) {
+        let store = Arc::clone(&self.store);
+        let _ = thread::spawn(move || {
+            let _guard = store.sessions.lock().expect("poison PTY session store");
+            panic!("poison PTY session store");
+        })
+        .join();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_kill_for_session_for_test(&self, session_id: i64) {
+        self.store
+            .kill_failures
+            .lock()
+            .expect("lock kill failures")
+            .insert(session_id);
     }
 }
 

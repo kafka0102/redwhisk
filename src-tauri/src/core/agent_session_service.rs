@@ -295,18 +295,26 @@ impl<'connection> AgentSessionService<'connection> {
                 if let Some(pty_sessions) = pty_sessions {
                     if let Some(pending_pty) = pending_pty {
                         let data_dir = data_dir.as_ref().to_path_buf();
-                        pty_sessions.register_for_project(
+                        let data_dir_for_exit = data_dir.clone();
+                        if let Err(error) = pty_sessions.register_for_project(
                             input.project_id,
                             result.session_id,
                             pending_pty,
                             move |exit_status| {
                                 let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                    &data_dir,
+                                    &data_dir_for_exit,
                                     result.session_id,
                                     exit_status,
                                 );
                             },
-                        );
+                        ) {
+                            error.pending.terminate();
+                            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                &data_dir,
+                                result.session_id,
+                                PtyExitStatus { exit_code: None },
+                            );
+                        }
                     }
                 } else if let Some(child) = child.take() {
                     let data_dir = data_dir.as_ref().to_path_buf();
@@ -469,18 +477,26 @@ impl<'connection> AgentSessionService<'connection> {
                 if let Some(pty_sessions) = pty_sessions {
                     if let Some(pending_pty) = pending_pty {
                         let data_dir = data_dir.as_ref().to_path_buf();
-                        pty_sessions.register_for_project(
+                        let data_dir_for_exit = data_dir.clone();
+                        if let Err(error) = pty_sessions.register_for_project(
                             input.project_id,
                             result.session_id,
                             pending_pty,
                             move |exit_status| {
                                 let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                    &data_dir,
+                                    &data_dir_for_exit,
                                     result.session_id,
                                     exit_status,
                                 );
                             },
-                        );
+                        ) {
+                            error.pending.terminate();
+                            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                &data_dir,
+                                result.session_id,
+                                PtyExitStatus { exit_code: None },
+                            );
+                        }
                     }
                 } else if let Some(child) = child.take() {
                     let data_dir = data_dir.as_ref().to_path_buf();

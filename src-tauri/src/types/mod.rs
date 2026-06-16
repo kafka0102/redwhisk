@@ -8,4 +8,5 @@ pub mod issue_action;
 pub mod local_data;
 pub mod project;
 pub mod project_terminal;
+pub mod project_terminal_config;
 pub mod session_event;
