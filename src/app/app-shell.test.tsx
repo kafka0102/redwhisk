@@ -6,6 +6,7 @@ import { AppShell } from "./app-shell";
 import {
   closeProjectTerminal,
   createProjectTerminal,
+  listProjectTerminals,
 } from "../features/terminals/project-terminal-commands";
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -52,15 +53,18 @@ vi.mock("../features/terminals/project-terminal", () => ({
 vi.mock("../features/terminals/project-terminal-commands", () => ({
   closeProjectTerminal: vi.fn(),
   createProjectTerminal: vi.fn(),
+  listProjectTerminals: vi.fn(),
 }));
 
 const createProjectTerminalMock = vi.mocked(createProjectTerminal);
 const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
+const listProjectTerminalsMock = vi.mocked(listProjectTerminals);
 
 describe("AppShell terminals activity persistence", () => {
   beforeEach(() => {
     createProjectTerminalMock.mockReset();
     closeProjectTerminalMock.mockReset();
+    listProjectTerminalsMock.mockReset();
     createProjectTerminalMock.mockResolvedValue({
       configId: 101,
       sessionId: -1,
@@ -69,10 +73,24 @@ describe("AppShell terminals activity persistence", () => {
       launchCommand: "/bin/zsh",
     });
     closeProjectTerminalMock.mockResolvedValue(undefined);
+    listProjectTerminalsMock.mockResolvedValue({ terminals: [] });
   });
 
   it("keeps project terminals after switching away and back", async () => {
     const user = userEvent.setup();
+    listProjectTerminalsMock
+      .mockResolvedValueOnce({ terminals: [] })
+      .mockResolvedValue({
+        terminals: [
+          {
+            configId: 101,
+            sessionId: -1,
+            name: "local-dev-web",
+            workingDir: "/tmp/redwhisk",
+            launchCommand: "/bin/zsh",
+          },
+        ],
+      });
 
     render(
       <AppShell
@@ -98,16 +116,50 @@ describe("AppShell terminals activity persistence", () => {
       expect(createProjectTerminalMock).toHaveBeenCalledWith({ projectId: 1 });
     });
 
-    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+    });
 
     await user.click(screen.getByRole("button", { name: "Issues" }));
     expect(screen.getByText("issues activity")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Terminals" }));
 
-    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "local-dev-web" }),
-    ).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => {
+      expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "local-dev-web" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("does not rehydrate empty terminals repeatedly", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppShell
+        onCreateProject={() => {}}
+        onProjectUpdated={() => {}}
+        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
+        project={{
+          id: 1,
+          name: "RedWhisk",
+          path: "/tmp/redwhisk",
+          completionPolicy: "agent_auto_commit",
+          recentOpenedAt: "2026-06-15T00:00:00.000Z",
+          status: "available",
+        }}
+        projects={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Terminals" }));
+
+    await waitFor(() => {
+      expect(listProjectTerminalsMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.getByRole("button", { name: "+ New terminal" })).toBeInTheDocument();
   });
 });
