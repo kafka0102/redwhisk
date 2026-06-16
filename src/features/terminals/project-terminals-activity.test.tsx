@@ -138,6 +138,19 @@ describe("ProjectTerminalsActivity", () => {
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
   });
 
+  it("hydrates an empty terminal list only once", async () => {
+    listProjectTerminalsMock.mockResolvedValue({ terminals: [] });
+
+    renderProjectTerminalsActivity();
+
+    await waitFor(() => {
+      expect(listProjectTerminalsMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.getByRole("button", { name: "+ New terminal" })).toBeInTheDocument();
+    expect(screen.queryByText("Loading terminals...")).not.toBeInTheDocument();
+  });
+
   it("shows unavailable state when persisted terminal has no running session", async () => {
     const user = userEvent.setup();
     listProjectTerminalsMock.mockResolvedValue({

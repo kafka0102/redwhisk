@@ -1,5 +1,5 @@
 import { Bot, CircleDot, Settings, Terminal } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
@@ -49,6 +49,23 @@ export function AppShell({
   const projectTerminalsState =
     projectTerminalsStateByProjectId[project.id] ??
     getDefaultProjectTerminalsActivityState();
+
+  const handleProjectTerminalsStateChange = useCallback(
+    (nextState: React.SetStateAction<ProjectTerminalsActivityState>) => {
+      setProjectTerminalsStateByProjectId((currentStateByProjectId) => {
+        const currentState =
+          currentStateByProjectId[project.id] ??
+          getDefaultProjectTerminalsActivityState();
+
+        return {
+          ...currentStateByProjectId,
+          [project.id]:
+            typeof nextState === "function" ? nextState(currentState) : nextState,
+        };
+      });
+    },
+    [project.id],
+  );
 
   async function handleWorkbenchHeaderClick(
     event: React.MouseEvent<HTMLElement>,
@@ -142,21 +159,7 @@ export function AppShell({
                 setIsGlobalSettingsOpen(false);
               }}
               onProjectUpdated={onProjectUpdated}
-              onProjectTerminalsStateChange={(nextState) => {
-                setProjectTerminalsStateByProjectId((currentStateByProjectId) => {
-                  const currentState =
-                    currentStateByProjectId[project.id] ??
-                    getDefaultProjectTerminalsActivityState();
-
-                  return {
-                    ...currentStateByProjectId,
-                    [project.id]:
-                      typeof nextState === "function"
-                        ? nextState(currentState)
-                        : nextState,
-                  };
-                });
-              }}
+              onProjectTerminalsStateChange={handleProjectTerminalsStateChange}
               onSelectAgentSession={setActiveAgentSessionId}
               projectCompletionPolicy={project.completionPolicy}
               projectId={project.id}
