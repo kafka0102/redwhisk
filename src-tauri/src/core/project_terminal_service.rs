@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::agent::pty_session_manager::{
-    read_terminal_snapshot, PendingPtySession, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PendingPtySession, PtyRegisterError, PtySessionManager, PtySpawnRequest,
 };
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
@@ -187,9 +187,15 @@ impl<'connection> ProjectTerminalService<'connection> {
         }
 
         let registry_on_exit = registry.clone();
-        pty_sessions.register_for_project(project.id, session_id, pending, move |_| {
-            registry_on_exit.mark_inactive(session_id);
-        });
+        if let Err(PtyRegisterError { message, pending }) =
+            pty_sessions.register_for_project(project.id, session_id, pending, move |_| {
+                registry_on_exit.mark_inactive(session_id);
+            })
+        {
+            let _ = registry.remove(project.id, session_id);
+            self.cleanup_failed_terminal_create(project.id, config.id, Some(pending))?;
+            return Err(project_terminal_start_error(message));
+        }
 
         Ok(CreateProjectTerminalResult {
             config_id: config.id,
@@ -758,6 +764,58 @@ mod tests {
         let configs = ProjectRepository::new(&database.connection)
             .list_project_terminal_configs(project.id)
             .expect("list terminal configs after registry insert failure");
+        assert!(configs.is_empty());
+        assert!(!manager.contains(-1));
+    }
+
+    #[test]
+    fn project_terminal_create_rolls_back_config_when_pty_session_register_fails() {
+        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+        manager.poison_sessions_for_test();
+
+        let error = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect_err("PTY session register failure should fail create");
+
+        assert_eq!(
+            error.code,
+            crate::types::errors::CommandErrorCode::ProjectTerminalStartFailed
+        );
+        let configs = ProjectRepository::new(&database.connection)
+            .list_project_terminal_configs(project.id)
+            .expect("list terminal configs after PTY session register failure");
         assert!(configs.is_empty());
         assert!(!manager.contains(-1));
     }
