@@ -130,4 +130,29 @@ describe("buildRunPromptPreview", () => {
       ),
     );
   });
+
+  it("builds prompt sections for multiple workflow skills stored as a JSON array", () => {
+    const preview = buildRunPromptPreview({
+      issue: {
+        title: "Prompt preview",
+        description: "Make the preview reflect the selected profile.",
+        attachments: [],
+      },
+      profile: {
+        defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+        promptTemplate: "",
+      },
+    });
+
+    expect(preview.finalPrompt).toBe(
+      [
+        "using skill skill-a for task:",
+        "using skill skill-b for task:",
+        "Make the preview reflect the selected profile.",
+      ].join("\n\n"),
+    );
+    expect(
+      preview.sources.find((source) => source.id === "default-skill")?.content,
+    ).toBe("skill-a\nskill-b");
+  });
 });

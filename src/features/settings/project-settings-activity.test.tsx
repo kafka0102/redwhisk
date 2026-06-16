@@ -115,6 +115,7 @@ const legacyPromptProfile: AgentProfileRecord = {
 
 describe("ProjectSettingsActivity", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     detectCodexCommandMock.mockReset();
     deleteAgentProfileMock.mockReset();
     testAgentCommandMock.mockReset();
@@ -128,6 +129,9 @@ describe("ProjectSettingsActivity", () => {
     settingsEventMocks.unlisten.mockReset();
     onProjectUpdated.mockReset();
     detectCodexCommandMock.mockResolvedValue({
+      command: "/usr/local/bin/codex",
+    });
+    testAgentCommandMock.mockResolvedValue({
       command: "/usr/local/bin/codex",
     });
     deleteAgentProfileMock.mockResolvedValue(undefined);
@@ -388,7 +392,7 @@ describe("ProjectSettingsActivity", () => {
       screen.getByRole("columnheader", { name: "Scope" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Workflow Skill" }),
+      screen.getByRole("columnheader", { name: "Workflow Skills" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: "Actions" }),
@@ -564,7 +568,7 @@ describe("ProjectSettingsActivity", () => {
       screen.getByRole("heading", { name: "New agent" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "New agent" })).toHaveTextContent(
-      /Name[\s\S]*Type[\s\S]*Command[\s\S]*Scope[\s\S]*Workflow Skill/,
+      /Name[\s\S]*Type[\s\S]*Command[\s\S]*Scope[\s\S]*Workflow Skills/,
     );
     expect(screen.getByLabelText("Agent type")).toHaveValue("codex");
     expect(screen.getByRole("option", { name: "Claude Code" })).toHaveValue(
@@ -639,8 +643,8 @@ describe("ProjectSettingsActivity", () => {
       command: "/opt/codex/bin/codex",
     });
     expect(
-      screen.getByText("Command available: /opt/codex/bin/codex"),
-    ).toHaveClass("agent-dialog__toast");
+      screen.getByText("Command available: codex").closest(".agent-dialog__toast"),
+    ).not.toBeNull();
     expect(screen.getByLabelText("Agent command")).toHaveValue(
       "/opt/codex/bin/codex",
     );
@@ -684,7 +688,7 @@ describe("ProjectSettingsActivity", () => {
         projectId: null,
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("codex-global")).toBeInTheDocument();
     expect(
       screen.getByText("/home/me/.agents/skills/codex-global/SKILL.md"),
@@ -702,7 +706,7 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("codex-project")).toBeInTheDocument();
     expect(
       screen.getByText("/repo/.agents/skills/codex-project/SKILL.md"),
@@ -753,7 +757,7 @@ describe("ProjectSettingsActivity", () => {
     );
     await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
 
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("claude-global")).toBeInTheDocument();
     expect(screen.getByLabelText("Agent profile name")).toHaveValue(
       "Claude Agent",
@@ -792,8 +796,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
-    expect(await screen.findByText("None")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(screen.getByText("codex-global")).toHaveClass(
       "settings-search-select__option-label",
     );
@@ -815,6 +818,102 @@ describe("ProjectSettingsActivity", () => {
           defaultSkill: "codex-global",
         }),
       ),
+    );
+  });
+
+  it("supports selecting multiple workflow skills and saves them as a JSON array string", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    listAgentSkillsMock.mockResolvedValue(
+      skillResponse([
+        {
+          name: "skill-a",
+          path: "/home/me/.agents/skills/skill-a/SKILL.md",
+          agentType: "codex",
+          scope: "global",
+          projectId: null,
+          sourceRoot: "/home/me/.agents/skills",
+        },
+        {
+          name: "skill-b",
+          path: "/home/me/.agents/skills/skill-b/SKILL.md",
+          agentType: "codex",
+          scope: "global",
+          projectId: null,
+          sourceRoot: "/home/me/.agents/skills",
+        },
+      ]),
+    );
+    saveAgentProfileMock.mockResolvedValue({
+      ...globalProfile,
+      name: "Multi Skill Agent",
+      defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "skill-a /home/me/.agents/skills/skill-a/SKILL.md",
+      }),
+    );
+    await user.click(
+      screen.getByRole("option", {
+        name: "skill-b /home/me/.agents/skills/skill-b/SKILL.md",
+      }),
+    );
+    await user.keyboard("{Escape}");
+    await user.type(
+      screen.getByLabelText("Agent profile name"),
+      "Multi Skill Agent",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+        }),
+      ),
+    );
+  });
+
+  it("allows manually closing the command test toast", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    testAgentCommandMock.mockResolvedValue({
+      command: "/opt/codex/bin/codex",
+    });
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(await screen.findByRole("button", { name: "New agent" }));
+    await user.click(screen.getByRole("button", { name: "测试" }));
+    expect(await screen.findByText("Command available: codex")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close message" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Command available: codex"),
+      ).not.toBeInTheDocument(),
     );
   });
 
@@ -899,7 +998,7 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     await user.click(
       await screen.findByRole("option", {
         name: "codex-project /repo/.agents/skills/codex-project/SKILL.md",
@@ -970,7 +1069,7 @@ describe("ProjectSettingsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("tracks workflow skill selection by path when visible skills share the same name", async () => {
+  it("tracks workflow skill selection by name when visible skills share the same name", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     listAgentSkillsMock.mockResolvedValue(
@@ -1011,23 +1110,21 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(
+      screen.getByRole("combobox", {
+        name: "Workflow Skills",
+      }),
+    );
     const firstSkill = await screen.findByRole("option", {
       name: "shared-skill /home/me/.agents/skills/shared-a/SKILL.md",
     });
     const secondSkill = screen.getByRole("option", {
       name: "shared-skill /home/me/.agents/skills/shared-b/SKILL.md",
     });
-
     await user.click(secondSkill);
 
     expect(firstSkill).toHaveAttribute("aria-selected", "false");
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
-    expect(
-      screen.getByRole("option", {
-        name: "shared-skill /home/me/.agents/skills/shared-b/SKILL.md",
-      }),
-    ).toHaveAttribute("aria-selected", "true");
+    expect(secondSkill).toHaveAttribute("aria-selected", "true");
 
     await user.keyboard("{Escape}");
     await user.type(
@@ -1087,7 +1184,7 @@ describe("ProjectSettingsActivity", () => {
         ]),
       );
     });
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("claude-global")).toBeInTheDocument();
 
     await act(async () => {
@@ -1139,7 +1236,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(screen.getByLabelText("Agent profile name"), "Unsaved");
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("codex-global")).toBeInTheDocument();
     await user.keyboard("{Escape}");
 
@@ -1155,7 +1252,7 @@ describe("ProjectSettingsActivity", () => {
       payload: { scope: "global", projectId: null },
     });
 
-    await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
+    await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("codex-refreshed")).toBeInTheDocument();
     expect(screen.getByLabelText("Agent profile name")).toHaveValue("Unsaved");
   });

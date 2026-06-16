@@ -17,6 +17,7 @@ import {
   type AgentProfileRecord,
 } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
+import { formatDefaultSkills } from "./agent-profile-skills";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
   type ProjectCompletionPolicy,
@@ -464,8 +465,8 @@ export function ProjectSettingsActivity({
                                   : messages.settings.projectScope}
                               </td>
                               <td className="settings-agent-table__skill">
-                                {profile.defaultSkill.trim().length > 0
-                                  ? profile.defaultSkill
+                                {formatDefaultSkills(profile.defaultSkill).length > 0
+                                  ? formatDefaultSkills(profile.defaultSkill)
                                   : "—"}
                               </td>
                               <td>
