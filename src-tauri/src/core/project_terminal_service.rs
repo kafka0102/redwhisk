@@ -30,6 +30,7 @@ const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 pub struct ProjectTerminalRegistry {
     next_session_id: Arc<AtomicI64>,
     sessions: Arc<Mutex<HashMap<i64, ProjectTerminalSession>>>,
+    config_locks: Arc<Mutex<HashMap<(i64, i64), Arc<Mutex<()>>>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +57,7 @@ impl ProjectTerminalRegistry {
         Self {
             next_session_id: Arc::new(AtomicI64::new(-1)),
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            config_locks: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -199,6 +201,29 @@ impl ProjectTerminalRegistry {
 
         Ok(session)
     }
+
+    fn with_config_lock<T>(
+        &self,
+        project_id: i64,
+        config_id: i64,
+        action: impl FnOnce() -> Result<T, CommandError>,
+    ) -> Result<T, CommandError> {
+        let lock = {
+            let mut config_locks = self
+                .config_locks
+                .lock()
+                .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+            config_locks
+                .entry((project_id, config_id))
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+
+        let _guard = lock
+            .lock()
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+        action()
+    }
 }
 
 impl<'connection> ProjectTerminalService<'connection> {
@@ -337,39 +362,41 @@ impl<'connection> ProjectTerminalService<'connection> {
         pty_sessions: &PtySessionManager,
     ) -> Result<DeleteProjectTerminalConfigResult, CommandError> {
         self.project_by_id(input.project_id)?;
-        let sessions = registry.sessions_by_config_id(input.project_id, input.config_id)?;
+        registry.with_config_lock(input.project_id, input.config_id, || {
+            let sessions = registry.sessions_by_config_id(input.project_id, input.config_id)?;
 
-        self.project_repository
-            .delete_project_terminal_config(input.project_id, input.config_id)
-            .map_err(project_terminal_database_error)?;
+            self.project_repository
+                .delete_project_terminal_config(input.project_id, input.config_id)
+                .map_err(project_terminal_database_error)?;
 
-        let session_id = if let Some((session_id, _)) =
-            preferred_project_terminal_session(sessions.clone(), pty_sessions)
-        {
-            let removed =
-                registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
-            for (removed_session_id, removed_session) in removed {
-                if removed_session.is_active && pty_sessions.contains(removed_session_id) {
-                    let _ = pty_sessions.kill(removed_session_id);
+            let session_id = if let Some((session_id, _)) =
+                preferred_project_terminal_session(sessions.clone(), pty_sessions)
+            {
+                let removed =
+                    registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
+                for (removed_session_id, removed_session) in removed {
+                    if removed_session.is_active && pty_sessions.contains(removed_session_id) {
+                        let _ = pty_sessions.kill(removed_session_id);
+                    }
                 }
-            }
-            Some(session_id)
-        } else if !sessions.is_empty() {
-            let removed =
-                registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
-            for (removed_session_id, removed_session) in removed {
-                if removed_session.is_active && pty_sessions.contains(removed_session_id) {
-                    let _ = pty_sessions.kill(removed_session_id);
+                Some(session_id)
+            } else if !sessions.is_empty() {
+                let removed =
+                    registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
+                for (removed_session_id, removed_session) in removed {
+                    if removed_session.is_active && pty_sessions.contains(removed_session_id) {
+                        let _ = pty_sessions.kill(removed_session_id);
+                    }
                 }
-            }
-            sessions.first().map(|(session_id, _)| *session_id)
-        } else {
-            None
-        };
+                sessions.first().map(|(session_id, _)| *session_id)
+            } else {
+                None
+            };
 
-        Ok(DeleteProjectTerminalConfigResult {
-            config_id: input.config_id,
-            session_id,
+            Ok(DeleteProjectTerminalConfigResult {
+                config_id: input.config_id,
+                session_id,
+            })
         })
     }
 
@@ -387,19 +414,33 @@ impl<'connection> ProjectTerminalService<'connection> {
             .map_err(project_terminal_database_error)?;
 
         for config in configs {
-            let sessions = registry.sessions_by_config_id(project_id, config.id)?;
-            if let Some((session_id, session)) =
-                preferred_project_terminal_session(sessions.clone(), pty_sessions)
-            {
-                if session.is_active && pty_sessions.contains(session_id) {
-                    continue;
+            run_restore_before_start_lock_hook(project_id, config.id);
+            let _ = registry.with_config_lock(project_id, config.id, || {
+                let Some(current_config) =
+                    self.project_terminal_config_by_id(project_id, config.id)?
+                else {
+                    return Ok(());
+                };
+
+                let sessions = registry.sessions_by_config_id(project_id, current_config.id)?;
+                if let Some((session_id, session)) =
+                    preferred_project_terminal_session(sessions.clone(), pty_sessions)
+                {
+                    if session.is_active && pty_sessions.contains(session_id) {
+                        return Ok(());
+                    }
                 }
-            }
 
-            let _ = registry.remove_sessions_by_config_id(project_id, config.id);
-
-            let _ =
-                self.start_terminal_for_config(data_dir.as_ref(), &config, registry, pty_sessions);
+                let _ = registry.remove_sessions_by_config_id(project_id, current_config.id);
+                run_restore_before_spawn_hook(project_id, current_config.id);
+                self.start_terminal_for_config(
+                    data_dir.as_ref(),
+                    &current_config,
+                    registry,
+                    pty_sessions,
+                )
+                .map(|_| ())
+            });
         }
 
         Ok(())
@@ -682,6 +723,18 @@ impl<'connection> ProjectTerminalService<'connection> {
             .map_err(project_terminal_database_error)
     }
 
+    fn project_terminal_config_by_id(
+        &self,
+        project_id: i64,
+        config_id: i64,
+    ) -> Result<Option<ProjectTerminalConfig>, CommandError> {
+        let configs = self
+            .project_repository
+            .list_project_terminal_configs(project_id)
+            .map_err(project_terminal_database_error)?;
+        Ok(configs.into_iter().find(|config| config.id == config_id))
+    }
+
     fn start_terminal_for_config(
         &self,
         data_dir: &Path,
@@ -842,8 +895,51 @@ fn project_terminal_persistence_error(message: &str) -> CommandError {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+struct RestoreTestHooks {
+    before_start_lock: Option<Arc<dyn Fn(i64, i64) + Send + Sync>>,
+    before_spawn: Option<Arc<dyn Fn(i64, i64) + Send + Sync>>,
+}
+
+#[cfg(test)]
+fn restore_test_hooks() -> &'static Mutex<RestoreTestHooks> {
+    static HOOKS: std::sync::OnceLock<Mutex<RestoreTestHooks>> = std::sync::OnceLock::new();
+    HOOKS.get_or_init(|| Mutex::new(RestoreTestHooks::default()))
+}
+
+#[cfg(test)]
+fn run_restore_before_start_lock_hook(project_id: i64, config_id: i64) {
+    let hook = restore_test_hooks()
+        .lock()
+        .ok()
+        .and_then(|hooks| hooks.before_start_lock.clone());
+    if let Some(hook) = hook {
+        hook(project_id, config_id);
+    }
+}
+
+#[cfg(not(test))]
+fn run_restore_before_start_lock_hook(_project_id: i64, _config_id: i64) {}
+
+#[cfg(test)]
+fn run_restore_before_spawn_hook(project_id: i64, config_id: i64) {
+    let hook = restore_test_hooks()
+        .lock()
+        .ok()
+        .and_then(|hooks| hooks.before_spawn.clone());
+    if let Some(hook) = hook {
+        hook(project_id, config_id);
+    }
+}
+
+#[cfg(not(test))]
+fn run_restore_before_spawn_hook(_project_id: i64, _config_id: i64) {}
+
+#[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc;
+    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::core::project_service::ProjectService;
@@ -856,7 +952,7 @@ mod tests {
         RestoreProjectTerminalInput, UpdateProjectTerminalConfigInput, WriteProjectTerminalInput,
     };
 
-    use super::{ProjectTerminalRegistry, ProjectTerminalService};
+    use super::{restore_test_hooks, ProjectTerminalRegistry, ProjectTerminalService};
 
     fn terminal_test_env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -867,6 +963,29 @@ mod tests {
         match terminal_test_env_lock().lock() {
             Ok(guard) => guard,
             Err(error) => error.into_inner(),
+        }
+    }
+
+    struct RestoreHooksGuard;
+
+    impl RestoreHooksGuard {
+        fn install(
+            before_start_lock: Option<Arc<dyn Fn(i64, i64) + Send + Sync>>,
+            before_spawn: Option<Arc<dyn Fn(i64, i64) + Send + Sync>>,
+        ) -> Self {
+            let mut hooks = restore_test_hooks().lock().expect("restore hooks");
+            hooks.before_start_lock = before_start_lock;
+            hooks.before_spawn = before_spawn;
+            Self
+        }
+    }
+
+    impl Drop for RestoreHooksGuard {
+        fn drop(&mut self) {
+            if let Ok(mut hooks) = restore_test_hooks().lock() {
+                hooks.before_start_lock = None;
+                hooks.before_spawn = None;
+            }
         }
     }
 
@@ -1489,5 +1608,254 @@ mod tests {
         assert_eq!(listed.terminals.len(), 1);
         assert_ne!(listed.terminals[0].session_id, 0);
         assert_ne!(listed.terminals[0].session_id, created.session_id);
+    }
+
+    #[test]
+    fn project_terminal_restore_deduplicates_concurrent_start_for_same_config() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        manager
+            .kill(created.session_id)
+            .expect("kill initial PTY session");
+        for _ in 0..20 {
+            if !manager.contains(created.session_id) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+
+        let registry = Arc::new(registry);
+        let manager = Arc::new(manager);
+        let entered = Arc::new(AtomicUsize::new(0));
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let _hooks = RestoreHooksGuard::install(
+            None,
+            Some({
+                let entered = Arc::clone(&entered);
+                let release_rx = Arc::clone(&release_rx);
+                Arc::new(move |project_id, config_id| {
+                    if project_id != project.id || config_id != created.config_id {
+                        return;
+                    }
+                    entered.fetch_add(1, Ordering::SeqCst);
+                    release_rx
+                        .lock()
+                        .expect("release rx")
+                        .recv()
+                        .expect("release restore start");
+                })
+            }),
+        );
+
+        let mut handles = Vec::new();
+        for _ in 0..2 {
+            let registry = Arc::clone(&registry);
+            let manager = Arc::clone(&manager);
+            let data_dir = temp_dir.path().to_path_buf();
+            handles.push(std::thread::spawn(move || {
+                ProjectTerminalService::restore_project_terminals_in_data_dir(
+                    data_dir, project.id, &registry, &manager,
+                )
+            }));
+        }
+
+        for _ in 0..40 {
+            if entered.load(Ordering::SeqCst) >= 1 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        let entered_count = entered.load(Ordering::SeqCst);
+
+        release_tx.send(()).expect("release first");
+        if entered_count > 1 {
+            release_tx.send(()).expect("release second");
+        }
+
+        for handle in handles {
+            handle
+                .join()
+                .expect("join restore thread")
+                .expect("restore should succeed");
+        }
+
+        assert_eq!(entered_count, 1);
+
+        let sessions = registry
+            .sessions
+            .lock()
+            .expect("registry sessions")
+            .values()
+            .filter(|session| {
+                session.project_id == project.id && session.config_id == created.config_id
+            })
+            .count();
+        assert_eq!(sessions, 1);
+    }
+
+    #[test]
+    fn project_terminal_delete_prevents_restore_from_restarting_deleted_config() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        manager
+            .kill(created.session_id)
+            .expect("kill initial PTY session");
+        for _ in 0..20 {
+            if !manager.contains(created.session_id) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+
+        let registry = Arc::new(registry);
+        let manager = Arc::new(manager);
+        let (paused_tx, paused_rx) = mpsc::channel::<()>();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let _hooks = RestoreHooksGuard::install(
+            Some({
+                Arc::new(move |project_id, config_id| {
+                    if project_id != project.id || config_id != created.config_id {
+                        return;
+                    }
+                    paused_tx.send(()).expect("signal paused restore");
+                    release_rx
+                        .lock()
+                        .expect("release rx")
+                        .recv()
+                        .expect("release restore");
+                })
+            }),
+            None,
+        );
+
+        let registry_for_thread = Arc::clone(&registry);
+        let manager_for_thread = Arc::clone(&manager);
+        let data_dir = temp_dir.path().to_path_buf();
+        let restore_handle = std::thread::spawn(move || {
+            ProjectTerminalService::restore_project_terminals_in_data_dir(
+                data_dir,
+                project.id,
+                &registry_for_thread,
+                &manager_for_thread,
+            )
+        });
+
+        paused_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("wait restore pause");
+
+        let deleted = service
+            .delete_project_terminal_config(
+                DeleteProjectTerminalConfigInput {
+                    project_id: project.id,
+                    config_id: created.config_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("delete config while restore paused");
+        assert_eq!(deleted.config_id, created.config_id);
+
+        release_tx.send(()).expect("release restore");
+        restore_handle
+            .join()
+            .expect("join restore thread")
+            .expect("restore should succeed");
+
+        let listed = service
+            .list_project_terminals(
+                ListProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("list terminals after delete");
+        assert!(listed.terminals.is_empty());
+
+        let matching_sessions = registry
+            .sessions
+            .lock()
+            .expect("registry sessions")
+            .values()
+            .filter(|session| {
+                session.project_id == project.id && session.config_id == created.config_id
+            })
+            .count();
+        assert_eq!(matching_sessions, 0);
     }
 }
