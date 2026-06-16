@@ -98,7 +98,7 @@ export function ProjectSettingsActivity({
   projectPath = "",
 }: ProjectSettingsActivityProps) {
   const { messages } = useI18n();
-  const [activeMenu, setActiveMenu] = useState<SettingsMenu>("agents");
+  const [activeMenu, setActiveMenu] = useState<SettingsMenu>("general");
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );

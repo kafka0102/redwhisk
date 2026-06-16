@@ -175,7 +175,7 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 
-  it("renders two-column layout with agents menu active by default", async () => {
+  it("renders two-column layout with general menu active by default", async () => {
     render(
       <ProjectSettingsActivity
         completionPolicy="manual"
@@ -198,17 +198,15 @@ describe("ProjectSettingsActivity", () => {
       "aria-hidden",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "General" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     expect(
       screen.queryByRole("button", { name: "Terminals" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Agents" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "New agent" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
   });
 
   it("exposes and updates the settings menu splitter width", async () => {
@@ -338,6 +336,7 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("shows agents in a table below the header action", async () => {
+    const user = userEvent.setup();
     const longWorkflowSkill =
       "codex-global-skill-with-a-very-long-unbroken-name";
     const projectProfileWithHigherId = { ...projectProfile, id: 20 };
@@ -363,6 +362,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     expect(
       await screen.findByRole("heading", { name: "Agents" }),
     ).toBeInTheDocument();
@@ -444,6 +444,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(
       await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
@@ -467,6 +468,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(
       await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
@@ -490,6 +492,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     const projectButton = await screen.findByRole("button", {
       name: "Edit Project Codex",
     });
@@ -520,6 +523,7 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("shows No agents for empty project and global lists", async () => {
+    const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
 
     render(
@@ -531,6 +535,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     expect(await screen.findAllByText("No agents")).toHaveLength(1);
   });
 
@@ -552,6 +557,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
     expect(
@@ -616,6 +622,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(
       screen.getByLabelText("Agent profile name"),
@@ -668,6 +675,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
     await waitFor(() =>
@@ -737,6 +745,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(
       screen.getByLabelText("Agent profile name"),
@@ -780,6 +789,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
     await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
@@ -828,6 +838,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(
       await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
     );
@@ -875,6 +886,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(
       await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
     );
@@ -930,6 +942,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(
       await screen.findByRole("button", { name: "Edit Legacy Prompt Codex" }),
     );
@@ -995,6 +1008,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
 
     await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
@@ -1053,6 +1067,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await waitFor(() => expect(pendingSkills.codex).toBeDefined());
     await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
@@ -1121,6 +1136,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.type(screen.getByLabelText("Agent profile name"), "Unsaved");
     await user.click(screen.getByRole("combobox", { name: "Workflow Skill" }));
@@ -1145,6 +1161,7 @@ describe("ProjectSettingsActivity", () => {
   });
 
   it("reloads agents when project id changes", async () => {
+    const user = userEvent.setup();
     let resolveProjectProfiles:
       | ((value: { profiles: AgentProfileRecord[] }) => void)
       | undefined;
@@ -1169,6 +1186,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByText("Project Codex");
     expect(listAgentProfilesMock).toHaveBeenCalledWith({
       scope: "project",
@@ -1212,6 +1230,7 @@ describe("ProjectSettingsActivity", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     expect(
       screen.getByRole("heading", { name: "New agent" }),
