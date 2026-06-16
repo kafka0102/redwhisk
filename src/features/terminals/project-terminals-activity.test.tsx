@@ -105,6 +105,28 @@ describe("ProjectTerminalsActivity", () => {
     expect(within(sidebar).getByText("/tmp/redwhisk/apps/api")).toBeInTheDocument();
   });
 
+  it("renders the working directory with a home shorthand and truncation styles", async () => {
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "API",
+          workingDir: "/Users/yujianjia/workspace/kafka/redwhisk/apps/api",
+          launchCommand: "pnpm dev",
+        },
+      ],
+    });
+
+    renderProjectTerminalsActivity();
+
+    const sidebar = await screen.findByLabelText("Project terminals");
+    const path = within(sidebar).getByText("~/workspace/kafka/redwhisk/apps/api");
+
+    expect(path).toHaveClass("project-terminals-card__meta");
+    expect(path).toHaveTextContent("~/workspace/kafka/redwhisk/apps/api");
+  });
+
   it("creates terminals, selects by config id, and keeps a stable active background", async () => {
     const user = userEvent.setup();
     listProjectTerminalsMock.mockResolvedValue({ terminals: [] });
