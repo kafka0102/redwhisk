@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronRight, Pencil, Plus, X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -42,6 +42,15 @@ const ACTIVE_TERMINAL_CARD_BACKGROUND = "color-mix(in srgb, var(--color-accent) 
 const ACTIVE_TERMINAL_CARD_BORDER = "color-mix(in srgb, var(--color-accent) 52%, var(--color-border-strong))";
 const INACTIVE_TERMINAL_CARD_BACKGROUND = "var(--color-surface)";
 const INACTIVE_TERMINAL_CARD_BORDER = "var(--color-border)";
+
+function formatTerminalPathForDisplay(path: string): string {
+  const normalizedPath = path.trim();
+  if (!normalizedPath) {
+    return "";
+  }
+
+  return normalizedPath.replace(/^\/(?:users|home)\/[^/]+/i, "~");
+}
 
 export function ProjectTerminalsActivity({
   onStateChange,
@@ -319,6 +328,9 @@ export function ProjectTerminalsActivity({
           <div className="project-terminals-card-list">
             {terminalCards.map((terminalCard) => {
               const isActive = activeTerminal?.configId === terminalCard.configId;
+              const displayPath = formatTerminalPathForDisplay(
+                terminalCard.workingDir || projectPath || "",
+              );
 
               return (
                 <section
@@ -348,33 +360,32 @@ export function ProjectTerminalsActivity({
                       <span className="project-terminals-card__name">
                         {terminalCard.name}
                       </span>
-                      <span className="project-terminals-card__meta">
-                        {terminalCard.workingDir || projectPath || ""}
-                      </span>
+                      <span className="project-terminals-card__meta">{displayPath}</span>
                     </span>
                   </button>
-                  <button
-                    aria-label={messages.settings.editTerminal(terminalCard.name)}
-                    className="project-terminals-card__edit"
-                    type="button"
-                    onClick={() => {
-                      setEditingTerminal(terminalCard);
-                    }}
-                  >
-                    <ChevronRight size={14} strokeWidth={2} />
-                    <Pencil size={12} strokeWidth={2} />
-                  </button>
-                  <button
-                    aria-label={messages.settings.deleteTerminal(terminalCard.name)}
-                    className="project-terminals-card__delete"
-                    disabled={closingConfigId === terminalCard.configId}
-                    type="button"
-                    onClick={() => {
-                      void handleDeleteTerminal(terminalCard.configId);
-                    }}
-                  >
-                    <X size={14} strokeWidth={2} />
-                  </button>
+                  <div className="project-terminals-card__actions">
+                    <button
+                      aria-label={messages.settings.editTerminal(terminalCard.name)}
+                      className="project-terminals-card__edit"
+                      type="button"
+                      onClick={() => {
+                        setEditingTerminal(terminalCard);
+                      }}
+                    >
+                      <Pencil size={12} strokeWidth={2} />
+                    </button>
+                    <button
+                      aria-label={messages.settings.deleteTerminal(terminalCard.name)}
+                      className="project-terminals-card__delete"
+                      disabled={closingConfigId === terminalCard.configId}
+                      type="button"
+                      onClick={() => {
+                        void handleDeleteTerminal(terminalCard.configId);
+                      }}
+                    >
+                      <X size={14} strokeWidth={2} />
+                    </button>
+                  </div>
                 </section>
               );
             })}
