@@ -73,9 +73,18 @@ export interface UpdateProjectTerminalConfigInput {
   launchCommand: string;
 }
 
+export interface UpdateProjectTerminalConfigResult {
+  terminal: ProjectTerminalSummary;
+}
+
 export interface DeleteProjectTerminalConfigInput {
   projectId: number;
   configId: number;
+}
+
+export interface DeleteProjectTerminalConfigResult {
+  configId: number;
+  sessionId: number | null;
 }
 
 export function createProjectTerminal(

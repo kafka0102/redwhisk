@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::agent::pty_session_manager::{
-    read_terminal_snapshot, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PendingPtySession, PtySessionManager, PtySpawnRequest,
 };
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
@@ -166,14 +166,12 @@ impl<'connection> ProjectTerminalService<'connection> {
         }) {
             Ok(pending) => pending,
             Err(error) => {
-                self.project_repository
-                    .delete_project_terminal_config(project.id, config.id)
-                    .map_err(project_terminal_database_error)?;
+                self.cleanup_failed_terminal_create(project.id, config.id, None)?;
                 return Err(project_terminal_start_error(error));
             }
         };
 
-        registry.insert(
+        if let Err(error) = registry.insert(
             session_id,
             ProjectTerminalSession {
                 project_id: project.id,
@@ -181,7 +179,10 @@ impl<'connection> ProjectTerminalService<'connection> {
                 log_path: log_path.to_string_lossy().to_string(),
                 is_active: true,
             },
-        )?;
+        ) {
+            self.cleanup_failed_terminal_create(project.id, config.id, Some(pending))?;
+            return Err(error);
+        }
 
         let registry_on_exit = registry.clone();
         pty_sessions.register_for_project(project.id, session_id, pending, move |_| {
@@ -396,6 +397,21 @@ impl<'connection> ProjectTerminalService<'connection> {
                 CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
                     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             })
+    }
+
+    fn cleanup_failed_terminal_create(
+        &self,
+        project_id: i64,
+        config_id: i64,
+        pending: Option<PendingPtySession>,
+    ) -> Result<(), CommandError> {
+        if let Some(pending) = pending {
+            pending.terminate();
+        }
+
+        self.project_repository
+            .delete_project_terminal_config(project_id, config_id)
+            .map_err(project_terminal_database_error)
     }
 }
 
@@ -685,5 +701,62 @@ mod tests {
             .list_project_terminal_configs(project.id)
             .expect("list terminal configs after failed create");
         assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn project_terminal_create_rolls_back_config_when_registry_insert_fails() {
+        let _env_lock = terminal_test_env_lock().lock().expect("terminal env lock");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let poisoned_sessions = registry.sessions.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned_sessions.lock().expect("poison registry lock");
+            panic!("poison registry");
+        })
+        .join();
+        let manager = PtySessionManager::new();
+
+        let error = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect_err("registry insert failure should fail create");
+
+        assert_eq!(
+            error.code,
+            crate::types::errors::CommandErrorCode::ProjectTerminalPersistenceFailed
+        );
+        let configs = ProjectRepository::new(&database.connection)
+            .list_project_terminal_configs(project.id)
+            .expect("list terminal configs after registry insert failure");
+        assert!(configs.is_empty());
+        assert!(!manager.contains(-1));
     }
 }
