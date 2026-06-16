@@ -439,9 +439,7 @@ describe("IssuesActivity", () => {
     await user.click(await screen.findByRole("button", { name: issue.title }));
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    expect(
-      within(dialog).getByRole("button", { name: "Close issue dialog" }),
-    ).toHaveFocus();
+    expect(dialog).toHaveFocus();
     expect(within(dialog).getByText(issue.title)).toBeInTheDocument();
     expect(within(dialog).getByText(issue.description)).toBeInTheDocument();
     expect(dialog.querySelector(".issue-detail__divider")).toBeInTheDocument();
@@ -923,6 +921,7 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Agent profile")).toHaveFocus();
     expect(
       within(dialog).getByRole("heading", { name: "Run Issue #20" }),
     ).toBeInTheDocument();
@@ -944,6 +943,38 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByLabelText("Run summary"),
     ).not.toBeInTheDocument();
+  });
+
+  it("focuses the issue summary dialog container instead of the close button", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [completedIssue] });
+    getIssueSummaryMock.mockResolvedValue({
+      issue: completedIssue,
+      sessionStartedAt: 1_780_634_000_000,
+      sessionClosedAt: 1_780_635_000_000,
+      completion: {
+        option: "complete_manual",
+        result: "completed",
+        commitHash: "abc1234",
+        failureReason: null,
+        headBefore: null,
+        headAfter: null,
+        changedFilesJson: null,
+        createdAt: 1_780_635_000_000,
+        source: "issue_action",
+      },
+      diagnostics: [],
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Completed issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "View Summary" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
+    expect(dialog).toHaveFocus();
   });
 
   it("submits the generated prompt snapshot when starting", async () => {

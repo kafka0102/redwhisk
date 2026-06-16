@@ -38,6 +38,7 @@ export function TemporarySessionDialog({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLFormElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -89,7 +90,7 @@ export function TemporarySessionDialog({
   }, [projectId]);
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
+    titleInputRef.current?.focus();
   }, []);
 
   const selectedProfile = useMemo(
@@ -204,6 +205,7 @@ export function TemporarySessionDialog({
             <label className="settings-field">
               <span>Title</span>
               <input
+                ref={titleInputRef}
                 aria-label="Session title"
                 className="settings-input"
                 value={title}

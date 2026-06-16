@@ -21,7 +21,7 @@ export function IssueSummaryDialog({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
+    dialogRef.current?.focus();
   }, []);
 
   useEffect(() => {
@@ -102,6 +102,7 @@ export function IssueSummaryDialog({
         aria-modal="true"
         className="issue-dialog issue-dialog--compact"
         role="dialog"
+        tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
         <div className="issue-dialog__header">

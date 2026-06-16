@@ -102,6 +102,7 @@ export function IssueFormDialog({
         aria-modal="true"
         className={`issue-dialog${isBacklogDialog ? " issue-dialog--backlog" : ""}`}
         role="dialog"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
         onSubmit={onSubmit}
       >

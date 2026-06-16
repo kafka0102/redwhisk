@@ -523,6 +523,7 @@ describe("AgentsActivity", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Session Dialog" });
     expect(dialog).toBeInTheDocument();
+    expect(screen.getByLabelText("Session title")).toHaveFocus();
     expect(screen.getByLabelText("Session title")).toHaveValue(
       "Untitled Session",
     );
@@ -3010,6 +3011,7 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("button", { name: "View Summary" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
+    expect(dialog).toHaveFocus();
     expect(
       within(dialog).getByText("Commit hash: abc1234"),
     ).toBeInTheDocument();
