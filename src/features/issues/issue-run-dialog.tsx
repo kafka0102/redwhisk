@@ -40,6 +40,7 @@ export function IssueRunDialog({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const profileSelectRef = useRef<HTMLSelectElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -107,8 +108,12 @@ export function IssueRunDialog({
   }, [issue, projectId]);
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
+    if (isLoadingProfiles || profiles.length === 0) {
+      return;
+    }
+
+    profileSelectRef.current?.focus();
+  }, [isLoadingProfiles, profiles.length]);
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
@@ -231,6 +236,7 @@ export function IssueRunDialog({
             <label className="settings-field">
               <span>Agent profile</span>
               <select
+                ref={profileSelectRef}
                 aria-label="Agent profile"
                 className="settings-input"
                 disabled={

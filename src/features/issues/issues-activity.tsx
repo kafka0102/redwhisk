@@ -137,7 +137,7 @@ export function IssuesActivity({
       return;
     }
 
-    closeButtonRef.current?.focus();
+    dialogFormRef.current?.focus();
   }, [dialogMode, selectedIssue?.status]);
 
   const lanes = useMemo(
