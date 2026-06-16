@@ -5,8 +5,10 @@ use crate::core::project_terminal_service::ProjectTerminalService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
-    ReadProjectTerminalInput, ReadProjectTerminalResult, ResizeProjectTerminalInput,
-    RestoreProjectTerminalInput, RestoreProjectTerminalResult, WriteProjectTerminalInput,
+    DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
+    ListProjectTerminalsResult, ReadProjectTerminalInput, ReadProjectTerminalResult,
+    ResizeProjectTerminalInput, RestoreProjectTerminalInput, RestoreProjectTerminalResult,
+    UpdateProjectTerminalConfigInput, UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
 };
 
 #[tauri::command]
@@ -32,6 +34,21 @@ pub fn read_project_terminal(
 ) -> Result<ReadProjectTerminalResult, CommandError> {
     let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
     ProjectTerminalService::read_terminal_snapshot_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn list_project_terminals(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ListProjectTerminalsInput,
+) -> Result<ListProjectTerminalsResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::list_project_terminals_in_data_dir(
         data_dir,
         input,
         &state.project_terminals,
@@ -92,6 +109,36 @@ pub fn close_project_terminal(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
     ProjectTerminalService::close_terminal_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn update_project_terminal_config(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: UpdateProjectTerminalConfigInput,
+) -> Result<UpdateProjectTerminalConfigResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::update_project_terminal_config_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn delete_project_terminal_config(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteProjectTerminalConfigInput,
+) -> Result<DeleteProjectTerminalConfigResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::delete_project_terminal_config_in_data_dir(
         data_dir,
         input,
         &state.project_terminals,

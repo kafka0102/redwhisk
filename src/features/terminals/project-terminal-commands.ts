@@ -1,12 +1,25 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
+export interface ProjectTerminalSummary {
+  configId: number;
+  sessionId: number;
+  name: string;
+  workingDir: string;
+  launchCommand: string;
+}
+
 export interface CreateProjectTerminalInput {
   projectId: number;
 }
 
-export interface CreateProjectTerminalResult {
-  sessionId: number;
-  name: string;
+export type CreateProjectTerminalResult = ProjectTerminalSummary;
+
+export interface ListProjectTerminalsInput {
+  projectId: number;
+}
+
+export interface ListProjectTerminalsResult {
+  terminals: ProjectTerminalSummary[];
 }
 
 export interface ReadProjectTerminalInput {
@@ -52,6 +65,28 @@ export interface CloseProjectTerminalInput {
   sessionId: number;
 }
 
+export interface UpdateProjectTerminalConfigInput {
+  projectId: number;
+  configId: number;
+  name: string;
+  workingDir: string;
+  launchCommand: string;
+}
+
+export interface UpdateProjectTerminalConfigResult {
+  terminal: ProjectTerminalSummary;
+}
+
+export interface DeleteProjectTerminalConfigInput {
+  projectId: number;
+  configId: number;
+}
+
+export interface DeleteProjectTerminalConfigResult {
+  configId: number;
+  sessionId: number | null;
+}
+
 export function createProjectTerminal(
   input: CreateProjectTerminalInput,
 ): Promise<CreateProjectTerminalResult> {
@@ -64,6 +99,14 @@ export function readProjectTerminal(
   input: ReadProjectTerminalInput,
 ): Promise<ReadProjectTerminalResult> {
   return invokeCommand<ReadProjectTerminalResult>("read_project_terminal", {
+    input,
+  });
+}
+
+export function listProjectTerminals(
+  input: ListProjectTerminalsInput,
+): Promise<ListProjectTerminalsResult> {
+  return invokeCommand<ListProjectTerminalsResult>("list_project_terminals", {
     input,
   });
 }
@@ -92,4 +135,22 @@ export function closeProjectTerminal(
   input: CloseProjectTerminalInput,
 ): Promise<void> {
   return invokeCommand("close_project_terminal", { input });
+}
+
+export function updateProjectTerminalConfig(
+  input: UpdateProjectTerminalConfigInput,
+): Promise<UpdateProjectTerminalConfigResult> {
+  return invokeCommand<UpdateProjectTerminalConfigResult>(
+    "update_project_terminal_config",
+    { input },
+  );
+}
+
+export function deleteProjectTerminalConfig(
+  input: DeleteProjectTerminalConfigInput,
+): Promise<DeleteProjectTerminalConfigResult> {
+  return invokeCommand<DeleteProjectTerminalConfigResult>(
+    "delete_project_terminal_config",
+    { input },
+  );
 }

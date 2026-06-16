@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use crate::agent::pty_session_manager::PtySessionManager;
+use crate::core::project_terminal_service::{ProjectTerminalRegistry, ProjectTerminalService};
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
@@ -134,7 +136,7 @@ impl<'connection> ProjectService<'connection> {
     pub fn list_projects_in_data_dir(
         data_dir: impl AsRef<Path>,
     ) -> Result<ProjectListResponse, CommandError> {
-        let database = open_project_database(data_dir)?;
+        let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).list_projects()
     }
@@ -142,19 +144,39 @@ impl<'connection> ProjectService<'connection> {
     pub fn open_project_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: OpenProjectInput,
+        project_terminals: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
     ) -> Result<ProjectSummary, CommandError> {
-        let database = open_project_database(data_dir)?;
+        let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
-        ProjectService::new(repository).open_project(input)
+        let project = ProjectService::new(repository).open_project(input)?;
+        let project_id = project.id;
+        let _ = ProjectTerminalService::restore_project_terminals_in_data_dir(
+            data_dir.as_ref(),
+            project_id,
+            project_terminals,
+            pty_sessions,
+        );
+        Ok(project)
     }
 
     pub fn open_project_for_window_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: OpenProjectInput,
+        project_terminals: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
     ) -> Result<ProjectSummary, CommandError> {
-        let database = open_project_database(data_dir)?;
+        let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
-        ProjectService::new(repository).open_project_for_window(input)
+        let project = ProjectService::new(repository).open_project_for_window(input)?;
+        let project_id = project.id;
+        let _ = ProjectTerminalService::restore_project_terminals_in_data_dir(
+            data_dir.as_ref(),
+            project_id,
+            project_terminals,
+            pty_sessions,
+        );
+        Ok(project)
     }
 
     pub fn record_project_opened_in_data_dir(

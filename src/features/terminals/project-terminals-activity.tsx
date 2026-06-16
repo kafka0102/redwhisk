@@ -1,13 +1,14 @@
 import {
+  type CSSProperties,
   type Dispatch,
   type SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
-import { Plus, X } from "lucide-react";
+import { ChevronRight, Pencil, Plus, X } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -16,15 +17,17 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
-import {
-  DEFAULT_TERMINAL_CARD_BACKGROUND,
-  type ProjectTerminalsActivityState,
-} from "./project-terminals-activity-state";
+import { ProjectTerminalEditDialog } from "./project-terminal-edit-dialog";
 import { ProjectTerminal } from "./project-terminal";
 import {
-  closeProjectTerminal,
   createProjectTerminal,
+  deleteProjectTerminalConfig,
+  listProjectTerminals,
 } from "./project-terminal-commands";
+import type {
+  ProjectTerminalCardState,
+  ProjectTerminalsActivityState,
+} from "./project-terminals-activity-state";
 
 interface ProjectTerminalsActivityProps {
   onStateChange: Dispatch<SetStateAction<ProjectTerminalsActivityState>>;
@@ -35,43 +38,51 @@ interface ProjectTerminalsActivityProps {
 }
 
 const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
+const ACTIVE_TERMINAL_CARD_BACKGROUND = "color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))";
+const ACTIVE_TERMINAL_CARD_BORDER = "color-mix(in srgb, var(--color-accent) 52%, var(--color-border-strong))";
+const INACTIVE_TERMINAL_CARD_BACKGROUND = "var(--color-surface)";
+const INACTIVE_TERMINAL_CARD_BORDER = "var(--color-border)";
 
 export function ProjectTerminalsActivity({
   onStateChange,
   projectId,
+  projectPath,
   state,
 }: ProjectTerminalsActivityProps) {
   const { messages } = useI18n();
   const [creatingTerminal, setCreatingTerminal] = useState(false);
-  const [terminalStatusMessage, setTerminalStatusMessage] = useState<
-    string | null
-  >(null);
-  const [closingTerminalId, setClosingTerminalId] = useState<number | null>(
+  const [closingConfigId, setClosingConfigId] = useState<number | null>(null);
+  const [hydratingTerminals, setHydratingTerminals] = useState(false);
+  const [terminalStatusMessage, setTerminalStatusMessage] = useState<string | null>(
+    null,
+  );
+  const [editingTerminal, setEditingTerminal] = useState<ProjectTerminalCardState | null>(
     null,
   );
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
   } | null>(null);
-  const {
-    selectedSessionId,
-    selectedTerminalColor,
-    sidebarWidth,
-    terminalCards,
-  } = state;
+  const { hasHydrated, selectedConfigId, sidebarWidth, terminalCards } = state;
 
-  const activeTerminal =
-    terminalCards.find((card) => card.sessionId === selectedSessionId) ??
-    terminalCards[0] ??
-    null;
+  const activeTerminal = useMemo(() => {
+    const selectedTerminal =
+      terminalCards.find((card) => card.configId === selectedConfigId) ?? null;
+    return selectedTerminal ?? terminalCards[0] ?? null;
+  }, [selectedConfigId, terminalCards]);
 
-  function selectTerminal(sessionId: number) {
-    onStateChange((currentState) => ({
-      ...currentState,
-      selectedSessionId: sessionId,
-      selectedTerminalColor: getRandomSelectedTerminalColor(),
-    }));
-  }
+  const activeSessionId =
+    activeTerminal && activeTerminal.sessionId !== 0 ? activeTerminal.sessionId : null;
+
+  const selectTerminal = useCallback(
+    (configId: number) => {
+      onStateChange((currentState) => ({
+        ...currentState,
+        selectedConfigId: configId,
+      }));
+    },
+    [onStateChange],
+  );
 
   const setSidebarWidth = useCallback(
     (width: SetStateAction<number>) => {
@@ -86,6 +97,42 @@ export function ProjectTerminalsActivity({
     [onStateChange],
   );
 
+  const hydrateTerminals = useCallback(async () => {
+    setHydratingTerminals(true);
+    setTerminalStatusMessage(null);
+
+    try {
+      const result = await listProjectTerminals({ projectId });
+      onStateChange((currentState) => {
+        const selectedStillExists = result.terminals.some(
+          (terminal) => terminal.configId === currentState.selectedConfigId,
+        );
+        return {
+          ...currentState,
+          hasHydrated: true,
+          selectedConfigId: selectedStillExists
+            ? currentState.selectedConfigId
+            : (result.terminals[0]?.configId ?? null),
+          terminalCards: result.terminals.map((terminal) => ({
+            configId: terminal.configId,
+            sessionId: terminal.sessionId,
+            name: terminal.name,
+            workingDir: terminal.workingDir,
+            launchCommand: terminal.launchCommand,
+          })),
+        };
+      });
+    } catch (error: unknown) {
+      setTerminalStatusMessage(toCommandError(error).message);
+      onStateChange((currentState) => ({
+        ...currentState,
+        hasHydrated: true,
+      }));
+    } finally {
+      setHydratingTerminals(false);
+    }
+  }, [onStateChange, projectId]);
+
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
       return;
@@ -95,6 +142,16 @@ export function ProjectTerminalsActivity({
     window.document.body.style.cursor = "";
     window.document.body.style.userSelect = "";
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void hydrateTerminals();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [hydrateTerminals]);
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
@@ -121,7 +178,92 @@ export function ProjectTerminalsActivity({
     };
   }, [clearDragState, setSidebarWidth]);
 
-  if (terminalCards.length === 0) {
+  async function handleCreateTerminal() {
+    if (creatingTerminal) {
+      return;
+    }
+
+    setTerminalStatusMessage(null);
+    setCreatingTerminal(true);
+
+    try {
+      const terminal = await createProjectTerminal({ projectId });
+      onStateChange((currentState) => ({
+        ...currentState,
+        hasHydrated: true,
+        selectedConfigId: terminal.configId,
+        terminalCards: [
+          ...currentState.terminalCards,
+          {
+            configId: terminal.configId,
+            sessionId: terminal.sessionId,
+            name: terminal.name,
+            workingDir: terminal.workingDir,
+            launchCommand: terminal.launchCommand,
+          },
+        ],
+      }));
+    } catch (error: unknown) {
+      setTerminalStatusMessage(toCommandError(error).message);
+    } finally {
+      setCreatingTerminal(false);
+    }
+  }
+
+  async function handleDeleteTerminal(configId: number) {
+    setTerminalStatusMessage(null);
+    setClosingConfigId(configId);
+
+    try {
+      await deleteProjectTerminalConfig({ projectId, configId });
+      onStateChange((currentState) => {
+        const remainingCards = currentState.terminalCards.filter(
+          (card) => card.configId !== configId,
+        );
+        const nextSelectedConfigId =
+          currentState.selectedConfigId === configId
+            ? (remainingCards[0]?.configId ?? null)
+            : currentState.selectedConfigId;
+
+        return {
+          ...currentState,
+          selectedConfigId: nextSelectedConfigId,
+          terminalCards: remainingCards,
+        };
+      });
+      if (editingTerminal?.configId === configId) {
+        setEditingTerminal(null);
+      }
+    } catch (error: unknown) {
+      setTerminalStatusMessage(toCommandError(error).message);
+    } finally {
+      setClosingConfigId(null);
+    }
+  }
+
+  function handleTerminalSaved(terminal: ProjectTerminalCardState) {
+    onStateChange((currentState) => ({
+      ...currentState,
+      terminalCards: currentState.terminalCards.map((card) =>
+        card.configId === terminal.configId ? terminal : card,
+      ),
+    }));
+    setEditingTerminal(null);
+  }
+
+  const showEmptyState = hasHydrated && terminalCards.length === 0 && !hydratingTerminals;
+
+  if (!hasHydrated || hydratingTerminals) {
+    return (
+      <main className="activity-surface activity-surface--terminals-empty">
+        <p className="project-terminals-loading" role="status">
+          {messages.settings.loadingTerminals}
+        </p>
+      </main>
+    );
+  }
+
+  if (showEmptyState) {
     return (
       <main className="activity-surface activity-surface--terminals-empty">
         <Button
@@ -138,239 +280,199 @@ export function ProjectTerminalsActivity({
     );
   }
 
-  async function handleCreateTerminal() {
-    if (creatingTerminal) {
-      return;
-    }
-
-    setTerminalStatusMessage(null);
-    setCreatingTerminal(true);
-
-    try {
-      const terminal = await createProjectTerminal({ projectId });
-      onStateChange((currentState) => ({
-        ...currentState,
-        selectedSessionId: terminal.sessionId,
-        selectedTerminalColor: getRandomSelectedTerminalColor(),
-        terminalCards: [
-          ...currentState.terminalCards,
-          {
-            sessionId: terminal.sessionId,
-            name: terminal.name,
-          },
-        ],
-      }));
-    } catch (error: unknown) {
-      setTerminalStatusMessage(toCommandError(error).message);
-    } finally {
-      setCreatingTerminal(false);
-    }
-  }
-
-  async function handleDeleteTerminal(sessionId: number) {
-    setTerminalStatusMessage(null);
-    setClosingTerminalId(sessionId);
-
-    try {
-      await closeProjectTerminal({ projectId, sessionId });
-      onStateChange((currentState) => {
-        const remainingCards = currentState.terminalCards.filter(
-          (card) => card.sessionId !== sessionId,
-        );
-        const nextSelectedSessionId =
-          currentState.selectedSessionId === sessionId
-            ? remainingCards[0]?.sessionId ?? null
-            : currentState.selectedSessionId;
-
-        return {
-          ...currentState,
-          selectedSessionId: nextSelectedSessionId,
-          selectedTerminalColor:
-            nextSelectedSessionId === null
-              ? DEFAULT_TERMINAL_CARD_BACKGROUND
-              : getRandomSelectedTerminalColor(),
-          terminalCards: remainingCards,
-        };
-      });
-    } catch (error: unknown) {
-      setTerminalStatusMessage(toCommandError(error).message);
-    } finally {
-      setClosingTerminalId(null);
-    }
-  }
-
   return (
-    <main
-      className="activity-surface activity-surface--terminals"
-      style={
-        {
-          "--project-terminals-sidebar-width": `${sidebarWidth}px`,
-        } as CSSProperties
-      }
-    >
-      <aside className="project-terminals-sidebar" aria-label="Project terminals">
-        <div className="project-terminals-sidebar__header">
-          <div className="project-terminals-sidebar__header-copy">
-            <h2>{messages.settings.terminals}</h2>
-          </div>
-          <Button
-            aria-label={messages.settings.newTerminal}
-            className="project-terminals-sidebar__create"
-            disabled={creatingTerminal}
-            size="icon"
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              void handleCreateTerminal();
-            }}
-          >
-            <Plus aria-hidden="true" size={15} strokeWidth={2} />
-          </Button>
-        </div>
-
-        {terminalStatusMessage ? (
-          <p className="issues-status" role="status" aria-label="Terminals status">
-            {terminalStatusMessage}
-          </p>
-        ) : null}
-
-        <div className="project-terminals-card-list">
-          {terminalCards.map((terminalCard) => {
-            const isActive = activeTerminal?.sessionId === terminalCard.sessionId;
-
-            return (
-              <section
-                key={terminalCard.sessionId}
-                className="project-terminals-card-shell"
-                style={
-                  {
-                    "--project-terminal-card-background":
-                      isActive
-                        ? selectedTerminalColor
-                        : DEFAULT_TERMINAL_CARD_BACKGROUND,
-                    "--project-terminal-card-border":
-                      isActive
-                        ? selectedTerminalColor
-                        : DEFAULT_TERMINAL_CARD_BORDER,
-                  } as CSSProperties
-                }
-              >
-                <button
-                  aria-label={terminalCard.name}
-                  aria-pressed={isActive}
-                  className="project-terminals-card"
-                  type="button"
-                  onClick={() => {
-                    selectTerminal(terminalCard.sessionId);
-                  }}
-                >
-                  <span className="project-terminals-card__copy">
-                    <span className="project-terminals-card__name">
-                      {terminalCard.name}
-                    </span>
-                  </span>
-                </button>
-                <button
-                  aria-label={messages.settings.deleteTerminal(
-                    terminalCard.name,
-                  )}
-                  className="project-terminals-card__delete"
-                  disabled={closingTerminalId === terminalCard.sessionId}
-                  type="button"
-                  onClick={() => {
-                    void handleDeleteTerminal(terminalCard.sessionId);
-                  }}
-                >
-                  <X size={14} strokeWidth={2} />
-                </button>
-              </section>
-            );
-          })}
-        </div>
-      </aside>
-
-      <div
-        aria-label="Resize terminals list"
-        aria-orientation="vertical"
-        aria-valuemax={PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH}
-        aria-valuemin={DEFAULT_ACTIVITY_SIDEBAR_WIDTH}
-        aria-valuenow={sidebarWidth}
-        className="project-terminals-splitter"
-        role="separator"
-        tabIndex={0}
-        onMouseDown={(event) => {
-          if (event.button !== 0) {
-            return;
-          }
-
-          event.preventDefault();
-          dragStateRef.current = {
-            startWidth: sidebarWidth,
-            startX: event.clientX,
-          };
-          window.document.body.style.cursor = "col-resize";
-          window.document.body.style.userSelect = "none";
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            setSidebarWidth((currentWidth) =>
-              clampProjectTerminalsSidebarWidth(
-                currentWidth - SIDEBAR_RESIZE_STEP,
-              ),
-            );
-          }
-
-          if (event.key === "ArrowRight") {
-            event.preventDefault();
-            setSidebarWidth((currentWidth) =>
-              clampProjectTerminalsSidebarWidth(
-                currentWidth + SIDEBAR_RESIZE_STEP,
-              ),
-            );
-          }
-
-          if (event.key === "Home") {
-            event.preventDefault();
-            setSidebarWidth(DEFAULT_ACTIVITY_SIDEBAR_WIDTH);
-          }
-
-          if (event.key === "End") {
-            event.preventDefault();
-            setSidebarWidth(PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH);
-          }
-        }}
-      />
-
-      <section className="project-terminals-workspace" aria-label="Terminal workspace">
-        {activeTerminal ? (
-          <div className="project-terminals-workspace__surface">
-            <ProjectTerminal
-              projectId={projectId}
-              sessionId={activeTerminal.sessionId}
-            />
-          </div>
-        ) : (
-          <div className="project-terminals-workspace__empty">
-            <div className="project-terminals-workspace__empty-copy">
-              <h3>{messages.settings.terminals}</h3>
-              <p>{messages.settings.noTerminals}</p>
+    <>
+      <main
+        className="activity-surface activity-surface--terminals"
+        style={
+          {
+            "--project-terminals-sidebar-width": `${sidebarWidth}px`,
+          } as CSSProperties
+        }
+      >
+        <aside className="project-terminals-sidebar" aria-label="Project terminals">
+          <div className="project-terminals-sidebar__header">
+            <div className="project-terminals-sidebar__header-copy">
+              <h2>{messages.settings.terminals}</h2>
             </div>
             <Button
               aria-label={messages.settings.newTerminal}
+              className="project-terminals-sidebar__create"
+              disabled={creatingTerminal}
+              size="icon"
               type="button"
               variant="secondary"
               onClick={() => {
                 void handleCreateTerminal();
               }}
             >
-              <Plus aria-hidden="true" size={14} strokeWidth={2} />
-              <span>{messages.settings.newTerminal}</span>
+              <Plus aria-hidden="true" size={15} strokeWidth={2} />
             </Button>
           </div>
-        )}
-      </section>
-    </main>
+
+          {terminalStatusMessage ? (
+            <p className="issues-status" role="status" aria-label="Terminals status">
+              {terminalStatusMessage}
+            </p>
+          ) : null}
+
+          <div className="project-terminals-card-list">
+            {terminalCards.map((terminalCard) => {
+              const isActive = activeTerminal?.configId === terminalCard.configId;
+
+              return (
+                <section
+                  key={terminalCard.configId}
+                  className="project-terminals-card-shell"
+                  style={
+                    {
+                      "--project-terminal-card-background": isActive
+                        ? ACTIVE_TERMINAL_CARD_BACKGROUND
+                        : INACTIVE_TERMINAL_CARD_BACKGROUND,
+                      "--project-terminal-card-border": isActive
+                        ? ACTIVE_TERMINAL_CARD_BORDER
+                        : INACTIVE_TERMINAL_CARD_BORDER,
+                    } as CSSProperties
+                  }
+                >
+                  <button
+                    aria-label={terminalCard.name}
+                    aria-pressed={isActive}
+                    className="project-terminals-card"
+                    type="button"
+                    onClick={() => {
+                      selectTerminal(terminalCard.configId);
+                    }}
+                  >
+                    <span className="project-terminals-card__copy">
+                      <span className="project-terminals-card__name">
+                        {terminalCard.name}
+                      </span>
+                      <span className="project-terminals-card__meta">
+                        {terminalCard.workingDir || projectPath || ""}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    aria-label={messages.settings.editTerminal(terminalCard.name)}
+                    className="project-terminals-card__edit"
+                    type="button"
+                    onClick={() => {
+                      setEditingTerminal(terminalCard);
+                    }}
+                  >
+                    <ChevronRight size={14} strokeWidth={2} />
+                    <Pencil size={12} strokeWidth={2} />
+                  </button>
+                  <button
+                    aria-label={messages.settings.deleteTerminal(terminalCard.name)}
+                    className="project-terminals-card__delete"
+                    disabled={closingConfigId === terminalCard.configId}
+                    type="button"
+                    onClick={() => {
+                      void handleDeleteTerminal(terminalCard.configId);
+                    }}
+                  >
+                    <X size={14} strokeWidth={2} />
+                  </button>
+                </section>
+              );
+            })}
+          </div>
+        </aside>
+
+        <div
+          aria-label="Resize terminals list"
+          aria-orientation="vertical"
+          aria-valuemax={PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH}
+          aria-valuemin={DEFAULT_ACTIVITY_SIDEBAR_WIDTH}
+          aria-valuenow={sidebarWidth}
+          className="project-terminals-splitter"
+          role="separator"
+          tabIndex={0}
+          onMouseDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+
+            event.preventDefault();
+            dragStateRef.current = {
+              startWidth: sidebarWidth,
+              startX: event.clientX,
+            };
+            window.document.body.style.cursor = "col-resize";
+            window.document.body.style.userSelect = "none";
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              setSidebarWidth((currentWidth) =>
+                clampProjectTerminalsSidebarWidth(
+                  currentWidth - SIDEBAR_RESIZE_STEP,
+                ),
+              );
+            }
+
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              setSidebarWidth((currentWidth) =>
+                clampProjectTerminalsSidebarWidth(
+                  currentWidth + SIDEBAR_RESIZE_STEP,
+                ),
+              );
+            }
+
+            if (event.key === "Home") {
+              event.preventDefault();
+              setSidebarWidth(DEFAULT_ACTIVITY_SIDEBAR_WIDTH);
+            }
+
+            if (event.key === "End") {
+              event.preventDefault();
+              setSidebarWidth(PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH);
+            }
+          }}
+        />
+
+        <section className="project-terminals-workspace" aria-label="Terminal workspace">
+          {activeTerminal && activeSessionId !== null ? (
+            <div className="project-terminals-workspace__surface">
+              <ProjectTerminal projectId={projectId} sessionId={activeSessionId} />
+            </div>
+          ) : (
+            <div className="project-terminals-workspace__empty">
+              <div className="project-terminals-workspace__empty-copy">
+                <h3>{activeTerminal?.name ?? messages.settings.terminals}</h3>
+                <p>{messages.settings.terminalUnavailable}</p>
+              </div>
+              <Button
+                aria-label={messages.settings.newTerminal}
+                disabled={creatingTerminal}
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  void handleCreateTerminal();
+                }}
+              >
+                <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                <span>{messages.settings.newTerminal}</span>
+              </Button>
+            </div>
+          )}
+        </section>
+      </main>
+
+      {editingTerminal ? (
+        <ProjectTerminalEditDialog
+          projectId={projectId}
+          terminal={editingTerminal}
+          onClose={() => {
+            setEditingTerminal(null);
+          }}
+          onSaved={handleTerminalSaved}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -379,20 +481,4 @@ function clampProjectTerminalsSidebarWidth(width: number) {
     PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH,
     Math.max(DEFAULT_ACTIVITY_SIDEBAR_WIDTH, width),
   );
-}
-const DEFAULT_TERMINAL_CARD_BORDER = "var(--color-border)";
-const SELECTED_TERMINAL_CARD_COLORS = [
-  "#fde68a",
-  "#bfdbfe",
-  "#c7f9cc",
-  "#fecdd3",
-  "#ddd6fe",
-  "#fdba74",
-];
-
-function getRandomSelectedTerminalColor() {
-  const colorIndex = Math.floor(
-    Math.random() * SELECTED_TERMINAL_CARD_COLORS.length,
-  );
-  return SELECTED_TERMINAL_CARD_COLORS[colorIndex] ?? "#fde68a";
 }
