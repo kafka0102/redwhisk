@@ -77,6 +77,119 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
 }
 
 #[test]
+fn project_terminal_config_migration_creates_expected_schema() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let table_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'project_terminal_configs'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("project_terminal_configs table count");
+    assert_eq!(table_count, 1);
+
+    let columns = table_columns(&database.connection, "project_terminal_configs");
+    assert_eq!(
+        columns,
+        vec![
+            "id",
+            "project_id",
+            "name",
+            "working_dir",
+            "launch_command",
+            "created_at",
+            "updated_at",
+        ],
+    );
+
+    let project_id_index_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('project_terminal_configs') WHERE name = 'idx_project_terminal_configs_project_id'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("project_id index count");
+    assert_eq!(project_id_index_count, 1);
+}
+
+#[test]
+fn repository_persists_project_terminal_config_lifecycle() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let repository = ProjectRepository::new(&database.connection);
+    let project = repository
+        .insert(
+            "sample-repo",
+            "/tmp/sample-repo",
+            ProjectCompletionPolicy::Manual,
+        )
+        .expect("insert project");
+
+    let inserted = repository
+        .insert_project_terminal_config(project.id, "New Terminal", "/tmp/sample-repo", "")
+        .expect("insert terminal config");
+
+    assert!(inserted.id > 0);
+    assert_eq!(inserted.project_id, project.id);
+    assert_eq!(inserted.name, "New Terminal");
+    assert_eq!(inserted.working_dir, "/tmp/sample-repo");
+    assert_eq!(inserted.launch_command, "");
+    assert!(inserted.created_at > 1_700_000_000_000);
+    assert_eq!(inserted.created_at, inserted.updated_at);
+
+    let listed = repository
+        .list_project_terminal_configs(project.id)
+        .expect("list terminal configs");
+    assert_eq!(listed, vec![inserted.clone()]);
+
+    let updated = repository
+        .update_project_terminal_config(
+            inserted.id,
+            "Server",
+            "/tmp/sample-repo/apps/api",
+            "pnpm dev",
+        )
+        .expect("update terminal config");
+
+    assert_eq!(updated.id, inserted.id);
+    assert_eq!(updated.project_id, project.id);
+    assert_eq!(updated.name, "Server");
+    assert_eq!(updated.working_dir, "/tmp/sample-repo/apps/api");
+    assert_eq!(updated.launch_command, "pnpm dev");
+    assert!(updated.updated_at >= updated.created_at);
+
+    let listed_after_update = repository
+        .list_project_terminal_configs(project.id)
+        .expect("list updated terminal configs");
+    assert_eq!(listed_after_update, vec![updated]);
+
+    repository
+        .delete_project_terminal_config(inserted.id)
+        .expect("delete terminal config");
+    let listed_after_delete = repository
+        .list_project_terminal_configs(project.id)
+        .expect("list after delete");
+    assert!(listed_after_delete.is_empty());
+}
+
+#[test]
 fn project_integer_id_migration_converts_existing_text_schema() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = DatabaseConfig::new(temp_dir.path())
@@ -389,7 +502,10 @@ fn repository_insert_is_idempotent_for_existing_repo_path() {
         first_project.completion_policy,
         redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
     );
-    assert_eq!(first_project.completion_policy, second_project.completion_policy);
+    assert_eq!(
+        first_project.completion_policy,
+        second_project.completion_policy
+    );
     let count: i64 = database
         .connection
         .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
@@ -696,7 +812,10 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
     assert_eq!(updated.name, "RedWhisk Desktop");
     assert_eq!(
         updated.repo_path,
-        repo_dir.canonicalize().expect("canonical repo").to_string_lossy()
+        repo_dir
+            .canonicalize()
+            .expect("canonical repo")
+            .to_string_lossy()
     );
     assert_eq!(
         updated.completion_policy,
@@ -827,10 +946,9 @@ fn validate_project_repo_path_returns_canonical_path_and_suggested_name() {
     let repo_dir = temp_dir.path().join("sample-repo");
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
 
-    let response = ProjectService::validate_project_repo_path(
-        repo_dir.join(".").to_string_lossy().as_ref(),
-    )
-    .expect("validated repo");
+    let response =
+        ProjectService::validate_project_repo_path(repo_dir.join(".").to_string_lossy().as_ref())
+            .expect("validated repo");
 
     assert_eq!(
         response.repo_path,

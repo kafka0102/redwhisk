@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::agent::pty_session_manager::{read_terminal_snapshot, PtySessionManager, PtySpawnRequest};
+use crate::agent::pty_session_manager::{
+    read_terminal_snapshot, PtySessionManager, PtySpawnRequest,
+};
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
@@ -64,7 +66,11 @@ impl ProjectTerminalRegistry {
         Ok(())
     }
 
-    fn find(&self, project_id: i64, session_id: i64) -> Result<ProjectTerminalSession, CommandError> {
+    fn find(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<ProjectTerminalSession, CommandError> {
         self.sessions
             .lock()
             .map_err(|_| project_terminal_persistence_error("Project Terminal 查询失败。"))?
@@ -77,7 +83,9 @@ impl ProjectTerminalRegistry {
                     "Project Terminal 不存在。",
                 )
                 .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
-                .with_detail(ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id))
+                .with_detail(
+                    ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id),
+                )
             })
     }
 
@@ -89,7 +97,11 @@ impl ProjectTerminalRegistry {
         }
     }
 
-    fn remove(&self, project_id: i64, session_id: i64) -> Result<ProjectTerminalSession, CommandError> {
+    fn remove(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<ProjectTerminalSession, CommandError> {
         let mut sessions = self
             .sessions
             .lock()
@@ -132,11 +144,20 @@ impl<'connection> ProjectTerminalService<'connection> {
         let session_id = registry.allocate_session_id();
         let log_path = terminal_log_path(data_dir.as_ref(), project.id, session_id)?;
         let shell_command = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        let config = self
+            .project_repository
+            .insert_project_terminal_config(
+                project.id,
+                DEFAULT_PROJECT_TERMINAL_NAME,
+                &project.repo_path,
+                &shell_command,
+            )
+            .map_err(project_terminal_database_error)?;
 
         let pending = pty_sessions
             .spawn_pending(&PtySpawnRequest {
-                command: shell_command,
-                working_dir: project.repo_path.clone(),
+                command: config.launch_command.clone(),
+                working_dir: config.working_dir.clone(),
                 log_path: log_path.to_string_lossy().to_string(),
                 initial_prompt: None,
                 rows: 32,
@@ -162,8 +183,11 @@ impl<'connection> ProjectTerminalService<'connection> {
         });
 
         Ok(CreateProjectTerminalResult {
+            config_id: config.id,
             session_id,
-            name: DEFAULT_PROJECT_TERMINAL_NAME.to_string(),
+            name: config.name,
+            working_dir: config.working_dir,
+            launch_command: config.launch_command,
         })
     }
 
@@ -307,7 +331,11 @@ impl<'connection> ProjectTerminalService<'connection> {
     ) -> Result<ReadProjectTerminalResult, CommandError> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).read_terminal_snapshot(input, registry, pty_sessions)
+        ProjectTerminalService::new(repository).read_terminal_snapshot(
+            input,
+            registry,
+            pty_sessions,
+        )
     }
 
     pub fn write_terminal_input_in_data_dir(
@@ -499,7 +527,10 @@ mod tests {
             .expect("create terminal");
 
         assert!(created.session_id < 0);
+        assert!(created.config_id > 0);
         assert_eq!(created.name, "New Terminal");
+        assert_eq!(created.working_dir, current_repo.to_string_lossy());
+        assert!(!created.launch_command.is_empty());
 
         service
             .write_terminal_input(

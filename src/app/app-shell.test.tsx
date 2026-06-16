@@ -62,8 +62,11 @@ describe("AppShell terminals activity persistence", () => {
     createProjectTerminalMock.mockReset();
     closeProjectTerminalMock.mockReset();
     createProjectTerminalMock.mockResolvedValue({
+      configId: 101,
       sessionId: -1,
       name: "local-dev-web",
+      workingDir: "/tmp/redwhisk",
+      launchCommand: "/bin/zsh",
     });
     closeProjectTerminalMock.mockResolvedValue(undefined);
   });

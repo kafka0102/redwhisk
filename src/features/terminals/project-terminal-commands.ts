@@ -1,12 +1,25 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
+export interface ProjectTerminalSummary {
+  configId: number;
+  sessionId: number;
+  name: string;
+  workingDir: string;
+  launchCommand: string;
+}
+
 export interface CreateProjectTerminalInput {
   projectId: number;
 }
 
-export interface CreateProjectTerminalResult {
-  sessionId: number;
-  name: string;
+export type CreateProjectTerminalResult = ProjectTerminalSummary;
+
+export interface ListProjectTerminalsInput {
+  projectId: number;
+}
+
+export interface ListProjectTerminalsResult {
+  terminals: ProjectTerminalSummary[];
 }
 
 export interface ReadProjectTerminalInput {
@@ -50,6 +63,19 @@ export interface ResizeProjectTerminalInput {
 export interface CloseProjectTerminalInput {
   projectId: number;
   sessionId: number;
+}
+
+export interface UpdateProjectTerminalConfigInput {
+  projectId: number;
+  configId: number;
+  name: string;
+  workingDir: string;
+  launchCommand: string;
+}
+
+export interface DeleteProjectTerminalConfigInput {
+  projectId: number;
+  configId: number;
 }
 
 export function createProjectTerminal(

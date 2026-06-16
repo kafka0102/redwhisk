@@ -56,12 +56,18 @@ describe("ProjectTerminalsActivity", () => {
     closeProjectTerminalMock.mockReset();
     createProjectTerminalMock
       .mockResolvedValueOnce({
+        configId: 101,
         sessionId: -1,
         name: "local-dev-web",
+        workingDir: "/tmp/redwhisk",
+        launchCommand: "/bin/zsh",
       })
       .mockResolvedValueOnce({
+        configId: 102,
         sessionId: -2,
         name: "local-dev-incident",
+        workingDir: "/tmp/redwhisk/apps/api",
+        launchCommand: "pnpm dev",
       });
     closeProjectTerminalMock.mockResolvedValue(undefined);
   });
