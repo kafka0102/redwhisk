@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
-  listAgentSkills,
   saveProjectLabel,
   type AgentProfileRecord,
-  type AgentSkillRecord,
   type ProjectLabelRecord,
   type ProjectLabelScope,
 } from "./settings-commands";
+import { parseDefaultSkills } from "./agent-profile-skills";
 
 const PRESET_COLORS = [
   "#E11D48",
@@ -49,8 +48,6 @@ export function ProjectLabelForm({
     label?.agentProfileId ? String(label.agentProfileId) : "none",
   );
   const [workflowSkill, setWorkflowSkill] = useState(label?.workflowSkill ?? "");
-  const [skills, setSkills] = useState<AgentSkillRecord[]>([]);
-  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -67,46 +64,14 @@ export function ProjectLabelForm({
   const selectedProfile =
     selectableProfiles.find((profile) => String(profile.id) === agentProfileId) ?? null;
   const hasSelectedAgent = selectedProfile !== null;
-  const hasWorkflowSkills = skills.length > 0;
-
-  const loadSkillsForProfile = useCallback(
-    async (profile: AgentProfileRecord | null) => {
-      if (!profile) {
-        setSkills([]);
-        setIsLoadingSkills(false);
-        return;
-      }
-
-      setIsLoadingSkills(true);
-      setStatusMessage(null);
-
-      try {
-        const response = await listAgentSkills({
-          agentType: profile.agentType,
-          projectId: profile.scope === "global" ? null : projectId,
-        });
-        setSkills(response.skills);
-        setWorkflowSkill((currentSkill) =>
-          response.skills.some((skill) => skill.name === currentSkill) ? currentSkill : "",
-        );
-      } catch (error: unknown) {
-        setSkills([]);
-        setWorkflowSkill("");
-        setStatusMessage(toCommandError(error).message);
-      } finally {
-        setIsLoadingSkills(false);
-      }
-    },
-    [projectId],
+  const availableWorkflowSkills = useMemo(
+    () => (selectedProfile ? parseDefaultSkills(selectedProfile.defaultSkill) : []),
+    [selectedProfile],
   );
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadSkillsForProfile(selectedProfile);
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [loadSkillsForProfile, selectedProfile]);
+  const hasWorkflowSkills = availableWorkflowSkills.length > 0;
+  const selectedWorkflowSkill = availableWorkflowSkills.includes(workflowSkill)
+    ? workflowSkill
+    : "";
 
   function validateName(nextName: string) {
     const trimmed = nextName.trim();
@@ -139,8 +104,8 @@ export function ProjectLabelForm({
         color,
         agentProfileId: selectedProfile?.id ?? null,
         workflowSkill:
-          hasSelectedAgent && hasWorkflowSkills && workflowSkill.trim().length > 0
-            ? workflowSkill
+          hasSelectedAgent && hasWorkflowSkills && selectedWorkflowSkill.trim().length > 0
+            ? selectedWorkflowSkill
             : null,
       });
       onSaved(saved);
@@ -211,7 +176,6 @@ export function ProjectLabelForm({
               onChange={(event) => {
                 const nextScope = event.target.value as ProjectLabelScope;
                 setScope(nextScope);
-                setSkills([]);
                 if (
                   agentProfileId !== "none" &&
                   !profiles.some((profile) => {
@@ -267,7 +231,6 @@ export function ProjectLabelForm({
                 const nextValue = event.target.value;
                 setAgentProfileId(nextValue);
                 setWorkflowSkill("");
-                setSkills([]);
               }}
             >
               <option value="none">{messages.settings.none}</option>
@@ -285,14 +248,13 @@ export function ProjectLabelForm({
               <select
                 aria-label="Workflow Skill"
                 className="settings-input"
-                disabled={isLoadingSkills}
-                value={workflowSkill}
+                value={selectedWorkflowSkill}
                 onChange={(event) => setWorkflowSkill(event.target.value)}
               >
                 <option value="">{messages.settings.none}</option>
-                {skills.map((skill) => (
-                  <option key={skill.path} value={skill.name}>
-                    {skill.name}
+                {availableWorkflowSkills.map((skillName) => (
+                  <option key={skillName} value={skillName}>
+                    {skillName}
                   </option>
                 ))}
               </select>

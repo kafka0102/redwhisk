@@ -432,6 +432,20 @@ describe("ProjectSettingsActivity", () => {
   it("opens the new label form and hides workflow skill until an agent is selected", async () => {
     const user = userEvent.setup();
     saveProjectLabelMock.mockResolvedValue(projectLabel);
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          profiles: [
+            {
+              ...projectProfile,
+              defaultSkill: JSON.stringify(["label-skill-a", "label-skill-b"]),
+            },
+          ],
+        };
+      }
+
+      return { profiles: [globalProfile] };
+    });
 
     render(
       <ProjectSettingsActivity
@@ -455,18 +469,31 @@ describe("ProjectSettingsActivity", () => {
 
     await user.selectOptions(screen.getByLabelText("Agent"), "1");
 
-    await waitFor(() =>
-      expect(listAgentSkillsMock).toHaveBeenLastCalledWith({
-        agentType: "codex",
-        projectId: 1,
-      }),
-    );
-    expect(screen.getByLabelText("Workflow Skill")).toBeInTheDocument();
+    const workflowSkill = await screen.findByLabelText("Workflow Skill");
+    expect(workflowSkill).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "label-skill-a" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "label-skill-b" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "codex-project" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps workflow skill hidden when the selected agent has no workflow skills", async () => {
     const user = userEvent.setup();
-    listAgentSkillsMock.mockResolvedValue(skillResponse([]));
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          profiles: [
+            {
+              ...projectProfile,
+              defaultSkill: "",
+            },
+          ],
+        };
+      }
+
+      return { profiles: [globalProfile] };
+    });
 
     render(
       <ProjectSettingsActivity
@@ -482,12 +509,6 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "New label" }));
     await user.selectOptions(screen.getByLabelText("Agent"), "1");
 
-    await waitFor(() =>
-      expect(listAgentSkillsMock).toHaveBeenLastCalledWith({
-        agentType: "codex",
-        projectId: 1,
-      }),
-    );
     expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
   });
 
