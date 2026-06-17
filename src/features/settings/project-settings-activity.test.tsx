@@ -464,6 +464,33 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.getByLabelText("Workflow Skill")).toBeInTheDocument();
   });
 
+  it("keeps workflow skill hidden when the selected agent has no workflow skills", async () => {
+    const user = userEvent.setup();
+    listAgentSkillsMock.mockResolvedValue(skillResponse([]));
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    await user.click(screen.getByRole("button", { name: "New label" }));
+    await user.selectOptions(screen.getByLabelText("Agent"), "1");
+
+    await waitFor(() =>
+      expect(listAgentSkillsMock).toHaveBeenLastCalledWith({
+        agentType: "codex",
+        projectId: 1,
+      }),
+    );
+    expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
+  });
+
   it("opens edit label dialog when clicking a label name and deletes labels", async () => {
     const user = userEvent.setup();
 
