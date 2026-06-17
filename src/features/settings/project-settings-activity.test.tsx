@@ -433,18 +433,18 @@ describe("ProjectSettingsActivity", () => {
     const user = userEvent.setup();
     saveProjectLabelMock.mockResolvedValue(projectLabel);
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") {
+      if (scope === "global") {
         return {
           profiles: [
             {
-              ...projectProfile,
+              ...globalProfile,
               defaultSkill: JSON.stringify(["label-skill-a", "label-skill-b"]),
             },
           ],
         };
       }
 
-      return { profiles: [globalProfile] };
+      return { profiles: [projectProfile] };
     });
 
     render(
@@ -461,13 +461,13 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "New label" }));
 
     expect(screen.getByRole("dialog", { name: "New label" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Scope")).toHaveValue("project");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("autocapitalize", "none");
+    expect(screen.getByLabelText("Scope")).toHaveValue("global");
     expect(screen.getByLabelText("Color")).toHaveValue("#e11d48");
     expect(screen.getByLabelText("Agent")).toHaveValue("none");
     expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Agent"), "1");
+    await user.selectOptions(screen.getByLabelText("Agent"), "2");
 
     const workflowSkill = await screen.findByLabelText("Workflow Skill");
     expect(workflowSkill).toBeInTheDocument();
@@ -481,18 +481,18 @@ describe("ProjectSettingsActivity", () => {
   it("keeps workflow skill hidden when the selected agent has no workflow skills", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") {
+      if (scope === "global") {
         return {
           profiles: [
             {
-              ...projectProfile,
+              ...globalProfile,
               defaultSkill: "",
             },
           ],
         };
       }
 
-      return { profiles: [globalProfile] };
+      return { profiles: [projectProfile] };
     });
 
     render(
@@ -507,7 +507,7 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Labels" }));
     await user.click(screen.getByRole("button", { name: "New label" }));
-    await user.selectOptions(screen.getByLabelText("Agent"), "1");
+    await user.selectOptions(screen.getByLabelText("Agent"), "2");
 
     expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
   });
