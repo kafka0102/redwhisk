@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -67,30 +67,46 @@ export function ProjectLabelForm({
   const selectedProfile =
     selectableProfiles.find((profile) => String(profile.id) === agentProfileId) ?? null;
   const hasSelectedAgent = selectedProfile !== null;
+  const hasWorkflowSkills = skills.length > 0;
 
-  async function loadSkillsForProfile(profile: AgentProfileRecord | null) {
-    if (!profile) {
-      setSkills([]);
-      setIsLoadingSkills(false);
-      return;
-    }
+  const loadSkillsForProfile = useCallback(
+    async (profile: AgentProfileRecord | null) => {
+      if (!profile) {
+        setSkills([]);
+        setIsLoadingSkills(false);
+        return;
+      }
 
-    setIsLoadingSkills(true);
-    setStatusMessage(null);
+      setIsLoadingSkills(true);
+      setStatusMessage(null);
 
-    try {
-      const response = await listAgentSkills({
-        agentType: profile.agentType,
-        projectId: profile.scope === "global" ? null : projectId,
-      });
-      setSkills(response.skills);
-    } catch (error: unknown) {
-      setSkills([]);
-      setStatusMessage(toCommandError(error).message);
-    } finally {
-      setIsLoadingSkills(false);
-    }
-  }
+      try {
+        const response = await listAgentSkills({
+          agentType: profile.agentType,
+          projectId: profile.scope === "global" ? null : projectId,
+        });
+        setSkills(response.skills);
+        setWorkflowSkill((currentSkill) =>
+          response.skills.some((skill) => skill.name === currentSkill) ? currentSkill : "",
+        );
+      } catch (error: unknown) {
+        setSkills([]);
+        setWorkflowSkill("");
+        setStatusMessage(toCommandError(error).message);
+      } finally {
+        setIsLoadingSkills(false);
+      }
+    },
+    [projectId],
+  );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadSkillsForProfile(selectedProfile);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadSkillsForProfile, selectedProfile]);
 
   function validateName(nextName: string) {
     const trimmed = nextName.trim();
@@ -122,7 +138,10 @@ export function ProjectLabelForm({
         projectId: scope === "project" ? projectId : null,
         color,
         agentProfileId: selectedProfile?.id ?? null,
-        workflowSkill: hasSelectedAgent && workflowSkill.trim().length > 0 ? workflowSkill : null,
+        workflowSkill:
+          hasSelectedAgent && hasWorkflowSkills && workflowSkill.trim().length > 0
+            ? workflowSkill
+            : null,
       });
       onSaved(saved);
     } catch (error: unknown) {
@@ -246,12 +265,9 @@ export function ProjectLabelForm({
               value={agentProfileId}
               onChange={(event) => {
                 const nextValue = event.target.value;
-                const nextProfile =
-                  selectableProfiles.find((profile) => String(profile.id) === nextValue) ?? null;
                 setAgentProfileId(nextValue);
                 setWorkflowSkill("");
                 setSkills([]);
-                void loadSkillsForProfile(nextProfile);
               }}
             >
               <option value="none">{messages.settings.none}</option>
@@ -263,7 +279,7 @@ export function ProjectLabelForm({
             </select>
           </label>
 
-          {hasSelectedAgent ? (
+          {hasSelectedAgent && hasWorkflowSkills ? (
             <label className="settings-field">
               <span>{messages.settings.workflowSkill}</span>
               <select
