@@ -42,7 +42,7 @@ export function ProjectLabelForm({
 }: ProjectLabelFormProps) {
   const { messages } = useI18n();
   const [name, setName] = useState(label?.name ?? "");
-  const [scope, setScope] = useState<ProjectLabelScope>(label?.scope ?? "project");
+  const [scope, setScope] = useState<ProjectLabelScope>(label?.scope ?? "global");
   const [color, setColor] = useState(label?.color ?? PRESET_COLORS[0]);
   const [agentProfileId, setAgentProfileId] = useState<string>(
     label?.agentProfileId ? String(label.agentProfileId) : "none",
@@ -151,6 +151,7 @@ export function ProjectLabelForm({
             <span>{messages.settings.name}</span>
             <input
               aria-label="Name"
+              autoCapitalize="none"
               className="settings-input"
               value={name}
               onChange={(event) => {
