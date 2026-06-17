@@ -4,6 +4,7 @@ use crate::agent::command_detector::{AgentCommandDetector, ShellAgentCommandDete
 use crate::db::agent_profile_repository::AgentProfileRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
+use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
@@ -11,9 +12,14 @@ use crate::types::agent_profile::{
     ValidateAgentWorktreePathInput, ValidateAgentWorktreePathResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
+use crate::types::project_label::{
+    DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse, ProjectLabelRecord,
+    ProjectLabelScope, SaveProjectLabelInput,
+};
 
 pub struct SettingsService<'connection, TDetector> {
     repository: AgentProfileRepository<'connection>,
+    project_label_repository: ProjectLabelRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
     detector: TDetector,
 }
@@ -24,11 +30,13 @@ where
 {
     pub fn new(
         repository: AgentProfileRepository<'connection>,
+        project_label_repository: ProjectLabelRepository<'connection>,
         project_repository: ProjectRepository<'connection>,
         detector: TDetector,
     ) -> Self {
         Self {
             repository,
+            project_label_repository,
             project_repository,
             detector,
         }
@@ -76,6 +84,31 @@ where
         Ok(AgentProfileListResponse { profiles })
     }
 
+    pub fn list_project_labels(
+        &self,
+        input: ListProjectLabelsInput,
+    ) -> Result<ProjectLabelListResponse, CommandError> {
+        if input.scope == ProjectLabelScope::Project {
+            let project_id = input.project_id.ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "项目级 Label 必须指定 project_id。",
+                )
+            })?;
+            self.ensure_project_exists(project_id)?;
+        }
+
+        let labels = self
+            .project_label_repository
+            .list_labels_by_scope(&input.scope, input.project_id)
+            .map_err(settings_database_error)?
+            .into_iter()
+            .map(project_label_record_from_row)
+            .collect();
+
+        Ok(ProjectLabelListResponse { labels })
+    }
+
     pub fn save_agent_profile(
         &self,
         input: SaveAgentProfileInput,
@@ -118,6 +151,52 @@ where
         Ok(agent_profile_record_from_row(row))
     }
 
+    pub fn save_project_label(
+        &self,
+        input: SaveProjectLabelInput,
+    ) -> Result<ProjectLabelRecord, CommandError> {
+        let name = validate_project_label_name(&input.name)?;
+        let color = validate_project_label_color(&input.color)?;
+        let workflow_skill = normalize_optional_string(input.workflow_skill.as_deref());
+        let project_id = match input.scope {
+            ProjectLabelScope::Project => Some(input.project_id.ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "项目级 Label 必须指定 project_id。",
+                )
+                .with_detail(ErrorDetail::new("Field").with_value("name", "projectId"))
+            })?),
+            ProjectLabelScope::Global => None,
+        };
+
+        if let Some(project_id) = project_id {
+            self.ensure_project_exists(project_id)?;
+        }
+
+        self.ensure_label_name_unique(&name, &input.scope, project_id, input.id)?;
+        self.validate_label_agent_assignment(
+            &input.scope,
+            project_id,
+            input.agent_profile_id,
+            workflow_skill.as_deref(),
+        )?;
+
+        let row = self
+            .project_label_repository
+            .save_label(
+                input.id,
+                &name,
+                &input.scope,
+                project_id,
+                &color,
+                input.agent_profile_id,
+                workflow_skill.as_deref(),
+            )
+            .map_err(settings_database_error)?;
+
+        Ok(project_label_record_from_row(row))
+    }
+
     pub fn validate_agent_worktree_path(
         &self,
         input: ValidateAgentWorktreePathInput,
@@ -145,6 +224,23 @@ where
             "Agent Profile 不存在或已删除。",
         )
         .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", input.id)))
+    }
+
+    pub fn delete_project_label(&self, input: DeleteProjectLabelInput) -> Result<(), CommandError> {
+        let deleted = self
+            .project_label_repository
+            .soft_delete_label(input.id)
+            .map_err(settings_database_error)?;
+
+        if deleted {
+            return Ok(());
+        }
+
+        Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Label 不存在或已删除。",
+        )
+        .with_detail(ErrorDetail::new("ProjectLabel").with_value("labelId", input.id)))
     }
 
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
@@ -196,6 +292,98 @@ where
         .with_detail(ErrorDetail::new("Field").with_value("name", "worktreePath"))
         .with_detail(ErrorDetail::new("WorktreePath").with_value("path", path)))
     }
+
+    fn ensure_label_name_unique(
+        &self,
+        name: &str,
+        scope: &ProjectLabelScope,
+        project_id: Option<i64>,
+        excluding_id: Option<i64>,
+    ) -> Result<(), CommandError> {
+        let duplicate = self
+            .project_label_repository
+            .find_duplicate_name(name, scope, project_id, excluding_id)
+            .map_err(settings_database_error)?;
+
+        if duplicate.is_none() {
+            return Ok(());
+        }
+
+        let message = match scope {
+            ProjectLabelScope::Project => "同一项目内的 Label 名称必须唯一。",
+            ProjectLabelScope::Global => "全局 Label 名称必须在所有项目和全局范围内唯一。",
+        };
+
+        Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            message,
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "name")))
+    }
+
+    fn validate_label_agent_assignment(
+        &self,
+        scope: &ProjectLabelScope,
+        project_id: Option<i64>,
+        agent_profile_id: Option<i64>,
+        workflow_skill: Option<&str>,
+    ) -> Result<(), CommandError> {
+        if workflow_skill.is_some() && agent_profile_id.is_none() {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentProfileValidationFailed,
+                "未选择 Agent 时不能设置 Workflow Skill。",
+            )
+            .with_detail(ErrorDetail::new("Field").with_value("name", "workflowSkill")));
+        }
+
+        let Some(agent_profile_id) = agent_profile_id else {
+            return Ok(());
+        };
+
+        let profile = self
+            .repository
+            .find_profile_by_id(agent_profile_id)
+            .map_err(settings_database_error)?
+            .filter(|profile| profile.del == 0)
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "关联的 Agent Profile 不存在。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentProfile").with_value("agentProfileId", agent_profile_id),
+                )
+            })?;
+
+        match scope {
+            ProjectLabelScope::Global => {
+                if profile.scope != AgentScope::Global {
+                    return Err(CommandError::new(
+                        CommandErrorCode::AgentProfileValidationFailed,
+                        "全局 Label 只能关联全局 Agent。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("AgentProfile")
+                            .with_value("agentProfileId", agent_profile_id),
+                    ));
+                }
+            }
+            ProjectLabelScope::Project => {
+                if profile.scope == AgentScope::Project && profile.project_id != project_id {
+                    return Err(CommandError::new(
+                        CommandErrorCode::AgentProfileValidationFailed,
+                        "项目级 Label 只能关联当前项目或全局 Agent。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("AgentProfile")
+                            .with_value("agentProfileId", agent_profile_id),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl SettingsService<'_, ShellAgentCommandDetector> {
@@ -204,9 +392,11 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
     ) -> Result<AgentCommandCheckResult, CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
+            project_label_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -219,9 +409,11 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
     ) -> Result<AgentCommandCheckResult, CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
+            project_label_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -234,9 +426,11 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
     ) -> Result<AgentProfileListResponse, CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
+            project_label_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -249,9 +443,11 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
     ) -> Result<AgentProfileRecord, CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
+            project_label_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -264,9 +460,11 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
     ) -> Result<ValidateAgentWorktreePathResult, CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
+            project_label_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -279,13 +477,66 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
     ) -> Result<(), CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
+            project_label_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
         .delete_agent_profile(input)
+    }
+
+    pub fn list_project_labels_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ListProjectLabelsInput,
+    ) -> Result<ProjectLabelListResponse, CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .list_project_labels(input)
+    }
+
+    pub fn save_project_label_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SaveProjectLabelInput,
+    ) -> Result<ProjectLabelRecord, CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .save_project_label(input)
+    }
+
+    pub fn delete_project_label_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteProjectLabelInput,
+    ) -> Result<(), CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .delete_project_label(input)
     }
 }
 
@@ -327,6 +578,22 @@ fn agent_profile_record_from_row(
     }
 }
 
+fn project_label_record_from_row(
+    row: crate::db::project_label_repository::ProjectLabelRow,
+) -> ProjectLabelRecord {
+    ProjectLabelRecord {
+        id: row.id,
+        name: row.name,
+        scope: row.scope,
+        project_id: row.project_id,
+        color: row.color,
+        agent_profile_id: row.agent_profile_id,
+        agent_name: row.agent_name,
+        workflow_skill: row.workflow_skill,
+        del: row.del,
+    }
+}
+
 fn validate_name(name: &str) -> Result<String, CommandError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -353,6 +620,58 @@ fn validate_command(command: &str) -> Result<String, CommandError> {
     Ok(trimmed.to_string())
 }
 
+fn validate_project_label_name(name: &str) -> Result<String, CommandError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Label 名称不能为空。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
+    }
+
+    if trimmed.chars().count() > 15 {
+        return Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Label 名称最多 15 个字符。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn validate_project_label_color(color: &str) -> Result<String, CommandError> {
+    let trimmed = color.trim();
+    let is_hex = trimmed.len() == 7
+        && trimmed.starts_with('#')
+        && trimmed
+            .chars()
+            .skip(1)
+            .all(|char| char.is_ascii_hexdigit());
+
+    if !is_hex {
+        return Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Label 颜色必须是 #RRGGBB 格式。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "color")));
+    }
+
+    Ok(trimmed.to_uppercase())
+}
+
+fn normalize_optional_string(value: Option<&str>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 fn agent_command_error(message: String) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentCommandUnavailable,
@@ -367,4 +686,250 @@ fn settings_database_error(error: rusqlite::Error) -> CommandError {
         "设置保存失败。",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::command_detector::AgentCommandDetector;
+    use crate::db::connection::DatabaseConfig;
+    use crate::db::migrations::MigrationRunner;
+    use crate::types::agent_profile::{AgentScope, AgentType, SaveAgentProfileInput};
+    use crate::types::project::ProjectCompletionPolicy;
+    use rusqlite::Connection;
+
+    #[derive(Default)]
+    struct TestDetector;
+
+    impl AgentCommandDetector for TestDetector {
+        fn detect_codex_command(&self) -> Result<String, String> {
+            Ok("codex".to_string())
+        }
+
+        fn test_command(&self, command: &str) -> Result<String, String> {
+            Ok(command.to_string())
+        }
+    }
+
+    #[test]
+    fn save_project_label_rejects_name_longer_than_fifteen_chars() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_id = insert_project(&database.connection, "repo-a");
+
+        let error = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "1234567890abcdef".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_id),
+                color: "#112233".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect_err("long label should fail");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    }
+
+    #[test]
+    fn save_project_label_rejects_duplicate_name_within_same_project() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_id = insert_project(&database.connection, "repo-a");
+
+        service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_id),
+                color: "#112233".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect("first label");
+
+        let error = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_id),
+                color: "#445566".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect_err("duplicate should fail");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    }
+
+    #[test]
+    fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_id = insert_project(&database.connection, "repo-a");
+
+        service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_id),
+                color: "#112233".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect("project label");
+
+        let error = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Global,
+                project_id: None,
+                color: "#445566".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect_err("global duplicate should fail");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    }
+
+    #[test]
+    fn save_project_label_rejects_workflow_skill_without_agent() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_id = insert_project(&database.connection, "repo-a");
+
+        let error = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_id),
+                color: "#112233".to_string(),
+                agent_profile_id: None,
+                workflow_skill: Some("skill-a".to_string()),
+            })
+            .expect_err("workflow skill without agent should fail");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    }
+
+    #[test]
+    fn save_project_label_allows_same_name_in_other_project() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_a = insert_project(&database.connection, "repo-a");
+        let project_b = insert_project(&database.connection, "repo-b");
+
+        service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_a),
+                color: "#112233".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect("project a label");
+
+        let saved = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "ops".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_b),
+                color: "#445566".to_string(),
+                agent_profile_id: None,
+                workflow_skill: None,
+            })
+            .expect("project b label");
+
+        assert_eq!(saved.name, "ops");
+        assert_eq!(saved.project_id, Some(project_b));
+    }
+
+    #[test]
+    fn save_global_label_rejects_project_agent_profile() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_id = insert_project(&database.connection, "repo-a");
+        let project_agent_id = insert_agent_profile(&service, Some(project_id), AgentScope::Project);
+
+        let error = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "release".to_string(),
+                scope: ProjectLabelScope::Global,
+                project_id: None,
+                color: "#112233".to_string(),
+                agent_profile_id: Some(project_agent_id),
+                workflow_skill: None,
+            })
+            .expect_err("global label should reject project agent");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    }
+
+    fn test_database(data_dir: &std::path::Path) -> crate::db::connection::Database {
+        let database = DatabaseConfig::new(data_dir).open().expect("database");
+        MigrationRunner::default()
+            .run(&database.connection)
+            .expect("migrations");
+        database
+    }
+
+    fn test_settings_service<'a>(connection: &'a Connection) -> SettingsService<'a, TestDetector> {
+        SettingsService::new(
+            AgentProfileRepository::new(connection),
+            ProjectLabelRepository::new(connection),
+            ProjectRepository::new(connection),
+            TestDetector,
+        )
+    }
+
+    fn insert_project(connection: &Connection, repo_name: &str) -> i64 {
+        ProjectRepository::new(connection)
+            .insert(
+                repo_name,
+                &format!("/tmp/{repo_name}"),
+                ProjectCompletionPolicy::Manual,
+            )
+            .expect("project")
+            .id
+    }
+
+    fn insert_agent_profile(
+        service: &SettingsService<'_, TestDetector>,
+        project_id: Option<i64>,
+        scope: AgentScope,
+    ) -> i64 {
+        service
+            .save_agent_profile(SaveAgentProfileInput {
+                id: None,
+                name: format!("agent-{scope:?}"),
+                agent_type: AgentType::Codex,
+                command: "codex".to_string(),
+                worktree_path: "".to_string(),
+                scope,
+                project_id,
+                mode: "default".to_string(),
+                dangerous: true,
+                default_skill: "".to_string(),
+                prompt_template: "".to_string(),
+            })
+            .expect("agent profile")
+            .id
+    }
 }

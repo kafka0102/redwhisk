@@ -37,14 +37,19 @@ export interface I18nMessages {
     editTerminal: (terminalName: string) => string;
     general: string;
     globalScope: string;
+    labels: string;
     loading: string;
+    loadingLabels: string;
     loadingTerminals: string;
     manual: string;
     menuLabel: string;
     name: string;
+    newLabel: string;
     newAgent: string;
     noAgents: string;
+    noLabels: string;
     noTerminals: string;
+    none: string;
     projectName: string;
     repositoryPath: string;
     terminalPath: string;
@@ -54,6 +59,8 @@ export interface I18nMessages {
     scope: string;
     splitterLabel: string;
     status: string;
+    agent: string;
+    color: string;
     terminalUnavailable: string;
     terminals: string;
     type: string;
@@ -118,17 +125,22 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       deleteConfirm: (profileName) =>
         `Are you sure you want to delete Agent Profile "${profileName}"?`,
       editTerminal: (terminalName) => `Edit terminal "${terminalName}"`,
+      labels: "Labels",
       general: "General",
       globalScope: "Global",
+      loadingLabels: "Loading labels...",
       loading: "Loading...",
       loadingTerminals: "Loading terminals...",
       manual: "Manual",
       menuLabel: "Settings menu",
       name: "Name",
+      newLabel: "New label",
       newAgent: "New agent",
+      noLabels: "No labels",
       newTerminal: "New terminal",
       noAgents: "No agents",
       noTerminals: "No terminals yet.",
+      none: "None",
       projectName: "Project Name",
       repositoryPath: "Repository path",
       terminalPath: "Terminal path",
@@ -138,6 +150,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       scope: "Scope",
       splitterLabel: "Resize settings menu",
       status: "Settings status",
+      agent: "Agent",
+      color: "Color",
       terminalUnavailable: "This terminal is not running right now.",
       terminals: "Terminals",
       type: "Type",
@@ -195,17 +209,22 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       delete: "删除",
       deleteConfirm: (profileName) => `确认删除 Agent Profile「${profileName}」吗？`,
       editTerminal: (terminalName) => `编辑终端「${terminalName}」`,
+      labels: "Labels",
       general: "通用",
       globalScope: "Global",
+      loadingLabels: "正在加载 labels...",
       loading: "加载中...",
       loadingTerminals: "正在加载终端...",
       manual: "手动",
       menuLabel: "设置菜单",
       name: "名称",
+      newLabel: "New label",
       newAgent: "New agent",
+      noLabels: "暂无 labels",
       newTerminal: "新建终端",
       noAgents: "暂无 agents",
       noTerminals: "暂无终端。",
+      none: "None",
       projectName: "Project 名称",
       repositoryPath: "仓库路径",
       terminalPath: "终端路径",
@@ -215,6 +234,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       scope: "范围",
       splitterLabel: "调整设置菜单宽度",
       status: "设置状态",
+      agent: "Agent",
+      color: "颜色",
       terminalUnavailable: "该终端当前未运行。",
       terminals: "Terminals",
       type: "类型",
