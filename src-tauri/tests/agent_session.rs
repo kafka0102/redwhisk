@@ -2379,6 +2379,7 @@ fn insert_issue_with_title(
             title: title.to_string(),
             description: "Issue description".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("create issue");
 

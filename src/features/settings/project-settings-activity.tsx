@@ -42,7 +42,7 @@ import {
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
 
-type SettingsMenu = "general" | "agents" | "labels";
+export type SettingsMenu = "general" | "agents" | "labels";
 
 interface AddFormState {
   projectId: number;
@@ -89,7 +89,9 @@ const SETTINGS_MENU_ITEMS: {
 ];
 
 interface ProjectSettingsActivityProps {
+  activeMenu?: SettingsMenu;
   completionPolicy: ProjectCompletionPolicy;
+  onMenuChange?: (menu: SettingsMenu) => void;
   onProjectUpdated?: (project: ProjectSummary) => void;
   projectId: number;
   projectName: string;
@@ -110,14 +112,18 @@ interface GeneralSettingsFormProps {
 }
 
 export function ProjectSettingsActivity({
+  activeMenu: requestedMenu = "general",
   completionPolicy,
+  onMenuChange,
   onProjectUpdated,
   projectId,
   projectName,
   projectPath = "",
 }: ProjectSettingsActivityProps) {
   const { messages } = useI18n();
-  const [activeMenu, setActiveMenu] = useState<SettingsMenu>("general");
+  const [internalActiveMenu, setInternalActiveMenu] = useState<SettingsMenu>(
+    requestedMenu,
+  );
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
@@ -162,6 +168,7 @@ export function ProjectSettingsActivity({
     startWidth: number;
     startX: number;
   } | null>(null);
+  const activeMenu = onMenuChange ? requestedMenu : internalActiveMenu;
 
   const activeMenuItem =
     SETTINGS_MENU_ITEMS.find((item) => item.key === activeMenu) ??
@@ -413,7 +420,12 @@ export function ProjectSettingsActivity({
                 className="settings-menu__item"
                 type="button"
                 aria-pressed={activeMenu === item.key}
-                onClick={() => setActiveMenu(item.key)}
+                onClick={() => {
+                  if (!onMenuChange) {
+                    setInternalActiveMenu(item.key);
+                  }
+                  onMenuChange?.(item.key);
+                }}
               >
                 <Icon
                   aria-hidden="true"

@@ -44,6 +44,7 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
           AND agent_sessions.del = 0
         LIMIT 1
     ) AS linked_session_latest_output,
+    issues.label_ids,
     issues.created_at,
     issues.updated_at
  FROM issues";
@@ -91,18 +92,20 @@ impl<'connection> IssueRepository<'connection> {
         project_id: i64,
         title: &str,
         description: &str,
+        label_ids_json: &str,
     ) -> rusqlite::Result<IssueRecord> {
         self.connection.execute(
-            "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+            "INSERT INTO issues (project_id, title, description, label_ids, status, created_at, updated_at)
              VALUES (
                ?1,
                ?2,
                ?3,
+               ?4,
                'backlog',
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )",
-            params![project_id, title, description],
+            params![project_id, title, description, label_ids_json],
         )?;
 
         let id = self.connection.last_insert_rowid();
@@ -115,18 +118,20 @@ impl<'connection> IssueRepository<'connection> {
         project_id: i64,
         title: &str,
         description: &str,
+        label_ids_json: &str,
     ) -> rusqlite::Result<IssueRecord> {
         transaction.execute(
-            "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+            "INSERT INTO issues (project_id, title, description, label_ids, status, created_at, updated_at)
              VALUES (
                ?1,
                ?2,
                ?3,
+               ?4,
                'backlog',
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )",
-            params![project_id, title, description],
+            params![project_id, title, description, label_ids_json],
         )?;
 
         let id = transaction.last_insert_rowid();
@@ -139,17 +144,19 @@ impl<'connection> IssueRepository<'connection> {
         issue_id: i64,
         title: &str,
         description: &str,
+        label_ids_json: &str,
     ) -> rusqlite::Result<Option<IssueRecord>> {
         let changed = self.connection.execute(
             "UPDATE issues
              SET title = ?1,
                  description = ?2,
+                 label_ids = ?3,
                  updated_at = MAX(
                    updated_at + 1,
                    CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
                  )
-             WHERE id = ?3 AND project_id = ?4 AND del = 0",
-            params![title, description, issue_id, project_id],
+             WHERE id = ?4 AND project_id = ?5 AND del = 0",
+            params![title, description, label_ids_json, issue_id, project_id],
         )?;
 
         if changed == 0 {
@@ -361,6 +368,8 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
         title: row.get(2)?,
         description: row.get(3)?,
         attachments: Vec::new(),
+        labels: Vec::new(),
+        label_ids: parse_label_ids_json(&row.get::<_, String>(10)?)?,
         status: issue_status_from_str(&row.get::<_, String>(4)?)?,
         linked_session_id: row.get(5)?,
         linked_session_status: row
@@ -373,8 +382,18 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
             .transpose()?,
         linked_session_log_path: row.get(8)?,
         linked_session_latest_output: row.get(9)?,
-        created_at: row.get(10)?,
-        updated_at: row.get(11)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+    })
+}
+
+fn parse_label_ids_json(value: &str) -> rusqlite::Result<Vec<i64>> {
+    serde_json::from_str::<Vec<i64>>(value).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            10,
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
     })
 }
 

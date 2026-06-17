@@ -23,7 +23,10 @@ import {
   type IssueRecord,
 } from "./issue-commands";
 import { listAgentSessions } from "../agents/agent-session-commands";
-import { listAgentProfiles } from "../settings/settings-commands";
+import {
+  listAgentProfiles,
+  listProjectLabels,
+} from "../settings/settings-commands";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 vi.mock("./issue-commands", () => ({
@@ -47,6 +50,7 @@ vi.mock("../agents/agent-session-commands", () => ({
 
 vi.mock("../settings/settings-commands", () => ({
   listAgentProfiles: vi.fn(),
+  listProjectLabels: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -140,6 +144,7 @@ const previewIssueAttachmentMock = vi.mocked(previewIssueAttachment);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
@@ -266,6 +271,28 @@ const globalProfile = {
   del: 0,
 };
 
+const projectLabel = {
+  id: 301,
+  name: "bug",
+  scope: "project" as const,
+  projectId: 1,
+  color: "#E11D48",
+  agentProfileId: null,
+  agentName: null,
+  workflowSkill: null,
+};
+
+const globalLabel = {
+  id: 302,
+  name: "release",
+  scope: "global" as const,
+  projectId: null,
+  color: "#3B82F6",
+  agentProfileId: null,
+  agentName: null,
+  workflowSkill: null,
+};
+
 const existingIssueRunPrompt = [
   "using skill bmad-dev-story for task:",
   "Existing description",
@@ -289,6 +316,7 @@ describe("IssuesActivity", () => {
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
+    listProjectLabelsMock.mockReset();
     openDialogMock.mockReset();
     saveDialogMock.mockReset();
     convertFileSrcMock.mockReset();
@@ -296,6 +324,12 @@ describe("IssuesActivity", () => {
     document.documentElement.removeAttribute("data-theme");
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    listProjectLabelsMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { labels: [] };
+      }
+      return { labels: [] };
+    });
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
     getProjectGitBranchesMock.mockResolvedValue({
       currentBranch: "main",
@@ -591,6 +625,7 @@ describe("IssuesActivity", () => {
         title: "draft local issue",
         description: "small task shape",
         attachments: [],
+        labelIds: [],
       }),
     );
     expect(
@@ -639,6 +674,7 @@ describe("IssuesActivity", () => {
             sourcePath: "/tmp/tsconfig.json",
           }),
         ],
+        labelIds: [],
       }),
     );
     expect(createIssueMock.mock.calls[0]?.[0].description).toContain(
@@ -677,6 +713,7 @@ describe("IssuesActivity", () => {
         title: "Updated issue",
         description: "Updated description",
         attachments: [],
+        labelIds: [],
       }),
     );
     expect(
@@ -710,6 +747,7 @@ describe("IssuesActivity", () => {
       title: "Failed update",
       description: "Existing description",
       attachments: [],
+      labelIds: [],
     });
     const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
     expect(
@@ -791,6 +829,68 @@ describe("IssuesActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Late issue" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("submits selected project and global label ids from the backlog dialog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    listProjectLabelsMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { labels: [projectLabel] };
+      }
+      return { labels: [globalLabel] };
+    });
+    createIssueMock.mockResolvedValue({
+      id: 24,
+      projectId: 1,
+      title: "Label issue",
+      description: "Needs a label",
+      status: "backlog",
+      labels: [projectLabel, globalLabel],
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_632_000_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.type(screen.getByLabelText("Title"), "Label issue");
+    await user.type(screen.getByLabelText("Description"), "Needs a label");
+    await user.click(screen.getByRole("button", { name: "labels" }));
+    await user.click(screen.getByRole("option", { name: "bug" }));
+    await user.click(screen.getByRole("option", { name: "release" }));
+    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent("bug");
+    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent("release");
+
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    await waitFor(() =>
+      expect(createIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        title: "Label issue",
+        description: "Needs a label",
+        attachments: [],
+        labelIds: [301, 302],
+      }),
+    );
+  });
+
+  it("opens project settings labels when the picker is empty", async () => {
+    const user = userEvent.setup();
+    const onOpenProjectSettingsLabels = vi.fn();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+
+    renderIssuesActivity({ onOpenProjectSettingsLabels });
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.click(screen.getByRole("button", { name: "labels" }));
+    await user.click(screen.getByRole("button", { name: "添加标签" }));
+
+    expect(onOpenProjectSettingsLabels).toHaveBeenCalledTimes(1);
   });
 
   it("restores the selected issue when create is canceled", async () => {

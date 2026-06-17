@@ -1,6 +1,9 @@
 import { AgentsActivity } from "../features/agents/agents-activity";
 import { IssuesActivity } from "../features/issues/issues-activity";
-import { ProjectSettingsActivity } from "../features/settings/project-settings-activity";
+import {
+  ProjectSettingsActivity,
+  type SettingsMenu,
+} from "../features/settings/project-settings-activity";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
 import {
   ProjectTerminalsActivity,
@@ -14,7 +17,10 @@ export type ActivityKey = "issues" | "agents" | "terminals" | "settings";
 interface ActivityRouterProps {
   activeActivity: ActivityKey;
   activeAgentSessionId: number | null;
+  activeProjectSettingsMenu: SettingsMenu;
   onOpenAgentsActivity: (sessionId: number) => void;
+  onOpenProjectSettingsLabels: () => void;
+  onProjectSettingsMenuChange: (menu: SettingsMenu) => void;
   onProjectUpdated: (project: ProjectSummary) => void;
   onProjectTerminalsStateChange: Dispatch<
     SetStateAction<ProjectTerminalsActivityState>
@@ -31,7 +37,10 @@ interface ActivityRouterProps {
 export function ActivityRouter({
   activeActivity,
   activeAgentSessionId,
+  activeProjectSettingsMenu,
   onOpenAgentsActivity,
+  onOpenProjectSettingsLabels,
+  onProjectSettingsMenuChange,
   onProjectUpdated,
   onProjectTerminalsStateChange,
   onSelectAgentSession,
@@ -69,8 +78,10 @@ export function ActivityRouter({
   if (activeActivity === "settings") {
     return (
       <ProjectSettingsActivity
+        activeMenu={activeProjectSettingsMenu}
         completionPolicy={projectCompletionPolicy}
         key={projectId}
+        onMenuChange={onProjectSettingsMenuChange}
         onProjectUpdated={onProjectUpdated}
         projectId={projectId}
         projectName={projectName}
@@ -82,6 +93,7 @@ export function ActivityRouter({
   return (
     <IssuesActivity
       onOpenAgentsActivity={onOpenAgentsActivity}
+      onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
       projectCompletionPolicy={projectCompletionPolicy}
       projectId={projectId}
       requestedIssueId={requestedIssueId}

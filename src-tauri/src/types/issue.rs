@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
+use crate::types::project_label::ProjectLabelScope;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -38,6 +39,16 @@ pub struct IssueAttachmentInput {
     pub mime_type: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueLabelRecord {
+    pub id: i64,
+    pub name: String,
+    pub scope: ProjectLabelScope,
+    pub project_id: Option<i64>,
+    pub color: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateIssueInput {
@@ -46,6 +57,8 @@ pub struct CreateIssueInput {
     pub description: String,
     #[serde(default)]
     pub attachments: Vec<IssueAttachmentInput>,
+    #[serde(default)]
+    pub label_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +70,8 @@ pub struct UpdateIssueInput {
     pub description: String,
     #[serde(default)]
     pub attachments: Vec<IssueAttachmentInput>,
+    #[serde(default)]
+    pub label_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -213,6 +228,10 @@ pub struct IssueRecord {
     pub description: String,
     #[serde(default)]
     pub attachments: Vec<IssueAttachmentRecord>,
+    #[serde(default)]
+    pub labels: Vec<IssueLabelRecord>,
+    #[serde(skip)]
+    pub label_ids: Vec<i64>,
     pub status: IssueStatus,
     pub linked_session_id: Option<i64>,
     pub linked_session_status: Option<AgentSessionStatus>,

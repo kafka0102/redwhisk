@@ -58,7 +58,8 @@ fn issue_migration_creates_issues_schema_with_project_index() {
             "status",
             "created_at",
             "updated_at",
-            "del"
+            "del",
+            "label_ids",
         ],
     );
     assert_eq!(
@@ -76,6 +77,10 @@ fn issue_migration_creates_issues_schema_with_project_index() {
     assert_eq!(
         table_column_type(&database.connection, "issues", "updated_at"),
         "INTEGER"
+    );
+    assert_eq!(
+        table_column_type(&database.connection, "issues", "label_ids"),
+        "TEXT"
     );
 
     let index_count: i64 = database
@@ -256,6 +261,7 @@ fn create_issue_defaults_to_backlog_and_saves_timestamps() {
             title: "  Write local issue  ".to_string(),
             description: "  Keep the shape small.  ".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
 
@@ -308,6 +314,7 @@ fn create_issue_rolls_back_issue_when_issue_action_insert_fails() {
             title: "Rollback me".to_string(),
             description: "Do not persist".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect_err("issue action insert should fail");
 
@@ -341,6 +348,7 @@ fn update_issue_trims_fields_and_advances_updated_at() {
             title: "First title".to_string(),
             description: "First description".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -358,6 +366,7 @@ fn update_issue_trims_fields_and_advances_updated_at() {
             title: "  Next title  ".to_string(),
             description: "  Next description  ".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("updated issue");
 
@@ -384,6 +393,7 @@ fn update_issue_is_scoped_to_project() {
             title: "First project issue".to_string(),
             description: "Do not leak".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
 
@@ -394,6 +404,7 @@ fn update_issue_is_scoped_to_project() {
             title: "Wrong project update".to_string(),
             description: "Should fail".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect_err("cross-project update should fail");
 
@@ -423,6 +434,7 @@ fn update_issue_rejects_missing_issue() {
             title: "Missing".to_string(),
             description: "Missing".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect_err("missing issue should fail");
 
@@ -460,6 +472,7 @@ fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
                 display_name: "draft-note.md".to_string(),
                 mime_type: Some("text/markdown".to_string()),
             }],
+            label_ids: Vec::new(),
         })
         .expect("created issue");
 
@@ -531,6 +544,7 @@ fn update_issue_removes_deleted_attachments_and_keeps_referenced_ones() {
                     mime_type: Some("text/markdown".to_string()),
                 },
             ],
+            label_ids: Vec::new(),
         })
         .expect("create issue");
     let removed_attachment = created.attachments[0].clone();
@@ -549,6 +563,7 @@ fn update_issue_removes_deleted_attachments_and_keeps_referenced_ones() {
                 display_name: kept_attachment.display_name.clone(),
                 mime_type: kept_attachment.mime_type.clone(),
             }],
+            label_ids: Vec::new(),
         })
         .expect("update issue");
 
@@ -588,6 +603,7 @@ fn preview_issue_attachment_returns_text_for_saved_and_draft_files() {
                 display_name: "preview.md".to_string(),
                 mime_type: Some("text/markdown".to_string()),
             }],
+            label_ids: Vec::new(),
         })
         .expect("create issue");
 
@@ -675,6 +691,7 @@ fn export_issue_attachment_supports_saved_and_draft_files() {
                 display_name: "export.txt".to_string(),
                 mime_type: Some("text/plain".to_string()),
             }],
+            label_ids: Vec::new(),
         })
         .expect("create issue");
     let saved_target = temp_dir.path().join("saved-copy.txt");
@@ -724,6 +741,7 @@ fn mark_issue_review_updates_running_issue_and_records_action_without_closing_se
             title: "Ready for review".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -792,6 +810,7 @@ fn mark_issue_review_rejects_non_running_issue_without_action() {
             title: "Already review".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -845,6 +864,7 @@ fn mark_issue_review_rejects_issue_without_running_linked_session() {
             title: "No session".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -890,6 +910,7 @@ fn mark_issue_review_rejects_cross_project_issue_without_action() {
             title: "Wrong project".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -942,6 +963,7 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
             title: "Ready to complete".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1019,6 +1041,7 @@ fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
             title: "Still running".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1081,6 +1104,7 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
             title: "Manual completed issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1163,6 +1187,7 @@ fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_
             title: "Manual complete after failed attempt".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1280,6 +1305,7 @@ fn complete_issue_clean_closes_running_session_and_records_audit() {
             title: "Ready to complete cleanly".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1398,6 +1424,7 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
             title: "Dirty worktree should block".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1490,6 +1517,7 @@ fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progres
             title: "Blocked clean complete".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1570,6 +1598,7 @@ fn prepare_agent_commit_completion_returns_preview_for_dirty_review_issue() {
             title: "Review issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1630,6 +1659,7 @@ fn prepare_agent_commit_completion_rejects_clean_repo() {
             title: "Review issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1691,6 +1721,7 @@ fn prepare_agent_commit_completion_records_blocked_attempt_when_git_operation_is
             title: "Blocked agent commit".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1774,6 +1805,7 @@ fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
             title: "Review issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -1881,6 +1913,7 @@ fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
             title: "Review issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2040,6 +2073,7 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
             title: "Review issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2173,6 +2207,7 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
             title: "Blocked detect".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2293,6 +2328,7 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
             title: "Worktree review issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2413,6 +2449,7 @@ fn get_issue_summary_reports_completed_session_state_mismatch() {
             title: "Completed mismatch".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2470,6 +2507,7 @@ fn update_issue_advances_timestamp_monotonically_from_future_timestamp() {
             title: "Future timestamp".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2487,6 +2525,7 @@ fn update_issue_advances_timestamp_monotonically_from_future_timestamp() {
             title: "Future timestamp updated".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("updated issue");
 
@@ -2508,6 +2547,7 @@ fn deleting_project_cascades_to_issues() {
             title: "Cascade issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
 
@@ -2545,6 +2585,7 @@ fn create_issue_rejects_empty_title_without_insert() {
             title: "   ".to_string(),
             description: "Description may exist".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect_err("empty title should fail");
 
@@ -2554,6 +2595,95 @@ fn create_issue_rejects_empty_title_without_insert() {
         .query_row("SELECT COUNT(*) FROM issues", [], |row| row.get(0))
         .expect("issue count");
     assert_eq!(count, 0);
+}
+
+#[test]
+fn create_issue_persists_label_ids_and_hydrates_labels() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "label-repo");
+    let project_label_id = insert_project_label(
+        &database.connection,
+        "ops",
+        "project",
+        Some(project_id),
+        "#112233",
+    );
+    let global_label_id =
+        insert_project_label(&database.connection, "release", "global", None, "#445566");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Issue with labels".to_string(),
+            description: "Label me".to_string(),
+            attachments: Vec::new(),
+            label_ids: vec![project_label_id, global_label_id],
+        })
+        .expect("create issue");
+
+    let stored_label_ids: String = database
+        .connection
+        .query_row(
+            "SELECT label_ids FROM issues WHERE id = ?1",
+            [issue.id],
+            |row| row.get(0),
+        )
+        .expect("stored label ids");
+
+    assert_eq!(stored_label_ids, format!("[{project_label_id},{global_label_id}]"));
+    assert_eq!(issue.labels.len(), 2);
+    assert_eq!(issue.labels[0].id, project_label_id);
+    assert_eq!(issue.labels[0].name, "ops");
+    assert_eq!(issue.labels[0].color, "#112233");
+    assert_eq!(issue.labels[1].id, global_label_id);
+    assert_eq!(issue.labels[1].name, "release");
+    assert_eq!(issue.labels[1].color, "#445566");
+}
+
+#[test]
+fn update_issue_rejects_label_from_another_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "label-owner");
+    let other_project_id = insert_project(&database.connection, "other-owner");
+    let foreign_label_id = insert_project_label(
+        &database.connection,
+        "foreign",
+        "project",
+        Some(other_project_id),
+        "#991B1B",
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Issue".to_string(),
+            description: "Description".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("create issue");
+
+    let error = service
+        .update_issue(UpdateIssueInput {
+            project_id,
+            issue_id: issue.id,
+            title: "Issue".to_string(),
+            description: "Description".to_string(),
+            attachments: Vec::new(),
+            label_ids: vec![foreign_label_id],
+        })
+        .expect_err("foreign label should fail");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
 }
 
 #[test]
@@ -2572,6 +2702,7 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
             title: "Older".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("older issue");
     let newer_issue = service
@@ -2580,6 +2711,7 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
             title: "Newer".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("newer issue");
     service
@@ -2588,6 +2720,7 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
             title: "Other project".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("other project issue");
     database
@@ -2645,6 +2778,7 @@ fn list_issues_includes_linked_session_facts() {
             title: "Linked session issue".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     let profile_id = insert_agent_profile(&database.connection);
@@ -2711,6 +2845,7 @@ fn advance_issue_status_completes_running_issue_and_closes_linked_session() {
             title: "Advance to done".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2763,6 +2898,7 @@ fn advance_issue_status_rejects_backward_transition() {
             title: "No backward".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     database
@@ -2799,6 +2935,7 @@ fn delete_issue_soft_deletes_issue_and_linked_session() {
             title: "Delete me".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     let profile_id = insert_agent_profile(&database.connection);
@@ -2863,6 +3000,7 @@ fn list_issues_ignores_standalone_sessions_in_same_project() {
             title: "Issue without linked session".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
+            label_ids: Vec::new(),
         })
         .expect("created issue");
     let profile_id = insert_agent_profile(&database.connection);
@@ -2928,6 +3066,23 @@ fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
         .insert(name, &repo_path, ProjectCompletionPolicy::AgentAutoCommit)
         .expect("insert project")
         .id
+}
+
+fn insert_project_label(
+    connection: &rusqlite::Connection,
+    name: &str,
+    scope: &str,
+    project_id: Option<i64>,
+    color: &str,
+) -> i64 {
+    connection
+        .execute(
+            "INSERT INTO project_labels (name, scope, project_id, color, del)
+             VALUES (?1, ?2, ?3, ?4, 0)",
+            rusqlite::params![name, scope, project_id, color],
+        )
+        .expect("insert project label");
+    connection.last_insert_rowid()
 }
 
 fn insert_project_with_repo_path_and_policy(
