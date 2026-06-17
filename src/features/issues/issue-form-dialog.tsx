@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Paperclip, Trash2 } from "lucide-react";
+import { Check, Plus, Paperclip, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -299,13 +299,36 @@ function IssueLabelsPicker({
   onOpenProjectLabelsSettings: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLDivElement | null>(null);
   const selectedLabels = labelIds
     .map((labelId) =>
       availableLabels.find((labelOption) => labelOption.id === labelId),
     )
     .filter((label): label is IssueLabelRecord => label !== undefined);
   const hasAvailableLabels = availableLabels.length > 0;
+
+  useEffect(() => {
+    if (!isOpen || !triggerRef.current) {
+      return;
+    }
+
+    const rect = triggerRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.left + window.scrollX,
+    });
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isOpen]);
 
   function toggleLabel(labelId: number) {
     onChange(
@@ -324,48 +347,54 @@ function IssueLabelsPicker({
     <div
       className="issue-field issue-field--labels"
       ref={rootRef}
-      onBlur={(event) => {
-        if (rootRef.current?.contains(event.relatedTarget as Node | null)) {
-          return;
-        }
-
-        setIsOpen(false);
-      }}
     >
-      <span className="issue-field__label">labels</span>
-      <div className="issue-label-picker">
-        <button
-          aria-expanded={isOpen}
-          aria-haspopup="listbox"
-          aria-label="labels"
-          className="issue-label-picker__trigger"
-          type="button"
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <span className="issue-label-picker__value">
-            {selectedLabels.length > 0 ? (
-              selectedLabels.map((label) => (
-                <span
-                  key={label.id}
-                  className="issue-label-chip"
-                  style={toIssueLabelStyle(label.color)}
-                >
-                  <span className="issue-label-chip__dot" aria-hidden="true" />
-                  <span>{label.name}</span>
-                </span>
-              ))
-            ) : (
-              <span className="issue-label-picker__placeholder">选择标签</span>
-            )}
+      <span className="issue-field__label">Labels</span>
+      <div className="issue-label-picker" ref={triggerRef}>
+        <div className="issue-label-picker__trigger-area">
+          <div className="issue-label-picker__selected">
+            {selectedLabels.map((label) => (
+              <span
+                key={label.id}
+                className="issue-label-chip"
+                style={toIssueLabelStyle(label.color)}
+              >
+                <span className="issue-label-chip__dot" aria-hidden="true" />
+                <span>{label.name}</span>
+              </span>
+            ))}
+          </div>
+          <span
+            aria-expanded={isOpen}
+            aria-haspopup="listbox"
+            aria-label="添加标签"
+            className="issue-label-picker__add-icon"
+            role="button"
+            tabIndex={0}
+            onClick={() => setIsOpen((current) => !current)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setIsOpen((current) => !current);
+              }
+            }}
+          >
+            <Plus aria-hidden="true" size={14} strokeWidth={2} />
           </span>
-          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.8} />
-        </button>
+        </div>
         {isOpen ? (
-          <div className="issue-label-picker__menu" role="listbox">
+          <div
+            className="issue-label-picker__menu issue-label-picker__menu--fixed"
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top: menuPosition.top,
+              left: menuPosition.left,
+            }}
+          >
             {labelsErrorMessage ? (
               <p className="issue-label-picker__state">{labelsErrorMessage}</p>
             ) : isLoading ? (
-              <p className="issue-label-picker__state">加载 labels...</p>
+              <p className="issue-label-picker__state">加载 Labels...</p>
             ) : hasAvailableLabels ? (
               <>
                 <div className="issue-label-picker__options">
@@ -376,30 +405,29 @@ function IssueLabelsPicker({
                       <button
                         key={label.id}
                         aria-selected={isSelected}
-                        className="issue-label-picker__option"
+                        className="issue-label-picker__option issue-label-picker__option--simple"
                         role="option"
                         tabIndex={-1}
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => toggleLabel(label.id)}
                       >
-                        <span className="issue-label-picker__option-surface">
-                          <span
-                            className="issue-label-chip"
-                            style={toIssueLabelStyle(label.color)}
-                          >
-                            <span
-                              className="issue-label-chip__dot"
-                              aria-hidden="true"
-                            />
-                            <span>{label.name}</span>
-                          </span>
+                        <span
+                          className="issue-label-picker__option-color-dot"
+                          style={{ backgroundColor: label.color }}
+                          aria-hidden="true"
+                        />
+                        <span className="issue-label-picker__option-name">
+                          {label.name}
                         </span>
-                        <span className="issue-label-picker__option-check">
-                          {isSelected ? (
-                            <Check aria-hidden="true" size={14} strokeWidth={2} />
-                          ) : null}
-                        </span>
+                        {isSelected ? (
+                          <Check
+                            className="issue-label-picker__option-check-simple"
+                            aria-hidden="true"
+                            size={14}
+                            strokeWidth={2}
+                          />
+                        ) : null}
                       </button>
                     );
                   })}
@@ -411,7 +439,7 @@ function IssueLabelsPicker({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={openLabelsSettings}
                 >
-                  管理 labels
+                  编辑 Labels
                 </button>
               </>
             ) : (
