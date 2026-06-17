@@ -1,0 +1,2 @@
+ALTER TABLE issues
+ADD COLUMN label_ids TEXT NOT NULL DEFAULT '[]';

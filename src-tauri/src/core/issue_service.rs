@@ -14,6 +14,7 @@ use crate::db::event_repository::EventRepository;
 use crate::db::issue_attachment_repository::IssueAttachmentRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
+use crate::db::project_label_repository::{ProjectLabelRepository, ProjectLabelRow};
 use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::{
@@ -34,9 +35,10 @@ use crate::types::issue::{
     DeleteIssueResult, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionOutcome,
     DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
     IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord,
-    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
-    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
+    IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus,
+    IssueSummaryCompletionInfo, IssueSummaryRecord, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SendAgentCommitPromptInput,
+    SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -186,6 +188,8 @@ impl<'connection> IssueService<'connection> {
         let project = self.require_project(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
+        let label_ids = self.validate_issue_label_ids(input.project_id, &input.label_ids)?;
+        let label_ids_json = serialize_label_ids(&label_ids)?;
         let transaction = self
             .issue_repository
             .connection()
@@ -196,6 +200,7 @@ impl<'connection> IssueService<'connection> {
             input.project_id,
             &title,
             &description,
+            &label_ids_json,
         )
         .map_err(issue_database_error)?;
         let (created_files, saved_issue) = match persist_new_attachments(
@@ -216,6 +221,7 @@ impl<'connection> IssueService<'connection> {
                         issue.id,
                         &title,
                         &rewritten_description,
+                        &label_ids_json,
                     )
                     .map_err(issue_database_error)?
                     .ok_or_else(|| issue_not_found(issue.id))?
@@ -230,6 +236,7 @@ impl<'connection> IssueService<'connection> {
         let payload_json = json!({
             "title": saved_issue.title,
             "description": saved_issue.description,
+            "labelIds": label_ids,
             "status": "backlog",
         })
         .to_string();
@@ -259,6 +266,8 @@ impl<'connection> IssueService<'connection> {
         let project = self.require_project(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
+        let label_ids = self.validate_issue_label_ids(input.project_id, &input.label_ids)?;
+        let label_ids_json = serialize_label_ids(&label_ids)?;
         let transaction = self
             .issue_repository
             .connection()
@@ -291,6 +300,7 @@ impl<'connection> IssueService<'connection> {
             input.issue_id,
             &title,
             &rewritten_description,
+            &label_ids_json,
         )
         .map_err(issue_database_error)?
         .ok_or_else(|| issue_not_found(input.issue_id))?;
@@ -1404,7 +1414,63 @@ impl<'connection> IssueService<'connection> {
             .issue_attachment_repository
             .list_by_issue_id(issue.id)
             .map_err(issue_database_error)?;
+        issue.labels = self.resolve_issue_labels(issue.project_id, &issue.label_ids)?;
         Ok(issue)
+    }
+
+    fn resolve_issue_labels(
+        &self,
+        project_id: i64,
+        label_ids: &[i64],
+    ) -> Result<Vec<IssueLabelRecord>, CommandError> {
+        let repository = ProjectLabelRepository::new(self.issue_repository.connection());
+        let mut labels = Vec::with_capacity(label_ids.len());
+
+        for label_id in label_ids {
+            let Some(label) = repository
+                .find_label_by_id(*label_id)
+                .map_err(issue_database_error)?
+            else {
+                continue;
+            };
+
+            if label.del != 0 || !is_issue_label_accessible(project_id, &label) {
+                continue;
+            }
+
+            labels.push(to_issue_label_record(label));
+        }
+
+        Ok(labels)
+    }
+
+    fn validate_issue_label_ids(
+        &self,
+        project_id: i64,
+        label_ids: &[i64],
+    ) -> Result<Vec<i64>, CommandError> {
+        let repository = ProjectLabelRepository::new(self.issue_repository.connection());
+        let mut normalized = Vec::with_capacity(label_ids.len());
+        let mut seen = HashSet::new();
+
+        for label_id in label_ids {
+            if !seen.insert(*label_id) {
+                continue;
+            }
+
+            let label = repository
+                .find_label_by_id(*label_id)
+                .map_err(issue_database_error)?
+                .ok_or_else(|| invalid_issue_label(*label_id, project_id))?;
+
+            if label.del != 0 || !is_issue_label_accessible(project_id, &label) {
+                return Err(invalid_issue_label(*label_id, project_id));
+            }
+
+            normalized.push(*label_id);
+        }
+
+        Ok(normalized)
     }
 
     fn resolve_attachment_source(
@@ -2053,6 +2119,41 @@ fn validate_title(title: &str) -> Result<String, CommandError> {
     Ok(trimmed.to_string())
 }
 
+fn serialize_label_ids(label_ids: &[i64]) -> Result<String, CommandError> {
+    serde_json::to_string(label_ids).map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })
+}
+
+fn invalid_issue_label(label_id: i64, project_id: i64) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::IssueValidationFailed,
+        "Issue labels 配置无效。",
+    )
+    .with_detail(ErrorDetail::new("IssueLabel").with_value("labelId", label_id))
+    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
+}
+
+fn is_issue_label_accessible(project_id: i64, label: &ProjectLabelRow) -> bool {
+    match label.scope {
+        crate::types::project_label::ProjectLabelScope::Global => true,
+        crate::types::project_label::ProjectLabelScope::Project => {
+            label.project_id == Some(project_id)
+        }
+    }
+}
+
+fn to_issue_label_record(label: ProjectLabelRow) -> IssueLabelRecord {
+    IssueLabelRecord {
+        id: label.id,
+        name: label.name,
+        scope: label.scope,
+        project_id: label.project_id,
+        color: label.color,
+    }
+}
+
 fn issue_not_found(issue_id: i64) -> CommandError {
     CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
         .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
@@ -2392,17 +2493,19 @@ fn update_issue_title_and_description_in_transaction(
     issue_id: i64,
     title: &str,
     description: &str,
+    label_ids_json: &str,
 ) -> rusqlite::Result<Option<IssueRecord>> {
     let changed = transaction.execute(
         "UPDATE issues
          SET title = ?1,
              description = ?2,
+             label_ids = ?3,
              updated_at = MAX(
                updated_at + 1,
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )
-         WHERE id = ?3 AND project_id = ?4",
-        rusqlite::params![title, description, issue_id, project_id],
+         WHERE id = ?4 AND project_id = ?5",
+        rusqlite::params![title, description, label_ids_json, issue_id, project_id],
     )?;
 
     if changed == 0 {

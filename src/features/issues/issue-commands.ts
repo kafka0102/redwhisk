@@ -4,12 +4,21 @@ import type { ProjectCompletionPolicy } from "../project/project-commands";
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
+export type IssueLabelScope = "project" | "global";
 export type IssueAttachmentKind =
   | "image"
   | "pdf"
   | "word"
   | "text"
   | "generic";
+
+export interface IssueLabelRecord {
+  id: number;
+  name: string;
+  scope: IssueLabelScope;
+  projectId: number | null;
+  color: string;
+}
 
 export interface IssueAttachmentRecord {
   id: number;
@@ -46,6 +55,7 @@ export interface IssueRecord {
   title: string;
   description: string;
   attachments?: IssueAttachmentRecord[];
+  labels?: IssueLabelRecord[];
   status: IssueStatus;
   linkedSessionId?: number | null;
   linkedSessionStatus?: AgentSessionStatus | null;
@@ -69,6 +79,7 @@ export interface CreateIssueInput {
   title: string;
   description: string;
   attachments?: IssueAttachmentDraftInput[];
+  labelIds?: number[];
 }
 
 export interface UpdateIssueInput {
@@ -77,6 +88,7 @@ export interface UpdateIssueInput {
   title: string;
   description: string;
   attachments?: IssueAttachmentDraftInput[];
+  labelIds?: number[];
 }
 
 export interface MarkIssueReviewInput {

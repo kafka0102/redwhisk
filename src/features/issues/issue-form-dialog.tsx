@@ -1,11 +1,12 @@
 import { Check, ChevronDown, Paperclip, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import type {
   IssueAttachmentRecord,
+  IssueLabelRecord,
   IssueRecord,
   IssueStatus,
 } from "./issue-commands";
@@ -20,6 +21,9 @@ interface IssueFormDialogProps {
   isSaving: boolean;
   canDismissWithoutCloseButton: boolean;
   errorMessage: string | null;
+  availableLabels: IssueLabelRecord[];
+  isLoadingLabels: boolean;
+  labelsErrorMessage: string | null;
   hasLinkedSession: boolean;
   isBacklogDialog: boolean;
   canViewSummary: boolean;
@@ -45,6 +49,7 @@ interface IssueFormDialogProps {
   onDeleteIssue: () => void;
   onOpenLinkedSession: () => void;
   onOpenSummary: () => void;
+  onOpenProjectLabelsSettings: () => void;
   canOpenAgentsActivity: boolean;
 }
 
@@ -55,6 +60,9 @@ export function IssueFormDialog({
   isSaving,
   canDismissWithoutCloseButton,
   errorMessage,
+  availableLabels,
+  isLoadingLabels,
+  labelsErrorMessage,
   hasLinkedSession,
   isBacklogDialog,
   canViewSummary,
@@ -74,6 +82,7 @@ export function IssueFormDialog({
   onDeleteIssue,
   onOpenLinkedSession,
   onOpenSummary,
+  onOpenProjectLabelsSettings,
   canOpenAgentsActivity,
 }: IssueFormDialogProps) {
   const isEditableDialog = mode === "create" || isBacklogDialog;
@@ -125,8 +134,12 @@ export function IssueFormDialog({
           {isEditableDialog ? (
             <IssueEditableFields
               form={form}
+              availableLabels={availableLabels}
+              isLoadingLabels={isLoadingLabels}
+              labelsErrorMessage={labelsErrorMessage}
               titleInputRef={titleInputRef}
               onFormChange={onFormChange}
+              onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
               onDownloadAttachment={onDownloadAttachment}
               onPreviewAttachment={onPreviewAttachment}
               onRemoveAttachment={onRemoveAttachment}
@@ -189,15 +202,23 @@ export function IssueFormDialog({
 
 function IssueEditableFields({
   form,
+  availableLabels,
+  isLoadingLabels,
+  labelsErrorMessage,
   titleInputRef,
   onFormChange,
+  onOpenProjectLabelsSettings,
   onDownloadAttachment,
   onPreviewAttachment,
   onRemoveAttachment,
 }: {
   form: IssueFormState;
+  availableLabels: IssueLabelRecord[];
+  isLoadingLabels: boolean;
+  labelsErrorMessage: string | null;
   titleInputRef: React.RefObject<HTMLInputElement | null>;
   onFormChange: (form: IssueFormState) => void;
+  onOpenProjectLabelsSettings: () => void;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -245,8 +266,189 @@ function IssueEditableFields({
           onRemoveAttachment={onRemoveAttachment}
         />
       </div>
+      <IssueLabelsPicker
+        availableLabels={availableLabels}
+        isLoading={isLoadingLabels}
+        labelIds={form.labelIds}
+        labelsErrorMessage={labelsErrorMessage}
+        onChange={(labelIds) =>
+          onFormChange({
+            ...form,
+            labelIds,
+          })
+        }
+        onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
+      />
     </div>
   );
+}
+
+function IssueLabelsPicker({
+  availableLabels,
+  isLoading,
+  labelIds,
+  labelsErrorMessage,
+  onChange,
+  onOpenProjectLabelsSettings,
+}: {
+  availableLabels: IssueLabelRecord[];
+  isLoading: boolean;
+  labelIds: number[];
+  labelsErrorMessage: string | null;
+  onChange: (labelIds: number[]) => void;
+  onOpenProjectLabelsSettings: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedLabels = labelIds
+    .map((labelId) =>
+      availableLabels.find((labelOption) => labelOption.id === labelId),
+    )
+    .filter((label): label is IssueLabelRecord => label !== undefined);
+  const hasAvailableLabels = availableLabels.length > 0;
+
+  function toggleLabel(labelId: number) {
+    onChange(
+      labelIds.includes(labelId)
+        ? labelIds.filter((value) => value !== labelId)
+        : [...labelIds, labelId],
+    );
+  }
+
+  function openLabelsSettings() {
+    setIsOpen(false);
+    onOpenProjectLabelsSettings();
+  }
+
+  return (
+    <div
+      className="issue-field issue-field--labels"
+      ref={rootRef}
+      onBlur={(event) => {
+        if (rootRef.current?.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+
+        setIsOpen(false);
+      }}
+    >
+      <span className="issue-field__label">labels</span>
+      <div className="issue-label-picker">
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label="labels"
+          className="issue-label-picker__trigger"
+          type="button"
+          onClick={() => setIsOpen((current) => !current)}
+        >
+          <span className="issue-label-picker__value">
+            {selectedLabels.length > 0 ? (
+              selectedLabels.map((label) => (
+                <span
+                  key={label.id}
+                  className="issue-label-chip"
+                  style={toIssueLabelStyle(label.color)}
+                >
+                  <span className="issue-label-chip__dot" aria-hidden="true" />
+                  <span>{label.name}</span>
+                </span>
+              ))
+            ) : (
+              <span className="issue-label-picker__placeholder">选择标签</span>
+            )}
+          </span>
+          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.8} />
+        </button>
+        {isOpen ? (
+          <div className="issue-label-picker__menu" role="listbox">
+            {labelsErrorMessage ? (
+              <p className="issue-label-picker__state">{labelsErrorMessage}</p>
+            ) : isLoading ? (
+              <p className="issue-label-picker__state">加载 labels...</p>
+            ) : hasAvailableLabels ? (
+              <>
+                <div className="issue-label-picker__options">
+                  {availableLabels.map((label) => {
+                    const isSelected = labelIds.includes(label.id);
+
+                    return (
+                      <button
+                        key={label.id}
+                        aria-selected={isSelected}
+                        className="issue-label-picker__option"
+                        role="option"
+                        tabIndex={-1}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => toggleLabel(label.id)}
+                      >
+                        <span className="issue-label-picker__option-surface">
+                          <span
+                            className="issue-label-chip"
+                            style={toIssueLabelStyle(label.color)}
+                          >
+                            <span
+                              className="issue-label-chip__dot"
+                              aria-hidden="true"
+                            />
+                            <span>{label.name}</span>
+                          </span>
+                        </span>
+                        <span className="issue-label-picker__option-check">
+                          {isSelected ? (
+                            <Check aria-hidden="true" size={14} strokeWidth={2} />
+                          ) : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="issue-label-picker__divider" aria-hidden="true" />
+                <button
+                  className="issue-label-picker__action"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={openLabelsSettings}
+                >
+                  管理 labels
+                </button>
+              </>
+            ) : (
+              <button
+                className="issue-label-picker__action"
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={openLabelsSettings}
+              >
+                添加标签
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function toIssueLabelStyle(color: string): CSSProperties {
+  return {
+    "--issue-label-accent": color,
+    "--issue-label-border": toIssueLabelBorder(color),
+  } as CSSProperties;
+}
+
+function toIssueLabelBorder(color: string): string {
+  const normalized = color.trim();
+  const hex = normalized.startsWith("#") ? normalized.slice(1) : normalized;
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return "rgba(127, 201, 255, 0.35)";
+  }
+
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, 0.38)`;
 }
 
 function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {

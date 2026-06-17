@@ -6,6 +6,7 @@ import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
+import type { SettingsMenu } from "../features/settings/project-settings-activity";
 import {
   getDefaultProjectTerminalsActivityState,
   type ProjectTerminalsActivityState,
@@ -39,6 +40,8 @@ export function AppShell({
 }: AppShellProps) {
   const { messages } = useI18n();
   const [activeActivity, setActiveActivity] = useState<ActivityKey>("issues");
+  const [activeProjectSettingsMenu, setActiveProjectSettingsMenu] =
+    useState<SettingsMenu>("general");
   const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
   const [activeAgentSessionId, setActiveAgentSessionId] = useState<
     number | null
@@ -158,9 +161,16 @@ export function AppShell({
                 setActiveActivity("agents");
                 setIsGlobalSettingsOpen(false);
               }}
+              onOpenProjectSettingsLabels={() => {
+                setActiveProjectSettingsMenu("labels");
+                setActiveActivity("settings");
+                setIsGlobalSettingsOpen(false);
+              }}
+              onProjectSettingsMenuChange={setActiveProjectSettingsMenu}
               onProjectUpdated={onProjectUpdated}
               onProjectTerminalsStateChange={handleProjectTerminalsStateChange}
               onSelectAgentSession={setActiveAgentSessionId}
+              activeProjectSettingsMenu={activeProjectSettingsMenu}
               projectCompletionPolicy={project.completionPolicy}
               projectId={project.id}
               projectName={project.name}

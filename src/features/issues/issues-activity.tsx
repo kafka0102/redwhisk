@@ -29,6 +29,10 @@ import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
+import {
+  listProjectLabels,
+  type ProjectLabelRecord,
+} from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
@@ -37,6 +41,7 @@ interface IssuesActivityProps {
   projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   onOpenAgentsActivity?: (sessionId: number) => void;
+  onOpenProjectSettingsLabels?: () => void;
   requestedIssueId?: number | null;
 }
 
@@ -44,6 +49,7 @@ export function IssuesActivity({
   projectCompletionPolicy,
   projectId,
   onOpenAgentsActivity,
+  onOpenProjectSettingsLabels,
   requestedIssueId = null,
 }: IssuesActivityProps) {
   const { messages } = useI18n();
@@ -64,6 +70,14 @@ export function IssuesActivity({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>([]);
+  const [labelsProjectId, setLabelsProjectId] = useState(projectId);
+  const [labelsLoadState, setLabelsLoadState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [labelsErrorMessage, setLabelsErrorMessage] = useState<string | null>(
     null,
   );
   const activeProjectIdRef = useRef(projectId);
@@ -124,6 +138,54 @@ export function IssuesActivity({
       isMounted = false;
     };
   }, [projectId, requestedIssueId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void Promise.all([
+      listProjectLabels({ scope: "project", projectId }),
+      listProjectLabels({ scope: "global", projectId: null }),
+    ])
+      .then(([projectResponse, globalResponse]) => {
+        if (!isMounted || activeProjectIdRef.current !== projectId) {
+          return;
+        }
+
+        setAvailableLabels(
+          [...projectResponse.labels, ...globalResponse.labels].sort((left, right) => {
+            if (left.scope !== right.scope) {
+              return left.scope === "project" ? -1 : 1;
+            }
+
+            return left.name.localeCompare(right.name);
+          }),
+        );
+        setLabelsProjectId(projectId);
+        setLabelsErrorMessage(null);
+        setLabelsLoadState("ready");
+      })
+      .catch((error: unknown) => {
+        if (!isMounted || activeProjectIdRef.current !== projectId) {
+          return;
+        }
+
+        setAvailableLabels([]);
+        setLabelsProjectId(projectId);
+        setLabelsErrorMessage(toCommandError(error).message);
+        setLabelsLoadState("error");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  const currentAvailableLabels =
+    labelsProjectId === projectId ? availableLabels : [];
+  const currentLabelsErrorMessage =
+    labelsProjectId === projectId ? labelsErrorMessage : null;
+  const isLoadingLabels =
+    labelsProjectId !== projectId || labelsLoadState === "loading";
 
   const selectedIssue = useMemo(
     () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
@@ -242,6 +304,7 @@ export function IssuesActivity({
             form.attachments,
           ),
           attachments: serializeAttachments(form.attachments),
+          labelIds: form.labelIds,
         });
         if (activeProjectIdRef.current !== requestProjectId) {
           return;
@@ -261,6 +324,7 @@ export function IssuesActivity({
             form.attachments,
           ),
           attachments: serializeAttachments(form.attachments),
+          labelIds: form.labelIds,
         });
         if (activeProjectIdRef.current !== requestProjectId) {
           return;
@@ -682,6 +746,9 @@ export function IssuesActivity({
           isSaving={isSaving}
           canDismissWithoutCloseButton={canDismissWithoutCloseButton}
           errorMessage={dialogErrorMessage}
+          availableLabels={currentAvailableLabels}
+          isLoadingLabels={isLoadingLabels}
+          labelsErrorMessage={currentLabelsErrorMessage}
           hasLinkedSession={hasLinkedSession}
           isBacklogDialog={isBacklogDialog}
           canViewSummary={canViewSummary}
@@ -706,6 +773,9 @@ export function IssuesActivity({
           onDeleteIssue={() => void handleDeleteIssue()}
           onOpenLinkedSession={openLinkedSession}
           onOpenSummary={handleOpenSummary}
+          onOpenProjectLabelsSettings={() => {
+            onOpenProjectSettingsLabels?.();
+          }}
         />
       ) : null}
 
@@ -744,6 +814,7 @@ function issueToForm(issue: IssueRecord): IssueFormState {
     title: issue.title,
     description: parsed.description,
     attachments: parsed.attachments,
+    labelIds: (issue.labels ?? []).map((label) => label.id),
   };
 }
 
@@ -941,8 +1012,17 @@ function hasUnsavedDialogChanges(
   return (
     form.title !== baseline.title ||
     form.description !== baseline.description ||
+    !haveSameLabelIds(form.labelIds, baseline.labelIds) ||
     !haveSameAttachments(form.attachments, baseline.attachments)
   );
+}
+
+function haveSameLabelIds(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((labelId, index) => labelId === right[index]);
 }
 
 function haveSameAttachments(

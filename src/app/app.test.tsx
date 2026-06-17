@@ -10,6 +10,7 @@ import {
   updateIssue,
   type IssueRecord,
 } from "../features/issues/issue-commands";
+import { listProjectLabels } from "../features/settings/settings-commands";
 import {
   createProject,
   initializeLocalData,
@@ -48,6 +49,10 @@ vi.mock("../features/issues/issue-commands", () => ({
   updateIssue: vi.fn(),
 }));
 
+vi.mock("../features/settings/settings-commands", () => ({
+  listProjectLabels: vi.fn(),
+}));
+
 vi.mock("../features/issues/issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     ariaLabel,
@@ -75,6 +80,7 @@ const openDialogMock = vi.mocked(open);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
+const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const updateIssueMock = vi.mocked(updateIssue);
 const createProjectMock = vi.mocked(createProject);
 const initializeLocalDataMock = vi.mocked(initializeLocalData);
@@ -99,6 +105,7 @@ describe("App project entry", () => {
     validateProjectRepoPathMock.mockReset();
     createIssueMock.mockReset();
     listIssuesMock.mockReset();
+    listProjectLabelsMock.mockReset();
     updateIssueMock.mockReset();
     getCurrentWindowMock.mockClear();
     mockAppWindow.isMaximized.mockReset();
@@ -134,6 +141,7 @@ describe("App project entry", () => {
     };
     listProjectsMock.mockImplementation(async () => currentProjectList);
     currentIssues = [];
+    listProjectLabelsMock.mockResolvedValue({ labels: [] });
     listIssuesMock.mockImplementation(async ({ projectId }) => {
       expect(projectId).toBe(1);
       return { issues: currentIssues };
@@ -425,6 +433,7 @@ describe("App project entry", () => {
     await user.click(await screen.findByRole("button", { name: "New Issue" }));
     expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "labels" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.type(screen.getByLabelText("Description"), "small task shape");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
@@ -434,6 +443,7 @@ describe("App project entry", () => {
       title: "draft local issue",
       description: "small task shape",
       attachments: [],
+      labelIds: [],
     });
     expect(
       await screen.findByRole("button", { name: "draft local issue" }),
@@ -441,10 +451,6 @@ describe("App project entry", () => {
     expect(
       screen.queryByRole("dialog", { name: "New Issue" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/priority/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/label/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/assignee/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/milestone/i)).not.toBeInTheDocument();
   });
 
   it("edits an issue by updating only title and description", async () => {
@@ -475,6 +481,7 @@ describe("App project entry", () => {
       screen.getByLabelText("Description"),
       "Updated description",
     );
+    expect(screen.getByRole("button", { name: "labels" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
@@ -483,6 +490,7 @@ describe("App project entry", () => {
       title: "Updated issue",
       description: "Updated description",
       attachments: [],
+      labelIds: [],
     });
     expect(
       screen.queryByRole("dialog", { name: "Issue Detail" }),
@@ -490,10 +498,6 @@ describe("App project entry", () => {
     expect(
       await screen.findByRole("button", { name: "Updated issue" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByLabelText(/priority/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/label/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/assignee/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/milestone/i)).not.toBeInTheDocument();
   });
 
   it("shows only the create card when there are no saved projects", async () => {

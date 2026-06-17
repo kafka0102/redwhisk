@@ -5,6 +5,7 @@ export interface IssueFormState {
   title: string;
   description: string;
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
+  labelIds: number[];
 }
 
 export interface AttachmentPreviewState {
@@ -20,4 +21,5 @@ export const EMPTY_FORM: IssueFormState = {
   title: "",
   description: "",
   attachments: [],
+  labelIds: [],
 };
