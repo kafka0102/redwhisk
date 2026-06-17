@@ -8,16 +8,20 @@ import {
   type ReactNode,
 } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, Info, Plus } from "lucide-react";
+import { Bot, Info, Plus, Tag } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import {
   deleteAgentProfile,
+  deleteProjectLabel,
   listAgentProfiles,
+  listProjectLabels,
   type AgentProfileRecord,
+  type ProjectLabelRecord,
 } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { formatDefaultSkills } from "./agent-profile-skills";
+import { ProjectLabelForm } from "./project-label-form";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
   type ProjectCompletionPolicy,
@@ -38,7 +42,7 @@ import {
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
 
-type SettingsMenu = "general" | "agents";
+type SettingsMenu = "general" | "agents" | "labels";
 
 interface AddFormState {
   projectId: number;
@@ -47,6 +51,15 @@ interface AddFormState {
 interface EditingProfileState {
   contextProjectId: number;
   profile: AgentProfileRecord;
+}
+
+interface AddLabelFormState {
+  projectId: number;
+}
+
+interface EditingLabelState {
+  contextProjectId: number;
+  label: ProjectLabelRecord;
 }
 
 const SETTINGS_MENU_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -67,6 +80,11 @@ const SETTINGS_MENU_ITEMS: {
     iconTestId: "settings-menu-icon-agents",
     key: "agents",
     MenuIcon: Bot,
+  },
+  {
+    iconTestId: "settings-menu-icon-labels",
+    key: "labels",
+    MenuIcon: Tag,
   },
 ];
 
@@ -109,17 +127,37 @@ export function ProjectSettingsActivity({
   const [globalProfiles, setGlobalProfiles] = useState<AgentProfileRecord[]>(
     [],
   );
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
+  const [projectLabels, setProjectLabels] = useState<ProjectLabelRecord[]>([]);
+  const [globalLabels, setGlobalLabels] = useState<ProjectLabelRecord[]>([]);
+  const [profilesErrorMessage, setProfilesErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [labelsErrorMessage, setLabelsErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [profilesLoadState, setProfilesLoadState] = useState<
+    "loading" | "ready" | "error"
+  >(
     "loading",
   );
+  const [labelsLoadState, setLabelsLoadState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [profilesProjectId, setProfilesProjectId] = useState(projectId);
+  const [labelsProjectId, setLabelsProjectId] = useState(projectId);
   const [addForm, setAddForm] = useState<AddFormState | null>(null);
   const [editingProfile, setEditingProfile] =
     useState<EditingProfileState | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<number | null>(
     null,
   );
+  const [addLabelForm, setAddLabelForm] = useState<AddLabelFormState | null>(
+    null,
+  );
+  const [editingLabel, setEditingLabel] = useState<EditingLabelState | null>(
+    null,
+  );
+  const [deletingLabelId, setDeletingLabelId] = useState<number | null>(null);
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
@@ -136,11 +174,29 @@ export function ProjectSettingsActivity({
     ...currentProjectProfiles,
     ...currentGlobalProfiles,
   ].sort((left, right) => left.id - right.id);
-  const currentErrorMessage = isProfilesCurrent ? errorMessage : null;
-  const currentLoadState = isProfilesCurrent ? loadState : "loading";
+  const currentProfilesErrorMessage = isProfilesCurrent
+    ? profilesErrorMessage
+    : null;
+  const currentProfilesLoadState = isProfilesCurrent
+    ? profilesLoadState
+    : "loading";
   const currentAddForm = addForm?.projectId === projectId ? addForm : null;
   const currentEditingProfile =
     editingProfile?.contextProjectId === projectId ? editingProfile : null;
+  const isLabelsCurrent = labelsProjectId === projectId;
+  const currentProjectLabels = isLabelsCurrent ? projectLabels : [];
+  const currentGlobalLabels = isLabelsCurrent ? globalLabels : [];
+  const currentLabels = [...currentProjectLabels, ...currentGlobalLabels].sort(
+    (left, right) => left.id - right.id,
+  );
+  const currentLabelsErrorMessage = isLabelsCurrent
+    ? labelsErrorMessage
+    : null;
+  const currentLabelsLoadState = isLabelsCurrent ? labelsLoadState : "loading";
+  const currentAddLabelForm =
+    addLabelForm?.projectId === projectId ? addLabelForm : null;
+  const currentEditingLabel =
+    editingLabel?.contextProjectId === projectId ? editingLabel : null;
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
@@ -163,17 +219,46 @@ export function ProjectSettingsActivity({
         if (!isMounted) return;
         setProjectProfiles(projectResponse.profiles);
         setGlobalProfiles(globalResponse.profiles);
-        setErrorMessage(null);
+        setProfilesErrorMessage(null);
         setProfilesProjectId(projectId);
-        setLoadState("ready");
+        setProfilesLoadState("ready");
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
         setProjectProfiles([]);
         setGlobalProfiles([]);
-        setErrorMessage(toCommandError(error).message);
+        setProfilesErrorMessage(toCommandError(error).message);
         setProfilesProjectId(projectId);
-        setLoadState("error");
+        setProfilesLoadState("error");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void Promise.all([
+      listProjectLabels({ scope: "project", projectId }),
+      listProjectLabels({ scope: "global", projectId: null }),
+    ])
+      .then(([projectResponse, globalResponse]) => {
+        if (!isMounted) return;
+        setProjectLabels(projectResponse.labels);
+        setGlobalLabels(globalResponse.labels);
+        setLabelsErrorMessage(null);
+        setLabelsProjectId(projectId);
+        setLabelsLoadState("ready");
+      })
+      .catch((error: unknown) => {
+        if (!isMounted) return;
+        setProjectLabels([]);
+        setGlobalLabels([]);
+        setLabelsErrorMessage(toCommandError(error).message);
+        setLabelsProjectId(projectId);
+        setLabelsLoadState("error");
       });
 
     return () => {
@@ -221,6 +306,21 @@ export function ProjectSettingsActivity({
     setEditingProfile(null);
   }
 
+  function handleLabelSaved(savedLabel: ProjectLabelRecord) {
+    setProjectLabels((current) => {
+      const remaining = removeLabel(current, savedLabel.id);
+      if (savedLabel.scope !== "project") return remaining;
+      return mergeLabel(remaining, savedLabel);
+    });
+    setGlobalLabels((current) => {
+      const remaining = removeLabel(current, savedLabel.id);
+      if (savedLabel.scope !== "global") return remaining;
+      return mergeLabel(remaining, savedLabel);
+    });
+    setAddLabelForm(null);
+    setEditingLabel(null);
+  }
+
   async function handleGeneralSettingsSave(
     input: Pick<
       UpdateProjectSettingsInput,
@@ -251,7 +351,7 @@ export function ProjectSettingsActivity({
       return;
     }
 
-    setErrorMessage(null);
+    setProfilesErrorMessage(null);
     setDeletingProfileId(profile.id);
 
     try {
@@ -262,9 +362,34 @@ export function ProjectSettingsActivity({
         current?.profile.id === profile.id ? null : current,
       );
     } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
+      setProfilesErrorMessage(toCommandError(error).message);
     } finally {
       setDeletingProfileId(null);
+    }
+  }
+
+  async function handleDeleteLabel(label: ProjectLabelRecord) {
+    const isConfirmed = window.confirm(
+      messages.settings.deleteConfirm(label.name),
+    );
+    if (!isConfirmed) {
+      return;
+    }
+
+    setLabelsErrorMessage(null);
+    setDeletingLabelId(label.id);
+
+    try {
+      await deleteProjectLabel({ id: label.id });
+      setProjectLabels((current) => removeLabel(current, label.id));
+      setGlobalLabels((current) => removeLabel(current, label.id));
+      setEditingLabel((current) =>
+        current?.label.id === label.id ? null : current,
+      );
+    } catch (error: unknown) {
+      setLabelsErrorMessage(toCommandError(error).message);
+    } finally {
+      setDeletingLabelId(null);
     }
   }
 
@@ -370,6 +495,20 @@ export function ProjectSettingsActivity({
                   <Plus aria-hidden="true" size={14} strokeWidth={2} />
                   <span>{messages.settings.newAgent}</span>
                 </Button>
+              ) : activeMenu === "labels" ? (
+                <Button
+                  className="settings-section__header-action"
+                  variant="secondary"
+                  type="button"
+                  aria-label={messages.settings.newLabel}
+                  onClick={() => {
+                    setAddLabelForm({ projectId });
+                    setEditingLabel(null);
+                  }}
+                >
+                  <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                  <span>{messages.settings.newLabel}</span>
+                </Button>
               ) : null
             }
           >
@@ -386,17 +525,17 @@ export function ProjectSettingsActivity({
 
             {activeMenu === "agents" ? (
               <>
-                {currentErrorMessage ? (
+                {currentProfilesErrorMessage ? (
                   <p
                     className="settings-status"
                     role="status"
                     aria-label={messages.settings.status}
                   >
-                    {currentErrorMessage}
+                    {currentProfilesErrorMessage}
                   </p>
                 ) : null}
 
-                {currentLoadState === "loading" ? (
+                {currentProfilesLoadState === "loading" ? (
                   <p className="settings-agent-section__loading">
                     {messages.settings.loading}
                   </p>
@@ -514,6 +653,126 @@ export function ProjectSettingsActivity({
                     profile={currentEditingProfile.profile}
                     onCancel={() => setEditingProfile(null)}
                     onSaved={handleProfileSaved}
+                  />
+                ) : null}
+              </>
+            ) : null}
+
+            {activeMenu === "labels" ? (
+              <>
+                {currentLabelsErrorMessage ? (
+                  <p
+                    className="settings-status"
+                    role="status"
+                    aria-label={messages.settings.status}
+                  >
+                    {currentLabelsErrorMessage}
+                  </p>
+                ) : null}
+
+                {currentLabelsLoadState === "loading" ? (
+                  <p className="settings-agent-section__loading">
+                    {messages.settings.loadingLabels}
+                  </p>
+                ) : currentLabels.length === 0 ? (
+                  <div className="settings-agent-table-empty">
+                    <p>{messages.settings.noLabels}</p>
+                  </div>
+                ) : (
+                  <div className="settings-agent-table-scroll">
+                    <table
+                      className="settings-label-table"
+                      aria-label={messages.settings.labels}
+                    >
+                      <thead>
+                        <tr>
+                          <th scope="col">{messages.settings.name}</th>
+                          <th scope="col">{messages.settings.scope}</th>
+                          <th scope="col">{messages.settings.color}</th>
+                          <th scope="col">{messages.settings.workflowSkill}</th>
+                          <th scope="col">{messages.settings.actions}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentLabels.map((label) => (
+                          <tr key={label.id} className="settings-label-table__row">
+                            <td>
+                              <button
+                                className="settings-label-table__name-button"
+                                type="button"
+                                aria-label={label.name}
+                                onClick={() => {
+                                  setEditingLabel({
+                                    contextProjectId: projectId,
+                                    label,
+                                  });
+                                  setAddLabelForm(null);
+                                }}
+                              >
+                                <span>{label.name}</span>
+                                <span className="settings-label-table__agent-copy">
+                                  {label.agentName ?? messages.settings.none}
+                                </span>
+                              </button>
+                            </td>
+                            <td>
+                              {label.scope === "global"
+                                ? messages.settings.globalScope
+                                : messages.settings.projectScope}
+                            </td>
+                            <td>
+                              <span
+                                className="settings-label-table__color-value"
+                                style={{ color: label.color }}
+                              >
+                                {label.color}
+                              </span>
+                            </td>
+                            <td className="settings-agent-table__skill">
+                              {label.workflowSkill ?? "—"}
+                            </td>
+                            <td>
+                              <div className="settings-agent-table__actions">
+                                <button
+                                  aria-label={`${messages.settings.delete} ${label.name}`}
+                                  className="settings-agent-table__delete-link"
+                                  disabled={deletingLabelId === label.id}
+                                  type="button"
+                                  onClick={() => {
+                                    void handleDeleteLabel(label);
+                                  }}
+                                >
+                                  {messages.settings.delete}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {currentAddLabelForm ? (
+                  <ProjectLabelForm
+                    key={`create-label-${currentAddLabelForm.projectId}`}
+                    mode="create"
+                    projectId={currentAddLabelForm.projectId}
+                    profiles={currentProfiles}
+                    onCancel={() => setAddLabelForm(null)}
+                    onSaved={handleLabelSaved}
+                  />
+                ) : null}
+
+                {currentEditingLabel ? (
+                  <ProjectLabelForm
+                    key={`edit-label-${currentEditingLabel.label.id}`}
+                    label={currentEditingLabel.label}
+                    mode="edit"
+                    projectId={projectId}
+                    profiles={currentProfiles}
+                    onCancel={() => setEditingLabel(null)}
+                    onSaved={handleLabelSaved}
                   />
                 ) : null}
               </>
@@ -687,5 +946,22 @@ function getSettingsMenuLabel(
   key: SettingsMenu,
   messages: I18nMessages,
 ): string {
-  return key === "general" ? messages.settings.general : messages.settings.agents;
+  if (key === "general") return messages.settings.general;
+  if (key === "agents") return messages.settings.agents;
+  return messages.settings.labels;
+}
+
+function mergeLabel(
+  currentLabels: ProjectLabelRecord[],
+  savedLabel: ProjectLabelRecord,
+): ProjectLabelRecord[] {
+  const remaining = removeLabel(currentLabels, savedLabel.id);
+  return [...remaining, savedLabel].sort((left, right) => left.id - right.id);
+}
+
+function removeLabel(
+  currentLabels: ProjectLabelRecord[],
+  labelId: number,
+): ProjectLabelRecord[] {
+  return currentLabels.filter((label) => label.id !== labelId);
 }

@@ -5,14 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectSettingsActivity } from "./project-settings-activity";
 import {
   deleteAgentProfile,
+  deleteProjectLabel,
   detectCodexCommand,
   listAgentProfiles,
   listAgentSkills,
+  listProjectLabels,
   saveAgentProfile,
+  saveProjectLabel,
   testAgentCommand,
   validateAgentWorktreePath,
   type AgentSkillListResponse,
   type AgentProfileRecord,
+  type ProjectLabelRecord,
 } from "./settings-commands";
 import {
   updateProjectSettings,
@@ -26,10 +30,13 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("./settings-commands", () => ({
   detectCodexCommand: vi.fn(),
   deleteAgentProfile: vi.fn(),
+  deleteProjectLabel: vi.fn(),
   testAgentCommand: vi.fn(),
   listAgentProfiles: vi.fn(),
   listAgentSkills: vi.fn(),
+  listProjectLabels: vi.fn(),
   saveAgentProfile: vi.fn(),
+  saveProjectLabel: vi.fn(),
   validateAgentWorktreePath: vi.fn(),
 }));
 
@@ -69,10 +76,13 @@ vi.mock("../project/project-commands", () => ({
 
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const deleteAgentProfileMock = vi.mocked(deleteAgentProfile);
+const deleteProjectLabelMock = vi.mocked(deleteProjectLabel);
 const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listAgentSkillsMock = vi.mocked(listAgentSkills);
+const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
+const saveProjectLabelMock = vi.mocked(saveProjectLabel);
 const validateAgentWorktreePathMock = vi.mocked(validateAgentWorktreePath);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
@@ -118,15 +128,40 @@ const legacyPromptProfile: AgentProfileRecord = {
   promptTemplate: "Keep this legacy prompt",
 };
 
+const projectLabel: ProjectLabelRecord = {
+  id: 11,
+  name: "Urgent",
+  scope: "project",
+  projectId: 1,
+  color: "#E11D48",
+  agentProfileId: 1,
+  agentName: "Project Codex",
+  workflowSkill: "codex-project",
+};
+
+const globalLabel: ProjectLabelRecord = {
+  id: 12,
+  name: "Shared",
+  scope: "global",
+  projectId: null,
+  color: "#3B82F6",
+  agentProfileId: null,
+  agentName: null,
+  workflowSkill: null,
+};
+
 describe("ProjectSettingsActivity", () => {
   beforeEach(() => {
     vi.useRealTimers();
     detectCodexCommandMock.mockReset();
     deleteAgentProfileMock.mockReset();
+    deleteProjectLabelMock.mockReset();
     testAgentCommandMock.mockReset();
     listAgentProfilesMock.mockReset();
     listAgentSkillsMock.mockReset();
+    listProjectLabelsMock.mockReset();
     saveAgentProfileMock.mockReset();
+    saveProjectLabelMock.mockReset();
     validateAgentWorktreePathMock.mockReset();
     updateProjectSettingsMock.mockReset();
     validateProjectRepoPathMock.mockReset();
@@ -141,6 +176,7 @@ describe("ProjectSettingsActivity", () => {
       command: "/usr/local/bin/codex",
     });
     deleteAgentProfileMock.mockResolvedValue(undefined);
+    deleteProjectLabelMock.mockResolvedValue(undefined);
     validateAgentWorktreePathMock.mockImplementation(async ({ path }) => ({
       path,
       exists: path.startsWith("/existing/"),
@@ -162,6 +198,10 @@ describe("ProjectSettingsActivity", () => {
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") return { profiles: [projectProfile] };
       return { profiles: [globalProfile] };
+    });
+    listProjectLabelsMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { labels: [projectLabel] };
+      return { labels: [globalLabel] };
     });
     listAgentSkillsMock.mockImplementation(async ({ agentType, projectId }) =>
       skillResponse([
@@ -212,6 +252,10 @@ describe("ProjectSettingsActivity", () => {
       "aria-hidden",
       "true",
     );
+    expect(screen.getByTestId("settings-menu-icon-labels")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "General" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -219,6 +263,7 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Terminals" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Labels" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
     expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
   });
@@ -347,6 +392,101 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByRole("table", { name: "Configured agents" }),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    expect(screen.getByRole("heading", { name: "Labels" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Labels" })).toBeInTheDocument();
+  });
+
+  it("renders labels page with table columns and values", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+
+    expect(
+      screen.getByRole("button", { name: "New label" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Scope" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Color" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Workflow Skills" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Urgent" })).toBeInTheDocument();
+    expect(screen.getByText("Project Codex")).toBeInTheDocument();
+    expect(screen.getByText("#E11D48")).toBeInTheDocument();
+    expect(screen.getByText("Shared")).toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(1);
+  });
+
+  it("opens the new label form and hides workflow skill until an agent is selected", async () => {
+    const user = userEvent.setup();
+    saveProjectLabelMock.mockResolvedValue(projectLabel);
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    await user.click(screen.getByRole("button", { name: "New label" }));
+
+    expect(screen.getByRole("dialog", { name: "New label" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Scope")).toHaveValue("project");
+    expect(screen.getByLabelText("Color")).toHaveValue("#e11d48");
+    expect(screen.getByLabelText("Agent")).toHaveValue("none");
+    expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Agent"), "1");
+
+    await waitFor(() =>
+      expect(listAgentSkillsMock).toHaveBeenLastCalledWith({
+        agentType: "codex",
+        projectId: 1,
+      }),
+    );
+    expect(screen.getByLabelText("Workflow Skill")).toBeInTheDocument();
+  });
+
+  it("opens edit label dialog when clicking a label name and deletes labels", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    await user.click(screen.getByRole("button", { name: "Urgent" }));
+    expect(screen.getByRole("dialog", { name: "Edit label" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete Urgent" }));
+    await waitFor(() =>
+      expect(deleteProjectLabelMock).toHaveBeenCalledWith({ id: 11 }),
+    );
+    expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
   });
 
   it("shows agents in a table below the header action", async () => {
