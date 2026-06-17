@@ -1722,9 +1722,9 @@ button:focus-visible {
 }
 
 .issue-field--labels {
-  grid-template-columns: 56px minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .issue-field__label {
@@ -1765,7 +1765,7 @@ button:focus-visible {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  min-height: 120px;
+  min-height: 200px;
   padding: 0;
   font-weight: 400;
   overflow: hidden;
@@ -1865,28 +1865,19 @@ button:focus-visible {
 }
 
 .issue-label-chip {
-  --issue-label-accent: var(--color-accent);
-  --issue-label-border: rgba(127, 201, 255, 0.35);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   max-width: 100%;
-  padding: 3px 8px;
-  border: 1px solid var(--issue-label-border);
+  padding: 4px 10px;
   border-radius: 999px;
-  background: var(--color-surface-elevated);
-  color: var(--issue-label-accent);
+  color: #ffffff;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.2;
 }
 
-.issue-label-chip__dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--issue-label-accent);
+.issue-dialog__labels-section {
+  padding: 0 14px 8px;
 }
 
 .issue-label-picker__menu {

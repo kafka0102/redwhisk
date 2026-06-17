@@ -1,5 +1,5 @@
-import { Check, Plus, Paperclip, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Check, Plus, Paperclip, Trash2, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,12 +134,8 @@ export function IssueFormDialog({
           {isEditableDialog ? (
             <IssueEditableFields
               form={form}
-              availableLabels={availableLabels}
-              isLoadingLabels={isLoadingLabels}
-              labelsErrorMessage={labelsErrorMessage}
               titleInputRef={titleInputRef}
               onFormChange={onFormChange}
-              onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
               onDownloadAttachment={onDownloadAttachment}
               onPreviewAttachment={onPreviewAttachment}
               onRemoveAttachment={onRemoveAttachment}
@@ -162,6 +158,23 @@ export function IssueFormDialog({
             />
           ) : null}
         </div>
+        {isEditableDialog ? (
+          <div className="issue-dialog__labels-section">
+            <IssueLabelsPicker
+              availableLabels={availableLabels}
+              isLoading={isLoadingLabels}
+              labelIds={form.labelIds}
+              labelsErrorMessage={labelsErrorMessage}
+              onChange={(labelIds) =>
+                onFormChange({
+                  ...form,
+                  labelIds,
+                })
+              }
+              onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
+            />
+          </div>
+        ) : null}
         <p
           className="issue-dialog__status"
           role="status"
@@ -202,23 +215,15 @@ export function IssueFormDialog({
 
 function IssueEditableFields({
   form,
-  availableLabels,
-  isLoadingLabels,
-  labelsErrorMessage,
   titleInputRef,
   onFormChange,
-  onOpenProjectLabelsSettings,
   onDownloadAttachment,
   onPreviewAttachment,
   onRemoveAttachment,
 }: {
   form: IssueFormState;
-  availableLabels: IssueLabelRecord[];
-  isLoadingLabels: boolean;
-  labelsErrorMessage: string | null;
   titleInputRef: React.RefObject<HTMLInputElement | null>;
   onFormChange: (form: IssueFormState) => void;
-  onOpenProjectLabelsSettings: () => void;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -266,19 +271,6 @@ function IssueEditableFields({
           onRemoveAttachment={onRemoveAttachment}
         />
       </div>
-      <IssueLabelsPicker
-        availableLabels={availableLabels}
-        isLoading={isLoadingLabels}
-        labelIds={form.labelIds}
-        labelsErrorMessage={labelsErrorMessage}
-        onChange={(labelIds) =>
-          onFormChange({
-            ...form,
-            labelIds,
-          })
-        }
-        onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
-      />
     </div>
   );
 }
@@ -356,9 +348,8 @@ function IssueLabelsPicker({
               <span
                 key={label.id}
                 className="issue-label-chip"
-                style={toIssueLabelStyle(label.color)}
+                style={{ backgroundColor: label.color }}
               >
-                <span className="issue-label-chip__dot" aria-hidden="true" />
                 <span>{label.name}</span>
               </span>
             ))}
@@ -457,26 +448,6 @@ function IssueLabelsPicker({
       </div>
     </div>
   );
-}
-
-function toIssueLabelStyle(color: string): CSSProperties {
-  return {
-    "--issue-label-accent": color,
-    "--issue-label-border": toIssueLabelBorder(color),
-  } as CSSProperties;
-}
-
-function toIssueLabelBorder(color: string): string {
-  const normalized = color.trim();
-  const hex = normalized.startsWith("#") ? normalized.slice(1) : normalized;
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
-    return "rgba(127, 201, 255, 0.35)";
-  }
-
-  const red = Number.parseInt(hex.slice(0, 2), 16);
-  const green = Number.parseInt(hex.slice(2, 4), 16);
-  const blue = Number.parseInt(hex.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, 0.38)`;
 }
 
 function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
