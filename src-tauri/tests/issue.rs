@@ -2268,6 +2268,137 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
 }
 
 #[test]
+fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("detect-agent-commit-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "detect-agent-commit-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Worktree review issue".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-worktree");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-branch",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions
+             SET working_dir = ?1,
+                 workspace_mode = 'worktree',
+                 target_branch = 'main',
+                 workspace_branch = 'issue-branch',
+                 workspace_path = ?1,
+                 worktree_root_path = ?2,
+                 completion_policy = 'agent_auto_commit'
+             WHERE id = ?3",
+            rusqlite::params![
+                workspace_path.to_string_lossy().to_string(),
+                worktree_root.to_string_lossy().to_string(),
+                session_id,
+            ],
+        )
+        .expect("update worktree session");
+
+    write_file(&workspace_path, "tracked.txt", "worktree change\n");
+
+    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
+    let pending = pty_sessions
+        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
+            command: "/bin/sh".to_string(),
+            working_dir: workspace_path.to_string_lossy().into_owned(),
+            log_path: temp_dir
+                .path()
+                .join("session.log")
+                .to_string_lossy()
+                .into_owned(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending");
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
+
+    service
+        .send_agent_commit_prompt(
+            SendAgentCommitPromptInput {
+                project_id,
+                issue_id: issue.id,
+            },
+            temp_dir.path(),
+            &pty_sessions,
+        )
+        .expect("send prompt");
+
+    git(&workspace_path, &["add", "tracked.txt"]);
+    git(&workspace_path, &["commit", "-m", "agent completion"]);
+
+    let completion_result = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect completion");
+
+    assert_eq!(
+        completion_result.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
+    );
+    assert_eq!(completion_result.issue.status, IssueStatus::Completed);
+    assert!(!workspace_path.exists());
+    let main_content = fs::read_to_string(repo_dir.join("tracked.txt")).expect("read main file");
+    assert_eq!(main_content, "worktree change\n");
+    assert_eq!(git_output(&repo_dir, &["branch", "--list", "issue-branch"]), "");
+}
+
+#[test]
 fn get_issue_summary_reports_completed_session_state_mismatch() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -2830,6 +2961,7 @@ fn insert_agent_profile(connection: &rusqlite::Connection) -> i64 {
             "Codex",
             AgentType::Codex,
             "/usr/local/bin/codex",
+            "",
             &AgentScope::Global,
             None,
             "full-auto",
@@ -2848,6 +2980,13 @@ fn insert_agent_session_for_issue(
     agent_profile_id: i64,
     status: &str,
 ) -> i64 {
+    let repo_path: String = connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("project repo path");
     connection
         .execute(
             "INSERT INTO agent_sessions (
@@ -2862,8 +3001,8 @@ fn insert_agent_session_for_issue(
                 log_path,
                 last_active_at,
                 started_at
-            ) VALUES (?1, ?2, ?3, ?4, 'none', '/tmp/repo', 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
-            rusqlite::params![project_id, issue_id, agent_profile_id, status],
+            ) VALUES (?1, ?2, ?3, ?4, 'none', ?5, 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
+            rusqlite::params![project_id, issue_id, agent_profile_id, status, repo_path],
         )
         .expect("insert agent session");
     connection.last_insert_rowid()

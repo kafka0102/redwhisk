@@ -36,7 +36,8 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
             "dangerous",
             "default_skill",
             "prompt_template",
-            "del"
+            "del",
+            "worktree_path",
         ],
     );
 
@@ -70,6 +71,7 @@ fn save_global_agent_profile_resolves_command() {
             name: "  Codex Default  ".to_string(),
             agent_type: AgentType::Codex,
             command: " codex ".to_string(),
+            worktree_path: "".to_string(),
             scope: AgentScope::Global,
             project_id: None,
             mode: "full-auto".to_string(),
@@ -82,6 +84,7 @@ fn save_global_agent_profile_resolves_command() {
     assert!(profile.id > 0);
     assert_eq!(profile.name, "Codex Default");
     assert_eq!(profile.command, "codex");
+    assert_eq!(profile.worktree_path, "");
     assert_eq!(profile.scope, AgentScope::Global);
     assert_eq!(profile.mode, "full-auto");
     assert!(profile.dangerous);
@@ -111,6 +114,7 @@ fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
             name: "Claude Default".to_string(),
             agent_type: AgentType::Claude,
             command: "claude".to_string(),
+            worktree_path: "".to_string(),
             scope: AgentScope::Global,
             project_id: None,
             mode: "default".to_string(),
@@ -148,6 +152,7 @@ fn delete_agent_profile_marks_profile_deleted_and_excludes_from_lists() {
             name: "Codex Default".to_string(),
             agent_type: AgentType::Codex,
             command: "codex".to_string(),
+            worktree_path: "".to_string(),
             scope: AgentScope::Global,
             project_id: None,
             mode: "full-auto".to_string(),
@@ -188,6 +193,50 @@ fn delete_agent_profile_marks_profile_deleted_and_excludes_from_lists() {
         .expect("historical profile");
     assert_eq!(historical_profile.id, profile.id);
     assert_eq!(historical_profile.del, 1);
+}
+
+#[test]
+fn settings_migration_adds_worktree_path_column() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let profile_columns = table_columns(&database.connection, "agent_profiles");
+    assert!(profile_columns.contains(&"worktree_path".to_string()));
+}
+
+#[test]
+fn save_agent_profile_rejects_missing_custom_worktree_path() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo");
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("codex", Ok("/usr/local/bin/codex")),
+    );
+
+    let error = service
+        .save_agent_profile(SaveAgentProfileInput {
+            id: None,
+            name: "Codex".to_string(),
+            agent_type: AgentType::Codex,
+            command: "codex".to_string(),
+            worktree_path: "/path/does/not/exist".to_string(),
+            scope: AgentScope::Project,
+            project_id: Some(project_id),
+            mode: "default".to_string(),
+            dangerous: true,
+            default_skill: "".to_string(),
+            prompt_template: "".to_string(),
+        })
+        .expect_err("missing custom worktree path should fail");
+
+    assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
 }
 
 #[test]
@@ -263,6 +312,7 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
             name: "Claude Upgraded".to_string(),
             agent_type: AgentType::Claude,
             command: "claude".to_string(),
+            worktree_path: "".to_string(),
             scope: AgentScope::Global,
             project_id: None,
             mode: "default".to_string(),
@@ -318,6 +368,7 @@ fn save_agent_profile_rejects_unavailable_command_without_persisting() {
             name: "Codex".to_string(),
             agent_type: AgentType::Codex,
             command: "codex".to_string(),
+            worktree_path: "".to_string(),
             scope: AgentScope::Global,
             project_id: None,
             mode: "full-auto".to_string(),
@@ -371,6 +422,7 @@ fn project_scope_agent_only_visible_to_target_project() {
             name: "Project Codex".to_string(),
             agent_type: AgentType::Codex,
             command: "/usr/local/bin/codex".to_string(),
+            worktree_path: "/tmp/redwhisk.worktrees".to_string(),
             scope: AgentScope::Project,
             project_id: Some(project_id),
             mode: "full-auto".to_string(),
@@ -382,6 +434,7 @@ fn project_scope_agent_only_visible_to_target_project() {
 
     assert_eq!(profile.scope, AgentScope::Project);
     assert_eq!(profile.project_id, Some(project_id));
+    assert_eq!(profile.worktree_path, "/tmp/redwhisk.worktrees");
 
     let project_profiles = service
         .list_agent_profiles(ListAgentProfilesInput {

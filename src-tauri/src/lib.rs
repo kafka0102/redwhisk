@@ -68,6 +68,7 @@ pub fn run() {
             commands::issue_commands::delete_issue,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::start_agent_session,
+            commands::agent_session_commands::get_project_git_branches,
             commands::agent_session_commands::start_standalone_agent_session,
             commands::agent_session_commands::read_agent_session_terminal,
             commands::agent_session_commands::write_agent_session_terminal,
@@ -79,6 +80,7 @@ pub fn run() {
             commands::settings_commands::test_agent_command,
             commands::settings_commands::list_agent_profiles,
             commands::settings_commands::save_agent_profile,
+            commands::settings_commands::validate_agent_worktree_path,
             commands::settings_commands::delete_agent_profile
         ])
         .run(tauri::generate_context!())

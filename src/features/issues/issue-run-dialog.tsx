@@ -2,34 +2,48 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  getProjectGitBranches,
+  startAgentSession,
+  type IssueRecord,
+  type ProjectGitBranchListResult,
+  type StartAgentSessionResult,
+  type WorkspaceMode,
+} from "./issue-commands";
+import {
   listAgentProfiles,
   type AgentProfileRecord,
 } from "../settings/settings-commands";
+import type { ProjectCompletionPolicy } from "../project/project-commands";
 import {
   listAgentSessions,
   type AgentSessionListItem,
 } from "../agents/agent-session-commands";
 import { toCommandError } from "../../shared/commands/command-error";
-import {
-  startAgentSession,
-  type IssueRecord,
-  type StartAgentSessionResult,
-} from "./issue-commands";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 import { parseDefaultSkills } from "../settings/agent-profile-skills";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
-const RECENT_WORKFLOW_SKILL_STORAGE_KEY = "redwhisk.issue-run.recent-workflow-skill";
+const RECENT_WORKFLOW_SKILL_STORAGE_KEY =
+  "redwhisk.issue-run.recent-workflow-skill";
+const RECENT_WORKSPACE_SELECTION_STORAGE_KEY =
+  "redwhisk.issue-run.recent-workspace-selection";
 
 interface IssueRunDialogProps {
   issue: Pick<IssueRecord, "id" | "title" | "description" | "attachments">;
+  projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   onClose: () => void;
   onStarted: (result: StartAgentSessionResult) => void | Promise<void>;
 }
 
+interface RecentWorkspaceSelection {
+  workspaceMode: WorkspaceMode;
+  targetBranch: string | null;
+}
+
 export function IssueRunDialog({
   issue,
+  projectCompletionPolicy,
   projectId,
   onClose,
   onStarted,
@@ -42,6 +56,17 @@ export function IssueRunDialog({
   const [selectedWorkflowSkill, setSelectedWorkflowSkill] = useState<
     string | null
   >(null);
+  const [completionPolicy, setCompletionPolicy] =
+    useState<ProjectCompletionPolicy>("manual");
+  const [workspaceMode, setWorkspaceMode] =
+    useState<WorkspaceMode>("current_branch");
+  const [targetBranch, setTargetBranch] = useState("");
+  const [branchState, setBranchState] = useState<ProjectGitBranchListResult>({
+    currentBranch: "",
+    localBranches: [],
+  });
+  const [isLoadingBranches, setIsLoadingBranches] = useState(true);
+  const [hasLoadedRunContext, setHasLoadedRunContext] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -51,41 +76,62 @@ export function IssueRunDialog({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadProfiles() {
+    async function loadRunDialogContext() {
       setIsLoadingProfiles(true);
+      setIsLoadingBranches(true);
       setStatusMessage(null);
 
       try {
-        const [projectResponse, globalResponse, sessionsResponse] =
-          await Promise.all([
-            listAgentProfiles({ scope: "project", projectId }),
-            listAgentProfiles({ scope: "global", projectId: null }),
-            listAgentSessions(projectId),
-          ]);
+        const [
+          projectProfilesResponse,
+          globalProfilesResponse,
+          sessionsResponse,
+          branchesResponse,
+        ] = await Promise.all([
+          listAgentProfiles({ scope: "project", projectId }),
+          listAgentProfiles({ scope: "global", projectId: null }),
+          listAgentSessions(projectId),
+          getProjectGitBranches({ projectId }),
+        ]);
 
         if (!isMounted) {
           return;
         }
 
         const mergedProfiles = [
-          ...projectResponse.profiles,
-          ...globalResponse.profiles,
+          ...projectProfilesResponse.profiles,
+          ...globalProfilesResponse.profiles,
         ];
         const initialProfile = resolveInitialProfile({
           profiles: mergedProfiles,
-          projectProfiles: projectResponse.profiles,
-          globalProfiles: globalResponse.profiles,
+          projectProfiles: projectProfilesResponse.profiles,
+          globalProfiles: globalProfilesResponse.profiles,
           sessions: sessionsResponse.sessions,
         });
+        const recentWorkspaceSelection = readRecentWorkspaceSelection(projectId);
+        const resolvedTargetBranch = resolveInitialTargetBranch({
+          currentBranch: branchesResponse.currentBranch,
+          localBranches: branchesResponse.localBranches,
+          recentTargetBranch: recentWorkspaceSelection?.targetBranch ?? null,
+        });
+
         setProfiles(mergedProfiles);
         setSelectedProfileId(initialProfile?.id ?? null);
-        const initialWorkflowSkill = initialProfile
-          ? resolveInitialWorkflowSkill({
-              profile: initialProfile,
-              projectId,
-            })
-          : null;
-        setSelectedWorkflowSkill(initialWorkflowSkill);
+        setSelectedWorkflowSkill(
+          initialProfile
+            ? resolveInitialWorkflowSkill({
+                profile: initialProfile,
+                projectId,
+              })
+            : null,
+        );
+        setCompletionPolicy(projectCompletionPolicy);
+        setWorkspaceMode(
+          recentWorkspaceSelection?.workspaceMode ?? "current_branch",
+        );
+        setTargetBranch(resolvedTargetBranch);
+        setBranchState(branchesResponse);
+        setHasLoadedRunContext(true);
 
         if (mergedProfiles.length === 0) {
           setStatusMessage(
@@ -101,16 +147,17 @@ export function IssueRunDialog({
       } finally {
         if (isMounted) {
           setIsLoadingProfiles(false);
+          setIsLoadingBranches(false);
         }
       }
     }
 
-    void loadProfiles();
+    void loadRunDialogContext();
 
     return () => {
       isMounted = false;
     };
-  }, [issue, projectId]);
+  }, [issue, projectCompletionPolicy, projectId]);
 
   useEffect(() => {
     if (isLoadingProfiles || profiles.length === 0) {
@@ -119,6 +166,17 @@ export function IssueRunDialog({
 
     profileSelectRef.current?.focus();
   }, [isLoadingProfiles, profiles.length]);
+
+  useEffect(() => {
+    if (!hasLoadedRunContext) {
+      return;
+    }
+
+    saveRecentWorkspaceSelection(projectId, {
+      workspaceMode,
+      targetBranch: targetBranch.trim().length > 0 ? targetBranch : null,
+    });
+  }, [hasLoadedRunContext, projectId, targetBranch, workspaceMode]);
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
@@ -159,13 +217,19 @@ export function IssueRunDialog({
     });
   }, [effectiveWorkflowSkill, issue, selectedProfile]);
   const promptDraft = preview?.finalPrompt ?? "";
+  const effectiveTargetBranch =
+    workspaceMode === "current_branch"
+      ? branchState.currentBranch
+      : targetBranch.trim();
 
   const isStartDisabled =
     isLoadingProfiles ||
+    isLoadingBranches ||
     isStarting ||
     selectedProfile === null ||
     preview === null ||
-    promptDraft.trim().length === 0;
+    promptDraft.trim().length === 0 ||
+    effectiveTargetBranch.length === 0;
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -213,6 +277,9 @@ export function IssueRunDialog({
         issueId: issue.id,
         agentProfileId: selectedProfile.id,
         promptSnapshot: promptDraft,
+        completionPolicyOverride: completionPolicy,
+        workspaceMode,
+        targetBranch: effectiveTargetBranch,
       });
       await onStarted(result);
     } catch (error) {
@@ -331,6 +398,59 @@ export function IssueRunDialog({
             ) : null}
 
             <label className="settings-field">
+              <span>Commit strategy</span>
+              <select
+                aria-label="Commit strategy"
+                className="settings-input"
+                disabled={isLoadingBranches || isStarting}
+                value={completionPolicy}
+                onChange={(event) =>
+                  setCompletionPolicy(
+                    event.target.value as ProjectCompletionPolicy,
+                  )
+                }
+              >
+                <option value="manual">Manual</option>
+                <option value="agent_auto_commit">Agent auto commit</option>
+              </select>
+            </label>
+
+            <div className="settings-field">
+              <span>Development mode</span>
+              <div className="agent-dialog__command-row">
+                <select
+                  aria-label="Development mode"
+                  className="settings-input"
+                  disabled={isLoadingBranches || isStarting}
+                  value={workspaceMode}
+                  onChange={(event) => {
+                    setWorkspaceMode(event.target.value as WorkspaceMode);
+                  }}
+                >
+                  <option value="current_branch">Current branch</option>
+                  <option value="worktree">Worktree</option>
+                </select>
+                <select
+                  aria-label="Target branch"
+                  className="settings-input"
+                  disabled={
+                    isLoadingBranches ||
+                    isStarting ||
+                    workspaceMode === "current_branch"
+                  }
+                  value={effectiveTargetBranch}
+                  onChange={(event) => setTargetBranch(event.target.value)}
+                >
+                  {branchState.localBranches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <label className="settings-field">
               <span>Final prompt</span>
               <textarea
                 aria-label="Final prompt"
@@ -401,7 +521,9 @@ function readRecentWorkflowSkill({
   projectId: number;
 }): string | null {
   try {
-    const rawValue = window.localStorage.getItem(RECENT_WORKFLOW_SKILL_STORAGE_KEY);
+    const rawValue = window.localStorage.getItem(
+      RECENT_WORKFLOW_SKILL_STORAGE_KEY,
+    );
     if (!rawValue) {
       return null;
     }
@@ -426,7 +548,9 @@ function saveRecentWorkflowSkill({
   workflowSkill: string | null;
 }) {
   try {
-    const rawValue = window.localStorage.getItem(RECENT_WORKFLOW_SKILL_STORAGE_KEY);
+    const rawValue = window.localStorage.getItem(
+      RECENT_WORKFLOW_SKILL_STORAGE_KEY,
+    );
     const records =
       rawValue === null
         ? {}
@@ -443,6 +567,89 @@ function saveRecentWorkflowSkill({
 
 function workflowSkillStorageKey(projectId: number, profileId: number): string {
   return `${projectId}:${profileId}`;
+}
+
+function readRecentWorkspaceSelection(
+  projectId: number,
+): RecentWorkspaceSelection | null {
+  try {
+    const rawValue = window.localStorage.getItem(
+      RECENT_WORKSPACE_SELECTION_STORAGE_KEY,
+    );
+    if (!rawValue) {
+      return null;
+    }
+
+    const records = JSON.parse(rawValue) as Record<
+      string,
+      RecentWorkspaceSelection | null
+    >;
+    const record = records[String(projectId)];
+    if (
+      record == null ||
+      (record.workspaceMode !== "current_branch" &&
+        record.workspaceMode !== "worktree")
+    ) {
+      return null;
+    }
+
+    return {
+      workspaceMode: record.workspaceMode,
+      targetBranch:
+        typeof record.targetBranch === "string" ? record.targetBranch : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveRecentWorkspaceSelection(
+  projectId: number,
+  selection: RecentWorkspaceSelection,
+) {
+  try {
+    const rawValue = window.localStorage.getItem(
+      RECENT_WORKSPACE_SELECTION_STORAGE_KEY,
+    );
+    const records =
+      rawValue === null
+        ? {}
+        : (JSON.parse(rawValue) as Record<
+            string,
+            RecentWorkspaceSelection | null
+          >);
+    records[String(projectId)] = selection;
+    window.localStorage.setItem(
+      RECENT_WORKSPACE_SELECTION_STORAGE_KEY,
+      JSON.stringify(records),
+    );
+  } catch {
+    // Ignore local storage failures and fall back to in-memory defaults.
+  }
+}
+
+function resolveInitialTargetBranch({
+  currentBranch,
+  localBranches,
+  recentTargetBranch,
+}: {
+  currentBranch: string;
+  localBranches: string[];
+  recentTargetBranch: string | null;
+}): string {
+  if (
+    recentTargetBranch &&
+    localBranches.includes(recentTargetBranch.trim()) &&
+    recentTargetBranch.trim().length > 0
+  ) {
+    return recentTargetBranch.trim();
+  }
+
+  if (currentBranch.trim().length > 0) {
+    return currentBranch;
+  }
+
+  return localBranches[0] ?? "";
 }
 
 function getExistingSessionId(

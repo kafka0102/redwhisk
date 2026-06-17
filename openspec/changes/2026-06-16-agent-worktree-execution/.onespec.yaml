@@ -1,6 +1,6 @@
 version: 1
 change: 2026-06-16-agent-worktree-execution
-phase: proposal-ready
+phase: review
 ambiguity: high
 complexity: high
 implementation_path: superpowers
@@ -9,13 +9,13 @@ workspace: worktree
 origin_branch: devlop
 origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
 origin_workspace_mode: current-branch
-plan: null
+plan: docs/superpowers/plans/2026-06-16-agent-worktree-execution.md
 handoff_context: openspec/changes/2026-06-16-agent-worktree-execution/.onespec.yaml
-handoff_purpose: proposal
-handoff_summary: proposal handoff from 6 file(s); primary artifact: openspec/changes/2026-06-16-agent-worktree-execution/proposal.md
+handoff_purpose: plan
+handoff_summary: plan handoff from 6 file(s); primary artifact: openspec/changes/2026-06-16-agent-worktree-execution/proposal.md
 handoff_hash: fa9f99812226047cb21d9f91c6ef4c06268a9bf3a00f47d4a626c9072775f39f
 touched_files_b64: null
 review_result: pending
 archive: pending
 created_at: 2026-06-16
-updated_at: 2026-06-16T14:14:50Z
+updated_at: 2026-06-16T15:33:00Z
