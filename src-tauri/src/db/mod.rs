@@ -7,3 +7,4 @@ pub mod issue_attachment_repository;
 pub mod issue_repository;
 pub mod migrations;
 pub mod project_repository;
+pub mod project_label_repository;

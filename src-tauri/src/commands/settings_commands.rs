@@ -8,6 +8,10 @@ use crate::types::agent_profile::{
     ValidateAgentWorktreePathInput, ValidateAgentWorktreePathResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
+use crate::types::project_label::{
+    DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse,
+    ProjectLabelRecord, SaveProjectLabelInput,
+};
 
 #[tauri::command]
 pub fn detect_codex_command(
@@ -66,6 +70,36 @@ pub fn delete_agent_profile(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::delete_agent_profile_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn list_project_labels(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ListProjectLabelsInput,
+) -> Result<ProjectLabelListResponse, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::list_project_labels_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn save_project_label(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SaveProjectLabelInput,
+) -> Result<ProjectLabelRecord, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::save_project_label_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn delete_project_label(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteProjectLabelInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::delete_project_label_in_data_dir(data_dir, input)
 }
 
 fn prepare_settings_data_dir(

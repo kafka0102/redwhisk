@@ -5,11 +5,13 @@ use redwhisk_lib::core::settings_service::SettingsService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
+use redwhisk_lib::db::project_label_repository::ProjectLabelRepository;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{
     AgentScope, AgentType, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
+use redwhisk_lib::types::project_label::{ProjectLabelScope, SaveProjectLabelInput};
 
 #[test]
 fn settings_migration_creates_restructured_agent_profiles_table() {
@@ -455,6 +457,107 @@ fn project_scope_agent_only_visible_to_target_project() {
     assert!(other_profiles.is_empty());
 }
 
+#[test]
+fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("/usr/local/bin/codex", Ok("/usr/local/bin/codex")),
+    );
+    let project_id = insert_project(&database.connection, "redwhisk");
+
+    service
+        .save_project_label(SaveProjectLabelInput {
+            id: None,
+            name: "ops".to_string(),
+            scope: ProjectLabelScope::Project,
+            project_id: Some(project_id),
+            color: "#112233".to_string(),
+            agent_profile_id: None,
+            workflow_skill: None,
+        })
+        .expect("project label");
+
+    let error = service
+        .save_project_label(SaveProjectLabelInput {
+            id: None,
+            name: "ops".to_string(),
+            scope: ProjectLabelScope::Global,
+            project_id: None,
+            color: "#445566".to_string(),
+            agent_profile_id: None,
+            workflow_skill: None,
+        })
+        .expect_err("global duplicate should fail");
+
+    assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+}
+
+#[test]
+fn save_project_label_allows_same_name_in_other_project() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("/usr/local/bin/codex", Ok("/usr/local/bin/codex")),
+    );
+    let project_a = insert_project(&database.connection, "redwhisk");
+    let project_b = insert_project(&database.connection, "agents-lab");
+
+    service
+        .save_project_label(SaveProjectLabelInput {
+            id: None,
+            name: "ops".to_string(),
+            scope: ProjectLabelScope::Project,
+            project_id: Some(project_a),
+            color: "#112233".to_string(),
+            agent_profile_id: None,
+            workflow_skill: None,
+        })
+        .expect("project a label");
+
+    let saved = service
+        .save_project_label(SaveProjectLabelInput {
+            id: None,
+            name: "ops".to_string(),
+            scope: ProjectLabelScope::Project,
+            project_id: Some(project_b),
+            color: "#445566".to_string(),
+            agent_profile_id: None,
+            workflow_skill: None,
+        })
+        .expect("project b label");
+
+    assert_eq!(saved.name, "ops");
+    assert_eq!(saved.project_id, Some(project_b));
+}
+
+#[test]
+fn save_project_label_rejects_workflow_skill_without_agent() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("/usr/local/bin/codex", Ok("/usr/local/bin/codex")),
+    );
+    let project_id = insert_project(&database.connection, "redwhisk");
+
+    let error = service
+        .save_project_label(SaveProjectLabelInput {
+            id: None,
+            name: "ops".to_string(),
+            scope: ProjectLabelScope::Project,
+            project_id: Some(project_id),
+            color: "#112233".to_string(),
+            agent_profile_id: None,
+            workflow_skill: Some("triage".to_string()),
+        })
+        .expect_err("workflow skill without agent should fail");
+
+    assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+}
+
 struct StubCommandDetector {
     detect_result: Result<String, String>,
     test_results: HashMap<String, Result<String, String>>,
@@ -496,6 +599,7 @@ fn settings_service<'connection>(
 ) -> SettingsService<'connection, StubCommandDetector> {
     SettingsService::new(
         AgentProfileRepository::new(connection),
+        ProjectLabelRepository::new(connection),
         ProjectRepository::new(connection),
         detector,
     )
