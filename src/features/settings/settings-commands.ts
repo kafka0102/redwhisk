@@ -4,6 +4,7 @@ export type AgentType = "codex" | "claude";
 export type AgentScope = "project" | "global";
 export type AgentSkillScope = "project" | "global";
 export type AgentSkillRefreshStatus = "idle" | "loading" | "ready" | "failed";
+export type ProjectLabelScope = "project" | "global";
 
 export interface AgentProfileRecord {
   id: number;
@@ -86,6 +87,40 @@ export interface AgentSkillsUpdatedEvent {
   projectId: number | null;
 }
 
+export interface ProjectLabelRecord {
+  id: number;
+  name: string;
+  scope: ProjectLabelScope;
+  projectId: number | null;
+  color: string;
+  agentProfileId: number | null;
+  agentName: string | null;
+  workflowSkill: string | null;
+}
+
+export interface ListProjectLabelsInput {
+  scope: ProjectLabelScope;
+  projectId: number | null;
+}
+
+export interface ProjectLabelListResponse {
+  labels: ProjectLabelRecord[];
+}
+
+export interface SaveProjectLabelInput {
+  id?: number;
+  name: string;
+  scope: ProjectLabelScope;
+  projectId: number | null;
+  color: string;
+  agentProfileId: number | null;
+  workflowSkill: string | null;
+}
+
+export interface DeleteProjectLabelInput {
+  id: number;
+}
+
 export interface AgentCommandCheckResult {
   command: string;
 }
@@ -153,6 +188,30 @@ export function refreshAgentSkills(
   input: RefreshAgentSkillsInput,
 ): Promise<void> {
   return invokeCommand("refresh_agent_skills", {
+    input,
+  });
+}
+
+export function listProjectLabels(
+  input: ListProjectLabelsInput,
+): Promise<ProjectLabelListResponse> {
+  return invokeCommand<ProjectLabelListResponse>("list_project_labels", {
+    input,
+  });
+}
+
+export function saveProjectLabel(
+  input: SaveProjectLabelInput,
+): Promise<ProjectLabelRecord> {
+  return invokeCommand<ProjectLabelRecord>("save_project_label", {
+    input,
+  });
+}
+
+export function deleteProjectLabel(
+  input: DeleteProjectLabelInput,
+): Promise<void> {
+  return invokeCommand("delete_project_label", {
     input,
   });
 }

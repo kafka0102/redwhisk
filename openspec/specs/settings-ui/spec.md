@@ -158,62 +158,35 @@ The Project Settings `General` form SHALL allow the user to maintain the project
 - **THEN** the form shows an error
 - **AND** the `Save` action is blocked until the path is valid
 
-### Requirement: Project Settings Terminals menu entry
-Project Settings SHALL expose a `Terminals` menu entry directly below `Agents` in the left settings menu.
+### Requirement: Project Settings navigation menu
+Project Settings SHALL expose `General`, `Agents`, and `Labels` in the left settings menu, in that order.
 
 #### Scenario: Settings menu is rendered
 - **WHEN** the user opens Project Settings
-- **THEN** the left menu shows `General`, `Agents`, and `Terminals` in that order
-- **AND** `Terminals` appears directly below `Agents`
-- **AND** the left menu width and splitter behavior remain consistent with other Project Settings modules
+- **THEN** the left menu shows `General`, `Agents`, and `Labels` in that order
+- **AND** `Labels` appears directly below `Agents`
+- **AND** the left menu width and splitter behavior remain consistent across all three modules
 
-### Requirement: Project Settings Terminals page layout
-The `Terminals` module SHALL keep the existing two-column Settings layout and render a compact stack of editable terminal cards.
+### Requirement: Project Settings Labels page layout
+The `Labels` module SHALL render a table-based management view using the shared Settings content frame.
 
-#### Scenario: Terminals page is opened
-- **WHEN** the user selects `Terminals`
-- **THEN** the right pane shows the title `Terminals`
-- **AND** a plus button is shown at the far right of the first row
-- **AND** terminal cards are rendered below in a tightly stacked list with only 4px vertical spacing
+#### Scenario: Labels settings is selected
+- **WHEN** the user selects `Labels`
+- **THEN** the Labels content uses the same centered 80% right-content container as General and Agents
 
-#### Scenario: Terminal card is selected
-- **WHEN** the user clicks a terminal card
-- **THEN** the selected card uses a darker background and border variant of the shared terminal card color
-- **AND** unselected cards keep a stable non-random background
+#### Scenario: Labels page is opened
+- **WHEN** the user selects `Labels`
+- **THEN** the right pane shows the title `Labels`
+- **AND** a `+ New label` button is shown at the upper right of the section header
+- **AND** a table is rendered below the header
 
-#### Scenario: Terminal card is hovered
-- **WHEN** the pointer hovers a terminal card
-- **THEN** an edit button is shown on the left side of the card header
-- **AND** the delete button remains available for removing the card
+#### Scenario: Labels are listed
+- **WHEN** project and global labels have loaded
+- **THEN** the table shows columns for `Name`, `Scope`, `Color`, `Workflow Skill`, and `Actions`
+- **AND** the `Name` column shows the label name together with the selected agent name
+- **AND** the `Color` column shows the stored RGB hex value as text and uses that same color for the text itself
+- **AND** the `Actions` column shows a delete link button
 
-#### Scenario: Editing a terminal card
-- **WHEN** the user clicks the terminal card edit button
-- **THEN** a dialog opens
-- **AND** the dialog allows editing `Name`, `Path`, and `Launch command`
-
-### Requirement: Project terminal item lifecycle
-The `Terminals` module SHALL let the user create and remove project terminal cards from the page.
-
-#### Scenario: Creating a terminal
-- **WHEN** the user clicks the plus button on the `Terminals` page
-- **THEN** a new terminal item is added with the default name `New Terminal`
-- **AND** the item can be expanded to reveal its terminal content area
-
-#### Scenario: Removing a terminal
-- **WHEN** the user hovers a terminal card
-- **THEN** a delete icon is shown near the card's upper-right corner
-- **AND** clicking the delete icon removes only that terminal item
-
-### Requirement: Theme-aware terminal card colors
-Each terminal card SHALL use a stable non-random background and distinguish the active card by darkening that shared visual treatment.
-
-#### Scenario: Stable terminal colors
-- **WHEN** the application theme is rendered
-- **THEN** terminal cards use a fixed, legible background treatment instead of a random color per terminal
-- **AND** card text and terminal chrome remain readable
-
-#### Scenario: Active terminal contrast
-- **WHEN** a terminal card is active
-- **THEN** its background and border are darkened relative to the inactive state
-- **AND** the active state remains readable in the supported theme
-
+#### Scenario: Editing an existing label
+- **WHEN** the user clicks a label name in the table
+- **THEN** a label edit dialog opens for that row
