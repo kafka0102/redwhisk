@@ -4,6 +4,7 @@ use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::types::agent_session::{
     AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
+    ProjectGitBranchListInput, ProjectGitBranchListResult,
     ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
     RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
@@ -87,6 +88,35 @@ pub fn start_agent_session(
         crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
     )
     .start_agent_session_with_pty(data_dir, input, &state.pty_sessions)
+}
+
+#[tauri::command]
+pub fn get_project_git_branches(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectGitBranchListInput,
+) -> Result<ProjectGitBranchListResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Git 分支查询失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    {
+        let mut local_data = state.local_data.lock().map_err(|_| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Git 分支查询失败。",
+            )
+        })?;
+        local_data
+            .initialize(&data_dir)
+            .map_err(CommandError::from)?;
+    }
+
+    AgentSessionService::get_project_git_branches_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]

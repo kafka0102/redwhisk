@@ -40,11 +40,12 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0019_agent_profiles_del",
             "0020_issues_and_agent_sessions_del",
             "0021_project_terminal_configs",
+            "0022_agent_worktree_execution",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0021_project_terminal_configs".to_string())
+        Some("0022_agent_worktree_execution".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -93,12 +94,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0019_agent_profiles_del",
             "0020_issues_and_agent_sessions_del",
             "0021_project_terminal_configs",
+            "0022_agent_worktree_execution",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0021_project_terminal_configs".to_string())
+        Some("0022_agent_worktree_execution".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -107,7 +109,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 21);
+    assert_eq!(schema_migrations_count, 22);
 }
 
 #[test]

@@ -19,7 +19,7 @@ impl<'connection> AgentProfileRepository<'connection> {
         match scope {
             AgentScope::Global => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                    "SELECT id, name, agent_type, command, worktree_path, scope, project_id, mode, dangerous, default_skill, prompt_template, del
                      FROM agent_profiles
                      WHERE scope = 'global' AND del = 0
                      ORDER BY id ASC",
@@ -31,7 +31,7 @@ impl<'connection> AgentProfileRepository<'connection> {
             }
             AgentScope::Project => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                    "SELECT id, name, agent_type, command, worktree_path, scope, project_id, mode, dangerous, default_skill, prompt_template, del
                      FROM agent_profiles
                      WHERE scope = 'project' AND project_id = ?1 AND del = 0
                      ORDER BY id ASC",
@@ -47,7 +47,7 @@ impl<'connection> AgentProfileRepository<'connection> {
     pub fn find_profile_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentProfileRow>> {
         self.connection
             .query_row(
-                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                "SELECT id, name, agent_type, command, worktree_path, scope, project_id, mode, dangerous, default_skill, prompt_template, del
                  FROM agent_profiles
                  WHERE id = ?1",
                 params![id],
@@ -62,6 +62,7 @@ impl<'connection> AgentProfileRepository<'connection> {
         name: &str,
         agent_type: AgentType,
         command: &str,
+        worktree_path: &str,
         scope: &AgentScope,
         project_id: Option<i64>,
         mode: &str,
@@ -80,18 +81,20 @@ impl<'connection> AgentProfileRepository<'connection> {
                      SET name = ?1,
                          agent_type = ?2,
                          command = ?3,
-                         scope = ?4,
-                         project_id = ?5,
-                         mode = ?6,
-                         dangerous = ?7,
-                         default_skill = ?8,
-                         prompt_template = ?9,
+                         worktree_path = ?4,
+                         scope = ?5,
+                         project_id = ?6,
+                         mode = ?7,
+                         dangerous = ?8,
+                         default_skill = ?9,
+                         prompt_template = ?10,
                          del = 0
-                     WHERE id = ?10",
+                     WHERE id = ?11",
                     params![
                         name,
                         agent_type_str,
                         command,
+                        worktree_path,
                         scope_str,
                         project_id,
                         mode,
@@ -108,12 +111,13 @@ impl<'connection> AgentProfileRepository<'connection> {
             None => {
                 self.connection.execute(
                     "INSERT INTO agent_profiles (
-                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)",
+                       name, agent_type, command, worktree_path, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0)",
                     params![
                         name,
                         agent_type_str,
                         command,
+                        worktree_path,
                         scope_str,
                         project_id,
                         mode,
@@ -146,6 +150,7 @@ pub struct AgentProfileRow {
     pub name: String,
     pub agent_type: AgentType,
     pub command: String,
+    pub worktree_path: String,
     pub scope: AgentScope,
     pub project_id: Option<i64>,
     pub mode: String,
@@ -161,13 +166,14 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
         name: row.get(1)?,
         agent_type: agent_type_from_str(&row.get::<_, String>(2)?)?,
         command: row.get(3)?,
-        scope: scope_from_str(&row.get::<_, String>(4)?)?,
-        project_id: row.get(5)?,
-        mode: row.get(6)?,
-        dangerous: sqlite_to_bool(row.get(7)?),
-        default_skill: row.get(8)?,
-        prompt_template: row.get(9)?,
-        del: row.get(10)?,
+        worktree_path: row.get(4)?,
+        scope: scope_from_str(&row.get::<_, String>(5)?)?,
+        project_id: row.get(6)?,
+        mode: row.get(7)?,
+        dangerous: sqlite_to_bool(row.get(8)?),
+        default_skill: row.get(9)?,
+        prompt_template: row.get(10)?,
+        del: row.get(11)?,
     })
 }
 

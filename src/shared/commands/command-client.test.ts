@@ -22,6 +22,7 @@ import {
   advanceIssueStatus,
   deleteIssue,
   detectAgentCommitCompletion,
+  getProjectGitBranches,
   getIssueSummary,
   prepareAgentCommitCompletion,
   sendAgentCommitPrompt,
@@ -33,6 +34,7 @@ import {
   listAgentProfiles,
   saveAgentProfile,
   testAgentCommand,
+  validateAgentWorktreePath,
 } from "../../features/settings/settings-commands";
 import {
   closeProjectTerminal,
@@ -642,6 +644,7 @@ describe("command client", () => {
           name: "Codex",
           agentType: "codex",
           command: "/usr/local/bin/codex",
+          worktreePath: "/tmp/redwhisk.worktrees",
           scope: "global",
           projectId: null,
           mode: "full-auto",
@@ -662,6 +665,7 @@ describe("command client", () => {
           name: "Codex",
           agentType: "codex",
           command: "/usr/local/bin/codex",
+          worktreePath: "/tmp/redwhisk.worktrees",
           scope: "global",
           projectId: null,
           mode: "full-auto",
@@ -683,6 +687,7 @@ describe("command client", () => {
       name: "Codex",
       agentType: "codex",
       command: "/usr/local/bin/codex",
+      worktreePath: "/tmp/redwhisk.worktrees",
       scope: "global",
       projectId: null,
       mode: "full-auto",
@@ -697,6 +702,7 @@ describe("command client", () => {
         name: "Codex",
         agentType: "codex",
         command: "/usr/local/bin/codex",
+        worktreePath: "/tmp/redwhisk.worktrees",
         scope: "global",
         projectId: null,
         mode: "full-auto",
@@ -709,6 +715,7 @@ describe("command client", () => {
       name: "Codex",
       agentType: "codex",
       command: "/usr/local/bin/codex",
+      worktreePath: "/tmp/redwhisk.worktrees",
       scope: "global",
       projectId: null,
       mode: "full-auto",
@@ -722,6 +729,7 @@ describe("command client", () => {
         name: "Codex",
         agentType: "codex",
         command: "/usr/local/bin/codex",
+        worktreePath: "/tmp/redwhisk.worktrees",
         scope: "global",
         projectId: null,
         mode: "full-auto",
@@ -741,6 +749,23 @@ describe("command client", () => {
     });
   });
 
+  it("invokes Rust Core through the validate agent worktree path command", async () => {
+    invokeMock.mockResolvedValue({
+      path: "/tmp/redwhisk.worktrees",
+      exists: true,
+    });
+
+    await expect(
+      validateAgentWorktreePath({ path: "/tmp/redwhisk.worktrees" }),
+    ).resolves.toEqual({
+      path: "/tmp/redwhisk.worktrees",
+      exists: true,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("validate_agent_worktree_path", {
+      input: { path: "/tmp/redwhisk.worktrees" },
+    });
+  });
+
   it("invokes Rust Core through the start agent session command", async () => {
     invokeMock.mockResolvedValue({
       sessionId: 7,
@@ -753,6 +778,9 @@ describe("command client", () => {
         issueId: 3,
         agentProfileId: 9,
         promptSnapshot: "Final prompt",
+        completionPolicyOverride: "agent_auto_commit",
+        workspaceMode: "worktree",
+        targetBranch: "main",
       }),
     ).resolves.toEqual({
       sessionId: 7,
@@ -764,7 +792,25 @@ describe("command client", () => {
         issueId: 3,
         agentProfileId: 9,
         promptSnapshot: "Final prompt",
+        completionPolicyOverride: "agent_auto_commit",
+        workspaceMode: "worktree",
+        targetBranch: "main",
       },
+    });
+  });
+
+  it("invokes Rust Core through the get project git branches command", async () => {
+    invokeMock.mockResolvedValue({
+      currentBranch: "main",
+      localBranches: ["main", "develop"],
+    });
+
+    await expect(getProjectGitBranches({ projectId: 1 })).resolves.toEqual({
+      currentBranch: "main",
+      localBranches: ["main", "develop"],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("get_project_git_branches", {
+      input: { projectId: 1 },
     });
   });
 
