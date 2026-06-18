@@ -1,3 +1,35 @@
+# 核心约束：必须遵守 docs/ 规范文档
+
+## 🔴 前置要求：先读取相关规范
+
+Agent 在执行任何任务前，**必须**先确认本次任务涉及哪些规范文档，并读取对应的 docs/ 文件：
+
+- **所有任务默认需要读取**：
+  - `docs/standards/README.md` - 规范文档索引
+  - `docs/standards/agent-development-rules.md` - Agent 开发通用规则
+
+- **涉及 TypeScript/代码改动时**：
+  - `docs/standards/shared/engineering-spec.md` - TypeScript 工程规范
+  - `docs/standards/shared/coding-style.md` - 编码风格
+
+- **涉及 UI/设计改动时**：
+  - `docs/DESIGN_GUIDE.md` - 设计系统指南
+  - `docs/standards/settings-page-layout.md` - Settings 页面布局规范（如适用）
+
+- **涉及 Git 提交时**：
+  - `docs/standards/shared/git-workflow.md` - Git 工作流规范
+
+## 规范优先级
+
+1. 用户明确要求 >
+2. docs/** 正式文档 >
+3. AGENTS.md >
+4. 外部 skill / workflow / 模板默认行为
+
+当规范之间存在冲突时，以更具体的文档为准：
+- `docs/standards/agent-development-rules.md` 的特定规则 > 本文件的通用规则
+- `docs/standards/shared/` 下的专项规范 > 概括性说明
+
 ## Git Commit Rule
 - Agent 完成当前任务并完成必要验证后，应自动创建一次 git commit。
 - 自动提交顺序固定为：完成任务 -> 运行该任务所需验证 -> 暂存当前任务相关文件 -> 创建 git commit。
