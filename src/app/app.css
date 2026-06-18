@@ -1646,7 +1646,7 @@ button:focus-visible {
   display: block;
   overflow: hidden;
   min-width: 0;
-  max-width: calc(100% - 34px);
+  max-width: 100%;
   color: var(--color-text-muted);
   font-size: 11px;
   line-height: 1.2;
@@ -1655,11 +1655,24 @@ button:focus-visible {
 }
 
 .issue-card__footer {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.issue-card__footer-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.issue-card__labels {
+  display: block;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .issue-card__run {
