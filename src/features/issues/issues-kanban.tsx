@@ -155,65 +155,73 @@ function IssueCard({
   return (
     <div role="listitem">
       <div className="issue-card__shell">
-        <button
-          ref={(element) => {
-            if (element) {
-              cardRefs.current.set(issue.id, element);
-            } else {
-              cardRefs.current.delete(issue.id);
-            }
-          }}
-          aria-describedby={describedBy}
-          aria-label={issue.title}
-          aria-pressed={isSelected}
-          className="issue-card"
-          type="button"
-          onClick={(event) => onOpenIssue(issue, event.currentTarget)}
-        >
-          <span id={metaId} className="issue-card__meta-row">
-            <span className="issue-card__id">#{issue.id}</span>
-            <span className="issue-card__updated">
-              {formatTimestamp(issue.updatedAt)}
+        <div className="issue-card__content-row">
+          <button
+            ref={(element) => {
+              if (element) {
+                cardRefs.current.set(issue.id, element);
+              } else {
+                cardRefs.current.delete(issue.id);
+              }
+            }}
+            aria-describedby={describedBy}
+            aria-label={issue.title}
+            aria-pressed={isSelected}
+            className="issue-card"
+            type="button"
+            onClick={(event) => onOpenIssue(issue, event.currentTarget)}
+          >
+            <span id={metaId} className="issue-card__meta-row">
+              <span className="issue-card__id">#{issue.id}</span>
+              <span className="issue-card__updated">
+                {formatTimestamp(issue.updatedAt)}
+              </span>
             </span>
-          </span>
-          <span className="issue-card__title">{issue.title}</span>
-          {issue.linkedSessionAttention === "requested" ? (
-            <span
-              id={attentionId}
-              className="attention-marker issue-card__attention"
-            >
-              <span aria-hidden="true" className="attention-marker__dot" />
-              <span className="attention-marker__text">Codex 需要确认</span>
-            </span>
-          ) : null}
-          {issue.description ? (
-            <span id={descriptionId} className="issue-card__description">
-              {toDescriptionExcerpt(issue.description)}
-            </span>
-          ) : null}
-        </button>
-        {isRunnable || hasLabels ? (
-          <div className="issue-card__footer">
-            {isRunnable ? (
-              <div className="issue-card__footer-actions">
-                <button
-                  aria-label={`Run ${issue.title}`}
-                  className="issue-card__run"
-                  type="button"
-                  onClick={(event) => {
-                    onRunIssue(issue, event.currentTarget);
-                  }}
-                >
-                  <Play aria-hidden="true" size={14} strokeWidth={2} />
-                </button>
-              </div>
-            ) : null}
-            {hasLabels ? (
-              <span id={labelsId} className="issue-card__labels">
-                {labels.map((label) => label.name).join(" · ")}
+            <span className="issue-card__title">{issue.title}</span>
+            {issue.linkedSessionAttention === "requested" ? (
+              <span
+                id={attentionId}
+                className="attention-marker issue-card__attention"
+              >
+                <span aria-hidden="true" className="attention-marker__dot" />
+                <span className="attention-marker__text">Codex 需要确认</span>
               </span>
             ) : null}
-          </div>
+            {issue.description ? (
+              <span id={descriptionId} className="issue-card__description">
+                {toDescriptionExcerpt(issue.description)}
+              </span>
+            ) : null}
+          </button>
+          {isRunnable ? (
+            <button
+              aria-label={`Run ${issue.title}`}
+              className="issue-card__run"
+              type="button"
+              onClick={(event) => {
+                onRunIssue(issue, event.currentTarget);
+              }}
+            >
+              <Play aria-hidden="true" size={14} strokeWidth={2} />
+            </button>
+          ) : null}
+        </div>
+        {hasLabels ? (
+          <span id={labelsId} className="issue-card__labels">
+            <span className="sr-only">
+              {`Labels: ${labels.map((label) => label.name).join(", ")}`}
+            </span>
+            {labels.map((label) => (
+              <span
+                key={label.id}
+                aria-hidden="true"
+                className="issue-card__label-chip"
+                style={{ backgroundColor: label.color }}
+              >
+                {label.name}
+              </span>
+            ))}
+          </span>
         ) : null}
       </div>
     </div>

@@ -417,26 +417,35 @@ describe("IssuesActivity", () => {
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
   });
 
-  it("shows issue labels below the card footer when labels are present", async () => {
+  it("shows issue label chips on cards across lanes when labels are present", async () => {
     listIssuesMock.mockResolvedValue({
       issues: [
         {
           ...existingIssue,
           labels: [projectLabel, globalLabel],
         },
+        {
+          ...reviewIssue,
+          labels: [globalLabel],
+        },
       ],
     });
 
     renderIssuesActivity();
 
-    const card = await screen.findByRole("button", {
+    const backlogCard = await screen.findByRole("button", {
       name: "Existing issue",
     });
+    const reviewCard = screen.getByRole("button", { name: "Review issue" });
 
-    expect(card).toHaveAccessibleDescription(
-      expect.stringContaining("bug · release"),
+    expect(backlogCard).toHaveAccessibleDescription(
+      expect.stringContaining("Labels: bug, release"),
     );
-    expect(screen.getByText("bug · release")).toBeInTheDocument();
+    expect(reviewCard).toHaveAccessibleDescription(
+      expect.stringContaining("Labels: release"),
+    );
+    expect(screen.getByText("bug")).toBeInTheDocument();
+    expect(screen.getAllByText("release")).toHaveLength(2);
   });
 
   it("shows a needs-attention marker on issue cards when linked session attention is requested", async () => {
