@@ -139,10 +139,15 @@ function IssueCard({
   const metaId = `issue-card-meta-${issue.id}`;
   const attentionId = `issue-card-attention-${issue.id}`;
   const descriptionId = `issue-card-description-${issue.id}`;
+  const labelsId = `issue-card-labels-${issue.id}`;
+  const labels = issue.labels ?? [];
+  const hasLabels = labels.length > 0;
+  const isRunnable = canRunIssue(issue);
   const describedBy = [
     metaId,
     issue.linkedSessionAttention === "requested" ? attentionId : null,
     issue.description ? descriptionId : null,
+    hasLabels ? labelsId : null,
   ]
     .filter((value): value is string => value != null)
     .join(" ");
@@ -187,18 +192,27 @@ function IssueCard({
             </span>
           ) : null}
         </button>
-        {canRunIssue(issue) ? (
+        {isRunnable || hasLabels ? (
           <div className="issue-card__footer">
-            <button
-              aria-label={`Run ${issue.title}`}
-              className="issue-card__run"
-              type="button"
-              onClick={(event) => {
-                onRunIssue(issue, event.currentTarget);
-              }}
-            >
-              <Play aria-hidden="true" size={14} strokeWidth={2} />
-            </button>
+            {isRunnable ? (
+              <div className="issue-card__footer-actions">
+                <button
+                  aria-label={`Run ${issue.title}`}
+                  className="issue-card__run"
+                  type="button"
+                  onClick={(event) => {
+                    onRunIssue(issue, event.currentTarget);
+                  }}
+                >
+                  <Play aria-hidden="true" size={14} strokeWidth={2} />
+                </button>
+              </div>
+            ) : null}
+            {hasLabels ? (
+              <span id={labelsId} className="issue-card__labels">
+                {labels.map((label) => label.name).join(" · ")}
+              </span>
+            ) : null}
           </div>
         ) : null}
       </div>

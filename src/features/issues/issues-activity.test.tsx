@@ -417,6 +417,28 @@ describe("IssuesActivity", () => {
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
   });
 
+  it("shows issue labels below the card footer when labels are present", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...existingIssue,
+          labels: [projectLabel, globalLabel],
+        },
+      ],
+    });
+
+    renderIssuesActivity();
+
+    const card = await screen.findByRole("button", {
+      name: "Existing issue",
+    });
+
+    expect(card).toHaveAccessibleDescription(
+      expect.stringContaining("bug · release"),
+    );
+    expect(screen.getByText("bug · release")).toBeInTheDocument();
+  });
+
   it("shows a needs-attention marker on issue cards when linked session attention is requested", async () => {
     listIssuesMock.mockResolvedValue({
       issues: [attentionIssue, linkedSessionIssue],
