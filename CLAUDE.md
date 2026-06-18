@@ -1,34 +1,60 @@
-# CLAUDE.md
+# 核心约束：必须遵守 docs/ 规范文档
 
-本项目对 Claude Code 的统一协作规则以 [AGENTS.md](./AGENTS.md) 为准。
+## 前置要求：先读取相关规范
 
-Claude Code 在开始任何任务前必须先读取并遵守：
+Agent 在执行任何任务前，**必须**先确认本次任务涉及哪些规范文档，并读取对应的 docs/ 文件：
 
-1. [AGENTS.md](./AGENTS.md)
-2. [docs/README.md](./docs/README.md)
-3. 与本次任务直接相关的 `docs/**` 正式文档
+- **所有任务默认需要读取**：
+  - `docs/standards/README.md` - 规范文档索引
+  - `docs/standards/agent-development-rules.md` - Agent 开发通用规则
 
-补充说明：
+- **涉及 TypeScript/代码改动时**：
+  - `docs/standards/shared/engineering-spec.md` - TypeScript 工程规范
+  - `docs/standards/shared/coding-style.md` - 编码风格
 
-- 若 `AGENTS.md` 与某份 `docs/**` 的概括存在冲突，以对应 `docs/**` 正式文档为准。
-- 若用户明确给出与 `AGENTS.md` 不同的要求，以用户要求为准。
-- 为避免多处维护规则，除 Claude Code 专属补充外，不要在本文件重复抄写 `AGENTS.md` 内容。
+- **涉及 UI/设计改动时**：
+  - `docs/DESIGN_GUIDE.md` - 设计系统指南
+  - `docs/standards/settings-page-layout.md` - Settings 页面布局规范（如适用）
 
-## Claude Code 工作流程要求
+- **涉及 Git 提交时**：
+  - `docs/standards/shared/git-workflow.md` - Git 工作流规范
 
-### 🔴 必须自动提交 Git
+## 规范优先级
 
-Claude Code **必须**在完成每个开发任务后，自动创建 git 提交，无需用户提醒：
+1. 用户明确要求 >
+2. docs/** 正式文档 >
+3. AGENTS.md >
+4. 外部 skill / workflow / 模板默认行为
 
-1. 完成任务后 → 先运行验证（lint、typecheck、test 等）
-2. 验证通过 → 自动暂存相关文件
-3. 创建有意义的 commit message（描述清楚做了什么）
-4. 完成提交
+当规范之间存在冲突时，以更具体的文档为准：
+- `docs/standards/agent-development-rules.md` 的特定规则 > 本文件的通用规则
+- `docs/standards/shared/` 下的专项规范 > 概括性说明
 
-### 任务完成的标准
+## Git Commit Rule
+- Agent 完成当前任务并完成必要验证后，应自动创建一次 git commit。
+- 自动提交顺序固定为：完成任务 -> 运行该任务所需验证 -> 暂存当前任务相关文件 -> 创建 git commit。
+- 自动提交只能包含当前任务直接相关的文件，禁止混入无关改动。
+- 如果工作区中存在无法安全归属到当前任务的无关改动，Agent 自动提交当前任务直接相关的文件。
+- 对代码改动，`必要验证` 不能只写成笼统描述，必须落成实际命令清单；未执行的命令不能口头视为“已验证”。
+- 只要改动了 TypeScript / JavaScript 源码，默认至少运行受影响包的 `lint` 与 `typecheck`。
+- 只要改动了运行时行为、分支逻辑、数据流、渲染逻辑或测试用例依赖的实现，除 `lint` 与 `typecheck` 外，还必须运行受影响范围内的 `test`。
+- 若因环境、耗时或外部依赖限制无法运行某项验证，必须在最终说明中明确写出“未运行什么、为什么没运行、风险在哪”。
 
-- 运行相关验证（lint、typecheck、test 等）
-- 所有验证通过
-- 创建 git 提交（只包含任务相关文件）
-- 工作区干净
-- 告知用户完成
+## Language Rule
+
+- 除非用户明确要求使用其他语言，所有说明性文字默认使用简体中文。
+- 此规则适用于主 Agent 与所有子 Agent / delegated agents，不能因为使用 skill、workflow、subagent 或模板而切换为英文。
+- 所有生成到 `docs/` 下的 Markdown 文档，正文、标题、分析、结论、步骤说明默认使用简体中文。
+- 代码、命令、日志原文、API 名称、协议字段、环境变量名、文件名、路径、TypeScript/SQL/Prisma 标识符保持原样，不做翻译。
+- 如果模板或工具预置了英文标题，允许保留固定文件名与少量固定英文 token，但正文内容必须使用简体中文；若无兼容性要求，优先直接使用中文标题。
+- 在 spawn / Task / delegation 场景下，发给子 Agent 的 prompt 应显式重复“默认使用简体中文输出说明文字”这一要求，避免子 Agent 丢失语言上下文。
+
+
+## Karpathy 风格编码纪律
+
+- 编码前先思考：开始实现前显式说明关键假设、歧义和取舍；如果需求存在多个合理解释，先澄清或列出默认选择，不能静默猜测。
+- 简单优先：只实现当前任务需要的最小方案；禁止提前加入未被要求的抽象、配置、扩展点、缓存、通知、兼容层或“顺手功能”。
+- 外科手术式修改：只修改与当前任务直接相关的代码；保持既有风格；不顺手重构、不改无关注释、不格式化无关文件；发现无关问题时只说明，不擅自处理。
+- 目标驱动执行：把任务转成可验证目标；bugfix 优先先复现或补测试，功能开发要说明验收标准；多步骤任务要为每一步写明验证方式。
+- 完成自检标准：每一处 diff 都必须能追溯到用户请求、项目文档或验证失败；无法解释来源的改动应撤回或单独征求确认。
+- 适用范围：这些规则约束非平凡实现、重构、修复和评审；明显的一行 typo、格式修正或无歧义小改动可按常识快速处理，但仍不得混入无关改动。
