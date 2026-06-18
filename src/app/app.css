@@ -1678,10 +1678,10 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  padding: 4px 10px;
+  padding: 2px 6px;
   border-radius: 999px;
   color: #ffffff;
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 500;
   line-height: 1.35;
 }
