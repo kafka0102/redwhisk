@@ -1,5 +1,6 @@
 import { AgentsActivity } from "../features/agents/agents-activity";
 import { IssuesActivity } from "../features/issues/issues-activity";
+import { DesignSystemActivity } from "../features/design-system/design-system-activity";
 import {
   ProjectSettingsActivity,
   type SettingsMenu,
@@ -12,7 +13,12 @@ import type { ProjectCompletionPolicy } from "../features/project/project-comman
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 
-export type ActivityKey = "issues" | "agents" | "terminals" | "settings";
+export type ActivityKey =
+  | "issues"
+  | "agents"
+  | "terminals"
+  | "settings"
+  | "design-system";
 
 interface ActivityRouterProps {
   activeActivity: ActivityKey;
@@ -88,6 +94,10 @@ export function ActivityRouter({
         projectPath={projectPath}
       />
     );
+  }
+
+  if (activeActivity === "design-system") {
+    return <DesignSystemActivity />;
   }
 
   return (

@@ -5,6 +5,7 @@ export interface I18nMessages {
   app: {
     activityBarLabel: string;
     agents: string;
+    designSystem: string;
     globalSettings: string;
     issues: string;
     projectSettings: string;
@@ -94,6 +95,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     app: {
       activityBarLabel: "Activity Bar",
       agents: "Agents",
+      designSystem: "Design System",
       globalSettings: "Global Settings",
       issues: "Issues",
       projectSettings: "Project Settings",
@@ -179,6 +181,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     app: {
       activityBarLabel: "活动栏",
       agents: "Agents",
+      designSystem: "设计系统",
       globalSettings: "全局设置",
       issues: "Issues",
       projectSettings: "项目设置",

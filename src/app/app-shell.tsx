@@ -1,4 +1,4 @@
-import { Bot, CircleDot, Settings, Terminal } from "lucide-react";
+import { Bot, CircleDot, Palette, Settings, Terminal } from "lucide-react";
 import { useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -29,6 +29,7 @@ const ACTIVITIES: Array<{
   { key: "agents", Icon: Bot },
   { key: "terminals", Icon: Terminal },
   { key: "settings", Icon: Settings },
+  { key: "design-system", Icon: Palette },
 ];
 
 export function AppShell({
@@ -100,7 +101,9 @@ export function AppShell({
                 ? messages.app.agents
                 : key === "terminals"
                   ? messages.app.terminals
-                  : messages.app.settings;
+                  : key === "design-system"
+                    ? messages.app.designSystem
+                    : messages.app.settings;
           const ariaLabel =
             key === "settings" ? messages.app.projectSettings : label;
 

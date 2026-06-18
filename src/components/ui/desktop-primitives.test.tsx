@@ -11,13 +11,10 @@ describe("desktop ui primitives", () => {
 
     const button = screen.getByRole("button", { name: "Run" });
 
-    expect(button.className).toContain("rounded-[var(--radius-card)]");
+    expect(button.className).toContain("rounded-[var(--radius-control)]");
     expect(button.className).toContain("text-[13px]");
     expect(button.className).toContain(
-      "focus-visible:ring-[var(--color-focus-ring)]",
-    );
-    expect(button.className).toContain(
-      "focus-visible:ring-offset-[var(--color-focus-offset)]",
+      "focus-visible:shadow-[var(--shadow-focus)]",
     );
   });
 
@@ -26,13 +23,10 @@ describe("desktop ui primitives", () => {
 
     const input = screen.getByRole("textbox", { name: "Command" });
 
-    expect(input.className).toContain("rounded-[var(--radius-card)]");
+    expect(input.className).toContain("rounded-[var(--radius-control)]");
     expect(input.className).toContain("text-[13px]");
     expect(input.className).toContain(
-      "focus-visible:ring-[var(--color-focus-ring)]",
-    );
-    expect(input.className).toContain(
-      "focus-visible:ring-offset-[var(--color-focus-offset)]",
+      "focus-visible:shadow-[var(--shadow-focus)]",
     );
   });
 
@@ -41,13 +35,10 @@ describe("desktop ui primitives", () => {
 
     const textarea = screen.getByRole("textbox", { name: "Prompt" });
 
-    expect(textarea.className).toContain("rounded-[var(--radius-card)]");
+    expect(textarea.className).toContain("rounded-[var(--radius-control)]");
     expect(textarea.className).toContain("text-[13px]");
     expect(textarea.className).toContain(
-      "focus-visible:ring-[var(--color-focus-ring)]",
-    );
-    expect(textarea.className).toContain(
-      "focus-visible:ring-offset-[var(--color-focus-offset)]",
+      "focus-visible:shadow-[var(--shadow-focus)]",
     );
   });
 });
