@@ -1589,28 +1589,42 @@ button:focus-visible {
 .issue-card {
   display: grid;
   width: 100%;
-  min-height: 88px;
   gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.issue-card__shell {
+  display: grid;
+  min-height: 88px;
+  gap: 8px;
   padding: 10px 10px 9px;
   border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
   border-radius: var(--radius-card);
   background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: left;
   transition: background-color 160ms ease-out;
 }
 
-.issue-card__shell {
-  position: relative;
+.issue-card__content-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
 }
 
-.issue-card:hover {
+.issue-card__shell:has(.issue-card:hover),
+.issue-card__shell:has(.issue-card[aria-pressed="true"]) {
   background: var(--color-surface);
 }
 
-.issue-card[aria-pressed="true"] {
-  background: var(--color-surface);
+.issue-card:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .issue-card__meta-row {
@@ -1646,7 +1660,6 @@ button:focus-visible {
   display: block;
   overflow: hidden;
   min-width: 0;
-  max-width: 100%;
   color: var(--color-text-muted);
   font-size: 11px;
   line-height: 1.2;
@@ -1654,25 +1667,23 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.issue-card__footer {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.issue-card__footer-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .issue-card__labels {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
-  color: var(--color-text-muted);
+}
+
+.issue-card__label-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #ffffff;
   font-size: 12px;
+  font-weight: 500;
   line-height: 1.35;
-  white-space: normal;
-  word-break: break-word;
 }
 
 .issue-card__run {
