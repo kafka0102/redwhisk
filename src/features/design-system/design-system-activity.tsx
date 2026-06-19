@@ -5,11 +5,7 @@ import {
   Textarea,
   Label,
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
   CardContent,
-  CardFooter,
   Badge,
   Separator,
   Empty,
@@ -19,7 +15,18 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { Check, X, Plus, Paperclip, Trash2, Inbox } from "lucide-react";
+
+const TYPE_SAMPLES = {
+  headline: "text-[22px] font-semibold leading-[1.2]",
+  title: "text-base font-semibold leading-[1.25]",
+  bodyStrong: "text-[13px] font-semibold leading-[1.32]",
+  body: "text-[13px] font-normal leading-[1.45]",
+  label: "text-xs font-semibold leading-[1.35]",
+  meta: "text-[11px] font-normal leading-[1.35]",
+  mono: "text-xs font-normal leading-[1.45] font-mono",
+} as const;
 
 export function DesignSystemActivity() {
   const [activeSection, setActiveSection] = useState("overview");
@@ -39,28 +46,36 @@ export function DesignSystemActivity() {
 
   return (
     <div className="activity-surface" style={{ padding: "24px" }}>
-      <div className="design-system-layout">
-        <div className="design-system-nav">
-          <div className="design-system-nav-header">
-            <h2>Design System</h2>
-            <p>RedWhisk UI Component Library</p>
+      <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] gap-6 overflow-hidden">
+        <nav className="grid grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden border-r py-4">
+          <div className="px-4">
+            <h2 className="text-base font-semibold leading-[1.25]">
+              Design System
+            </h2>
+            <p className="mt-1 text-xs leading-[1.35] text-muted-foreground">
+              RedWhisk UI Component Library
+            </p>
           </div>
-          <nav className="design-system-nav-list">
+          <div className="grid auto-rows-min gap-0.5 overflow-auto px-2">
             {sections.map((section) => (
-              <button
+              <Button
                 key={section.id}
-                className={`design-system-nav-item ${
-                  activeSection === section.id ? "active" : ""
-                }`}
+                variant="ghost"
+                aria-pressed={activeSection === section.id}
                 onClick={() => setActiveSection(section.id)}
+                className={cn(
+                  "w-full justify-start",
+                  activeSection === section.id &&
+                    "bg-muted font-semibold text-foreground",
+                )}
               >
                 {section.label}
-              </button>
+              </Button>
             ))}
-          </nav>
-        </div>
+          </div>
+        </nav>
 
-        <div className="design-system-content">
+        <div className="overflow-auto pr-2">
           {activeSection === "overview" && <OverviewSection />}
           {activeSection === "colors" && <ColorsSection />}
           {activeSection === "typography" && <TypographySection />}
@@ -77,52 +92,83 @@ export function DesignSystemActivity() {
   );
 }
 
+function SectionHeader({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <h2 className="m-0 text-[22px] font-semibold leading-[1.2]">{title}</h2>
+      <p className="mt-1.5 text-[13px] leading-[1.45] text-muted-foreground">
+        {description}
+      </p>
+    </div>
+  );
+}
+
 function OverviewSection() {
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Overview</h2>
-        <p>The Local Workbench - Quiet, Compact, Reliable</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Overview"
+        description="The Local Workbench - Quiet, Compact, Reliable"
+      />
 
-      <div className="design-note">
-        <h3>Design Principles</h3>
-        <ul>
-          <li>
-            <strong>Trust over Delight:</strong> State must be clear and
-            auditable
-          </li>
-          <li>
-            <strong>Workbench Density:</strong> Desktop-first panels, hairline
-            borders, compact controls
-          </li>
-          <li>
-            <strong>Restrained Expression:</strong> Black, white, gray as
-            default; color only when needed
-          </li>
-          <li>
-            <strong>Clear Boundaries:</strong> Project, Issue, Session, Settings
-            must remain visually distinct
-          </li>
-        </ul>
-      </div>
+      <Card>
+        <CardContent className="grid gap-3">
+          <h3 className="text-[13px] font-semibold leading-[1.32]">
+            Design Principles
+          </h3>
+          <ul className="m-0 list-disc pl-5">
+            <li className="my-1 text-[13px] leading-[1.45]">
+              <strong>Trust over Delight:</strong> State must be clear and
+              auditable
+            </li>
+            <li className="my-1 text-[13px] leading-[1.45]">
+              <strong>Workbench Density:</strong> Desktop-first panels, hairline
+              borders, compact controls
+            </li>
+            <li className="my-1 text-[13px] leading-[1.45]">
+              <strong>Restrained Expression:</strong> Black, white, gray as
+              default; color only when needed
+            </li>
+            <li className="my-1 text-[13px] leading-[1.45]">
+              <strong>Clear Boundaries:</strong> Project, Issue, Session,
+              Settings must remain visually distinct
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
 
-      <div className="design-note design-note--warning">
-        <h3>Hard Don'ts</h3>
-        <ul>
-          <li>
-            Don't make marketing pages, SaaS dashboards, or colorful column看板
-          </li>
-          <li>
-            Don't use large rounded cards, gradients, or decorative shadows
-          </li>
-          <li>
-            Don't make state only available through color (always add text)
-          </li>
-          <li>Don't fake "premium" through large fonts or excessive spacing</li>
-        </ul>
-      </div>
-    </div>
+      <Card className="border-destructive/40 bg-destructive/5">
+        <CardContent className="grid gap-3">
+          <h3 className="text-[13px] font-semibold leading-[1.32]">
+            Hard Don&apos;ts
+          </h3>
+          <ul className="m-0 list-disc pl-5">
+            <li className="my-1 text-[13px] leading-[1.45]">
+              Don&apos;t make marketing pages, SaaS dashboards, or colorful
+              column看板
+            </li>
+            <li className="my-1 text-[13px] leading-[1.45]">
+              Don&apos;t use large rounded cards, gradients, or decorative
+              shadows
+            </li>
+            <li className="my-1 text-[13px] leading-[1.45]">
+              Don&apos;t make state only available through color (always add
+              text)
+            </li>
+            <li className="my-1 text-[13px] leading-[1.45]">
+              Don&apos;t fake &quot;premium&quot; through large fonts or
+              excessive spacing
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+    </section>
   );
 }
 
@@ -173,96 +219,139 @@ function ColorsSection() {
   ];
 
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Colors</h2>
-        <p>The Rarity Rule: Color must be scarce</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Colors"
+        description="The Rarity Rule: Color must be scarce"
+      />
 
-      <div className="color-section">
-        <h3>Neutrals (Light)</h3>
-        <div className="color-grid">
-          {neutralsLight.map((color) => (
-            <div key={color.name} className="color-swatch">
-              <div
-                className="color-swatch-box"
-                style={{ backgroundColor: color.value }}
-              />
-              <div className="color-swatch-info">
-                <div className="color-swatch-name">{color.name}</div>
-                <div className="color-swatch-value">{color.value}</div>
-                <div className="color-swatch-var">{color.var}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <ColorGroup heading="Neutrals (Light)">
+        {neutralsLight.map((color) => (
+          <ColorSwatch key={color.name} color={color} />
+        ))}
+      </ColorGroup>
 
-      <div className="color-section">
-        <h3>Accents</h3>
-        <div className="color-grid">
-          {accents.map((color) => (
-            <div key={color.name} className="color-swatch">
-              <div className="color-swatch-duo">
+      <ColorGroup heading="Accents">
+        {accents.map((color) => (
+          <Card key={color.name}>
+            <CardContent className="grid gap-2">
+              <div className="flex gap-1">
                 <div
-                  className="color-swatch-box"
+                  className="h-12 flex-1 rounded-sm border"
                   style={{ backgroundColor: color.light }}
                 />
                 <div
-                  className="color-swatch-box"
+                  className="h-12 flex-1 rounded-sm border"
                   style={{ backgroundColor: color.dark }}
                 />
               </div>
-              <div className="color-swatch-info">
-                <div className="color-swatch-name">{color.name}</div>
-                <div className="color-swatch-value">
-                  {color.light} / {color.dark}
-                </div>
-                <div className="color-swatch-var">{color.var}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+              <ColorSwatchInfo
+                name={color.name}
+                value={`${color.light} / ${color.dark}`}
+                token={color.var}
+              />
+            </CardContent>
+          </Card>
+        ))}
+      </ColorGroup>
 
-      <div className="color-section">
-        <h3>State Colors</h3>
-        <p>Use as small markers, never as full backgrounds or wide strips</p>
-        <div className="color-grid">
-          {states.map((color) => (
-            <div key={color.name} className="color-swatch">
+      <ColorGroup
+        heading="State Colors"
+        description="Use as small markers, never as full backgrounds or wide strips"
+      >
+        {states.map((color) => (
+          <ColorSwatch key={color.name} color={color} />
+        ))}
+      </ColorGroup>
+
+      <ColorGroup
+        heading="Project Identity Colors"
+        description="Only for Project Switcher icons; stable per project"
+      >
+        {projectColors.map((color) => (
+          <Card key={color.name}>
+            <CardContent className="grid gap-2">
               <div
-                className="color-swatch-box"
+                className="h-12 w-full rounded-sm border"
                 style={{ backgroundColor: color.value }}
               />
-              <div className="color-swatch-info">
-                <div className="color-swatch-name">{color.name}</div>
-                <div className="color-swatch-value">{color.value}</div>
-                <div className="color-swatch-var">{color.var}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+              <ColorSwatchInfo name={color.name} value={color.value} />
+            </CardContent>
+          </Card>
+        ))}
+      </ColorGroup>
+    </section>
+  );
+}
 
-      <div className="color-section">
-        <h3>Project Identity Colors</h3>
-        <p>Only for Project Switcher icons; stable per project</p>
-        <div className="color-grid">
-          {projectColors.map((color) => (
-            <div key={color.name} className="color-swatch">
-              <div
-                className="color-swatch-box"
-                style={{ backgroundColor: color.value }}
-              />
-              <div className="color-swatch-info">
-                <div className="color-swatch-name">{color.name}</div>
-                <div className="color-swatch-value">{color.value}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+function ColorGroup({
+  heading,
+  description,
+  children,
+}: {
+  heading: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-1">
+        <h3 className="m-0 text-sm font-semibold leading-[1.3]">{heading}</h3>
+        {description && (
+          <p className="m-0 text-xs leading-[1.4] text-muted-foreground">
+            {description}
+          </p>
+        )}
       </div>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ColorSwatch({
+  color,
+}: {
+  color: { name: string; var: string; value: string };
+}) {
+  return (
+    <Card>
+      <CardContent className="grid gap-2">
+        <div
+          className="h-12 w-full rounded-sm border"
+          style={{ backgroundColor: color.value }}
+        />
+        <ColorSwatchInfo
+          name={color.name}
+          value={color.value}
+          token={color.var}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ColorSwatchInfo({
+  name,
+  value,
+  token,
+}: {
+  name: string;
+  value: string;
+  token?: string;
+}) {
+  return (
+    <div className="grid gap-0.5">
+      <div className="text-xs font-semibold leading-[1.35]">{name}</div>
+      <div className="text-[11px] leading-[1.35] text-muted-foreground">
+        {value}
+      </div>
+      {token && (
+        <div className="font-mono text-[11px] leading-[1.35] text-muted-foreground/70">
+          {token}
+        </div>
+      )}
     </div>
   );
 }
@@ -275,7 +364,7 @@ function TypographySection() {
       weight: "650",
       lineHeight: "1.2",
       usage: "Only for Project Home title",
-      className: "design-type-headline",
+      className: TYPE_SAMPLES.headline,
     },
     {
       name: "Title",
@@ -283,7 +372,7 @@ function TypographySection() {
       weight: "650",
       lineHeight: "1.25",
       usage: "Activity-level titles (e.g., Issues)",
-      className: "design-type-title",
+      className: TYPE_SAMPLES.title,
     },
     {
       name: "Body Strong",
@@ -291,7 +380,7 @@ function TypographySection() {
       weight: "650",
       lineHeight: "1.32",
       usage: "Project name, Issue title, dialog title",
-      className: "design-type-body-strong",
+      className: TYPE_SAMPLES.bodyStrong,
     },
     {
       name: "Body",
@@ -299,7 +388,7 @@ function TypographySection() {
       weight: "400",
       lineHeight: "1.45",
       usage: "Default UI copy, button, input",
-      className: "design-type-body",
+      className: TYPE_SAMPLES.body,
     },
     {
       name: "Label",
@@ -307,7 +396,7 @@ function TypographySection() {
       weight: "600",
       lineHeight: "1.35",
       usage: "Field label, section label",
-      className: "design-type-label",
+      className: TYPE_SAMPLES.label,
     },
     {
       name: "Meta",
@@ -315,7 +404,7 @@ function TypographySection() {
       weight: "400",
       lineHeight: "1.35",
       usage: "Timestamp, count, status text",
-      className: "design-type-meta",
+      className: TYPE_SAMPLES.meta,
     },
     {
       name: "Mono",
@@ -323,81 +412,134 @@ function TypographySection() {
       weight: "400",
       lineHeight: "1.45",
       usage: "Repo path, command, log, hash, file path",
-      className: "design-type-mono",
+      className: TYPE_SAMPLES.mono,
     },
   ];
 
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Typography</h2>
-        <p>The No Display Rule: No hero type, no display fonts</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Typography"
+        description="The No Display Rule: No hero type, no display fonts"
+      />
 
-      <div className="type-scale">
+      <div className="grid gap-6">
         {typeScale.map((type) => (
-          <div key={type.name} className="type-scale-item">
-            <div className="type-scale-meta">
-              <div className="type-scale-name">{type.name}</div>
-              <div className="type-scale-details">
-                {type.size} / {type.weight} / {type.lineHeight}
+          <Card key={type.name}>
+            <CardContent className="grid gap-3">
+              <div className="grid gap-1">
+                <div className="text-xs font-semibold leading-[1.35]">
+                  {type.name}
+                </div>
+                <div className="font-mono text-[11px] leading-[1.35] text-muted-foreground">
+                  {type.size} / {type.weight} / {type.lineHeight}
+                </div>
+                <div className="text-[11px] leading-[1.35] text-muted-foreground/70">
+                  {type.usage}
+                </div>
               </div>
-              <div className="type-scale-usage">{type.usage}</div>
-            </div>
-            <div className="type-scale-sample">
-              <span className={type.className}>
-                The quick brown fox jumps over the lazy dog
-              </span>
-            </div>
-          </div>
+              <div className="border-t pt-2">
+                <span className={type.className}>
+                  The quick brown fox jumps over the lazy dog
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
+    </section>
+  );
+}
+
+function Showcase({
+  heading,
+  description,
+  children,
+}: {
+  heading: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardContent className="grid gap-3">
+        <div className="grid gap-1">
+          <h3 className="m-0 text-sm font-semibold leading-[1.3]">{heading}</h3>
+          {description && (
+            <p className="m-0 text-xs leading-[1.4] text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </div>
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Demo({
+  stacked = false,
+  children,
+}: {
+  stacked?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap gap-2 rounded-lg border border-dashed bg-muted p-4",
+        stacked && "flex-col items-stretch",
+      )}
+    >
+      {children}
     </div>
   );
 }
 
 function ButtonsSection() {
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Buttons</h2>
-        <p>Compact square controls, 3px radius</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Buttons"
+        description="Compact square controls, 3px radius"
+      />
 
-      <div className="component-showcase">
-        <h3>Primary Button</h3>
-        <p>Current strongest action. Black on white (inverted in dark mode)</p>
-        <div className="component-demo">
+      <Showcase
+        heading="Primary Button"
+        description="Current strongest action. Black on white (inverted in dark mode)"
+      >
+        <Demo>
           <Button>Save</Button>
           <Button disabled>Disabled</Button>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Secondary Button</h3>
-        <p>Cancel, Configure, and disabled follow-up workflow buttons</p>
-        <div className="component-demo">
+      <Showcase
+        heading="Secondary Button"
+        description="Cancel, Configure, and disabled follow-up workflow buttons"
+      >
+        <Demo>
           <Button variant="secondary">Cancel</Button>
           <Button variant="secondary" disabled>
             Disabled
           </Button>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Ghost Button</h3>
-        <p>For subtle actions in panels</p>
-        <div className="component-demo">
+      <Showcase
+        heading="Ghost Button"
+        description="For subtle actions in panels"
+      >
+        <Demo>
           <Button variant="ghost">Edit</Button>
           <Button variant="ghost" disabled>
             Disabled
           </Button>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>With Icons</h3>
-        <div className="component-demo">
+      <Showcase heading="With Icons">
+        <Demo>
           <Button>
             <Plus size={16} />
             New Issue
@@ -410,97 +552,80 @@ function ButtonsSection() {
             <Trash2 size={16} />
             Delete
           </Button>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Small Buttons</h3>
-        <div className="component-demo">
+      <Showcase heading="Small Buttons">
+        <Demo>
           <Button size="sm">Save</Button>
           <Button variant="secondary" size="sm">
             Cancel
           </Button>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Icon Only</h3>
-        <div className="component-demo">
+      <Showcase heading="Icon Only">
+        <Demo>
           <Button size="icon" aria-label="Check">
             <Check size={16} />
           </Button>
           <Button size="icon" variant="secondary" aria-label="Close">
             <X size={16} />
           </Button>
-        </div>
-      </div>
-    </div>
+        </Demo>
+      </Showcase>
+    </section>
   );
 }
 
 function InputsSection() {
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Inputs & Fields</h2>
-        <p>3px radius, 1px hairline border</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Inputs & Fields"
+        description="3px radius, 1px hairline border"
+      />
 
-      <div className="component-showcase">
-        <h3>Text Input</h3>
-        <div className="component-demo component-demo--stacked">
-          <Label>
-            Title
-            <Input
-              placeholder="Enter issue title"
-              style={{ marginTop: "5px" }}
-            />
-          </Label>
-          <Label>
-            With Value
-            <Input
-              value="Create local issue workflow"
-              style={{ marginTop: "5px" }}
-            />
-          </Label>
-          <Label>
-            Disabled
-            <Input
-              disabled
-              value="Cannot edit this"
-              style={{ marginTop: "5px" }}
-            />
-          </Label>
-        </div>
-      </div>
+      <Showcase heading="Text Input">
+        <Demo stacked>
+          <div className="grid gap-1.5">
+            <Label htmlFor="ds-input-title">Title</Label>
+            <Input id="ds-input-title" placeholder="Enter issue title" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="ds-input-value">With Value</Label>
+            <Input id="ds-input-value" value="Create local issue workflow" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="ds-input-disabled">Disabled</Label>
+            <Input id="ds-input-disabled" disabled value="Cannot edit this" />
+          </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Textarea</h3>
-        <div className="component-demo component-demo--stacked">
-          <Label>
-            Description
+      <Showcase heading="Textarea">
+        <Demo stacked>
+          <div className="grid gap-1.5">
+            <Label htmlFor="ds-textarea">Description</Label>
             <Textarea
+              id="ds-textarea"
               placeholder="Describe the issue in detail..."
-              style={{ marginTop: "5px", minHeight: "100px" }}
+              className="min-h-[100px]"
             />
-          </Label>
-        </div>
-      </div>
-    </div>
+          </div>
+        </Demo>
+      </Showcase>
+    </section>
   );
 }
 
 function BadgesSection() {
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Badges</h2>
-        <p>Small status indicators</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader title="Badges" description="Small status indicators" />
 
-      <div className="component-showcase">
-        <h3>Badge Variants</h3>
-        <div className="component-demo">
+      <Showcase heading="Badge Variants">
+        <Demo>
           <Badge variant="default">Default</Badge>
           <Badge variant="secondary">Secondary</Badge>
           <Badge variant="outline">Outline</Badge>
@@ -511,44 +636,46 @@ function BadgesSection() {
           <Badge className="bg-[rgba(200,144,0,0.1)] text-[var(--color-lane-running-marker)]">
             Running
           </Badge>
-        </div>
-      </div>
-    </div>
+        </Demo>
+      </Showcase>
+    </section>
   );
 }
 
 function CardsSection() {
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Cards</h2>
-        <p>The Flat Workbench Rule: No card shadows at rest</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Cards"
+        description="The Flat Workbench Rule: No card shadows at rest"
+      />
 
-      <div className="component-showcase">
-        <h3>Basic Card</h3>
-        <div className="component-demo component-demo--stacked">
+      <Showcase heading="Basic Card">
+        <Demo stacked>
           <Card style={{ maxWidth: "400px" }}>
-            <CardHeader>
-              <CardTitle>Card Title</CardTitle>
-              <CardDescription>Description here</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p style={{ fontSize: "13px", lineHeight: "1.45" }}>
+            <CardContent className="grid gap-3">
+              <div className="grid gap-1">
+                <div className="text-base font-medium leading-snug">
+                  Card Title
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Description here
+                </div>
+              </div>
+              <p className="text-[13px] leading-[1.45]">
                 Card content goes here. Keep it compact and focused.
               </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary">Cancel</Button>
+                <Button>Confirm</Button>
+              </div>
             </CardContent>
-            <CardFooter>
-              <Button variant="secondary">Cancel</Button>
-              <Button>Confirm</Button>
-            </CardFooter>
           </Card>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Empty State</h3>
-        <div className="component-demo component-demo--stacked">
+      <Showcase heading="Empty State">
+        <Demo stacked>
           <Empty>
             <EmptyHeader>
               <EmptyMedia>
@@ -566,48 +693,34 @@ function CardsSection() {
               </Button>
             </EmptyContent>
           </Empty>
-        </div>
-      </div>
-    </div>
+        </Demo>
+      </Showcase>
+    </section>
   );
 }
 
 function LayoutsSection() {
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Layouts</h2>
-        <p>Template systems for consistent page structure</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Layouts"
+        description="Template systems for consistent page structure"
+      />
 
-      <div className="component-showcase">
-        <h3>Page Layout</h3>
-        <div className="component-demo component-demo--stacked">
-          <div className="p-4 border border-[var(--color-border)] rounded-[var(--radius-card)]">
-            <div className="text-[12px] text-[var(--color-text-muted)] mb-2">
-              &lt;PageLayout title="My Page" subtitle="Subtitle here"&gt;
+      <Showcase heading="Page Layout">
+        <Demo stacked>
+          <div className="rounded-[var(--radius-card)] border p-4">
+            <div className="mb-2 text-xs text-muted-foreground">
+              &lt;PageLayout title=&quot;My Page&quot; subtitle=&quot;Subtitle
+              here&quot;&gt;
             </div>
-            <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-card)] p-4">
-              <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-[var(--color-border)]">
+            <div className="rounded-[var(--radius-card)] border border-dashed p-4">
+              <div className="mb-4 flex items-start justify-between gap-4 border-b pb-4">
                 <div>
-                  <h3
-                    style={{
-                      fontSize: "22px",
-                      fontWeight: "650",
-                      lineHeight: "1.2",
-                      margin: "0",
-                    }}
-                  >
+                  <h3 className="m-0 text-[22px] font-semibold leading-[1.2]">
                     My Page
                   </h3>
-                  <p
-                    style={{
-                      fontSize: "13px",
-                      color: "var(--color-text-muted)",
-                      lineHeight: "1.45",
-                      margin: "8px 0 0",
-                    }}
-                  >
+                  <p className="mt-2 text-[13px] leading-[1.45] text-muted-foreground">
                     Subtitle here
                   </p>
                 </div>
@@ -616,31 +729,26 @@ function LayoutsSection() {
                   <Button>Primary</Button>
                 </div>
               </div>
-              <div className="text-[13px] text-[var(--color-text-muted)]">
+              <div className="text-[13px] text-muted-foreground">
                 Page content goes here
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </Demo>
+      </Showcase>
 
-      <div className="component-showcase">
-        <h3>Separator</h3>
-        <div className="component-demo component-demo--stacked">
+      <Showcase heading="Separator">
+        <Demo stacked>
           <Card style={{ maxWidth: "400px" }}>
-            <CardContent style={{ padding: "14px" }}>
-              <p style={{ fontSize: "13px", marginBottom: "12px" }}>
-                Above the separator
-              </p>
+            <CardContent>
+              <p className="mb-3 text-[13px]">Above the separator</p>
               <Separator />
-              <p style={{ fontSize: "13px", marginTop: "12px" }}>
-                Below the separator
-              </p>
+              <p className="mt-3 text-[13px]">Below the separator</p>
             </CardContent>
           </Card>
-        </div>
-      </div>
-    </div>
+        </Demo>
+      </Showcase>
+    </section>
   );
 }
 
@@ -655,30 +763,32 @@ function SpacingSection() {
   ];
 
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Spacing</h2>
-        <p>Compact, purposeful spacing system</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Spacing"
+        description="Compact, purposeful spacing system"
+      />
 
-      <div className="spacing-scale">
+      <div className="grid gap-4">
         {spacing.map((space) => (
-          <div key={space.name} className="spacing-item">
-            <div className="spacing-label">
-              {space.name} ({space.value})
-            </div>
-            <div
-              className="spacing-bar"
-              style={{
-                width: space.value,
-                height: space.value,
-                minWidth: "48px",
-              }}
-            />
-          </div>
+          <Card key={space.name}>
+            <CardContent className="grid grid-cols-[100px_minmax(0,1fr)] items-center gap-4">
+              <div className="text-xs font-semibold leading-[1.35]">
+                {space.name} ({space.value})
+              </div>
+              <div
+                className="rounded-sm border bg-muted"
+                style={{
+                  width: space.value,
+                  height: space.value,
+                  minWidth: "48px",
+                }}
+              />
+            </CardContent>
+          </Card>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -691,27 +801,35 @@ function RadiusSection() {
   ];
 
   return (
-    <div className="design-section">
-      <div className="design-section-header">
-        <h2>Border Radius</h2>
-        <p>Subtle, minimal rounding</p>
-      </div>
+    <section className="grid gap-6 pb-12">
+      <SectionHeader
+        title="Border Radius"
+        description="Subtle, minimal rounding"
+      />
 
-      <div className="radius-scale">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
         {radii.map((radius) => (
-          <div key={radius.name} className="radius-item">
-            <div
-              className="radius-box"
-              style={{ borderRadius: radius.value }}
-            />
-            <div className="radius-info">
-              <div className="radius-name">{radius.name}</div>
-              <div className="radius-value">{radius.value}</div>
-              <div className="radius-usage">{radius.usage}</div>
-            </div>
-          </div>
+          <Card key={radius.name}>
+            <CardContent className="grid gap-3">
+              <div
+                className="h-16 w-16 border bg-muted"
+                style={{ borderRadius: radius.value }}
+              />
+              <div className="grid gap-0.5">
+                <div className="text-xs font-semibold leading-[1.35]">
+                  {radius.name}
+                </div>
+                <div className="font-mono text-[11px] leading-[1.35] text-muted-foreground">
+                  {radius.value}
+                </div>
+                <div className="text-[11px] leading-[1.35] text-muted-foreground/70">
+                  {radius.usage}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
