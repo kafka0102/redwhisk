@@ -3617,3 +3617,379 @@ button:focus-visible {
   min-width: 0;
   overflow: auto;
 }
+
+/* ===========================================================================
+   结构化消息流（agent-message-stream）
+   黑白灰优先、13px body、1px 边框、无阴影、状态不只靠颜色。
+   =========================================================================== */
+
+.agents-message-stream {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-app);
+}
+
+.agents-message-stream__scroll {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.agents-message-stream__empty,
+.agents-message-stream__error {
+  margin: 0;
+  padding: 24px 12px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.agents-message-stream__error {
+  color: var(--color-danger);
+}
+
+.agents-message-stream__running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agents-message__spinner {
+  animation: agents-message-spin 900ms linear infinite;
+}
+
+@keyframes agents-message-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 消息条目通用 */
+.agents-message__entry {
+  min-width: 0;
+}
+
+.agents-message__entry--user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.agents-message__entry--assistant,
+.agents-message__entry--reasoning,
+.agents-message__entry--tool,
+.agents-message__entry--todo,
+.agents-message__entry--error,
+.agents-message__entry--compaction {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* 气泡 */
+.agents-message__bubble {
+  max-width: 85%;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.agents-message__bubble--user {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.agents-message__bubble--assistant {
+  background: var(--color-surface);
+}
+
+.agents-message__text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Markdown 容器 */
+.agents-message__markdown {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agents-message__markdown p {
+  margin: 0 0 8px;
+}
+
+.agents-message__markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.agents-message__markdown ul,
+.agents-message__markdown ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.agents-message__markdown h1,
+.agents-message__markdown h2,
+.agents-message__markdown h3 {
+  margin: 8px 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.agents-message__markdown a {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.agents-message__code-inline {
+  padding: 0 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.agents-message__code-block {
+  margin: 4px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  overflow-x: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agents-message__code-block code {
+  font-family: inherit;
+}
+
+/* 推理折叠 */
+.agents-message__reasoning {
+  max-width: 85%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.agents-message__reasoning-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agents-message__reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agents-message__reasoning-text {
+  margin: 0;
+  padding: 0 10px 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* 工具调用卡片 */
+.agents-message__tool {
+  max-width: 85%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.agents-message__tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.agents-message__tool-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agents-message__tool-status {
+  flex: 0 0 auto;
+}
+
+.agents-message__tool-body {
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.agents-message__command,
+.agents-message__path {
+  display: block;
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.agents-message__output {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  max-height: 280px;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agents-message__output--diff {
+  color: var(--color-text-muted);
+}
+
+.agents-message__exit-code {
+  margin: 6px 0 0;
+  color: var(--color-text-subtle);
+  font-size: 11px;
+}
+
+.agents-message__tool-error {
+  margin: 6px 0 0;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.agents-message__search-query,
+.agents-message__sub-agent,
+.agents-message__plan {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agents-message__search-matches {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+
+.agents-message__search-matches code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* Todo 清单 */
+.agents-message__todo {
+  max-width: 85%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.agents-message__todo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agents-message__todo-list {
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.agents-message__todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.agents-message__todo-check {
+  flex: 0 0 auto;
+  width: 14px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agents-message__todo-item--done .agents-message__todo-text {
+  color: var(--color-text-subtle);
+  text-decoration: line-through;
+}
+
+.agents-message__todo-text {
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* 错误卡片 */
+.agents-message__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 85%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.agents-message__error p {
+  margin: 0;
+  word-break: break-word;
+}
+
+/* 压缩横幅 */
+.agents-message__compaction {
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  text-align: center;
+}
