@@ -1,0 +1,220 @@
+import { render, waitFor } from "@testing-library/react";
+import { act } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import type { AgentStreamEventEnvelope } from "../agent-stream-types";
+import { useAgentMessageStream } from "./use-agent-message-stream";
+
+// vi.hoisted 让 mock 工厂与测试体共享同一份可变 listeners。
+const mocks = vi.hoisted(() => ({
+  listeners: [] as Array<{
+    eventName: string;
+    callback: (event: { payload: AgentStreamEventEnvelope }) => void;
+  }>,
+  unlisten: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (
+      eventName: string,
+      callback: (event: { payload: AgentStreamEventEnvelope }) => void,
+    ) => {
+      mocks.listeners.push({ eventName, callback });
+      return Promise.resolve(mocks.unlisten);
+    },
+  ),
+}));
+
+vi.mock("../agent-session-commands", () => ({
+  readAgentTimeline: vi.fn(),
+}));
+
+const { readAgentTimeline } = await import("../agent-session-commands");
+const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+
+interface ProbeProps {
+  projectId: number;
+  sessionId: number;
+  onState: (state: ReturnType<typeof useAgentMessageStream>) => void;
+}
+
+function Probe({ projectId, sessionId, onState }: ProbeProps) {
+  const state = useAgentMessageStream({ projectId, sessionId });
+  onState(state);
+  return <div data-testid="probe" />;
+}
+
+async function renderProbe(props: ProbeProps) {
+  let latest: ReturnType<typeof useAgentMessageStream> | null = null;
+  const captureState = (state: ReturnType<typeof useAgentMessageStream>) => {
+    latest = state;
+  };
+  const result = render(
+    <Probe
+      projectId={props.projectId}
+      sessionId={props.sessionId}
+      onState={captureState}
+    />,
+  );
+  // 等待 effects（含 readAgentTimeline 与 listen）落地。
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return {
+    result,
+    getState: () => latest,
+    /** rerender 时复用同一份 state 捕获器，保证 getState 始终读到最新值。 */
+    rerenderWith: (next: { projectId: number; sessionId: number }) => {
+      result.rerender(
+        <Probe
+          projectId={next.projectId}
+          sessionId={next.sessionId}
+          onState={captureState}
+        />,
+      );
+    },
+  };
+}
+
+describe("useAgentMessageStream", () => {
+  it("readAgentTimeline 完成后用历史 timeline 种子 state", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        { type: "user_message", text: "你好", messageId: "u1" },
+        { type: "assistant_message", text: "你好！", messageId: "a1" },
+      ],
+    });
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      onState: () => {},
+    });
+    const state = getState()!;
+    expect(state.isInitialized).toBe(true);
+    expect(state.entries).toHaveLength(2);
+    expect(state.entries[0].id).toBe("u1");
+  });
+
+  it("readAgentTimeline 失败时设置 error 并标记 initialized", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockRejectedValue(new Error("db error"));
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 11,
+      onState: () => {},
+    });
+    const state = getState()!;
+    expect(state.isInitialized).toBe(true);
+    expect(state.lastError).toBe("db error");
+  });
+
+  it("事件流到达后 dispatch 到 state", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({ items: [] });
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 12,
+      onState: () => {},
+    });
+
+    act(() => {
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 12,
+          seq: 1,
+          epoch: "epoch-1",
+          event: { type: "turn_started", turnId: "t1" },
+        },
+      });
+    });
+
+    expect(getState()!.turnStatus).toBe("running");
+  });
+
+  it("忽略其它 projectId/sessionId 的事件", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({ items: [] });
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 13,
+      onState: () => {},
+    });
+
+    act(() => {
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 999,
+          seq: 1,
+          epoch: "epoch-1",
+          event: { type: "turn_started", turnId: "t1" },
+        },
+      });
+    });
+
+    expect(getState()!.turnStatus).toBe("idle");
+  });
+
+  it("unmount 时调用 unlisten", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({ items: [] });
+    mocks.listeners.length = 0;
+    mocks.unlisten.mockClear();
+
+    const { result } = await renderProbe({
+      projectId: 1,
+      sessionId: 14,
+      onState: () => {},
+    });
+    result.unmount();
+    expect(mocks.unlisten).toHaveBeenCalled();
+  });
+
+  it("切换 session 时重置 state", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [{ type: "user_message", text: "旧", messageId: "u1" }],
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 15,
+      onState: () => {},
+    });
+    expect(getState()!.entries).toHaveLength(1);
+
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [{ type: "user_message", text: "新", messageId: "u2" }],
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 16 });
+
+    await waitFor(() => {
+      expect(readAgentTimelineMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 16,
+      });
+    });
+    await waitFor(() => {
+      expect(getState()!.entries[0]?.id).toBe("u2");
+    });
+
+    const state = getState()!;
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0].id).toBe("u2");
+  });
+});
