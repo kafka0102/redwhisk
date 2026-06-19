@@ -29,6 +29,9 @@ pub fn run() {
                 latest_output_writer.record_terminal_output(&event);
                 let _ = app_handle.emit(AGENT_SESSION_TERMINAL_OUTPUT_EVENT, event);
             });
+            state
+                .agent_event_broadcaster
+                .set_app_handle(app.handle().clone());
             trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
             Ok(())
         })
