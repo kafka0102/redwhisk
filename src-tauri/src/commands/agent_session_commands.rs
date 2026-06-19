@@ -4,8 +4,8 @@ use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::types::agent_session::{
     AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ProjectGitBranchListInput, ProjectGitBranchListResult,
-    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
+    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentSessionTerminalInput,
+    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
     RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
     StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,

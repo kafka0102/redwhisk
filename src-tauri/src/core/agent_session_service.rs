@@ -26,12 +26,12 @@ use crate::types::agent_profile::AgentScope;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ProjectGitBranchListInput, ProjectGitBranchListResult,
-    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
-    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
-    StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
-    WorkspaceMode, WriteAgentSessionTerminalInput,
+    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentSessionTerminalResult,
+    ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
+    RestoreAgentSessionTerminalResult, SetAgentSessionAttentionInput,
+    SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
+    StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult, WorkspaceMode,
+    WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -630,8 +630,12 @@ impl<'connection> AgentSessionService<'connection> {
             started_at,
         )?;
         let command_snapshot = build_command_snapshot(&profile);
-        let branch_info = list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
-        let workspace_mode = input.workspace_mode.clone().unwrap_or(WorkspaceMode::CurrentBranch);
+        let branch_info =
+            list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
+        let workspace_mode = input
+            .workspace_mode
+            .clone()
+            .unwrap_or(WorkspaceMode::CurrentBranch);
         let completion_policy = Some(
             input
                 .completion_policy_override
@@ -767,7 +771,8 @@ impl<'connection> AgentSessionService<'connection> {
         input: ProjectGitBranchListInput,
     ) -> Result<ProjectGitBranchListResult, CommandError> {
         let project = self.project_by_id(input.project_id)?;
-        let branch_info = list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
+        let branch_info =
+            list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
 
         Ok(ProjectGitBranchListResult {
             current_branch: branch_info.current_branch,
@@ -1699,7 +1704,11 @@ fn resolve_target_branch(
         .filter(|value| !value.is_empty())
         .unwrap_or(branch_info.current_branch.as_str());
 
-    if branch_info.local_branches.iter().any(|branch| branch == target_branch) {
+    if branch_info
+        .local_branches
+        .iter()
+        .any(|branch| branch == target_branch)
+    {
         return Ok(target_branch.to_string());
     }
 

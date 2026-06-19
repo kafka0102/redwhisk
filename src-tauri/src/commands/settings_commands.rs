@@ -9,8 +9,8 @@ use crate::types::agent_profile::{
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_label::{
-    DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse,
-    ProjectLabelRecord, SaveProjectLabelInput,
+    DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse, ProjectLabelRecord,
+    SaveProjectLabelInput,
 };
 
 #[tauri::command]

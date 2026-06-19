@@ -7,9 +7,9 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AdvanceIssueStatusInput, AgentCommitCompletionPreview, CompleteIssueCleanInput,
     CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput, DeleteIssueResult,
-    DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult, ExportIssueAttachmentInput,
-    GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse, IssueRecord,
-    IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse,
+    IssueRecord, IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
     PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
     UpdateIssueInput,
 };
@@ -89,7 +89,8 @@ pub fn advance_issue_status(
     let issue = IssueService::advance_issue_status_in_data_dir(data_dir, input)?;
 
     if let Some(session_id) = issue.linked_session_id {
-        if issue.linked_session_status == Some(crate::types::agent_session::AgentSessionStatus::Closed)
+        if issue.linked_session_status
+            == Some(crate::types::agent_session::AgentSessionStatus::Closed)
             && state.pty_sessions.contains(session_id)
         {
             let _ = state.pty_sessions.kill(session_id);

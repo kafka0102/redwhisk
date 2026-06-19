@@ -389,11 +389,7 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
 
 fn parse_label_ids_json(value: &str) -> rusqlite::Result<Vec<i64>> {
     serde_json::from_str::<Vec<i64>>(value).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            10,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
+        rusqlite::Error::FromSqlConversionFailure(10, rusqlite::types::Type::Text, Box::new(error))
     })
 }
 

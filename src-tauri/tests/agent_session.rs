@@ -17,11 +17,11 @@ use redwhisk_lib::types::agent_session::{
     SetAgentSessionAttentionInput, StartAgentSessionInput, StartStandaloneAgentSessionInput,
     WorkspaceMode,
 };
-use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::IssueStatus;
 use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
+use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 use serde_json::Value;
 
@@ -844,7 +844,10 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
 
     assert_eq!(session.workspace_mode, WorkspaceMode::Worktree);
     assert_eq!(session.target_branch.as_deref(), Some("main"));
-    assert_eq!(session.completion_policy, Some(ProjectCompletionPolicy::AgentAutoCommit));
+    assert_eq!(
+        session.completion_policy,
+        Some(ProjectCompletionPolicy::AgentAutoCommit)
+    );
     assert_eq!(
         session.worktree_root_path.as_deref(),
         Some(worktree_root.to_string_lossy().as_ref())
@@ -2564,7 +2567,11 @@ fn git(repo: &std::path::Path, args: &[&str]) {
         .current_dir(repo)
         .status()
         .expect("run git");
-    assert!(status.success(), "git command failed: git {}", args.join(" "));
+    assert!(
+        status.success(),
+        "git command failed: git {}",
+        args.join(" ")
+    );
 }
 
 fn echo_stdin_command(base_dir: &std::path::Path) -> std::path::PathBuf {

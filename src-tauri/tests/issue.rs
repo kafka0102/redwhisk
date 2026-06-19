@@ -2431,7 +2431,10 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
     assert!(!workspace_path.exists());
     let main_content = fs::read_to_string(repo_dir.join("tracked.txt")).expect("read main file");
     assert_eq!(main_content, "worktree change\n");
-    assert_eq!(git_output(&repo_dir, &["branch", "--list", "issue-branch"]), "");
+    assert_eq!(
+        git_output(&repo_dir, &["branch", "--list", "issue-branch"]),
+        ""
+    );
 }
 
 #[test]
@@ -2635,7 +2638,10 @@ fn create_issue_persists_label_ids_and_hydrates_labels() {
         )
         .expect("stored label ids");
 
-    assert_eq!(stored_label_ids, format!("[{project_label_id},{global_label_id}]"));
+    assert_eq!(
+        stored_label_ids,
+        format!("[{project_label_id},{global_label_id}]")
+    );
     assert_eq!(issue.labels.len(), 2);
     assert_eq!(issue.labels[0].id, project_label_id);
     assert_eq!(issue.labels[0].name, "ops");
