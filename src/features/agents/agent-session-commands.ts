@@ -190,13 +190,15 @@ export type { AgentAttachmentKindLiteral } from "./agent-stream-types";
 export interface StartStructuredAgentSessionInput {
   projectId: number;
   title?: string;
+  /** agent 类型，缺省 codex。决定走哪种 provider 实现。 */
+  agentType?: AgentType;
   /** auto / full-access / read-only，缺省 auto。 */
   mode?: string;
-  /** 初始模型 id，缺省由 codex 选默认。 */
+  /** 初始模型 id，缺省由 agent 选默认。 */
   model?: string;
   /** low / medium / high。 */
   effort?: string;
-  /** 续接已存在的 codex threadId，缺省则新建 thread。 */
+  /** 续接已存在的 agent threadId，缺省则新建 thread。 */
   resumeFromCodexSessionId?: string;
 }
 
@@ -244,6 +246,11 @@ export interface SetAgentModeInput {
 }
 
 export interface ListAgentModelsInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface ListAgentModesInput {
   projectId: number;
   sessionId: number;
 }
@@ -302,8 +309,10 @@ export function listAgentModels(
   return invokeCommand<ListAgentModelsResult>("list_agent_models", { input });
 }
 
-export function listAgentModes(): Promise<ListAgentModesResult> {
-  return invokeCommand<ListAgentModesResult>("list_agent_modes");
+export function listAgentModes(
+  input: ListAgentModesInput,
+): Promise<ListAgentModesResult> {
+  return invokeCommand<ListAgentModesResult>("list_agent_modes", { input });
 }
 
 export function saveAgentAttachment(

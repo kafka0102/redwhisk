@@ -1,25 +1,26 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use tauri::{Manager, State};
 
-use crate::agent::codex_app_server::client::PermissionDecision;
-use crate::agent::codex_app_server::session::CodexMode;
+use crate::agent::session_handle::AgentSessionHandle;
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
 use crate::types::agent_session::{
-    AgentSessionListResponse, CancelAgentTurnInput, InjectAgentSessionPromptInput,
-    InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
-    ListAgentModesResult, ProjectGitBranchListInput, ProjectGitBranchListResult,
-    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ReadAgentTimelineInput,
-    ReadAgentTimelineResult, ResizeAgentSessionTerminalInput, RespondAgentPermissionInput,
-    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult, SaveAgentAttachmentInput,
-    SaveAgentAttachmentResult, SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput,
-    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, SetAgentThinkingInput,
-    StartAgentSessionInput, StartAgentSessionResult, StartStandaloneAgentSessionInput,
-    StartStandaloneAgentSessionResult, StartStructuredAgentSessionInput,
-    StartStructuredAgentSessionResult, WriteAgentSessionTerminalInput,
+    AgentPermissionDecision, AgentSessionListResponse, CancelAgentTurnInput,
+    InjectAgentSessionPromptInput, InjectAgentSessionPromptResult, ListAgentModelsInput,
+    ListAgentModelsResult, ListAgentModesInput, ListAgentModesResult, ProjectGitBranchListInput,
+    ProjectGitBranchListResult, ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
+    ReadAgentTimelineInput, ReadAgentTimelineResult, ResizeAgentSessionTerminalInput,
+    RespondAgentPermissionInput, RestoreAgentSessionTerminalInput,
+    RestoreAgentSessionTerminalResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
+    SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
+    SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
+    StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
+    StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
+    WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -300,7 +301,7 @@ pub fn resize_agent_session_terminal(
 // ---------------------------------------------------------------------------
 // 结构化 Agent Session（codex app-server JSON-RPC 路径）命令
 //
-// 与上面的 PTY 命令并存。这些命令通过 `AppState.codex_sessions` 取回
+// 与上面的 PTY 命令并存。这些命令通过 `AppState.agent_sessions` 取回
 // 运行中的 `CodexSessionHandle`，调用其方法驱动结构化事件流。
 //
 // 数据库打开沿用现有 PTY 命令范式（参见 `start_agent_session`）：每个命令
@@ -312,8 +313,8 @@ pub fn resize_agent_session_terminal(
 fn require_structured_handle(
     state: &State<'_, AppState>,
     session_id: i64,
-) -> Result<std::sync::Arc<crate::agent::codex_app_server::CodexSessionHandle>, CommandError> {
-    state.codex_sessions.get(session_id).ok_or_else(|| {
+) -> Result<Arc<dyn AgentSessionHandle>, CommandError> {
+    state.agent_sessions.get(session_id).ok_or_else(|| {
         CommandError::new(
             CommandErrorCode::AgentSessionNotRunning,
             "当前 Session 没有运行中的结构化会话。",
@@ -389,7 +390,7 @@ pub fn start_structured_agent_session(
     AgentSessionService::start_structured_agent_session_in_data_dir(
         data_dir,
         input,
-        &state.codex_sessions,
+        &state.agent_sessions,
         &state.agent_event_broadcaster,
     )
 }
@@ -406,7 +407,7 @@ pub fn send_agent_message(
     let handle = require_structured_handle(&state, input.session_id)?;
     handle
         .send_message(input.message)
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 
 #[tauri::command]
@@ -421,7 +422,7 @@ pub fn cancel_agent_turn(
     let handle = require_structured_handle(&state, input.session_id)?;
     handle
         .cancel_turn()
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 
 #[tauri::command]
@@ -434,22 +435,17 @@ pub fn respond_agent_permission(
     let service = build_agent_session_service(&database.connection);
     service.find_project_session_record(input.project_id, input.session_id)?;
     let handle = require_structured_handle(&state, input.session_id)?;
-    let decision = match input.decision.as_str() {
-        "accept" => PermissionDecision::Accept,
-        "decline" => PermissionDecision::Decline,
-        "cancel" => PermissionDecision::Cancel,
-        other => {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "不支持的权限决策。",
-            )
-            .with_detail(ErrorDetail::new("Field").with_value("name", "decision"))
-            .with_detail(ErrorDetail::new("Value").with_value("decision", other)));
-        }
-    };
+    let decision = AgentPermissionDecision::from_str_literal(&input.decision).ok_or_else(|| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "不支持的权限决策。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "decision"))
+        .with_detail(ErrorDetail::new("Value").with_value("decision", input.decision.clone()))
+    })?;
     handle
         .respond_permission(&input.request_id, decision)
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 
 #[tauri::command]
@@ -464,7 +460,7 @@ pub fn set_agent_model(
     let handle = require_structured_handle(&state, input.session_id)?;
     handle
         .set_model(input.model_id)
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 
 #[tauri::command]
@@ -479,7 +475,7 @@ pub fn set_agent_thinking(
     let handle = require_structured_handle(&state, input.session_id)?;
     handle
         .set_effort(input.effort)
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 
 #[tauri::command]
@@ -492,17 +488,9 @@ pub fn set_agent_mode(
     let service = build_agent_session_service(&database.connection);
     service.find_project_session_record(input.project_id, input.session_id)?;
     let handle = require_structured_handle(&state, input.session_id)?;
-    let mode = CodexMode::from_id(&input.mode_id).ok_or_else(|| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "不支持的协作模式。",
-        )
-        .with_detail(ErrorDetail::new("Field").with_value("name", "modeId"))
-        .with_detail(ErrorDetail::new("Value").with_value("modeId", input.mode_id.clone()))
-    })?;
     handle
-        .set_mode(mode)
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+        .set_mode(&input.mode_id)
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 
 #[tauri::command]
@@ -517,14 +505,22 @@ pub fn list_agent_models(
     let handle = require_structured_handle(&state, input.session_id)?;
     let models = handle
         .list_models()
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)?;
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)?;
     Ok(ListAgentModelsResult { models })
 }
 
 #[tauri::command]
-pub fn list_agent_modes() -> Result<ListAgentModesResult, CommandError> {
+pub fn list_agent_modes(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ListAgentModesInput,
+) -> Result<ListAgentModesResult, CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
     Ok(ListAgentModesResult {
-        modes: CodexMode::available_modes(),
+        modes: handle.list_modes(),
     })
 }
 
@@ -587,6 +583,6 @@ pub fn read_agent_timeline(
     let handle = require_structured_handle(&state, input.session_id)?;
     let items = handle
         .read_timeline()
-        .map_err(crate::core::agent_session_service::codex_error_to_command_error)?;
+        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)?;
     Ok(ReadAgentTimelineResult { items })
 }

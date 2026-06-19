@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentComposer } from "./agent-composer";
+import { getAgentCapabilities } from "../agent-capabilities";
 import type { AgentUsage } from "../agent-stream-types";
 
 const dialogMocks = vi.hoisted(() => ({
@@ -89,12 +90,14 @@ async function renderComposer(
     turnStatus?: "idle" | "running" | "failed" | "canceled";
     usage?: AgentUsage | null;
     currentModelId?: string | null;
+    capabilities?: ReturnType<typeof getAgentCapabilities>;
   } = {},
 ) {
   const result = render(
     <AgentComposer
       projectId={1}
       sessionId={10}
+      capabilities={overrides.capabilities ?? getAgentCapabilities("codex")}
       turnStatus={overrides.turnStatus ?? "idle"}
       usage={overrides.usage ?? null}
       currentModelId={overrides.currentModelId}
@@ -258,5 +261,17 @@ describe("AgentComposer", () => {
     await renderComposer();
     expect(screen.getByText("Think")).toBeInTheDocument();
     expect(screen.getByText("模型")).toBeInTheDocument();
+  });
+
+  it("capabilities 关闭模型与 Think 时不渲染对应 Select（claude 等无能力 agent）", async () => {
+    await renderComposer({
+      capabilities: getAgentCapabilities("claude"),
+    });
+    expect(screen.queryByText("模型")).not.toBeInTheDocument();
+    expect(screen.queryByText("Think")).not.toBeInTheDocument();
+    // 发送按钮仍渲染。
+    expect(
+      screen.getByRole("button", { name: "发送消息" }),
+    ).toBeInTheDocument();
   });
 });

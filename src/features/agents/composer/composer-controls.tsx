@@ -14,11 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
+import type { AgentCapabilities } from "../agent-capabilities";
 import { ComposerContextMeter } from "./composer-context-meter";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
 import type { ComposerEffort } from "./composer-types";
 
 interface ComposerControlsProps {
+  capabilities: AgentCapabilities;
   models: AgentModel[];
   selectedModelId: string | null;
   isLoadingModels: boolean;
@@ -43,6 +45,7 @@ const EFFORT_LABELS: Record<string, string> = {
 const OFF_VALUE = "__off__";
 
 export function ComposerControls({
+  capabilities,
   models,
   selectedModelId,
   isLoadingModels,
@@ -59,84 +62,90 @@ export function ComposerControls({
 }: ComposerControlsProps) {
   const effortValue = effort ?? OFF_VALUE;
   const hasModels = models.length > 0;
+  const showModelSelect = capabilities.supportsModelSwitching;
+  const showThinkSelect = capabilities.supportsReasoningEffort;
 
   return (
     <div className="agents-composer__controls">
       <div className="agents-composer__selects">
-        <div className="agents-composer__field">
-          <Label
-            htmlFor="agent-composer-model"
-            className="agents-composer__field-label"
-          >
-            模型
-          </Label>
-          <Select
-            value={selectedModelId ?? ""}
-            onValueChange={(value) => {
-              if (typeof value === "string" && value !== "") {
-                onSelectModel(value);
-              }
-            }}
-            disabled={!hasModels || isLoadingModels}
-          >
-            <SelectTrigger
-              id="agent-composer-model"
-              aria-label="选择模型"
-              className="agents-composer__select"
-              size="sm"
+        {showModelSelect && (
+          <div className="agents-composer__field">
+            <Label
+              htmlFor="agent-composer-model"
+              className="agents-composer__field-label"
             >
-              <SelectValue
-                placeholder={
-                  modelsError ?? (isLoadingModels ? "加载中…" : "无可用模型")
+              模型
+            </Label>
+            <Select
+              value={selectedModelId ?? ""}
+              onValueChange={(value) => {
+                if (typeof value === "string" && value !== "") {
+                  onSelectModel(value);
                 }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {models.map((model) => (
-                <SelectItem key={model.modelId} value={model.modelId}>
-                  {model.displayName ?? model.modelId}
-                  {model.isDefault ? "（默认）" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="agents-composer__field">
-          <Label
-            htmlFor="agent-composer-effort"
-            className="agents-composer__field-label"
-          >
-            Think
-          </Label>
-          <Select
-            value={effortValue}
-            onValueChange={(value) => {
-              if (value === OFF_VALUE) {
-                onSelectEffort(null);
-              } else if (typeof value === "string") {
-                onSelectEffort(value as ComposerEffort);
-              }
-            }}
-          >
-            <SelectTrigger
-              id="agent-composer-effort"
-              aria-label="Think 模式"
-              className="agents-composer__select"
-              size="sm"
+              }}
+              disabled={!hasModels || isLoadingModels}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={OFF_VALUE}>关闭</SelectItem>
-              {thinkOptions.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {EFFORT_LABELS[option] ?? option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+              <SelectTrigger
+                id="agent-composer-model"
+                aria-label="选择模型"
+                className="agents-composer__select"
+                size="sm"
+              >
+                <SelectValue
+                  placeholder={
+                    modelsError ?? (isLoadingModels ? "加载中…" : "无可用模型")
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.modelId} value={model.modelId}>
+                    {model.displayName ?? model.modelId}
+                    {model.isDefault ? "（默认）" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {showThinkSelect && (
+          <div className="agents-composer__field">
+            <Label
+              htmlFor="agent-composer-effort"
+              className="agents-composer__field-label"
+            >
+              Think
+            </Label>
+            <Select
+              value={effortValue}
+              onValueChange={(value) => {
+                if (value === OFF_VALUE) {
+                  onSelectEffort(null);
+                } else if (typeof value === "string") {
+                  onSelectEffort(value as ComposerEffort);
+                }
+              }}
+            >
+              <SelectTrigger
+                id="agent-composer-effort"
+                aria-label="Think 模式"
+                className="agents-composer__select"
+                size="sm"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={OFF_VALUE}>关闭</SelectItem>
+                {thinkOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {EFFORT_LABELS[option] ?? option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="agents-composer__actions">
