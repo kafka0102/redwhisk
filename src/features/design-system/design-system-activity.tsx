@@ -2,21 +2,13 @@ import { useState } from "react";
 import {
   Button,
   Input,
-  Textarea,
-  Label,
   Card,
   CardContent,
-  Badge,
-  Separator,
   Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Check, X, Plus, Paperclip, Trash2, Inbox } from "lucide-react";
+import { Check, X, Plus, Paperclip, Trash2 } from "lucide-react";
 
 const TYPE_SAMPLES = {
   headline: "text-[22px] font-semibold leading-[1.2]",
@@ -37,7 +29,6 @@ export function DesignSystemActivity() {
     { id: "typography", label: "Typography" },
     { id: "buttons", label: "Buttons" },
     { id: "inputs", label: "Inputs" },
-    { id: "badges", label: "Badges" },
     { id: "cards", label: "Cards" },
     { id: "layouts", label: "Layouts" },
     { id: "spacing", label: "Spacing" },
@@ -81,7 +72,6 @@ export function DesignSystemActivity() {
           {activeSection === "typography" && <TypographySection />}
           {activeSection === "buttons" && <ButtonsSection />}
           {activeSection === "inputs" && <InputsSection />}
-          {activeSection === "badges" && <BadgesSection />}
           {activeSection === "cards" && <CardsSection />}
           {activeSection === "layouts" && <LayoutsSection />}
           {activeSection === "spacing" && <SpacingSection />}
@@ -588,54 +578,9 @@ function InputsSection() {
 
       <Showcase heading="Text Input">
         <Demo stacked>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ds-input-title">Title</Label>
-            <Input id="ds-input-title" placeholder="Enter issue title" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ds-input-value">With Value</Label>
-            <Input id="ds-input-value" value="Create local issue workflow" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ds-input-disabled">Disabled</Label>
-            <Input id="ds-input-disabled" disabled value="Cannot edit this" />
-          </div>
-        </Demo>
-      </Showcase>
-
-      <Showcase heading="Textarea">
-        <Demo stacked>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ds-textarea">Description</Label>
-            <Textarea
-              id="ds-textarea"
-              placeholder="Describe the issue in detail..."
-              className="min-h-[100px]"
-            />
-          </div>
-        </Demo>
-      </Showcase>
-    </section>
-  );
-}
-
-function BadgesSection() {
-  return (
-    <section className="grid gap-6 pb-12">
-      <SectionHeader title="Badges" description="Small status indicators" />
-
-      <Showcase heading="Badge Variants">
-        <Demo>
-          <Badge variant="default">Default</Badge>
-          <Badge variant="secondary">Secondary</Badge>
-          <Badge variant="outline">Outline</Badge>
-          <Badge variant="destructive">Destructive</Badge>
-          <Badge className="bg-[rgba(36,148,71,0.1)] text-[var(--color-lane-review-marker)]">
-            Review
-          </Badge>
-          <Badge className="bg-[rgba(200,144,0,0.1)] text-[var(--color-lane-running-marker)]">
-            Running
-          </Badge>
+          <Input placeholder="Enter issue title" />
+          <Input value="Create local issue workflow" />
+          <Input disabled value="Cannot edit this" />
         </Demo>
       </Showcase>
     </section>
@@ -677,21 +622,11 @@ function CardsSection() {
       <Showcase heading="Empty State">
         <Demo stacked>
           <Empty>
-            <EmptyHeader>
-              <EmptyMedia>
-                <Inbox size={40} />
-              </EmptyMedia>
-              <EmptyTitle>No issues</EmptyTitle>
-              <EmptyDescription>
-                Create an issue to get started
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button>
-                <Plus size={16} />
-                New Issue
-              </Button>
-            </EmptyContent>
+            <EmptyTitle>No issues</EmptyTitle>
+            <Button>
+              <Plus size={16} />
+              New Issue
+            </Button>
           </Empty>
         </Demo>
       </Showcase>
@@ -734,18 +669,6 @@ function LayoutsSection() {
               </div>
             </div>
           </div>
-        </Demo>
-      </Showcase>
-
-      <Showcase heading="Separator">
-        <Demo stacked>
-          <Card style={{ maxWidth: "400px" }}>
-            <CardContent>
-              <p className="mb-3 text-[13px]">Above the separator</p>
-              <Separator />
-              <p className="mt-3 text-[13px]">Below the separator</p>
-            </CardContent>
-          </Card>
         </Demo>
       </Showcase>
     </section>
