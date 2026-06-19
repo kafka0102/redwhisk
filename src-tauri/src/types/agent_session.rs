@@ -252,13 +252,16 @@ pub struct StartStructuredAgentSessionInput {
     pub project_id: i64,
     /// 会话标题（独立会话用，关联 issue 的场景留空）。
     pub title: Option<String>,
+    /// agent 类型（缺省 Codex）。决定走哪种 provider 实现。
+    #[serde(default)]
+    pub agent_type: Option<AgentType>,
     /// 协作模式：auto / full-access / read-only。缺省 auto。
     pub mode: Option<String>,
-    /// 初始模型 id（缺省由 codex 选默认）。
+    /// 初始模型 id（缺省由 agent 选默认）。
     pub model: Option<String>,
     /// 初始 reasoning effort：low / medium / high。
     pub effort: Option<String>,
-    /// 续接已存在的 codex threadId（缺省则新建 thread）。
+    /// 续接已存在的 agent threadId（缺省则新建 thread）。
     pub resume_from_codex_session_id: Option<String>,
 }
 
@@ -336,6 +339,13 @@ pub struct ListAgentModelsResult {
 #[serde(rename_all = "camelCase")]
 pub struct ListAgentModesResult {
     pub modes: Vec<AgentMode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentModesInput {
+    pub project_id: i64,
+    pub session_id: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

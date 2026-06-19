@@ -1,6 +1,11 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
-export type AgentType = "codex" | "claude";
+// AgentType 统一从 agent-session-commands 导出，避免多处定义冲突。
+// 后端 AgentType 枚举（Codex/Claude）序列化为 "codex"/"claude"；
+// "claude_code" 为前端 UI 别名（agent-visuals 视作 Claude）。
+export type { AgentType } from "../agents/agent-session-commands";
+import type { AgentType } from "../agents/agent-session-commands";
+
 export type AgentScope = "project" | "global";
 export type AgentSkillScope = "project" | "global";
 export type AgentSkillRefreshStatus = "idle" | "loading" | "ready" | "failed";

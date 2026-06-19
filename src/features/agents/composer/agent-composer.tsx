@@ -25,6 +25,7 @@ const TEXTAREA_MAX_HEIGHT_PX = 160;
 export function AgentComposer({
   projectId,
   sessionId,
+  capabilities,
   turnStatus,
   usage,
   currentModelId,
@@ -136,6 +137,7 @@ export function AgentComposer({
         </p>
       ) : null}
       <ComposerControls
+        capabilities={capabilities}
         models={models}
         selectedModelId={selectedModelId}
         isLoadingModels={isLoadingModels}

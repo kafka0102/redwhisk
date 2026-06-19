@@ -16,6 +16,7 @@ import {
   validateAgentWorktreePath,
   type AgentSkillListResponse,
   type AgentProfileRecord,
+  type AgentType,
   type ProjectLabelRecord,
 } from "./settings-commands";
 import {
@@ -1451,7 +1452,7 @@ describe("ProjectSettingsActivity", () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     const pendingSkills: Partial<
-      Record<"codex" | "claude", (response: AgentSkillListResponse) => void>
+      Record<AgentType, (response: AgentSkillListResponse) => void>
     > = {};
     listAgentSkillsMock.mockImplementation(
       ({ agentType }) =>

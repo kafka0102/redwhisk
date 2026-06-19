@@ -27,6 +27,8 @@ use super::notification::{parse_notification, CodexNotification};
 use super::thread_item::{extract_usage, map_thread_item};
 use super::transport::{CodexAppServerError, CodexTransport, RequestHandler};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
+use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+use crate::types::agent_session::AgentPermissionDecision;
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentPermissionAction, AgentPermissionRequest, AgentStreamEvent,
     AgentTimelineItem, AgentUsage, PermissionBehavior, PermissionKind, ToolCallStatus,
@@ -414,6 +416,71 @@ impl CodexSessionHandle {
             .lock()
             .ok()
             .and_then(|state| state.thread_id.clone())
+    }
+}
+
+/// 将协议无关的 `AgentPermissionDecision` 转为 codex 内部的 `PermissionDecision`。
+///
+/// 两者都是 accept/decline/cancel 三态，仅类型归属不同；转换零成本。
+fn to_codex_decision(decision: AgentPermissionDecision) -> PermissionDecision {
+    match decision {
+        AgentPermissionDecision::Accept => PermissionDecision::Accept,
+        AgentPermissionDecision::Decline => PermissionDecision::Decline,
+        AgentPermissionDecision::Cancel => PermissionDecision::Cancel,
+    }
+}
+
+impl AgentSessionHandle for CodexSessionHandle {
+    fn send_message(&self, text: String) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::send_message(self, text).map_err(AgentSessionError::from)
+    }
+
+    fn cancel_turn(&self) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::cancel_turn(self).map_err(AgentSessionError::from)
+    }
+
+    fn respond_permission(
+        &self,
+        request_id: &str,
+        decision: AgentPermissionDecision,
+    ) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::respond_permission(self, request_id, to_codex_decision(decision))
+            .map_err(AgentSessionError::from)
+    }
+
+    fn set_model(&self, model_id: String) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::set_model(self, model_id).map_err(AgentSessionError::from)
+    }
+
+    fn set_effort(&self, effort: Option<String>) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::set_effort(self, effort).map_err(AgentSessionError::from)
+    }
+
+    fn set_mode(&self, mode_id: &str) -> Result<(), AgentSessionError> {
+        let mode = CodexMode::from_id(mode_id).ok_or_else(|| {
+            AgentSessionError::UnsupportedMode(mode_id.to_string())
+        })?;
+        CodexSessionHandle::set_mode(self, mode).map_err(AgentSessionError::from)
+    }
+
+    fn list_models(&self) -> Result<Vec<AgentModel>, AgentSessionError> {
+        CodexSessionHandle::list_models(self).map_err(AgentSessionError::from)
+    }
+
+    fn list_modes(&self) -> Vec<AgentMode> {
+        CodexSessionHandle::list_modes(self)
+    }
+
+    fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
+        CodexSessionHandle::read_timeline(self).map_err(AgentSessionError::from)
+    }
+
+    fn shutdown(&self) {
+        CodexSessionHandle::shutdown(self)
+    }
+
+    fn thread_id(&self) -> Option<String> {
+        CodexSessionHandle::thread_id(self)
     }
 }
 

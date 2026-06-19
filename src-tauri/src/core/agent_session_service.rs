@@ -13,8 +13,9 @@ use rusqlite::{params, Transaction};
 
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::codex_app_server::session::CodexMode;
-use crate::agent::codex_app_server::{CodexAppServerError, CodexSessionConfig, CodexSessionHandle};
-use crate::agent::codex_session_registry::CodexSessionRegistry;
+use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+use crate::agent::session_registry::AgentSessionRegistry;
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
@@ -29,7 +30,7 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::read_git_snapshot;
 use crate::git::worktree::{create_worktree_for_issue, list_local_branches, GitBranchInfo};
-use crate::types::agent_profile::AgentScope;
+use crate::types::agent_profile::{AgentScope, AgentType};
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
@@ -1195,7 +1196,7 @@ impl AgentSessionService<'_> {
     pub fn start_structured_agent_session_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: StartStructuredAgentSessionInput,
-        codex_registry: &CodexSessionRegistry,
+        agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
     ) -> Result<StartStructuredAgentSessionResult, CommandError> {
         let database = DatabaseConfig::new(&data_dir)
@@ -1211,13 +1212,13 @@ impl AgentSessionService<'_> {
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
         );
-        service.start_structured_agent_session(input, codex_registry, broadcaster)
+        service.start_structured_agent_session(input, agent_registry, broadcaster)
     }
 
     fn start_structured_agent_session(
         &self,
         input: StartStructuredAgentSessionInput,
-        codex_registry: &CodexSessionRegistry,
+        agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
     ) -> Result<StartStructuredAgentSessionResult, CommandError> {
         let project = self.project_by_id(input.project_id)?;
@@ -1229,15 +1230,7 @@ impl AgentSessionService<'_> {
             error
         })?;
 
-        let mode =
-            CodexMode::from_id(input.mode.as_deref().unwrap_or("auto")).ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionValidationFailed,
-                    "不支持的协作模式。",
-                )
-                .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-                .with_detail(ErrorDetail::new("Value").with_value("mode", input.mode.clone()))
-            })?;
+        let agent_type = input.agent_type.unwrap_or(AgentType::Codex);
 
         let title = input
             .title
@@ -1284,35 +1277,63 @@ impl AgentSessionService<'_> {
 
         let session_id = session.id;
 
-        // 构造并启动 CodexSessionHandle。
-        let config = CodexSessionConfig {
-            project_id: input.project_id,
-            session_id,
-            binary: "codex".to_string(),
-            cwd: cwd.clone(),
-            mode,
-            broadcaster: broadcaster.clone(),
-            resume_thread_id: input.resume_from_codex_session_id.clone(),
-            model: input.model.clone(),
-            effort: input.effort.clone(),
+        // 按 agent_type 分支构造具体 provider 句柄。当前仅 Codex 有实现；
+        // 其他类型返回「暂不支持」。新增 Claude 等时在此扩展分支。
+        let handle: Arc<dyn AgentSessionHandle> = match agent_type {
+            AgentType::Codex => {
+                let mode = CodexMode::from_id(input.mode.as_deref().unwrap_or("auto"))
+                    .ok_or_else(|| {
+                        CommandError::new(
+                            CommandErrorCode::AgentSessionValidationFailed,
+                            "不支持的协作模式。",
+                        )
+                        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+                        .with_detail(
+                            ErrorDetail::new("Value").with_value("mode", input.mode.clone()),
+                        )
+                    })?;
+                let config = CodexSessionConfig {
+                    project_id: input.project_id,
+                    session_id,
+                    binary: "codex".to_string(),
+                    cwd: cwd.clone(),
+                    mode,
+                    broadcaster: broadcaster.clone(),
+                    resume_thread_id: input.resume_from_codex_session_id.clone(),
+                    model: input.model.clone(),
+                    effort: input.effort.clone(),
+                };
+                let codex_handle = CodexSessionHandle::start(config)
+                    .map_err(|e| agent_session_error_to_command_error(e.into()))?;
+                Arc::new(codex_handle)
+            }
+            AgentType::Claude => {
+                return Err(CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "暂不支持的 agent 类型。",
+                )
+                .with_detail(ErrorDetail::new("Field").with_value("name", "agentType"))
+                .with_detail(
+                    ErrorDetail::new("Value").with_value("agentType", "claude"),
+                ));
+            }
         };
-        let handle = CodexSessionHandle::start(config).map_err(codex_error_to_command_error)?;
         let thread_id = handle.thread_id().ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::AgentSessionStreamFailed,
-                "Codex 会话启动后未拿到 threadId。",
+                "Agent 会话启动后未拿到 threadId。",
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
         })?;
 
-        // 回填 codex_session_id（codex threadId）。
+        // 回填 codex_session_id（agent threadId）。
         self.agent_session_repository
             .update_codex_session_id(session_id, &thread_id)
             .map_err(agent_session_database_error)?;
 
         // 注册到 broadcaster / registry，供前端订阅与后续命令取用。
         broadcaster.register_session(session_id);
-        codex_registry.register(session_id, Arc::new(handle));
+        agent_registry.register(session_id, handle);
 
         Ok(StartStructuredAgentSessionResult {
             session_id,
@@ -1815,23 +1836,20 @@ fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandErro
     Ok(trimmed.to_string())
 }
 
-/// 把 `CodexAppServerError` 转成 `CommandError`。
+/// 把 `AgentSessionError` 转成 `CommandError`。
 ///
-/// 进程未运行 / 通道关闭 → `AgentSessionNotRunning`；其余协议层错误 →
-/// `AgentSessionStreamFailed`。
-pub(crate) fn codex_error_to_command_error(error: CodexAppServerError) -> CommandError {
+/// agent 进程未运行 → `AgentSessionNotRunning`；协议层错误 / 不支持的
+/// 模式 / 其他 → `AgentSessionStreamFailed`。各 provider 的内部错误
+/// 经 `From` 归一化到 `AgentSessionError` 后统一走本函数。
+pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> CommandError {
     let message = error.to_string();
     let code = match &error {
-        CodexAppServerError::BinaryNotFound(_)
-        | CodexAppServerError::SpawnFailed(_)
-        | CodexAppServerError::Closed(_) => CommandErrorCode::AgentSessionNotRunning,
-        CodexAppServerError::RequestTimeout { .. }
-        | CodexAppServerError::ServerError { .. }
-        | CodexAppServerError::Protocol(_)
-        | CodexAppServerError::Serialize(_)
-        | CodexAppServerError::Io(_) => CommandErrorCode::AgentSessionStreamFailed,
+        AgentSessionError::NotRunning(_) => CommandErrorCode::AgentSessionNotRunning,
+        AgentSessionError::Protocol(_)
+        | AgentSessionError::UnsupportedMode(_)
+        | AgentSessionError::Other(_) => CommandErrorCode::AgentSessionStreamFailed,
     };
-    CommandError::new(code, "Codex 会话调用失败。")
+    CommandError::new(code, "Agent 会话调用失败。")
         .with_detail(ErrorDetail::new("Cause").with_value("message", message))
 }
 
