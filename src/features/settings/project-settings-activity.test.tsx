@@ -610,12 +610,13 @@ describe("ProjectSettingsActivity", () => {
     expect(
       within(table).getByRole("cell", { name: "Global" }),
     ).toBeInTheDocument();
-    expect(within(table).getByRole("cell", { name: "—" })).toHaveClass(
-      "settings-agent-table__skill",
+    expect(within(table).getByRole("cell", { name: "—" })).toHaveAttribute(
+      "data-slot",
+      "settings-agents-skill-cell",
     );
     expect(
       within(table).getByRole("cell", { name: longWorkflowSkill }),
-    ).toHaveClass("settings-agent-table__skill");
+    ).toHaveAttribute("data-slot", "settings-agents-skill-cell");
     expect(screen.getAllByAltText("Agent 类型：Codex")).toHaveLength(2);
 
     const rows = within(table).getAllByRole("row").slice(1);

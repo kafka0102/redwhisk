@@ -14,6 +14,15 @@ export {
 export { Badge } from "./badge";
 export { Separator } from "./separator";
 export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from "./table";
+export {
   Empty,
   EmptyHeader,
   EmptyTitle,
