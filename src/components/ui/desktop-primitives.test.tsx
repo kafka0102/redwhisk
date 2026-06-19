@@ -6,39 +6,30 @@ import { Input } from "./input";
 import { Textarea } from "./textarea";
 
 describe("desktop ui primitives", () => {
-  it("uses desktop token classes for buttons", () => {
+  it("renders the shadcn button primitive", () => {
     render(<Button>Run</Button>);
 
     const button = screen.getByRole("button", { name: "Run" });
 
-    expect(button.className).toContain("rounded-[var(--radius-control)]");
-    expect(button.className).toContain("text-[13px]");
-    expect(button.className).toContain(
-      "focus-visible:shadow-[var(--shadow-focus)]",
-    );
+    expect(button).toHaveAttribute("data-slot", "button");
+    expect(button.className).toContain("bg-primary");
   });
 
-  it("uses desktop token classes for inputs", () => {
+  it("renders the shadcn input primitive", () => {
     render(<Input aria-label="Command" />);
 
     const input = screen.getByRole("textbox", { name: "Command" });
 
-    expect(input.className).toContain("rounded-[var(--radius-control)]");
-    expect(input.className).toContain("text-[13px]");
-    expect(input.className).toContain(
-      "focus-visible:shadow-[var(--shadow-focus)]",
-    );
+    expect(input).toHaveAttribute("data-slot", "input");
+    expect(input.className).toContain("border-input");
   });
 
-  it("uses desktop token classes for textareas", () => {
+  it("renders the shadcn textarea primitive", () => {
     render(<Textarea aria-label="Prompt" />);
 
     const textarea = screen.getByRole("textbox", { name: "Prompt" });
 
-    expect(textarea.className).toContain("rounded-[var(--radius-control)]");
-    expect(textarea.className).toContain("text-[13px]");
-    expect(textarea.className).toContain(
-      "focus-visible:shadow-[var(--shadow-focus)]",
-    );
+    expect(textarea).toHaveAttribute("data-slot", "textarea");
+    expect(textarea.className).toContain("border-input");
   });
 });
