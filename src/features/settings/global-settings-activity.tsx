@@ -1,7 +1,4 @@
-import {
-  SlidersHorizontal,
-  type LucideIcon,
-} from "lucide-react";
+import { SlidersHorizontal, type LucideIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,6 +7,8 @@ import {
   type CSSProperties,
 } from "react";
 
+import { Button, Card, CardContent } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ThemePreference } from "../../shared/i18n/messages";
 import {
@@ -23,13 +22,8 @@ const SETTINGS_MENU_MAX_WIDTH = 420;
 const THEME_OPTIONS: ThemePreference[] = ["light", "dark", "system"];
 
 export function GlobalSettingsActivity() {
-  const {
-    locale,
-    messages,
-    setLocale,
-    setThemePreference,
-    themePreference,
-  } = useI18n();
+  const { locale, messages, setLocale, setThemePreference, themePreference } =
+    useI18n();
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
@@ -84,7 +78,10 @@ export function GlobalSettingsActivity() {
       }
     >
       <div className="settings-layout">
-        <nav className="settings-menu" aria-label={messages.globalSettings.settingsMenu}>
+        <nav
+          className="settings-menu"
+          aria-label={messages.globalSettings.settingsMenu}
+        >
           <SettingsMenuItem
             Icon={SlidersHorizontal}
             isActive
@@ -150,69 +147,57 @@ export function GlobalSettingsActivity() {
               <h3>{preferencesLabel}</h3>
             </div>
             <div className="settings-section__body">
-              <div className="settings-card global-preferences-card">
-                <section className="global-preferences-section">
-                  <h4>{messages.globalSettings.language}</h4>
-                  <div className="global-language-options">
-                    <button
-                      className="global-language-option"
-                      type="button"
-                      aria-pressed={locale === "en"}
-                      onClick={() => setLocale("en")}
-                    >
-                      {messages.globalSettings.english}
-                    </button>
-                    <button
-                      className="global-language-option"
-                      type="button"
-                      aria-pressed={locale === "zh"}
-                      onClick={() => setLocale("zh")}
-                    >
-                      {messages.globalSettings.chinese}
-                    </button>
-                  </div>
-                </section>
-
-                <section className="global-preferences-section">
-                  <h4>{messages.globalSettings.theme}</h4>
-                  <div className="global-theme-grid">
-                    {THEME_OPTIONS.map((themeOption) => (
-                      <button
-                        className="global-theme-option"
-                        type="button"
-                        key={themeOption}
-                        aria-pressed={themePreference === themeOption}
-                        onClick={() => setThemePreference(themeOption)}
+              <Card>
+                <CardContent className="grid gap-[26px] p-7">
+                  <section className="grid min-w-0 gap-3.5">
+                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                      {messages.globalSettings.language}
+                    </h4>
+                    <div className="flex flex-wrap gap-3">
+                      <OptionButton
+                        pressed={locale === "en"}
+                        onClick={() => setLocale("en")}
+                        className="min-w-[132px]"
                       >
-                        <span
-                          className={`global-theme-preview global-theme-preview--${themeOption}`}
-                          aria-hidden="true"
+                        {messages.globalSettings.english}
+                      </OptionButton>
+                      <OptionButton
+                        pressed={locale === "zh"}
+                        onClick={() => setLocale("zh")}
+                        className="min-w-[132px]"
+                      >
+                        {messages.globalSettings.chinese}
+                      </OptionButton>
+                    </div>
+                  </section>
+
+                  <section className="grid min-w-0 gap-3.5">
+                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                      {messages.globalSettings.theme}
+                    </h4>
+                    <div className="grid min-w-0 grid-cols-3 gap-4">
+                      {THEME_OPTIONS.map((themeOption) => (
+                        <Button
+                          key={themeOption}
+                          variant="ghost"
+                          aria-pressed={themePreference === themeOption}
+                          onClick={() => setThemePreference(themeOption)}
+                          className={cn(
+                            "grid h-auto gap-2.5 px-0 py-0 text-center font-normal text-muted-foreground hover:bg-transparent",
+                            themePreference === themeOption &&
+                              "font-bold text-foreground hover:bg-transparent",
+                          )}
                         >
-                          <span className="global-theme-preview__dots">
-                            <span className="global-theme-preview__dot global-theme-preview__dot--red" />
-                            <span className="global-theme-preview__dot global-theme-preview__dot--yellow" />
-                            <span className="global-theme-preview__dot global-theme-preview__dot--green" />
+                          <ThemePreview theme={themeOption} />
+                          <span className="text-[15px] leading-[1.3]">
+                            {messages.globalSettings[themeOption]}
                           </span>
-                          <span className="global-theme-preview__body">
-                            <span className="global-theme-preview__side">
-                              <span className="global-theme-preview__line global-theme-preview__line--short" />
-                              <span className="global-theme-preview__line global-theme-preview__line--shorter" />
-                            </span>
-                            <span className="global-theme-preview__main">
-                              <span className="global-theme-preview__line global-theme-preview__line--long" />
-                              <span className="global-theme-preview__line global-theme-preview__line--longer" />
-                              <span className="global-theme-preview__line global-theme-preview__line--medium" />
-                            </span>
-                          </span>
-                        </span>
-                        <span className="global-theme-option__label">
-                          {messages.globalSettings[themeOption]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              </div>
+                        </Button>
+                      ))}
+                    </div>
+                  </section>
+                </CardContent>
+              </Card>
             </div>
           </section>
         </div>
@@ -240,6 +225,139 @@ function SettingsMenuItem({
       <span>{label}</span>
     </button>
   );
+}
+
+function OptionButton({
+  pressed,
+  onClick,
+  className,
+  children,
+}: {
+  pressed: boolean;
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      variant="outline"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={cn(
+        "h-12 min-h-12 px-[18px] text-base font-medium",
+        pressed &&
+          "border-ring bg-background font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--ring)]",
+        className,
+      )}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function ThemePreview({ theme }: { theme: ThemePreference }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "grid h-[clamp(108px,12vw,126px)] grid-rows-[28px_minmax(0,1fr)] overflow-hidden rounded-[var(--radius-dialog)] border bg-background",
+        theme === "dark" &&
+          "border-ring shadow-[0_0_0_2px_var(--ring)] [background:#0c0d10]",
+      )}
+      style={previewThemeStyle(theme)}
+    >
+      <span className="flex items-center gap-1.5 px-3.5">
+        <span className="size-[9px] rounded-full bg-[#ff5f57]" />
+        <span className="size-[9px] rounded-full bg-[#ffbd2e]" />
+        <span className="size-[9px] rounded-full bg-[#28c840]" />
+      </span>
+      <span
+        className="grid min-h-0"
+        style={{
+          gridTemplateColumns: "32% minmax(0,1fr)",
+          ...previewBodyStyle(theme),
+        }}
+      >
+        <span
+          className="grid auto-rows-min gap-2.5 min-w-0 p-5 px-3.5"
+          style={previewSideStyle(theme)}
+        >
+          <span
+            className="block h-[7px] w-[60%] rounded-full"
+            style={{ background: previewSideLineColor(theme) }}
+          />
+          <span
+            className="block h-[7px] w-[46%] rounded-full"
+            style={{ background: previewSideLineColor(theme) }}
+          />
+        </span>
+        <span className="grid auto-rows-min gap-2.5 min-w-0 p-5 px-3.5 [background:var(--theme-preview-surface)]">
+          <span
+            className="block h-[7px] w-[84%] rounded-full"
+            style={{ background: previewMainLineColor(theme) }}
+          />
+          <span
+            className="block h-[7px] w-[96%] rounded-full"
+            style={{ background: previewMainLineColor(theme) }}
+          />
+          <span
+            className="block h-[7px] w-[64%] rounded-full"
+            style={{ background: previewMainLineColor(theme) }}
+          />
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function previewThemeStyle(theme: ThemePreference): CSSProperties {
+  if (theme === "light") {
+    return { ["--theme-preview-surface" as string]: "#ffffff" };
+  }
+  if (theme === "dark") {
+    return { ["--theme-preview-surface" as string]: "#0c0d10" };
+  }
+  // system
+  return { ["--theme-preview-surface" as string]: "#ffffff" };
+}
+
+function previewBodyStyle(theme: ThemePreference): CSSProperties {
+  if (theme === "system") {
+    return {
+      background: "linear-gradient(90deg, #ffffff 0 50%, #0b0b0c 50%)",
+    };
+  }
+  if (theme === "dark") {
+    return { background: "#0c0d10" };
+  }
+  return { background: "#ffffff" };
+}
+
+function previewSideStyle(theme: ThemePreference): CSSProperties {
+  return {
+    background: theme === "dark" ? "#0c0d10" : "#ffffff",
+    borderRight: `1px solid ${theme === "system" ? "#272a30" : "var(--color-border)"}`,
+  };
+}
+
+function previewSideLineColor(theme: ThemePreference): string {
+  if (theme === "dark") {
+    return "#3a3f47";
+  }
+  if (theme === "system") {
+    return "#8a8f98";
+  }
+  return "var(--color-border-strong)";
+}
+
+function previewMainLineColor(theme: ThemePreference): string {
+  if (theme === "dark") {
+    return "#3a3f47";
+  }
+  if (theme === "system") {
+    return "#3a3f47";
+  }
+  return "var(--color-border-strong)";
 }
 
 function clampSettingsMenuWidth(width: number) {
