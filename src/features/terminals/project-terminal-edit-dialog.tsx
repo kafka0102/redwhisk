@@ -2,6 +2,8 @@ import { X } from "lucide-react";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ProjectTerminalCardState } from "./project-terminals-activity-state";
@@ -32,7 +34,14 @@ export function ProjectTerminalEditDialog({
       name !== terminal.name ||
       workingDir !== terminal.workingDir ||
       launchCommand !== terminal.launchCommand,
-    [launchCommand, name, terminal.launchCommand, terminal.name, terminal.workingDir, workingDir],
+    [
+      launchCommand,
+      name,
+      terminal.launchCommand,
+      terminal.name,
+      terminal.workingDir,
+      workingDir,
+    ],
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -105,38 +114,53 @@ export function ProjectTerminalEditDialog({
 
         <div className="issue-dialog__body issue-dialog__body--single terminal-edit-dialog__body">
           <div className="issue-dialog__editor">
-            <label className="settings-field">
-              <span>{messages.settings.name}</span>
-              <input
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="terminal-name"
+                className="text-xs text-muted-foreground"
+              >
+                {messages.settings.name}
+              </Label>
+              <Input
+                id="terminal-name"
                 aria-label={messages.settings.name}
-                className="settings-input settings-input--form-control"
                 disabled={isSaving}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
-            </label>
+            </div>
 
-            <label className="settings-field">
-              <span>{messages.settings.terminalPath}</span>
-              <input
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="terminal-path"
+                className="text-xs text-muted-foreground"
+              >
+                {messages.settings.terminalPath}
+              </Label>
+              <Input
+                id="terminal-path"
                 aria-label={messages.settings.terminalPath}
-                className="settings-input settings-input--form-control"
                 disabled={isSaving}
                 value={workingDir}
                 onChange={(event) => setWorkingDir(event.target.value)}
               />
-            </label>
+            </div>
 
-            <label className="settings-field">
-              <span>{messages.settings.command}</span>
-              <input
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="terminal-command"
+                className="text-xs text-muted-foreground"
+              >
+                {messages.settings.command}
+              </Label>
+              <Input
+                id="terminal-command"
                 aria-label={messages.settings.command}
-                className="settings-input settings-input--form-control"
                 disabled={isSaving}
                 value={launchCommand}
                 onChange={(event) => setLaunchCommand(event.target.value)}
               />
-            </label>
+            </div>
           </div>
         </div>
 

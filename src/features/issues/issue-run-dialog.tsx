@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   getProjectGitBranches,
   startAgentSession,
@@ -71,7 +80,7 @@ export function IssueRunDialog({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const profileSelectRef = useRef<HTMLSelectElement | null>(null);
+  const profileSelectRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -108,7 +117,8 @@ export function IssueRunDialog({
           globalProfiles: globalProfilesResponse.profiles,
           sessions: sessionsResponse.sessions,
         });
-        const recentWorkspaceSelection = readRecentWorkspaceSelection(projectId);
+        const recentWorkspaceSelection =
+          readRecentWorkspaceSelection(projectId);
         const resolvedTargetBranch = resolveInitialTargetBranch({
           currentBranch: branchesResponse.currentBranch,
           localBranches: branchesResponse.localBranches,
@@ -329,18 +339,21 @@ export function IssueRunDialog({
         </div>
         <div className="issue-dialog__body">
           <div className="issue-dialog__editor issue-dialog__editor--full">
-            <label className="settings-field">
-              <span>Agent profile</span>
-              <select
-                ref={profileSelectRef}
-                aria-label="Agent profile"
-                className="settings-input"
-                disabled={
-                  isLoadingProfiles || isStarting || profiles.length === 0
-                }
-                value={selectedProfileId ?? ""}
-                onChange={(event) => {
-                  const nextProfileId = Number(event.target.value);
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="run-agent-profile"
+                className="text-xs text-muted-foreground"
+              >
+                Agent profile
+              </Label>
+              <Select
+                items={profiles.map((profile) => ({
+                  value: profile.id,
+                  label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}`,
+                }))}
+                value={selectedProfileId}
+                onValueChange={(value) => {
+                  const nextProfileId = value as number;
                   const nextProfile =
                     profiles.find((profile) => profile.id === nextProfileId) ??
                     null;
@@ -356,25 +369,46 @@ export function IssueRunDialog({
                   );
                 }}
               >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                    {profile.scope === "project" ? " (Project)" : " (Global)"}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger
+                  ref={profileSelectRef}
+                  id="run-agent-profile"
+                  aria-label="Agent profile"
+                  className="w-full"
+                  disabled={
+                    isLoadingProfiles || isStarting || profiles.length === 0
+                  }
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                      {profile.scope === "project" ? " (Project)" : " (Global)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {shouldShowWorkflowSkill ? (
-              <label className="settings-field">
-                <span>Workflow skill</span>
-                <select
-                  aria-label="Workflow skill"
-                  className="settings-input"
-                  disabled={isLoadingProfiles || isStarting}
+              <div className="grid gap-1.5">
+                <Label
+                  htmlFor="run-workflow-skill"
+                  className="text-xs text-muted-foreground"
+                >
+                  Workflow skill
+                </Label>
+                <Select
+                  items={[
+                    { value: NO_WORKFLOW_SKILL_VALUE, label: "None" },
+                    ...workflowSkillOptions.map((skill) => ({
+                      value: skill,
+                      label: skill,
+                    })),
+                  ]}
                   value={workflowSkillValue}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
+                  onValueChange={(nextValue) => {
                     const nextWorkflowSkill =
                       nextValue === NO_WORKFLOW_SKILL_VALUE ? "" : nextValue;
                     setSelectedWorkflowSkill(nextWorkflowSkill);
@@ -387,79 +421,140 @@ export function IssueRunDialog({
                     }
                   }}
                 >
-                  <option value={NO_WORKFLOW_SKILL_VALUE}>None</option>
-                  {workflowSkillOptions.map((skill) => (
-                    <option key={skill} value={skill}>
-                      {skill}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <SelectTrigger
+                    id="run-workflow-skill"
+                    aria-label="Workflow skill"
+                    className="w-full"
+                    disabled={isLoadingProfiles || isStarting}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_WORKFLOW_SKILL_VALUE}>
+                      None
+                    </SelectItem>
+                    {workflowSkillOptions.map((skill) => (
+                      <SelectItem key={skill} value={skill}>
+                        {skill}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             ) : null}
 
-            <label className="settings-field">
-              <span>Commit strategy</span>
-              <select
-                aria-label="Commit strategy"
-                className="settings-input"
-                disabled={isLoadingBranches || isStarting}
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="run-commit-strategy"
+                className="text-xs text-muted-foreground"
+              >
+                Commit strategy
+              </Label>
+              <Select
+                items={[
+                  { value: "manual", label: "Manual" },
+                  { value: "agent_auto_commit", label: "Agent auto commit" },
+                ]}
                 value={completionPolicy}
-                onChange={(event) =>
-                  setCompletionPolicy(
-                    event.target.value as ProjectCompletionPolicy,
-                  )
+                onValueChange={(value) =>
+                  setCompletionPolicy(value as ProjectCompletionPolicy)
                 }
               >
-                <option value="manual">Manual</option>
-                <option value="agent_auto_commit">Agent auto commit</option>
-              </select>
-            </label>
-
-            <div className="settings-field">
-              <span>Development mode</span>
-              <div className="agent-dialog__command-row">
-                <select
-                  aria-label="Development mode"
-                  className="settings-input"
+                <SelectTrigger
+                  id="run-commit-strategy"
+                  aria-label="Commit strategy"
+                  className="w-full"
                   disabled={isLoadingBranches || isStarting}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="agent_auto_commit">
+                    Agent auto commit
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="run-development-mode"
+                className="text-xs text-muted-foreground"
+              >
+                Development mode
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select
+                  items={[
+                    { value: "current_branch", label: "Current branch" },
+                    { value: "worktree", label: "Worktree" },
+                  ]}
                   value={workspaceMode}
-                  onChange={(event) => {
-                    setWorkspaceMode(event.target.value as WorkspaceMode);
+                  onValueChange={(value) => {
+                    setWorkspaceMode(value as WorkspaceMode);
                   }}
                 >
-                  <option value="current_branch">Current branch</option>
-                  <option value="worktree">Worktree</option>
-                </select>
-                <select
-                  aria-label="Target branch"
-                  className="settings-input"
-                  disabled={
-                    isLoadingBranches ||
-                    isStarting ||
-                    workspaceMode === "current_branch"
-                  }
+                  <SelectTrigger
+                    id="run-development-mode"
+                    aria-label="Development mode"
+                    className="w-full"
+                    disabled={isLoadingBranches || isStarting}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current_branch">
+                      Current branch
+                    </SelectItem>
+                    <SelectItem value="worktree">Worktree</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  items={branchState.localBranches.map((branch) => ({
+                    value: branch,
+                    label: branch,
+                  }))}
                   value={effectiveTargetBranch}
-                  onChange={(event) => setTargetBranch(event.target.value)}
+                  onValueChange={(value) => setTargetBranch(value as string)}
                 >
-                  {branchState.localBranches.map((branch) => (
-                    <option key={branch} value={branch}>
-                      {branch}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    aria-label="Target branch"
+                    className="w-full"
+                    disabled={
+                      isLoadingBranches ||
+                      isStarting ||
+                      workspaceMode === "current_branch"
+                    }
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branchState.localBranches.map((branch) => (
+                      <SelectItem key={branch} value={branch}>
+                        {branch}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            <label className="settings-field">
-              <span>Final prompt</span>
-              <textarea
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="run-final-prompt"
+                className="text-xs text-muted-foreground"
+              >
+                Final prompt
+              </Label>
+              <Textarea
+                id="run-final-prompt"
                 aria-label="Final prompt"
-                className="settings-textarea"
                 readOnly
                 rows={12}
                 value={promptDraft}
               />
-            </label>
+            </div>
           </div>
         </div>
         <p

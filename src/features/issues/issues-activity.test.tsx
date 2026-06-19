@@ -28,6 +28,7 @@ import {
   listProjectLabels,
 } from "../settings/settings-commands";
 import { I18nProvider } from "../../shared/i18n/i18n";
+import { selectShadcnOption } from "../../test/select-helpers";
 
 vi.mock("./issue-commands", () => ({
   advanceIssueStatus: vi.fn(),
@@ -892,8 +893,12 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("button", { name: "labels" }));
     await user.click(screen.getByRole("option", { name: "bug" }));
     await user.click(screen.getByRole("option", { name: "release" }));
-    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent("bug");
-    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent("release");
+    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent(
+      "bug",
+    );
+    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent(
+      "release",
+    );
 
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
@@ -1078,18 +1083,24 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).getByRole("heading", { name: "Run Issue #20" }),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Agent profile")).toHaveValue("100");
-    expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
+    expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
+      "Project Codex (Project)",
+    );
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "bmad-dev-story",
     );
-    expect(within(dialog).getByLabelText("Commit strategy")).toHaveValue(
-      "agent_auto_commit",
+    expect(within(dialog).getByLabelText("Commit strategy")).toHaveTextContent(
+      "Agent auto commit",
     );
-    expect(within(dialog).getByLabelText("Development mode")).toHaveValue(
-      "current_branch",
+    expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
+      "Current branch",
     );
-    expect(within(dialog).getByLabelText("Target branch")).toHaveValue("main");
-    expect(within(dialog).getByLabelText("Target branch")).toBeDisabled();
+    expect(within(dialog).getByLabelText("Target branch")).toHaveTextContent(
+      "main",
+    );
+    expect(
+      within(dialog).getByRole("combobox", { name: "Target branch" }),
+    ).toBeDisabled();
     expect(
       within(dialog).queryByLabelText("Working directory"),
     ).not.toBeInTheDocument();
@@ -1212,33 +1223,35 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     let dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    await user.selectOptions(
-      within(dialog).getByLabelText("Development mode"),
-      "worktree",
+    await selectShadcnOption(
+      user,
+      within(dialog),
+      "Development mode",
+      "Worktree",
     );
-    await user.selectOptions(
-      within(dialog).getByLabelText("Target branch"),
-      "develop",
-    );
-    await user.selectOptions(
-      within(dialog).getByLabelText("Commit strategy"),
-      "manual",
-    );
-    expect(within(dialog).getByLabelText("Target branch")).toBeEnabled();
+    await selectShadcnOption(user, within(dialog), "Target branch", "develop");
+    await selectShadcnOption(user, within(dialog), "Commit strategy", "Manual");
+    expect(
+      within(dialog).getByRole("combobox", { name: "Target branch" }),
+    ).toBeEnabled();
 
     await user.click(
       within(dialog).getByRole("button", { name: "Close run dialog" }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
-    dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    expect(within(dialog).getByLabelText("Development mode")).toHaveValue(
-      "worktree",
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
     );
-    expect(within(dialog).getByLabelText("Target branch")).toHaveValue(
+    dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
+      "Worktree",
+    );
+    expect(within(dialog).getByLabelText("Target branch")).toHaveTextContent(
       "develop",
     );
 
@@ -1347,11 +1360,9 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    const profileSelect = within(dialog).getByLabelText(
-      "Agent profile",
-    ) as HTMLSelectElement;
-
-    expect(profileSelect).toHaveValue("101");
+    expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
+      "Project Claude (Project)",
+    );
   });
 
   it("prefers the most recent issue run profile when it is still available", async () => {
@@ -1400,11 +1411,9 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    const profileSelect = within(dialog).getByLabelText(
-      "Agent profile",
-    ) as HTMLSelectElement;
-
-    expect(profileSelect).toHaveValue("200");
+    expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
+      "Global Codex (Global)",
+    );
   });
 
   it("hides the workflow skill field when the selected agent profile has no configured skill", async () => {
@@ -1423,7 +1432,9 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
     expect(
@@ -1447,17 +1458,16 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    await user.selectOptions(
-      within(dialog).getByLabelText("Workflow skill"),
-      "__none__",
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
     );
 
-    expect(
-      within(dialog).getByLabelText("Final prompt"),
-    ).toHaveValue(existingIssueRunPromptWithoutSkill);
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    await selectShadcnOption(user, within(dialog), "Workflow skill", "None");
+
+    expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
+      existingIssueRunPromptWithoutSkill,
+    );
   });
 
   it("restores the most recently used workflow skill for the selected agent profile", async () => {
@@ -1483,20 +1493,26 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     let dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    await user.selectOptions(
-      within(dialog).getByLabelText("Workflow skill"),
+    await selectShadcnOption(
+      user,
+      within(dialog),
+      "Workflow skill",
       "review-skill",
     );
     await user.click(
       within(dialog).getByRole("button", { name: "Close run dialog" }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
     dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "review-skill",
     );
   });
@@ -1524,10 +1540,12 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.click(screen.getByRole("button", { name: "Run Existing issue" }));
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    expect(within(dialog).getByLabelText("Workflow skill")).toHaveValue(
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "skill-a",
     );
   });
@@ -1765,9 +1783,7 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
-    expect(
-      within(dialog).queryByText("#301"),
-    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("#301")).not.toBeInTheDocument();
   });
 
   it("opens the linked session from the issue detail link even when the session is closed", async () => {
@@ -1789,7 +1805,9 @@ describe("IssuesActivity", () => {
     );
 
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
-    expect(screen.queryByRole("dialog", { name: "Issue Detail" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Issue Detail" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a forward-only status menu and completes a running issue after confirmation", async () => {
@@ -1830,9 +1848,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
 
-    expect(
-      screen.getByRole("menuitem", { name: "Backlog" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Backlog" })).toBeDisabled();
     expect(
       screen.getByRole("menuitem", { name: "In progress" }),
     ).toBeDisabled();
@@ -1850,7 +1866,9 @@ describe("IssuesActivity", () => {
       projectId: 1,
       issueId: attentionIssue.id,
     });
-    expect(screen.getByRole("button", { name: "View Summary" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View Summary" }),
+    ).toBeInTheDocument();
 
     confirmSpy.mockRestore();
   });
@@ -1870,14 +1888,18 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Delete issue" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete issue" }),
+    );
 
     expect(confirmSpy).toHaveBeenCalledWith("确认删除这个 issue 吗？");
     expect(deleteIssueMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: runningIssue.id,
     });
-    expect(screen.queryByRole("dialog", { name: "Issue Detail" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Issue Detail" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Running issue" }),
     ).not.toBeInTheDocument();
@@ -1899,11 +1921,15 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Delete issue" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete issue" }),
+    );
 
     expect(confirmSpy).toHaveBeenCalledWith("确认删除这个 issue 吗？");
     expect(deleteIssueMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Issue Detail" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Issue Detail" }),
+    ).toBeInTheDocument();
 
     confirmSpy.mockRestore();
   });

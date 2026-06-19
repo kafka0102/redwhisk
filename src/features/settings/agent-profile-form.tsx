@@ -15,6 +15,15 @@ import {
   type AgentType,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import {
   parseDefaultSkills,
   serializeDefaultSkills,
@@ -53,16 +62,19 @@ export function AgentProfileForm({
   );
   const [modeValue] = useState(() => profile?.mode ?? "default");
   const [dangerous] = useState(() => profile?.dangerous ?? true);
-  const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>(
-    () => parseDefaultSkills(profile?.defaultSkill ?? "").map(toMissingSkillKey),
+  const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>(() =>
+    parseDefaultSkills(profile?.defaultSkill ?? "").map(toMissingSkillKey),
   );
   const [promptTemplate] = useState(() => profile?.promptTemplate ?? "");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isValidatingWorktreePath, setIsValidatingWorktreePath] = useState(false);
-  const [worktreePathError, setWorktreePathError] = useState<string | null>(null);
+  const [isValidatingWorktreePath, setIsValidatingWorktreePath] =
+    useState(false);
+  const [worktreePathError, setWorktreePathError] = useState<string | null>(
+    null,
+  );
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
   const [skills, setSkills] = useState<AgentSkillRecord[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
@@ -261,17 +273,14 @@ export function AgentProfileForm({
       ),
     [effectiveSelectedSkillKeys, visibleSkills],
   );
-  const missingSkillNames = useMemo(
-    () => {
-      const names = selectedSkillKeys
-        .filter((key) => isMissingSkillKey(key))
-        .map(fromMissingSkillKey);
-      return dedupeStrings(
-        names.filter((skillName) => !visibleSkillNames.has(skillName)),
-      );
-    },
-    [selectedSkillKeys, visibleSkillNames],
-  );
+  const missingSkillNames = useMemo(() => {
+    const names = selectedSkillKeys
+      .filter((key) => isMissingSkillKey(key))
+      .map(fromMissingSkillKey);
+    return dedupeStrings(
+      names.filter((skillName) => !visibleSkillNames.has(skillName)),
+    );
+  }, [selectedSkillKeys, visibleSkillNames]);
   const workflowSkillOptions = useMemo(() => {
     const missingOptions = missingSkillNames.map((skillName) => ({
       value: toMissingSkillKey(skillName),
@@ -318,7 +327,9 @@ export function AgentProfileForm({
     setWorktreePathError(null);
 
     try {
-      const result = await validateAgentWorktreePath({ path: trimmedWorktreePath });
+      const result = await validateAgentWorktreePath({
+        path: trimmedWorktreePath,
+      });
       if (!isCurrentValidationRequest(requestSequence)) {
         return false;
       }
@@ -415,41 +426,67 @@ export function AgentProfileForm({
         </div>
 
         <div className="agent-dialog__body">
-          <label className="settings-field">
-            <span>Name</span>
-            <input
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="agent-profile-name"
+              className="text-xs text-muted-foreground"
+            >
+              Name
+            </Label>
+            <Input
+              id="agent-profile-name"
               aria-label="Agent profile name"
-              className="settings-input"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-          </label>
+          </div>
 
-          <label className="settings-field">
-            <span>Type</span>
-            <select
-              aria-label="Agent type"
-              className="settings-input"
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="agent-profile-type"
+              className="text-xs text-muted-foreground"
+            >
+              Type
+            </Label>
+            <Select
+              items={[
+                { value: "codex", label: "Codex" },
+                { value: "claude", label: "Claude Code" },
+              ]}
               value={agentType}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 skillRequestSequenceRef.current += 1;
-                setAgentType(event.target.value as AgentType);
+                setAgentType(value as AgentType);
                 setSelectedSkillKeys([]);
                 setSkills([]);
                 setSkillLoadFailed(false);
               }}
             >
-              <option value="codex">Codex</option>
-              <option value="claude">Claude Code</option>
-            </select>
-          </label>
+              <SelectTrigger
+                id="agent-profile-type"
+                aria-label="Agent type"
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="codex">Codex</SelectItem>
+                <SelectItem value="claude">Claude Code</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <label className="settings-field">
-            <span>Command</span>
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="agent-profile-command"
+              className="text-xs text-muted-foreground"
+            >
+              Command
+            </Label>
             <div className="agent-dialog__command-row">
-              <input
+              <Input
+                id="agent-profile-command"
                 aria-label="Agent command"
-                className="settings-input"
                 value={command}
                 onChange={(event) => setCommand(event.target.value)}
               />
@@ -462,13 +499,18 @@ export function AgentProfileForm({
                 {isTesting ? "测试中..." : "测试"}
               </button>
             </div>
-          </label>
+          </div>
 
-          <label className="settings-field">
-            <span>Worktree path</span>
-            <input
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="agent-profile-worktree-path"
+              className="text-xs text-muted-foreground"
+            >
+              Worktree path
+            </Label>
+            <Input
+              id="agent-profile-worktree-path"
               aria-label="Worktree path"
-              className="settings-input"
               value={worktreePath}
               onBlur={() => {
                 if (!didEditWorktreePathRef.current) {
@@ -485,19 +527,21 @@ export function AgentProfileForm({
               }}
             />
             {isDefaultWorktreePath ? (
-              <span className="settings-field__hint">
+              <span className="text-xs text-muted-foreground">
                 默认路径允许当前不存在，运行时会按需创建。
               </span>
             ) : null}
             {isValidatingWorktreePath ? (
-              <span className="settings-field__hint">校验路径中...</span>
+              <span className="text-xs text-muted-foreground">
+                校验路径中...
+              </span>
             ) : null}
             {worktreePathError ? (
-              <span role="alert" className="settings-field__error">
+              <span role="alert" className="text-xs text-destructive">
                 {worktreePathError}
               </span>
             ) : null}
-          </label>
+          </div>
 
           <SearchableSelect
             label="Scope"
@@ -839,7 +883,10 @@ function SearchableMultiSelect({
         />
       </label>
       {selectedOptions.length > 0 ? (
-        <div className="settings-search-select__chips" aria-label={`${ariaLabel} selected`}>
+        <div
+          className="settings-search-select__chips"
+          aria-label={`${ariaLabel} selected`}
+        >
           {selectedOptions.map((option) => (
             <button
               key={option.value}

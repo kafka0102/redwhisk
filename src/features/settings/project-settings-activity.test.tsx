@@ -22,6 +22,10 @@ import {
   updateProjectSettings,
   validateProjectRepoPath,
 } from "../project/project-commands";
+import {
+  openShadcnSelect,
+  selectShadcnOption,
+} from "../../test/select-helpers";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -264,7 +268,9 @@ describe("ProjectSettingsActivity", () => {
       screen.queryByRole("button", { name: "Terminals" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Labels" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "General" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
   });
 
@@ -373,13 +379,9 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.getByLabelText("Repository path")).toHaveValue(
       "/tmp/redwhisk",
     );
-    expect(screen.getByLabelText("Git completion strategy")).toHaveValue(
-      "manual",
+    expect(screen.getByLabelText("Git completion strategy")).toHaveTextContent(
+      "Manual",
     );
-    expect(screen.getByRole("option", { name: "Manual" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Auto Commit" }),
-    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Agents" }));
@@ -416,9 +418,15 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByRole("button", { name: "New label" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Scope" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Color" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Scope" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Color" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: "Workflow Skills" }),
     ).toBeInTheDocument();
@@ -460,19 +468,29 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Labels" }));
     await user.click(screen.getByRole("button", { name: "New label" }));
 
-    expect(screen.getByRole("dialog", { name: "New label" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toHaveAttribute("autocapitalize", "none");
-    expect(screen.getByLabelText("Scope")).toHaveValue("global");
+    expect(
+      screen.getByRole("dialog", { name: "New label" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveAttribute(
+      "autocapitalize",
+      "none",
+    );
+    expect(screen.getByLabelText("Scope")).toHaveTextContent("Global");
     expect(screen.getByLabelText("Color")).toHaveValue("#e11d48");
-    expect(screen.getByLabelText("Agent")).toHaveValue("none");
+    expect(screen.getByLabelText("Agent")).toHaveTextContent("None");
     expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Agent"), "2");
+    await selectShadcnOption(user, screen, "Agent", "Global Codex");
 
     const workflowSkill = await screen.findByLabelText("Workflow Skill");
     expect(workflowSkill).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "label-skill-a" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "label-skill-b" })).toBeInTheDocument();
+    await openShadcnSelect(user, screen, "Workflow Skill");
+    expect(
+      await screen.findByRole("option", { name: "label-skill-a" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "label-skill-b" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: "codex-project" }),
     ).not.toBeInTheDocument();
@@ -507,7 +525,7 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Labels" }));
     await user.click(screen.getByRole("button", { name: "New label" }));
-    await user.selectOptions(screen.getByLabelText("Agent"), "2");
+    await selectShadcnOption(user, screen, "Agent", "Global Codex");
 
     expect(screen.queryByLabelText("Workflow Skill")).not.toBeInTheDocument();
   });
@@ -527,7 +545,9 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Labels" }));
     await user.click(screen.getByRole("button", { name: "Urgent" }));
-    expect(screen.getByRole("dialog", { name: "Edit label" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Edit label" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close" }));
 
     await user.click(screen.getByRole("button", { name: "Delete Urgent" }));
@@ -769,10 +789,7 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.getByRole("dialog", { name: "New agent" })).toHaveTextContent(
       /Name[\s\S]*Type[\s\S]*Command[\s\S]*Scope[\s\S]*Workflow Skills/,
     );
-    expect(screen.getByLabelText("Agent type")).toHaveValue("codex");
-    expect(screen.getByRole("option", { name: "Claude Code" })).toHaveValue(
-      "claude",
-    );
+    expect(screen.getByLabelText("Agent type")).toHaveTextContent("Codex");
     expect(await screen.findByLabelText("Agent command")).toHaveValue("codex");
     expect(screen.getByRole("combobox", { name: "Scope" })).toHaveValue(
       "Global",
@@ -830,7 +847,10 @@ describe("ProjectSettingsActivity", () => {
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.click(screen.getByRole("combobox", { name: "Scope" }));
     await user.click(screen.getByRole("option", { name: "Project" }));
-    await user.type(screen.getByLabelText("Agent profile name"), "Scoped Codex");
+    await user.type(
+      screen.getByLabelText("Agent profile name"),
+      "Scoped Codex",
+    );
     expect(screen.getByLabelText("Worktree path")).toHaveValue(
       "/tmp/redwhisk.worktrees",
     );
@@ -880,7 +900,9 @@ describe("ProjectSettingsActivity", () => {
         path: "/custom/worktrees",
       }),
     );
-    expect(screen.getByText("Worktree path does not exist.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Worktree path does not exist."),
+    ).toBeInTheDocument();
     expect(saveAgentProfileMock).not.toHaveBeenCalled();
   });
 
@@ -922,7 +944,9 @@ describe("ProjectSettingsActivity", () => {
       command: "/opt/codex/bin/codex",
     });
     expect(
-      screen.getByText("Command available: codex").closest(".agent-dialog__toast"),
+      screen
+        .getByText("Command available: codex")
+        .closest(".agent-dialog__toast"),
     ).not.toBeNull();
     expect(screen.getByLabelText("Agent command")).toHaveValue(
       "/opt/codex/bin/codex",
@@ -1034,7 +1058,7 @@ describe("ProjectSettingsActivity", () => {
       screen.getByLabelText("Agent profile name"),
       "Claude Agent",
     );
-    await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
+    await selectShadcnOption(user, screen, "Agent type", "Claude Code");
 
     await user.click(screen.getByRole("combobox", { name: "Workflow Skills" }));
     expect(await screen.findByText("claude-global")).toBeInTheDocument();
@@ -1186,7 +1210,9 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await user.click(screen.getByRole("button", { name: "测试" }));
-    expect(await screen.findByText("Command available: codex")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Command available: codex"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Close message" }));
     await waitFor(() =>
@@ -1446,7 +1472,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
     await waitFor(() => expect(pendingSkills.codex).toBeDefined());
-    await user.selectOptions(screen.getByLabelText("Agent type"), "claude");
+    await selectShadcnOption(user, screen, "Agent type", "Claude Code");
     await waitFor(() => expect(pendingSkills.claude).toBeDefined());
 
     await act(async () => {
@@ -1481,7 +1507,9 @@ describe("ProjectSettingsActivity", () => {
       );
     });
 
-    expect(screen.getByLabelText("Agent type")).toHaveValue("claude");
+    expect(screen.getByLabelText("Agent type")).toHaveTextContent(
+      "Claude Code",
+    );
     expect(screen.getByText("claude-global")).toBeInTheDocument();
     expect(screen.queryByText("codex-global")).not.toBeInTheDocument();
   });
@@ -1650,9 +1678,11 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "General" }));
     await user.clear(await screen.findByLabelText("Project Name"));
     await user.type(screen.getByLabelText("Project Name"), "RedWhisk Desktop");
-    await user.selectOptions(
-      screen.getByLabelText("Git completion strategy"),
-      "agent_auto_commit",
+    await selectShadcnOption(
+      user,
+      screen,
+      "Git completion strategy",
+      "Auto Commit",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
