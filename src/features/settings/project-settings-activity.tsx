@@ -4,10 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type FormEvent,
-  type ReactNode,
 } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { Bot, Info, Plus, Tag } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
@@ -19,28 +16,18 @@ import {
   type AgentProfileRecord,
   type ProjectLabelRecord,
 } from "./settings-commands";
-import { AgentProfileForm } from "./agent-profile-form";
-import { formatDefaultSkills } from "./agent-profile-skills";
-import { ProjectLabelForm } from "./project-label-form";
 import { toCommandError } from "../../shared/commands/command-error";
-import {
-  type ProjectCompletionPolicy,
-  type UpdateProjectSettingsInput,
-  updateProjectSettings,
-  validateProjectRepoPath,
-} from "../project/project-commands";
-import { ProjectDetailsForm } from "../project/project-details-form";
+import type { ProjectCompletionPolicy } from "../project/project-commands";
 import type { ProjectSummary } from "../../app/app";
-import {
-  formatAgentTypeLabel,
-  getAgentLogoSrc,
-} from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
+import { GeneralSettingsPanel } from "./settings-general-panel";
+import { AgentsSettingsPanel } from "./settings-agents-panel";
+import { LabelsSettingsPanel } from "./settings-labels-panel";
 
 export type SettingsMenu = "general" | "agents" | "labels";
 
@@ -96,19 +83,6 @@ interface ProjectSettingsActivityProps {
   projectId: number;
   projectName: string;
   projectPath?: string;
-}
-
-interface GeneralSettingsFormProps {
-  completionPolicy: ProjectCompletionPolicy;
-  messages: I18nMessages;
-  onSave: (
-    input: Pick<
-      UpdateProjectSettingsInput,
-      "name" | "repoPath" | "completionPolicy"
-    >,
-  ) => Promise<void>;
-  projectName: string;
-  projectPath: string;
 }
 
 export function ProjectSettingsActivity({
@@ -328,28 +302,6 @@ export function ProjectSettingsActivity({
     setEditingLabel(null);
   }
 
-  async function handleGeneralSettingsSave(
-    input: Pick<
-      UpdateProjectSettingsInput,
-      "name" | "repoPath" | "completionPolicy"
-    >,
-  ) {
-    const updatedProject = await updateProjectSettings({
-      projectId,
-      name: input.name,
-      repoPath: input.repoPath,
-      completionPolicy: input.completionPolicy,
-    });
-    onProjectUpdated?.({
-      id: updatedProject.id,
-      name: updatedProject.name,
-      path: updatedProject.repoPath,
-      completionPolicy: updatedProject.completionPolicy,
-      recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
-      status: "available",
-    });
-  }
-
   async function handleDeleteProfile(profile: AgentProfileRecord) {
     const isConfirmed = window.confirm(
       messages.settings.deleteConfirm(profile.name),
@@ -398,6 +350,22 @@ export function ProjectSettingsActivity({
     } finally {
       setDeletingLabelId(null);
     }
+  }
+
+  function handleAddFormChange(form: AddFormState | null) {
+    setAddForm(form);
+  }
+
+  function handleEditingProfileChange(state: EditingProfileState | null) {
+    setEditingProfile(state);
+  }
+
+  function handleAddLabelFormChange(form: AddLabelFormState | null) {
+    setAddLabelForm(form);
+  }
+
+  function handleEditingLabelChange(state: EditingLabelState | null) {
+    setEditingLabel(state);
   }
 
   return (
@@ -495,7 +463,6 @@ export function ProjectSettingsActivity({
             headerAction={
               activeMenu === "agents" ? (
                 <Button
-                  className="settings-section__header-action"
                   variant="secondary"
                   type="button"
                   aria-label={messages.settings.newAgent}
@@ -509,7 +476,6 @@ export function ProjectSettingsActivity({
                 </Button>
               ) : activeMenu === "labels" ? (
                 <Button
-                  className="settings-section__header-action"
                   variant="secondary"
                   type="button"
                   aria-label={messages.settings.newLabel}
@@ -525,269 +491,47 @@ export function ProjectSettingsActivity({
             }
           >
             {activeMenu === "general" ? (
-              <GeneralSettingsForm
-                key={`${projectId}:${projectName}:${projectPath}:${completionPolicy}`}
+              <GeneralSettingsPanel
                 completionPolicy={completionPolicy}
-                messages={messages}
-                onSave={handleGeneralSettingsSave}
+                projectId={projectId}
                 projectName={projectName}
                 projectPath={projectPath}
+                onProjectUpdated={onProjectUpdated}
               />
             ) : null}
 
             {activeMenu === "agents" ? (
-              <>
-                {currentProfilesErrorMessage ? (
-                  <p
-                    className="settings-status"
-                    role="status"
-                    aria-label={messages.settings.status}
-                  >
-                    {currentProfilesErrorMessage}
-                  </p>
-                ) : null}
-
-                {currentProfilesLoadState === "loading" ? (
-                  <p className="settings-agent-section__loading">
-                    {messages.settings.loading}
-                  </p>
-                ) : currentProfiles.length === 0 ? (
-                  <div className="settings-agent-table-empty">
-                    <p>{messages.settings.noAgents}</p>
-                  </div>
-                ) : (
-                  <div className="settings-agent-table-scroll">
-                    <table
-                      className="settings-agent-table"
-                      aria-label={messages.settings.configuredAgents}
-                    >
-                      <thead>
-                        <tr>
-                          <th scope="col">{messages.settings.type}</th>
-                          <th scope="col">{messages.settings.name}</th>
-                          <th scope="col">{messages.settings.command}</th>
-                          <th scope="col">{messages.settings.scope}</th>
-                          <th scope="col">{messages.settings.workflowSkill}</th>
-                          <th scope="col">
-                            {messages.settings.actions}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentProfiles.map((profile) => {
-                          const agentLabel = formatAgentTypeLabel(
-                            profile.agentType,
-                          );
-
-                          return (
-                            <tr
-                              key={profile.id}
-                              className="settings-agent-table__row"
-                            >
-                              <td>
-                                <img
-                                  alt={`Agent 类型：${agentLabel}`}
-                                  className="settings-agent-table__logo"
-                                  src={getAgentLogoSrc(profile.agentType)}
-                                />
-                              </td>
-                              <td>
-                                <button
-                                  className="settings-agent-table__name-button"
-                                  type="button"
-                                  aria-label={`Edit ${profile.name}`}
-                                  onClick={() => {
-                                    setEditingProfile({
-                                      contextProjectId: projectId,
-                                      profile,
-                                    });
-                                    setAddForm(null);
-                                  }}
-                                >
-                                  {profile.name}
-                                </button>
-                              </td>
-                              <td className="settings-agent-table__command">
-                                {formatCommandName(profile.command)}
-                              </td>
-                              <td>
-                                {profile.scope === "global"
-                                  ? messages.settings.globalScope
-                                  : messages.settings.projectScope}
-                              </td>
-                              <td className="settings-agent-table__skill">
-                                {formatDefaultSkills(profile.defaultSkill).length > 0
-                                  ? formatDefaultSkills(profile.defaultSkill)
-                                  : "—"}
-                              </td>
-                              <td>
-                                <div className="settings-agent-table__actions">
-                                  <button
-                                    aria-label={`${messages.settings.delete} ${profile.name}`}
-                                    className="settings-agent-table__delete-link"
-                                    disabled={deletingProfileId === profile.id}
-                                    type="button"
-                                    onClick={() => {
-                                      void handleDeleteProfile(profile);
-                                    }}
-                                  >
-                                    {messages.settings.delete}
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {currentAddForm ? (
-                  <AgentProfileForm
-                    key={`create-${currentAddForm.projectId}`}
-                    mode="create"
-                    scope="global"
-                    projectId={currentAddForm.projectId}
-                    projectPath={projectPath}
-                    onCancel={() => setAddForm(null)}
-                    onSaved={handleProfileSaved}
-                  />
-                ) : null}
-
-                {currentEditingProfile ? (
-                  <AgentProfileForm
-                    key={`edit-${currentEditingProfile.profile.id}`}
-                    mode="edit"
-                    scope={currentEditingProfile.profile.scope}
-                    projectId={projectId}
-                    projectPath={projectPath}
-                    profile={currentEditingProfile.profile}
-                    onCancel={() => setEditingProfile(null)}
-                    onSaved={handleProfileSaved}
-                  />
-                ) : null}
-              </>
+              <AgentsSettingsPanel
+                addForm={currentAddForm}
+                deletingProfileId={deletingProfileId}
+                editingProfile={currentEditingProfile}
+                errorMessage={currentProfilesErrorMessage}
+                loadState={currentProfilesLoadState}
+                profiles={currentProfiles}
+                projectId={projectId}
+                projectPath={projectPath}
+                onAddFormChange={handleAddFormChange}
+                onDeleteProfile={handleDeleteProfile}
+                onEditingProfileChange={handleEditingProfileChange}
+                onProfileSaved={handleProfileSaved}
+              />
             ) : null}
 
             {activeMenu === "labels" ? (
-              <>
-                {currentLabelsErrorMessage ? (
-                  <p
-                    className="settings-status"
-                    role="status"
-                    aria-label={messages.settings.status}
-                  >
-                    {currentLabelsErrorMessage}
-                  </p>
-                ) : null}
-
-                {currentLabelsLoadState === "loading" ? (
-                  <p className="settings-agent-section__loading">
-                    {messages.settings.loadingLabels}
-                  </p>
-                ) : currentLabels.length === 0 ? (
-                  <div className="settings-agent-table-empty">
-                    <p>{messages.settings.noLabels}</p>
-                  </div>
-                ) : (
-                  <div className="settings-agent-table-scroll">
-                    <table
-                      className="settings-label-table"
-                      aria-label={messages.settings.labels}
-                    >
-                      <thead>
-                        <tr>
-                          <th scope="col">{messages.settings.name}</th>
-                          <th scope="col">{messages.settings.scope}</th>
-                          <th scope="col">{messages.settings.color}</th>
-                          <th scope="col">{messages.settings.workflowSkill}</th>
-                          <th scope="col">{messages.settings.actions}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentLabels.map((label) => (
-                          <tr key={label.id} className="settings-label-table__row">
-                            <td>
-                              <button
-                                className="settings-label-table__name-button"
-                                type="button"
-                                aria-label={label.name}
-                                onClick={() => {
-                                  setEditingLabel({
-                                    contextProjectId: projectId,
-                                    label,
-                                  });
-                                  setAddLabelForm(null);
-                                }}
-                              >
-                                <span>{label.name}</span>
-                                <span className="settings-label-table__agent-copy">
-                                  {label.agentName ?? messages.settings.none}
-                                </span>
-                              </button>
-                            </td>
-                            <td>
-                              {label.scope === "global"
-                                ? messages.settings.globalScope
-                                : messages.settings.projectScope}
-                            </td>
-                            <td>
-                              <span
-                                className="settings-label-table__color-value"
-                                style={{ color: label.color }}
-                              >
-                                {label.color}
-                              </span>
-                            </td>
-                            <td className="settings-agent-table__skill">
-                              {label.workflowSkill ?? "—"}
-                            </td>
-                            <td>
-                              <div className="settings-agent-table__actions">
-                                <button
-                                  aria-label={`${messages.settings.delete} ${label.name}`}
-                                  className="settings-agent-table__delete-link"
-                                  disabled={deletingLabelId === label.id}
-                                  type="button"
-                                  onClick={() => {
-                                    void handleDeleteLabel(label);
-                                  }}
-                                >
-                                  {messages.settings.delete}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {currentAddLabelForm ? (
-                  <ProjectLabelForm
-                    key={`create-label-${currentAddLabelForm.projectId}`}
-                    mode="create"
-                    projectId={currentAddLabelForm.projectId}
-                    profiles={currentProfiles}
-                    onCancel={() => setAddLabelForm(null)}
-                    onSaved={handleLabelSaved}
-                  />
-                ) : null}
-
-                {currentEditingLabel ? (
-                  <ProjectLabelForm
-                    key={`edit-label-${currentEditingLabel.label.id}`}
-                    label={currentEditingLabel.label}
-                    mode="edit"
-                    projectId={projectId}
-                    profiles={currentProfiles}
-                    onCancel={() => setEditingLabel(null)}
-                    onSaved={handleLabelSaved}
-                  />
-                ) : null}
-              </>
+              <LabelsSettingsPanel
+                addForm={currentAddLabelForm}
+                deletingLabelId={deletingLabelId}
+                editingLabel={currentEditingLabel}
+                errorMessage={currentLabelsErrorMessage}
+                labels={currentLabels}
+                loadState={currentLabelsLoadState}
+                profiles={currentProfiles}
+                projectId={projectId}
+                onAddFormChange={handleAddLabelFormChange}
+                onDeleteLabel={handleDeleteLabel}
+                onEditingLabelChange={handleEditingLabelChange}
+                onLabelSaved={handleLabelSaved}
+              />
             ) : null}
           </SettingsContentFrame>
         </div>
@@ -802,8 +546,8 @@ function SettingsContentFrame({
   item,
   label,
 }: {
-  children: ReactNode;
-  headerAction?: ReactNode;
+  children: React.ReactNode;
+  headerAction?: React.ReactNode;
   item: (typeof SETTINGS_MENU_ITEMS)[number];
   label: string;
 }) {
@@ -821,108 +565,6 @@ function SettingsContentFrame({
   );
 }
 
-function GeneralSettingsForm({
-  completionPolicy,
-  messages,
-  onSave,
-  projectName,
-  projectPath,
-}: GeneralSettingsFormProps) {
-  const [projectNameValue, setProjectNameValue] = useState(projectName);
-  const [projectPathValue, setProjectPathValue] = useState(projectPath);
-  const [completionPolicyValue, setCompletionPolicyValue] =
-    useState<ProjectCompletionPolicy>(completionPolicy);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isChoosingRepoPath, setIsChoosingRepoPath] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const trimmedProjectName = projectNameValue.trim();
-  const trimmedProjectPath = projectPathValue.trim();
-  const isDirty =
-    trimmedProjectName !== projectName ||
-    trimmedProjectPath !== projectPath ||
-    completionPolicyValue !== completionPolicy;
-  const isSaveDisabled =
-    isSaving ||
-    isChoosingRepoPath ||
-    trimmedProjectName.length === 0 ||
-    trimmedProjectPath.length === 0 ||
-    !isDirty;
-
-  async function handleChooseRepoPath() {
-    setErrorMessage(null);
-    setIsChoosingRepoPath(true);
-
-    try {
-      const selectedPath = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Git Repository",
-      });
-
-      if (typeof selectedPath !== "string") {
-        return;
-      }
-
-      const validatedPath = await validateProjectRepoPath({
-        repoPath: selectedPath,
-      });
-      setProjectPathValue(validatedPath.repoPath);
-    } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
-    } finally {
-      setIsChoosingRepoPath(false);
-    }
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isSaveDisabled) {
-      return;
-    }
-
-    setErrorMessage(null);
-    setIsSaving(true);
-
-    try {
-      await onSave({
-        name: trimmedProjectName,
-        repoPath: trimmedProjectPath,
-        completionPolicy: completionPolicyValue,
-      });
-    } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <ProjectDetailsForm
-      ariaStatusLabel={`${messages.settings.general} ${messages.settings.status}`}
-      autoCommitLabel={messages.settings.autoCommit}
-      chooseFolderLabel={messages.settings.chooseFolder}
-      className="settings-card settings-general-card"
-      completionPolicy={completionPolicyValue}
-      completionStrategyLabel={messages.settings.completionStrategy}
-      errorMessage={errorMessage}
-      isChoosingRepoPath={isChoosingRepoPath}
-      isSubmitting={isSaving}
-      onChooseRepoPath={handleChooseRepoPath}
-      onCompletionPolicyChange={setCompletionPolicyValue}
-      onNameChange={setProjectNameValue}
-      onSubmit={handleSubmit}
-      projectName={projectNameValue}
-      projectNameLabel={messages.settings.projectName}
-      repoPath={projectPathValue}
-      repoPathLabel={messages.settings.repositoryPath}
-      manualLabel={messages.settings.manual}
-      submitDisabled={isSaveDisabled}
-      submitLabel={messages.settings.save}
-      submittingLabel={messages.settings.saving}
-    />
-  );
-}
-
 function mergeProfile(
   currentProfiles: AgentProfileRecord[],
   savedProfile: AgentProfileRecord,
@@ -936,15 +578,6 @@ function removeProfile(
   profileId: number,
 ): AgentProfileRecord[] {
   return currentProfiles.filter((profile) => profile.id !== profileId);
-}
-
-function formatCommandName(command: string): string {
-  const trimmedCommand = command.trim();
-  if (trimmedCommand.length === 0) return "—";
-
-  const normalizedCommand = trimmedCommand.replace(/\\/g, "/");
-  const commandParts = normalizedCommand.split("/").filter(Boolean);
-  return commandParts[commandParts.length - 1] ?? trimmedCommand;
 }
 
 function clampSettingsMenuWidth(width: number) {
