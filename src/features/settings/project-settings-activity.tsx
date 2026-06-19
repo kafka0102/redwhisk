@@ -463,7 +463,7 @@ export function ProjectSettingsActivity({
             headerAction={
               activeMenu === "agents" ? (
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   type="button"
                   aria-label={messages.settings.newAgent}
                   onClick={() => {
@@ -476,7 +476,7 @@ export function ProjectSettingsActivity({
                 </Button>
               ) : activeMenu === "labels" ? (
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   type="button"
                   aria-label={messages.settings.newLabel}
                   onClick={() => {
