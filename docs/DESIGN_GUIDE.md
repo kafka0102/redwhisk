@@ -110,6 +110,13 @@ RedWhisk 的设计理念是**安静、紧凑、可靠**。界面应该像一个�
 
 ## 组件使用指南
 
+### 使用原则
+
+- 默认使用 `src/components/ui/` 下的 shadcn 组件搭建页面。
+- 不为每个页面重新手写按钮、输入框、选择器、菜单、对话框、空态等基础控件样式。
+- 当 shadcn 默认元素与 RedWhisk 设计差异不大时，优先接受默认样式，避免为了微小差异新增局部 CSS。
+- 当差异影响信息密度、焦点状态、圆角、颜色或可访问性时，优先在 `src/shared/styles/tokens.css`、全局样式或 `src/components/ui/` 组件层统一覆盖，不在 feature 内分散覆盖。
+
 ### Button
 
 ```tsx
@@ -174,9 +181,11 @@ import {
 import { Badge } from "@/components/ui";
 
 <Badge variant="default">Default</Badge>
-<Badge variant="success">Success</Badge>
-<Badge variant="warning">Warning</Badge>
-<Badge variant="danger">Danger</Badge>
+<Badge variant="secondary">Secondary</Badge>
+<Badge variant="destructive">Danger</Badge>
+<Badge className="bg-[rgba(36,148,71,0.1)] text-[var(--color-lane-review-marker)]">
+  Review
+</Badge>
 ```
 
 ### Layouts

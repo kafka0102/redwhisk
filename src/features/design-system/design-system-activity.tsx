@@ -13,15 +13,13 @@ import {
   Badge,
   Separator,
   Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
 } from "@/components/ui";
-import {
-  Check,
-  X,
-  Plus,
-  Paperclip,
-  Trash2,
-  Inbox,
-} from "lucide-react";
+import { Check, X, Plus, Paperclip, Trash2, Inbox } from "lucide-react";
 
 export function DesignSystemActivity() {
   const [activeSection, setActiveSection] = useState("overview");
@@ -91,16 +89,20 @@ function OverviewSection() {
         <h3>Design Principles</h3>
         <ul>
           <li>
-            <strong>Trust over Delight:</strong> State must be clear and auditable
+            <strong>Trust over Delight:</strong> State must be clear and
+            auditable
           </li>
           <li>
-            <strong>Workbench Density:</strong> Desktop-first panels, hairline borders, compact controls
+            <strong>Workbench Density:</strong> Desktop-first panels, hairline
+            borders, compact controls
           </li>
           <li>
-            <strong>Restrained Expression:</strong> Black, white, gray as default; color only when needed
+            <strong>Restrained Expression:</strong> Black, white, gray as
+            default; color only when needed
           </li>
           <li>
-            <strong>Clear Boundaries:</strong> Project, Issue, Session, Settings must remain visually distinct
+            <strong>Clear Boundaries:</strong> Project, Issue, Session, Settings
+            must remain visually distinct
           </li>
         </ul>
       </div>
@@ -108,9 +110,15 @@ function OverviewSection() {
       <div className="design-note design-note--warning">
         <h3>Hard Don'ts</h3>
         <ul>
-          <li>Don't make marketing pages, SaaS dashboards, or colorful column看板</li>
-          <li>Don't use large rounded cards, gradients, or decorative shadows</li>
-          <li>Don't make state only available through color (always add text)</li>
+          <li>
+            Don't make marketing pages, SaaS dashboards, or colorful column看板
+          </li>
+          <li>
+            Don't use large rounded cards, gradients, or decorative shadows
+          </li>
+          <li>
+            Don't make state only available through color (always add text)
+          </li>
           <li>Don't fake "premium" through large fonts or excessive spacing</li>
         </ul>
       </div>
@@ -131,7 +139,12 @@ function ColorsSection() {
   ];
 
   const accents = [
-    { name: "Accent", var: "--color-accent", light: "#111111", dark: "#ffffff" },
+    {
+      name: "Accent",
+      var: "--color-accent",
+      light: "#111111",
+      dark: "#ffffff",
+    },
     {
       name: "Accent Muted",
       var: "--color-accent-muted",
@@ -143,7 +156,11 @@ function ColorsSection() {
   const states = [
     { name: "Running", var: "--color-lane-running-marker", value: "#c89000" },
     { name: "Review", var: "--color-lane-review-marker", value: "#249447" },
-    { name: "Completed", var: "--color-lane-completed-marker", value: "#1681d9" },
+    {
+      name: "Completed",
+      var: "--color-lane-completed-marker",
+      value: "#1681d9",
+    },
     { name: "Danger", var: "--color-danger", value: "#b42318" },
   ];
 
@@ -400,7 +417,9 @@ function ButtonsSection() {
         <h3>Small Buttons</h3>
         <div className="component-demo">
           <Button size="sm">Save</Button>
-          <Button variant="secondary" size="sm">Cancel</Button>
+          <Button variant="secondary" size="sm">
+            Cancel
+          </Button>
         </div>
       </div>
 
@@ -432,15 +451,25 @@ function InputsSection() {
         <div className="component-demo component-demo--stacked">
           <Label>
             Title
-            <Input placeholder="Enter issue title" style={{ marginTop: "5px" }} />
+            <Input
+              placeholder="Enter issue title"
+              style={{ marginTop: "5px" }}
+            />
           </Label>
           <Label>
             With Value
-            <Input value="Create local issue workflow" style={{ marginTop: "5px" }} />
+            <Input
+              value="Create local issue workflow"
+              style={{ marginTop: "5px" }}
+            />
           </Label>
           <Label>
             Disabled
-            <Input disabled value="Cannot edit this" style={{ marginTop: "5px" }} />
+            <Input
+              disabled
+              value="Cannot edit this"
+              style={{ marginTop: "5px" }}
+            />
           </Label>
         </div>
       </div>
@@ -474,9 +503,14 @@ function BadgesSection() {
         <div className="component-demo">
           <Badge variant="default">Default</Badge>
           <Badge variant="secondary">Secondary</Badge>
-          <Badge variant="success">Success</Badge>
-          <Badge variant="warning">Warning</Badge>
-          <Badge variant="danger">Danger</Badge>
+          <Badge variant="outline">Outline</Badge>
+          <Badge variant="destructive">Destructive</Badge>
+          <Badge className="bg-[rgba(36,148,71,0.1)] text-[var(--color-lane-review-marker)]">
+            Review
+          </Badge>
+          <Badge className="bg-[rgba(200,144,0,0.1)] text-[var(--color-lane-running-marker)]">
+            Running
+          </Badge>
         </div>
       </div>
     </div>
@@ -515,15 +549,22 @@ function CardsSection() {
       <div className="component-showcase">
         <h3>Empty State</h3>
         <div className="component-demo component-demo--stacked">
-          <Empty
-            icon={<Inbox size={40} />}
-            title="No issues"
-            description="Create an issue to get started"
-          >
-            <Button>
-              <Plus size={16} />
-              New Issue
-            </Button>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia>
+                <Inbox size={40} />
+              </EmptyMedia>
+              <EmptyTitle>No issues</EmptyTitle>
+              <EmptyDescription>
+                Create an issue to get started
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button>
+                <Plus size={16} />
+                New Issue
+              </Button>
+            </EmptyContent>
           </Empty>
         </div>
       </div>
@@ -549,8 +590,26 @@ function LayoutsSection() {
             <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-card)] p-4">
               <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-[var(--color-border)]">
                 <div>
-                  <h3 style={{ fontSize: "22px", fontWeight: "650", lineHeight: "1.2", margin: "0" }}>My Page</h3>
-                  <p style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: "1.45", margin: "8px 0 0" }}>Subtitle here</p>
+                  <h3
+                    style={{
+                      fontSize: "22px",
+                      fontWeight: "650",
+                      lineHeight: "1.2",
+                      margin: "0",
+                    }}
+                  >
+                    My Page
+                  </h3>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      color: "var(--color-text-muted)",
+                      lineHeight: "1.45",
+                      margin: "8px 0 0",
+                    }}
+                  >
+                    Subtitle here
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="secondary">Action</Button>
