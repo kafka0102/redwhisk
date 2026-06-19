@@ -66,9 +66,9 @@ struct NewAttachmentPersistence {
     attachment_id: i64,
 }
 
-struct AttachmentAnalysis {
-    kind: IssueAttachmentKind,
-    is_previewable: bool,
+pub(crate) struct AttachmentAnalysis {
+    pub(crate) kind: IssueAttachmentKind,
+    pub(crate) is_previewable: bool,
 }
 
 struct ResolvedAttachmentSource {
@@ -2530,7 +2530,10 @@ fn update_issue_title_and_description_in_transaction(
     IssueRepository::find_by_id_in_transaction(transaction, issue_id)
 }
 
-fn analyze_attachment(display_name: &str, mime_type: Option<&str>) -> AttachmentAnalysis {
+pub(crate) fn analyze_attachment(
+    display_name: &str,
+    mime_type: Option<&str>,
+) -> AttachmentAnalysis {
     let extension = Path::new(display_name)
         .extension()
         .and_then(|value| value.to_str())
@@ -2605,7 +2608,7 @@ fn infer_display_name(path: &Path) -> String {
         .to_string()
 }
 
-fn sanitize_attachment_file_name(value: &str) -> String {
+pub(crate) fn sanitize_attachment_file_name(value: &str) -> String {
     let sanitized = value
         .chars()
         .map(|char| {

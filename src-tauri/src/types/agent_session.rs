@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::agent_profile::AgentType;
+use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use crate::types::issue::IssueStatus;
 use crate::types::project::ProjectCompletionPolicy;
 
@@ -214,4 +215,183 @@ pub struct ProjectGitBranchListInput {
 pub struct ProjectGitBranchListResult {
     pub current_branch: String,
     pub local_branches: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// 结构化 Agent Session（codex app-server JSON-RPC 路径）命令 DTO
+//
+// 与现有 PTY 路径（StartAgentSessionInput 等）并存。这些 DTO 对应任务 3
+// 新增的 11 个 `#[tauri::command]`，载荷按 camelCase 序列化，与前端 TS
+// 镜像（`agent-session-commands.ts`）保持一致。
+// ---------------------------------------------------------------------------
+
+/// 权限决策字面量，对应 codex server→client request 的 accept/decline/cancel。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentPermissionDecision {
+    Accept,
+    Decline,
+    Cancel,
+}
+
+impl AgentPermissionDecision {
+    pub fn from_str_literal(value: &str) -> Option<Self> {
+        match value {
+            "accept" => Some(Self::Accept),
+            "decline" => Some(Self::Decline),
+            "cancel" => Some(Self::Cancel),
+            _ => None,
+        }
+    }
+}
+
+/// 启动结构化 Agent Session。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartStructuredAgentSessionInput {
+    pub project_id: i64,
+    /// 会话标题（独立会话用，关联 issue 的场景留空）。
+    pub title: Option<String>,
+    /// 协作模式：auto / full-access / read-only。缺省 auto。
+    pub mode: Option<String>,
+    /// 初始模型 id（缺省由 codex 选默认）。
+    pub model: Option<String>,
+    /// 初始 reasoning effort：low / medium / high。
+    pub effort: Option<String>,
+    /// 续接已存在的 codex threadId（缺省则新建 thread）。
+    pub resume_from_codex_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartStructuredAgentSessionResult {
+    pub session_id: i64,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendAgentMessageInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelAgentTurnInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RespondAgentPermissionInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub request_id: String,
+    /// accept / decline / cancel。
+    pub decision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAgentModelInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub model_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAgentThinkingInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    /// None 表示关闭 Think 模式；Some(low|medium|high) 表示开启。
+    pub effort: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAgentModeInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub mode_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentModelsInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentModelsResult {
+    pub models: Vec<AgentModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentModesResult {
+    pub modes: Vec<AgentMode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveAgentAttachmentInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    /// 前端经 `@tauri-apps/plugin-dialog` 拿到的本地源路径。
+    pub source_path: String,
+    /// 展示名（通常为源文件名）。
+    pub display_name: String,
+}
+
+/// 附件种类字面量，镜像 `IssueAttachmentKind` 的字符串值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentAttachmentKind {
+    Image,
+    Pdf,
+    Word,
+    Text,
+    Generic,
+}
+
+impl From<crate::types::issue::IssueAttachmentKind> for AgentAttachmentKind {
+    fn from(value: crate::types::issue::IssueAttachmentKind) -> Self {
+        use crate::types::issue::IssueAttachmentKind;
+        match value {
+            IssueAttachmentKind::Image => Self::Image,
+            IssueAttachmentKind::Pdf => Self::Pdf,
+            IssueAttachmentKind::Word => Self::Word,
+            IssueAttachmentKind::Text => Self::Text,
+            IssueAttachmentKind::Generic => Self::Generic,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveAgentAttachmentResult {
+    /// 附件落盘后的绝对路径。
+    pub path: String,
+    /// 经过 sanitize 的展示名。
+    pub display_name: String,
+    pub kind: AgentAttachmentKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadAgentTimelineInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadAgentTimelineResult {
+    pub items: Vec<AgentTimelineItem>,
 }

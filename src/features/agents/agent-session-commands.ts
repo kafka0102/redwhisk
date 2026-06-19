@@ -1,4 +1,10 @@
 import { invokeCommand } from "../../shared/commands/command-client";
+import type {
+  ListAgentModelsResult,
+  ListAgentModesResult,
+  ReadAgentTimelineResult,
+  SaveAgentAttachmentResult,
+} from "./agent-stream-types";
 
 export type AgentType = "codex" | "claude" | "claude_code";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
@@ -167,4 +173,151 @@ export function startStandaloneAgentSession(
       input,
     },
   );
+}
+
+// ---------------------------------------------------------------------------
+// 结构化 Agent Session（codex app-server JSON-RPC 路径）命令
+//
+// 与上面 PTY 路径的命令并存。这些命令对应任务 3 新增的 11 个 Rust
+// `#[tauri::command]`，DTO 与 `src-tauri/src/types/agent_session.rs` 镜像。
+// 事件流类型见 `agent-stream-types.ts`（镜像
+// `src-tauri/src/types/agent_session_stream.rs`）。
+// ---------------------------------------------------------------------------
+
+export type AgentPermissionDecisionLiteral = "accept" | "decline" | "cancel";
+export type { AgentAttachmentKindLiteral } from "./agent-stream-types";
+
+export interface StartStructuredAgentSessionInput {
+  projectId: number;
+  title?: string;
+  /** auto / full-access / read-only，缺省 auto。 */
+  mode?: string;
+  /** 初始模型 id，缺省由 codex 选默认。 */
+  model?: string;
+  /** low / medium / high。 */
+  effort?: string;
+  /** 续接已存在的 codex threadId，缺省则新建 thread。 */
+  resumeFromCodexSessionId?: string;
+}
+
+export interface StartStructuredAgentSessionResult {
+  sessionId: number;
+  threadId: string;
+}
+
+export interface SendAgentMessageInput {
+  projectId: number;
+  sessionId: number;
+  message: string;
+}
+
+export interface CancelAgentTurnInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface RespondAgentPermissionInput {
+  projectId: number;
+  sessionId: number;
+  requestId: string;
+  /** accept / decline / cancel。 */
+  decision: AgentPermissionDecisionLiteral;
+}
+
+export interface SetAgentModelInput {
+  projectId: number;
+  sessionId: number;
+  modelId: string;
+}
+
+export interface SetAgentThinkingInput {
+  projectId: number;
+  sessionId: number;
+  /** undefined 表示关闭 Think；low/medium/high 表示开启。 */
+  effort?: string;
+}
+
+export interface SetAgentModeInput {
+  projectId: number;
+  sessionId: number;
+  modeId: string;
+}
+
+export interface ListAgentModelsInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface SaveAgentAttachmentInput {
+  projectId: number;
+  sessionId: number;
+  /** 本地源路径（由 `@tauri-apps/plugin-dialog` 的 open() 返回）。 */
+  sourcePath: string;
+  displayName: string;
+}
+
+export interface ReadAgentTimelineInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export function startStructuredAgentSession(
+  input: StartStructuredAgentSessionInput,
+): Promise<StartStructuredAgentSessionResult> {
+  return invokeCommand<StartStructuredAgentSessionResult>(
+    "start_structured_agent_session",
+    { input },
+  );
+}
+
+export function sendAgentMessage(input: SendAgentMessageInput): Promise<void> {
+  return invokeCommand("send_agent_message", { input });
+}
+
+export function cancelAgentTurn(input: CancelAgentTurnInput): Promise<void> {
+  return invokeCommand("cancel_agent_turn", { input });
+}
+
+export function respondAgentPermission(
+  input: RespondAgentPermissionInput,
+): Promise<void> {
+  return invokeCommand("respond_agent_permission", { input });
+}
+
+export function setAgentModel(input: SetAgentModelInput): Promise<void> {
+  return invokeCommand("set_agent_model", { input });
+}
+
+export function setAgentThinking(input: SetAgentThinkingInput): Promise<void> {
+  return invokeCommand("set_agent_thinking", { input });
+}
+
+export function setAgentMode(input: SetAgentModeInput): Promise<void> {
+  return invokeCommand("set_agent_mode", { input });
+}
+
+export function listAgentModels(
+  input: ListAgentModelsInput,
+): Promise<ListAgentModelsResult> {
+  return invokeCommand<ListAgentModelsResult>("list_agent_models", { input });
+}
+
+export function listAgentModes(): Promise<ListAgentModesResult> {
+  return invokeCommand<ListAgentModesResult>("list_agent_modes");
+}
+
+export function saveAgentAttachment(
+  input: SaveAgentAttachmentInput,
+): Promise<SaveAgentAttachmentResult> {
+  return invokeCommand<SaveAgentAttachmentResult>("save_agent_attachment", {
+    input,
+  });
+}
+
+export function readAgentTimeline(
+  input: ReadAgentTimelineInput,
+): Promise<ReadAgentTimelineResult> {
+  return invokeCommand<ReadAgentTimelineResult>("read_agent_timeline", {
+    input,
+  });
 }

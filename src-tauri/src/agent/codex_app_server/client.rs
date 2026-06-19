@@ -224,6 +224,16 @@ impl CodexAppServerClient {
         Ok(thread_id.to_string())
     }
 
+    /// `turn/interrupt`：中断指定 turn。
+    ///
+    /// codex 收到后会让当前 turn 尽快结束（通常触发 `turn/completed`
+    /// 通知，status 为 `canceled` / `aborted`）。
+    pub fn turn_interrupt(&self, turn_id: &str) -> Result<(), CodexAppServerError> {
+        let payload = json!({ "turnId": turn_id });
+        self.transport.request("turn/interrupt", payload)?;
+        Ok(())
+    }
+
     /// `thread/read`：读取 thread 历史。
     pub fn thread_read(&self, thread_id: &str) -> Result<ThreadReadResponse, CodexAppServerError> {
         let payload = json!({
