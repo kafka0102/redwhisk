@@ -244,6 +244,25 @@ impl CodexSessionHandle {
         Ok(())
     }
 
+    /// 中断当前 turn。无 turn 运行时直接返回 `Ok(())`。
+    ///
+    /// 通过 codex `turn/interrupt` 请求实现；codex 随后会广播
+    /// `turn/completed`（status 通常为 `canceled`）。
+    pub fn cancel_turn(&self) -> Result<(), CodexAppServerError> {
+        let turn_id = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| CodexAppServerError::Protocol("session 锁中毒".into()))?;
+            state.current_turn_id.clone()
+        };
+        let Some(turn_id) = turn_id else {
+            return Ok(());
+        };
+        self.client.turn_interrupt(&turn_id)?;
+        Ok(())
+    }
+
     /// 回复一个挂起的权限请求。
     pub fn respond_permission(
         &self,

@@ -1,15 +1,25 @@
+use std::fs;
+use std::path::PathBuf;
+
 use tauri::{Manager, State};
 
+use crate::agent::codex_app_server::client::PermissionDecision;
+use crate::agent::codex_app_server::session::CodexMode;
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
+use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
 use crate::types::agent_session::{
-    AgentSessionListResponse, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentSessionTerminalInput,
-    ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
-    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
-    StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
-    WriteAgentSessionTerminalInput,
+    AgentSessionListResponse, CancelAgentTurnInput, InjectAgentSessionPromptInput,
+    InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
+    ListAgentModesResult, ProjectGitBranchListInput, ProjectGitBranchListResult,
+    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ReadAgentTimelineInput,
+    ReadAgentTimelineResult, ResizeAgentSessionTerminalInput, RespondAgentPermissionInput,
+    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult, SaveAgentAttachmentInput,
+    SaveAgentAttachmentResult, SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput,
+    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, SetAgentThinkingInput,
+    StartAgentSessionInput, StartAgentSessionResult, StartStandaloneAgentSessionInput,
+    StartStandaloneAgentSessionResult, StartStructuredAgentSessionInput,
+    StartStructuredAgentSessionResult, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -285,4 +295,298 @@ pub fn resize_agent_session_terminal(
     })?;
 
     AgentSessionService::resize_terminal_in_data_dir(data_dir, input, &state.pty_sessions)
+}
+
+// ---------------------------------------------------------------------------
+// 结构化 Agent Session（codex app-server JSON-RPC 路径）命令
+//
+// 与上面的 PTY 命令并存。这些命令通过 `AppState.codex_sessions` 取回
+// 运行中的 `CodexSessionHandle`，调用其方法驱动结构化事件流。
+//
+// 数据库打开沿用现有 PTY 命令范式（参见 `start_agent_session`）：每个命令
+// 内联开库 + 跑迁移 + 构造 service，确保 service 的 `'connection` 借用
+// 绑定到命令栈上的 `database`。
+// ---------------------------------------------------------------------------
+
+/// 从 registry 取回句柄；未注册时返回 `AgentSessionNotRunning`。
+fn require_structured_handle(
+    state: &State<'_, AppState>,
+    session_id: i64,
+) -> Result<std::sync::Arc<crate::agent::codex_app_server::CodexSessionHandle>, CommandError> {
+    state.codex_sessions.get(session_id).ok_or_else(|| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionNotRunning,
+            "当前 Session 没有运行中的结构化会话。",
+        )
+        .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+    })
+}
+
+/// 打开 agent session 数据库并跑迁移。返回的 `Database` 由调用方持有，
+/// 供 `build_agent_session_service` 借用。
+fn open_agent_session_database(
+    app: &tauri::AppHandle,
+) -> Result<crate::db::connection::Database, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 数据目录不可用。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    let database = crate::db::connection::DatabaseConfig::new(&data_dir)
+        .open()
+        .map_err(CommandError::from)?;
+    crate::db::migrations::MigrationRunner::default()
+        .run(&database.connection)
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 数据库迁移失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+    Ok(database)
+}
+
+/// 基于已打开的连接构造 `AgentSessionService`。
+fn build_agent_session_service(connection: &rusqlite::Connection) -> AgentSessionService<'_> {
+    AgentSessionService::new(
+        crate::db::issue_repository::IssueRepository::new(connection),
+        crate::db::project_repository::ProjectRepository::new(connection),
+        crate::db::agent_profile_repository::AgentProfileRepository::new(connection),
+        crate::db::agent_session_repository::AgentSessionRepository::new(connection),
+    )
+}
+
+#[tauri::command]
+pub fn start_structured_agent_session(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: StartStructuredAgentSessionInput,
+) -> Result<StartStructuredAgentSessionResult, CommandError> {
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 启动失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    {
+        let mut local_data = state.local_data.lock().map_err(|_| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 启动失败。",
+            )
+        })?;
+        local_data
+            .initialize(&data_dir)
+            .map_err(CommandError::from)?;
+    }
+
+    AgentSessionService::start_structured_agent_session_in_data_dir(
+        data_dir,
+        input,
+        &state.codex_sessions,
+        &state.agent_event_broadcaster,
+    )
+}
+
+#[tauri::command]
+pub fn send_agent_message(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SendAgentMessageInput,
+) -> Result<(), CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    handle
+        .send_message(input.message)
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+}
+
+#[tauri::command]
+pub fn cancel_agent_turn(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: CancelAgentTurnInput,
+) -> Result<(), CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    handle
+        .cancel_turn()
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+}
+
+#[tauri::command]
+pub fn respond_agent_permission(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: RespondAgentPermissionInput,
+) -> Result<(), CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    let decision = match input.decision.as_str() {
+        "accept" => PermissionDecision::Accept,
+        "decline" => PermissionDecision::Decline,
+        "cancel" => PermissionDecision::Cancel,
+        other => {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "不支持的权限决策。",
+            )
+            .with_detail(ErrorDetail::new("Field").with_value("name", "decision"))
+            .with_detail(ErrorDetail::new("Value").with_value("decision", other)));
+        }
+    };
+    handle
+        .respond_permission(&input.request_id, decision)
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+}
+
+#[tauri::command]
+pub fn set_agent_model(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SetAgentModelInput,
+) -> Result<(), CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    handle
+        .set_model(input.model_id)
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+}
+
+#[tauri::command]
+pub fn set_agent_thinking(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SetAgentThinkingInput,
+) -> Result<(), CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    handle
+        .set_effort(input.effort)
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+}
+
+#[tauri::command]
+pub fn set_agent_mode(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SetAgentModeInput,
+) -> Result<(), CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    let mode = CodexMode::from_id(&input.mode_id).ok_or_else(|| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "不支持的协作模式。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "modeId"))
+        .with_detail(ErrorDetail::new("Value").with_value("modeId", input.mode_id.clone()))
+    })?;
+    handle
+        .set_mode(mode)
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)
+}
+
+#[tauri::command]
+pub fn list_agent_models(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ListAgentModelsInput,
+) -> Result<ListAgentModelsResult, CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    let models = handle
+        .list_models()
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)?;
+    Ok(ListAgentModelsResult { models })
+}
+
+#[tauri::command]
+pub fn list_agent_modes() -> Result<ListAgentModesResult, CommandError> {
+    Ok(ListAgentModesResult {
+        modes: CodexMode::available_modes(),
+    })
+}
+
+#[tauri::command]
+pub fn save_agent_attachment(
+    app: tauri::AppHandle,
+    input: SaveAgentAttachmentInput,
+) -> Result<SaveAgentAttachmentResult, CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    // 归属校验（不依赖句柄，session 行存在即可）。
+    service.find_project_session_record(input.project_id, input.session_id)?;
+
+    let data_dir = app.path().app_data_dir().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "附件保存失败：数据目录不可用。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    let sanitized = sanitize_attachment_file_name(&input.display_name);
+    let analysis = analyze_attachment(&input.display_name, None);
+    let attachment_dir: PathBuf = data_dir
+        .join("agent-attachments")
+        .join(input.session_id.to_string());
+    fs::create_dir_all(&attachment_dir).map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "附件目录创建失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+    let dest = attachment_dir.join(&sanitized);
+    fs::copy(&input.source_path, &dest).map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "附件复制失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        .with_detail(ErrorDetail::new("Source").with_value("path", input.source_path.clone()))
+    })?;
+
+    Ok(SaveAgentAttachmentResult {
+        path: dest.to_string_lossy().to_string(),
+        display_name: sanitized,
+        kind: analysis.kind.into(),
+    })
+}
+
+#[tauri::command]
+pub fn read_agent_timeline(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ReadAgentTimelineInput,
+) -> Result<ReadAgentTimelineResult, CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    let handle = require_structured_handle(&state, input.session_id)?;
+    let items = handle
+        .read_timeline()
+        .map_err(crate::core::agent_session_service::codex_error_to_command_error)?;
+    Ok(ReadAgentTimelineResult { items })
 }

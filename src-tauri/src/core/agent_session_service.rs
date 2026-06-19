@@ -3,11 +3,18 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
+use rusqlite::{params, Transaction};
+
+use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
+use crate::agent::codex_app_server::session::CodexMode;
+use crate::agent::codex_app_server::{CodexAppServerError, CodexSessionConfig, CodexSessionHandle};
+use crate::agent::codex_session_registry::CodexSessionRegistry;
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
@@ -30,7 +37,8 @@ use crate::types::agent_session::{
     ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
     RestoreAgentSessionTerminalResult, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
-    StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult, WorkspaceMode,
+    StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
+    StartStructuredAgentSessionInput, StartStructuredAgentSessionResult, WorkspaceMode,
     WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -1102,6 +1110,19 @@ impl<'connection> AgentSessionService<'connection> {
 
         Ok(session)
     }
+
+    /// 结构化 Agent Session 命令的归属校验入口。
+    ///
+    /// 与私有 `find_project_session` 行为一致（确保 project 存在 + session
+    /// 归属该 project），但公开给命令层调用，供 `send_agent_message` 等
+    /// 结构化命令在操作句柄前校验 session 归属。
+    pub fn find_project_session_record(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<crate::types::agent_session::AgentSessionRecord, CommandError> {
+        self.find_project_session(project_id, session_id)
+    }
 }
 
 fn project_completion_capabilities(
@@ -1159,6 +1180,144 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .start_standalone_agent_session(data_dir, input)
+    }
+
+    /// 启动结构化 Agent Session（codex app-server JSON-RPC 路径）。
+    ///
+    /// 与 PTY 路径并存：不创建 PTY 子进程，而是 spawn `codex app-server`
+    /// 并通过 `CodexSessionHandle` 走结构化事件流。session 行落到
+    /// `agent_sessions` 表（`agent_type=codex`，`codex_session_id` 存
+    /// codex threadId），但不写 `log_path` / `command_snapshot` 等 PTY
+    /// 专用字段（填占位空串以兼容 NOT NULL 约束）。
+    ///
+    /// 首版限制：codex binary 固定为 `"codex"`，不从 AgentProfile 解析
+    /// （profile 接入留到任务 6 收尾）。
+    pub fn start_structured_agent_session_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: StartStructuredAgentSessionInput,
+        codex_registry: &CodexSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<StartStructuredAgentSessionResult, CommandError> {
+        let database = DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        let service = AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        );
+        service.start_structured_agent_session(input, codex_registry, broadcaster)
+    }
+
+    fn start_structured_agent_session(
+        &self,
+        input: StartStructuredAgentSessionInput,
+        codex_registry: &CodexSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<StartStructuredAgentSessionResult, CommandError> {
+        let project = self.project_by_id(input.project_id)?;
+        let cwd = validate_working_dir(&project.repo_path).map_err(|mut error| {
+            error
+                .details
+                .get_or_insert_with(Vec::new)
+                .push(ErrorDetail::new("Project").with_value("projectId", input.project_id));
+            error
+        })?;
+
+        let mode =
+            CodexMode::from_id(input.mode.as_deref().unwrap_or("auto")).ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "不支持的协作模式。",
+                )
+                .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+                .with_detail(ErrorDetail::new("Value").with_value("mode", input.mode.clone()))
+            })?;
+
+        let title = input
+            .title
+            .as_deref()
+            .map(validate_session_title)
+            .transpose()?;
+        let started_at = current_epoch_millis()?;
+
+        // 落 session 行。结构化会话没有 PTY 概念，PTY 专用字段填占位空串
+        // 以满足 NOT NULL；codex_session_id 在 handle.start 成功后回填。
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        let session = (|| {
+            let session = insert_structured_session_in_transaction(
+                &transaction,
+                input.project_id,
+                title.as_deref(),
+                &cwd,
+                started_at,
+            )?;
+            let event_payload = json!({
+                "sessionId": session.id,
+                "projectId": input.project_id,
+                "issueId": Value::Null,
+                "title": title,
+                "status": "running",
+                "structuredStream": true,
+            })
+            .to_string();
+            EventRepository::insert_session_event_in_transaction(
+                &transaction,
+                session.id,
+                SessionEventType::SessionStarted,
+                &event_payload,
+                started_at,
+            )?;
+            transaction.commit()?;
+            Ok::<_, rusqlite::Error>(session)
+        })()
+        .map_err(agent_session_database_error)?;
+
+        let session_id = session.id;
+
+        // 构造并启动 CodexSessionHandle。
+        let config = CodexSessionConfig {
+            project_id: input.project_id,
+            session_id,
+            binary: "codex".to_string(),
+            cwd: cwd.clone(),
+            mode,
+            broadcaster: broadcaster.clone(),
+            resume_thread_id: input.resume_from_codex_session_id.clone(),
+            model: input.model.clone(),
+            effort: input.effort.clone(),
+        };
+        let handle = CodexSessionHandle::start(config).map_err(codex_error_to_command_error)?;
+        let thread_id = handle.thread_id().ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionStreamFailed,
+                "Codex 会话启动后未拿到 threadId。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+        })?;
+
+        // 回填 codex_session_id（codex threadId）。
+        self.agent_session_repository
+            .update_codex_session_id(session_id, &thread_id)
+            .map_err(agent_session_database_error)?;
+
+        // 注册到 broadcaster / registry，供前端订阅与后续命令取用。
+        broadcaster.register_session(session_id);
+        codex_registry.register(session_id, Arc::new(handle));
+
+        Ok(StartStructuredAgentSessionResult {
+            session_id,
+            thread_id,
+        })
     }
 
     pub fn list_agent_sessions_in_data_dir(
@@ -1656,6 +1815,67 @@ fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandErro
     Ok(trimmed.to_string())
 }
 
+/// 把 `CodexAppServerError` 转成 `CommandError`。
+///
+/// 进程未运行 / 通道关闭 → `AgentSessionNotRunning`；其余协议层错误 →
+/// `AgentSessionStreamFailed`。
+pub(crate) fn codex_error_to_command_error(error: CodexAppServerError) -> CommandError {
+    let message = error.to_string();
+    let code = match &error {
+        CodexAppServerError::BinaryNotFound(_)
+        | CodexAppServerError::SpawnFailed(_)
+        | CodexAppServerError::Closed(_) => CommandErrorCode::AgentSessionNotRunning,
+        CodexAppServerError::RequestTimeout { .. }
+        | CodexAppServerError::ServerError { .. }
+        | CodexAppServerError::Protocol(_)
+        | CodexAppServerError::Serialize(_)
+        | CodexAppServerError::Io(_) => CommandErrorCode::AgentSessionStreamFailed,
+    };
+    CommandError::new(code, "Codex 会话调用失败。")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message))
+}
+
+/// 在事务中插入一条结构化 session 行。
+///
+/// 与 `insert_standalone_in_transaction` 不同：不依赖 `agent_profile_id`
+/// （结构化会话首版不绑定 profile），PTY 专用字段填占位空串以满足 NOT NULL
+/// 约束，`codex_session_id` 留空待 handle.start 后回填。
+fn insert_structured_session_in_transaction(
+    transaction: &Transaction<'_>,
+    project_id: i64,
+    title: Option<&str>,
+    working_dir: &str,
+    started_at: i64,
+) -> rusqlite::Result<crate::types::agent_session::AgentSessionRecord> {
+    transaction.execute(
+        "INSERT INTO agent_sessions (
+           project_id,
+           issue_id,
+           title,
+           agent_profile_id,
+           status,
+           attention,
+           working_dir,
+           command_snapshot,
+           prompt_snapshot,
+           workspace_mode,
+           target_branch,
+           workspace_branch,
+           workspace_path,
+           completion_policy,
+           worktree_root_path,
+           log_path,
+           last_active_at,
+           started_at
+         ) VALUES (?1, NULL, ?2, 0, 'running', 'none', ?3, '', '', 'current_branch', NULL, NULL, ?3, NULL, NULL, '', ?4, ?4)",
+        params![project_id, title, working_dir, started_at],
+    )?;
+
+    let id = transaction.last_insert_rowid();
+    AgentSessionRepository::find_by_id_in_transaction(transaction, id)?
+        .ok_or(rusqlite::Error::QueryReturnedNoRows)
+}
+
 fn validate_session_title(title: &str) -> Result<String, CommandError> {
     let trimmed = title.trim();
     if trimmed.is_empty() {
@@ -1668,7 +1888,6 @@ fn validate_session_title(title: &str) -> Result<String, CommandError> {
 
     Ok(trimmed.to_string())
 }
-
 fn validate_injected_prompt(prompt: &str) -> Result<String, CommandError> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
