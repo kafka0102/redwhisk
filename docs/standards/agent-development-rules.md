@@ -15,7 +15,7 @@
 - 包管理：`pnpm`，当前不使用 Turbo 或多 package workspace。
 - 数据库：SQLite migrations 位于 `src-tauri/migrations/`，结构化业务状态由 Rust Core 读写。
 - 前后端边界：Tauri command + Tauri event；不引入 HTTP REST/GraphQL。
-- Agent 终端：Rust PTY 管理进程与日志，前端 xterm.js 负责展示和输入转发。
+- Agent 终端：Codex session 走 `codex app-server` 结构化事件流（NDJSON over stdio），Rust Core 负责 spawn、握手与事件归一化，前端用结构化消息流组件渲染并经底部 composer 输入。PTY + xterm.js 仅保留给 project terminal 等真正交互式终端。
 
 ## 目录边界
 
@@ -24,7 +24,7 @@
 - `src/app/`：应用入口、Activity 路由、Workbench shell、全局壳层样式。
 - `src/features/project/`：Project Home、Project card、Project Switcher、Project command wrapper。
 - `src/features/issues/`：Issues Activity、Issue Dialog、Run Prompt、Completion、Summary。
-- `src/features/agents/`：Agents Activity、Session list、Codex terminal、Issue Inspector、临时 Session。
+- `src/features/agents/`：Agents Activity、Session list、Codex 结构化消息流、composer 输入框、Issue Inspector、临时 Session。
 - `src/features/settings/`：Project Settings、Agent Profile 表单和 Settings command wrapper。
 - `src/shared/commands/`：Tauri command client、统一 command error 处理。
 - `src/components/ui/`：基础 UI primitive。
@@ -36,7 +36,7 @@ Rust 按 command adapter、core service、repository、类型和外部能力分�
 - `src-tauri/src/core/`：业务 service、状态流转、事务编排。
 - `src-tauri/src/db/`：连接、migration、repository 和 SQL 映射。
 - `src-tauri/src/types/`：跨边界 DTO、状态枚举和 command error。
-- `src-tauri/src/agent/`：Codex command 检测、PTY session 管理、终端输出广播。
+- `src-tauri/src/agent/`：Codex command 检测、PTY session 管理、终端输出广播、结构化事件广播。
 - `src-tauri/src/git/`：Git status、HEAD、operation state 检测。
 
 不得把领域逻辑塞进泛化 `utils`。当前已有 `src/lib/utils.ts` 仅作为轻量 class 合并工具使用，新增共享逻辑必须放入有明确领域语义的模块。
@@ -117,17 +117,23 @@ Command 失败必须返回统一错误结构：
 
 ## Event 与终端通道
 
-Tauri event 只表示事实发生或终端输出，不发起业务写入。事件名使用 kebab-case，例如 `agent-session-terminal-output`。
+Tauri event 只表示事实发生或终端输出，不发起业务写入。事件名使用 kebab-case，例如 `agent-session-terminal-output`、`agent-session-stream-event`。
 
 事件 payload 必须包含定位实体的 ID，例如 `projectId`、`sessionId`、`issueId`。
+
+当前存在两条并列通道，按 session 类型分流：
+
+- `agent-session-terminal-output`：承载 PTY 原始字节流，仅用于 project terminal 等真正交互式终端。
+- `agent-session-stream-event`：承载 Codex session 的结构化 Agent 事件流（`AgentStreamEvent`），由 Rust Core 归一化 `codex app-server` 输出后广播。
 
 终端输出规则：
 
 - PTY 原始输出继续写入 session log 文件。
-- Running Session 的 xterm 主渲染使用实时输出事件与 restore 结果，不再以轮询日志尾部作为主路径。
-- `read_agent_session_terminal` 只适合作为非活跃 Session、Open Log 或诊断降级路径。
+- project terminal 的 xterm 主渲染使用实时输出事件与 restore 结果，不再以轮询日志尾部作为主路径。
+- `read_agent_session_terminal` 只适合作为非活跃 PTY Session、Open Log 或诊断降级路径；Codex session 改用 `read_agent_timeline` 拉结构化历史。
 - 前端不得重放截断 ANSI 日志作为 Codex TUI 恢复方案。
-- Inspector、Dialog、Header 操作不得卸载当前 xterm。
+- Codex session 不得使用 PTY/xterm 链路；其输入走 `send_agent_message`，输出走 `agent-session-stream-event`。
+- Inspector、Dialog、Header 操作不得卸载当前 xterm 或结构化消息流。
 
 ## Issue 与 Agent Session 流程规则
 
@@ -179,7 +185,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Project 工作台 Activity Bar 只包含 `Issues`、`Agents`、`Settings`。
 - Project Switcher 属于窗口顶部 chrome，不属于内容 Header。
 - Activity Bar 主分组里的 `Settings` 是 Project Settings；Global Settings 是左侧菜单底部的仅图标 shell action，不属于 Project Activity 列表。
-- Agents Activity 使用左右两栏：左侧 Session list，右侧 Codex Native Session View。
+- Agents Activity 使用左右两栏：左侧 Session list，右侧 Codex Session View。Codex Session View 由结构化消息流与底部固定 composer 输入框组成，不再使用 xterm。
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。
 - 前端交互控件默认使用 `src/components/ui/` 下的 shadcn 组件；除非存在明确的语义、可访问性或第三方集成需要，不新增手写基础按钮、输入框、选择器、菜单、对话框等控件。
@@ -187,16 +193,28 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - 图标优先使用已有 `lucide-react`。
 - 核心状态不能只靠颜色表达，必须有文本或可访问 label。
 - Dialog 打开后焦点进入 Dialog，关闭后回到触发控件；`Esc` 关闭最上层 Dialog/Inspector。
-- `Enter` 在 Dialog 中提交主动作，在 Codex terminal 中原样传给终端。
+- `Enter` 在 Dialog 中提交主动作；在 composer 中提交消息，`Shift+Enter` 换行；在 project terminal 的 xterm 中原样传给终端。
 - `prefers-reduced-motion: reduce` 下必须禁用或显著收敛非必要动画。
 
 禁止：
 
 - 新增营销式 hero、渐变装饰、大圆角卡片墙、彩色阶段柱或管理后台式重型组件库。
 - 在 feature 页面中绕过 shadcn 组件，直接用原生标签和散落 class 重做通用控件。
-- 在 Codex Native Session View 之外再做独立聊天输入框。
+- 在 Codex 结构化消息流之外另起 xterm 或独立输入框；Codex session 的输入必须经底部 composer 与 `send_agent_message`。
 - Header 无关联 Issue 时显示 `No linked issue`。
-- Inspector/Dialog 打开关闭导致 xterm 重建。
+- Inspector/Dialog 打开关闭导致 xterm 或结构化消息流重建。
+
+## Codex app-server 接入边界
+
+Codex session 通过 `codex app-server` 子进程接入，不走 PTY。职责边界如下：
+
+- Rust Core 负责 spawn `codex app-server`、NDJSON over stdio 握手、JSON-RPC 请求/响应/通知分发，并把 Codex 私有输出归一化为 `AgentStreamEvent` 结构化事件后广播。
+- Rust Core 维护单 session 状态机：`threadId`、`currentTurnId`、待审批权限请求、事件 `seq`/`epoch` 游标。
+- 切换模型经 `turn/start` 的 `model` 字段；Think 模式经 `turn/start` 的 `effort` 字段（即 reasoning effort）。两者均由 Rust Core 透传，前端只发 command。
+- 上下文窗口用量来自 `thread/tokenUsage/updated` 通知，由 Rust Core 解析为 `AgentUsage` 后随 `usage_updated` 事件广播。
+- 工具调用权限（命令执行、文件改动、用户输入）由 app-server 发起 server→client request，Rust Core 转为 `permission_requested` 事件广播，前端审批后经 `respond_agent_permission` 回复。
+- 附件（图片/文件）落盘到 app data dir 后，以本地路径形式随 `turn/start` 的 `input` 传入，由 agent 自行读取，不内联文件字节。
+- 非 Codex agent（如未来引入的 claude）在未实现对应 provider 适配前，可临时降级走 PTY 链路；Codex session 不允许降级到 PTY。
 
 ## Agent Profile 与 Settings 规则
 
