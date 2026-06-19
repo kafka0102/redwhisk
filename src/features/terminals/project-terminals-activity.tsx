@@ -278,7 +278,7 @@ export function ProjectTerminalsActivity({
         <Button
           disabled={creatingTerminal}
           type="button"
-          variant="secondary"
+          variant="outline"
           onClick={() => {
             void handleCreateTerminal();
           }}
@@ -310,7 +310,7 @@ export function ProjectTerminalsActivity({
               disabled={creatingTerminal}
               size="icon"
               type="button"
-              variant="secondary"
+              variant="outline"
               onClick={() => {
                 void handleCreateTerminal();
               }}
@@ -460,7 +460,7 @@ export function ProjectTerminalsActivity({
                 aria-label={messages.settings.newTerminal}
                 disabled={creatingTerminal}
                 type="button"
-                variant="secondary"
+                variant="outline"
                 onClick={() => {
                   void handleCreateTerminal();
                 }}
