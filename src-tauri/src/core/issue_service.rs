@@ -35,10 +35,10 @@ use crate::types::issue::{
     DeleteIssueResult, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionOutcome,
     DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
     IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord,
-    IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus,
-    IssueSummaryCompletionInfo, IssueSummaryRecord, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SendAgentCommitPromptInput,
-    SendAgentCommitPromptResult, UpdateIssueInput,
+    IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo,
+    IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::ProjectCompletionPolicy;
@@ -641,7 +641,9 @@ impl<'connection> IssueService<'connection> {
                         CommandErrorCode::IssueValidationFailed,
                         "删除 Issue 时关闭关联 Session 失败。",
                     )
-                    .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
+                    .with_detail(
+                        ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
+                    ));
                 }
 
                 let session_event_payload = json!({
@@ -662,8 +664,12 @@ impl<'connection> IssueService<'connection> {
                 .map_err(issue_database_error)?;
             }
 
-            AgentSessionRepository::soft_delete_in_transaction(&transaction, session_id, deleted_at)
-                .map_err(issue_database_error)?;
+            AgentSessionRepository::soft_delete_in_transaction(
+                &transaction,
+                session_id,
+                deleted_at,
+            )
+            .map_err(issue_database_error)?;
         }
 
         let deleted = IssueRepository::soft_delete_in_transaction(
@@ -1057,8 +1063,9 @@ impl<'connection> IssueService<'connection> {
             is_clean: false,
         };
         let after_snapshot = read_git_snapshot(&session.working_dir).map_err(issue_git_error)?;
-        let detection = detect_commit_result(&session.working_dir, &before_snapshot, &after_snapshot)
-            .map_err(issue_git_error)?;
+        let detection =
+            detect_commit_result(&session.working_dir, &before_snapshot, &after_snapshot)
+                .map_err(issue_git_error)?;
 
         let commit_hash = match detection {
             GitCommitDetectionResult::NewCommit { commit_hash } => commit_hash,
@@ -1581,8 +1588,9 @@ impl<'connection> IssueService<'connection> {
                     ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                 )
             })?;
-        let effective_completion_policy =
-            session.completion_policy.unwrap_or(project.completion_policy);
+        let effective_completion_policy = session
+            .completion_policy
+            .unwrap_or(project.completion_policy);
 
         if effective_completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
             let completion_policy = match effective_completion_policy {
@@ -1686,12 +1694,13 @@ impl<'connection> IssueService<'connection> {
                 None,
             )?,
             IssueStatus::Review => {
-                let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
-                    &transaction,
-                    input.project_id,
-                    input.issue_id,
-                )
-                .map_err(issue_database_error)?;
+                let linked_session_id =
+                    IssueRepository::find_running_linked_session_id_in_transaction(
+                        &transaction,
+                        input.project_id,
+                        input.issue_id,
+                    )
+                    .map_err(issue_database_error)?;
 
                 if issue.status == IssueStatus::Running {
                     if let Some(linked_session_id) = linked_session_id {
@@ -1755,12 +1764,13 @@ impl<'connection> IssueService<'connection> {
                 }
             }
             IssueStatus::Completed => {
-                let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
-                    &transaction,
-                    input.project_id,
-                    input.issue_id,
-                )
-                .map_err(issue_database_error)?;
+                let linked_session_id =
+                    IssueRepository::find_running_linked_session_id_in_transaction(
+                        &transaction,
+                        input.project_id,
+                        input.issue_id,
+                    )
+                    .map_err(issue_database_error)?;
 
                 match (issue.status.clone(), linked_session_id) {
                     (IssueStatus::Running, Some(linked_session_id)) => {
@@ -1805,21 +1815,21 @@ impl<'connection> IssueService<'connection> {
                             linked_session_id,
                         )?
                     }
-                    (IssueStatus::Review, Some(linked_session_id)) => {
-                        self.complete_issue_from_review_in_transaction(
+                    (IssueStatus::Review, Some(linked_session_id)) => self
+                        .complete_issue_from_review_in_transaction(
                             &transaction,
                             input.project_id,
                             input.issue_id,
                             linked_session_id,
-                        )?
-                    }
-                    (_, Some(linked_session_id)) => self.complete_issue_without_review_in_transaction(
-                        &transaction,
-                        input.project_id,
-                        input.issue_id,
-                        issue.status.clone(),
-                        Some(linked_session_id),
-                    )?,
+                        )?,
+                    (_, Some(linked_session_id)) => self
+                        .complete_issue_without_review_in_transaction(
+                            &transaction,
+                            input.project_id,
+                            input.issue_id,
+                            issue.status.clone(),
+                            Some(linked_session_id),
+                        )?,
                     (_, None) => self.complete_issue_without_review_in_transaction(
                         &transaction,
                         input.project_id,
@@ -1901,7 +1911,9 @@ impl<'connection> IssueService<'connection> {
                 CommandErrorCode::IssueValidationFailed,
                 "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
             )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id))
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+            )
         })?;
 
         let issue_action_payload = json!({
@@ -2078,12 +2090,15 @@ fn finalize_worktree_completion(
         return Ok(());
     };
 
-    if !is_branch_merged(repo_path, target_branch, workspace_branch).map_err(map_worktree_git_error)? {
+    if !is_branch_merged(repo_path, target_branch, workspace_branch)
+        .map_err(map_worktree_git_error)?
+    {
         merge_branch_into_target(repo_path, target_branch, workspace_branch)
             .map_err(map_worktree_git_error)?;
     }
 
-    cleanup_worktree(repo_path, workspace_path, workspace_branch).map_err(map_worktree_git_error)?;
+    cleanup_worktree(repo_path, workspace_path, workspace_branch)
+        .map_err(map_worktree_git_error)?;
     Ok(())
 }
 

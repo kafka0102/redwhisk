@@ -501,9 +501,7 @@ fn workspace_mode_to_str(value: &WorkspaceMode) -> &'static str {
     }
 }
 
-fn project_completion_policy_from_str(
-    value: &str,
-) -> rusqlite::Result<ProjectCompletionPolicy> {
+fn project_completion_policy_from_str(value: &str) -> rusqlite::Result<ProjectCompletionPolicy> {
     match value {
         "manual" => Ok(ProjectCompletionPolicy::Manual),
         "agent_auto_commit" => Ok(ProjectCompletionPolicy::AgentAutoCommit),

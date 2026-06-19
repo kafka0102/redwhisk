@@ -314,11 +314,10 @@ where
             ProjectLabelScope::Global => "全局 Label 名称必须在所有项目和全局范围内唯一。",
         };
 
-        Err(CommandError::new(
-            CommandErrorCode::AgentProfileValidationFailed,
-            message,
+        Err(
+            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
+                .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
         )
-        .with_detail(ErrorDetail::new("Field").with_value("name", "name")))
     }
 
     fn validate_label_agent_assignment(
@@ -645,10 +644,7 @@ fn validate_project_label_color(color: &str) -> Result<String, CommandError> {
     let trimmed = color.trim();
     let is_hex = trimmed.len() == 7
         && trimmed.starts_with('#')
-        && trimmed
-            .chars()
-            .skip(1)
-            .all(|char| char.is_ascii_hexdigit());
+        && trimmed.chars().skip(1).all(|char| char.is_ascii_hexdigit());
 
     if !is_hex {
         return Err(CommandError::new(
@@ -865,7 +861,8 @@ mod tests {
         let database = test_database(temp_dir.path());
         let service = test_settings_service(&database.connection);
         let project_id = insert_project(&database.connection, "repo-a");
-        let project_agent_id = insert_agent_profile(&service, Some(project_id), AgentScope::Project);
+        let project_agent_id =
+            insert_agent_profile(&service, Some(project_id), AgentScope::Project);
 
         let error = service
             .save_project_label(SaveProjectLabelInput {

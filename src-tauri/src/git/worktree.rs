@@ -115,7 +115,10 @@ pub fn merge_branch_into_target(
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     let original_branch = run_git(&repo_path, &["branch", "--show-current"])?;
     run_git(&repo_path, &["checkout", target_branch])?;
-    let merge_result = run_git(&repo_path, &["merge", "--no-ff", "--no-edit", source_branch]);
+    let merge_result = run_git(
+        &repo_path,
+        &["merge", "--no-ff", "--no-edit", source_branch],
+    );
     let checkout_back = run_git(&repo_path, &["checkout", &original_branch]);
 
     if let Err(error) = checkout_back {
@@ -131,7 +134,10 @@ pub fn cleanup_worktree(
     workspace_branch: &str,
 ) -> Result<(), GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
-    run_git(&repo_path, &["worktree", "remove", "--force", workspace_path])?;
+    run_git(
+        &repo_path,
+        &["worktree", "remove", "--force", workspace_path],
+    )?;
     run_git(&repo_path, &["branch", "-D", workspace_branch])?;
     run_git(&repo_path, &["worktree", "prune"])?;
     Ok(())
@@ -153,9 +159,8 @@ fn prepare_worktree_root(path: &Path) -> Result<PathBuf, GitWorktreeError> {
             path.to_string_lossy().to_string(),
         ));
     }
-    fs::create_dir_all(path).map_err(|_| {
-        GitWorktreeError::WorktreeRootInvalid(path.to_string_lossy().to_string())
-    })?;
+    fs::create_dir_all(path)
+        .map_err(|_| GitWorktreeError::WorktreeRootInvalid(path.to_string_lossy().to_string()))?;
     Ok(path.to_path_buf())
 }
 
