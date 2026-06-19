@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import { Textarea } from "../../components/ui/textarea";
 import {
   startStandaloneAgentSession,
   type StartStandaloneAgentSessionResult,
@@ -202,50 +212,75 @@ export function TemporarySessionDialog({
 
         <div className="issue-dialog__body">
           <div className="issue-dialog__editor">
-            <label className="settings-field">
-              <span>Title</span>
-              <input
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="temporary-session-title"
+                className="text-xs text-muted-foreground"
+              >
+                Title
+              </Label>
+              <Input
                 ref={titleInputRef}
+                id="temporary-session-title"
                 aria-label="Session title"
-                className="settings-input"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
               />
-            </label>
+            </div>
 
-            <label className="settings-field">
-              <span>Agent profile</span>
-              <select
-                aria-label="Agent profile"
-                className="settings-input"
-                disabled={isLoadingProfiles || profiles.length === 0}
-                value={selectedProfileId ?? ""}
-                onChange={(event) => {
-                  const nextProfileId = Number(event.target.value);
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="temporary-session-profile"
+                className="text-xs text-muted-foreground"
+              >
+                Agent profile
+              </Label>
+              <Select
+                items={profiles.map((profile) => ({
+                  value: profile.id,
+                  label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}`,
+                }))}
+                value={selectedProfileId}
+                onValueChange={(value) => {
                   setSelectedProfileId(
-                    Number.isNaN(nextProfileId) ? null : nextProfileId,
+                    value == null ? null : (value as number),
                   );
                 }}
               >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                    {profile.scope === "project" ? " (Project)" : " (Global)"}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger
+                  id="temporary-session-profile"
+                  aria-label="Agent profile"
+                  className="w-full"
+                  disabled={isLoadingProfiles || profiles.length === 0}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                      {profile.scope === "project" ? " (Project)" : " (Global)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <label className="settings-field">
-              <span>Prompt</span>
-              <textarea
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="temporary-session-prompt"
+                className="text-xs text-muted-foreground"
+              >
+                Prompt
+              </Label>
+              <Textarea
+                id="temporary-session-prompt"
                 aria-label="Initial prompt"
-                className="settings-textarea"
                 rows={10}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
               />
-            </label>
+            </div>
           </div>
         </div>
 

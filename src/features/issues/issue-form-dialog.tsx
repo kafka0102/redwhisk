@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import type {
   IssueAttachmentRecord,
@@ -237,8 +238,12 @@ function IssueEditableFields({
   return (
     <div className="issue-dialog__editor issue-dialog__editor--editable">
       <div className="issue-field">
+        <Label htmlFor="issue-title" className="text-xs text-muted-foreground">
+          Title
+        </Label>
         <Input
           ref={titleInputRef}
+          id="issue-title"
           aria-label="Title"
           autoCapitalize="none"
           autoCorrect="off"
@@ -336,10 +341,7 @@ function IssueLabelsPicker({
   }
 
   return (
-    <div
-      className="issue-field issue-field--labels"
-      ref={rootRef}
-    >
+    <div className="issue-field issue-field--labels" ref={rootRef}>
       <span className="issue-field__label">Labels</span>
       <div className="issue-label-picker" ref={triggerRef}>
         <div className="issue-label-picker__trigger-area">
@@ -377,7 +379,7 @@ function IssueLabelsPicker({
             className="issue-label-picker__menu issue-label-picker__menu--fixed"
             role="listbox"
             style={{
-              position: 'fixed',
+              position: "fixed",
               top: menuPosition.top,
               left: menuPosition.left,
             }}
@@ -423,7 +425,10 @@ function IssueLabelsPicker({
                     );
                   })}
                 </div>
-                <div className="issue-label-picker__divider" aria-hidden="true" />
+                <div
+                  className="issue-label-picker__divider"
+                  aria-hidden="true"
+                />
                 <button
                   className="issue-label-picker__action"
                   type="button"
@@ -531,7 +536,9 @@ function IssueActionsAside({
               className="issue-dialog__status-trigger"
               disabled={isSaving}
               type="button"
-              onClick={() => setIsStatusMenuOpen((currentValue) => !currentValue)}
+              onClick={() =>
+                setIsStatusMenuOpen((currentValue) => !currentValue)
+              }
             >
               <span>{statusLabelFor(currentStatus)}</span>
               <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />

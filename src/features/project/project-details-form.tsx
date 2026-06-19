@@ -1,6 +1,15 @@
 import type { FormEvent } from "react";
 
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import type { ProjectCompletionPolicy } from "./project-commands";
 
 interface ProjectDetailsFormProps {
@@ -58,22 +67,29 @@ export function ProjectDetailsForm({
 }: ProjectDetailsFormProps) {
   return (
     <form className={className} onSubmit={onSubmit}>
-      <label className="settings-field">
-        <span>{projectNameLabel}</span>
-        <input
+      <div className="grid gap-1.5">
+        <Label htmlFor="project-name" className="text-xs text-muted-foreground">
+          {projectNameLabel}
+        </Label>
+        <Input
+          id="project-name"
           aria-label={projectNameLabel}
-          className="settings-input settings-input--form-control"
           disabled={isSubmitting}
           value={projectName}
           onChange={(event) => onNameChange(event.target.value)}
         />
-      </label>
-      <label className="settings-field">
-        <span>{repoPathLabel}</span>
+      </div>
+      <div className="grid gap-1.5">
+        <Label
+          htmlFor="project-repo-path"
+          className="text-xs text-muted-foreground"
+        >
+          {repoPathLabel}
+        </Label>
         <div className="settings-field__control-row">
-          <input
+          <Input
+            id="project-repo-path"
             aria-label={repoPathLabel}
-            className="settings-input settings-input--form-control"
             disabled={isSubmitting || isChoosingRepoPath}
             readOnly
             value={repoPath}
@@ -88,26 +104,44 @@ export function ProjectDetailsForm({
             {isChoosingRepoPath ? choosingFolderLabel : chooseFolderLabel}
           </Button>
         </div>
-      </label>
-      <label className="settings-field">
-        <span>{completionStrategyLabel}</span>
-        <select
-          aria-label={completionStrategyLabel}
-          className="settings-input settings-input--form-control"
-          disabled={isSubmitting}
+      </div>
+      <div className="grid gap-1.5">
+        <Label
+          htmlFor="project-completion-strategy"
+          className="text-xs text-muted-foreground"
+        >
+          {completionStrategyLabel}
+        </Label>
+        <Select
+          items={[
+            { value: "agent_auto_commit", label: autoCommitLabel },
+            { value: "manual", label: manualLabel },
+          ]}
           value={completionPolicy}
-          onChange={(event) =>
-            onCompletionPolicyChange(
-              event.target.value as ProjectCompletionPolicy,
-            )
+          onValueChange={(value) =>
+            onCompletionPolicyChange(value as ProjectCompletionPolicy)
           }
         >
-          <option value="agent_auto_commit">{autoCommitLabel}</option>
-          <option value="manual">{manualLabel}</option>
-        </select>
-      </label>
+          <SelectTrigger
+            id="project-completion-strategy"
+            aria-label={completionStrategyLabel}
+            className="w-full"
+            disabled={isSubmitting}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="agent_auto_commit">{autoCommitLabel}</SelectItem>
+            <SelectItem value="manual">{manualLabel}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       {errorMessage ? (
-        <p className="settings-status" role="status" aria-label={ariaStatusLabel}>
+        <p
+          className="settings-status"
+          role="status"
+          aria-label={ariaStatusLabel}
+        >
           {errorMessage}
         </p>
       ) : null}

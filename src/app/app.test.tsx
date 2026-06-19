@@ -575,9 +575,7 @@ describe("App project entry", () => {
     );
     expect(
       within(projectDialog).getByLabelText("Git completion strategy"),
-    ).toHaveValue(
-      "agent_auto_commit",
-    );
+    ).toHaveTextContent("Auto Commit");
     await user.click(
       within(projectDialog).getByRole("button", { name: "Create Project" }),
     );
