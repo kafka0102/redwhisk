@@ -3993,3 +3993,247 @@ button:focus-visible {
   font-size: 11px;
   text-align: center;
 }
+
+/* ===========================================================================
+   Agent composer 输入框（Codex Session View 底部固定输入栏）
+   =========================================================================== */
+
+.agents-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.agents-composer__input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.agents-composer__attach {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.agents-composer__attach:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.agents-composer__attach:focus-visible {
+  outline: none;
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 2px var(--color-surface-muted);
+}
+
+.agents-composer__textarea {
+  flex: 1 1 auto;
+  min-height: 30px;
+  max-height: 160px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  overflow-y: auto;
+}
+
+.agents-composer__textarea::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.agents-composer__textarea:focus-visible {
+  outline: none;
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 2px var(--color-surface-muted);
+}
+
+.agents-composer__error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+/* 附件行 */
+.agents-composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.agents-composer__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.agents-composer__chip--error {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-muted);
+  color: var(--color-danger);
+}
+
+.agents-composer__chip-spinner {
+  animation: agents-message-spin 0.9s linear infinite;
+}
+
+.agents-composer__chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agents-composer__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.agents-composer__chip-remove:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.agents-composer__attachments-hint {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+}
+
+/* 控制行 */
+.agents-composer__controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agents-composer__selects {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.agents-composer__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agents-composer__field-label {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+}
+
+.agents-composer__select {
+  min-width: 110px;
+}
+
+.agents-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 用量条 */
+.agents-composer__meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.agents-composer__meter--empty {
+  color: var(--color-text-subtle);
+}
+
+.agents-composer__meter-bar {
+  display: inline-block;
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.agents-composer__meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-text-muted);
+  transition: width 0.15s ease;
+}
+
+.agents-composer__meter-fill--warning {
+  background: var(--color-danger);
+}
+
+.agents-composer__meter-text {
+  white-space: nowrap;
+}
+
+/* 发送 / 取消按钮 */
+.agents-composer__send,
+.agents-composer__cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.agents-composer__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agents-composer__send:not(:disabled):hover,
+.agents-composer__cancel:hover {
+  opacity: 0.85;
+}
+
+.agents-composer__cancel {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
