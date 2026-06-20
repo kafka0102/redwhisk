@@ -7,6 +7,7 @@ import {
   AlertCircle,
   LoaderCircle,
   Terminal,
+  ChevronDown,
   FileEdit,
   FilePlus,
   FileSearch,
@@ -98,7 +99,13 @@ function ReasoningCard({
       <details className="agents-message__reasoning">
         <summary className="agents-message__reasoning-summary">
           <Sparkles aria-hidden="true" size={13} strokeWidth={1.8} />
-          <span>思考过程</span>
+          <span>Thinking</span>
+          <ChevronDown
+            aria-hidden="true"
+            size={13}
+            strokeWidth={1.8}
+            className="agents-message__summary-chevron"
+          />
         </summary>
         <p className="agents-message__reasoning-text">{item.text}</p>
       </details>
@@ -117,7 +124,7 @@ function ToolCallCard({
         <div className="agents-message__tool-header">
           <span className="agents-message__tool-name">
             <ToolCallIcon detail={item.detail} />
-            <span>{item.name}</span>
+            <span>{formatToolName(item.name, item.detail)}</span>
           </span>
           <ToolCallStatusBadge status={item.status} />
         </div>
@@ -188,12 +195,25 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
     case "shell":
       return (
         <div className="agents-message__tool-body">
-          <code className="agents-message__command">$ {detail.command}</code>
-          {detail.output ? (
-            <pre className="agents-message__output">{detail.output}</pre>
-          ) : null}
-          {detail.exitCode != null ? (
-            <p className="agents-message__exit-code">{`Exit code: ${detail.exitCode}`}</p>
+          <code className="agents-message__command">{detail.command}</code>
+          {detail.output || detail.exitCode != null ? (
+            <details className="agents-message__tool-output">
+              <summary className="agents-message__tool-output-summary">
+                <span>Output</span>
+                {detail.exitCode != null ? (
+                  <span className="agents-message__exit-code">{`exit ${detail.exitCode}`}</span>
+                ) : null}
+                <ChevronDown
+                  aria-hidden="true"
+                  size={13}
+                  strokeWidth={1.8}
+                  className="agents-message__summary-chevron"
+                />
+              </summary>
+              {detail.output ? (
+                <pre className="agents-message__output">{detail.output}</pre>
+              ) : null}
+            </details>
           ) : null}
         </div>
       );
@@ -269,6 +289,32 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
         </div>
       );
   }
+}
+
+function formatToolName(name: string, detail: ToolCallDetail): string {
+  if (detail.type === "shell") {
+    return "Shell";
+  }
+  if (detail.type === "edit") {
+    return "Edit";
+  }
+  if (detail.type === "write") {
+    return "Write";
+  }
+  if (detail.type === "read") {
+    return "Read";
+  }
+  if (detail.type === "search") {
+    return "Search";
+  }
+  if (detail.type === "plan") {
+    return "Plan";
+  }
+  return name
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function TodoCard({

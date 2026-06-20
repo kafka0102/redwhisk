@@ -3628,15 +3628,19 @@ button:focus-visible {
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   height: 100%;
-  background: var(--color-app);
+  background: color-mix(
+    in srgb,
+    var(--color-app) 96%,
+    var(--color-surface-muted)
+  );
 }
 
 .agents-message-stream__scroll {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
-  padding: 16px;
+  padding: 28px 18px;
   overflow-y: auto;
 }
 
@@ -3657,8 +3661,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 16px;
+  padding: 7px 18px;
   border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
   color: var(--color-text-muted);
   font-size: 12px;
 }
@@ -3676,6 +3681,8 @@ button:focus-visible {
 /* 消息条目通用 */
 .agents-message__entry {
   min-width: 0;
+  width: min(880px, 100%);
+  margin: 0 auto;
 }
 
 .agents-message__entry--user {
@@ -3695,23 +3702,26 @@ button:focus-visible {
 
 /* 气泡 */
 .agents-message__bubble {
-  max-width: 85%;
+  max-width: min(720px, 100%);
   min-width: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   font-size: 13px;
   line-height: 1.45;
   word-break: break-word;
 }
 
 .agents-message__bubble--user {
-  border-color: var(--color-border-strong);
+  max-width: min(620px, 86%);
+  padding: 8px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-dialog);
   background: var(--color-surface-muted);
 }
 
 .agents-message__bubble--assistant {
-  background: var(--color-surface);
+  background: transparent;
 }
 
 .agents-message__text {
@@ -3722,7 +3732,7 @@ button:focus-visible {
 /* Markdown 容器 */
 .agents-message__markdown {
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.58;
 }
 
 .agents-message__markdown p {
@@ -3762,11 +3772,11 @@ button:focus-visible {
 }
 
 .agents-message__code-block {
-  margin: 4px 0;
+  margin: 6px 0;
   padding: 8px 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
-  background: var(--color-surface-muted);
+  background: var(--color-surface-panel);
   overflow-x: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
@@ -3779,19 +3789,18 @@ button:focus-visible {
 
 /* 推理折叠 */
 .agents-message__reasoning {
-  max-width: 85%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
+  width: min(720px, 100%);
+  color: var(--color-text-muted);
 }
 
 .agents-message__reasoning-summary {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  width: fit-content;
+  padding: 2px 0;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 12.5px;
   cursor: pointer;
   list-style: none;
 }
@@ -3802,47 +3811,59 @@ button:focus-visible {
 
 .agents-message__reasoning-text {
   margin: 0;
-  padding: 0 10px 8px;
+  padding: 6px 0 0 19px;
+  border-left: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
 
+.agents-message__summary-chevron {
+  transition: transform 150ms ease;
+}
+
+details[open] > summary .agents-message__summary-chevron {
+  transform: rotate(180deg);
+}
+
 /* 工具调用卡片 */
 .agents-message__tool {
-  max-width: 85%;
+  width: min(760px, 100%);
   min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
+  color: var(--color-text-muted);
 }
 
 .agents-message__tool-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--color-border);
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 2px 0;
 }
 
 .agents-message__tool-name {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   min-width: 0;
-  color: var(--color-text);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
 .agents-message__tool-status {
   flex: 0 0 auto;
+  height: 18px;
+  border-radius: var(--radius-control);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .agents-message__tool-body {
-  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+  padding: 3px 0 0 20px;
   min-width: 0;
 }
 
@@ -3850,21 +3871,42 @@ button:focus-visible {
 .agents-message__path {
   display: block;
   margin: 0;
-  padding: 4px 6px;
-  border-radius: var(--radius-control);
-  background: var(--color-surface-muted);
-  color: var(--color-text);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
+  line-height: 1.5;
   word-break: break-all;
+}
+
+.agents-message__tool-output {
+  width: min(680px, 100%);
+}
+
+.agents-message__tool-output-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  color: var(--color-text-subtle);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agents-message__tool-output-summary::-webkit-details-marker {
+  display: none;
 }
 
 .agents-message__output {
   margin: 6px 0 0;
   padding: 6px 8px;
   max-height: 280px;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
-  background: var(--color-surface-muted);
+  background: var(--color-surface-panel);
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
@@ -3878,9 +3920,10 @@ button:focus-visible {
 }
 
 .agents-message__exit-code {
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--color-text-subtle);
   font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .agents-message__tool-error {
@@ -3913,7 +3956,7 @@ button:focus-visible {
 
 /* Todo 清单 */
 .agents-message__todo {
-  max-width: 85%;
+  max-width: min(720px, 100%);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
@@ -3968,7 +4011,7 @@ button:focus-visible {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  max-width: 85%;
+  max-width: min(720px, 100%);
   padding: 8px 10px;
   border: 1px solid var(--color-danger);
   border-radius: var(--radius-card);

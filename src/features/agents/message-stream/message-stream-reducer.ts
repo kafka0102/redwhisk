@@ -130,6 +130,11 @@ function applyEvent(
       return { ...state, turnStatus: "canceled" };
 
     case "timeline": {
+      if (shouldSkipTimelineItem(event.item, state.entries)) {
+        const lastSeq =
+          event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
+        return { ...state, lastSeq };
+      }
       const entries = applyTimelineItem(state.entries, event.item);
       const lastSeq =
         event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
@@ -183,6 +188,10 @@ function applyTimelineItem(
   entries: MessageStreamEntry[],
   item: AgentTimelineItem,
 ): MessageStreamEntry[] {
+  if (shouldSkipTimelineItem(item, entries)) {
+    return entries;
+  }
+
   switch (item.type) {
     case "assistant_message": {
       const messageId = item.messageId;
@@ -251,6 +260,70 @@ function applyTimelineItem(
     default:
       return entries;
   }
+}
+
+function shouldSkipTimelineItem(
+  item: AgentTimelineItem,
+  entries: MessageStreamEntry[],
+): boolean {
+  if (isEmptyTimelineItem(item)) {
+    return true;
+  }
+  if (entries.some((entry) => entry.kind === "user_message")) {
+    return false;
+  }
+  if (item.type !== "assistant_message") {
+    return false;
+  }
+  return isStartupNoise(item.text);
+}
+
+function isEmptyTimelineItem(item: AgentTimelineItem): boolean {
+  switch (item.type) {
+    case "user_message":
+    case "assistant_message":
+    case "reasoning":
+      return item.text.trim().length === 0;
+    case "tool_call":
+      return isEmptyToolCall(item);
+    case "todo":
+      return item.items.length === 0;
+    case "error":
+      return item.message.trim().length === 0;
+    default:
+      return false;
+  }
+}
+
+function isEmptyToolCall(
+  item: Extract<AgentTimelineItem, { type: "tool_call" }>,
+): boolean {
+  const detail = item.detail;
+  switch (detail.type) {
+    case "shell":
+      return detail.command.trim().length === 0;
+    case "read":
+    case "edit":
+    case "write":
+      return detail.path.trim().length === 0;
+    case "search":
+      return detail.query.trim().length === 0;
+    case "plan":
+      return detail.text.trim().length === 0;
+    default:
+      return false;
+  }
+}
+
+function isStartupNoise(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  return (
+    normalized === "codeance ready" ||
+    normalized === "codex ready" ||
+    normalized === "ready" ||
+    normalized.startsWith("codeance started") ||
+    normalized.startsWith("codex started")
+  );
 }
 
 /** 从 timeline item 派生稳定 id。 */
