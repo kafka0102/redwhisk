@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import {
   act,
   fireEvent,
@@ -15,11 +16,8 @@ import codexLogoSrc from "../../assets/images/codex.svg";
 import { AgentsActivity } from "./agents-activity";
 import {
   listAgentSessions,
-  readAgentSessionTerminal,
-  resizeAgentSessionTerminal,
   setAgentSessionAttention,
-  startStandaloneAgentSession,
-  writeAgentSessionTerminal,
+  startStructuredAgentSession,
 } from "./agent-session-commands";
 import {
   completeIssueClean,
@@ -38,13 +36,21 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: vi.fn(),
 }));
 
+// mock AgentSessionView 为占位组件，避免在 agents-activity 测试中深渲染
+// message-stream / composer（它们有独立的测试覆盖）。
+vi.mock("./agent-session-view", () => ({
+  AgentSessionView: () =>
+    createElement("div", {
+      "aria-label": "Agent 会话消息流",
+      "data-testid": "agent-session-view",
+    }),
+}));
+
 vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
-  readAgentSessionTerminal: vi.fn(),
-  resizeAgentSessionTerminal: vi.fn(),
   setAgentSessionAttention: vi.fn(),
-  startStandaloneAgentSession: vi.fn(),
-  writeAgentSessionTerminal: vi.fn(),
+  startStructuredAgentSession: vi.fn(),
+  sendAgentMessage: vi.fn(),
 }));
 
 vi.mock("../settings/settings-commands", () => ({
@@ -64,11 +70,8 @@ vi.mock("../issues/issue-commands", () => ({
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
-const readAgentSessionTerminalMock = vi.mocked(readAgentSessionTerminal);
-const resizeAgentSessionTerminalMock = vi.mocked(resizeAgentSessionTerminal);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
-const startStandaloneAgentSessionMock = vi.mocked(startStandaloneAgentSession);
-const writeAgentSessionTerminalMock = vi.mocked(writeAgentSessionTerminal);
+const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
@@ -119,11 +122,8 @@ const defaultProfiles = {
 describe("AgentsActivity", () => {
   beforeEach(() => {
     listAgentSessionsMock.mockReset();
-    readAgentSessionTerminalMock.mockReset();
-    resizeAgentSessionTerminalMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
-    startStandaloneAgentSessionMock.mockReset();
-    writeAgentSessionTerminalMock.mockReset();
+    startStructuredAgentSessionMock.mockReset();
     listIssuesMock.mockReset();
     completeIssueManualMock.mockReset();
     completeIssueCleanMock.mockReset();
@@ -134,20 +134,14 @@ describe("AgentsActivity", () => {
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     openPathMock.mockReset();
-    readAgentSessionTerminalMock.mockResolvedValue({
-      sessionId: 301,
-      snapshot: "",
-      isActive: true,
-    });
-    resizeAgentSessionTerminalMock.mockResolvedValue();
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
       attention: "requested",
     });
-    startStandaloneAgentSessionMock.mockResolvedValue({
+    startStructuredAgentSessionMock.mockResolvedValue({
       sessionId: 701,
+      threadId: "thread-701",
     });
-    writeAgentSessionTerminalMock.mockResolvedValue();
     openPathMock.mockResolvedValue();
     sendAgentCommitPromptMock.mockResolvedValue({
       issueId: 22,
@@ -400,7 +394,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("heading", { name: "#issue20 Existing issue" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("uses a full-height split layout for the session list and workspace", async () => {
@@ -757,11 +751,10 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     await waitFor(() =>
-      expect(startStandaloneAgentSessionMock).toHaveBeenCalledWith({
+      expect(startStructuredAgentSessionMock).toHaveBeenCalledWith({
         projectId: 1,
         title: "Scratch Session",
-        agentProfileId: 101,
-        promptSnapshot: "Help me inspect the current repo",
+        agentType: "codex",
       }),
     );
     await waitFor(() =>
@@ -798,7 +791,7 @@ describe("AgentsActivity", () => {
         },
       ],
     });
-    startStandaloneAgentSessionMock.mockRejectedValue({
+    startStructuredAgentSessionMock.mockRejectedValue({
       code: "AGENT_SESSION_START_FAILED",
       message: "Agent 进程启动失败。",
     });
@@ -1534,7 +1527,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("hides mark review after command success when refreshing sessions fails", async () => {
@@ -1584,7 +1577,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("keeps mark review hidden when an older polling response returns running after command success", async () => {
@@ -1677,7 +1670,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("refreshes sessions after mark review command fails without unmounting terminal", async () => {
@@ -1732,7 +1725,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("hides mark review when the selected session has no linked running issue", async () => {
@@ -1792,7 +1785,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Review issue/i }));
     expect(
@@ -1891,7 +1884,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("shows the manual completion action on review header without placeholder follow-up actions", async () => {
@@ -1939,7 +1932,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("shows agent commit action for dirty review sessions and opens completion confirmation", async () => {
@@ -2093,9 +2086,7 @@ describe("AgentsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Mark done" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
@@ -2190,9 +2181,7 @@ describe("AgentsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Mark done" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
@@ -2306,9 +2295,7 @@ describe("AgentsActivity", () => {
       />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Mark done" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
@@ -2395,7 +2382,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("keeps mark done hidden after command success when refreshing sessions fails", async () => {
@@ -2429,7 +2416,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("completes a linked running issue directly to done from the status menu", async () => {
@@ -2758,7 +2745,7 @@ describe("AgentsActivity", () => {
         name: /Newest completed issue/i,
       }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("hides the info pane when the selected session has no linked issue", async () => {
@@ -2872,7 +2859,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: /#issue20.*Existing issue/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("keeps abnormal linked sessions on the terminal without a header log opener", async () => {
@@ -2930,7 +2917,9 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Issue" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Issue" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("separator", { name: "Resize session info" }),
     ).not.toBeInTheDocument();
@@ -2943,8 +2932,10 @@ describe("AgentsActivity", () => {
     expect(
       within(drawer).getByRole("heading", { level: 4, name: "Existing issue" }),
     ).toBeInTheDocument();
-    expect(within(drawer).getByText("Existing description")).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(
+      within(drawer).getByText("Existing description"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("keeps the terminal visible after linked issue header actions", async () => {
@@ -2977,7 +2968,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Codex Session terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
   it("opens completed issue summary from the header", async () => {

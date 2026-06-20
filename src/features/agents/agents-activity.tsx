@@ -17,18 +17,15 @@ import {
 import {
   listAgentSessions,
   setAgentSessionAttention,
-  type StartStandaloneAgentSessionResult,
+  type StartStructuredAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
-import {
-  formatAgentTypeLabel,
-  getAgentLogoSrc,
-} from "./agent-visuals";
-import { CodexTerminal } from "./codex-terminal";
+import { formatAgentTypeLabel, getAgentLogoSrc } from "./agent-visuals";
+import { AgentSessionView } from "./agent-session-view";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueSummaryDialog } from "../issues/issue-summary-dialog";
 import {
@@ -547,8 +544,9 @@ export function AgentsActivity({
     }
 
     const currentSession =
-      sessions.find((session) => session.sessionId === selectedSession.sessionId) ??
-      selectedSession;
+      sessions.find(
+        (session) => session.sessionId === selectedSession.sessionId,
+      ) ?? selectedSession;
     let nextSession = currentSession;
 
     if (currentSession.issueStatus === "running") {
@@ -557,10 +555,9 @@ export function AgentsActivity({
         return;
       }
 
-      nextSession =
-        refreshedSessions.find(
-          (session) => session.sessionId === currentSession.sessionId,
-        ) ?? { ...currentSession, issueStatus: "review" as const };
+      nextSession = refreshedSessions.find(
+        (session) => session.sessionId === currentSession.sessionId,
+      ) ?? { ...currentSession, issueStatus: "review" as const };
     }
 
     if (projectCompletionPolicy === "manual") {
@@ -710,7 +707,7 @@ export function AgentsActivity({
   }
 
   async function handleTemporarySessionStarted(
-    result: StartStandaloneAgentSessionResult,
+    result: StartStructuredAgentSessionResult,
   ) {
     const response = await listAgentSessions(projectId);
     setSessions(applySessionListOverlays(response.sessions));
@@ -721,9 +718,7 @@ export function AgentsActivity({
   return (
     <main
       className="activity-surface activity-surface--agents"
-      style={
-        { "--agents-sidebar-width": `${sidebarWidth}px` } as CSSProperties
-      }
+      style={{ "--agents-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <aside className="agents-sidebar" aria-label="Agent sessions">
         <div className="agents-sidebar__header">
@@ -825,7 +820,9 @@ export function AgentsActivity({
 
       <section
         className={`agents-workspace${
-          isIssueDrawerOpen && linkedIssue ? " agents-workspace--with-issue-drawer" : ""
+          isIssueDrawerOpen && linkedIssue
+            ? " agents-workspace--with-issue-drawer"
+            : ""
         }`}
         aria-label="Session workspace"
       >
@@ -854,7 +851,9 @@ export function AgentsActivity({
                       type="button"
                       onClick={() =>
                         void handleTransitionAction(
-                          sessionTransitionPhase === "running" ? "review" : "done",
+                          sessionTransitionPhase === "running"
+                            ? "review"
+                            : "done",
                         )
                       }
                     >
@@ -876,7 +875,11 @@ export function AgentsActivity({
                             )
                           }
                         >
-                          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />
+                          <ChevronDown
+                            aria-hidden="true"
+                            size={14}
+                            strokeWidth={1.9}
+                          />
                         </button>
                         {isTransitionMenuOpen ? (
                           <div
@@ -959,9 +962,10 @@ export function AgentsActivity({
             }}
           >
             {selectedSession ? (
-              <CodexTerminal
+              <AgentSessionView
                 projectId={projectId}
                 sessionId={selectedSession.sessionId}
+                agentType={selectedSession.agentType}
               />
             ) : (
               <p className="empty-state">
@@ -979,7 +983,6 @@ export function AgentsActivity({
             onClose={() => setIsIssueDrawerOpen(false)}
           />
         ) : null}
-
       </section>
 
       {isTemporarySessionDialogOpen ? (
@@ -1123,8 +1126,9 @@ function SessionIssueDrawer({
     };
   }, [issueId, projectId]);
 
-  const description =
-    issue?.description?.trim().length ? issue.description : "No details provided.";
+  const description = issue?.description?.trim().length
+    ? issue.description
+    : "No details provided.";
 
   return (
     <aside className="agents-issue-drawer" aria-label="Issue details">
@@ -1155,7 +1159,9 @@ function SessionIssueDrawer({
           <>
             <section className="issue-dialog__panel">
               <h4>Title</h4>
-              <p className="issue-detail__title">{issue?.title ?? issueTitle}</p>
+              <p className="issue-detail__title">
+                {issue?.title ?? issueTitle}
+              </p>
             </section>
             <section className="issue-dialog__panel">
               <h4>Details</h4>
@@ -1353,9 +1359,7 @@ function buildSessionStatusDotClassName(tone: string): string {
   return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
 }
 
-function formatSessionStatusLabel(
-  session: AgentSessionListItem,
-): string {
+function formatSessionStatusLabel(session: AgentSessionListItem): string {
   if (session.status === "crashed") {
     return "crashed";
   }
