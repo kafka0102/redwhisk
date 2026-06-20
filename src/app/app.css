@@ -1715,19 +1715,9 @@ button:focus-visible {
 .agents-groups {
   display: grid;
   align-content: start;
-  gap: 10px;
   min-height: 0;
   overflow: auto;
-  padding: 0 8px;
-}
-
-.agents-group {
-  display: grid;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
+  padding: 0;
 }
 
 .agents-group__header {
@@ -1779,7 +1769,16 @@ button:focus-visible {
 
 .agents-session-list {
   display: grid;
-  gap: 6px;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+}
+
+.agents-session-list__empty {
+  margin: 0;
+  padding: 12px 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
 .agents-session-row {
@@ -1788,9 +1787,10 @@ button:focus-visible {
   gap: 3px;
   width: 100%;
   min-height: 72px;
-  padding: 7px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
@@ -1799,7 +1799,6 @@ button:focus-visible {
 
 .agents-session-row:hover,
 .agents-session-row[aria-pressed="true"] {
-  border-color: var(--color-border-strong);
   background: var(--color-surface-muted);
 }
 
@@ -1841,6 +1840,14 @@ button:focus-visible {
 
 .agents-session-row__status-dot--running {
   background: var(--color-lane-review-marker);
+}
+
+.agents-session-row__status-dot--attention {
+  background: var(--color-lane-running-marker);
+}
+
+.agents-session-row__status-dot--review {
+  background: var(--color-lane-completed-marker);
 }
 
 .agents-session-row__status-dot--viewed {

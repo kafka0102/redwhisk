@@ -1081,7 +1081,7 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
         .list_agent_sessions(project_id)
         .expect("list agent sessions");
 
-    assert_eq!(response.sessions.len(), 22);
+    assert_eq!(response.sessions.len(), 23);
     assert_eq!(
         response.sessions[0].issue_title.as_deref(),
         Some("Newest running issue")
@@ -1116,26 +1116,23 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
             .iter()
             .map(|session| session.issue_title.clone())
             .collect::<Vec<_>>(),
-        (1..=20)
+        (0..=19)
             .rev()
+            .chain(std::iter::once(20))
             .map(|index| Some(format!("Completed issue {index:02}")))
             .collect::<Vec<_>>()
     );
     assert_eq!(
         response.sessions[2].issue_title.as_deref(),
-        Some("Completed issue 20")
+        Some("Completed issue 19")
     );
     assert_eq!(
         response
             .sessions
             .last()
             .and_then(|session| session.issue_title.as_deref()),
-        Some("Completed issue 01")
+        Some("Completed issue 20")
     );
-    assert!(response
-        .sessions
-        .iter()
-        .all(|session| session.issue_title.as_deref() != Some("Completed issue 00")));
     assert!(response
         .sessions
         .iter()
@@ -1265,7 +1262,7 @@ fn list_agent_sessions_orders_completed_ties_by_session_id_desc() {
         second_issue,
         profile_id,
         AgentSessionStatus::Stopped,
-        shared_closed_at - 2,
+        shared_closed_at - 1,
         Some(shared_closed_at),
     );
 

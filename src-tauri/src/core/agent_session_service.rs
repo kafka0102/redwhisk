@@ -61,6 +61,7 @@ const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
 const ATTENTION_SNAPSHOT_MAX_BYTES: usize = 32_768;
 const TIMELINE_LOG_SNAPSHOT_MAX_BYTES: usize = 262_144;
 const LATEST_OUTPUT_MAX_CHARS: usize = 500;
+const AGENT_SESSION_COMPLETED_LIST_LIMIT: usize = 50;
 
 struct SessionLaunchContext {
     profile: AgentProfileRow,
@@ -954,47 +955,34 @@ impl<'connection> AgentSessionService<'connection> {
         let (can_complete_clean_for_project, can_complete_agent_commit_for_project) =
             project_completion_capabilities(&project.repo_path, project.completion_policy);
 
-        let rows = self
+        self.agent_session_repository
+            .prune_completed_over_limit(
+                project_id,
+                AGENT_SESSION_COMPLETED_LIST_LIMIT,
+                current_epoch_millis()?,
+            )
+            .map_err(agent_session_database_error)?;
+
+        let mut rows = self
             .agent_session_repository
             .list_by_project_id(project_id)
             .map_err(agent_session_database_error)?;
 
-        let mut running_sessions = Vec::new();
-        let mut completed_sessions = Vec::new();
-
-        for mut row in rows {
-            match row.status {
-                crate::types::agent_session::AgentSessionStatus::Running => {
-                    row.attention =
-                        self.reconcile_running_session_attention(row.session_id, None)?;
-                    running_sessions.push(row);
-                }
-                crate::types::agent_session::AgentSessionStatus::Closed
-                | crate::types::agent_session::AgentSessionStatus::Crashed
-                | crate::types::agent_session::AgentSessionStatus::Stopped => {
-                    completed_sessions.push(row);
-                }
+        for row in rows.iter_mut() {
+            if row.status == crate::types::agent_session::AgentSessionStatus::Running {
+                row.attention = self.reconcile_running_session_attention(row.session_id, None)?;
             }
         }
 
-        running_sessions.sort_by(|left, right| {
+        rows.sort_by(|left, right| {
             right
-                .last_active_at
-                .cmp(&left.last_active_at)
+                .list_inserted_at
+                .cmp(&left.list_inserted_at)
                 .then_with(|| right.session_id.cmp(&left.session_id))
         });
-        completed_sessions.sort_by(|left, right| {
-            right
-                .closed_at
-                .unwrap_or(right.last_active_at)
-                .cmp(&left.closed_at.unwrap_or(left.last_active_at))
-                .then_with(|| right.session_id.cmp(&left.session_id))
-        });
-        completed_sessions.truncate(20);
 
-        let sessions = running_sessions
+        let sessions = rows
             .into_iter()
-            .chain(completed_sessions)
             .map(|row| {
                 let latest_output = row
                     .latest_output
@@ -2174,9 +2162,10 @@ fn insert_structured_session_in_transaction(
            completion_policy,
            worktree_root_path,
            log_path,
+           list_inserted_at,
            last_active_at,
            started_at
-         ) VALUES (?1, NULL, ?2, 0, 'running', 'none', ?3, '', '', 'current_branch', NULL, NULL, ?3, NULL, NULL, ?4, ?5, ?5)",
+         ) VALUES (?1, NULL, ?2, 0, 'running', 'none', ?3, '', '', 'current_branch', NULL, NULL, ?3, NULL, NULL, ?4, ?5, ?5, ?5)",
         params![project_id, title, working_dir, log_path, started_at],
     )?;
 
@@ -2794,7 +2783,13 @@ mod tests {
     use super::{
         command_supports_prompt_argument, detect_codex_session_id_from_home,
         latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
+        AgentSessionService,
     };
+    use crate::db::agent_profile_repository::AgentProfileRepository;
+    use crate::db::agent_session_repository::AgentSessionRepository;
+    use crate::db::issue_repository::IssueRepository;
+    use crate::db::migrations::MigrationRunner;
+    use crate::db::project_repository::ProjectRepository;
     use crate::types::agent_session::{
         AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode,
     };
@@ -2802,6 +2797,7 @@ mod tests {
         AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
     };
     use crate::types::project::ProjectCompletionPolicy;
+    use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -3001,6 +2997,97 @@ mod tests {
         assert_eq!(detected, None);
     }
 
+    #[test]
+    fn list_agent_sessions_keeps_pinned_order_when_activity_changes() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            301,
+            Some(20),
+            Some("First visible session"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            1_000,
+            None,
+        );
+        insert_session_list_row(
+            &database,
+            302,
+            Some(21),
+            Some("Second visible session"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            2_000,
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let first_list = service.list_agent_sessions(1).expect("list sessions");
+        assert_eq!(
+            session_ids(&first_list.sessions),
+            vec![302, 301],
+            "newer inserted session should appear first"
+        );
+
+        database
+            .execute(
+                "UPDATE agent_sessions SET last_active_at = ?1 WHERE id = ?2",
+                params![9_000_i64, 301_i64],
+            )
+            .expect("update activity");
+
+        let second_list = service.list_agent_sessions(1).expect("list sessions");
+        assert_eq!(session_ids(&second_list.sessions), vec![302, 301]);
+    }
+
+    #[test]
+    fn list_agent_sessions_keeps_non_completed_sessions_when_completed_history_exceeds_limit() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            301,
+            Some(20),
+            Some("Running issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            10,
+            None,
+        );
+        insert_session_list_row(
+            &database,
+            302,
+            Some(21),
+            Some("Review issue"),
+            Some("review"),
+            AgentSessionStatus::Running,
+            11,
+            None,
+        );
+
+        for index in 0..55 {
+            insert_session_list_row(
+                &database,
+                400 + index,
+                None,
+                None,
+                None,
+                AgentSessionStatus::Closed,
+                100 + index,
+                Some(200 + index),
+            );
+        }
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let ids = session_ids(&response.sessions);
+
+        assert!(ids.contains(&301));
+        assert!(ids.contains(&302));
+        assert_eq!(response.sessions.len(), 52);
+        assert!(!ids.contains(&400));
+        assert!(ids.contains(&454));
+    }
+
     fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create session dir");
@@ -3047,5 +3134,99 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("unix time")
             .as_millis() as i64
+    }
+
+    fn setup_session_list_database() -> Connection {
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at, completion_policy)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1, 'manual')",
+                params![std::env::temp_dir().to_string_lossy().to_string()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, worktree_path)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0, '')",
+                [],
+            )
+            .expect("insert profile");
+        connection
+    }
+
+    fn test_agent_session_service(connection: &Connection) -> AgentSessionService<'_> {
+        AgentSessionService::new(
+            IssueRepository::new(connection),
+            ProjectRepository::new(connection),
+            AgentProfileRepository::new(connection),
+            AgentSessionRepository::new(connection),
+        )
+    }
+
+    fn insert_session_list_row(
+        connection: &Connection,
+        session_id: i64,
+        issue_id: Option<i64>,
+        issue_title: Option<&str>,
+        issue_status: Option<&str>,
+        session_status: AgentSessionStatus,
+        started_at: i64,
+        closed_at: Option<i64>,
+    ) {
+        if let (Some(issue_id), Some(issue_title), Some(issue_status)) =
+            (issue_id, issue_title, issue_status)
+        {
+            connection
+                .execute(
+                    "INSERT INTO issues (id, project_id, title, description, status, created_at, updated_at, del)
+                     VALUES (?1, 1, ?2, '', ?3, ?4, ?4, 0)",
+                    params![issue_id, issue_title, issue_status, started_at],
+                )
+                .expect("insert issue");
+        }
+
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, workspace_mode,
+                   target_branch, workspace_branch, workspace_path, completion_policy,
+                   worktree_root_path, log_path, list_inserted_at, last_active_at, started_at,
+                   closed_at, del
+                 ) VALUES (
+                   ?1, 1, ?2, NULL, 101, ?3, 'none',
+                   ?4, '', '', 'current_branch',
+                   NULL, NULL, ?4, 'manual',
+                   NULL, ?5, ?6, ?6, ?7, ?8, 0
+                 )",
+                params![
+                    session_id,
+                    issue_id,
+                    session_status_literal(&session_status),
+                    std::env::temp_dir().to_string_lossy().to_string(),
+                    format!("/tmp/redwhisk-session-{session_id}.jsonl"),
+                    started_at,
+                    started_at,
+                    closed_at,
+                ],
+            )
+            .expect("insert session");
+    }
+
+    fn session_status_literal(status: &AgentSessionStatus) -> &'static str {
+        match status {
+            AgentSessionStatus::Running => "running",
+            AgentSessionStatus::Closed => "closed",
+            AgentSessionStatus::Crashed => "crashed",
+            AgentSessionStatus::Stopped => "stopped",
+        }
+    }
+
+    fn session_ids(sessions: &[crate::types::agent_session::AgentSessionListItem]) -> Vec<i64> {
+        sessions.iter().map(|session| session.session_id).collect()
     }
 }

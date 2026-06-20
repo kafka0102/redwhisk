@@ -174,57 +174,21 @@ export function AgentsActivity({
     };
   }, [applySessionListOverlays, projectId]);
 
-  const sessionsByGroup = useMemo(
-    () =>
-      [
-        {
-          key: "inProcess" as const,
-          label: messages.agentsFeature.inProgress,
-          emptyCopy: messages.agentsFeature.noInProgressSessions,
-        },
-        {
-          key: "review" as const,
-          label: messages.agentsFeature.review,
-          emptyCopy: messages.agentsFeature.noReviewSessions,
-        },
-        {
-          key: "done" as const,
-          label: messages.agentsFeature.done,
-          emptyCopy: messages.agentsFeature.noDoneSessions,
-        },
-      ]
-        .map((group) => ({
-          ...group,
-          sessions: sessions.filter(
-            (session) => getSessionIssueGroup(session) === group.key,
-          ),
-        }))
-        .map((group) => ({
-          ...group,
-          count: group.sessions.length,
-        })),
-    [
-      messages.agentsFeature.done,
-      messages.agentsFeature.inProgress,
-      messages.agentsFeature.noDoneSessions,
-      messages.agentsFeature.noInProgressSessions,
-      messages.agentsFeature.noReviewSessions,
-      messages.agentsFeature.review,
-      sessions,
-    ],
+  const visibleSessions = useMemo(
+    () => sessions.filter((session) => getSessionIssueGroup(session) !== null),
+    [sessions],
   );
 
   const currentSessionId =
-    (sessions.some((session) => session.sessionId === selectedSessionId)
+    (visibleSessions.some((session) => session.sessionId === selectedSessionId)
       ? selectedSessionId
       : null) ??
-    sessionsByGroup[0]?.sessions[0]?.sessionId ??
-    sessionsByGroup[1]?.sessions[0]?.sessionId ??
-    sessionsByGroup[2]?.sessions[0]?.sessionId ??
+    visibleSessions[0]?.sessionId ??
     null;
 
   const selectedSession =
-    sessions.find((session) => session.sessionId === currentSessionId) ?? null;
+    visibleSessions.find((session) => session.sessionId === currentSessionId) ??
+    null;
   const linkedIssue: LinkedSessionIssue | null = useMemo(
     () =>
       selectedSession?.issueId != null && selectedSession.issueTitle
@@ -721,12 +685,12 @@ export function AgentsActivity({
     >
       <AgentsSessionList
         errorMessage={errorMessage}
-        groups={sessionsByGroup}
         isLoading={isLoading}
         newSessionButtonRef={newSessionButtonRef}
         onNewSession={openTemporarySessionDialog}
         onSelectSession={handleSelectSession}
         selectedSessionId={selectedSession?.sessionId ?? null}
+        sessions={visibleSessions}
         title={messages.app.agents}
       />
 
