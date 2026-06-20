@@ -235,6 +235,51 @@ describe("messageStreamReducer", () => {
     });
   });
 
+  describe("user_message 去重", () => {
+    it("后端回显按文本替换乐观用户消息", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "OPTIMISTIC_USER_MESSAGE",
+        text: "继续修复",
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "继续修复",
+          messageId: "u1",
+        }),
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].id).toBe("u1");
+      expect(state.entries[0].item).toEqual({
+        type: "user_message",
+        text: "继续修复",
+        messageId: "u1",
+      });
+    });
+
+    it("重复 user_message 回显不会追加多条", () => {
+      let state = createInitialState();
+      const item: AgentTimelineItem = {
+        type: "user_message",
+        text: "重复消息",
+        messageId: "u1",
+      };
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent(item),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent(item, 2),
+      });
+
+      expect(state.entries).toHaveLength(1);
+    });
+  });
+
   describe("reasoning 增量", () => {
     it("无 id 的连续 reasoning 合并为一条，保留最终文本", () => {
       let state = createInitialState();

@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Terminal,
   ChevronDown,
+  ExternalLink,
   FileEdit,
   FilePlus,
   FileSearch,
@@ -249,16 +250,31 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
     case "search":
       return (
         <div className="agents-message__tool-body">
-          <p className="agents-message__search-query">{`搜索：${detail.query}`}</p>
-          {detail.matches.length > 0 ? (
-            <ul className="agents-message__search-matches">
-              {detail.matches.map((match, index) => (
-                <li key={`${index}-${match}`}>
-                  <code>{match}</code>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <details className="agents-message__tool-output">
+            <summary className="agents-message__tool-output-summary">
+              <span>{formatSearchSummary(detail)}</span>
+              <ChevronDown
+                aria-hidden="true"
+                size={13}
+                strokeWidth={1.8}
+                className="agents-message__summary-chevron"
+              />
+            </summary>
+            <div className="agents-message__search-details">
+              <p className="agents-message__search-query">{detail.query}</p>
+              {detail.matches.length > 0 ? (
+                <ul className="agents-message__search-matches">
+                  {detail.matches.map((match, index) => (
+                    <li key={`${index}-${match}`}>
+                      <SearchMatch match={match} />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="agents-message__search-empty">没有返回匹配项</p>
+              )}
+            </div>
+          </details>
         </div>
       );
     case "sub_agent":
@@ -289,6 +305,39 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
         </div>
       );
   }
+}
+
+function SearchMatch({ match }: { match: string }) {
+  const url = extractFirstUrl(match);
+  if (!url) {
+    return <code>{match}</code>;
+  }
+  return (
+    <a
+      className="agents-message__search-link"
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      <ExternalLink aria-hidden="true" size={12} strokeWidth={1.8} />
+      <span>{match}</span>
+    </a>
+  );
+}
+
+function formatSearchSummary(
+  detail: Extract<ToolCallDetail, { type: "search" }>,
+): string {
+  const count = detail.matches.length;
+  if (count === 0) {
+    return "查看搜索内容";
+  }
+  return `查看搜索内容和 ${count} 条结果`;
+}
+
+function extractFirstUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s)]+/);
+  return match?.[0] ?? null;
 }
 
 function formatToolName(name: string, detail: ToolCallDetail): string {

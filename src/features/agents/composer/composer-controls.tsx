@@ -1,7 +1,4 @@
-// composer 控制行（纯展示）：附件图标 + 模型菜单 + Think 菜单 + 发送/取消按钮 + 用量条。
-//
-// 模型与 Think 都用 shadcn Select（base-ui）。Think 只展示 low/medium/high/xhigh，
-// 不提供关闭项。
+// composer 控制行（纯展示）：附件图标 + 模型菜单/只读模型信息 + 发送/取消按钮 + 用量条。
 
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 
@@ -15,7 +12,6 @@ import {
 import type { AgentCapabilities } from "../agent-capabilities";
 import { ComposerContextMeter } from "./composer-context-meter";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
-import type { ComposerEffort } from "./composer-types";
 
 interface ComposerControlsProps {
   capabilities: AgentCapabilities;
@@ -23,10 +19,8 @@ interface ComposerControlsProps {
   selectedModelId: string | null;
   isLoadingModels: boolean;
   modelsError: string | null;
+  isModelReadOnly: boolean;
   onSelectModel: (modelId: string) => void;
-  effort: ComposerEffort;
-  thinkOptions: string[];
-  onSelectEffort: (effort: ComposerEffort) => void;
   isSending: boolean;
   canSend: boolean;
   onAddAttachment: () => void;
@@ -35,23 +29,14 @@ interface ComposerControlsProps {
   usage: AgentUsage | null;
 }
 
-const EFFORT_LABELS: Record<string, string> = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "xhigh",
-};
-
 export function ComposerControls({
   capabilities,
   models,
   selectedModelId,
   isLoadingModels,
   modelsError,
+  isModelReadOnly,
   onSelectModel,
-  effort,
-  thinkOptions,
-  onSelectEffort,
   isSending,
   canSend,
   onAddAttachment,
@@ -60,8 +45,11 @@ export function ComposerControls({
   usage,
 }: ComposerControlsProps) {
   const hasModels = models.length > 0;
-  const showModelSelect = capabilities.supportsModelSwitching;
-  const showThinkSelect = capabilities.supportsReasoningEffort;
+  const showModelSelect =
+    capabilities.supportsModelSwitching && !isModelReadOnly;
+  const showReadOnlyModel =
+    isModelReadOnly || !capabilities.supportsModelSwitching;
+  const modelLabel = selectedModelId ?? fallbackModelLabel(capabilities);
 
   return (
     <div className="agents-composer__controls">
@@ -109,32 +97,14 @@ export function ComposerControls({
             </Select>
           )}
 
-          {showThinkSelect && (
-            <Select
-              value={effort}
-              onValueChange={(value) => {
-                if (typeof value === "string") {
-                  onSelectEffort(value as ComposerEffort);
-                }
-              }}
+          {showReadOnlyModel && modelLabel ? (
+            <span
+              className="agents-composer__model-label"
+              aria-label="当前模型类型"
             >
-              <SelectTrigger
-                id="agent-composer-effort"
-                aria-label="Think 模式"
-                className="agents-composer__select"
-                size="sm"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="start" className="agents-composer__menu">
-                {thinkOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {EFFORT_LABELS[option] ?? option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+              {modelLabel}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -170,4 +140,8 @@ export function ComposerControls({
       </div>
     </div>
   );
+}
+
+function fallbackModelLabel(capabilities: AgentCapabilities): string | null {
+  return capabilities.modelTypeLabel;
 }

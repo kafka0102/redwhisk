@@ -117,6 +117,38 @@ describe("AgentMessageStream", () => {
     expect(container.querySelector("details")).toBeNull();
   });
 
+  it("渲染搜索工具的可展开查询内容和 URL 结果", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "search-1",
+          name: "web_search",
+          detail: {
+            type: "search",
+            query: "Claude 最新模型",
+            mode: "content",
+            matches: [
+              "Anthropic models https://docs.anthropic.com/en/docs/about-claude/models/overview",
+            ],
+          },
+          status: "completed",
+        },
+      ],
+    });
+    render(<AgentMessageStream projectId={1} sessionId={11} />);
+    await waitFor(() => {
+      expect(screen.getByText("Search")).toBeInTheDocument();
+    });
+    expect(screen.getByText("查看搜索内容和 1 条结果")).toBeInTheDocument();
+    expect(screen.getByText("Claude 最新模型")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "https://docs.anthropic.com/en/docs/about-claude/models/overview",
+    );
+  });
+
   it("渲染 todo 清单", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({

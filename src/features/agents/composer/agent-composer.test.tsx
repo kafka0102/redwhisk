@@ -2,7 +2,7 @@
 //
 // 覆盖：空态渲染、输入后发送按钮启用、Enter 发送、Shift+Enter 不发送、
 // running 状态显示取消按钮、用量条渲染、附件 chip 渲染与移除、
-// 模型/Think Select 选项渲染、错误内联显示。
+// 模型 Select 选项渲染、错误内联显示。
 //
 // base-ui Select 的弹出层在 jsdom 中需交互才挂载，故选项渲染测试通过
 // SelectItem 的文本（在 content 内）配合 waitFor 断言；发送/取消等核心交互
@@ -28,7 +28,6 @@ vi.mock("../agent-session-commands", () => ({
   listAgentModels: vi.fn(),
   listAgentModes: vi.fn(),
   setAgentModel: vi.fn(),
-  setAgentThinking: vi.fn(),
   sendAgentMessage: vi.fn(),
   cancelAgentTurn: vi.fn(),
   saveAgentAttachment: vi.fn(),
@@ -37,14 +36,12 @@ vi.mock("../agent-session-commands", () => ({
 const {
   listAgentModels,
   setAgentModel,
-  setAgentThinking,
   sendAgentMessage,
   cancelAgentTurn,
   saveAgentAttachment,
 } = await import("../agent-session-commands");
 const listAgentModelsMock = vi.mocked(listAgentModels);
 const setAgentModelMock = vi.mocked(setAgentModel);
-const setAgentThinkingMock = vi.mocked(setAgentThinking);
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
 const cancelAgentTurnMock = vi.mocked(cancelAgentTurn);
 const saveAgentAttachmentMock = vi.mocked(saveAgentAttachment);
@@ -60,7 +57,6 @@ beforeEach(() => {
   sendAgentMessageMock.mockResolvedValue(undefined);
   cancelAgentTurnMock.mockResolvedValue(undefined);
   setAgentModelMock.mockResolvedValue(undefined);
-  setAgentThinkingMock.mockResolvedValue(undefined);
   saveAgentAttachmentMock.mockImplementation(
     async (input: { sourcePath: string; displayName: string }) => ({
       path: `/data/agent-attachments/1/${input.displayName}`,
@@ -103,10 +99,15 @@ async function renderComposer(
       currentModelId={overrides.currentModelId}
     />,
   );
-  // 等待 listAgentModels effect 落地。
-  await waitFor(() => {
-    expect(listAgentModelsMock).toHaveBeenCalled();
-  });
+  if (
+    (overrides.capabilities ?? getAgentCapabilities("codex"))
+      .supportsModelSwitching
+  ) {
+    // 等待 listAgentModels effect 落地。
+    await waitFor(() => {
+      expect(listAgentModelsMock).toHaveBeenCalled();
+    });
+  }
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
@@ -251,7 +252,7 @@ describe("AgentComposer", () => {
     });
   });
 
-  it("模型加载失败时内联显示错误", async () => {
+  it("模型加载失败时内联显示非运行中以外的错误", async () => {
     listAgentModelsMock.mockRejectedValueOnce(new Error("后端不可达"));
     await renderComposer();
     await waitFor(() => {
@@ -259,24 +260,40 @@ describe("AgentComposer", () => {
     });
   });
 
-  it("渲染无可见标签的模型和 Think 选择器", async () => {
+  it("模型来源为历史非运行中 session 时不显示错误，改为只读模型信息", async () => {
+    listAgentModelsMock.mockRejectedValueOnce(
+      new Error("当前 Session 没有运行中的结构化会话。"),
+    );
+    await renderComposer();
+    await waitFor(() => {
+      expect(listAgentModelsMock).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryByText(/模型加载失败：当前 Session 没有运行中的结构化会话/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前模型类型")).toHaveTextContent("Codex");
+  });
+
+  it("渲染无可见标签的模型选择器，不渲染 Think 选择器", async () => {
     await renderComposer();
     expect(
       screen.getByRole("combobox", { name: "选择模型" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Think 模式" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("combobox", { name: "Think 模式" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
   });
 
-  it("capabilities 关闭模型与 Think 时不渲染对应 Select（claude 等无能力 agent）", async () => {
+  it("capabilities 关闭模型与 Think 时不请求模型列表，显示只读 Claude 类型", async () => {
     await renderComposer({
       capabilities: getAgentCapabilities("claude"),
     });
+    expect(listAgentModelsMock).not.toHaveBeenCalled();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前模型类型")).toHaveTextContent("Claude");
     // 发送按钮仍渲染。
     expect(
       screen.getByRole("button", { name: "发送消息" }),

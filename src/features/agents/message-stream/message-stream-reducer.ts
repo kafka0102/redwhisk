@@ -10,7 +10,8 @@
 //   reasoning 则替换，否则 append），保证只剩最终完整推理。
 // - tool_call：按 callId upsert；item/started→running，item/completed→终态。
 // - todo：codex plan 渐进更新 → 若尾项是 todo 则替换，否则 append。
-// - user_message / error / compaction：直接 append。
+// - user_message：按 messageId 或文本合并乐观消息与后端回显。
+// - error / compaction：直接 append。
 //
 // reducer 为纯函数，不依赖 React，便于单测。
 
@@ -74,8 +75,7 @@ export function messageStreamReducer(
 
     case "OPTIMISTIC_USER_MESSAGE": {
       // 乐观插入用户消息：发送成功后立即展示，不等后端 timeline 回显。
-      // 用临时 id（optimistic- 前缀）避免与后端回显条目（messageId 无前缀）冲突；
-      // 后端回显到达后会作为新条目 append，首版接受短暂重复。
+      // 后端回显到达后通过文本匹配替换该乐观条目，避免重复展示。
       const localId = nextLocalId(state.entries);
       const item: AgentTimelineItem = {
         type: "user_message",
@@ -212,6 +212,54 @@ function applyTimelineItem(
       return [...entries, toEntry(item, nextLocalId(entries))];
     }
 
+    case "user_message": {
+      const messageId = item.messageId;
+      if (messageId) {
+        const index = findLastIndex(
+          entries,
+          (entry) => entry.kind === "user_message" && entry.id === messageId,
+        );
+        if (index >= 0) {
+          return replaceAt(entries, index, {
+            id: messageId,
+            kind: item.type,
+            item,
+          });
+        }
+      }
+
+      const optimisticIndex = findLastIndex(
+        entries,
+        (entry) =>
+          entry.kind === "user_message" &&
+          entry.id.startsWith("optimistic-") &&
+          entry.item.type === "user_message" &&
+          normalizeMessageText(entry.item.text) ===
+            normalizeMessageText(item.text),
+      );
+      if (optimisticIndex >= 0) {
+        return replaceAt(entries, optimisticIndex, {
+          id: messageId ?? entries[optimisticIndex].id,
+          kind: item.type,
+          item,
+        });
+      }
+
+      const duplicateIndex = findLastIndex(
+        entries,
+        (entry) =>
+          entry.kind === "user_message" &&
+          entry.item.type === "user_message" &&
+          normalizeMessageText(entry.item.text) ===
+            normalizeMessageText(item.text),
+      );
+      if (duplicateIndex >= 0) {
+        return entries;
+      }
+
+      return [...entries, toEntry(item, nextLocalId(entries))];
+    }
+
     case "reasoning": {
       // 后端每次发完整最新文本且无 id：合并到上一条 reasoning。
       const lastIndex = entries.length - 1;
@@ -252,7 +300,6 @@ function applyTimelineItem(
       return [...entries, toEntry(item, nextLocalId(entries))];
     }
 
-    case "user_message":
     case "error":
     case "compaction":
       return [...entries, toEntry(item, nextLocalId(entries))];
@@ -342,6 +389,10 @@ function deriveEntryId(item: AgentTimelineItem, localId: number): string {
     default:
       return `local-${localId}`;
   }
+}
+
+function normalizeMessageText(text: string): string {
+  return text.trim().replace(/\r\n/g, "\n");
 }
 
 /** 生成下一个 local 自增序号（基于现有 entries 数量）。 */

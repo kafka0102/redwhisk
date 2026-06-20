@@ -10,7 +10,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TurnStatus } from "../message-stream/message-stream-types";
 import { useAgentComposer } from "./use-agent-composer";
 import type { UseAgentComposerResult } from "./use-agent-composer";
-import type { ComposerEffort } from "./composer-types";
 
 const dialogMocks = vi.hoisted(() => ({
   open: vi.fn(),
@@ -24,25 +23,18 @@ vi.mock("../agent-session-commands", () => ({
   sendAgentMessage: vi.fn(),
   cancelAgentTurn: vi.fn(),
   saveAgentAttachment: vi.fn(),
-  setAgentThinking: vi.fn(),
 }));
 
-const {
-  sendAgentMessage,
-  cancelAgentTurn,
-  saveAgentAttachment,
-  setAgentThinking,
-} = await import("../agent-session-commands");
+const { sendAgentMessage, cancelAgentTurn, saveAgentAttachment } =
+  await import("../agent-session-commands");
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
 const cancelAgentTurnMock = vi.mocked(cancelAgentTurn);
 const saveAgentAttachmentMock = vi.mocked(saveAgentAttachment);
-const setAgentThinkingMock = vi.mocked(setAgentThinking);
 
 interface ProbeProps {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
-  currentEffort?: ComposerEffort | null;
   onMessageSent?: (message: string) => void;
   onState: (state: UseAgentComposerResult) => void;
 }
@@ -51,7 +43,6 @@ function Probe({
   projectId,
   sessionId,
   turnStatus,
-  currentEffort,
   onMessageSent,
   onState,
 }: ProbeProps) {
@@ -59,7 +50,6 @@ function Probe({
     projectId,
     sessionId,
     turnStatus,
-    currentEffort,
     onMessageSent,
   });
   onState(state);
@@ -70,9 +60,7 @@ type ProbeInput = Omit<ProbeProps, "onState">;
 
 async function renderProbe(props: ProbeInput): Promise<{
   getState: () => UseAgentComposerResult | null;
-  rerenderWith: (
-    next: Partial<Pick<ProbeProps, "turnStatus" | "currentEffort">>,
-  ) => void;
+  rerenderWith: (next: Partial<Pick<ProbeProps, "turnStatus">>) => void;
 }> {
   let latest: UseAgentComposerResult | null = null;
   const captureState = (state: UseAgentComposerResult) => {
@@ -83,7 +71,6 @@ async function renderProbe(props: ProbeInput): Promise<{
       projectId={props.projectId}
       sessionId={props.sessionId}
       turnStatus={props.turnStatus}
-      currentEffort={props.currentEffort}
       onMessageSent={props.onMessageSent}
       onState={captureState}
     />,
@@ -93,19 +80,12 @@ async function renderProbe(props: ProbeInput): Promise<{
   });
   return {
     getState: () => latest,
-    rerenderWith: (
-      next: Partial<Pick<ProbeProps, "turnStatus" | "currentEffort">>,
-    ) => {
+    rerenderWith: (next: Partial<Pick<ProbeProps, "turnStatus">>) => {
       result.rerender(
         <Probe
           projectId={props.projectId}
           sessionId={props.sessionId}
           turnStatus={next.turnStatus ?? props.turnStatus}
-          currentEffort={
-            Object.prototype.hasOwnProperty.call(next, "currentEffort")
-              ? next.currentEffort
-              : props.currentEffort
-          }
           onMessageSent={props.onMessageSent}
           onState={captureState}
         />,
@@ -126,7 +106,6 @@ beforeEach(() => {
       kind: "text",
     }),
   );
-  setAgentThinkingMock.mockResolvedValue(undefined);
 });
 
 describe("useAgentComposer", () => {
@@ -354,47 +333,6 @@ describe("useAgentComposer", () => {
     expect(getState()!.attachments).toHaveLength(0);
   });
 
-  it("默认 Think 为 medium", async () => {
-    const { getState } = await renderProbe({
-      projectId: 1,
-      sessionId: 10,
-      turnStatus: "idle",
-    });
-    expect(getState()!.effort).toBe("medium");
-  });
-
-  it("handleSetEffort(high) 调用 setAgentThinking 且 effort=high", async () => {
-    const { getState } = await renderProbe({
-      projectId: 1,
-      sessionId: 10,
-      turnStatus: "idle",
-    });
-    await act(async () => {
-      await getState()!.handleSetEffort("high");
-    });
-    expect(setAgentThinkingMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 10,
-      effort: "high",
-    });
-    expect(getState()!.effort).toBe("high");
-  });
-
-  it("setAgentThinking 失败：回滚 effort 并设 submitError", async () => {
-    setAgentThinkingMock.mockRejectedValueOnce(new Error("不支持"));
-    const { getState } = await renderProbe({
-      projectId: 1,
-      sessionId: 10,
-      turnStatus: "idle",
-    });
-    await act(async () => {
-      getState()!.handleSetEffort("low");
-    });
-    // 初始 effort 为 medium，失败后回滚到 medium。
-    expect(getState()!.effort).toBe("medium");
-    expect(getState()!.submitError).toBe("不支持");
-  });
-
   it("rerender turnStatus 后 isSending 跟随更新", async () => {
     const { getState, rerenderWith } = await renderProbe({
       projectId: 1,
@@ -405,22 +343,6 @@ describe("useAgentComposer", () => {
     rerenderWith({ turnStatus: "running" });
     await waitFor(() => {
       expect(getState()!.isSending).toBe(true);
-    });
-  });
-
-  it("rerender currentEffort 后 effort 跟随父级状态更新", async () => {
-    const { getState, rerenderWith } = await renderProbe({
-      projectId: 1,
-      sessionId: 10,
-      turnStatus: "idle",
-      currentEffort: null,
-    });
-    expect(getState()!.effort).toBe("medium");
-
-    rerenderWith({ currentEffort: "medium" });
-
-    await waitFor(() => {
-      expect(getState()!.effort).toBe("medium");
     });
   });
 });

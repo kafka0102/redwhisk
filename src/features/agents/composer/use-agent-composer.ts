@@ -1,5 +1,5 @@
-// composer 核心 hook：管理文本、附件、Think effort、提交错误，并暴露
-// 提交/取消/附件增删/effort 切换动作。
+// composer 核心 hook：管理文本、附件、提交错误，并暴露
+// 提交/取消/附件增删动作。
 //
 // `isSending` 直接派生自父组件下传的 `turnStatus === "running"`，不本地维护，
 // 避免与 message-stream 形成双数据源。
@@ -11,26 +11,24 @@
 // 提交时收集 status === "saved" 的附件，映射为 `{ path, displayName, kind }`
 // 随消息一起发送；status === "saving" 的附件会阻止提交并提示用户等待。
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
   cancelAgentTurn,
   saveAgentAttachment,
   sendAgentMessage,
-  setAgentThinking,
 } from "../agent-session-commands";
 import type { AgentMessageAttachment } from "../agent-session-commands";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import { toCommandError } from "../../../shared/commands/command-error";
-import type { ComposerAttachment, ComposerEffort } from "./composer-types";
+import type { ComposerAttachment } from "./composer-types";
 import type { TurnStatus } from "../message-stream/message-stream-types";
 
 interface UseAgentComposerArgs {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
-  currentEffort?: ComposerEffort | null;
   onMessageSent?: (message: string) => void;
 }
 
@@ -38,7 +36,6 @@ export interface UseAgentComposerResult {
   text: string;
   setText: (value: string) => void;
   attachments: ComposerAttachment[];
-  effort: ComposerEffort;
   submitError: string | null;
   /** 派生自 turnStatus，供组件切换发送/取消按钮。 */
   isSending: boolean;
@@ -50,11 +47,7 @@ export interface UseAgentComposerResult {
   handleAddAttachment: () => Promise<void>;
   /** 移除指定 id 的附件草稿。 */
   handleRemoveAttachment: (id: string) => void;
-  /** 切换 Think effort。 */
-  handleSetEffort: (effort: ComposerEffort) => Promise<void>;
 }
-
-const DEFAULT_EFFORT: ComposerEffort = "medium";
 
 /** 生成简单的本地唯一 id（避免引入 uuid 依赖）。 */
 function createLocalId(): string {
@@ -97,21 +90,13 @@ export function useAgentComposer({
   projectId,
   sessionId,
   turnStatus,
-  currentEffort,
   onMessageSent,
 }: UseAgentComposerArgs): UseAgentComposerResult {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const [effort, setEffort] = useState<ComposerEffort>(
-    currentEffort ?? DEFAULT_EFFORT,
-  );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isSending = turnStatus === "running";
-
-  useEffect(() => {
-    setEffort(currentEffort ?? DEFAULT_EFFORT);
-  }, [currentEffort]);
 
   const handleSubmit = useCallback(async () => {
     const message = text.trim();
@@ -215,36 +200,15 @@ export function useAgentComposer({
     );
   }, []);
 
-  const handleSetEffort = useCallback(
-    async (nextEffort: ComposerEffort) => {
-      const previous = effort;
-      setEffort(nextEffort);
-      setSubmitError(null);
-      try {
-        await setAgentThinking({
-          projectId,
-          sessionId,
-          effort: nextEffort,
-        });
-      } catch (error) {
-        setEffort(previous);
-        setSubmitError(toCommandError(error).message);
-      }
-    },
-    [effort, projectId, sessionId],
-  );
-
   return {
     text,
     setText,
     attachments,
-    effort,
     submitError,
     isSending,
     handleSubmit,
     handleCancel,
     handleAddAttachment,
     handleRemoveAttachment,
-    handleSetEffort,
   };
 }

@@ -23,6 +23,7 @@ interface UseAgentModelsArgs {
   projectId: number;
   sessionId: number;
   currentModelId?: string | null;
+  enabled: boolean;
 }
 
 export interface UseAgentModelsResult {
@@ -30,6 +31,7 @@ export interface UseAgentModelsResult {
   selectedModelId: string | null;
   isLoading: boolean;
   error: string | null;
+  isReadOnly: boolean;
   /** 切换模型：调 setAgentModel；后端经事件回传后 Select 自动跟随。 */
   selectModel: (modelId: string) => Promise<void>;
 }
@@ -47,18 +49,28 @@ export function useAgentModels({
   projectId,
   sessionId,
   currentModelId,
+  enabled,
 }: UseAgentModelsArgs): UseAgentModelsResult {
   const [models, setModels] = useState<AgentModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   // 拉取模型列表。sessionId 切换时重新加载。
   useEffect(() => {
     let isDisposed = false;
 
     async function loadModels() {
+      if (!enabled) {
+        setModels([]);
+        setError(null);
+        setIsLoading(false);
+        setIsReadOnly(true);
+        return;
+      }
       setIsLoading(true);
       setError(null);
+      setIsReadOnly(false);
       try {
         const { models: nextModels } = await listAgentModels({
           projectId,
@@ -72,7 +84,14 @@ export function useAgentModels({
         if (isDisposed) {
           return;
         }
-        setError(toCommandError(loadError).message);
+        const message = toCommandError(loadError).message;
+        if (isNotRunningModelSourceError(message)) {
+          setModels([]);
+          setError(null);
+          setIsReadOnly(true);
+          return;
+        }
+        setError(message);
       } finally {
         if (!isDisposed) {
           setIsLoading(false);
@@ -85,7 +104,7 @@ export function useAgentModels({
     return () => {
       isDisposed = true;
     };
-  }, [projectId, sessionId]);
+  }, [enabled, projectId, sessionId]);
 
   // 选中值优先级：数据源 currentModelId > 列表默认。纯渲染期派生，无 setState。
   const selectedModelId = currentModelId ?? deriveDefaultModelId(models);
@@ -108,6 +127,14 @@ export function useAgentModels({
     selectedModelId,
     isLoading,
     error,
+    isReadOnly,
     selectModel,
   };
+}
+
+function isNotRunningModelSourceError(message: string): boolean {
+  return (
+    message.includes("没有运行中的结构化会话") ||
+    message.includes("not running")
+  );
 }

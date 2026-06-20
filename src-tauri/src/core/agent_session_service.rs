@@ -2348,14 +2348,20 @@ fn read_structured_timeline_log(
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(envelope) = serde_json::from_str::<AgentStreamEventEnvelope>(trimmed) else {
+        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+            if saw_structured_line {
+                continue;
+            }
+            return Ok(None);
+        };
+        let Some(item) = timeline_item_from_log_value(value) else {
             if saw_structured_line {
                 continue;
             }
             return Ok(None);
         };
         saw_structured_line = true;
-        if let AgentStreamEvent::Timeline { item, .. } = envelope.event {
+        if let Some(item) = item {
             items.push(item);
         }
     }
@@ -2365,6 +2371,25 @@ fn read_structured_timeline_log(
     } else {
         Ok(None)
     }
+}
+
+fn timeline_item_from_log_value(value: Value) -> Option<Option<AgentTimelineItem>> {
+    if let Ok(envelope) = serde_json::from_value::<AgentStreamEventEnvelope>(value.clone()) {
+        return Some(match envelope.event {
+            AgentStreamEvent::Timeline { item, .. } => Some(item),
+            _ => None,
+        });
+    }
+
+    let event = value.get("event")?;
+    let event_type = event.get("type").and_then(Value::as_str)?;
+    if event_type != "timeline" {
+        return Some(None);
+    }
+    let item_value = event.get("item")?.clone();
+    serde_json::from_value::<AgentTimelineItem>(item_value)
+        .ok()
+        .map(Some)
 }
 
 fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, CommandError> {
@@ -2846,6 +2871,42 @@ mod tests {
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("历史回答")
+        );
+    }
+
+    #[test]
+    fn read_timeline_from_legacy_structured_log_does_not_render_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("legacy-structured.jsonl");
+        fs::write(
+            &log_path,
+            concat!(
+                "{\"projectId\":1,\"sessionId\":26,\"seq\":1,\"epoch\":\"epoch-unknown\",\"event\":{\"type\":\"thread_started\",\"threadId\":\"019ee3cc\"}}\n",
+                "{\"projectId\":1,\"sessionId\":26,\"seq\":2,\"epoch\":\"epoch-unknown\",\"event\":{\"type\":\"timeline\",\"item\":{\"type\":\"user_message\",\"text\":\"北京今天天气如何？\",\"messageId\":\"u1\"},\"turnId\":\"t1\"}}\n",
+                "{\"projectId\":1,\"sessionId\":26,\"seq\":3,\"epoch\":\"epoch-unknown\",\"event\":{\"type\":\"timeline\",\"item\":{\"type\":\"assistant_message\",\"text\":\"我会查询北京天气。\",\"messageId\":\"a1\"},\"turnId\":\"t1\"}}\n"
+            ),
+        )
+        .expect("write legacy structured log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let items = read_timeline_from_session_log(&session).expect("read timeline");
+
+        assert_eq!(
+            items,
+            vec![
+                AgentTimelineItem::UserMessage {
+                    text: "北京今天天气如何？".to_string(),
+                    message_id: Some("u1".to_string()),
+                },
+                AgentTimelineItem::AssistantMessage {
+                    text: "我会查询北京天气。".to_string(),
+                    message_id: Some("a1".to_string()),
+                },
+            ]
+        );
+        assert_eq!(
+            latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
+            Some("我会查询北京天气。")
         );
     }
 
