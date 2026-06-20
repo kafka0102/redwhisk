@@ -20,8 +20,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use super::client::{
-    CodexAppServerClient, InitializeParams, PermissionDecision, SandboxPolicy, TurnInput,
-    TurnStartParams,
+    text_user_input, CodexAppServerClient, InitializeParams, PermissionDecision, SandboxPolicy,
+    TurnInput, TurnStartParams,
 };
 use super::notification::{parse_notification, CodexNotification};
 use super::thread_item::{extract_usage, map_thread_item};
@@ -450,12 +450,12 @@ fn build_turn_input(text: String, attachments: &[AgentMessageAttachment]) -> Tur
     if attachments.is_empty() {
         return TurnInput::Text(text);
     }
-    let mut blocks = vec![json!({ "type": "text", "text": text })];
+    let mut blocks = vec![text_user_input(&text)];
     for attachment in attachments {
-        blocks.push(json!({
-            "type": "text",
-            "text": format!("[附件] {}: {}", attachment.display_name, attachment.path),
-        }));
+        blocks.push(text_user_input(&format!(
+            "[附件] {}: {}",
+            attachment.display_name, attachment.path
+        )));
     }
     TurnInput::Blocks(blocks)
 }
@@ -466,8 +466,7 @@ impl AgentSessionHandle for CodexSessionHandle {
         text: String,
         attachments: Vec<AgentMessageAttachment>,
     ) -> Result<(), AgentSessionError> {
-        CodexSessionHandle::send_message(self, text, attachments)
-            .map_err(AgentSessionError::from)
+        CodexSessionHandle::send_message(self, text, attachments).map_err(AgentSessionError::from)
     }
 
     fn cancel_turn(&self) -> Result<(), AgentSessionError> {
@@ -492,9 +491,8 @@ impl AgentSessionHandle for CodexSessionHandle {
     }
 
     fn set_mode(&self, mode_id: &str) -> Result<(), AgentSessionError> {
-        let mode = CodexMode::from_id(mode_id).ok_or_else(|| {
-            AgentSessionError::UnsupportedMode(mode_id.to_string())
-        })?;
+        let mode = CodexMode::from_id(mode_id)
+            .ok_or_else(|| AgentSessionError::UnsupportedMode(mode_id.to_string()))?;
         CodexSessionHandle::set_mode(self, mode).map_err(AgentSessionError::from)
     }
 
@@ -1096,10 +1094,14 @@ mod tests {
     #[test]
     fn build_turn_input_text_when_no_attachments() {
         let input = build_turn_input("hello".into(), &[]);
-        match input {
+        match &input {
             TurnInput::Text(text) => assert_eq!(text, "hello"),
             other => panic!("期望 TurnInput::Text，实际 {other:?}"),
         }
+        assert_eq!(
+            input.to_json(),
+            json!([{ "type": "text", "text": "hello", "text_elements": [] }])
+        );
     }
 
     #[test]
@@ -1118,19 +1120,23 @@ mod tests {
             },
         ];
         let input = build_turn_input("请看附件".into(), &attachments);
-        let blocks = match input {
+        let blocks = match &input {
             TurnInput::Blocks(blocks) => blocks,
             other => panic!("期望 TurnInput::Blocks，实际 {other:?}"),
         };
         assert_eq!(blocks.len(), 3);
-        assert_eq!(blocks[0], json!({ "type": "text", "text": "请看附件" }));
+        assert_eq!(
+            blocks[0],
+            json!({ "type": "text", "text": "请看附件", "text_elements": [] })
+        );
         assert_eq!(
             blocks[1],
-            json!({ "type": "text", "text": "[附件] a.png: /data/a.png" })
+            json!({ "type": "text", "text": "[附件] a.png: /data/a.png", "text_elements": [] })
         );
         assert_eq!(
             blocks[2],
-            json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf" })
+            json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf", "text_elements": [] })
         );
+        assert_eq!(input.to_json(), Value::Array(blocks.to_vec()));
     }
 }

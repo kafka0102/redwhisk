@@ -65,10 +65,18 @@ pub enum TurnInput {
 impl TurnInput {
     pub fn to_json(&self) -> Value {
         match self {
-            TurnInput::Text(text) => Value::String(text.clone()),
+            TurnInput::Text(text) => Value::Array(vec![text_user_input(text)]),
             TurnInput::Blocks(blocks) => Value::Array(blocks.clone()),
         }
     }
+}
+
+pub fn text_user_input(text: &str) -> Value {
+    json!({
+        "type": "text",
+        "text": text,
+        "text_elements": [],
+    })
 }
 
 /// codex sandbox 策略。对应 paseo `toSandboxPolicy` 的三种 type。
@@ -356,9 +364,12 @@ mod tests {
     }
 
     #[test]
-    fn turn_input_text_to_json_is_string() {
+    fn turn_input_text_to_json_is_user_input_array() {
         let json = TurnInput::Text("hello".into()).to_json();
-        assert_eq!(json, Value::String("hello".into()));
+        assert_eq!(
+            json,
+            json!([{ "type": "text", "text": "hello", "text_elements": [] }])
+        );
     }
 
     #[test]
