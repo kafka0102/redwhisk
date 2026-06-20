@@ -6,10 +6,10 @@
 // 规范遵循（agent-development-rules.md）：
 // - L188：composer 是 Codex Session View 底部固定输入框
 // - L196：Enter 提交消息，Shift+Enter 换行
-// - L213：模型/Think 前端只发 command
+// - L213：模型前端只发 command；不可用时只展示只读模型信息
 // - L214：上下文窗口用量来自 usage_updated 事件 → props.usage
 
-import { useMemo, type KeyboardEvent } from "react";
+import { type KeyboardEvent } from "react";
 
 import { Textarea } from "@/components/ui";
 import { useAgentComposer } from "./use-agent-composer";
@@ -20,7 +20,6 @@ import type { AgentComposerProps } from "./composer-types";
 
 /** textarea 最大高度（px），超过后内部滚动而非无限撑高。 */
 const TEXTAREA_MAX_HEIGHT_PX = 160;
-const THINK_OPTIONS = ["low", "medium", "high", "xhigh"] as const;
 
 export function AgentComposer({
   projectId,
@@ -29,7 +28,6 @@ export function AgentComposer({
   turnStatus,
   usage,
   currentModelId,
-  currentEffort,
   onMessageSent,
 }: AgentComposerProps) {
   const {
@@ -37,33 +35,31 @@ export function AgentComposer({
     selectedModelId,
     isLoading: isLoadingModels,
     error: modelsError,
+    isReadOnly: isModelReadOnly,
     selectModel,
-  } = useAgentModels({ projectId, sessionId, currentModelId });
+  } = useAgentModels({
+    projectId,
+    sessionId,
+    currentModelId,
+    enabled: capabilities.supportsModelSwitching,
+  });
 
   const {
     text,
     setText,
     attachments,
-    effort,
     submitError,
     isSending,
     handleSubmit,
     handleCancel,
     handleAddAttachment,
     handleRemoveAttachment,
-    handleSetEffort,
   } = useAgentComposer({
     projectId,
     sessionId,
     turnStatus,
-    currentEffort,
     onMessageSent,
   });
-
-  // UI 固定展示四档 Think 模式，不提供 off。
-  const thinkOptions = useMemo(() => {
-    return [...THINK_OPTIONS];
-  }, []);
 
   const canSend = text.trim() !== "" && !isSending;
 
@@ -123,13 +119,9 @@ export function AgentComposer({
         selectedModelId={selectedModelId}
         isLoadingModels={isLoadingModels}
         modelsError={modelsError}
+        isModelReadOnly={isModelReadOnly}
         onSelectModel={(modelId) => {
           void selectModel(modelId);
-        }}
-        effort={effort}
-        thinkOptions={thinkOptions}
-        onSelectEffort={(nextEffort) => {
-          void handleSetEffort(nextEffort);
         }}
         isSending={isSending}
         canSend={canSend}

@@ -30,15 +30,12 @@ export interface ComposerAttachment {
   error?: string;
 }
 
-/** Think 模式（reasoning effort）取值；Composer UI 不提供关闭项。 */
-export type ComposerEffort = "low" | "medium" | "high" | "xhigh";
-
 /** AgentComposer 顶层组件的 props。 */
 export interface AgentComposerProps {
   projectId: number;
   sessionId: number;
   /**
-   * 当前 agent 的能力声明，决定模型 / Think / 模式等控件是否渲染。
+   * 当前 agent 的能力声明，决定模型等控件是否渲染。
    * 父组件按 session 的 agentType 经 `getAgentCapabilities` 取得。
    */
   capabilities: AgentCapabilities;
@@ -51,10 +48,6 @@ export interface AgentComposerProps {
    * 父组件在 message-stream 收到 `model_changed` 事件时下传新值。
    */
   currentModelId?: string | null;
-  /**
-   * 当前 Think effort。无独立事件流，可选初始化（任务 6 可由父组件持久化）。
-   */
-  currentEffort?: ComposerEffort | null;
   /**
    * 可选：发送成功回调，供父组件做乐观用户消息合并（任务 6 用）。
    */

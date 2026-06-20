@@ -7,6 +7,8 @@
 import type { AgentType } from "./agent-session-commands";
 
 export interface AgentCapabilities {
+  /** 当前 agent/provider 的只读模型类型标签。 */
+  modelTypeLabel: string;
   /** 是否支持运行时切换模型。 */
   supportsModelSwitching: boolean;
   /** 是否支持 reasoning effort（Think 模式）。 */
@@ -17,16 +19,19 @@ export interface AgentCapabilities {
 
 const AGENT_CAPABILITIES: Record<AgentType, AgentCapabilities> = {
   codex: {
+    modelTypeLabel: "Codex",
     supportsModelSwitching: true,
-    supportsReasoningEffort: true,
+    supportsReasoningEffort: false,
     supportsModes: true,
   },
   claude: {
+    modelTypeLabel: "Claude",
     supportsModelSwitching: false,
     supportsReasoningEffort: false,
     supportsModes: false,
   },
   claude_code: {
+    modelTypeLabel: "Claude",
     supportsModelSwitching: false,
     supportsReasoningEffort: false,
     supportsModes: false,
