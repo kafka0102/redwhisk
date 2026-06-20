@@ -4,13 +4,13 @@
 //! `AgentStreamEvent`。命名遵循项目约定：struct 使用 `camelCase`，事件与
 //! 状态 enum 使用 `snake_case`。前端只消费这些结构，不发起业务写入。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// 顶层结构化事件，对应 `agent-session-stream-event` 广播载荷中的 `event` 字段。
 ///
 /// 设计参考 paseo 的 `AgentStreamEvent`：把 codex app-server 的 notification
 /// 归一化为按 `type` 区分的 union，前端用 `switch` 分发渲染。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     rename_all = "snake_case",
     rename_all_fields = "camelCase",
@@ -68,7 +68,7 @@ pub enum AgentStreamEvent {
 ///
 /// `tool_call` 通过 `detail` 二次分发到具体工具类型（shell / edit / search 等），
 /// 让每种工具都有定制 UI 而非裸 stdout。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     rename_all = "snake_case",
     rename_all_fields = "camelCase",
@@ -110,7 +110,7 @@ pub enum AgentTimelineItem {
 /// 工具调用详情，首版实现 codex 用得到的子集。
 ///
 /// `unknown` 作为兜底，保留原始 input/output 便于诊断。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     rename_all = "snake_case",
     rename_all_fields = "camelCase",
@@ -160,7 +160,7 @@ pub enum ToolCallDetail {
 }
 
 /// 工具调用生命周期状态。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
     Running,
@@ -170,7 +170,7 @@ pub enum ToolCallStatus {
 }
 
 /// 搜索模式，对应 paseo search detail 的 `mode`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchMode {
     Content,
@@ -179,7 +179,7 @@ pub enum SearchMode {
 }
 
 /// 上下文压缩状态。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompactionStatus {
     Loading,
@@ -187,7 +187,7 @@ pub enum CompactionStatus {
 }
 
 /// todo 项。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoItem {
     pub text: String,
@@ -198,7 +198,7 @@ pub struct TodoItem {
 ///
 /// 来自 codex `thread/tokenUsage/updated` 通知：`contextWindowMaxTokens`
 /// 取 `model_context_window`，`contextWindowUsedTokens` 取 `last.total_tokens`。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUsage {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -212,7 +212,7 @@ pub struct AgentUsage {
 }
 
 /// 权限请求，对应 app-server 的 server→client request。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentPermissionRequest {
     pub id: String,
@@ -227,7 +227,7 @@ pub struct AgentPermissionRequest {
 }
 
 /// 权限请求种类。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionKind {
     Tool,
@@ -238,7 +238,7 @@ pub enum PermissionKind {
 }
 
 /// 权限请求的可选动作。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentPermissionAction {
     pub id: String,
@@ -247,7 +247,7 @@ pub struct AgentPermissionAction {
 }
 
 /// 权限动作行为。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionBehavior {
     Allow,
@@ -255,7 +255,7 @@ pub enum PermissionBehavior {
 }
 
 /// 协作模式（plan / code 等）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMode {
     pub mode_id: String,
@@ -264,7 +264,7 @@ pub struct AgentMode {
 }
 
 /// 可选模型。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentModel {
     pub model_id: String,
@@ -281,7 +281,7 @@ pub struct AgentModel {
 ///
 /// `seq` 为单 session 内单调递增的事件序号；`epoch` 在 session 重建时更换，
 /// 供前端做游标续传与历史回放对齐。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentStreamEventEnvelope {
     pub project_id: i64,

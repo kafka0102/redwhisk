@@ -14,11 +14,11 @@ use rusqlite::{params, Transaction};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
-use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
-use crate::agent::session_registry::AgentSessionRegistry;
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
+use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+use crate::agent::session_registry::AgentSessionRegistry;
 use crate::core::issue_service::IssueService;
 use crate::db::agent_profile_repository::{AgentProfileRepository, AgentProfileRow};
 use crate::db::agent_session_repository::AgentSessionRepository;
@@ -35,12 +35,15 @@ use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentSessionTerminalResult,
-    ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
+    ReadAgentTimelineResult, ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
     RestoreAgentSessionTerminalResult, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
     StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
     StartStructuredAgentSessionInput, StartStructuredAgentSessionResult, WorkspaceMode,
     WriteAgentSessionTerminalInput,
+};
+use crate::types::agent_session_stream::{
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -56,6 +59,8 @@ const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
 const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
 const ATTENTION_SNAPSHOT_MAX_BYTES: usize = 32_768;
+const TIMELINE_LOG_SNAPSHOT_MAX_BYTES: usize = 262_144;
+const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 
 struct SessionLaunchContext {
     profile: AgentProfileRow,
@@ -744,6 +749,9 @@ impl<'connection> AgentSessionService<'connection> {
             .into_iter()
             .chain(completed_sessions)
             .map(|row| {
+                let latest_output = row
+                    .latest_output
+                    .or_else(|| latest_output_from_session_log(&row.log_path));
                 let can_complete_clean = can_complete_clean_for_project
                     && row.status == crate::types::agent_session::AgentSessionStatus::Running
                     && row.issue_status == Some(IssueStatus::Review);
@@ -764,7 +772,7 @@ impl<'connection> AgentSessionService<'connection> {
                     status: row.status,
                     attention: row.attention,
                     log_path: row.log_path,
-                    latest_output: row.latest_output,
+                    latest_output,
                     last_active_at: row.last_active_at,
                     started_at: row.started_at,
                     closed_at: row.closed_at,
@@ -1124,6 +1132,26 @@ impl<'connection> AgentSessionService<'connection> {
     ) -> Result<crate::types::agent_session::AgentSessionRecord, CommandError> {
         self.find_project_session(project_id, session_id)
     }
+
+    pub fn read_agent_timeline(
+        &self,
+        project_id: i64,
+        session_id: i64,
+        handle: Option<Arc<dyn AgentSessionHandle>>,
+    ) -> Result<ReadAgentTimelineResult, CommandError> {
+        let session = self.find_project_session(project_id, session_id)?;
+
+        if let Some(handle) = handle {
+            match handle.read_timeline() {
+                Ok(items) => return Ok(ReadAgentTimelineResult { items }),
+                Err(AgentSessionError::NotRunning(_)) => {}
+                Err(error) => return Err(agent_session_error_to_command_error(error)),
+            }
+        }
+
+        let items = read_timeline_from_session_log(&session)?;
+        Ok(ReadAgentTimelineResult { items })
+    }
 }
 
 fn project_completion_capabilities(
@@ -1212,11 +1240,17 @@ impl AgentSessionService<'_> {
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
         );
-        service.start_structured_agent_session(input, agent_registry, broadcaster)
+        service.start_structured_agent_session(
+            data_dir.as_ref(),
+            input,
+            agent_registry,
+            broadcaster,
+        )
     }
 
     fn start_structured_agent_session(
         &self,
+        data_dir: &Path,
         input: StartStructuredAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
@@ -1238,6 +1272,7 @@ impl AgentSessionService<'_> {
             .map(validate_session_title)
             .transpose()?;
         let started_at = current_epoch_millis()?;
+        let log_path = build_structured_log_path(data_dir, input.project_id, started_at)?;
 
         // 落 session 行。结构化会话没有 PTY 概念，PTY 专用字段填占位空串
         // 以满足 NOT NULL；codex_session_id 在 handle.start 成功后回填。
@@ -1252,6 +1287,7 @@ impl AgentSessionService<'_> {
                 input.project_id,
                 title.as_deref(),
                 &cwd,
+                &log_path,
                 started_at,
             )?;
             let event_payload = json!({
@@ -1261,6 +1297,7 @@ impl AgentSessionService<'_> {
                 "title": title,
                 "status": "running",
                 "structuredStream": true,
+                "logPath": log_path,
             })
             .to_string();
             EventRepository::insert_session_event_in_transaction(
@@ -1281,8 +1318,8 @@ impl AgentSessionService<'_> {
         // 其他类型返回「暂不支持」。新增 Claude 等时在此扩展分支。
         let handle: Arc<dyn AgentSessionHandle> = match agent_type {
             AgentType::Codex => {
-                let mode = CodexMode::from_id(input.mode.as_deref().unwrap_or("auto"))
-                    .ok_or_else(|| {
+                let mode = CodexMode::from_id(input.mode.as_deref().unwrap_or("auto")).ok_or_else(
+                    || {
                         CommandError::new(
                             CommandErrorCode::AgentSessionValidationFailed,
                             "不支持的协作模式。",
@@ -1291,7 +1328,8 @@ impl AgentSessionService<'_> {
                         .with_detail(
                             ErrorDetail::new("Value").with_value("mode", input.mode.clone()),
                         )
-                    })?;
+                    },
+                )?;
                 let config = CodexSessionConfig {
                     project_id: input.project_id,
                     session_id,
@@ -1313,9 +1351,7 @@ impl AgentSessionService<'_> {
                     "暂不支持的 agent 类型。",
                 )
                 .with_detail(ErrorDetail::new("Field").with_value("name", "agentType"))
-                .with_detail(
-                    ErrorDetail::new("Value").with_value("agentType", "claude"),
-                ));
+                .with_detail(ErrorDetail::new("Value").with_value("agentType", "claude")));
             }
         };
         let thread_id = handle.thread_id().ok_or_else(|| {
@@ -1863,6 +1899,7 @@ fn insert_structured_session_in_transaction(
     project_id: i64,
     title: Option<&str>,
     working_dir: &str,
+    log_path: &str,
     started_at: i64,
 ) -> rusqlite::Result<crate::types::agent_session::AgentSessionRecord> {
     transaction.execute(
@@ -1885,8 +1922,8 @@ fn insert_structured_session_in_transaction(
            log_path,
            last_active_at,
            started_at
-         ) VALUES (?1, NULL, ?2, 0, 'running', 'none', ?3, '', '', 'current_branch', NULL, NULL, ?3, NULL, NULL, '', ?4, ?4)",
-        params![project_id, title, working_dir, started_at],
+         ) VALUES (?1, NULL, ?2, 0, 'running', 'none', ?3, '', '', 'current_branch', NULL, NULL, ?3, NULL, NULL, ?4, ?5, ?5)",
+        params![project_id, title, working_dir, log_path, started_at],
     )?;
 
     let id = transaction.last_insert_rowid();
@@ -1987,6 +2024,152 @@ fn build_log_path(
         "{session_name}-profile-{agent_profile_id}-{started_at}.log"
     ));
     Ok(path.to_string_lossy().to_string())
+}
+
+fn build_structured_log_path(
+    data_dir: &Path,
+    project_id: i64,
+    started_at: i64,
+) -> Result<String, CommandError> {
+    let logs_dir = data_dir.join(SESSION_LOG_DIR_NAME);
+    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
+
+    let path = logs_dir.join(format!(
+        "structured-project-{project_id}-pid-{}-{started_at}.jsonl",
+        std::process::id()
+    ));
+    Ok(path.to_string_lossy().to_string())
+}
+
+fn read_timeline_from_session_log(
+    session: &crate::types::agent_session::AgentSessionRecord,
+) -> Result<Vec<AgentTimelineItem>, CommandError> {
+    if session.log_path.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let path = Path::new(&session.log_path);
+    if let Some(items) = read_structured_timeline_log(path)? {
+        return Ok(items);
+    }
+
+    read_terminal_timeline_log(path)
+}
+
+fn read_structured_timeline_log(
+    path: &Path,
+) -> Result<Option<Vec<AgentTimelineItem>>, CommandError> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Some(Vec::new())),
+        Err(error) => return Err(agent_session_start_error(error)),
+    };
+    let reader = BufReader::new(file);
+    let mut saw_structured_line = false;
+    let mut items = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(agent_session_start_error)?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(envelope) = serde_json::from_str::<AgentStreamEventEnvelope>(trimmed) else {
+            if saw_structured_line {
+                continue;
+            }
+            return Ok(None);
+        };
+        saw_structured_line = true;
+        if let AgentStreamEvent::Timeline { item, .. } = envelope.event {
+            items.push(item);
+        }
+    }
+
+    if saw_structured_line {
+        Ok(Some(items))
+    } else {
+        Ok(None)
+    }
+}
+
+fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, CommandError> {
+    let snapshot = match read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES) {
+        Ok(snapshot) => snapshot,
+        Err(error) if error.contains("No such file") || error.contains("not found") => {
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(agent_session_start_error(error)),
+    };
+    let text = strip_terminal_control_sequences(&snapshot)
+        .replace('\r', "\n")
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
+
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    Ok(vec![AgentTimelineItem::AssistantMessage {
+        text,
+        message_id: Some("session-log".to_string()),
+    }])
+}
+
+fn latest_output_from_session_log(log_path: &str) -> Option<String> {
+    if log_path.trim().is_empty() {
+        return None;
+    }
+
+    let path = Path::new(log_path);
+    if let Ok(Some(items)) = read_structured_timeline_log(path) {
+        for item in items.iter().rev() {
+            if let Some(output) = latest_output_from_timeline_item(item) {
+                return Some(output);
+            }
+        }
+        return None;
+    }
+
+    let snapshot = read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES).ok()?;
+    latest_output_from_text(&strip_terminal_control_sequences(&snapshot).replace('\r', "\n"))
+}
+
+fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Option<String> {
+    use crate::types::agent_session_stream::ToolCallDetail;
+
+    let text = match item {
+        AgentTimelineItem::AssistantMessage { text, .. }
+        | AgentTimelineItem::UserMessage { text, .. }
+        | AgentTimelineItem::Reasoning { text } => text.as_str(),
+        AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
+            ToolCallDetail::Shell { command, .. } => command.as_str(),
+            ToolCallDetail::Read { path, .. }
+            | ToolCallDetail::Edit { path, .. }
+            | ToolCallDetail::Write { path, .. } => path.as_str(),
+            ToolCallDetail::Search { query, .. } => query.as_str(),
+            ToolCallDetail::Plan { text } => text.as_str(),
+            ToolCallDetail::SubAgent { .. } | ToolCallDetail::Unknown { .. } => name.as_str(),
+        },
+        AgentTimelineItem::Todo { .. } => "Plan updated",
+        AgentTimelineItem::Error { message } => message.as_str(),
+        AgentTimelineItem::Compaction { .. } => "Context compacted",
+    };
+
+    latest_output_from_text(text)
+}
+
+fn latest_output_from_text(text: &str) -> Option<String> {
+    let latest_line = text
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())?;
+    Some(latest_line.chars().take(LATEST_OUTPUT_MAX_CHARS).collect())
 }
 
 fn spawn_agent_process(
@@ -2311,8 +2494,15 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
 mod tests {
     use super::{
         command_supports_prompt_argument, detect_codex_session_id_from_home,
-        normalize_submitted_prompt,
+        latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
     };
+    use crate::types::agent_session::{
+        AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode,
+    };
+    use crate::types::agent_session_stream::{
+        AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+    };
+    use crate::types::project::ProjectCompletionPolicy;
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -2329,6 +2519,89 @@ mod tests {
         assert!(command_supports_prompt_argument("/usr/local/bin/codex"));
         assert!(command_supports_prompt_argument("codex"));
         assert!(!command_supports_prompt_argument("/tmp/echo-stdin.sh"));
+    }
+
+    #[test]
+    fn read_timeline_from_structured_log_replays_timeline_items() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("structured.jsonl");
+        let assistant_event = AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 7,
+            seq: 1,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage {
+                    text: "历史回答".to_string(),
+                    message_id: Some("msg-1".to_string()),
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 1_700_000_000_000,
+            },
+        };
+        let usage_event = AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 7,
+            seq: 2,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::ThreadStarted {
+                thread_id: "thread-1".to_string(),
+            },
+        };
+        fs::write(
+            &log_path,
+            format!(
+                "{}\n{}\n",
+                serde_json::to_string(&assistant_event).expect("serialize assistant"),
+                serde_json::to_string(&usage_event).expect("serialize thread")
+            ),
+        )
+        .expect("write structured log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let items = read_timeline_from_session_log(&session).expect("read timeline");
+
+        assert_eq!(
+            items,
+            vec![AgentTimelineItem::AssistantMessage {
+                text: "历史回答".to_string(),
+                message_id: Some("msg-1".to_string()),
+            }]
+        );
+        assert_eq!(
+            latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
+            Some("历史回答")
+        );
+    }
+
+    #[test]
+    fn read_timeline_from_pty_log_returns_clean_assistant_message() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("pty.log");
+        fs::write(
+            &log_path,
+            "\u{1b}[2K\rThinking...\n\u{1b}[32m最终输出\u{1b}[0m\n",
+        )
+        .expect("write pty log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let items = read_timeline_from_session_log(&session).expect("read timeline");
+
+        assert_eq!(items.len(), 1);
+        match &items[0] {
+            AgentTimelineItem::AssistantMessage { text, message_id } => {
+                assert_eq!(message_id.as_deref(), Some("session-log"));
+                assert!(text.contains("Thinking..."));
+                assert!(text.contains("最终输出"));
+                assert!(!text.contains('\u{1b}'));
+            }
+            other => panic!("expected assistant message, got {other:?}"),
+        }
+        assert_eq!(
+            latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
+            Some("最终输出")
+        );
     }
 
     #[test]
@@ -2405,6 +2678,33 @@ mod tests {
             ),
         )
         .expect("write session file");
+    }
+
+    fn test_session_record(log_path: &str) -> AgentSessionRecord {
+        AgentSessionRecord {
+            id: 7,
+            project_id: 1,
+            issue_id: None,
+            title: Some("test".to_string()),
+            agent_profile_id: 0,
+            codex_session_id: None,
+            status: AgentSessionStatus::Stopped,
+            attention: AgentSessionAttention::None,
+            working_dir: "/tmp/redwhisk".to_string(),
+            command_snapshot: String::new(),
+            prompt_snapshot: String::new(),
+            workspace_mode: WorkspaceMode::CurrentBranch,
+            target_branch: None,
+            workspace_branch: None,
+            workspace_path: None,
+            completion_policy: Some(ProjectCompletionPolicy::Manual),
+            worktree_root_path: None,
+            log_path: log_path.to_string(),
+            latest_output: None,
+            last_active_at: 1,
+            started_at: 1,
+            closed_at: Some(2),
+        }
     }
 
     fn current_millis() -> i64 {

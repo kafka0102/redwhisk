@@ -579,10 +579,9 @@ pub fn read_agent_timeline(
 ) -> Result<ReadAgentTimelineResult, CommandError> {
     let database = open_agent_session_database(&app)?;
     let service = build_agent_session_service(&database.connection);
-    service.find_project_session_record(input.project_id, input.session_id)?;
-    let handle = require_structured_handle(&state, input.session_id)?;
-    let items = handle
-        .read_timeline()
-        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)?;
-    Ok(ReadAgentTimelineResult { items })
+    service.read_agent_timeline(
+        input.project_id,
+        input.session_id,
+        state.agent_sessions.get(input.session_id),
+    )
 }
