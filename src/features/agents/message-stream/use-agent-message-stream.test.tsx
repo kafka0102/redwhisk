@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
 import { useAgentMessageStream } from "./use-agent-message-stream";
+import type { MessageStreamState } from "./message-stream-types";
 
 // vi.hoisted 让 mock 工厂与测试体共享同一份可变 listeners。
 const mocks = vi.hoisted(() => ({
@@ -40,15 +41,15 @@ interface ProbeProps {
 }
 
 function Probe({ projectId, sessionId, onState }: ProbeProps) {
-  const state = useAgentMessageStream({ projectId, sessionId });
-  onState(state);
+  const result = useAgentMessageStream({ projectId, sessionId });
+  onState(result);
   return <div data-testid="probe" />;
 }
 
 async function renderProbe(props: ProbeProps) {
-  let latest: ReturnType<typeof useAgentMessageStream> | null = null;
-  const captureState = (state: ReturnType<typeof useAgentMessageStream>) => {
-    latest = state;
+  let latest: MessageStreamState | null = null;
+  const captureState = (result: ReturnType<typeof useAgentMessageStream>) => {
+    latest = result.state;
   };
   const result = render(
     <Probe

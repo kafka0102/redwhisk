@@ -11,8 +11,9 @@ import {
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import {
-  startStandaloneAgentSession,
-  type StartStandaloneAgentSessionResult,
+  sendAgentMessage,
+  startStructuredAgentSession,
+  type StartStructuredAgentSessionResult,
 } from "./agent-session-commands";
 import {
   listAgentProfiles,
@@ -24,7 +25,7 @@ interface TemporarySessionDialogProps {
   projectId: number;
   onClose: () => void;
   onStarted: (
-    result: StartStandaloneAgentSessionResult,
+    result: StartStructuredAgentSessionResult,
   ) => Promise<void> | void;
 }
 
@@ -159,12 +160,20 @@ export function TemporarySessionDialog({
     let didStart = false;
 
     try {
-      const result = await startStandaloneAgentSession({
+      const result = await startStructuredAgentSession({
         projectId,
         title: title.trim(),
-        agentProfileId: selectedProfile.id,
-        promptSnapshot: promptDraft,
+        agentType: selectedProfile.agentType,
       });
+      // 结构化路径启动后单独发首条消息（StartStructuredAgentSessionInput 不带 prompt）。
+      const trimmedPrompt = promptDraft.trim();
+      if (trimmedPrompt) {
+        await sendAgentMessage({
+          projectId,
+          sessionId: result.sessionId,
+          message: trimmedPrompt,
+        });
+      }
       await onStarted(result);
       didStart = true;
     } catch (error) {

@@ -69,6 +69,23 @@ export function messageStreamReducer(
     case "EVENT":
       return applyEvent(state, action.event);
 
+    case "OPTIMISTIC_USER_MESSAGE": {
+      // 乐观插入用户消息：发送成功后立即展示，不等后端 timeline 回显。
+      // 用临时 id（optimistic- 前缀）避免与后端回显条目（messageId 无前缀）冲突；
+      // 后端回显到达后会作为新条目 append，首版接受短暂重复。
+      const localId = nextLocalId(state.entries);
+      const item: AgentTimelineItem = {
+        type: "user_message",
+        text: action.text,
+      };
+      const entry: MessageStreamEntry = {
+        id: `optimistic-${localId}`,
+        kind: "user_message",
+        item,
+      };
+      return { ...state, entries: [...state.entries, entry] };
+    }
+
     default:
       return state;
   }

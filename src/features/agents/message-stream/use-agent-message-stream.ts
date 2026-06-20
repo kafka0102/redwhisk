@@ -7,6 +7,7 @@
 // 主动调用 unlisten 防泄漏（参考 `terminal-surface.tsx`、`agent-profile-form.tsx`）。
 
 import { useEffect, useReducer } from "react";
+import type { Dispatch } from "react";
 
 import { readAgentTimeline } from "../agent-session-commands";
 import { subscribeAgentSessionStream } from "./agent-stream-events";
@@ -14,6 +15,10 @@ import {
   createInitialState,
   messageStreamReducer,
 } from "./message-stream-reducer";
+import type {
+  MessageStreamAction,
+  MessageStreamState,
+} from "./message-stream-types";
 import { toCommandError } from "../../../shared/commands/command-error";
 
 interface UseAgentMessageStreamArgs {
@@ -24,12 +29,16 @@ interface UseAgentMessageStreamArgs {
 /**
  * 订阅并聚合单个 Agent session 的结构化消息流。
  *
- * 返回当前 `MessageStreamState`；首次加载历史前 `isInitialized` 为 false。
+ * 返回当前 `MessageStreamState` 与 `dispatch`；首次加载历史前 `isInitialized`
+ * 为 false。`dispatch` 供父组件做乐观更新（如发送消息后立即插入用户消息）。
  */
 export function useAgentMessageStream({
   projectId,
   sessionId,
-}: UseAgentMessageStreamArgs) {
+}: UseAgentMessageStreamArgs): {
+  state: MessageStreamState;
+  dispatch: Dispatch<MessageStreamAction>;
+} {
   const [state, dispatch] = useReducer(
     messageStreamReducer,
     undefined,
@@ -87,5 +96,5 @@ export function useAgentMessageStream({
     };
   }, [projectId, sessionId]);
 
-  return state;
+  return { state, dispatch };
 }

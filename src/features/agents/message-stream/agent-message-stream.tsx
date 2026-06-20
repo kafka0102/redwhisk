@@ -3,6 +3,11 @@
 // 负责滚动容器、空态文案、轮次运行指示器与自动滚动到底部。自动滚动策略：
 // 用户停留在底部附近时跟随新内容滚动；手动上滚后停止跟随（避免抢夺滚动位置）。
 // "滚动到底部"按钮留到任务 6。
+//
+// 拆分为两层：
+// - `AgentMessageStream`：自包含，内部调 `useAgentMessageStream` 订阅，用于独立场景/测试。
+// - `AgentMessageStreamView`：纯渲染，接收外部 `state`，供 `AgentSessionView` 父组件
+//   统一订阅后下传，避免双订阅。
 
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, type UIEvent } from "react";
@@ -10,7 +15,10 @@ import { useEffect, useRef, type UIEvent } from "react";
 import type { AgentTimelineItem } from "../agent-stream-types";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { AgentMessageCards } from "./agent-message-cards";
-import type { MessageStreamEntry } from "./message-stream-types";
+import type {
+  MessageStreamEntry,
+  MessageStreamState,
+} from "./message-stream-types";
 
 interface AgentMessageStreamProps {
   projectId: number;
@@ -20,11 +28,26 @@ interface AgentMessageStreamProps {
 /** 距底部阈值（px），小于此值视为"贴底"，新内容自动跟随滚动。 */
 const PIN_TO_BOTTOM_THRESHOLD_PX = 80;
 
+/** 自包含变体：内部订阅事件流，用于独立场景与测试。 */
 export function AgentMessageStream({
   projectId,
   sessionId,
 }: AgentMessageStreamProps) {
-  const state = useAgentMessageStream({ projectId, sessionId });
+  const { state } = useAgentMessageStream({ projectId, sessionId });
+  return <AgentMessageStreamView state={state} />;
+}
+
+interface AgentMessageStreamViewProps {
+  state: MessageStreamState;
+}
+
+/**
+ * 纯渲染变体：接收外部 state，不自行订阅。
+ *
+ * 供 `AgentSessionView` 等父组件统一调 `useAgentMessageStream` 后下传，
+ * 避免消息流与 composer 各自订阅形成双数据源。
+ */
+export function AgentMessageStreamView({ state }: AgentMessageStreamViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const { entries, turnStatus, isInitialized, lastError } = state;

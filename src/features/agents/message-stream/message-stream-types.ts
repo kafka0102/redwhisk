@@ -39,9 +39,10 @@ export interface MessageStreamState {
   isInitialized: boolean;
 }
 
-/** hook 内部 dispatch 的动作（不对外暴露）。 */
+/** hook 内部 dispatch 的动作。 */
 export type MessageStreamAction =
   | { type: "RESET" }
   | { type: "HYDRATE"; items: AgentTimelineItem[] }
   | { type: "HYDRATE_FAILED"; error: string }
-  | { type: "EVENT"; event: AgentStreamEvent };
+  | { type: "EVENT"; event: AgentStreamEvent }
+  | { type: "OPTIMISTIC_USER_MESSAGE"; text: string };
