@@ -135,6 +135,36 @@ describe("messageStreamReducer", () => {
       });
     });
 
+    it("过滤历史中的启动噪音与空消息", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [
+          { type: "assistant_message", text: "", messageId: "empty-a1" },
+          { type: "reasoning", text: "   " },
+          {
+            type: "assistant_message",
+            text: "Codeance ready",
+            messageId: "boot",
+          },
+          {
+            type: "tool_call",
+            callId: "empty-shell",
+            name: "shell",
+            detail: { type: "shell", command: "" },
+            status: "completed",
+          },
+          { type: "assistant_message", text: "可以开始。", messageId: "a1" },
+        ],
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "assistant_message",
+        text: "可以开始。",
+        messageId: "a1",
+      });
+    });
+
     it("HYDRATE_FAILED 设置 error 并标记 initialized", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "HYDRATE_FAILED",
@@ -248,6 +278,15 @@ describe("messageStreamReducer", () => {
       expect(state.entries).toHaveLength(2);
       expect(state.entries[0].kind).toBe("assistant_message");
       expect(state.entries[1].kind).toBe("reasoning");
+    });
+
+    it("过滤实时空 reasoning", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "EVENT",
+        event: timelineEvent({ type: "reasoning", text: "\n  \n" }),
+      });
+      expect(state.entries).toHaveLength(0);
+      expect(state.lastSeq).toBe(1);
     });
   });
 

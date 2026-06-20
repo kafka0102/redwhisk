@@ -52,8 +52,12 @@ describe("AgentMessageStream", () => {
     });
     render(<AgentMessageStream projectId={1} sessionId={3} />);
     await waitFor(() => {
-      expect(screen.getByText("思考过程")).toBeInTheDocument();
+      expect(screen.getByText("Thinking")).toBeInTheDocument();
     });
+    const details = screen
+      .getByText("Thinking")
+      .closest("details") as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
     expect(screen.getByText("我先想想")).toBeInTheDocument();
   });
 
@@ -77,11 +81,40 @@ describe("AgentMessageStream", () => {
     });
     render(<AgentMessageStream projectId={1} sessionId={4} />);
     await waitFor(() => {
-      expect(screen.getByText("shell")).toBeInTheDocument();
+      expect(screen.getByText("Shell")).toBeInTheDocument();
     });
     expect(screen.getByText(/ls -la/)).toBeInTheDocument();
     expect(screen.getByText("完成")).toBeInTheDocument();
-    expect(screen.getByText("Exit code: 0")).toBeInTheDocument();
+    const output = screen.getByText("file.txt");
+    const details = output.closest("details") as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
+    expect(screen.getByText("exit 0")).toBeInTheDocument();
+  });
+
+  it("隐藏无输出的 shell 详情折叠区", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "c1",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "git status",
+          },
+          status: "running",
+        },
+      ],
+    });
+    const { container } = render(
+      <AgentMessageStream projectId={1} sessionId={10} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Shell")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/git status/)).toBeInTheDocument();
+    expect(container.querySelector("details")).toBeNull();
   });
 
   it("渲染 todo 清单", async () => {
