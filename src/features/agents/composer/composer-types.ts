@@ -30,8 +30,8 @@ export interface ComposerAttachment {
   error?: string;
 }
 
-/** Think 模式（reasoning effort）取值；`null` 表示关闭。 */
-export type ComposerEffort = "low" | "medium" | "high" | null;
+/** Think 模式（reasoning effort）取值；Composer UI 不提供关闭项。 */
+export type ComposerEffort = "low" | "medium" | "high" | "xhigh";
 
 /** AgentComposer 顶层组件的 props。 */
 export interface AgentComposerProps {
@@ -54,7 +54,7 @@ export interface AgentComposerProps {
   /**
    * 当前 Think effort。无独立事件流，可选初始化（任务 6 可由父组件持久化）。
    */
-  currentEffort?: ComposerEffort;
+  currentEffort?: ComposerEffort | null;
   /**
    * 可选：发送成功回调，供父组件做乐观用户消息合并（任务 6 用）。
    */

@@ -2289,6 +2289,7 @@ button:focus-visible {
   grid-row: 3;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 :root[data-theme="dark"] .agents-terminal-pane {
@@ -3635,12 +3636,32 @@ button:focus-visible {
   );
 }
 
+.agents-session-view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.agents-session-view__permissions {
+  display: grid;
+  gap: 8px;
+  width: min(920px, calc(100% - 32px));
+  margin: 0 auto 8px;
+}
+
+.agents-session-view__permissions:empty {
+  display: none;
+}
+
 .agents-message-stream__scroll {
   display: grid;
   align-content: start;
   gap: 10px;
   min-height: 0;
-  padding: 28px 18px;
+  padding: 28px 18px 18px;
   overflow-y: auto;
 }
 
@@ -4044,16 +4065,13 @@ details[open] > summary .agents-message__summary-chevron {
 .agents-composer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--color-border);
+  gap: 7px;
+  width: min(920px, calc(100% - 32px));
+  margin: 0 auto 14px;
+  padding: 9px 10px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
-}
-
-.agents-composer__input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
 }
 
 .agents-composer__attach {
@@ -4061,38 +4079,37 @@ details[open] > summary .agents-message__summary-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  border: 1px solid var(--color-border);
+  border: 0;
   border-radius: var(--radius-control);
-  background: var(--color-surface-muted);
+  background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   transition:
+    background 0.12s ease,
     color 0.12s ease,
-    border-color 0.12s ease;
+    opacity 0.12s ease;
 }
 
 .agents-composer__attach:hover {
+  background: var(--color-surface-muted);
   color: var(--color-text);
-  border-color: var(--color-border-strong);
 }
 
 .agents-composer__attach:focus-visible {
   outline: none;
-  border-color: var(--color-border-strong);
-  box-shadow: 0 0 0 2px var(--color-surface-muted);
+  box-shadow: var(--shadow-focus);
 }
 
 .agents-composer__textarea {
-  flex: 1 1 auto;
-  min-height: 30px;
+  min-height: calc(13px * 1.5 * 3 + 14px);
   max-height: 160px;
-  padding: 6px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text);
   font-size: 13px;
   line-height: 1.5;
@@ -4106,8 +4123,6 @@ details[open] > summary .agents-message__summary-chevron {
 
 .agents-composer__textarea:focus-visible {
   outline: none;
-  border-color: var(--color-border-strong);
-  box-shadow: 0 0 0 2px var(--color-surface-muted);
 }
 
 .agents-composer__error {
@@ -4180,30 +4195,49 @@ details[open] > summary .agents-message__summary-chevron {
 /* 控制行 */
 .agents-composer__controls {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
+.agents-composer__tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .agents-composer__selects {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.agents-composer__field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.agents-composer__field-label {
-  color: var(--color-text-subtle);
-  font-size: 11px;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .agents-composer__select {
+  height: 26px;
   min-width: 110px;
+  padding: 0 6px 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.agents-composer__select:hover,
+.agents-composer__select[data-popup-open] {
+  background: var(--color-surface-muted);
+}
+
+.agents-composer__select:focus-visible {
+  box-shadow: var(--shadow-focus);
+}
+
+.agents-composer__menu {
+  border-radius: var(--radius-card);
+  box-shadow: 0 8px 22px var(--color-popover-shadow);
 }
 
 .agents-composer__actions {

@@ -36,14 +36,16 @@ export function AgentSessionView({
   return (
     <div className="agents-session-view" aria-label="Agent 结构化会话视图">
       <AgentMessageStreamView state={state} />
-      {state.pendingPermissions.map((request) => (
-        <PermissionCard
-          key={request.id}
-          request={request}
-          projectId={projectId}
-          sessionId={sessionId}
-        />
-      ))}
+      <div className="agents-session-view__permissions">
+        {state.pendingPermissions.map((request) => (
+          <PermissionCard
+            key={request.id}
+            request={request}
+            projectId={projectId}
+            sessionId={sessionId}
+          />
+        ))}
+      </div>
       <AgentComposer
         projectId={projectId}
         sessionId={sessionId}

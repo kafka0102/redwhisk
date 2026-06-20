@@ -1,11 +1,4 @@
 import {
-  ChevronDown,
-  ChevronRight,
-  LayoutGrid,
-  LoaderCircle,
-  Plus,
-} from "lucide-react";
-import {
   useCallback,
   useEffect,
   useMemo,
@@ -24,24 +17,28 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
-import { formatAgentTypeLabel, getAgentLogoSrc } from "./agent-visuals";
-import { AgentSessionView } from "./agent-session-view";
 import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueSummaryDialog } from "../issues/issue-summary-dialog";
 import {
   completeIssueClean,
   completeIssueManual,
   detectAgentCommitCompletion,
-  listIssues,
   markIssueReview,
   prepareAgentCommitCompletion,
   sendAgentCommitPrompt,
   type AgentCommitCompletionPreview,
-  type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
+import { AgentsSessionList } from "./agents-session-list";
+import {
+  AgentsSessionPane,
+  type LinkedSessionIssue,
+  type SessionIssueTransition,
+} from "./agents-session-pane";
+import { SessionIssueDrawer } from "./session-issue-drawer";
+import { getSessionIssueGroup } from "./agent-session-formatters";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -54,9 +51,6 @@ interface AgentsActivityProps {
   projectCompletionPolicy?: ProjectCompletionPolicy;
   projectId: number;
 }
-
-type SessionIssueGroup = "inProcess" | "review" | "done";
-type SessionIssueTransition = "review" | "done";
 
 export function AgentsActivity({
   activeSessionId,
@@ -198,12 +192,17 @@ export function AgentsActivity({
           label: messages.agentsFeature.done,
           emptyCopy: messages.agentsFeature.noDoneSessions,
         },
-      ].map((group) => ({
-        ...group,
-        sessions: sessions.filter(
-          (session) => getSessionIssueGroup(session) === group.key,
-        ),
-      })),
+      ]
+        .map((group) => ({
+          ...group,
+          sessions: sessions.filter(
+            (session) => getSessionIssueGroup(session) === group.key,
+          ),
+        }))
+        .map((group) => ({
+          ...group,
+          count: group.sessions.length,
+        })),
     [
       messages.agentsFeature.done,
       messages.agentsFeature.inProgress,
@@ -226,7 +225,7 @@ export function AgentsActivity({
 
   const selectedSession =
     sessions.find((session) => session.sessionId === currentSessionId) ?? null;
-  const linkedIssue = useMemo(
+  const linkedIssue: LinkedSessionIssue | null = useMemo(
     () =>
       selectedSession?.issueId != null && selectedSession.issueTitle
         ? {
@@ -720,63 +719,16 @@ export function AgentsActivity({
       className="activity-surface activity-surface--agents"
       style={{ "--agents-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
-      <aside className="agents-sidebar" aria-label="Agent sessions">
-        <div className="agents-sidebar__header">
-          <div className="agents-sidebar__header-main">
-            <h2>{messages.app.agents}</h2>
-          </div>
-          <div
-            className="agents-sidebar__toolbar"
-            aria-label="Session list controls"
-          >
-            <button
-              aria-label="Session list view"
-              className="agents-toolbar-button"
-              disabled
-              type="button"
-            >
-              <LayoutGrid aria-hidden="true" size={16} strokeWidth={1.8} />
-            </button>
-            <button
-              aria-label="New session"
-              className="agents-toolbar-button"
-              ref={newSessionButtonRef}
-              type="button"
-              onClick={openTemporarySessionDialog}
-            >
-              <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
-            </button>
-          </div>
-        </div>
-
-        {errorMessage ? (
-          <p className="issues-status" role="status" aria-label="Agents status">
-            {errorMessage}
-          </p>
-        ) : null}
-        {isLoading ? (
-          <p className="issues-loading" role="status">
-            Loading sessions...
-          </p>
-        ) : null}
-
-        {!isLoading && !errorMessage ? (
-          <div className="agents-groups">
-            {sessionsByGroup.map((group) => (
-              <SessionGroup
-                key={group.key}
-                emptyCopy={group.emptyCopy}
-                count={group.sessions.length}
-                label={group.label}
-                groupKey={group.key}
-                onSelect={handleSelectSession}
-                selectedSessionId={selectedSession?.sessionId ?? null}
-                sessions={group.sessions}
-              />
-            ))}
-          </div>
-        ) : null}
-      </aside>
+      <AgentsSessionList
+        errorMessage={errorMessage}
+        groups={sessionsByGroup}
+        isLoading={isLoading}
+        newSessionButtonRef={newSessionButtonRef}
+        onNewSession={openTemporarySessionDialog}
+        onSelectSession={handleSelectSession}
+        selectedSessionId={selectedSession?.sessionId ?? null}
+        title={messages.app.agents}
+      />
 
       <div
         aria-label="Resize session list"
@@ -826,155 +778,37 @@ export function AgentsActivity({
         }`}
         aria-label="Session workspace"
       >
-        <div className="agents-terminal-pane">
-          {selectedSession ? (
-            <div className="agents-session-toolbar">
-              <div className="agents-session-toolbar__copy">
-                <p className="agents-session-toolbar__eyebrow">当前会话</p>
-                {linkedIssue ? (
-                  <h3 className="agents-session-toolbar__issue-heading">{`#issue${linkedIssue.issueId} ${linkedIssue.issueTitle}`}</h3>
-                ) : (
-                  <h3>{formatSessionTitle(selectedSession)}</h3>
-                )}
-                {shouldShowExplicitSessionStatus(selectedSession) ? (
-                  <p className="agents-session-toolbar__status">{`Status: ${formatSessionStatusLabel(
-                    selectedSession,
-                  )}`}</p>
-                ) : null}
-              </div>
-              <div className="agents-session-toolbar__actions">
-                {canRenderTransitionButton ? (
-                  <div className="agents-session-toolbar__split-action">
-                    <button
-                      className="agents-session-toolbar__action agents-session-toolbar__action--split-main"
-                      disabled={isTransitionPending}
-                      type="button"
-                      onClick={() =>
-                        void handleTransitionAction(
-                          sessionTransitionPhase === "running"
-                            ? "review"
-                            : "done",
-                        )
-                      }
-                    >
-                      {transitionButtonLabel}
-                    </button>
-                    {canRenderTransitionMenu ? (
-                      <div className="agents-session-toolbar__split-menu">
-                        <button
-                          aria-expanded={isTransitionMenuOpen}
-                          aria-haspopup="menu"
-                          aria-label="Open status options"
-                          className="agents-session-toolbar__action agents-session-toolbar__action--split-toggle"
-                          disabled={isTransitionPending}
-                          type="button"
-                          onClick={() =>
-                            setIsTransitionMenuOpen(
-                              (currentIsTransitionMenuOpen) =>
-                                !currentIsTransitionMenuOpen,
-                            )
-                          }
-                        >
-                          <ChevronDown
-                            aria-hidden="true"
-                            size={14}
-                            strokeWidth={1.9}
-                          />
-                        </button>
-                        {isTransitionMenuOpen ? (
-                          <div
-                            className="agents-session-toolbar__menu"
-                            role="menu"
-                          >
-                            {transitionMenuOptions.map((option) => (
-                              <button
-                                key={option.action}
-                                className="agents-session-toolbar__menu-item"
-                                role="menuitem"
-                                type="button"
-                                onClick={() =>
-                                  void handleTransitionAction(option.action)
-                                }
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {linkedIssue ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    type="button"
-                    onClick={() => setIsIssueDrawerOpen(true)}
-                  >
-                    Open Issue
-                  </button>
-                ) : null}
-                {canViewSummary ? (
-                  <button
-                    className="agents-session-toolbar__action"
-                    type="button"
-                    onClick={handleOpenSummary}
-                  >
-                    View Summary
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-          <div className="agents-session-status-stack">
-            {markReviewErrorMessage ? (
-              <p className="issues-status" role="status">
-                {markReviewErrorMessage}
-              </p>
-            ) : null}
-            {completeManualErrorMessage ? (
-              <p className="issues-status" role="status">
-                {completeManualErrorMessage}
-              </p>
-            ) : null}
-            {completeCleanErrorMessage ? (
-              <p className="issues-status" role="status">
-                {completeCleanErrorMessage}
-              </p>
-            ) : null}
-            {completeAgentCommitErrorMessage ? (
-              <p className="issues-status" role="status">
-                {completeAgentCommitErrorMessage}
-              </p>
-            ) : null}
-            {attentionErrorMessage ? (
-              <p className="issues-status" role="status">
-                {attentionErrorMessage}
-              </p>
-            ) : null}
-          </div>
-          <div
-            className="agents-terminal-host"
-            onMouseDown={() => {
-              if (selectedSession) {
-                void acknowledgeSessionAttention(selectedSession.sessionId);
-              }
-            }}
-          >
-            {selectedSession ? (
-              <AgentSessionView
-                projectId={projectId}
-                sessionId={selectedSession.sessionId}
-                agentType={selectedSession.agentType}
-              />
-            ) : (
-              <p className="empty-state">
-                Agent sessions will appear here after a session has been started
-                for this project.
-              </p>
-            )}
-          </div>
-        </div>
+        <AgentsSessionPane
+          agentCommitErrorMessage={completeAgentCommitErrorMessage}
+          attentionErrorMessage={attentionErrorMessage}
+          canRenderTransitionButton={canRenderTransitionButton}
+          canRenderTransitionMenu={canRenderTransitionMenu}
+          canViewSummary={canViewSummary}
+          cleanErrorMessage={completeCleanErrorMessage}
+          isTransitionMenuOpen={isTransitionMenuOpen}
+          isTransitionPending={isTransitionPending}
+          linkedIssue={linkedIssue}
+          manualErrorMessage={completeManualErrorMessage}
+          markReviewErrorMessage={markReviewErrorMessage}
+          onAcknowledgeSessionAttention={(sessionId) => {
+            void acknowledgeSessionAttention(sessionId);
+          }}
+          onOpenIssue={() => setIsIssueDrawerOpen(true)}
+          onOpenSummary={handleOpenSummary}
+          onToggleTransitionMenu={() =>
+            setIsTransitionMenuOpen(
+              (currentIsTransitionMenuOpen) => !currentIsTransitionMenuOpen,
+            )
+          }
+          onTransitionAction={(action) => {
+            void handleTransitionAction(action);
+          }}
+          projectId={projectId}
+          selectedSession={selectedSession}
+          transitionButtonLabel={transitionButtonLabel}
+          transitionMenuOptions={transitionMenuOptions}
+          transitionPhase={sessionTransitionPhase}
+        />
         {isIssueDrawerOpen && linkedIssue ? (
           <SessionIssueDrawer
             issueId={linkedIssue.issueId}
@@ -1069,111 +903,6 @@ export function AgentsActivity({
   );
 }
 
-interface SessionIssueDrawerProps {
-  issueId: number;
-  issueTitle: string;
-  projectId: number;
-  onClose: () => void;
-}
-
-function SessionIssueDrawer({
-  issueId,
-  issueTitle,
-  projectId,
-  onClose,
-}: SessionIssueDrawerProps) {
-  const [issue, setIssue] = useState<IssueRecord | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadIssue() {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const response = await listIssues({ projectId });
-        if (!isMounted) {
-          return;
-        }
-
-        const nextIssue =
-          response.issues.find((candidate) => candidate.id === issueId) ?? null;
-        setIssue(nextIssue);
-        if (!nextIssue) {
-          setErrorMessage("Linked issue no longer exists.");
-        }
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setIssue(null);
-        setErrorMessage(toCommandError(error).message);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadIssue();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [issueId, projectId]);
-
-  const description = issue?.description?.trim().length
-    ? issue.description
-    : "No details provided.";
-
-  return (
-    <aside className="agents-issue-drawer" aria-label="Issue details">
-      <div className="agents-issue-drawer__header">
-        <div className="agents-issue-drawer__copy">
-          <p className="agents-issue-drawer__eyebrow">Issue</p>
-          <h4>{issue?.title ?? issueTitle}</h4>
-        </div>
-        <button
-          aria-label="Close issue details"
-          className="issue-dialog__close"
-          type="button"
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </div>
-      <div className="agents-issue-drawer__body">
-        {isLoading ? (
-          <p className="issues-status" role="status">
-            Loading issue...
-          </p>
-        ) : errorMessage ? (
-          <p className="issues-status" role="status">
-            {errorMessage}
-          </p>
-        ) : (
-          <>
-            <section className="issue-dialog__panel">
-              <h4>Title</h4>
-              <p className="issue-detail__title">
-                {issue?.title ?? issueTitle}
-              </p>
-            </section>
-            <section className="issue-dialog__panel">
-              <h4>Details</h4>
-              <div className="issue-detail__description">{description}</div>
-            </section>
-          </>
-        )}
-      </div>
-    </aside>
-  );
-}
-
 function applySessionOverlay(
   session: AgentSessionListItem,
   reviewedIssueIds: Set<number>,
@@ -1208,29 +937,6 @@ function applySessionOverlay(
   };
 }
 
-function getSessionIssueGroup(
-  session: AgentSessionListItem,
-): SessionIssueGroup | null {
-  switch (session.issueStatus) {
-    case "running":
-      return "inProcess";
-    case "review":
-      return "review";
-    case "completed":
-      return "done";
-    case "backlog":
-      return null;
-    default:
-      break;
-  }
-
-  if (session.issueId != null) {
-    return session.status === "running" ? "inProcess" : "done";
-  }
-
-  return session.status === "running" ? "inProcess" : "done";
-}
-
 function getSessionTransitionPhase(
   session: AgentSessionListItem | null,
 ): "running" | "review" | "completed" | null {
@@ -1246,202 +952,4 @@ function getSessionTransitionPhase(
     default:
       return null;
   }
-}
-
-interface SessionGroupProps {
-  count: number;
-  emptyCopy: string;
-  groupKey: SessionIssueGroup;
-  label: string;
-  onSelect: (sessionId: number) => void;
-  selectedSessionId: number | null;
-  sessions: AgentSessionListItem[];
-}
-
-function SessionGroup({
-  count,
-  emptyCopy,
-  groupKey,
-  label,
-  onSelect,
-  selectedSessionId,
-  sessions,
-}: SessionGroupProps) {
-  const [isExpanded, setIsExpanded] = useState(groupKey !== "done");
-
-  return (
-    <section aria-label={`${label} sessions`} className="agents-group">
-      <button
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${label} sessions`}
-        className="agents-group__header"
-        type="button"
-        onClick={() => setIsExpanded((currentIsExpanded) => !currentIsExpanded)}
-      >
-        {isExpanded ? (
-          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />
-        ) : (
-          <ChevronRight aria-hidden="true" size={14} strokeWidth={1.9} />
-        )}
-        <h3>
-          <span className="agents-group__title">{label}</span>
-          <span className="agents-group__count">{`(${count})`}</span>
-        </h3>
-      </button>
-      {isExpanded && sessions.length === 0 ? (
-        <p className="agents-group__empty">{emptyCopy}</p>
-      ) : null}
-      {isExpanded && sessions.length > 0 ? (
-        <div className="agents-session-list">
-          {sessions.map((session) => {
-            const outputLine = formatSessionOutputLine(session.latestOutput);
-            const statusTone = getSessionStatusTone(session);
-            const statusLabel = formatSessionStatusLabel(session);
-            const agentLabel = formatAgentTypeLabel(session.agentType);
-
-            return (
-              <button
-                key={session.sessionId}
-                aria-pressed={selectedSessionId === session.sessionId}
-                className="agents-session-row"
-                type="button"
-                onClick={() => onSelect(session.sessionId)}
-              >
-                <span className="agents-session-row__header">
-                  {statusTone === "running" ? (
-                    <LoaderCircle
-                      aria-label="Session 正在运行"
-                      className="agents-session-row__running-icon"
-                      size={12}
-                      strokeWidth={2}
-                    />
-                  ) : null}
-                  <span className="agents-session-row__title">
-                    {formatSessionTitle(session)}
-                  </span>
-                </span>
-                <span className="agents-session-row__output">
-                  <span
-                    aria-label={`Session 状态：${statusLabel}`}
-                    className={buildSessionStatusDotClassName(statusTone)}
-                  />
-                  <span className="agents-session-row__latest-output">
-                    {outputLine}
-                  </span>
-                </span>
-                <span className="agents-session-row__agent">
-                  <img
-                    alt={`Agent 类型：${agentLabel}`}
-                    className="agents-session-row__agent-logo"
-                    src={getAgentLogoSrc(session.agentType)}
-                  />
-                  {shouldShowSessionRowStatus(session) ? (
-                    <span className="agents-session-row__meta-status">
-                      {statusLabel}
-                    </span>
-                  ) : null}
-                  <span className="sr-only">{`，${statusLabel}`}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function formatSessionTitle(session: AgentSessionListItem): string {
-  return session.issueTitle ?? session.title ?? `Session #${session.sessionId}`;
-}
-
-function buildSessionStatusDotClassName(tone: string): string {
-  return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
-}
-
-function formatSessionStatusLabel(session: AgentSessionListItem): string {
-  if (session.status === "crashed") {
-    return "crashed";
-  }
-
-  if (session.status === "stopped") {
-    return "stopped";
-  }
-
-  if (session.issueStatus === "completed") {
-    return "Done";
-  }
-
-  if (session.issueStatus === "review") {
-    return "Review";
-  }
-
-  if (session.attention === "requested") {
-    return "输出完成";
-  }
-
-  if (session.status === "running") {
-    return "运行中";
-  }
-
-  return "closed";
-}
-
-function getSessionStatusTone(session: AgentSessionListItem): string {
-  if (session.issueStatus === "completed") {
-    return "done";
-  }
-
-  if (session.issueStatus === "review") {
-    return "viewed";
-  }
-
-  if (session.status !== "running") {
-    return "done";
-  }
-
-  return session.attention === "requested" ? "viewed" : "running";
-}
-
-function formatSessionOutputLine(output: string | null | undefined): string {
-  if (!output) {
-    return "";
-  }
-
-  const lines = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index];
-    if (!isNonOutputLine(line)) {
-      return line;
-    }
-  }
-
-  return "";
-}
-
-function isNonOutputLine(line: string): boolean {
-  const normalized = line.trim().toLowerCase();
-  return (
-    normalized === "working" ||
-    normalized === "thinking" ||
-    normalized === "working..." ||
-    normalized === "thinking..." ||
-    /^[>›]\s*/.test(line) ||
-    /^input\s*[:：]/i.test(line) ||
-    /^prompt\s*[:：]/i.test(line)
-  );
-}
-
-function shouldShowExplicitSessionStatus(
-  session: AgentSessionListItem,
-): boolean {
-  return session.status === "crashed" || session.status === "stopped";
-}
-
-function shouldShowSessionRowStatus(session: AgentSessionListItem): boolean {
-  return session.status === "crashed";
 }

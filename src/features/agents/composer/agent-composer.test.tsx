@@ -259,10 +259,16 @@ describe("AgentComposer", () => {
     });
   });
 
-  it("渲染 Think 字段标签", async () => {
+  it("渲染无可见标签的模型和 Think 选择器", async () => {
     await renderComposer();
-    expect(screen.getByText("Think")).toBeInTheDocument();
-    expect(screen.getByText("模型")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "选择模型" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Think 模式" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Think")).not.toBeInTheDocument();
+    expect(screen.queryByText("模型")).not.toBeInTheDocument();
   });
 
   it("capabilities 关闭模型与 Think 时不渲染对应 Select（claude 等无能力 agent）", async () => {

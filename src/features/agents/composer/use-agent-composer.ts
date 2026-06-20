@@ -30,7 +30,7 @@ interface UseAgentComposerArgs {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
-  currentEffort?: ComposerEffort;
+  currentEffort?: ComposerEffort | null;
   onMessageSent?: (message: string) => void;
 }
 
@@ -50,9 +50,11 @@ export interface UseAgentComposerResult {
   handleAddAttachment: () => Promise<void>;
   /** 移除指定 id 的附件草稿。 */
   handleRemoveAttachment: (id: string) => void;
-  /** 切换 Think effort；null 表示关闭。 */
+  /** 切换 Think effort。 */
   handleSetEffort: (effort: ComposerEffort) => Promise<void>;
 }
+
+const DEFAULT_EFFORT: ComposerEffort = "medium";
 
 /** 生成简单的本地唯一 id（避免引入 uuid 依赖）。 */
 function createLocalId(): string {
@@ -100,13 +102,15 @@ export function useAgentComposer({
 }: UseAgentComposerArgs): UseAgentComposerResult {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
+  const [effort, setEffort] = useState<ComposerEffort>(
+    currentEffort ?? DEFAULT_EFFORT,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isSending = turnStatus === "running";
 
   useEffect(() => {
-    setEffort(currentEffort ?? null);
+    setEffort(currentEffort ?? DEFAULT_EFFORT);
   }, [currentEffort]);
 
   const handleSubmit = useCallback(async () => {
@@ -220,7 +224,7 @@ export function useAgentComposer({
         await setAgentThinking({
           projectId,
           sessionId,
-          effort: nextEffort ?? undefined,
+          effort: nextEffort,
         });
       } catch (error) {
         setEffort(previous);

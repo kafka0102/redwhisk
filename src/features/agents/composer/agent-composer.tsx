@@ -9,7 +9,6 @@
 // - L213：模型/Think 前端只发 command
 // - L214：上下文窗口用量来自 usage_updated 事件 → props.usage
 
-import { Paperclip } from "lucide-react";
 import { useMemo, type KeyboardEvent } from "react";
 
 import { Textarea } from "@/components/ui";
@@ -21,6 +20,7 @@ import type { AgentComposerProps } from "./composer-types";
 
 /** textarea 最大高度（px），超过后内部滚动而非无限撑高。 */
 const TEXTAREA_MAX_HEIGHT_PX = 160;
+const THINK_OPTIONS = ["low", "medium", "high", "xhigh"] as const;
 
 export function AgentComposer({
   projectId,
@@ -60,17 +60,10 @@ export function AgentComposer({
     onMessageSent,
   });
 
-  // Think 选项取当前模型的 supportedReasoningEfforts，空则回退 low/medium/high。
+  // UI 固定展示四档 Think 模式，不提供 off。
   const thinkOptions = useMemo(() => {
-    const currentModel = models.find(
-      (model) => model.modelId === selectedModelId,
-    );
-    const supported = currentModel?.supportedReasoningEfforts ?? [];
-    if (supported.length > 0) {
-      return supported;
-    }
-    return ["low", "medium", "high"];
-  }, [models, selectedModelId]);
+    return [...THINK_OPTIONS];
+  }, []);
 
   const canSend = text.trim() !== "" && !isSending;
 
@@ -104,28 +97,16 @@ export function AgentComposer({
         attachments={attachments}
         onRemove={handleRemoveAttachment}
       />
-      <div className="agents-composer__input-row">
-        <button
-          type="button"
-          className="agents-composer__attach"
-          aria-label="添加附件"
-          onClick={() => {
-            void handleAddAttachment();
-          }}
-        >
-          <Paperclip aria-hidden="true" size={15} strokeWidth={2} />
-        </button>
-        <Textarea
-          className="agents-composer__textarea"
-          aria-label="输入消息"
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={1}
-          style={{ maxHeight: TEXTAREA_MAX_HEIGHT_PX }}
-        />
-      </div>
+      <Textarea
+        className="agents-composer__textarea"
+        aria-label="输入消息"
+        placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={handleKeyDown}
+        rows={3}
+        style={{ maxHeight: TEXTAREA_MAX_HEIGHT_PX }}
+      />
       {submitError ? (
         <p className="agents-composer__error" role="status">
           {submitError}
@@ -157,6 +138,9 @@ export function AgentComposer({
         }}
         onCancel={() => {
           void handleCancel();
+        }}
+        onAddAttachment={() => {
+          void handleAddAttachment();
         }}
         usage={usage}
       />

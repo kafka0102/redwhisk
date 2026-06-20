@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TurnStatus } from "../message-stream/message-stream-types";
 import { useAgentComposer } from "./use-agent-composer";
 import type { UseAgentComposerResult } from "./use-agent-composer";
+import type { ComposerEffort } from "./composer-types";
 
 const dialogMocks = vi.hoisted(() => ({
   open: vi.fn(),
@@ -41,7 +42,7 @@ interface ProbeProps {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
-  currentEffort?: "low" | "medium" | "high" | null;
+  currentEffort?: ComposerEffort | null;
   onMessageSent?: (message: string) => void;
   onState: (state: UseAgentComposerResult) => void;
 }
@@ -353,21 +354,13 @@ describe("useAgentComposer", () => {
     expect(getState()!.attachments).toHaveLength(0);
   });
 
-  it("handleSetEffort(null) 调用 setAgentThinking 且 effort=undefined", async () => {
+  it("默认 Think 为 medium", async () => {
     const { getState } = await renderProbe({
       projectId: 1,
       sessionId: 10,
       turnStatus: "idle",
     });
-    await act(async () => {
-      await getState()!.handleSetEffort(null);
-    });
-    expect(setAgentThinkingMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 10,
-      effort: undefined,
-    });
-    expect(getState()!.effort).toBeNull();
+    expect(getState()!.effort).toBe("medium");
   });
 
   it("handleSetEffort(high) 调用 setAgentThinking 且 effort=high", async () => {
@@ -397,8 +390,8 @@ describe("useAgentComposer", () => {
     await act(async () => {
       getState()!.handleSetEffort("low");
     });
-    // 初始 effort 为 null，失败后回滚到 null
-    expect(getState()!.effort).toBeNull();
+    // 初始 effort 为 medium，失败后回滚到 medium。
+    expect(getState()!.effort).toBe("medium");
     expect(getState()!.submitError).toBe("不支持");
   });
 
@@ -422,7 +415,7 @@ describe("useAgentComposer", () => {
       turnStatus: "idle",
       currentEffort: null,
     });
-    expect(getState()!.effort).toBeNull();
+    expect(getState()!.effort).toBe("medium");
 
     rerenderWith({ currentEffort: "medium" });
 
