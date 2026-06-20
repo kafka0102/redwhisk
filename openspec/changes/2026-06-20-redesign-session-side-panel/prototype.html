@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Session 右侧改版原型</title>
+    <style>
+      :root {
+        color: #17181a;
+        background: #ffffff;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.45;
+        --color-app: #ffffff;
+        --color-surface: #ffffff;
+        --color-surface-muted: #f1f2f4;
+        --color-surface-panel: #fbfbfc;
+        --color-border: #e3e5e8;
+        --color-border-strong: #d1d5db;
+        --color-text: #17181a;
+        --color-text-muted: #5f6368;
+        --color-text-subtle: #8a8f98;
+        --color-accent: #111111;
+        --color-accent-muted: #e9eaee;
+        --color-focus-ring: #4d84ff;
+        --color-lane-review-marker: #22863a;
+        --color-danger: #b42318;
+        --radius-control: 3px;
+        --radius-icon: 7px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--color-app);
+        color: var(--color-text);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .prototype-shell {
+        display: grid;
+        grid-template-columns: 252px 1px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .session-list {
+        border-right: 1px solid var(--color-border);
+        background: var(--color-surface-panel);
+      }
+
+      .session-list__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .session-list__title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 650;
+      }
+
+      .session-list__button {
+        display: inline-grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        background: var(--color-surface);
+        color: var(--color-text);
+      }
+
+      .session-list__body {
+        padding: 8px;
+      }
+
+      .session-row {
+        width: 100%;
+        margin: 0 0 4px;
+        padding: 9px 8px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--color-text);
+        text-align: left;
+      }
+
+      .session-row[aria-pressed="true"] {
+        background: var(--color-surface-muted);
+      }
+
+      .session-row__title {
+        display: block;
+        overflow: hidden;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-row__meta {
+        display: block;
+        margin-top: 3px;
+        overflow: hidden;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .splitter {
+        background: var(--color-border);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 600px;
+        min-width: 0;
+        min-height: 100vh;
+      }
+
+      .main-pane {
+        display: grid;
+        grid-template-rows: 56px 41px minmax(0, 1fr);
+        min-width: 0;
+        background: var(--color-surface);
+      }
+
+      .session-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+        min-width: 0;
+        padding: 0 12px 0 14px;
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-surface);
+      }
+
+      .session-topbar__issue {
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.32;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-topbar__actions {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .action-split {
+        position: relative;
+        display: inline-flex;
+      }
+
+      .action-button,
+      .icon-button {
+        display: inline-grid;
+        height: 30px;
+        place-items: center;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        background: var(--color-surface);
+        color: var(--color-text);
+      }
+
+      .action-button {
+        grid-template-columns: auto auto;
+        column-gap: 6px;
+        padding: 0 9px;
+      }
+
+      .icon-button {
+        width: 30px;
+      }
+
+      .icon-button[aria-pressed="true"] {
+        background: var(--color-accent-muted);
+        box-shadow: inset 0 0 0 1px var(--color-border-strong);
+      }
+
+      .main-tabs {
+        display: flex;
+        align-items: end;
+        gap: 2px;
+        min-width: 0;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-surface);
+      }
+
+      .main-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 32px;
+        max-width: 220px;
+        padding: 0 10px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--color-text-muted);
+      }
+
+      .main-tab[aria-selected="true"] {
+        border-bottom-color: var(--color-accent);
+        color: var(--color-text);
+      }
+
+      .main-tab__label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .main-tab__close {
+        color: var(--color-text-subtle);
+      }
+
+      .main-content {
+        min-width: 0;
+        overflow: auto;
+        background: #ffffff;
+      }
+
+      .session-placeholder {
+        min-height: 100%;
+        padding: 22px;
+      }
+
+      .session-cardless-message {
+        max-width: 680px;
+        color: var(--color-text-muted);
+      }
+
+      .code-placeholder {
+        min-height: 100%;
+        background: #fcfcfd;
+      }
+
+      .code-placeholder__header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 44px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-surface);
+        font-weight: 650;
+      }
+
+      .code-placeholder__body {
+        margin: 0;
+        padding: 16px 18px;
+        color: #2f3338;
+        font-family: "SF Mono", "Cascadia Mono", Consolas, monospace;
+        font-size: 10px;
+        line-height: 1.35;
+      }
+
+      .side-panel {
+        display: grid;
+        grid-template-rows: 56px 36px minmax(0, 1fr);
+        min-width: 0;
+        border-left: 1px solid var(--color-border);
+        background: var(--color-surface);
+      }
+
+      .side-tabs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 56px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .side-tab {
+        min-width: 66px;
+        height: 40px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: #737780;
+        font-size: 15px;
+      }
+
+      .side-tab[aria-selected="true"] {
+        background: var(--color-surface-muted);
+        color: var(--color-text);
+      }
+
+      .side-filter {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        height: 36px;
+        min-width: 0;
+        padding: 0 10px 0 8px;
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .filter-menu {
+        position: relative;
+      }
+
+      .filter-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 28px;
+        padding: 0 7px;
+        border: 0;
+        background: transparent;
+        color: #737780;
+        font-size: 13px;
+      }
+
+      .filter-trigger:hover,
+      .filter-trigger[aria-expanded="true"] {
+        background: var(--color-surface-muted);
+      }
+
+      .filter-menu__content {
+        position: absolute;
+        top: 31px;
+        left: 0;
+        z-index: 2;
+        display: grid;
+        min-width: 118px;
+        padding: 4px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        background: var(--color-surface);
+        box-shadow: 0 8px 20px rgb(17 24 39 / 10%);
+      }
+
+      .filter-menu__item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        height: 28px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: var(--radius-control);
+        background: transparent;
+        color: var(--color-text);
+        text-align: left;
+      }
+
+      .filter-menu__item:hover,
+      .filter-menu__item[aria-selected="true"] {
+        background: var(--color-surface-muted);
+      }
+
+      .side-tools {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #6c7078;
+      }
+
+      .refresh-button {
+        display: inline-grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 0;
+        border-radius: var(--radius-control);
+        background: transparent;
+        color: #6c7078;
+      }
+
+      .refresh-button:hover {
+        background: var(--color-surface-muted);
+      }
+
+      .changes-list,
+      .file-tree {
+        min-width: 0;
+        overflow: auto;
+        padding: 0 0 18px;
+      }
+
+      .change-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: 10px;
+        width: 100%;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+      }
+
+      .change-row:hover,
+      .change-row[aria-current="true"] {
+        background: #f7f8fa;
+      }
+
+      .change-row:hover::after {
+        position: absolute;
+        left: 12px;
+        bottom: -26px;
+        z-index: 3;
+        max-width: calc(100% - 24px);
+        overflow: hidden;
+        padding: 4px 7px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        background: #17181a;
+        color: #ffffff;
+        content: attr(data-path);
+        font-size: 11px;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .change-row__name {
+        overflow: hidden;
+        color: #222428;
+        font-size: 13px;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .change-row__path {
+        margin-left: 5px;
+        color: #848893;
+        font-size: 12px;
+        font-weight: 400;
+      }
+
+      .change-row__actions {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        min-width: 118px;
+      }
+
+      .new-badge {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        padding: 0 7px;
+        border-radius: 6px;
+        background: #cfe8d5;
+        color: #15803d;
+        font-size: 12px;
+      }
+
+      .change-row__stats {
+        display: inline-flex;
+        min-width: 72px;
+        justify-content: end;
+        gap: 4px;
+        font-size: 12px;
+      }
+
+      .added {
+        color: #16803a;
+      }
+
+      .deleted {
+        color: #c01818;
+      }
+
+      .tree-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+        min-height: 28px;
+        padding: 0 12px;
+        border: 0;
+        background: transparent;
+        color: var(--color-text);
+        text-align: left;
+      }
+
+      .tree-row:hover,
+      .tree-row[aria-current="true"] {
+        background: #f7f8fa;
+      }
+
+      .tree-row--child {
+        padding-left: 30px;
+      }
+
+      .tree-icon {
+        width: 16px;
+        color: #777b84;
+      }
+
+      .tree-icon--ts {
+        color: #2563eb;
+      }
+
+      .tree-icon--vue {
+        color: #16a34a;
+      }
+
+      .tree-icon--css {
+        color: #7c3aed;
+      }
+
+      .tree-icon--rust {
+        color: #b45309;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 980px) {
+        .prototype-shell {
+          grid-template-columns: 210px 1px minmax(0, 1fr);
+        }
+
+        .workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .side-panel {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <aside class="session-list" aria-label="Agents">
+        <header class="session-list__header">
+          <h1 class="session-list__title">Agents</h1>
+          <button class="session-list__button" type="button" aria-label="新建">
+            +
+          </button>
+        </header>
+        <div class="session-list__body">
+          <button class="session-row" type="button" aria-pressed="true">
+            <span class="session-row__title">#128 Session 右侧页面改版</span>
+            <span class="session-row__meta">运行中 · 正在生成 UI 原型</span>
+          </button>
+          <button class="session-row" type="button" aria-pressed="false">
+            <span class="session-row__title">#117 修复 labels 设置</span>
+            <span class="session-row__meta">待审核 · 输出完成</span>
+          </button>
+        </div>
+      </aside>
+      <div class="splitter" role="separator" aria-label="Resize Agents"></div>
+      <section class="workspace" aria-label="Session workspace">
+        <main class="main-pane">
+          <header class="session-topbar">
+            <h2 class="session-topbar__issue">
+              #128 Session 右侧页面改版与代码文件浏览
+            </h2>
+            <div class="session-topbar__actions">
+              <div class="action-split">
+                <button class="action-button" type="button">
+                  Mark review <span aria-hidden="true">⌄</span>
+                </button>
+              </div>
+              <button class="icon-button" type="button" aria-label="打开终端">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="m4 17 6-5-6-5M12 19h8"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                class="icon-button"
+                type="button"
+                aria-label="打开右侧面板"
+                aria-pressed="true"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                  <rect
+                    x="4"
+                    y="5"
+                    width="16"
+                    height="14"
+                    rx="2"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                  />
+                  <path
+                    d="M13 5v14"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <nav class="main-tabs" aria-label="Session tabs">
+            <button
+              class="main-tab"
+              id="tab-session"
+              type="button"
+              aria-selected="false"
+            >
+              <span class="main-tab__label">Session</span>
+            </button>
+            <button
+              class="main-tab"
+              id="tab-diff"
+              type="button"
+              aria-selected="true"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M6 3v12M18 9v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM8.5 7.5h4.3c1.8 0 3.2 1.4 3.2 3.2V12"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span class="main-tab__label">agents-activity.tsx</span>
+              <span class="main-tab__close" aria-hidden="true">×</span>
+            </button>
+          </nav>
+
+          <section class="main-content" id="main-content">
+            <div class="code-placeholder">
+              <div class="code-placeholder__header">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M6 3v12M18 9v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM8.5 7.5h4.3c1.8 0 3.2 1.4 3.2 3.2V12"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                agents-activity.tsx
+              </div>
+              <pre class="code-placeholder__body">当前版本暂不实现 Diff 渲染。
+点击右侧“变更”中的文件后，左侧打开唯一的“变更”Tab。
+再次点击其他变更文件时，替换该 Tab 的文件名与内容。</pre>
+            </div>
+          </section>
+        </main>
+
+        <aside class="side-panel" aria-label="Session details">
+          <nav class="side-tabs" aria-label="右侧面板">
+            <button
+              class="side-tab"
+              id="side-tab-changes"
+              type="button"
+              aria-selected="true"
+            >
+              变更
+            </button>
+            <button
+              class="side-tab"
+              id="side-tab-files"
+              type="button"
+              aria-selected="false"
+            >
+              文件
+            </button>
+          </nav>
+
+          <div class="side-filter" id="changes-filter">
+            <div class="filter-menu">
+              <button
+                class="filter-trigger"
+                id="filter-trigger"
+                type="button"
+                aria-expanded="false"
+                aria-haspopup="menu"
+              >
+                <span aria-hidden="true">□</span>
+                <span id="filter-label">未提交</span>
+                <span aria-hidden="true">⌄</span>
+              </button>
+              <div class="filter-menu__content hidden" id="filter-menu" role="menu">
+                <button
+                  class="filter-menu__item"
+                  type="button"
+                  role="menuitem"
+                  aria-selected="true"
+                  data-filter-label="未提交"
+                >
+                  <span aria-hidden="true">□</span>
+                  未提交
+                </button>
+                <button
+                  class="filter-menu__item"
+                  type="button"
+                  role="menuitem"
+                  aria-selected="false"
+                  data-filter-label="已提交"
+                >
+                  <span aria-hidden="true">✓</span>
+                  已提交
+                </button>
+              </div>
+            </div>
+            <div class="side-tools" aria-label="变更工具">
+              <button class="refresh-button" type="button" aria-label="刷新变更">
+                ↻
+              </button>
+            </div>
+          </div>
+
+          <div class="changes-list" id="changes-list">
+            <button
+              class="change-row"
+              type="button"
+              aria-current="true"
+              data-path="src/features/agents/agents-activity.tsx"
+            >
+              <span class="change-row__name">agents-activity.tsx</span>
+              <span class="change-row__actions">
+                <span class="change-row__stats">
+                  <span class="added">+164</span>
+                  <span class="deleted">-22</span>
+                </span>
+              </span>
+            </button>
+            <button
+              class="change-row"
+              type="button"
+              data-path="src/features/agents/agents-session-pane.tsx"
+            >
+              <span class="change-row__name"
+                >agents-session-pane.tsx
+                <span class="change-row__path">src/features/agents</span></span
+              >
+              <span class="change-row__actions">
+                <span class="change-row__stats">
+                  <span class="added">+88</span>
+                  <span class="deleted">-31</span>
+                </span>
+              </span>
+            </button>
+            <button
+              class="change-row"
+              type="button"
+              data-path="src/features/agents/session-side-panel.tsx"
+            >
+              <span class="change-row__name"
+                >session-side-panel.tsx
+                <span class="change-row__path">src/features/agents</span></span
+              >
+              <span class="change-row__actions">
+                <span class="new-badge">新增</span>
+                <span class="change-row__stats">
+                  <span class="added">+241</span>
+                  <span class="deleted">-0</span>
+                </span>
+              </span>
+            </button>
+            <button
+              class="change-row"
+              type="button"
+              data-path="src/features/agents/session-workspace-tabs.tsx"
+            >
+              <span class="change-row__name"
+                >session-workspace-tabs.tsx
+                <span class="change-row__path">src/features/agents</span></span
+              >
+              <span class="change-row__actions">
+                <span class="new-badge">新增</span>
+                <span class="change-row__stats">
+                  <span class="added">+119</span>
+                  <span class="deleted">-0</span>
+                </span>
+              </span>
+            </button>
+            <button class="change-row" type="button" data-path="src/app/app.css">
+              <span class="change-row__name"
+                >app.css <span class="change-row__path">src/app</span></span
+              >
+              <span class="change-row__actions">
+                <span class="change-row__stats">
+                  <span class="added">+196</span>
+                  <span class="deleted">-47</span>
+                </span>
+              </span>
+            </button>
+            <button
+              class="change-row"
+              type="button"
+              data-path="src/features/agents/agents-activity.test.tsx"
+            >
+              <span class="change-row__name"
+                >agents-activity.test.tsx
+                <span class="change-row__path">src/features/agents</span></span
+              >
+              <span class="change-row__actions">
+                <span class="change-row__stats">
+                  <span class="added">+72</span>
+                  <span class="deleted">-12</span>
+                </span>
+              </span>
+            </button>
+          </div>
+
+          <div class="file-tree hidden" id="file-tree">
+            <button class="tree-row" type="button">
+              <span class="tree-icon">▾</span> src
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon">▾</span> features
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon">▾</span> agents
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon tree-icon--ts">TS</span>
+              agents-activity.tsx
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon tree-icon--ts">TS</span>
+              agents-session-pane.tsx
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon tree-icon--ts">TS</span>
+              session-side-panel.tsx
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon tree-icon--css">CSS</span>
+              app.css
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon tree-icon--rust">RS</span>
+              src-tauri/src/agent/mod.rs
+            </button>
+            <button class="tree-row tree-row--child" type="button">
+              <span class="tree-icon tree-icon--vue">VUE</span>
+              mock-vue-file.vue
+            </button>
+          </div>
+        </aside>
+      </section>
+    </div>
+
+    <script>
+      const sideChangesTab = document.querySelector("#side-tab-changes");
+      const sideFilesTab = document.querySelector("#side-tab-files");
+      const changesFilter = document.querySelector("#changes-filter");
+      const changesList = document.querySelector("#changes-list");
+      const fileTree = document.querySelector("#file-tree");
+      const mainContent = document.querySelector("#main-content");
+      const diffTab = document.querySelector("#tab-diff");
+      const filterTrigger = document.querySelector("#filter-trigger");
+      const filterLabel = document.querySelector("#filter-label");
+      const filterMenu = document.querySelector("#filter-menu");
+
+      function setSideTab(tab) {
+        const isFiles = tab === "files";
+        sideChangesTab.setAttribute("aria-selected", String(!isFiles));
+        sideFilesTab.setAttribute("aria-selected", String(isFiles));
+        changesFilter.classList.toggle("hidden", isFiles);
+        changesList.classList.toggle("hidden", isFiles);
+        fileTree.classList.toggle("hidden", !isFiles);
+      }
+
+      function openDiff(fileName) {
+        diffTab.querySelector(".main-tab__label").textContent = fileName;
+        mainContent.innerHTML = `<div class="code-placeholder">
+          <div class="code-placeholder__header">⌥ ${fileName}</div>
+          <pre class="code-placeholder__body">当前版本暂不实现 Diff 渲染。
+模拟文件：${fileName}
+点击其他变更文件会替换同一个“变更”Tab。</pre>
+        </div>`;
+      }
+
+      function openFile(fileName) {
+        diffTab.querySelector(".main-tab__label").textContent = fileName;
+        mainContent.innerHTML = `<div class="code-placeholder">
+          <div class="code-placeholder__header">${fileName}</div>
+          <pre class="code-placeholder__body">// 当前版本使用静态内容模拟代码预览。
+export function Preview() {
+  return "${fileName}";
+}</pre>
+        </div>`;
+      }
+
+      sideChangesTab.addEventListener("click", () => setSideTab("changes"));
+      sideFilesTab.addEventListener("click", () => setSideTab("files"));
+      filterTrigger.addEventListener("click", () => {
+        const nextExpanded =
+          filterTrigger.getAttribute("aria-expanded") !== "true";
+        filterTrigger.setAttribute("aria-expanded", String(nextExpanded));
+        filterMenu.classList.toggle("hidden", !nextExpanded);
+      });
+      filterMenu.querySelectorAll(".filter-menu__item").forEach((item) => {
+        item.addEventListener("click", () => {
+          filterLabel.textContent = item.dataset.filterLabel;
+          filterMenu
+            .querySelectorAll(".filter-menu__item")
+            .forEach((option) => option.setAttribute("aria-selected", "false"));
+          item.setAttribute("aria-selected", "true");
+          filterTrigger.setAttribute("aria-expanded", "false");
+          filterMenu.classList.add("hidden");
+        });
+      });
+      changesList.querySelectorAll(".change-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          changesList
+            .querySelectorAll(".change-row")
+            .forEach((item) => item.removeAttribute("aria-current"));
+          row.setAttribute("aria-current", "true");
+          openDiff(row.querySelector(".change-row__name").childNodes[0].textContent.trim());
+        });
+      });
+      fileTree.querySelectorAll(".tree-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          const label = row.textContent.trim().replace(/\s+/g, " ");
+          if (!label.includes(".")) {
+            return;
+          }
+          fileTree
+            .querySelectorAll(".tree-row")
+            .forEach((item) => item.removeAttribute("aria-current"));
+          row.setAttribute("aria-current", "true");
+          openFile(label.replace(/^(TS|CSS|RS|VUE)\s+/, ""));
+        });
+      });
+    </script>
+  </body>
+</html>
