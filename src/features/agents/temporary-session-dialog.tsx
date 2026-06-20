@@ -172,6 +172,7 @@ export function TemporarySessionDialog({
           projectId,
           sessionId: result.sessionId,
           message: trimmedPrompt,
+          attachments: [],
         });
       }
       await onStarted(result);

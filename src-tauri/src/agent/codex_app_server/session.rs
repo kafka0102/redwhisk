@@ -28,7 +28,7 @@ use super::thread_item::{extract_usage, map_thread_item};
 use super::transport::{CodexAppServerError, CodexTransport, RequestHandler};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
-use crate::types::agent_session::AgentPermissionDecision;
+use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentPermissionAction, AgentPermissionRequest, AgentStreamEvent,
     AgentTimelineItem, AgentUsage, PermissionBehavior, PermissionKind, ToolCallStatus,
@@ -215,7 +215,14 @@ impl CodexSessionHandle {
     }
 
     /// 发送用户消息（发起一轮 turn）。
-    pub fn send_message(&self, text: String) -> Result<(), CodexAppServerError> {
+    ///
+    /// `attachments` 非空时切换为 `TurnInput::Blocks`，把附件编码为文本路径
+    /// 引用块追加在用户文本之后；为空时保持 `TurnInput::Text` 向后兼容。
+    pub fn send_message(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), CodexAppServerError> {
         let (thread_id, model, effort, mode) = {
             let state = self
                 .state
@@ -234,7 +241,7 @@ impl CodexSessionHandle {
 
         let params = TurnStartParams {
             thread_id,
-            input: TurnInput::Text(text),
+            input: build_turn_input(text, &attachments),
             model,
             effort,
             approval_policy: mode.approval_policy().to_string(),
@@ -430,9 +437,37 @@ fn to_codex_decision(decision: AgentPermissionDecision) -> PermissionDecision {
     }
 }
 
+/// 把用户文本与附件编码为 `turn/start` 的 `input`。
+///
+/// - 附件为空：`TurnInput::Text(text)`，保持向后兼容（codex 原生文本路径）。
+/// - 附件非空：`TurnInput::Blocks`，首个块为用户文本，其后每个附件追加一个
+///   text 块，内容为 `[附件] {display_name}: {path}`。
+///
+/// 首版统一用文本路径引用而非 image/file block：codex app-server 的 image
+/// 输入块 schema 在本仓库未类型化（仅 text 块被测试证实），文本路径引用
+/// 零协议风险、立即可用；image block 接入留作后续独立任务。
+fn build_turn_input(text: String, attachments: &[AgentMessageAttachment]) -> TurnInput {
+    if attachments.is_empty() {
+        return TurnInput::Text(text);
+    }
+    let mut blocks = vec![json!({ "type": "text", "text": text })];
+    for attachment in attachments {
+        blocks.push(json!({
+            "type": "text",
+            "text": format!("[附件] {}: {}", attachment.display_name, attachment.path),
+        }));
+    }
+    TurnInput::Blocks(blocks)
+}
+
 impl AgentSessionHandle for CodexSessionHandle {
-    fn send_message(&self, text: String) -> Result<(), AgentSessionError> {
-        CodexSessionHandle::send_message(self, text).map_err(AgentSessionError::from)
+    fn send_message(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::send_message(self, text, attachments)
+            .map_err(AgentSessionError::from)
     }
 
     fn cancel_turn(&self) -> Result<(), AgentSessionError> {
@@ -1056,5 +1091,46 @@ mod tests {
             pending_permissions: HashMap::new(),
             latest_usage: None,
         }
+    }
+
+    #[test]
+    fn build_turn_input_text_when_no_attachments() {
+        let input = build_turn_input("hello".into(), &[]);
+        match input {
+            TurnInput::Text(text) => assert_eq!(text, "hello"),
+            other => panic!("期望 TurnInput::Text，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_turn_input_blocks_with_attachment_paths() {
+        use crate::types::agent_session::AgentAttachmentKind;
+        let attachments = vec![
+            AgentMessageAttachment {
+                path: "/data/a.png".into(),
+                display_name: "a.png".into(),
+                kind: AgentAttachmentKind::Image,
+            },
+            AgentMessageAttachment {
+                path: "/data/b.pdf".into(),
+                display_name: "b.pdf".into(),
+                kind: AgentAttachmentKind::Pdf,
+            },
+        ];
+        let input = build_turn_input("请看附件".into(), &attachments);
+        let blocks = match input {
+            TurnInput::Blocks(blocks) => blocks,
+            other => panic!("期望 TurnInput::Blocks，实际 {other:?}"),
+        };
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0], json!({ "type": "text", "text": "请看附件" }));
+        assert_eq!(
+            blocks[1],
+            json!({ "type": "text", "text": "[附件] a.png: /data/a.png" })
+        );
+        assert_eq!(
+            blocks[2],
+            json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf" })
+        );
     }
 }

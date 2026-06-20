@@ -79,14 +79,18 @@ impl AgentSessionRegistry {
 mod tests {
     use super::*;
     use crate::agent::session_handle::AgentSessionError;
-    use crate::types::agent_session::AgentPermissionDecision;
+    use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
     use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 
     /// 测试用的空句柄实现，仅用于验证注册表的存取语义。
     struct StubHandle;
 
     impl AgentSessionHandle for StubHandle {
-        fn send_message(&self, _text: String) -> Result<(), AgentSessionError> {
+        fn send_message(
+            &self,
+            _text: String,
+            _attachments: Vec<AgentMessageAttachment>,
+        ) -> Result<(), AgentSessionError> {
             Ok(())
         }
         fn cancel_turn(&self) -> Result<(), AgentSessionError> {

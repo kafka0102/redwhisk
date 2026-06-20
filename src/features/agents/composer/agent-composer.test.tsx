@@ -146,6 +146,7 @@ describe("AgentComposer", () => {
         projectId: 1,
         sessionId: 10,
         message: "你好",
+        attachments: [],
       });
     });
     expect(textarea).toHaveValue("");
@@ -162,6 +163,7 @@ describe("AgentComposer", () => {
         projectId: 1,
         sessionId: 10,
         message: "你好",
+        attachments: [],
       });
     });
   });

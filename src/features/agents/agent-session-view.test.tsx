@@ -101,6 +101,7 @@ describe("AgentSessionView", () => {
       projectId: 1,
       sessionId: 10,
       message: "测试消息",
+      attachments: [],
     });
     // 乐观插入：发送后立即在流中看到用户消息，不等后端回显。
     expect(screen.getByText("测试消息")).toBeInTheDocument();

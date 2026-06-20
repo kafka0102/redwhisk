@@ -11,7 +11,7 @@
 //! - `set_mode` 接收字符串 mode_id，由实现内部解析为各自的 mode 预设，
 //!   避免命令层耦合具体 agent 的 mode 枚举。
 
-use crate::types::agent_session::AgentPermissionDecision;
+use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 
 /// 结构化 agent session 调用过程中的归一化错误。
@@ -59,7 +59,15 @@ impl From<crate::agent::codex_app_server::transport::CodexAppServerError>
 /// `AgentSessionError::NotRunning`。
 pub trait AgentSessionHandle: Send + Sync {
     /// 发送用户消息，发起新一轮 turn。
-    fn send_message(&self, text: String) -> Result<(), AgentSessionError>;
+    ///
+    /// `attachments` 为协议中立的附件列表（落盘路径 + 展示名 + 种类）；
+    /// 空切片表示纯文本消息。具体 agent 实现负责把附件编码进各自协议
+    /// 的输入块（codex → `TurnInput::Blocks`）。
+    fn send_message(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), AgentSessionError>;
 
     /// 中断当前 turn；无 turn 运行时返回 `Ok(())`。
     fn cancel_turn(&self) -> Result<(), AgentSessionError>;

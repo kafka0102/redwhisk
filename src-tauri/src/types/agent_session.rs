@@ -278,6 +278,23 @@ pub struct SendAgentMessageInput {
     pub project_id: i64,
     pub session_id: i64,
     pub message: String,
+    /// 随消息发送的附件。空 vec 表示纯文本消息（向后兼容旧前端不发该字段）。
+    #[serde(default)]
+    pub attachments: Vec<AgentMessageAttachment>,
+}
+
+/// 随用户消息发送的单个附件。
+///
+/// 协议中立类型：只携带落盘路径、展示名、种类，具体 agent 实现（codex /
+/// 未来 claude）负责把它编码进各自协议的输入块。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMessageAttachment {
+    /// `save_agent_attachment` 返回的落盘绝对路径。
+    pub path: String,
+    /// 经过 sanitize 的展示名。
+    pub display_name: String,
+    pub kind: AgentAttachmentKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -360,7 +377,10 @@ pub struct SaveAgentAttachmentInput {
 }
 
 /// 附件种类字面量，镜像 `IssueAttachmentKind` 的字符串值。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+///
+/// 同时实现 `Serialize`（落盘结果返回）与 `Deserialize`（随消息发送入参），
+/// 使 `AgentMessageAttachment` 可跨命令边界往返。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentAttachmentKind {
     Image,
