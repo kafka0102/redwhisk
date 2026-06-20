@@ -1,0 +1,22 @@
+version: 1
+change: 2026-06-20-redesign-session-side-panel
+phase: proposal-ready
+ambiguity: high
+complexity: unknown
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/2026-06-20-redesign-session-side-panel/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: proposal handoff from 4 file(s); primary artifact: openspec/changes/2026-06-20-redesign-session-side-panel/proposal.md
+handoff_hash: 87dfb6511c77437df0d0b4bf8456c718747a0373d44923afabb8ffcaee97535a
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-06-20
+updated_at: 2026-06-20T15:18:54Z
