@@ -20,6 +20,7 @@ pub struct AgentSessionListRow {
     pub attention: AgentSessionAttention,
     pub log_path: String,
     pub latest_output: Option<String>,
+    pub list_inserted_at: i64,
     pub last_active_at: i64,
     pub started_at: i64,
     pub closed_at: Option<i64>,
@@ -75,6 +76,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.attention,
                 agent_sessions.log_path,
                 agent_sessions.latest_output,
+                COALESCE(agent_sessions.list_inserted_at, agent_sessions.started_at),
                 agent_sessions.last_active_at,
                 agent_sessions.started_at,
                 agent_sessions.closed_at
@@ -93,6 +95,40 @@ impl<'connection> AgentSessionRepository<'connection> {
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(sessions)
+    }
+
+    pub fn prune_completed_over_limit(
+        &self,
+        project_id: i64,
+        keep_completed_count: usize,
+        deleted_at: i64,
+    ) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET del = 1,
+                 last_active_at = MAX(last_active_at + 1, ?3)
+             WHERE id IN (
+               SELECT agent_sessions.id
+               FROM agent_sessions
+               LEFT JOIN issues
+                 ON issues.id = agent_sessions.issue_id
+                AND issues.project_id = agent_sessions.project_id
+                AND issues.del = 0
+               WHERE agent_sessions.project_id = ?1
+                 AND agent_sessions.del = 0
+                 AND (
+                   issues.status = 'completed'
+                   OR (
+                     agent_sessions.issue_id IS NULL
+                     AND agent_sessions.status IN ('closed', 'crashed', 'stopped')
+                   )
+                 )
+               ORDER BY COALESCE(agent_sessions.list_inserted_at, agent_sessions.started_at) DESC,
+                        agent_sessions.id DESC
+               LIMIT -1 OFFSET ?2
+             )",
+            params![project_id, keep_completed_count as i64, deleted_at],
+        )
     }
 
     pub fn list_running_by_project_id(
@@ -154,9 +190,10 @@ impl<'connection> AgentSessionRepository<'connection> {
                completion_policy,
                worktree_root_path,
                log_path,
+               list_inserted_at,
                last_active_at,
                started_at
-             ) VALUES (?1, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             ) VALUES (?1, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15)",
             params![
                 project_id,
                 issue_id,
@@ -215,9 +252,10 @@ impl<'connection> AgentSessionRepository<'connection> {
                completion_policy,
                worktree_root_path,
                log_path,
+               list_inserted_at,
                last_active_at,
                started_at
-             ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15)",
             params![
                 project_id,
                 title,
@@ -428,9 +466,10 @@ fn agent_session_list_row_from_row(
         attention: agent_session_attention_from_str(&row.get::<_, String>(8)?)?,
         log_path: row.get(9)?,
         latest_output: row.get(10)?,
-        last_active_at: row.get(11)?,
-        started_at: row.get(12)?,
-        closed_at: row.get(13)?,
+        list_inserted_at: row.get(11)?,
+        last_active_at: row.get(12)?,
+        started_at: row.get(13)?,
+        closed_at: row.get(14)?,
     })
 }
 

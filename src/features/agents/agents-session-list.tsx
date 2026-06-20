@@ -1,47 +1,32 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  LayoutGrid,
-  LoaderCircle,
-  Plus,
-} from "lucide-react";
-import { useState, type RefObject } from "react";
+import { LayoutGrid, LoaderCircle, Plus } from "lucide-react";
+import type { RefObject } from "react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "./agent-visuals";
 import {
   formatSessionStatusLabel,
   formatSessionTitle,
-  type SessionIssueGroup,
 } from "./agent-session-formatters";
-
-export interface SessionGroupViewModel {
-  count: number;
-  emptyCopy: string;
-  key: SessionIssueGroup;
-  label: string;
-  sessions: AgentSessionListItem[];
-}
 
 interface AgentsSessionListProps {
   errorMessage: string | null;
-  groups: SessionGroupViewModel[];
   isLoading: boolean;
   newSessionButtonRef: RefObject<HTMLButtonElement | null>;
   onNewSession: () => void;
   onSelectSession: (sessionId: number) => void;
   selectedSessionId: number | null;
+  sessions: AgentSessionListItem[];
   title: string;
 }
 
 export function AgentsSessionList({
   errorMessage,
-  groups,
   isLoading,
   newSessionButtonRef,
   onNewSession,
   onSelectSession,
   selectedSessionId,
+  sessions,
   title,
 }: AgentsSessionListProps) {
   return (
@@ -86,86 +71,52 @@ export function AgentsSessionList({
       ) : null}
 
       {!isLoading && !errorMessage ? (
-        <div className="agents-groups">
-          {groups.map((group) => (
-            <SessionGroup
-              key={group.key}
-              emptyCopy={group.emptyCopy}
-              count={group.count}
-              label={group.label}
-              groupKey={group.key}
-              onSelect={onSelectSession}
-              selectedSessionId={selectedSessionId}
-              sessions={group.sessions}
-            />
-          ))}
-        </div>
+        <SessionRows
+          onSelect={onSelectSession}
+          selectedSessionId={selectedSessionId}
+          sessions={sessions}
+        />
       ) : null}
     </aside>
   );
 }
 
-interface SessionGroupProps {
-  count: number;
-  emptyCopy: string;
-  groupKey: SessionIssueGroup;
-  label: string;
+interface SessionRowsProps {
   onSelect: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
 }
 
-function SessionGroup({
-  count,
-  emptyCopy,
-  groupKey,
-  label,
+function SessionRows({
   onSelect,
   selectedSessionId,
   sessions,
-}: SessionGroupProps) {
-  const [isExpanded, setIsExpanded] = useState(groupKey !== "done");
-
+}: SessionRowsProps) {
   return (
-    <section aria-label={`${label} sessions`} className="agents-group">
-      <button
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${label} sessions`}
-        className="agents-group__header"
-        type="button"
-        onClick={() => setIsExpanded((currentIsExpanded) => !currentIsExpanded)}
-      >
-        {isExpanded ? (
-          <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />
-        ) : (
-          <ChevronRight aria-hidden="true" size={14} strokeWidth={1.9} />
-        )}
-        <h3>
-          <span className="agents-group__title">{label}</span>
-          <span className="agents-group__count">{`(${count})`}</span>
-        </h3>
-      </button>
-      {isExpanded && sessions.length === 0 ? (
-        <p className="agents-group__empty">{emptyCopy}</p>
-      ) : null}
-      {isExpanded && sessions.length > 0 ? (
-        <div className="agents-session-list">
-          {sessions.map((session) => {
-            const outputLine = formatSessionOutputLine(session.latestOutput);
-            const statusTone = getSessionStatusTone(session);
-            const statusLabel = formatSessionStatusLabel(session);
-            const agentLabel = formatAgentTypeLabel(session.agentType);
+    <div
+      aria-label="Agent sessions"
+      className="agents-session-list"
+      role="list"
+    >
+      {sessions.length === 0 ? (
+        <p className="agents-session-list__empty">No sessions.</p>
+      ) : (
+        sessions.map((session) => {
+          const outputLine = formatSessionOutputLine(session.latestOutput);
+          const statusTone = getSessionStatusTone(session);
+          const statusLabel = formatSessionStatusLabel(session);
+          const agentLabel = formatAgentTypeLabel(session.agentType);
 
-            return (
+          return (
+            <div key={session.sessionId} role="listitem">
               <button
-                key={session.sessionId}
                 aria-pressed={selectedSessionId === session.sessionId}
                 className="agents-session-row"
                 type="button"
                 onClick={() => onSelect(session.sessionId)}
               >
                 <span className="agents-session-row__header">
-                  {statusTone === "running" ? (
+                  {shouldShowRunningSpinner(session) ? (
                     <LoaderCircle
                       aria-label="Session 正在运行"
                       className="agents-session-row__running-icon"
@@ -200,11 +151,11 @@ function SessionGroup({
                   <span className="sr-only">{`，${statusLabel}`}</span>
                 </span>
               </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </section>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }
 
@@ -213,19 +164,32 @@ function buildSessionStatusDotClassName(tone: string): string {
 }
 
 function getSessionStatusTone(session: AgentSessionListItem): string {
+  if (session.status !== "running") {
+    return "done";
+  }
+
+  if (session.attention === "requested") {
+    return "attention";
+  }
+
   if (session.issueStatus === "completed") {
     return "done";
   }
 
   if (session.issueStatus === "review") {
-    return "viewed";
+    return "review";
   }
 
-  if (session.status !== "running") {
-    return "done";
-  }
+  return "running";
+}
 
-  return session.attention === "requested" ? "viewed" : "running";
+function shouldShowRunningSpinner(session: AgentSessionListItem): boolean {
+  return (
+    session.status === "running" &&
+    session.attention !== "requested" &&
+    session.issueStatus !== "review" &&
+    session.issueStatus !== "completed"
+  );
 }
 
 function formatSessionOutputLine(output: string | null | undefined): string {
