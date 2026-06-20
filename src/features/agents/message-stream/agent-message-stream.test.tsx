@@ -83,8 +83,9 @@ describe("AgentMessageStream", () => {
     await waitFor(() => {
       expect(screen.getByText("Shell")).toBeInTheDocument();
     });
-    expect(screen.getByText(/ls -la/)).toBeInTheDocument();
+    expect(screen.getAllByText(/ls -la/)).toHaveLength(2);
     expect(screen.getByText("完成")).toBeInTheDocument();
+    expect(screen.getByText("Shell details")).toBeInTheDocument();
     const output = screen.getByText("file.txt");
     const details = output.closest("details") as HTMLDetailsElement | null;
     expect(details?.open).toBe(false);
@@ -141,12 +142,40 @@ describe("AgentMessageStream", () => {
     await waitFor(() => {
       expect(screen.getByText("Search")).toBeInTheDocument();
     });
-    expect(screen.getByText("查看搜索内容和 1 条结果")).toBeInTheDocument();
-    expect(screen.getByText("Claude 最新模型")).toBeInTheDocument();
+    expect(screen.getByText("Search details and 1 result")).toBeInTheDocument();
+    expect(screen.getAllByText("Claude 最新模型")).toHaveLength(2);
+    expect(screen.getByText("Mode")).toBeInTheDocument();
+    expect(screen.getByText("content")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
       "https://docs.anthropic.com/en/docs/about-claude/models/overview",
     );
+  });
+
+  it("兼容旧 unknown webSearch 工具并在摘要显示 query", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "legacy-search-1",
+          name: "webSearch",
+          detail: {
+            type: "unknown",
+            rawOutput: JSON.stringify({
+              action: { type: "search", query: "weather: Beijing" },
+            }),
+          },
+          status: "completed",
+        },
+      ],
+    });
+    render(<AgentMessageStream projectId={1} sessionId={12} />);
+    await waitFor(() => {
+      expect(screen.getByText("Search")).toBeInTheDocument();
+    });
+    expect(screen.getByText("weather: Beijing")).toBeInTheDocument();
+    expect(screen.getByText("Tool details")).toBeInTheDocument();
   });
 
   it("渲染 todo 清单", async () => {

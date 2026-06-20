@@ -5,9 +5,9 @@
 //! redwhisk 的 `AgentTimelineItem` 联合类型，让前端按 `type` 分发渲染。
 //!
 //! 首版覆盖 codex 0.x 常见 item 类型：userMessage / agentMessage / reasoning /
-//! plan / commandExecution / fileChange / contextCompaction。其余类型
-//! （mcpToolCall / webSearch / collabAgentToolCall / image*）暂归 `unknown`
-//! 或 `error`，保留原始 JSON 便于诊断，待后续 PR 补齐。
+//! plan / commandExecution / fileChange / webSearch / contextCompaction。其余类型
+//! （mcpToolCall / collabAgentToolCall / image*）暂归 `unknown` 或 `error`，
+//! 保留原始 JSON 便于诊断，待后续 PR 补齐。
 
 use serde_json::Value;
 
@@ -74,10 +74,11 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
         }
         "commandExecution" => map_command_execution(item),
         "fileChange" => map_file_change(item),
+        "webSearch" => map_web_search(item),
         "contextCompaction" => Some(AgentTimelineItem::Compaction {
             status: CompactionStatus::Completed,
         }),
-        "mcpToolCall" | "webSearch" | "collabAgentToolCall" | "imageView" | "imageGeneration" => {
+        "mcpToolCall" | "collabAgentToolCall" | "imageView" | "imageGeneration" => {
             map_unknown_tool_call(item, item_type)
         }
         _ => None,
@@ -172,6 +173,46 @@ fn map_file_change(item: &Value) -> Option<AgentTimelineItem> {
     })
 }
 
+fn map_web_search(item: &Value) -> Option<AgentTimelineItem> {
+    let call_id = str_field(item, "id")
+        .or_else(|| str_field(item, "callId"))
+        .or_else(|| str_field(item, "call_id"))
+        .unwrap_or_else(|| "web_search".to_string());
+    let query = extract_search_query(item)?;
+    let mode = str_field(item, "mode")
+        .or_else(|| nested_str_field(item, &["input", "mode"]))
+        .map(|value| parse_search_mode_str(&value))
+        .unwrap_or(SearchMode::Content);
+    let matches = extract_search_matches(item);
+    let success = item.get("success").and_then(Value::as_bool);
+    let running = is_item_running(item);
+
+    let status = if running {
+        ToolCallStatus::Running
+    } else if success == Some(false) {
+        ToolCallStatus::Failed
+    } else {
+        ToolCallStatus::Completed
+    };
+    let error = if status == ToolCallStatus::Failed {
+        str_field(item, "error").or(Some("Web search failed".to_string()))
+    } else {
+        None
+    };
+
+    Some(AgentTimelineItem::ToolCall {
+        call_id,
+        name: "web_search".into(),
+        detail: ToolCallDetail::Search {
+            query,
+            mode,
+            matches,
+        },
+        status,
+        error,
+    })
+}
+
 fn map_unknown_tool_call(item: &Value, name: &str) -> Option<AgentTimelineItem> {
     let call_id = str_field(item, "id")
         .or_else(|| str_field(item, "callId"))
@@ -260,6 +301,53 @@ fn extract_patch_text(value: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_search_query(item: &Value) -> Option<String> {
+    str_field(item, "query")
+        .or_else(|| nested_str_field(item, &["input", "query"]))
+        .or_else(|| nested_str_field(item, &["action", "query"]))
+        .or_else(|| nested_str_field(item, &["output", "action", "query"]))
+        .filter(|query| !query.trim().is_empty())
+}
+
+fn extract_search_matches(item: &Value) -> Vec<String> {
+    for field in ["matches", "results", "sources"] {
+        if let Some(matches) = item.get(field).and_then(values_to_search_matches) {
+            return matches;
+        }
+    }
+    if let Some(matches) = item
+        .get("output")
+        .and_then(|output| output.get("sources"))
+        .and_then(values_to_search_matches)
+    {
+        return matches;
+    }
+    Vec::new()
+}
+
+fn values_to_search_matches(value: &Value) -> Option<Vec<String>> {
+    let array = value.as_array()?;
+    let matches = array
+        .iter()
+        .filter_map(value_to_search_match)
+        .collect::<Vec<_>>();
+    Some(matches)
+}
+
+fn value_to_search_match(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return non_empty_string(text);
+    }
+    let url = str_field(value, "url");
+    let title = str_field(value, "title").or_else(|| str_field(value, "name"));
+    match (title, url) {
+        (Some(title), Some(url)) => non_empty_string(&format!("{title} {url}")),
+        (None, Some(url)) => non_empty_string(&url),
+        (Some(title), None) => non_empty_string(&title),
+        (None, None) => None,
+    }
 }
 
 fn is_item_running(item: &Value) -> bool {
@@ -413,6 +501,23 @@ fn str_field(value: &Value, field: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn nested_str_field(value: &Value, path: &[&str]) -> Option<String> {
+    let mut current = value;
+    for field in path {
+        current = current.get(field)?;
+    }
+    current.as_str().map(|s| s.to_string())
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,6 +640,89 @@ mod tests {
                 }
             }
             other => panic!("期望 ToolCall，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_web_search_with_query_and_matches() {
+        let item = map_thread_item(
+            &json!({
+                "id": "s1",
+                "type": "webSearch",
+                "query": "Beijing weather today",
+                "mode": "count",
+                "matches": [
+                    "Weather https://weather.example/beijing",
+                    { "title": "Forecast", "url": "https://example.com/forecast" }
+                ],
+            }),
+            true,
+        );
+        match item {
+            Some(AgentTimelineItem::ToolCall {
+                name,
+                detail,
+                status,
+                ..
+            }) => {
+                assert_eq!(name, "web_search");
+                assert_eq!(status, ToolCallStatus::Completed);
+                match detail {
+                    ToolCallDetail::Search {
+                        query,
+                        mode,
+                        matches,
+                    } => {
+                        assert_eq!(query, "Beijing weather today");
+                        assert_eq!(mode, SearchMode::Count);
+                        assert_eq!(
+                            matches,
+                            vec![
+                                "Weather https://weather.example/beijing",
+                                "Forecast https://example.com/forecast",
+                            ]
+                        );
+                    }
+                    other => panic!("期望 Search detail，实际 {other:?}"),
+                }
+            }
+            other => panic!("期望 ToolCall，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_web_search_from_output_action_sources() {
+        let item = map_thread_item(
+            &json!({
+                "id": "s2",
+                "type": "WebSearch",
+                "output": {
+                    "action": {
+                        "type": "search",
+                        "query": "weather: Beijing",
+                    },
+                    "sources": [
+                        { "type": "url", "url": "https://weather.example/beijing" }
+                    ]
+                },
+            }),
+            true,
+        );
+        match item {
+            Some(AgentTimelineItem::ToolCall {
+                detail:
+                    ToolCallDetail::Search {
+                        query,
+                        mode,
+                        matches,
+                    },
+                ..
+            }) => {
+                assert_eq!(query, "weather: Beijing");
+                assert_eq!(mode, SearchMode::Content);
+                assert_eq!(matches, vec!["https://weather.example/beijing"]);
+            }
+            other => panic!("期望 Search tool call，实际 {other:?}"),
         }
     }
 
