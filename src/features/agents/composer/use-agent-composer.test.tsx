@@ -41,6 +41,7 @@ interface ProbeProps {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
+  currentEffort?: "low" | "medium" | "high" | null;
   onMessageSent?: (message: string) => void;
   onState: (state: UseAgentComposerResult) => void;
 }
@@ -49,6 +50,7 @@ function Probe({
   projectId,
   sessionId,
   turnStatus,
+  currentEffort,
   onMessageSent,
   onState,
 }: ProbeProps) {
@@ -56,6 +58,7 @@ function Probe({
     projectId,
     sessionId,
     turnStatus,
+    currentEffort,
     onMessageSent,
   });
   onState(state);
@@ -66,7 +69,9 @@ type ProbeInput = Omit<ProbeProps, "onState">;
 
 async function renderProbe(props: ProbeInput): Promise<{
   getState: () => UseAgentComposerResult | null;
-  rerenderWith: (next: { turnStatus: TurnStatus }) => void;
+  rerenderWith: (
+    next: Partial<Pick<ProbeProps, "turnStatus" | "currentEffort">>,
+  ) => void;
 }> {
   let latest: UseAgentComposerResult | null = null;
   const captureState = (state: UseAgentComposerResult) => {
@@ -77,6 +82,7 @@ async function renderProbe(props: ProbeInput): Promise<{
       projectId={props.projectId}
       sessionId={props.sessionId}
       turnStatus={props.turnStatus}
+      currentEffort={props.currentEffort}
       onMessageSent={props.onMessageSent}
       onState={captureState}
     />,
@@ -86,12 +92,19 @@ async function renderProbe(props: ProbeInput): Promise<{
   });
   return {
     getState: () => latest,
-    rerenderWith: (next: { turnStatus: TurnStatus }) => {
+    rerenderWith: (
+      next: Partial<Pick<ProbeProps, "turnStatus" | "currentEffort">>,
+    ) => {
       result.rerender(
         <Probe
           projectId={props.projectId}
           sessionId={props.sessionId}
-          turnStatus={next.turnStatus}
+          turnStatus={next.turnStatus ?? props.turnStatus}
+          currentEffort={
+            Object.prototype.hasOwnProperty.call(next, "currentEffort")
+              ? next.currentEffort
+              : props.currentEffort
+          }
           onMessageSent={props.onMessageSent}
           onState={captureState}
         />,
@@ -399,6 +412,22 @@ describe("useAgentComposer", () => {
     rerenderWith({ turnStatus: "running" });
     await waitFor(() => {
       expect(getState()!.isSending).toBe(true);
+    });
+  });
+
+  it("rerender currentEffort 后 effort 跟随父级状态更新", async () => {
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "idle",
+      currentEffort: null,
+    });
+    expect(getState()!.effort).toBeNull();
+
+    rerenderWith({ currentEffort: "medium" });
+
+    await waitFor(() => {
+      expect(getState()!.effort).toBe("medium");
     });
   });
 });

@@ -169,7 +169,7 @@ impl CodexSessionHandle {
         } else {
             let preset_mode = config.mode;
             client.thread_start(
-                config.model.as_deref().unwrap_or("gpt-5"),
+                config.model.as_deref(),
                 Some(&config.cwd),
                 preset_mode.approval_policy(),
                 preset_mode.sandbox_policy_label(),
