@@ -1,13 +1,11 @@
-// composer 控制行（纯展示）：模型 Select + Think Select + 发送/取消按钮 + 用量条。
+// composer 控制行（纯展示）：附件图标 + 模型菜单 + Think 菜单 + 发送/取消按钮 + 用量条。
 //
-// 模型与 Think 都用 shadcn Select（base-ui），复用 temporary-session-dialog 的
-// dynamic-options 模式。Think 选项从当前模型的 `supportedReasoningEfforts` 取，
-// 空则回退 low/medium/high；额外提供「关闭」选项（effort=null）。
+// 模型与 Think 都用 shadcn Select（base-ui）。Think 只展示 low/medium/high/xhigh，
+// 不提供关闭项。
 
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Paperclip, Square } from "lucide-react";
 
 import {
-  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -31,18 +29,18 @@ interface ComposerControlsProps {
   onSelectEffort: (effort: ComposerEffort) => void;
   isSending: boolean;
   canSend: boolean;
+  onAddAttachment: () => void;
   onSubmit: () => void;
   onCancel: () => void;
   usage: AgentUsage | null;
 }
 
 const EFFORT_LABELS: Record<string, string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
 };
-
-const OFF_VALUE = "__off__";
 
 export function ComposerControls({
   capabilities,
@@ -56,26 +54,29 @@ export function ComposerControls({
   onSelectEffort,
   isSending,
   canSend,
+  onAddAttachment,
   onSubmit,
   onCancel,
   usage,
 }: ComposerControlsProps) {
-  const effortValue = effort ?? OFF_VALUE;
   const hasModels = models.length > 0;
   const showModelSelect = capabilities.supportsModelSwitching;
   const showThinkSelect = capabilities.supportsReasoningEffort;
 
   return (
     <div className="agents-composer__controls">
-      <div className="agents-composer__selects">
-        {showModelSelect && (
-          <div className="agents-composer__field">
-            <Label
-              htmlFor="agent-composer-model"
-              className="agents-composer__field-label"
-            >
-              模型
-            </Label>
+      <div className="agents-composer__tools">
+        <button
+          type="button"
+          className="agents-composer__attach"
+          aria-label="添加附件"
+          onClick={onAddAttachment}
+        >
+          <Paperclip aria-hidden="true" size={16} strokeWidth={1.9} />
+        </button>
+
+        <div className="agents-composer__selects">
+          {showModelSelect && (
             <Select
               value={selectedModelId ?? ""}
               onValueChange={(value) => {
@@ -97,7 +98,7 @@ export function ComposerControls({
                   }
                 />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent align="start" className="agents-composer__menu">
                 {models.map((model) => (
                   <SelectItem key={model.modelId} value={model.modelId}>
                     {model.displayName ?? model.modelId}
@@ -106,23 +107,13 @@ export function ComposerControls({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
+          )}
 
-        {showThinkSelect && (
-          <div className="agents-composer__field">
-            <Label
-              htmlFor="agent-composer-effort"
-              className="agents-composer__field-label"
-            >
-              Think
-            </Label>
+          {showThinkSelect && (
             <Select
-              value={effortValue}
+              value={effort}
               onValueChange={(value) => {
-                if (value === OFF_VALUE) {
-                  onSelectEffort(null);
-                } else if (typeof value === "string") {
+                if (typeof value === "string") {
                   onSelectEffort(value as ComposerEffort);
                 }
               }}
@@ -135,8 +126,7 @@ export function ComposerControls({
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={OFF_VALUE}>关闭</SelectItem>
+              <SelectContent align="start" className="agents-composer__menu">
                 {thinkOptions.map((option) => (
                   <SelectItem key={option} value={option}>
                     {EFFORT_LABELS[option] ?? option}
@@ -144,8 +134,8 @@ export function ComposerControls({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="agents-composer__actions">
