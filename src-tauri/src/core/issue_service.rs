@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::json;
 
 use crate::agent::pty_session_manager::PtySessionManager;
+use crate::agent::session_registry::AgentSessionRegistry;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -23,7 +24,7 @@ use crate::git::status::{
 use crate::git::worktree::{cleanup_worktree, is_branch_merged, merge_branch_into_target};
 use crate::types::agent_session::{
     AgentSessionPromptKind, AgentSessionRecord, AgentSessionStatus, InjectAgentSessionPromptInput,
-    WorkspaceMode,
+    InjectAgentSessionPromptResult, WorkspaceMode,
 };
 use crate::types::completion_attempt::{
     CompletionAttemptOption, CompletionAttemptRecord, CompletionAttemptResult,
@@ -919,6 +920,7 @@ impl<'connection> IssueService<'connection> {
         input: SendAgentCommitPromptInput,
         data_dir: impl AsRef<Path>,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<SendAgentCommitPromptResult, CommandError> {
         let context = self.validate_agent_commit_context(input.project_id, input.issue_id)?;
         let completion_prompt =
@@ -932,16 +934,58 @@ impl<'connection> IssueService<'connection> {
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
 
-        let inject_result = AgentSessionService::inject_session_prompt_in_data_dir(
-            data_dir.as_ref(),
-            InjectAgentSessionPromptInput {
-                project_id: input.project_id,
-                session_id: context.linked_session_id,
-                prompt: completion_prompt,
-                kind: AgentSessionPromptKind::Completion,
-            },
-            pty_sessions,
-        )?;
+        let (inject_result, structured_prompt_event_payload) =
+            if let Some(handle) = agent_registry.get(context.linked_session_id) {
+                handle
+                    .send_message(completion_prompt.clone(), Vec::new())
+                    .map_err(
+                        crate::core::agent_session_service::agent_session_error_to_command_error,
+                    )?;
+                let session = AgentSessionRepository::new(self.issue_repository.connection())
+                    .find_by_id(context.linked_session_id)
+                    .map_err(issue_database_error)?
+                    .ok_or_else(|| {
+                        CommandError::new(
+                        CommandErrorCode::IssueValidationFailed,
+                        "只有存在运行中关联 Agent Session 的 Issue 可以发送 Agent Commit prompt。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("AgentSession")
+                            .with_value("sessionId", context.linked_session_id),
+                    )
+                    })?;
+                (
+                    InjectAgentSessionPromptResult {
+                        session_id: context.linked_session_id,
+                        codex_session_id: session.codex_session_id.clone(),
+                    },
+                    Some(
+                        json!({
+                            "sessionId": context.linked_session_id,
+                            "issueId": context.issue.id,
+                            "kind": "completion",
+                            "prompt": completion_prompt,
+                            "submitted": true,
+                            "codexSessionId": session.codex_session_id,
+                        })
+                        .to_string(),
+                    ),
+                )
+            } else {
+                (
+                    AgentSessionService::inject_session_prompt_in_data_dir(
+                        data_dir.as_ref(),
+                        InjectAgentSessionPromptInput {
+                            project_id: input.project_id,
+                            session_id: context.linked_session_id,
+                            prompt: completion_prompt,
+                            kind: AgentSessionPromptKind::Completion,
+                        },
+                        pty_sessions,
+                    )?,
+                    None,
+                )
+            };
 
         let recorded_at = current_epoch_millis()?;
         let transaction = self
@@ -949,6 +993,16 @@ impl<'connection> IssueService<'connection> {
             .connection()
             .unchecked_transaction()
             .map_err(issue_database_error)?;
+        if let Some(payload) = structured_prompt_event_payload {
+            EventRepository::insert_session_event_in_transaction(
+                &transaction,
+                context.linked_session_id,
+                SessionEventType::SessionPromptInjected,
+                &payload,
+                recorded_at,
+            )
+            .map_err(issue_database_error)?;
+        }
         CompletionAttemptRepository::insert_in_transaction(
             &transaction,
             context.issue.id,
@@ -1350,6 +1404,7 @@ impl<'connection> IssueService<'connection> {
         data_dir: impl AsRef<Path>,
         input: SendAgentCommitPromptInput,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<SendAgentCommitPromptResult, CommandError> {
         let database = open_issue_database(&data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
@@ -1358,6 +1413,7 @@ impl<'connection> IssueService<'connection> {
             input,
             data_dir,
             pty_sessions,
+            agent_registry,
         )
     }
 

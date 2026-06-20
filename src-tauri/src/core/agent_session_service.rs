@@ -115,6 +115,28 @@ impl<'connection> AgentSessionService<'connection> {
         self.start_agent_session_internal(data_dir, input, Some(pty_sessions))
     }
 
+    pub fn start_agent_session_with_runtime(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartAgentSessionInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
+        if launch.profile.agent_type == AgentType::Codex {
+            return self.start_structured_issue_agent_session(
+                data_dir.as_ref(),
+                input,
+                launch,
+                agent_registry,
+                broadcaster,
+            );
+        }
+
+        self.start_agent_session_internal_with_launch(data_dir, input, launch, Some(pty_sessions))
+    }
+
     pub fn start_standalone_agent_session(
         &self,
         data_dir: impl AsRef<Path>,
@@ -138,9 +160,18 @@ impl<'connection> AgentSessionService<'connection> {
         input: StartAgentSessionInput,
         pty_sessions: Option<&PtySessionManager>,
     ) -> Result<StartAgentSessionResult, CommandError> {
-        let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
         let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
+        self.start_agent_session_internal_with_launch(data_dir, input, launch, pty_sessions)
+    }
 
+    fn start_agent_session_internal_with_launch(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartAgentSessionInput,
+        launch: SessionLaunchContext,
+        pty_sessions: Option<&PtySessionManager>,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
         let issue = self
             .issue_repository
             .find_by_id(input.issue_id)
@@ -383,6 +414,222 @@ impl<'connection> AgentSessionService<'connection> {
                 ))
             }
         }
+    }
+
+    fn start_structured_issue_agent_session(
+        &self,
+        data_dir: &Path,
+        input: StartAgentSessionInput,
+        launch: SessionLaunchContext,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
+        let issue = self
+            .issue_repository
+            .find_by_id(input.issue_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+            })?;
+
+        if issue.project_id != input.project_id {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "Issue 不属于当前 Project。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+            .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
+        }
+
+        if let Some(existing_session) = self
+            .agent_session_repository
+            .find_by_issue_id(input.issue_id)
+            .map_err(agent_session_database_error)?
+        {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionAlreadyExists,
+                "当前 Issue 已存在关联 Agent Session。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+            .with_detail(
+                ErrorDetail::new("AgentSession")
+                    .with_value("sessionId", existing_session.id)
+                    .with_value(
+                        "status",
+                        format!("{:?}", existing_session.status).to_lowercase(),
+                    ),
+            ));
+        }
+
+        if issue.status != IssueStatus::Backlog {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "只有 backlog Issue 可以启动 Agent Session。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("status", format!("{:?}", issue.status).to_lowercase()),
+            ));
+        }
+
+        let structured_log_path =
+            build_structured_log_path(data_dir, input.project_id, launch.started_at)?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+
+        let transaction_result: Result<StartAgentSessionResult, rusqlite::Error> = (|| {
+            let session = AgentSessionRepository::insert_in_transaction(
+                &transaction,
+                input.project_id,
+                issue.id,
+                input.agent_profile_id,
+                &launch.working_dir,
+                &launch.command_snapshot,
+                &prompt_snapshot,
+                &launch.workspace_mode,
+                launch.target_branch.as_deref(),
+                launch.workspace_branch.as_deref(),
+                launch.workspace_path.as_deref(),
+                launch.completion_policy,
+                launch.worktree_root_path.as_deref(),
+                &structured_log_path,
+                launch.started_at,
+            )?;
+
+            let updated_issue = IssueRepository::update_status_in_transaction(
+                &transaction,
+                input.project_id,
+                issue.id,
+                IssueStatus::Running,
+            )?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+
+            let session_event_payload = json!({
+                "sessionId": session.id,
+                "issueId": issue.id,
+                "agentProfileId": input.agent_profile_id,
+                "status": "running",
+                "structuredStream": true,
+                "logPath": structured_log_path,
+            })
+            .to_string();
+            EventRepository::insert_session_event_in_transaction(
+                &transaction,
+                session.id,
+                SessionEventType::SessionStarted,
+                &session_event_payload,
+                launch.started_at,
+            )?;
+
+            let issue_action_payload = json!({
+                "sessionId": session.id,
+                "fromStatus": "backlog",
+                "toStatus": "running",
+                "agentProfileId": input.agent_profile_id,
+            })
+            .to_string();
+            EventRepository::insert_issue_action_in_transaction(
+                &transaction,
+                issue.id,
+                IssueActionType::AgentSessionStarted,
+                &issue_action_payload,
+                updated_issue.updated_at,
+            )?;
+
+            transaction.commit()?;
+
+            Ok(StartAgentSessionResult {
+                session_id: session.id,
+                issue_id: issue.id,
+            })
+        })();
+
+        let result = transaction_result
+            .map_err(|error| agent_session_transaction_error_for_issue(error, input.issue_id))?;
+        let mode = codex_mode_from_profile(&launch.profile)?;
+        let config = CodexSessionConfig {
+            project_id: input.project_id,
+            session_id: result.session_id,
+            binary: launch.profile.command.clone(),
+            cwd: launch.working_dir.clone(),
+            mode,
+            broadcaster: broadcaster.clone(),
+            resume_thread_id: None,
+            model: None,
+            effort: None,
+        };
+        let codex_handle = match CodexSessionHandle::start(config) {
+            Ok(handle) => handle,
+            Err(error) => {
+                let _ = self.rollback_failed_structured_issue_session(
+                    input.project_id,
+                    input.issue_id,
+                    result.session_id,
+                );
+                return Err(agent_session_error_to_command_error(error.into()));
+            }
+        };
+        let thread_id = codex_handle.thread_id().ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionStreamFailed,
+                "Agent 会话启动后未拿到 threadId。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", result.session_id),
+            )
+        })?;
+        self.agent_session_repository
+            .update_codex_session_id(result.session_id, &thread_id)
+            .map_err(agent_session_database_error)?;
+
+        broadcaster.register_session(result.session_id);
+        let handle: Arc<dyn AgentSessionHandle> = Arc::new(codex_handle);
+        if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
+            handle.shutdown();
+            let _ = self.rollback_failed_structured_issue_session(
+                input.project_id,
+                input.issue_id,
+                result.session_id,
+            );
+            return Err(agent_session_error_to_command_error(error));
+        }
+        agent_registry.register(result.session_id, handle);
+
+        Ok(result)
+    }
+
+    fn rollback_failed_structured_issue_session(
+        &self,
+        project_id: i64,
+        issue_id: i64,
+        session_id: i64,
+    ) -> Result<(), CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        AgentSessionRepository::soft_delete_in_transaction(
+            &transaction,
+            session_id,
+            current_epoch_millis()?,
+        )
+        .map_err(agent_session_database_error)?;
+        IssueRepository::update_status_in_transaction(
+            &transaction,
+            project_id,
+            issue_id,
+            IssueStatus::Backlog,
+        )
+        .map_err(agent_session_database_error)?;
+        transaction.commit().map_err(agent_session_database_error)?;
+        Ok(())
     }
 
     fn start_standalone_agent_session_internal(
@@ -801,6 +1048,7 @@ impl<'connection> AgentSessionService<'connection> {
         &self,
         project_id: i64,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<(), CommandError> {
         self.ensure_project_exists(project_id)?;
 
@@ -810,7 +1058,7 @@ impl<'connection> AgentSessionService<'connection> {
             .map_err(agent_session_database_error)?;
 
         for session in running_sessions {
-            if pty_sessions.contains(session.id) {
+            if pty_sessions.contains(session.id) || agent_registry.contains(session.id) {
                 continue;
             }
 
@@ -1381,6 +1629,7 @@ impl AgentSessionService<'_> {
         data_dir: impl AsRef<Path>,
         project_id: i64,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<AgentSessionListResponse, CommandError> {
         let database = DatabaseConfig::new(data_dir)
             .open()
@@ -1395,7 +1644,11 @@ impl AgentSessionService<'_> {
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
         )
-        .reconcile_unrecoverable_running_sessions(project_id, pty_sessions)?;
+        .reconcile_unrecoverable_running_sessions(
+            project_id,
+            pty_sessions,
+            agent_registry,
+        )?;
 
         AgentSessionService::new(
             IssueRepository::new(&database.connection),
@@ -1701,6 +1954,7 @@ impl AgentSessionService<'_> {
         data_dir: impl AsRef<Path>,
         project_id: i64,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<(), CommandError> {
         let database = DatabaseConfig::new(data_dir)
             .open()
@@ -1715,7 +1969,7 @@ impl AgentSessionService<'_> {
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
         )
-        .reconcile_unrecoverable_running_sessions(project_id, pty_sessions)
+        .reconcile_unrecoverable_running_sessions(project_id, pty_sessions, agent_registry)
     }
 
     fn mark_session_stopped_after_restart(
@@ -2009,6 +2263,26 @@ fn resolve_worktree_root_path(
 
 fn build_command_snapshot(profile: &AgentProfileRow) -> String {
     profile.command.clone()
+}
+
+fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, CommandError> {
+    let normalized = profile.mode.trim();
+    if let Some(mode) = CodexMode::from_id(normalized) {
+        return Ok(mode);
+    }
+
+    match normalized {
+        "" | "default" | "auto" => Ok(CodexMode::Auto),
+        "full-auto" | "danger-full-access" | "dangerous" => Ok(CodexMode::FullAccess),
+        "read_only" => Ok(CodexMode::ReadOnly),
+        _ if profile.dangerous => Ok(CodexMode::FullAccess),
+        _ => Err(CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "不支持的 Codex 协作模式。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+        .with_detail(ErrorDetail::new("Value").with_value("mode", profile.mode.clone()))),
+    }
 }
 
 fn build_log_path(

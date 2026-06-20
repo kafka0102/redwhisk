@@ -51,7 +51,10 @@ export function messageStreamReducer(
       return createInitialState();
 
     case "HYDRATE": {
-      const entries = action.items.map((item, index) => toEntry(item, index));
+      const entries = action.items.reduce<MessageStreamEntry[]>(
+        (currentEntries, item) => applyTimelineItem(currentEntries, item),
+        [],
+      );
       return {
         ...createInitialState(),
         entries,

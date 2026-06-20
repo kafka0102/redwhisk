@@ -890,15 +890,12 @@ describe("IssuesActivity", () => {
     );
     await user.type(screen.getByLabelText("Title"), "Label issue");
     await user.type(screen.getByLabelText("Description"), "Needs a label");
-    await user.click(screen.getByRole("button", { name: "labels" }));
+    await user.click(screen.getByRole("button", { name: "添加标签" }));
     await user.click(screen.getByRole("option", { name: "bug" }));
     await user.click(screen.getByRole("option", { name: "release" }));
-    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent(
-      "bug",
-    );
-    expect(screen.getByRole("button", { name: "labels" })).toHaveTextContent(
-      "release",
-    );
+    await user.click(screen.getByRole("button", { name: "添加标签" }));
+    expect(screen.getByText("bug")).toBeInTheDocument();
+    expect(screen.getByText("release")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
@@ -923,8 +920,11 @@ describe("IssuesActivity", () => {
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
-    await user.click(screen.getByRole("button", { name: "labels" }));
     await user.click(screen.getByRole("button", { name: "添加标签" }));
+    const addLabelButtons = screen.getAllByRole("button", {
+      name: "添加标签",
+    });
+    await user.click(addLabelButtons[addLabelButtons.length - 1]);
 
     expect(onOpenProjectSettingsLabels).toHaveBeenCalledTimes(1);
   });

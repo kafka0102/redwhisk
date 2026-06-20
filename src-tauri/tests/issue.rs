@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
 use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
@@ -1235,6 +1236,7 @@ fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_
             },
             temp_dir.path(),
             &pty_sessions,
+            &AgentSessionRegistry::new(),
         )
         .expect("send prompt");
 
@@ -1853,6 +1855,7 @@ fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
             },
             temp_dir.path(),
             &pty_sessions,
+            &AgentSessionRegistry::new(),
         )
         .expect("send prompt");
 
@@ -1961,6 +1964,7 @@ fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
             },
             temp_dir.path(),
             &pty_sessions,
+            &AgentSessionRegistry::new(),
         )
         .expect("send prompt");
 
@@ -2121,6 +2125,7 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
             },
             temp_dir.path(),
             &pty_sessions,
+            &AgentSessionRegistry::new(),
         )
         .expect("send prompt");
 
@@ -2255,6 +2260,7 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
             },
             temp_dir.path(),
             &pty_sessions,
+            &AgentSessionRegistry::new(),
         )
         .expect("send prompt");
 
@@ -2410,6 +2416,7 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
             },
             temp_dir.path(),
             &pty_sessions,
+            &AgentSessionRegistry::new(),
         )
         .expect("send prompt");
 
