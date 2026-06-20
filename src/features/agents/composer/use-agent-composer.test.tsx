@@ -168,6 +168,7 @@ describe("useAgentComposer", () => {
       projectId: 1,
       sessionId: 10,
       message: "你好",
+      attachments: [],
     });
     expect(getState()!.text).toBe("");
     expect(onMessageSent).toHaveBeenCalledWith("你好");
@@ -228,6 +229,67 @@ describe("useAgentComposer", () => {
       sourcePath: "/tmp/report.txt",
       displayName: "report.txt",
     });
+  });
+
+  it("发送时携带已落盘附件并清空附件列表", async () => {
+    dialogMocks.open.mockResolvedValue("/tmp/screenshot.png");
+    saveAgentAttachmentMock.mockResolvedValueOnce({
+      path: "/data/agent-attachments/1/screenshot.png",
+      displayName: "screenshot.png",
+      kind: "image",
+    });
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "idle",
+    });
+    await act(async () => {
+      await getState()!.handleAddAttachment();
+    });
+    await act(async () => {
+      getState()!.setText("请看这张图");
+    });
+    await act(async () => {
+      await getState()!.handleSubmit();
+    });
+    expect(sendAgentMessageMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+      message: "请看这张图",
+      attachments: [
+        {
+          path: "/data/agent-attachments/1/screenshot.png",
+          displayName: "screenshot.png",
+          kind: "image",
+        },
+      ],
+    });
+    expect(getState()!.text).toBe("");
+    expect(getState()!.attachments).toEqual([]);
+  });
+
+  it("附件仍在落盘时阻止提交并提示", async () => {
+    // saveAgentAttachment 不 resolve，使附件卡在 saving 状态。
+    saveAgentAttachmentMock.mockReturnValueOnce(new Promise(() => {}));
+    dialogMocks.open.mockResolvedValue("/tmp/slow.txt");
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "idle",
+    });
+    // 触发添加但不 await，让附件停留在 saving。
+    act(() => {
+      void getState()!.handleAddAttachment();
+    });
+    await act(async () => {
+      getState()!.setText("先发文本");
+    });
+    await act(async () => {
+      await getState()!.handleSubmit();
+    });
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(getState()!.submitError).toBe("附件正在上传，请稍候");
+    expect(getState()!.text).toBe("先发文本");
   });
 
   it("用户取消选择（open 返回 null）不添加附件", async () => {

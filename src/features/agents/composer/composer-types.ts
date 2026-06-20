@@ -15,9 +15,9 @@ import type { TurnStatus } from "../message-stream/message-stream-types";
  * 用户经 `@tauri-apps/plugin-dialog` 选定本地文件后，调 `saveAgentAttachment`
  * 落盘到 app data dir；落盘成功后 chip 状态转为 `saved`。
  *
- * 规范缺口：`SendAgentMessageInput` 目前只接受 `message: string`，无法把
- * `savedPath` 随消息发送给 codex（`TurnInput::Blocks` 变体已存在但未接线）。
- * 本任务附件仅落盘，发送时不附带路径；缺口修复推迟到任务 6 / 后续。
+ * 提交时 `useAgentComposer.handleSubmit` 收集 `status === "saved"` 的附件，
+ * 映射为 `AgentMessageAttachment` 随消息一起发送；`saving` 状态的附件会阻止
+ * 提交并提示用户等待。后端把附件编码为 `TurnInput::Blocks` 的 text 块路径引用。
  */
 export interface ComposerAttachment {
   /** 本地生成的 id，用于 React key 与移除定位。 */

@@ -4,11 +4,12 @@
 // `isSending` 直接派生自父组件下传的 `turnStatus === "running"`，不本地维护，
 // 避免与 message-stream 形成双数据源。
 //
-// 附件流程（规范缺口，见 composer-types.ts）：
+// 附件流程：
 //   open({ directory:false, multiple:false }) → sourcePath
 //   → saveAgentAttachment({ sourcePath, displayName=basename }) → savedPath
 //   → push chip（status saving → saved/error）
-// 附件暂不随消息发送；`sendAgentMessage` 只发文本。
+// 提交时收集 status === "saved" 的附件，映射为 `{ path, displayName, kind }`
+// 随消息一起发送；status === "saving" 的附件会阻止提交并提示用户等待。
 
 import { useCallback, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -19,6 +20,7 @@ import {
   sendAgentMessage,
   setAgentThinking,
 } from "../agent-session-commands";
+import type { AgentMessageAttachment } from "../agent-session-commands";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import { toCommandError } from "../../../shared/commands/command-error";
 import type { ComposerAttachment, ComposerEffort } from "./composer-types";
@@ -108,15 +110,33 @@ export function useAgentComposer({
     if (message === "") {
       return;
     }
+    // 附件仍在落盘时阻止提交，避免发出不完整附件集。
+    if (attachments.some((attachment) => attachment.status === "saving")) {
+      setSubmitError("附件正在上传，请稍候");
+      return;
+    }
+    const payloadAttachments: AgentMessageAttachment[] = attachments
+      .filter((attachment) => attachment.status === "saved")
+      .map((attachment) => ({
+        path: attachment.savedPath,
+        displayName: attachment.displayName,
+        kind: attachment.kind,
+      }));
     setSubmitError(null);
     try {
-      await sendAgentMessage({ projectId, sessionId, message });
+      await sendAgentMessage({
+        projectId,
+        sessionId,
+        message,
+        attachments: payloadAttachments,
+      });
       setText("");
+      setAttachments([]);
       onMessageSent?.(message);
     } catch (error) {
       setSubmitError(toCommandError(error).message);
     }
-  }, [text, projectId, sessionId, onMessageSent]);
+  }, [text, attachments, projectId, sessionId, onMessageSent]);
 
   const handleCancel = useCallback(async () => {
     setSubmitError(null);

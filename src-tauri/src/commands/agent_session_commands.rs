@@ -406,7 +406,7 @@ pub fn send_agent_message(
     service.find_project_session_record(input.project_id, input.session_id)?;
     let handle = require_structured_handle(&state, input.session_id)?;
     handle
-        .send_message(input.message)
+        .send_message(input.message, input.attachments)
         .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
 }
 

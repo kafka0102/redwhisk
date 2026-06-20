@@ -1,5 +1,6 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 import type {
+  AgentAttachmentKindLiteral,
   ListAgentModelsResult,
   ListAgentModesResult,
   ReadAgentTimelineResult,
@@ -207,10 +208,20 @@ export interface StartStructuredAgentSessionResult {
   threadId: string;
 }
 
+export interface AgentMessageAttachment {
+  /** `saveAgentAttachment` 返回的落盘绝对路径。 */
+  path: string;
+  /** 经过 sanitize 的展示名。 */
+  displayName: string;
+  kind: AgentAttachmentKindLiteral;
+}
+
 export interface SendAgentMessageInput {
   projectId: number;
   sessionId: number;
   message: string;
+  /** 随消息发送的已落盘附件；空数组表示纯文本消息。 */
+  attachments: AgentMessageAttachment[];
 }
 
 export interface CancelAgentTurnInput {
