@@ -6,11 +6,15 @@
 //! `agent-session-stream-event`。
 
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
+use crate::db::agent_session_repository::AgentSessionRepository;
+use crate::db::connection::DatabaseConfig;
 use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvelope};
 
 /// 结构化 Agent 事件流的 Tauri event 名。
@@ -88,6 +92,7 @@ impl AgentEventBroadcaster {
             epoch,
             event,
         };
+        self.persist_stream_event(&envelope);
         // 广播失败只忽略：前端可经 read_agent_timeline 补历史，不应阻塞 Agent 执行。
         let _ = app_handle.emit(AGENT_SESSION_STREAM_EVENT, envelope);
     }
@@ -104,6 +109,97 @@ impl AgentEventBroadcaster {
         cursor.seq = cursor.seq.saturating_add(1);
         (cursor.seq, cursor.epoch.clone())
     }
+
+    fn persist_stream_event(&self, envelope: &AgentStreamEventEnvelope) {
+        let Some(app_handle) = self.app_handle.get() else {
+            return;
+        };
+        let Ok(data_dir) = app_handle.path().app_data_dir() else {
+            return;
+        };
+        let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
+            return;
+        };
+        let repository = AgentSessionRepository::new(&database.connection);
+        let Ok(Some(session)) = repository.find_by_id(envelope.session_id) else {
+            return;
+        };
+        if session.log_path.is_empty() {
+            return;
+        }
+
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&session.log_path)
+        {
+            if let Ok(line) = serde_json::to_string(envelope) {
+                let _ = writeln!(file, "{line}");
+            }
+        }
+
+        let Some(latest_output) = latest_output_from_stream_event(&envelope.event) else {
+            return;
+        };
+        let updated_at = current_epoch_millis();
+        let _ = repository.update_latest_output(envelope.session_id, &latest_output, updated_at);
+    }
+}
+
+fn latest_output_from_stream_event(event: &AgentStreamEvent) -> Option<String> {
+    let text = match event {
+        AgentStreamEvent::Timeline { item, .. } => latest_output_from_timeline_item(item),
+        AgentStreamEvent::TurnFailed { error, .. } => Some(error.as_str()),
+        AgentStreamEvent::PermissionRequested { request } => {
+            request.title.as_deref().or(request.description.as_deref())
+        }
+        AgentStreamEvent::ModeChanged {
+            current_mode_id, ..
+        } => Some(current_mode_id.as_str()),
+        AgentStreamEvent::ModelChanged { model_id } => Some(model_id.as_str()),
+        _ => None,
+    }?;
+    truncate_latest_output(text)
+}
+
+fn latest_output_from_timeline_item(
+    item: &crate::types::agent_session_stream::AgentTimelineItem,
+) -> Option<&str> {
+    use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail};
+
+    match item {
+        AgentTimelineItem::AssistantMessage { text, .. }
+        | AgentTimelineItem::UserMessage { text, .. }
+        | AgentTimelineItem::Reasoning { text } => Some(text.as_str()),
+        AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
+            ToolCallDetail::Shell { command, .. } => Some(command.as_str()),
+            ToolCallDetail::Read { path, .. }
+            | ToolCallDetail::Edit { path, .. }
+            | ToolCallDetail::Write { path, .. } => Some(path.as_str()),
+            ToolCallDetail::Search { query, .. } => Some(query.as_str()),
+            ToolCallDetail::Plan { text } => Some(text.as_str()),
+            ToolCallDetail::SubAgent { .. } | ToolCallDetail::Unknown { .. } => Some(name.as_str()),
+        },
+        AgentTimelineItem::Todo { .. } => Some("Plan updated"),
+        AgentTimelineItem::Error { message } => Some(message.as_str()),
+        AgentTimelineItem::Compaction { .. } => Some("Context compacted"),
+    }
+}
+
+fn truncate_latest_output(text: &str) -> Option<String> {
+    let latest_line = text
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())?;
+    Some(latest_line.chars().take(500).collect())
+}
+
+fn current_epoch_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
