@@ -68,6 +68,73 @@ describe("messageStreamReducer", () => {
       expect(state.entries[1].id).toBe("a1");
     });
 
+    it("用实时合并规则折叠历史 assistant delta 与工具状态", () => {
+      const items: AgentTimelineItem[] = [
+        { type: "assistant_message", text: "我", messageId: "a1" },
+        { type: "assistant_message", text: "我会先读取文件", messageId: "a1" },
+        {
+          type: "tool_call",
+          callId: "c1",
+          name: "shell",
+          detail: { type: "shell", command: "rg TODO" },
+          status: "running",
+        },
+        {
+          type: "tool_call",
+          callId: "c1",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "rg TODO",
+            output: "src/app.tsx",
+            exitCode: 0,
+          },
+          status: "completed",
+        },
+      ];
+
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items,
+      });
+
+      expect(state.entries).toHaveLength(2);
+      expect(state.entries[0].item).toEqual({
+        type: "assistant_message",
+        text: "我会先读取文件",
+        messageId: "a1",
+      });
+      expect(state.entries[1].item).toEqual({
+        type: "tool_call",
+        callId: "c1",
+        name: "shell",
+        detail: {
+          type: "shell",
+          command: "rg TODO",
+          output: "src/app.tsx",
+          exitCode: 0,
+        },
+        status: "completed",
+      });
+    });
+
+    it("折叠历史中的连续 reasoning，只保留最终内容", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [
+          { type: "reasoning", text: "分析入口" },
+          { type: "reasoning", text: "分析入口\n定位 reducer" },
+          { type: "reasoning", text: "分析入口\n定位 reducer\n形成结论" },
+        ],
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "reasoning",
+        text: "分析入口\n定位 reducer\n形成结论",
+      });
+    });
+
     it("HYDRATE_FAILED 设置 error 并标记 initialized", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "HYDRATE_FAILED",

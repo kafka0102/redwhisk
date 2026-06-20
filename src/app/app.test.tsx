@@ -306,7 +306,9 @@ describe("App project entry", () => {
     expect(getCurrentWindowMock).not.toHaveBeenCalled();
     expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
     expect(mockAppWindow.maximize).not.toHaveBeenCalled();
-    expect(screen.getByRole("menu", { name: "Project Switcher" })).toBeVisible();
+    expect(
+      screen.getByRole("menu", { name: "Project Switcher" }),
+    ).toBeVisible();
   });
 
   it("uses English as the default UI language in a project workbench", async () => {
@@ -367,6 +369,7 @@ describe("App project entry", () => {
       "Agents",
       "Terminals",
       "Project Settings",
+      "Design System",
       "Global Settings",
     ]);
     expect(
@@ -433,7 +436,9 @@ describe("App project entry", () => {
     await user.click(await screen.findByRole("button", { name: "New Issue" }));
     expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "labels" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "添加标签" }),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.type(screen.getByLabelText("Description"), "small task shape");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
@@ -481,7 +486,9 @@ describe("App project entry", () => {
       screen.getByLabelText("Description"),
       "Updated description",
     );
-    expect(screen.getByRole("button", { name: "labels" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "添加标签" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
@@ -808,14 +815,14 @@ describe("App project entry", () => {
     await user.click(
       screen.getByRole("button", { name: "Current project RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("menuitem", { name: "创建项目" }),
-    );
+    await user.click(screen.getByRole("menuitem", { name: "创建项目" }));
 
     const projectDialog = await screen.findByRole("dialog", {
       name: "New Project",
     });
-    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue("");
+    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
+      "",
+    );
     expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
       "",
     );

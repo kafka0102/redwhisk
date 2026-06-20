@@ -25,6 +25,7 @@ pub fn list_issues(
         &data_dir,
         project_id,
         &state.pty_sessions,
+        &state.agent_sessions,
     )?;
     IssueService::list_issues_in_data_dir(data_dir, project_id)
 }
@@ -137,7 +138,12 @@ pub fn send_agent_commit_prompt(
     input: SendAgentCommitPromptInput,
 ) -> Result<SendAgentCommitPromptResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::send_agent_commit_prompt_in_data_dir(data_dir, input, &state.pty_sessions)
+    IssueService::send_agent_commit_prompt_in_data_dir(
+        data_dir,
+        input,
+        &state.pty_sessions,
+        &state.agent_sessions,
+    )
 }
 
 #[tauri::command]
@@ -151,6 +157,7 @@ pub fn detect_agent_commit_completion(
         &data_dir,
         input.project_id,
         &state.pty_sessions,
+        &state.agent_sessions,
     )?;
     IssueService::detect_agent_commit_completion_in_data_dir(data_dir, input)
 }
@@ -166,6 +173,7 @@ pub fn get_issue_summary(
         &data_dir,
         input.project_id,
         &state.pty_sessions,
+        &state.agent_sessions,
     )?;
     IssueService::get_issue_summary_in_data_dir(data_dir, input)
 }

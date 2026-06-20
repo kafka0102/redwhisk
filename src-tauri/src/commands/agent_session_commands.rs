@@ -50,7 +50,12 @@ pub fn list_agent_sessions(
             .map_err(CommandError::from)?;
     }
 
-    AgentSessionService::list_agent_sessions_in_data_dir(data_dir, project_id, &state.pty_sessions)
+    AgentSessionService::list_agent_sessions_in_data_dir(
+        data_dir,
+        project_id,
+        &state.pty_sessions,
+        &state.agent_sessions,
+    )
 }
 
 #[tauri::command]
@@ -98,7 +103,13 @@ pub fn start_agent_session(
         crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
         crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
     )
-    .start_agent_session_with_pty(data_dir, input, &state.pty_sessions)
+    .start_agent_session_with_runtime(
+        data_dir,
+        input,
+        &state.pty_sessions,
+        &state.agent_sessions,
+        &state.agent_event_broadcaster,
+    )
 }
 
 #[tauri::command]

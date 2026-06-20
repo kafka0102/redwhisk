@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use redwhisk_lib::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
+use redwhisk_lib::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
 use redwhisk_lib::core::agent_session_service::AgentSessionService;
 use redwhisk_lib::core::issue_service::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
@@ -12,11 +16,12 @@ use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
-    AgentSessionAttention, AgentSessionPromptKind, AgentSessionStatus,
-    InjectAgentSessionPromptInput, ProjectGitBranchListInput, RestoreAgentSessionTerminalInput,
-    SetAgentSessionAttentionInput, StartAgentSessionInput, StartStandaloneAgentSessionInput,
-    WorkspaceMode,
+    AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
+    AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
+    RestoreAgentSessionTerminalInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
+    StartStandaloneAgentSessionInput, WorkspaceMode,
 };
+use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::IssueStatus;
 use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
@@ -24,6 +29,60 @@ use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 use serde_json::Value;
+
+struct NoopStructuredHandle;
+
+impl AgentSessionHandle for NoopStructuredHandle {
+    fn send_message(
+        &self,
+        _text: String,
+        _attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn cancel_turn(&self) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn respond_permission(
+        &self,
+        _request_id: &str,
+        _decision: AgentPermissionDecision,
+    ) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn set_model(&self, _model_id: String) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn set_effort(&self, _effort: Option<String>) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn set_mode(&self, _mode_id: &str) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn list_models(&self) -> Result<Vec<AgentModel>, AgentSessionError> {
+        Ok(Vec::new())
+    }
+
+    fn list_modes(&self) -> Vec<AgentMode> {
+        Vec::new()
+    }
+
+    fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
+        Ok(Vec::new())
+    }
+
+    fn shutdown(&self) {}
+
+    fn thread_id(&self) -> Option<String> {
+        Some("thread-test".to_string())
+    }
+}
 
 #[test]
 fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
@@ -1646,7 +1705,11 @@ fn reconcile_unrecoverable_running_sessions_marks_session_stopped_and_records_re
     let manager = PtySessionManager::new();
 
     service
-        .reconcile_unrecoverable_running_sessions(project_id, &manager)
+        .reconcile_unrecoverable_running_sessions(
+            project_id,
+            &manager,
+            &AgentSessionRegistry::new(),
+        )
         .expect("reconcile running sessions");
 
     let session = AgentSessionRepository::new(&database.connection)
@@ -1691,6 +1754,46 @@ fn reconcile_unrecoverable_running_sessions_marks_session_stopped_and_records_re
         payload["logPath"].as_str(),
         Some("/tmp/restart-reconcile.log")
     );
+}
+
+#[test]
+fn reconcile_unrecoverable_running_sessions_keeps_registered_structured_session_running() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "structured-restart-reconcile-project");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_555_000,
+        None,
+        "/tmp/structured-restart-reconcile.log",
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let manager = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let handle: Arc<dyn AgentSessionHandle> = Arc::new(NoopStructuredHandle);
+    registry.register(session_id, handle);
+
+    service
+        .reconcile_unrecoverable_running_sessions(project_id, &manager, &registry)
+        .expect("reconcile running sessions");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session exists");
+    assert_eq!(session.status, AgentSessionStatus::Running);
+    assert!(session.closed_at.is_none());
 }
 
 #[test]
