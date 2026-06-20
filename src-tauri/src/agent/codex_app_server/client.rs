@@ -208,19 +208,12 @@ impl CodexAppServerClient {
     /// 用于首次创建会话；返回新 threadId。
     pub fn thread_start(
         &self,
-        model: &str,
+        model: Option<&str>,
         cwd: Option<&str>,
         approval_policy: &str,
         sandbox: &str,
     ) -> Result<String, CodexAppServerError> {
-        let mut payload = json!({
-            "model": model,
-            "approvalPolicy": approval_policy,
-            "sandbox": sandbox,
-        });
-        if let Some(cwd) = cwd {
-            payload["cwd"] = Value::String(cwd.to_string());
-        }
+        let payload = build_thread_start_payload(model, cwd, approval_policy, sandbox);
         let result = self.transport.request("thread/start", payload)?;
         let thread_id = result
             .get("thread")
@@ -343,6 +336,25 @@ impl CodexAppServerClient {
     }
 }
 
+fn build_thread_start_payload(
+    model: Option<&str>,
+    cwd: Option<&str>,
+    approval_policy: &str,
+    sandbox: &str,
+) -> Value {
+    let mut payload = json!({
+        "approvalPolicy": approval_policy,
+        "sandbox": sandbox,
+    });
+    if let Some(model) = model {
+        payload["model"] = Value::String(model.to_string());
+    }
+    if let Some(cwd) = cwd {
+        payload["cwd"] = Value::String(cwd.to_string());
+    }
+    payload
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +395,25 @@ mod tests {
         assert_eq!(PermissionDecision::Accept.as_str(), "accept");
         assert_eq!(PermissionDecision::Decline.as_str(), "decline");
         assert_eq!(PermissionDecision::Cancel.as_str(), "cancel");
+    }
+
+    #[test]
+    fn thread_start_payload_omits_model_when_not_specified() {
+        let payload =
+            build_thread_start_payload(None, Some("/tmp/project"), "on-request", "workspace-write");
+
+        assert!(payload.get("model").is_none());
+        assert_eq!(payload["cwd"], "/tmp/project");
+        assert_eq!(payload["approvalPolicy"], "on-request");
+        assert_eq!(payload["sandbox"], "workspace-write");
+    }
+
+    #[test]
+    fn thread_start_payload_includes_explicit_model() {
+        let payload =
+            build_thread_start_payload(Some("openai/gpt-5"), None, "never", "danger-full-access");
+
+        assert_eq!(payload["model"], "openai/gpt-5");
+        assert!(payload.get("cwd").is_none());
     }
 }

@@ -11,7 +11,7 @@
 // 提交时收集 status === "saved" 的附件，映射为 `{ path, displayName, kind }`
 // 随消息一起发送；status === "saving" 的附件会阻止提交并提示用户等待。
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
@@ -104,6 +104,10 @@ export function useAgentComposer({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isSending = turnStatus === "running";
+
+  useEffect(() => {
+    setEffort(currentEffort ?? null);
+  }, [currentEffort]);
 
   const handleSubmit = useCallback(async () => {
     const message = text.trim();
