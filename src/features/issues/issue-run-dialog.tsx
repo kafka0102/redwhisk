@@ -559,6 +559,7 @@ export function IssueRunDialog({
               <Textarea
                 id="run-final-prompt"
                 aria-label="Final prompt"
+                className="h-56 min-h-0 resize-none overflow-y-auto field-sizing-fixed font-mono text-xs leading-relaxed md:text-xs"
                 readOnly
                 rows={12}
                 value={promptDraft}
