@@ -89,8 +89,10 @@ impl CodexTransport {
     /// `binary` 为 codex 可执行路径（通常 `codex`）；`cwd` 透传给子进程。
     /// 失败返回 `BinaryNotFound` / `SpawnFailed`。
     pub fn spawn(binary: &str, cwd: Option<&str>) -> Result<Self, CodexAppServerError> {
-        let mut command = Command::new(binary);
+        let (program, args) = split_command_line(binary)?;
+        let mut command = Command::new(program);
         command
+            .args(args)
             .arg("app-server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -295,6 +297,14 @@ impl Drop for CodexTransport {
             self.shutdown();
         }
     }
+}
+
+fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), CodexAppServerError> {
+    let mut parts = command.split_whitespace();
+    let program = parts.next().ok_or_else(|| {
+        CodexAppServerError::SpawnFailed("codex app-server binary 不能为空".to_string())
+    })?;
+    Ok((program, parts.collect()))
 }
 
 fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {

@@ -56,6 +56,9 @@ use crate::types::project::{ProjectCompletionPolicy, ProjectSummary, ProjectWork
 use crate::types::session_event::SessionEventType;
 
 const SESSION_LOG_DIR_NAME: &str = "session-logs";
+const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
+const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
+const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
@@ -227,7 +230,7 @@ impl<'connection> AgentSessionService<'connection> {
         }
 
         let command_accepts_prompt_argument =
-            command_supports_prompt_argument(&launch.profile.command);
+            command_supports_prompt_argument(&launch.command_snapshot);
         let initial_prompt_argument =
             command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
 
@@ -235,7 +238,7 @@ impl<'connection> AgentSessionService<'connection> {
             Some(
                 pty_sessions
                     .spawn_pending(&PtySpawnRequest {
-                        command: launch.profile.command.clone(),
+                        command: launch.command_snapshot.clone(),
                         working_dir: launch.working_dir.clone(),
                         log_path: launch.log_path.clone(),
                         initial_prompt: initial_prompt_argument.clone(),
@@ -257,7 +260,7 @@ impl<'connection> AgentSessionService<'connection> {
                 &launch.log_path,
                 initial_prompt_argument.as_deref(),
             )?;
-            ensure_process_started(&mut child, &launch.profile.command)?;
+            ensure_process_started(&mut child, &launch.command_snapshot)?;
             Some(child)
         } else {
             None
@@ -346,7 +349,7 @@ impl<'connection> AgentSessionService<'connection> {
 
         match transaction_result {
             Ok(result) => {
-                if should_attempt_codex_session_capture(&launch.profile.command) {
+                if should_attempt_codex_session_capture(&launch.command_snapshot) {
                     let data_dir = data_dir.as_ref().to_path_buf();
                     let working_dir = launch.working_dir.clone();
                     let session_id = result.session_id;
@@ -562,7 +565,7 @@ impl<'connection> AgentSessionService<'connection> {
         let config = CodexSessionConfig {
             project_id: input.project_id,
             session_id: result.session_id,
-            binary: launch.profile.command.clone(),
+            binary: launch.command_snapshot.clone(),
             cwd: launch.working_dir.clone(),
             mode,
             broadcaster: broadcaster.clone(),
@@ -654,7 +657,7 @@ impl<'connection> AgentSessionService<'connection> {
                 &format!("project-{}-standalone", input.project_id),
             )?;
 
-        let command_accepts_prompt_argument = command_supports_prompt_argument(&profile.command);
+        let command_accepts_prompt_argument = command_supports_prompt_argument(&command_snapshot);
         let initial_prompt_argument =
             command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
 
@@ -662,7 +665,7 @@ impl<'connection> AgentSessionService<'connection> {
             Some(
                 pty_sessions
                     .spawn_pending(&PtySpawnRequest {
-                        command: profile.command.clone(),
+                        command: command_snapshot.clone(),
                         working_dir: working_dir.clone(),
                         log_path: log_path.clone(),
                         initial_prompt: initial_prompt_argument.clone(),
@@ -684,7 +687,7 @@ impl<'connection> AgentSessionService<'connection> {
                 &log_path,
                 initial_prompt_argument.as_deref(),
             )?;
-            ensure_process_started(&mut child, &profile.command)?;
+            ensure_process_started(&mut child, &command_snapshot)?;
             Some(child)
         } else {
             None
@@ -752,7 +755,7 @@ impl<'connection> AgentSessionService<'connection> {
 
         match transaction_result {
             Ok(result) => {
-                if should_attempt_codex_session_capture(&profile.command) {
+                if should_attempt_codex_session_capture(&command_snapshot) {
                     let data_dir = data_dir.as_ref().to_path_buf();
                     let working_dir = working_dir.clone();
                     let session_id = result.session_id;
@@ -1602,7 +1605,7 @@ impl AgentSessionService<'_> {
                 let config = CodexSessionConfig {
                     project_id: input.project_id,
                     session_id,
-                    binary: "codex".to_string(),
+                    binary: ensure_codex_bypass_arg("codex"),
                     cwd: cwd.clone(),
                     mode,
                     broadcaster: broadcaster.clone(),
@@ -2366,7 +2369,51 @@ fn shell_command(command: &str) -> Command {
 }
 
 fn build_command_snapshot(profile: &AgentProfileRow) -> String {
-    profile.command.clone()
+    agent_command_with_default_args(profile)
+}
+
+fn agent_command_with_default_args(profile: &AgentProfileRow) -> String {
+    match profile.agent_type {
+        AgentType::Codex => ensure_codex_bypass_arg(&profile.command),
+        AgentType::Claude => ensure_claude_bypass_permission_args(&profile.command),
+    }
+}
+
+fn ensure_codex_bypass_arg(command: &str) -> String {
+    append_missing_args(command, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
+}
+
+fn ensure_claude_bypass_permission_args(command: &str) -> String {
+    if command_has_arg(command, CLAUDE_PERMISSION_MODE_ARG) {
+        command.trim().to_string()
+    } else {
+        append_missing_args(
+            command,
+            &[CLAUDE_PERMISSION_MODE_ARG, CLAUDE_BYPASS_PERMISSIONS_MODE],
+        )
+    }
+}
+
+fn append_missing_args(command: &str, args: &[&str]) -> String {
+    let trimmed = command.trim();
+    let mut command_line = trimmed.to_string();
+
+    for arg in args {
+        if command_has_arg(trimmed, arg) {
+            continue;
+        }
+
+        if !command_line.is_empty() {
+            command_line.push(' ');
+        }
+        command_line.push_str(arg);
+    }
+
+    command_line
+}
+
+fn command_has_arg(command: &str, arg: &str) -> bool {
+    command.split_whitespace().any(|part| part == arg)
 }
 
 fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, CommandError> {
@@ -2633,8 +2680,11 @@ fn spawn_agent_process(
 ) -> Result<Child, CommandError> {
     let log_file = File::create(log_path).map_err(agent_session_start_error)?;
     let stderr_file = log_file.try_clone().map_err(agent_session_start_error)?;
+    let command_line = agent_command_with_default_args(profile);
+    let (program, args) = split_agent_command_line(&command_line)?;
 
-    let mut command = Command::new(&profile.command);
+    let mut command = Command::new(program);
+    command.args(args);
     command.current_dir(working_dir);
     command.stdout(Stdio::from(log_file));
     command.stderr(Stdio::from(stderr_file));
@@ -2642,6 +2692,18 @@ fn spawn_agent_process(
         command.arg(prompt);
     }
     command.spawn().map_err(agent_session_start_error)
+}
+
+fn split_agent_command_line(command: &str) -> Result<(&str, Vec<&str>), CommandError> {
+    let mut parts = command.split_whitespace();
+    let program = parts.next().ok_or_else(|| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionStartFailed,
+            "Agent command 不能为空。",
+        )
+        .with_detail(ErrorDetail::new("Command").with_value("command", command))
+    })?;
+    Ok((program, parts.collect()))
 }
 
 fn ensure_process_started(child: &mut Child, command: &str) -> Result<(), CommandError> {
@@ -2757,7 +2819,11 @@ fn normalize_submitted_prompt(prompt: &str) -> String {
 }
 
 fn should_attempt_codex_session_capture(command: &str) -> bool {
-    Path::new(command)
+    let Some(program) = command.split_whitespace().next() else {
+        return false;
+    };
+
+    Path::new(program)
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.eq_ignore_ascii_case("codex"))
@@ -2946,15 +3012,16 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
 #[cfg(test)]
 mod tests {
     use super::{
-        command_supports_prompt_argument, detect_codex_session_id_from_home,
-        latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
-        AgentSessionService,
+        agent_command_with_default_args, command_supports_prompt_argument,
+        detect_codex_session_id_from_home, latest_output_from_session_log,
+        normalize_submitted_prompt, read_timeline_from_session_log, AgentSessionService,
     };
     use crate::db::agent_profile_repository::AgentProfileRepository;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::issue_repository::IssueRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
+    use crate::types::agent_profile::{AgentScope, AgentType};
     use crate::types::agent_session::{
         AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode,
     };
@@ -2978,7 +3045,53 @@ mod tests {
     fn command_supports_prompt_argument_only_for_codex_binary() {
         assert!(command_supports_prompt_argument("/usr/local/bin/codex"));
         assert!(command_supports_prompt_argument("codex"));
+        assert!(command_supports_prompt_argument(
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        ));
         assert!(!command_supports_prompt_argument("/tmp/echo-stdin.sh"));
+    }
+
+    #[test]
+    fn agent_command_with_default_args_adds_codex_bypass_flag() {
+        let profile = test_agent_profile(AgentType::Codex, "codex");
+
+        assert_eq!(
+            agent_command_with_default_args(&profile),
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        );
+    }
+
+    #[test]
+    fn agent_command_with_default_args_keeps_existing_codex_bypass_flag() {
+        let profile = test_agent_profile(
+            AgentType::Codex,
+            "codex --dangerously-bypass-approvals-and-sandbox",
+        );
+
+        assert_eq!(
+            agent_command_with_default_args(&profile),
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        );
+    }
+
+    #[test]
+    fn agent_command_with_default_args_adds_claude_permission_mode() {
+        let profile = test_agent_profile(AgentType::Claude, "claude");
+
+        assert_eq!(
+            agent_command_with_default_args(&profile),
+            "claude --permission-mode bypassPermissions"
+        );
+    }
+
+    #[test]
+    fn agent_command_with_default_args_keeps_existing_claude_permission_mode() {
+        let profile = test_agent_profile(AgentType::Claude, "claude --permission-mode auto");
+
+        assert_eq!(
+            agent_command_with_default_args(&profile),
+            "claude --permission-mode auto"
+        );
     }
 
     #[test]
@@ -3368,6 +3481,25 @@ mod tests {
             last_active_at: 1,
             started_at: 1,
             closed_at: Some(2),
+        }
+    }
+
+    fn test_agent_profile(
+        agent_type: AgentType,
+        command: &str,
+    ) -> crate::db::agent_profile_repository::AgentProfileRow {
+        crate::db::agent_profile_repository::AgentProfileRow {
+            id: 101,
+            name: "Test Agent".to_string(),
+            agent_type,
+            command: command.to_string(),
+            scope: AgentScope::Project,
+            project_id: Some(1),
+            mode: "auto".to_string(),
+            dangerous: false,
+            default_skill: String::new(),
+            prompt_template: String::new(),
+            del: 0,
         }
     }
 
