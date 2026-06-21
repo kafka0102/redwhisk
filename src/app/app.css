@@ -1152,9 +1152,8 @@ button:focus-visible {
 
 .issue-card__shell {
   display: grid;
-  min-height: 88px;
   gap: 8px;
-  padding: 10px 10px 9px;
+  padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
   border-radius: var(--radius-card);
   background: var(--color-surface);
