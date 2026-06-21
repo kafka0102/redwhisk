@@ -2278,7 +2278,7 @@ button:focus-visible {
 }
 
 .agents-workspace--with-side-panel {
-  grid-template-columns: minmax(0, 1fr) 600px;
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
 .agents-terminal-pane {
