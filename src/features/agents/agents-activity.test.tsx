@@ -3018,6 +3018,18 @@ describe("AgentsActivity", () => {
       within(panel).getByRole("button", { name: "刷新变更" }),
     ).toBeInTheDocument();
 
+    await user.click(within(panel).getByRole("button", { name: "未提交" }));
+    expect(
+      within(panel).getByRole("menuitem", { name: "已提交" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("heading", { name: "#20 Existing issue" }),
+    );
+    expect(
+      within(panel).queryByRole("menuitem", { name: "已提交" }),
+    ).not.toBeInTheDocument();
+
     await user.hover(
       within(panel).getByRole("button", { name: /agents-activity\.tsx/ }),
     );

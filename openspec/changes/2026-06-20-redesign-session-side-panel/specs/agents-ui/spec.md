@@ -60,7 +60,7 @@ Agents Activity SHALL provide a right Session side panel changes view matching t
 #### Scenario: Changes view is opened
 
 - **WHEN** the right Session side panel opens
-- **THEN** the panel width defaults to `600px`
+- **THEN** the panel width defaults to `300px`
 - **AND** the top panel tabs include `变更` and `文件`
 - **AND** the top panel tab row height matches the left Agents issue row height
 

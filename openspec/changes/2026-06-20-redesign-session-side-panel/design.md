@@ -93,7 +93,7 @@ interface MockChangedFile {
 
 - 保持 RedWhisk 安静、紧凑、可靠的视觉语言。
 - 不使用 Card 包裹顶部 Issue 信息区。
-- 右侧辅助面板默认宽度 `600px`。
+- 右侧辅助面板默认宽度 `300px`。
 - 顶部 `变更/文件` Tab 行高度与左侧 Agents Issue 行保持一致。
 - Diff 占位内容使用更小字号和更紧凑行高。
 - 所有按钮必须有 accessible name；选中态不能只靠颜色表达，需保留 `aria-selected` / `aria-pressed`。

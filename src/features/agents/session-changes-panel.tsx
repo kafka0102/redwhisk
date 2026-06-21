@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Circle, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MOCK_CHANGED_FILES, type MockChangedFile } from "./session-mock-files";
 
@@ -14,13 +14,37 @@ export function SessionChangesPanel({
 }: SessionChangesPanelProps) {
   const [filter, setFilter] = useState<ChangeFilter>("uncommitted");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   const filterLabel = filter === "uncommitted" ? "未提交" : "已提交";
+
+  useEffect(() => {
+    if (!isFilterOpen) {
+      return;
+    }
+
+    function handleDocumentMouseDown(event: MouseEvent) {
+      if (
+        event.target instanceof Node &&
+        filterRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+
+      setIsFilterOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
+    };
+  }, [isFilterOpen]);
 
   return (
     <div className="session-changes-panel">
       <div className="session-side-panel__filter-row">
-        <div className="session-change-filter">
+        <div className="session-change-filter" ref={filterRef}>
           <button
             aria-expanded={isFilterOpen}
             aria-haspopup="menu"
