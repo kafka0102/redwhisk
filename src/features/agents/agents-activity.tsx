@@ -37,8 +37,13 @@ import {
   type LinkedSessionIssue,
   type SessionIssueTransition,
 } from "./agents-session-pane";
-import { SessionIssueDrawer } from "./session-issue-drawer";
 import { getSessionIssueGroup } from "./agent-session-formatters";
+import { SessionSidePanel } from "./session-side-panel";
+import type { MockChangedFile, MockTreeNode } from "./session-mock-files";
+import type {
+  SessionWorkspaceFile,
+  SessionWorkspaceTabKind,
+} from "./session-workspace-types";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -92,8 +97,14 @@ export function AgentsActivity({
   const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
     useState(false);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
-  const [isIssueDrawerOpen, setIsIssueDrawerOpen] = useState(false);
+  const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] =
+    useState<SessionWorkspaceTabKind>("session");
+  const [workspaceFileTab, setWorkspaceFileTab] =
+    useState<SessionWorkspaceFile | null>(null);
+  const [workspaceChangeTab, setWorkspaceChangeTab] =
+    useState<SessionWorkspaceFile | null>(null);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
@@ -189,6 +200,14 @@ export function AgentsActivity({
   const selectedSession =
     visibleSessions.find((session) => session.sessionId === currentSessionId) ??
     null;
+
+  function resetSessionWorkspace() {
+    setActiveWorkspaceTab("session");
+    setWorkspaceFileTab(null);
+    setWorkspaceChangeTab(null);
+    setIsSessionSidePanelOpen(false);
+  }
+
   const linkedIssue: LinkedSessionIssue | null = useMemo(
     () =>
       selectedSession?.issueId != null && selectedSession.issueTitle
@@ -272,9 +291,38 @@ export function AgentsActivity({
 
   function handleSelectSession(sessionId: number) {
     setIsTransitionMenuOpen(false);
+    resetSessionWorkspace();
     setSelectedSessionId(sessionId);
     onSelectSession?.(sessionId);
     void acknowledgeSessionAttention(sessionId);
+  }
+
+  function openWorkspaceFile(file: MockTreeNode) {
+    setWorkspaceFileTab({
+      fileName: file.fileName,
+      filePath: file.filePath,
+    });
+    setActiveWorkspaceTab("file");
+  }
+
+  function openWorkspaceChange(file: MockChangedFile) {
+    setWorkspaceChangeTab({
+      fileName: file.fileName,
+      filePath: file.filePath,
+    });
+    setActiveWorkspaceTab("changes");
+  }
+
+  function closeWorkspaceTab(tab: Exclude<SessionWorkspaceTabKind, "session">) {
+    if (tab === "file") {
+      setWorkspaceFileTab(null);
+    } else {
+      setWorkspaceChangeTab(null);
+    }
+
+    if (activeWorkspaceTab === tab) {
+      setActiveWorkspaceTab("session");
+    }
   }
 
   async function markLinkedIssueReview(issue: NonNullable<typeof linkedIssue>) {
@@ -674,6 +722,7 @@ export function AgentsActivity({
   ) {
     const response = await listAgentSessions(projectId);
     setSessions(applySessionListOverlays(response.sessions));
+    resetSessionWorkspace();
     setSelectedSessionId(result.sessionId);
     onSelectSession?.(result.sessionId);
   }
@@ -736,8 +785,8 @@ export function AgentsActivity({
 
       <section
         className={`agents-workspace${
-          isIssueDrawerOpen && linkedIssue
-            ? " agents-workspace--with-issue-drawer"
+          isSessionSidePanelOpen && linkedIssue
+            ? " agents-workspace--with-side-panel"
             : ""
         }`}
         aria-label="Session workspace"
@@ -751,14 +800,24 @@ export function AgentsActivity({
           cleanErrorMessage={completeCleanErrorMessage}
           isTransitionMenuOpen={isTransitionMenuOpen}
           isTransitionPending={isTransitionPending}
+          activeWorkspaceTab={activeWorkspaceTab}
+          changeTab={workspaceChangeTab}
+          fileTab={workspaceFileTab}
+          isSidePanelOpen={isSessionSidePanelOpen}
           linkedIssue={linkedIssue}
           manualErrorMessage={completeManualErrorMessage}
           markReviewErrorMessage={markReviewErrorMessage}
           onAcknowledgeSessionAttention={(sessionId) => {
             void acknowledgeSessionAttention(sessionId);
           }}
-          onOpenIssue={() => setIsIssueDrawerOpen(true)}
+          onCloseWorkspaceTab={closeWorkspaceTab}
           onOpenSummary={handleOpenSummary}
+          onSelectWorkspaceTab={setActiveWorkspaceTab}
+          onToggleSidePanel={() =>
+            setIsSessionSidePanelOpen(
+              (currentIsSessionSidePanelOpen) => !currentIsSessionSidePanelOpen,
+            )
+          }
           onToggleTransitionMenu={() =>
             setIsTransitionMenuOpen(
               (currentIsTransitionMenuOpen) => !currentIsTransitionMenuOpen,
@@ -773,12 +832,10 @@ export function AgentsActivity({
           transitionMenuOptions={transitionMenuOptions}
           transitionPhase={sessionTransitionPhase}
         />
-        {isIssueDrawerOpen && linkedIssue ? (
-          <SessionIssueDrawer
-            issueId={linkedIssue.issueId}
-            issueTitle={linkedIssue.issueTitle}
-            projectId={projectId}
-            onClose={() => setIsIssueDrawerOpen(false)}
+        {isSessionSidePanelOpen && linkedIssue ? (
+          <SessionSidePanel
+            onOpenChangedFile={openWorkspaceChange}
+            onOpenFile={openWorkspaceFile}
           />
         ) : null}
       </section>

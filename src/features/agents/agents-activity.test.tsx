@@ -380,7 +380,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "#issue20 Existing issue" }),
+      screen.getByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
@@ -1104,7 +1104,7 @@ describe("AgentsActivity", () => {
     expect(existingIssueRow).toHaveAttribute("aria-pressed", "false");
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: "#issue21 Running issue" }),
+        screen.getByRole("heading", { name: "#21 Running issue" }),
       ).toBeInTheDocument(),
     );
   });
@@ -1253,7 +1253,10 @@ describe("AgentsActivity", () => {
     });
 
     expect(crashedRow).toHaveTextContent("crashed");
-    expect(await screen.findByText("Status: crashed")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "#23 Crashed issue" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Status: crashed")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
@@ -1291,7 +1294,10 @@ describe("AgentsActivity", () => {
     });
 
     expect(stoppedRow).toHaveTextContent("stopped");
-    expect(await screen.findByText("Status: stopped")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "#24 Stopped issue" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Status: stopped")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
@@ -1567,7 +1573,7 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", {
         level: 3,
-        name: "#issue21 Review candidate",
+        name: "#21 Review candidate",
       }),
     ).toBeInTheDocument();
 
@@ -1846,7 +1852,7 @@ describe("AgentsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: /Review issue/i }));
     expect(
-      await screen.findByRole("heading", { name: "#issue22 Review issue" }),
+      await screen.findByRole("heading", { name: "#22 Review issue" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
@@ -1859,7 +1865,7 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", {
         level: 3,
-        name: "#issue23 Completed issue",
+        name: "#23 Completed issue",
       }),
     ).toBeInTheDocument();
     expect(
@@ -1905,14 +1911,14 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", {
         level: 3,
-        name: "#issue22 Review issue",
+        name: "#22 Review issue",
       }),
     ).toBeInTheDocument();
     expect(
       within(sessionList).getByRole("button", { name: /Review issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.queryByRole("button", { name: /#issue22.*Review issue/i }),
+      screen.queryByRole("button", { name: /#22.*Review issue/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
@@ -1957,10 +1963,10 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     expect(
-      await screen.findByRole("heading", { name: "#issue22 Review issue" }),
+      await screen.findByRole("heading", { name: "#22 Review issue" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /#issue22.*Review issue/i }),
+      screen.queryByRole("button", { name: /#22.*Review issue/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
@@ -2740,7 +2746,7 @@ describe("AgentsActivity", () => {
       }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.getByRole("heading", { name: "#issue21 Newest running issue" }),
+      screen.getByRole("heading", { name: "#21 Newest running issue" }),
     ).toBeInTheDocument();
   });
 
@@ -2878,7 +2884,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+      await screen.findByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("separator", { name: "Resize session info" }),
@@ -2887,7 +2893,7 @@ describe("AgentsActivity", () => {
       screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /#issue20.*Existing issue/i }),
+      screen.queryByRole("button", { name: /#20.*Existing issue/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
@@ -2914,7 +2920,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+      await screen.findByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
@@ -2922,7 +2928,7 @@ describe("AgentsActivity", () => {
     expect(openPathMock).not.toHaveBeenCalled();
   });
 
-  it("opens linked issue details in the right drawer", async () => {
+  it("opens the session side panel from the split action", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
@@ -2945,27 +2951,159 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+      await screen.findByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Open Issue" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Open Issue" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("separator", { name: "Resize session info" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Open Issue" }));
+    const splitButton = screen.getByRole("button", {
+      name: "打开 Session 侧边栏",
+    });
+    expect(splitButton).toHaveAttribute("aria-pressed", "false");
 
-    const drawer = await screen.findByRole("complementary", {
-      name: "Issue details",
+    await user.click(splitButton);
+
+    expect(splitButton).toHaveAttribute("aria-pressed", "true");
+    const panel = await screen.findByRole("complementary", {
+      name: "Session side panel",
     });
     expect(
-      within(drawer).getByRole("heading", { level: 4, name: "Existing issue" }),
+      within(panel).getByRole("tab", { name: "变更" }),
     ).toBeInTheDocument();
     expect(
-      within(drawer).getByText("Existing description"),
+      within(panel).getByRole("tab", { name: "文件" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+  });
+
+  it("opens a single replaceable changed-file tab from the session side panel", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await user.click(
+      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+    );
+
+    const panel = await screen.findByRole("complementary", {
+      name: "Session side panel",
+    });
+    expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "未提交" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "刷新变更" }),
+    ).toBeInTheDocument();
+
+    await user.hover(
+      within(panel).getByRole("button", { name: /agents-activity\.tsx/ }),
+    );
+    expect(
+      await screen.findByText("src/features/agents/agents-activity.tsx"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(panel).getByRole("button", { name: /agents-activity\.tsx/ }),
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "agents-activity.tsx" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "agents-activity.tsx" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
+
+    await user.click(
+      within(panel).getByRole("button", { name: /agents-session-pane\.tsx/ }),
+    );
+
+    expect(
+      screen.queryByRole("tab", { name: "agents-activity.tsx" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "agents-session-pane.tsx" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "agents-session-pane.tsx" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens a single replaceable file preview tab from the file tree", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await user.click(
+      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+    );
+    const panel = await screen.findByRole("complementary", {
+      name: "Session side panel",
+    });
+    await user.click(within(panel).getByRole("tab", { name: "文件" }));
+
+    await user.click(
+      within(panel).getByRole("button", { name: /session-side-panel\.tsx/ }),
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "session-side-panel.tsx" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "session-side-panel.tsx" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/代码预览占位/)).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: /app\.css/ }));
+
+    expect(
+      screen.queryByRole("tab", { name: "session-side-panel.tsx" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "app.css" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "app.css" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the terminal visible after linked issue header actions", async () => {
@@ -2991,7 +3129,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      await screen.findByRole("heading", { name: "#issue20 Existing issue" }),
+      await screen.findByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Mark review" }));
 
@@ -3026,7 +3164,7 @@ describe("AgentsActivity", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "#issue23 Newest completed issue",
+        name: "#23 Newest completed issue",
       }),
     );
     await user.click(screen.getByRole("button", { name: "View Summary" }));
