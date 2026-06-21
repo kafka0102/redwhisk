@@ -11,6 +11,7 @@ export type AgentType = "codex" | "claude" | "claude_code";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
+export type WorkspaceMode = "current_branch" | "worktree";
 
 export interface AgentSessionListItem {
   sessionId: number;
@@ -25,6 +26,7 @@ export interface AgentSessionListItem {
   status: AgentSessionStatus;
   attention: AgentSessionAttention;
   isTurnRunning?: boolean;
+  workspaceMode?: WorkspaceMode;
   logPath?: string | null;
   latestOutput?: string | null;
   lastActiveAt: number;
