@@ -1850,6 +1850,10 @@ button:focus-visible {
   background: var(--color-lane-completed-marker);
 }
 
+.agents-session-row__status-dot--in-progress {
+  background: var(--color-lane-completed-marker);
+}
+
 .agents-session-row__status-dot--viewed {
   background: var(--color-lane-completed-marker);
 }

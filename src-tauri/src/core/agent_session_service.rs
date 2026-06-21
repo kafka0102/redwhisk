@@ -984,14 +984,16 @@ impl<'connection> AgentSessionService<'connection> {
         let sessions = rows
             .into_iter()
             .map(|row| {
+                let is_session_running =
+                    row.status == crate::types::agent_session::AgentSessionStatus::Running;
                 let latest_output = row
                     .latest_output
                     .or_else(|| latest_output_from_session_log(&row.log_path));
                 let can_complete_clean = can_complete_clean_for_project
-                    && row.status == crate::types::agent_session::AgentSessionStatus::Running
+                    && is_session_running
                     && row.issue_status == Some(IssueStatus::Review);
                 let can_complete_agent_commit = can_complete_agent_commit_for_project
-                    && row.status == crate::types::agent_session::AgentSessionStatus::Running
+                    && is_session_running
                     && row.issue_status == Some(IssueStatus::Review);
 
                 AgentSessionListItem {
@@ -1006,6 +1008,9 @@ impl<'connection> AgentSessionService<'connection> {
                     agent_type: row.agent_type,
                     status: row.status,
                     attention: row.attention,
+                    is_turn_running: is_structured_turn_running(&row.log_path)
+                        .unwrap_or(None)
+                        .unwrap_or(is_session_running),
                     log_path: row.log_path,
                     latest_output,
                     last_active_at: row.last_active_at,
@@ -2381,6 +2386,56 @@ fn timeline_item_from_log_value(value: Value) -> Option<Option<AgentTimelineItem
         .map(Some)
 }
 
+fn is_structured_turn_running(path: &str) -> Result<Option<bool>, CommandError> {
+    if path.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(agent_session_start_error(error)),
+    };
+    let reader = BufReader::new(file);
+    let mut saw_turn_event = false;
+    let mut is_turn_running = false;
+
+    for line in reader.lines() {
+        let line = line.map_err(agent_session_start_error)?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        let Some(event_type) = structured_log_event_type(&value) else {
+            continue;
+        };
+
+        match event_type {
+            "turn_started" => {
+                saw_turn_event = true;
+                is_turn_running = true;
+            }
+            "turn_completed" | "turn_failed" | "turn_canceled" => {
+                saw_turn_event = true;
+                is_turn_running = false;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(saw_turn_event.then_some(is_turn_running))
+}
+
+fn structured_log_event_type(value: &Value) -> Option<&str> {
+    value
+        .get("event")
+        .and_then(|event| event.get("type"))
+        .and_then(Value::as_str)
+}
+
 fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, CommandError> {
     let snapshot = match read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES) {
         Ok(snapshot) => snapshot,
@@ -3086,6 +3141,82 @@ mod tests {
         assert_eq!(response.sessions.len(), 52);
         assert!(!ids.contains(&400));
         assert!(ids.contains(&454));
+    }
+
+    #[test]
+    fn list_agent_sessions_reads_turn_running_state_from_structured_log() {
+        let database = setup_session_list_database();
+        let completed_log_path = std::env::temp_dir().join(format!(
+            "redwhisk-completed-turn-{}.jsonl",
+            current_millis()
+        ));
+        fs::write(
+            &completed_log_path,
+            concat!(
+                "{\"projectId\":1,\"sessionId\":301,\"seq\":1,\"epoch\":\"test\",\"event\":{\"type\":\"turn_started\",\"turnId\":\"t1\"}}\n",
+                "{\"projectId\":1,\"sessionId\":301,\"seq\":2,\"epoch\":\"test\",\"event\":{\"type\":\"turn_completed\",\"turnId\":\"t1\",\"usage\":null}}\n"
+            ),
+        )
+        .expect("write completed turn log");
+        insert_session_list_row(
+            &database,
+            301,
+            Some(20),
+            Some("Completed turn issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            10,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = 301",
+                params![completed_log_path.to_string_lossy().to_string()],
+            )
+            .expect("set completed log path");
+
+        let active_log_path =
+            std::env::temp_dir().join(format!("redwhisk-active-turn-{}.jsonl", current_millis()));
+        fs::write(
+            &active_log_path,
+            "{\"projectId\":1,\"sessionId\":302,\"seq\":1,\"epoch\":\"test\",\"event\":{\"type\":\"turn_started\",\"turnId\":\"t2\"}}\n",
+        )
+        .expect("write active turn log");
+        insert_session_list_row(
+            &database,
+            302,
+            Some(21),
+            Some("Active turn issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            11,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = 302",
+                params![active_log_path.to_string_lossy().to_string()],
+            )
+            .expect("set active log path");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let completed_turn_session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 301)
+            .expect("completed turn session");
+        let active_turn_session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 302)
+            .expect("active turn session");
+
+        assert!(!completed_turn_session.is_turn_running);
+        assert!(active_turn_session.is_turn_running);
+
+        fs::remove_file(completed_log_path).ok();
+        fs::remove_file(active_log_path).ok();
     }
 
     fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {

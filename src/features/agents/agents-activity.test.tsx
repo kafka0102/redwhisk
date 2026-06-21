@@ -538,6 +538,77 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("hides the running spinner when the structured turn has completed", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 25,
+          issueTitle: "In progress waiting issue",
+          issueStatus: "running",
+          isTurnRunning: false,
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    const sessionList = await screen.findByRole("list", {
+      name: "Agent sessions",
+    });
+    const sessionRow = within(sessionList).getByRole("button", {
+      name: /In progress waiting issue/i,
+    });
+
+    expect(
+      within(sessionRow).getByLabelText("Session 状态：In Progress"),
+    ).toHaveClass("agents-session-row__status-dot--in-progress");
+    expect(
+      within(sessionRow).queryByLabelText("Session 正在运行"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the running spinner while the structured turn is active", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 503,
+          issueId: 26,
+          issueTitle: "Active turn issue",
+          issueStatus: "running",
+          isTurnRunning: true,
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={503} projectId={1} />);
+
+    const sessionList = await screen.findByRole("list", {
+      name: "Agent sessions",
+    });
+    const sessionRow = within(sessionList).getByRole("button", {
+      name: /Active turn issue/i,
+    });
+
+    expect(
+      within(sessionRow).getByLabelText("Session 正在运行"),
+    ).toBeInTheDocument();
+  });
+
   it("renders agent type icons without visible text labels", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [

@@ -122,6 +122,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "workspace_path",
             "completion_policy",
             "worktree_root_path",
+            "list_inserted_at",
         ]
     );
 
