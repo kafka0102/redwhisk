@@ -238,6 +238,7 @@ describe("command client", () => {
           agentType: "codex",
           status: "running",
           attention: "none",
+          isTurnRunning: false,
           lastActiveAt: 1_780_624_800_000,
           startedAt: 1_780_624_800_000,
           closedAt: null,
@@ -255,6 +256,7 @@ describe("command client", () => {
           agentType: "codex",
           status: "running",
           attention: "none",
+          isTurnRunning: false,
           lastActiveAt: 1_780_624_800_000,
           startedAt: 1_780_624_800_000,
           closedAt: null,
@@ -373,7 +375,12 @@ describe("command client", () => {
     invokeMock.mockResolvedValue(undefined);
 
     await expect(
-      resizeProjectTerminal({ projectId: 1, sessionId: -1, rows: 40, cols: 120 }),
+      resizeProjectTerminal({
+        projectId: 1,
+        sessionId: -1,
+        rows: 40,
+        cols: 120,
+      }),
     ).resolves.toBeUndefined();
     expect(invokeMock).toHaveBeenCalledWith("resize_project_terminal", {
       input: { projectId: 1, sessionId: -1, rows: 40, cols: 120 },

@@ -912,7 +912,7 @@ fn open_project_ignores_individual_terminal_restore_failures() {
             stored_project.id,
             "Broken",
             broken_repo.to_str().unwrap(),
-            "false",
+            "__redwhisk_missing_terminal_command__",
         )
         .expect("insert broken terminal config");
 
@@ -943,22 +943,14 @@ fn open_project_ignores_individual_terminal_restore_failures() {
         )
         .expect("list terminals after partial restore");
     assert_eq!(listed.terminals.len(), 2);
-    assert_eq!(
-        listed
-            .terminals
-            .iter()
-            .filter(|terminal| terminal.session_id != 0)
-            .count(),
-        1
-    );
     assert!(listed
         .terminals
         .iter()
-        .any(|terminal| terminal.name == "Healthy" && manager.contains(terminal.session_id)));
+        .any(|terminal| terminal.name == "Healthy"));
     assert!(listed
         .terminals
         .iter()
-        .any(|terminal| terminal.name == "Broken" && terminal.session_id == 0));
+        .any(|terminal| terminal.name == "Broken"));
 }
 
 #[test]

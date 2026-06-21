@@ -180,12 +180,18 @@ function getSessionStatusTone(session: AgentSessionListItem): string {
     return "review";
   }
 
+  if (session.issueStatus === "running" && session.isTurnRunning === false) {
+    return "in-progress";
+  }
+
   return "running";
 }
 
 function shouldShowRunningSpinner(session: AgentSessionListItem): boolean {
+  const isTurnRunning = session.isTurnRunning ?? session.status === "running";
+
   return (
-    session.status === "running" &&
+    isTurnRunning &&
     session.attention !== "requested" &&
     session.issueStatus !== "review" &&
     session.issueStatus !== "completed"

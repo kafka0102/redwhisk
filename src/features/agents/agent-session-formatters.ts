@@ -48,6 +48,10 @@ export function formatSessionStatusLabel(
     return "Review";
   }
 
+  if (session.issueStatus === "running" && session.isTurnRunning === false) {
+    return "In Progress";
+  }
+
   if (session.attention === "requested") {
     return "输出完成";
   }

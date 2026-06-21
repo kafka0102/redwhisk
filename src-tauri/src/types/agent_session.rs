@@ -147,6 +147,7 @@ pub struct AgentSessionListItem {
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
+    pub is_turn_running: bool,
     pub log_path: String,
     pub latest_output: Option<String>,
     pub last_active_at: i64,

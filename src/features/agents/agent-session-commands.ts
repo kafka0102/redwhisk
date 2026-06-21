@@ -24,6 +24,7 @@ export interface AgentSessionListItem {
   agentType: AgentType;
   status: AgentSessionStatus;
   attention: AgentSessionAttention;
+  isTurnRunning?: boolean;
   logPath?: string | null;
   latestOutput?: string | null;
   lastActiveAt: number;
