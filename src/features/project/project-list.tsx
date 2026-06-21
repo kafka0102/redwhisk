@@ -123,6 +123,7 @@ export function ProjectList({
         </div>
         <Button
           type="button"
+          variant={"outline"}
           disabled={isCreatingProject}
           onClick={onCreateProject}
         >
