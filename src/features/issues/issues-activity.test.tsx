@@ -2287,7 +2287,7 @@ describe("IssuesActivity", () => {
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     prepareAgentCommitCompletionMock.mockRejectedValueOnce({
       code: "ISSUE_VALIDATION_FAILED",
-      message: "当前 Project 未启用 agent_auto_commit 完成策略。",
+      message: "当前项目中有未提交的代码，请提交后再标记完成。",
       details: [
         {
           "@type": "CompletionPolicy",
@@ -2310,7 +2310,7 @@ describe("IssuesActivity", () => {
     expect(completeIssueManualMock).not.toHaveBeenCalled();
     expect(
       within(dialog).getByText(
-        "当前分支中有未提交的代码，请提交后再标记完成。",
+        "当前项目中有未提交的代码，请提交后再标记完成。",
       ),
     ).toBeInTheDocument();
   });

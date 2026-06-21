@@ -747,7 +747,7 @@ impl<'connection> IssueService<'connection> {
             };
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前 Project 未启用 agent_auto_commit 完成策略。",
+                "当前项目中有未提交的代码，请提交后再标记完成。",
             )
             .with_detail(
                 ErrorDetail::new("CompletionPolicy")
@@ -1062,7 +1062,7 @@ impl<'connection> IssueService<'connection> {
         if project.completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前 Project 未启用 agent_auto_commit 完成策略。",
+                "当前项目中有未提交的代码，请提交后再标记完成。",
             ));
         }
 
@@ -1675,7 +1675,7 @@ impl<'connection> IssueService<'connection> {
             };
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前 Project 未启用 agent_auto_commit 完成策略。",
+                "当前项目中有未提交的代码，请提交后再标记完成。",
             )
             .with_detail(
                 ErrorDetail::new("CompletionPolicy")
