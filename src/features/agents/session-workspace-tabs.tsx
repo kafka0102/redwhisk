@@ -1,7 +1,7 @@
 import { GitBranch, X } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { SessionDiffPlaceholder } from "./session-diff-placeholder";
+import { SessionDiffViewer } from "./session-diff-viewer";
 import { SessionFilePreviewPlaceholder } from "./session-file-preview-placeholder";
 import type {
   SessionWorkspaceChangeTab,
@@ -64,7 +64,7 @@ export function SessionWorkspaceTabs({
         {selectedTab === "file" && fileTab ? (
           <SessionFilePreviewPlaceholder file={fileTab} />
         ) : selectedTab === "changes" && changeTab ? (
-          <SessionDiffPlaceholder file={changeTab} />
+          <SessionDiffViewer tab={changeTab} />
         ) : (
           sessionContent
         )}

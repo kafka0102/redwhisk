@@ -1,7 +1,10 @@
 import { Check, ChevronDown, Circle, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { WorkspaceChangedFile } from "./session-workspace-commands";
+import type {
+  WorkspaceChangedFile,
+  WorkspaceChangeKind,
+} from "./session-workspace-commands";
 
 type ChangeFilter = "committed" | "uncommitted";
 
@@ -140,10 +143,11 @@ interface ChangedFileRowProps {
 
 function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const kindLabel = formatChangeKindLabel(file.kind);
 
   return (
     <button
-      className="session-change-row"
+      className={`session-change-row${file.kind === "deleted" ? " session-change-row--deleted" : ""}`}
       type="button"
       onBlur={() => setIsTooltipVisible(false)}
       onClick={() => onOpenChangedFile(file)}
@@ -152,18 +156,13 @@ function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
       onMouseLeave={() => setIsTooltipVisible(false)}
     >
       <span className="session-change-row__name">
-        {file.fileName}
+        <span>{file.fileName}</span>
         <span className="session-change-row__path">
           {getParentPath(file.filePath)}
         </span>
       </span>
       <span className="session-change-row__actions">
-        {file.kind === "added" || file.kind === "untracked" ? (
-          <span className="session-change-row__new">新增</span>
-        ) : null}
-        {file.kind === "deleted" ? (
-          <span className="session-change-row__new">删除</span>
-        ) : null}
+        <span className="session-change-row__label">{kindLabel}</span>
         <span className="session-change-row__stats">
           <span className="session-change-row__added">{`+${file.additions}`}</span>
           <span className="session-change-row__deleted">{`-${file.deletions}`}</span>
@@ -181,4 +180,22 @@ function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
 function getParentPath(filePath: string): string {
   const lastSlashIndex = filePath.lastIndexOf("/");
   return lastSlashIndex >= 0 ? filePath.slice(0, lastSlashIndex) : "";
+}
+
+function formatChangeKindLabel(kind: WorkspaceChangeKind): string {
+  switch (kind) {
+    case "added":
+    case "untracked":
+      return "新增";
+    case "deleted":
+      return "删除";
+    case "renamed":
+      return "重命名";
+    case "copied":
+      return "复制";
+    case "binary":
+      return "二进制";
+    case "modified":
+      return "修改";
+  }
 }

@@ -55,6 +55,30 @@ vi.mock("./agent-session-view", () => ({
     }),
 }));
 
+vi.mock("@monaco-editor/react", () => ({
+  DiffEditor: ({
+    modified,
+    options,
+    original,
+  }: {
+    modified: string;
+    options?: { readOnly?: boolean; renderSideBySide?: boolean };
+    original: string;
+  }) =>
+    createElement("div", {
+      "data-modified": modified,
+      "data-original": original,
+      "data-read-only": String(options?.readOnly ?? false),
+      "data-render-side-by-side": String(options?.renderSideBySide ?? true),
+      "data-testid": "monaco-diff",
+    }),
+  Editor: ({ value }: { value: string }) =>
+    createElement("div", {
+      "data-testid": "monaco-editor",
+      "data-value": value,
+    }),
+}));
+
 vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
   setAgentSessionAttention: vi.fn(),
@@ -748,6 +772,92 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("button", { name: /Existing issue/ }));
 
     expect(screen.getByRole("tab", { name: "a.ts" })).toBeInTheDocument();
+  });
+
+  it("opens a read-only diff for a changed file without placeholder text", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes",
+      files: [changedFile("src/a.ts", "modified")],
+    });
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/a.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "const value = 1;",
+      modifiedContent: "const value = 2;",
+      isBinary: false,
+      isTooLarge: false,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByRole("button", { name: /a.ts/ }));
+
+    expect(await screen.findByTestId("monaco-diff")).toHaveAttribute(
+      "data-original",
+      "const value = 1;",
+    );
+    expect(
+      screen.queryByText(/当前版本暂不实现 Diff 渲染/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a text label for every changed file kind", async () => {
+    const kinds: WorkspaceChangeKind[] = [
+      "added",
+      "modified",
+      "deleted",
+      "renamed",
+      "copied",
+      "binary",
+    ];
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes",
+      files: kinds.map((kind) => changedFile(`src/${kind}.ts`, kind)),
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await userEvent.click(await screen.findByLabelText("打开 Session 侧边栏"));
+
+    for (const label of ["新增", "修改", "删除", "重命名", "复制", "二进制"]) {
+      expect(await screen.findByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("shows an explicit unavailable state for binary diffs", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes",
+      files: [changedFile("src/image.png", "binary")],
+    });
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/image.png",
+      oldPath: null,
+      kind: "binary",
+      language: null,
+      originalContent: "",
+      modifiedContent: "",
+      isBinary: true,
+      isTooLarge: false,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByRole("button", { name: /image.png/ }));
+
+    expect(await screen.findByText("二进制文件不可预览。")).toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-diff")).not.toBeInTheDocument();
   });
 
   it("uses a full-height split layout for the session list and workspace", async () => {
@@ -3480,9 +3590,10 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("tab", { name: "agents-activity.tsx" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "agents-activity.tsx" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("monaco-diff")).toHaveAttribute(
+      "data-read-only",
+      "true",
+    );
     expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
 
     await user.click(
@@ -3495,9 +3606,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("tab", { name: "agents-session-pane.tsx" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "agents-session-pane.tsx" }),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-diff")).toBeInTheDocument();
   });
 
   it("opens a single replaceable file preview tab from the file tree", async () => {
