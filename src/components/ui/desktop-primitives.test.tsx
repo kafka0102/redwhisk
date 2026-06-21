@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { Button } from "./button";
 import { Input } from "./input";
+import { Textarea } from "./textarea";
 
 describe("desktop ui primitives", () => {
   it("renders the shadcn button primitive", () => {
@@ -21,5 +22,17 @@ describe("desktop ui primitives", () => {
 
     expect(input).toHaveAttribute("data-slot", "input");
     expect(input.className).toContain("border-input");
+    expect(input).toHaveAttribute("autocapitalize", "none");
+    expect(input).toHaveAttribute("spellcheck", "false");
+  });
+
+  it("renders the shadcn textarea primitive without automatic capitalization", () => {
+    render(<Textarea aria-label="Prompt" />);
+
+    const textarea = screen.getByRole("textbox", { name: "Prompt" });
+
+    expect(textarea).toHaveAttribute("data-slot", "textarea");
+    expect(textarea).toHaveAttribute("autocapitalize", "none");
+    expect(textarea).toHaveAttribute("spellcheck", "false");
   });
 });

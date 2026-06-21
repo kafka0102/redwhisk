@@ -229,6 +229,8 @@ Codex session 通过 `codex app-server` 子进程接入，不走 PTY。职责边
 
 Codex command 检测和测试由 Rust Core 完成，React 不直接执行 shell。command 不可用时，不得保存或启用会在启动时失败的 Agent Profile。
 
+Agent command 检测必须考虑桌面应用启动环境与用户终端环境的差异。macOS 上从 Finder、Dock 或 Tauri 启动的进程通常不会继承交互终端中的 `PATH`、`nvm`、`rbenv` 等初始化结果；Rust Core 做 `command -v` 时不得只依赖当前进程环境。检测裸命令名（例如 `codex`）时，应优先保持非交互登录 shell 查询，并在失败时补充交互登录 shell 查询，以覆盖用户在 `.zshrc` 等交互 shell 启动脚本中配置的命令路径。
+
 ## 文案与国际化
 
 规划文档要求核心状态和命令支持 `zh-CN` / `en-US`，但当前代码尚无 `src/shared/i18n` 运行时字典，且已有故事记录该项为 deferred work。
