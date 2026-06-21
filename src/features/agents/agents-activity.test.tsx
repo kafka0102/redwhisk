@@ -190,6 +190,23 @@ function getLastPathSegment(path: string): string {
   return segments[segments.length - 1] ?? path;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 describe("AgentsActivity", () => {
   beforeEach(() => {
     listAgentSessionsMock.mockReset();
@@ -512,7 +529,7 @@ describe("AgentsActivity", () => {
   });
 
   it("refreshes uncommitted changes while the side panel is open", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers();
     getProjectWorktreeChangesMock
       .mockResolvedValueOnce({
         signature: "one",
@@ -534,16 +551,62 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
-    expect(
-      await screen.findByRole("button", { name: /one.ts/ }),
-    ).toBeInTheDocument();
+    await flushMicrotasks();
+    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
+    await flushMicrotasks();
+    expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
     await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 2_100));
+      await vi.advanceTimersByTimeAsync(2_100);
     });
 
     expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
+  });
+
+  it("keeps newer uncommitted changes when an older refresh returns last", async () => {
+    vi.useFakeTimers();
+    const oldChanges =
+      deferred<Awaited<ReturnType<typeof getProjectWorktreeChanges>>>();
+    const newChanges =
+      deferred<Awaited<ReturnType<typeof getProjectWorktreeChanges>>>();
+    getProjectWorktreeChangesMock
+      .mockReturnValueOnce(oldChanges.promise)
+      .mockReturnValueOnce(newChanges.promise);
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await flushMicrotasks();
+    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      newChanges.resolve({
+        signature: "new",
+        files: [changedFile("src/new.ts", "modified")],
+      });
+      await newChanges.promise;
+    });
+    expect(screen.getByRole("button", { name: /new.ts/ })).toBeInTheDocument();
+
+    await act(async () => {
+      oldChanges.resolve({
+        signature: "old",
+        files: [changedFile("src/old.ts", "modified")],
+      });
+      await oldChanges.promise;
+    });
+
+    expect(screen.getByRole("button", { name: /new.ts/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /old.ts/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("refreshes uncommitted changes immediately from the refresh button", async () => {
@@ -579,7 +642,7 @@ describe("AgentsActivity", () => {
   });
 
   it("refreshes the file tree while the files tab is active", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers();
     getProjectWorktreeFileTreeMock
       .mockResolvedValueOnce({
         signature: "one",
@@ -594,18 +657,65 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
-    await user.click(screen.getByRole("tab", { name: "文件" }));
-    expect(
-      await screen.findByRole("button", { name: /one.ts/ }),
-    ).toBeInTheDocument();
+    await flushMicrotasks();
+    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
+    fireEvent.click(screen.getByRole("tab", { name: "文件" }));
+    await flushMicrotasks();
+    expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
     await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 5_100));
+      await vi.advanceTimersByTimeAsync(5_100);
     });
 
     expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
-  }, 8_000);
+  });
+
+  it("keeps newer file tree nodes when an older refresh returns last", async () => {
+    vi.useFakeTimers();
+    const oldFileTree =
+      deferred<Awaited<ReturnType<typeof getProjectWorktreeFileTree>>>();
+    const newFileTree =
+      deferred<Awaited<ReturnType<typeof getProjectWorktreeFileTree>>>();
+    getProjectWorktreeFileTreeMock
+      .mockReturnValueOnce(oldFileTree.promise)
+      .mockReturnValueOnce(newFileTree.promise);
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await flushMicrotasks();
+    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
+    fireEvent.click(screen.getByRole("tab", { name: "文件" }));
+    expect(getProjectWorktreeFileTreeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100);
+    });
+    expect(getProjectWorktreeFileTreeMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      newFileTree.resolve({
+        signature: "new",
+        nodes: [fileNode("src/new.ts")],
+      });
+      await newFileTree.promise;
+    });
+    expect(screen.getByRole("button", { name: /new.ts/ })).toBeInTheDocument();
+
+    await act(async () => {
+      oldFileTree.resolve({
+        signature: "old",
+        nodes: [fileNode("src/old.ts")],
+      });
+      await oldFileTree.promise;
+    });
+
+    expect(screen.getByRole("button", { name: /new.ts/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /old.ts/ }),
+    ).not.toBeInTheDocument();
+  });
 
   it("restores cached workspace tab when switching back to a session", async () => {
     const user = userEvent.setup();
