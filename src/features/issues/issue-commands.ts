@@ -5,12 +5,7 @@ export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
 export type IssueLabelScope = "project" | "global";
-export type IssueAttachmentKind =
-  | "image"
-  | "pdf"
-  | "word"
-  | "text"
-  | "generic";
+export type IssueAttachmentKind = "image" | "pdf" | "word" | "text" | "generic";
 
 export interface IssueLabelRecord {
   id: number;
@@ -313,7 +308,9 @@ export function getIssueSummary(
   });
 }
 
-export function deleteIssue(input: DeleteIssueInput): Promise<DeleteIssueResult> {
+export function deleteIssue(
+  input: DeleteIssueInput,
+): Promise<DeleteIssueResult> {
   return invokeCommand<DeleteIssueResult>("delete_issue", {
     input,
   });
@@ -322,9 +319,12 @@ export function deleteIssue(input: DeleteIssueInput): Promise<DeleteIssueResult>
 export function previewIssueAttachment(
   input: PreviewIssueAttachmentInput,
 ): Promise<IssueAttachmentPreviewRecord> {
-  return invokeCommand<IssueAttachmentPreviewRecord>("preview_issue_attachment", {
-    input,
-  });
+  return invokeCommand<IssueAttachmentPreviewRecord>(
+    "preview_issue_attachment",
+    {
+      input,
+    },
+  );
 }
 
 export function exportIssueAttachment(

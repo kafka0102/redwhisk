@@ -6,9 +6,7 @@ import {
   type SettingsMenu,
 } from "../features/settings/project-settings-activity";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
-import {
-  ProjectTerminalsActivity,
-} from "../features/terminals/project-terminals-activity";
+import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
 import type { ProjectCompletionPolicy } from "../features/project/project-commands";
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";

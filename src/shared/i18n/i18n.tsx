@@ -44,8 +44,9 @@ const DEFAULT_I18N_CONTEXT: I18nContextValue = {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
-  const [themePreference, setThemePreferenceState] =
-    useState<ThemePreference>(getInitialThemePreference);
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(
+    getInitialThemePreference,
+  );
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(
     getSystemTheme,
   );
@@ -126,7 +127,6 @@ function getSystemTheme(): "light" | "dark" {
 
 function canMatchDarkScheme() {
   return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function"
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
   );
 }

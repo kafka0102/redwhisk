@@ -27,7 +27,10 @@ export function ProjectTerminal({
         restore: () => restoreProjectTerminal({ projectId, sessionId }),
         subscribeOutput: (handler) =>
           subscribeAgentSessionTerminalOutput((event) => {
-            if (event.projectId !== projectId || event.sessionId !== sessionId) {
+            if (
+              event.projectId !== projectId ||
+              event.sessionId !== sessionId
+            ) {
               return;
             }
 

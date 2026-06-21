@@ -210,7 +210,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       configuredAgents: "已配置 agents",
       chooseFolder: "选择目录",
       delete: "删除",
-      deleteConfirm: (profileName) => `确认删除 Agent Profile「${profileName}」吗？`,
+      deleteConfirm: (profileName) =>
+        `确认删除 Agent Profile「${profileName}」吗？`,
       editTerminal: (terminalName) => `编辑终端「${terminalName}」`,
       labels: "Labels",
       general: "通用",

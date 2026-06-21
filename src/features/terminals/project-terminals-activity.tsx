@@ -38,8 +38,10 @@ interface ProjectTerminalsActivityProps {
 }
 
 const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
-const ACTIVE_TERMINAL_CARD_BACKGROUND = "color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))";
-const ACTIVE_TERMINAL_CARD_BORDER = "color-mix(in srgb, var(--color-accent) 52%, var(--color-border-strong))";
+const ACTIVE_TERMINAL_CARD_BACKGROUND =
+  "color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))";
+const ACTIVE_TERMINAL_CARD_BORDER =
+  "color-mix(in srgb, var(--color-accent) 52%, var(--color-border-strong))";
 const INACTIVE_TERMINAL_CARD_BACKGROUND = "var(--color-surface)";
 const INACTIVE_TERMINAL_CARD_BORDER = "var(--color-border)";
 
@@ -62,12 +64,11 @@ export function ProjectTerminalsActivity({
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [closingConfigId, setClosingConfigId] = useState<number | null>(null);
   const [hydratingTerminals, setHydratingTerminals] = useState(false);
-  const [terminalStatusMessage, setTerminalStatusMessage] = useState<string | null>(
-    null,
-  );
-  const [editingTerminal, setEditingTerminal] = useState<ProjectTerminalCardState | null>(
-    null,
-  );
+  const [terminalStatusMessage, setTerminalStatusMessage] = useState<
+    string | null
+  >(null);
+  const [editingTerminal, setEditingTerminal] =
+    useState<ProjectTerminalCardState | null>(null);
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
@@ -81,7 +82,9 @@ export function ProjectTerminalsActivity({
   }, [selectedConfigId, terminalCards]);
 
   const activeSessionId =
-    activeTerminal && activeTerminal.sessionId !== 0 ? activeTerminal.sessionId : null;
+    activeTerminal && activeTerminal.sessionId !== 0
+      ? activeTerminal.sessionId
+      : null;
 
   const selectTerminal = useCallback(
     (configId: number) => {
@@ -260,7 +263,8 @@ export function ProjectTerminalsActivity({
     setEditingTerminal(null);
   }
 
-  const showEmptyState = hasHydrated && terminalCards.length === 0 && !hydratingTerminals;
+  const showEmptyState =
+    hasHydrated && terminalCards.length === 0 && !hydratingTerminals;
 
   if (!hasHydrated || hydratingTerminals) {
     return (
@@ -299,7 +303,10 @@ export function ProjectTerminalsActivity({
           } as CSSProperties
         }
       >
-        <aside className="project-terminals-sidebar" aria-label="Project terminals">
+        <aside
+          className="project-terminals-sidebar"
+          aria-label="Project terminals"
+        >
           <div className="project-terminals-sidebar__header">
             <div className="project-terminals-sidebar__header-copy">
               <h2>{messages.settings.terminals}</h2>
@@ -320,14 +327,19 @@ export function ProjectTerminalsActivity({
           </div>
 
           {terminalStatusMessage ? (
-            <p className="issues-status" role="status" aria-label="Terminals status">
+            <p
+              className="issues-status"
+              role="status"
+              aria-label="Terminals status"
+            >
               {terminalStatusMessage}
             </p>
           ) : null}
 
           <div className="project-terminals-card-list">
             {terminalCards.map((terminalCard) => {
-              const isActive = activeTerminal?.configId === terminalCard.configId;
+              const isActive =
+                activeTerminal?.configId === terminalCard.configId;
               const displayPath = formatTerminalPathForDisplay(
                 terminalCard.workingDir || projectPath || "",
               );
@@ -360,12 +372,16 @@ export function ProjectTerminalsActivity({
                       <span className="project-terminals-card__name">
                         {terminalCard.name}
                       </span>
-                      <span className="project-terminals-card__meta">{displayPath}</span>
+                      <span className="project-terminals-card__meta">
+                        {displayPath}
+                      </span>
                     </span>
                   </button>
                   <div className="project-terminals-card__actions">
                     <button
-                      aria-label={messages.settings.editTerminal(terminalCard.name)}
+                      aria-label={messages.settings.editTerminal(
+                        terminalCard.name,
+                      )}
                       className="project-terminals-card__edit"
                       type="button"
                       onClick={() => {
@@ -375,7 +391,9 @@ export function ProjectTerminalsActivity({
                       <Pencil size={12} strokeWidth={2} />
                     </button>
                     <button
-                      aria-label={messages.settings.deleteTerminal(terminalCard.name)}
+                      aria-label={messages.settings.deleteTerminal(
+                        terminalCard.name,
+                      )}
                       className="project-terminals-card__delete"
                       disabled={closingConfigId === terminalCard.configId}
                       type="button"
@@ -445,10 +463,16 @@ export function ProjectTerminalsActivity({
           }}
         />
 
-        <section className="project-terminals-workspace" aria-label="Terminal workspace">
+        <section
+          className="project-terminals-workspace"
+          aria-label="Terminal workspace"
+        >
           {activeTerminal && activeSessionId !== null ? (
             <div className="project-terminals-workspace__surface">
-              <ProjectTerminal projectId={projectId} sessionId={activeSessionId} />
+              <ProjectTerminal
+                projectId={projectId}
+                sessionId={activeSessionId}
+              />
             </div>
           ) : (
             <div className="project-terminals-workspace__empty">

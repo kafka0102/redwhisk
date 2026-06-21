@@ -135,7 +135,10 @@ export function ProjectSwitcher({
               type="button"
               onClick={handleCreateProject}
             >
-              <span className="project-switcher__create-icon" aria-hidden="true">
+              <span
+                className="project-switcher__create-icon"
+                aria-hidden="true"
+              >
                 <Plus size={15} strokeWidth={2} />
               </span>
               <span>创建项目</span>

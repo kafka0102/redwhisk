@@ -125,9 +125,10 @@ describe("buildRunPromptPreview", () => {
     });
 
     expect(preview.finalPrompt).toBe(
-      ["使用skill bmad-dev-story 执行任务：", "Make the preview reflect the selected profile."].join(
-        "\n\n",
-      ),
+      [
+        "使用skill bmad-dev-story 执行任务：",
+        "Make the preview reflect the selected profile.",
+      ].join("\n\n"),
     );
   });
 

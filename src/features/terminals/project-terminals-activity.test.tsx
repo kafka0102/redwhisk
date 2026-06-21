@@ -90,19 +90,22 @@ describe("ProjectTerminalsActivity", () => {
 
     renderProjectTerminalsActivity();
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading terminals...");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading terminals...",
+    );
 
     await waitFor(() => {
       expect(listProjectTerminalsMock).toHaveBeenCalledWith({ projectId: 1 });
     });
 
     const sidebar = screen.getByLabelText("Project terminals");
-    expect(within(sidebar).getByRole("button", { name: "API" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(sidebar).getByRole("button", { name: "API" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
-    expect(within(sidebar).getByText("/tmp/redwhisk/apps/api")).toBeInTheDocument();
+    expect(
+      within(sidebar).getByText("/tmp/redwhisk/apps/api"),
+    ).toBeInTheDocument();
   });
 
   it("renders the working directory with a home shorthand and truncation styles", async () => {
@@ -121,7 +124,9 @@ describe("ProjectTerminalsActivity", () => {
     renderProjectTerminalsActivity();
 
     const sidebar = await screen.findByLabelText("Project terminals");
-    const path = within(sidebar).getByText("~/workspace/kafka/redwhisk/apps/api");
+    const path = within(sidebar).getByText(
+      "~/workspace/kafka/redwhisk/apps/api",
+    );
 
     expect(path).toHaveClass("project-terminals-card__meta");
     expect(path).toHaveTextContent("~/workspace/kafka/redwhisk/apps/api");
@@ -169,7 +174,9 @@ describe("ProjectTerminalsActivity", () => {
       expect(listProjectTerminalsMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByRole("button", { name: "+ New terminal" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ New terminal" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Loading terminals...")).not.toBeInTheDocument();
   });
 
@@ -197,13 +204,19 @@ describe("ProjectTerminalsActivity", () => {
     renderProjectTerminalsActivity();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Worker" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Worker" }),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: "Worker" }));
 
-    expect(screen.getByText("This terminal is not running right now.")).toBeInTheDocument();
-    expect(screen.queryByTestId("project-terminal:1:-1")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("This terminal is not running right now."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("project-terminal:1:-1"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the edit dialog and saves terminal config updates", async () => {
@@ -288,11 +301,15 @@ describe("ProjectTerminalsActivity", () => {
     renderProjectTerminalsActivity();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Worker" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Worker" }),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: "Worker" }));
-    await user.click(screen.getByRole("button", { name: 'Delete terminal "Worker"' }));
+    await user.click(
+      screen.getByRole("button", { name: 'Delete terminal "Worker"' }),
+    );
 
     await waitFor(() => {
       expect(deleteProjectTerminalConfigMock).toHaveBeenCalledWith({
@@ -306,6 +323,8 @@ describe("ProjectTerminalsActivity", () => {
       "true",
     );
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Worker" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Worker" }),
+    ).not.toBeInTheDocument();
   });
 });

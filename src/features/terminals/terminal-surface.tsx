@@ -337,7 +337,8 @@ export function TerminalSurface({
 
     const startTerminal = async () => {
       try {
-        unlistenOutput = await transportRef.current.subscribeOutput(handleOutput);
+        unlistenOutput =
+          await transportRef.current.subscribeOutput(handleOutput);
         if (isDisposed) {
           unlistenOutput();
           unlistenOutput = null;
@@ -384,11 +385,7 @@ export function TerminalSurface({
           {statusMessage}
         </p>
       ) : null}
-      <div
-        ref={hostRef}
-        aria-label={ariaLabel}
-        className={terminalClassName}
-      />
+      <div ref={hostRef} aria-label={ariaLabel} className={terminalClassName} />
       {!canBootXterm ? (
         <p className="terminal-surface-shell__status" role="status">
           Terminal preview is unavailable in this environment. Runtime PTY/xterm

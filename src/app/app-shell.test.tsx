@@ -40,11 +40,9 @@ vi.mock("../features/agents/agents-activity", () => ({
 }));
 
 vi.mock("../features/settings/project-settings-activity", () => ({
-  ProjectSettingsActivity: ({
-    activeMenu,
-  }: {
-    activeMenu?: string;
-  }) => <div>project settings activity {activeMenu}</div>,
+  ProjectSettingsActivity: ({ activeMenu }: { activeMenu?: string }) => (
+    <div>project settings activity {activeMenu}</div>
+  ),
 }));
 
 vi.mock("../features/settings/global-settings-activity", () => ({
@@ -143,10 +141,9 @@ describe("AppShell terminals activity persistence", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "local-dev-web" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: "local-dev-web" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("does not rehydrate empty terminals repeatedly", async () => {
@@ -175,7 +172,9 @@ describe("AppShell terminals activity persistence", () => {
       expect(listProjectTerminalsMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByRole("button", { name: "+ New terminal" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ New terminal" }),
+    ).toBeInTheDocument();
   });
 
   it("opens project settings on the labels tab when requested from issues", async () => {
@@ -198,7 +197,9 @@ describe("AppShell terminals activity persistence", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "open labels settings" }));
+    await user.click(
+      screen.getByRole("button", { name: "open labels settings" }),
+    );
 
     expect(
       screen.getByText("project settings activity labels"),
