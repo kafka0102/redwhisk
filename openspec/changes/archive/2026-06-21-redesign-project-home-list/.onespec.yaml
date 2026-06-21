@@ -1,6 +1,6 @@
 version: 1
 change: redesign-project-home-list
-phase: review
+phase: done
 ambiguity: low
 complexity: medium
 implementation_path: superpowers
@@ -11,12 +11,12 @@ origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
 origin_workspace_mode: current-branch
 implementation_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
 plan: docs/superpowers/plans/2026-06-21-redesign-project-home-list.md
-handoff_context: openspec/changes/redesign-project-home-list/.onespec.yaml
+handoff_context: openspec/changes/archive/2026-06-21-redesign-project-home-list/.onespec.yaml
 handoff_purpose: review
 handoff_summary: review handoff from 3 file(s); primary artifact: openspec/changes/redesign-project-home-list/proposal.md
 handoff_hash: e8c2e659bbcbc27548ff89dec755dde54916be767bd71a651b27fd28411b939a
 touched_files_b64: c3JjL2ZlYXR1cmVzL3Byb2plY3QvcHJvamVjdC1ob21lLnRzeApzcmMvZmVhdHVyZXMvcHJvamVjdC9wcm9qZWN0LWxpc3QudHN4CnNyYy9mZWF0dXJlcy9wcm9qZWN0L3Byb2plY3QtY2FyZC50c3gKc3JjL2ZlYXR1cmVzL3Byb2plY3QvcHJvamVjdC1jYXJkLWdyaWQudHN4CnNyYy9mZWF0dXJlcy9wcm9qZWN0L2NyZWF0ZS1wcm9qZWN0LWNhcmQudHN4CnNyYy9hcHAvYXBwLXNoZWxsLnRzeApzcmMvYXBwL2FwcC50ZXN0LnRzeApzcmMvYXBwL2FwcC5jc3MKZG9jcy9zdXBlcnBvd2Vycy9wbGFucy8yMDI2LTA2LTIxLXJlZGVzaWduLXByb2plY3QtaG9tZS1saXN0Lm1kCm9wZW5zcGVjL2NoYW5nZXMvcmVkZXNpZ24tcHJvamVjdC1ob21lLWxpc3QvdGFza3MubWQK
-review_result: pending
-archive: pending
+review_result: accepted
+archive: archived
 created_at: 2026-06-21
 updated_at: 2026-06-21T04:04:37Z
