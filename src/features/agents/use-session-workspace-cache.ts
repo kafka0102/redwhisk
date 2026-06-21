@@ -30,9 +30,11 @@ interface SessionWorkspaceCache {
   changeTab: SessionWorkspaceChangeTab | null;
   changes: WorkspaceChangedFile[];
   changesErrorMessage: string | null;
+  changesRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
   fileTree: WorkspaceFileTreeNode[];
   fileTreeErrorMessage: string | null;
+  fileTreeRequestSequence: number;
   isChangesLoading: boolean;
   isFileTreeLoading: boolean;
   lastChangesSignature: string | null;
@@ -45,9 +47,11 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   changeTab: null,
   changes: [],
   changesErrorMessage: null,
+  changesRequestSequence: 0,
   fileTab: null,
   fileTree: [],
   fileTreeErrorMessage: null,
+  fileTreeRequestSequence: 0,
   isChangesLoading: false,
   isFileTreeLoading: false,
   lastChangesSignature: null,
@@ -88,8 +92,11 @@ export function useSessionWorkspaceCache({
       return;
     }
 
+    let requestSequence = 0;
     updateCurrentCache((cache) => ({
       ...cache,
+      changesRequestSequence: (requestSequence =
+        cache.changesRequestSequence + 1),
       isChangesLoading: true,
       changesErrorMessage: null,
     }));
@@ -100,22 +107,30 @@ export function useSessionWorkspaceCache({
         sessionId,
       });
 
-      updateCurrentCache((cache) => ({
-        ...cache,
-        changes:
-          cache.lastChangesSignature === response.signature
-            ? cache.changes
-            : response.files,
-        isChangesLoading: false,
-        changesErrorMessage: null,
-        lastChangesSignature: response.signature,
-      }));
+      updateCurrentCache((cache) =>
+        cache.changesRequestSequence === requestSequence
+          ? {
+              ...cache,
+              changes:
+                cache.lastChangesSignature === response.signature
+                  ? cache.changes
+                  : response.files,
+              isChangesLoading: false,
+              changesErrorMessage: null,
+              lastChangesSignature: response.signature,
+            }
+          : cache,
+      );
     } catch (error) {
-      updateCurrentCache((cache) => ({
-        ...cache,
-        isChangesLoading: false,
-        changesErrorMessage: toCommandError(error).message,
-      }));
+      updateCurrentCache((cache) =>
+        cache.changesRequestSequence === requestSequence
+          ? {
+              ...cache,
+              isChangesLoading: false,
+              changesErrorMessage: toCommandError(error).message,
+            }
+          : cache,
+      );
     }
   }, [projectId, sessionId, updateCurrentCache]);
 
@@ -124,8 +139,11 @@ export function useSessionWorkspaceCache({
       return;
     }
 
+    let requestSequence = 0;
     updateCurrentCache((cache) => ({
       ...cache,
+      fileTreeRequestSequence: (requestSequence =
+        cache.fileTreeRequestSequence + 1),
       isFileTreeLoading: true,
       fileTreeErrorMessage: null,
     }));
@@ -136,22 +154,30 @@ export function useSessionWorkspaceCache({
         sessionId,
       });
 
-      updateCurrentCache((cache) => ({
-        ...cache,
-        fileTree:
-          cache.lastFileTreeSignature === response.signature
-            ? cache.fileTree
-            : response.nodes,
-        isFileTreeLoading: false,
-        fileTreeErrorMessage: null,
-        lastFileTreeSignature: response.signature,
-      }));
+      updateCurrentCache((cache) =>
+        cache.fileTreeRequestSequence === requestSequence
+          ? {
+              ...cache,
+              fileTree:
+                cache.lastFileTreeSignature === response.signature
+                  ? cache.fileTree
+                  : response.nodes,
+              isFileTreeLoading: false,
+              fileTreeErrorMessage: null,
+              lastFileTreeSignature: response.signature,
+            }
+          : cache,
+      );
     } catch (error) {
-      updateCurrentCache((cache) => ({
-        ...cache,
-        isFileTreeLoading: false,
-        fileTreeErrorMessage: toCommandError(error).message,
-      }));
+      updateCurrentCache((cache) =>
+        cache.fileTreeRequestSequence === requestSequence
+          ? {
+              ...cache,
+              isFileTreeLoading: false,
+              fileTreeErrorMessage: toCommandError(error).message,
+            }
+          : cache,
+      );
     }
   }, [projectId, sessionId, updateCurrentCache]);
 
