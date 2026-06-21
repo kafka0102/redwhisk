@@ -1610,6 +1610,59 @@ describe("IssuesActivity", () => {
     ).toBeEnabled();
   });
 
+  it("falls back to the refreshed linked session when start succeeds without a session id", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock
+      .mockResolvedValueOnce({ issues: [existingIssue] })
+      .mockResolvedValueOnce({
+        issues: [
+          {
+            ...existingIssue,
+            status: "running" as const,
+            linkedSessionId: 301,
+            linkedSessionStatus: "running" as const,
+          },
+        ],
+      });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: null,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Run Existing issue" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Run Issue #20" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
+  });
+
   it("uses the latest available project profile before global fallback", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
