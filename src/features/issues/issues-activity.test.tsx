@@ -1145,6 +1145,12 @@ describe("IssuesActivity", () => {
     ) as HTMLTextAreaElement;
     expect(promptField.value).toBe(existingIssueRunPrompt);
     expect(promptField).toHaveAttribute("readonly");
+    expect(promptField).toHaveClass(
+      "field-sizing-fixed",
+      "h-56",
+      "resize-none",
+      "overflow-y-auto",
+    );
     expect(
       within(dialog).queryByText("Prompt sources"),
     ).not.toBeInTheDocument();
