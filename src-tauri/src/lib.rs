@@ -94,7 +94,6 @@ pub fn run() {
             commands::settings_commands::test_agent_command,
             commands::settings_commands::list_agent_profiles,
             commands::settings_commands::save_agent_profile,
-            commands::settings_commands::validate_agent_worktree_path,
             commands::settings_commands::delete_agent_profile,
             commands::settings_commands::list_project_labels,
             commands::settings_commands::save_project_label,

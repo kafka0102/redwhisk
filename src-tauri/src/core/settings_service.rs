@@ -9,7 +9,6 @@ use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
     DeleteAgentProfileInput, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
-    ValidateAgentWorktreePathInput, ValidateAgentWorktreePathResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_label::{
@@ -115,7 +114,6 @@ where
     ) -> Result<AgentProfileRecord, CommandError> {
         let name = validate_name(&input.name)?;
         let command = validate_command(&input.command)?;
-        let worktree_path = self.validate_worktree_path(input.project_id, &input.worktree_path)?;
 
         if input.scope == AgentScope::Project {
             let project_id = input.project_id.ok_or_else(|| {
@@ -138,7 +136,6 @@ where
                 &name,
                 input.agent_type,
                 &command,
-                &worktree_path,
                 &input.scope,
                 input.project_id,
                 &input.mode,
@@ -197,18 +194,6 @@ where
         Ok(project_label_record_from_row(row))
     }
 
-    pub fn validate_agent_worktree_path(
-        &self,
-        input: ValidateAgentWorktreePathInput,
-    ) -> Result<ValidateAgentWorktreePathResult, CommandError> {
-        let path = input.path.trim().to_string();
-
-        Ok(ValidateAgentWorktreePathResult {
-            exists: Path::new(&path).is_dir(),
-            path,
-        })
-    }
-
     pub fn delete_agent_profile(&self, input: DeleteAgentProfileInput) -> Result<(), CommandError> {
         let deleted = self
             .repository
@@ -252,45 +237,6 @@ where
                 CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
                     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             })
-    }
-
-    fn validate_worktree_path(
-        &self,
-        project_id: Option<i64>,
-        raw_path: &str,
-    ) -> Result<String, CommandError> {
-        let path = raw_path.trim().to_string();
-        if path.is_empty() {
-            return Ok(path);
-        }
-
-        let Some(project_id) = project_id else {
-            return Ok(path);
-        };
-
-        let project = self
-            .project_repository
-            .find_by_id(project_id)
-            .map_err(settings_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
-                    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
-            })?;
-        let default_worktree_path = format!("{}.worktrees", project.repo_path);
-        if path == default_worktree_path {
-            return Ok(path);
-        }
-
-        if Path::new(&path).is_dir() {
-            return Ok(path);
-        }
-
-        Err(CommandError::new(
-            CommandErrorCode::AgentProfileValidationFailed,
-            "自定义 Worktree path 不存在。",
-        )
-        .with_detail(ErrorDetail::new("Field").with_value("name", "worktreePath"))
-        .with_detail(ErrorDetail::new("WorktreePath").with_value("path", path)))
     }
 
     fn ensure_label_name_unique(
@@ -453,23 +399,6 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         .save_agent_profile(input)
     }
 
-    pub fn validate_agent_worktree_path_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: ValidateAgentWorktreePathInput,
-    ) -> Result<ValidateAgentWorktreePathResult, CommandError> {
-        let database = open_settings_database(data_dir)?;
-        let repository = AgentProfileRepository::new(&database.connection);
-        let project_label_repository = ProjectLabelRepository::new(&database.connection);
-        let project_repository = ProjectRepository::new(&database.connection);
-        SettingsService::new(
-            repository,
-            project_label_repository,
-            project_repository,
-            ShellAgentCommandDetector::new(),
-        )
-        .validate_agent_worktree_path(input)
-    }
-
     pub fn delete_agent_profile_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: DeleteAgentProfileInput,
@@ -566,7 +495,6 @@ fn agent_profile_record_from_row(
         name: row.name,
         agent_type: row.agent_type,
         command: row.command,
-        worktree_path: row.worktree_path,
         scope: row.scope,
         project_id: row.project_id,
         mode: row.mode,
@@ -918,7 +846,6 @@ mod tests {
                 name: format!("agent-{scope:?}"),
                 agent_type: AgentType::Codex,
                 command: "codex".to_string(),
-                worktree_path: "".to_string(),
                 scope,
                 project_id,
                 mode: "default".to_string(),

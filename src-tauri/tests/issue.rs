@@ -3129,7 +3129,6 @@ fn insert_agent_profile(connection: &rusqlite::Connection) -> i64 {
             "Codex",
             AgentType::Codex,
             "/usr/local/bin/codex",
-            "",
             &AgentScope::Global,
             None,
             "full-auto",

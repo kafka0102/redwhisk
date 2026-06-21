@@ -9,7 +9,7 @@ use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectCompletionPolicy, ProjectPathStatus,
-    UpdateProjectSettingsInput,
+    ProjectWorktreeLocation, UpdateProjectSettingsInput,
 };
 use redwhisk_lib::types::project_terminal::{
     CreateProjectTerminalInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
@@ -60,6 +60,8 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "created_at",
             "last_opened_at",
             "completion_policy",
+            "worktree_location",
+            "worktree_setup_command",
         ],
     );
     assert_eq!(
@@ -329,9 +331,26 @@ fn project_integer_id_migration_converts_existing_text_schema() {
             "0003_project_integer_ids",
             include_str!("../migrations/0003_project_integer_ids.sql"),
         ),
+        ("0004_issues", include_str!("../migrations/0004_issues.sql")),
+        (
+            "0006_agent_profiles_and_project_overrides",
+            include_str!("../migrations/0006_agent_profiles_and_project_overrides.sql"),
+        ),
+        (
+            "0007_restructure_agent_profiles",
+            include_str!("../migrations/0007_restructure_agent_profiles.sql"),
+        ),
+        (
+            "0008_agent_sessions_and_session_events",
+            include_str!("../migrations/0008_agent_sessions_and_session_events.sql"),
+        ),
         (
             "0010_project_completion_policy",
             include_str!("../migrations/0010_project_completion_policy.sql"),
+        ),
+        (
+            "0022_agent_worktree_execution",
+            include_str!("../migrations/0022_agent_worktree_execution.sql"),
         ),
     ]);
 
@@ -356,6 +375,11 @@ fn project_integer_id_migration_converts_existing_text_schema() {
         project.completion_policy,
         redwhisk_lib::types::project::ProjectCompletionPolicy::Manual
     );
+    assert_eq!(
+        project.worktree_location,
+        ProjectWorktreeLocation::RepoSibling
+    );
+    assert_eq!(project.worktree_setup_command, "");
     assert_eq!(project.created_at, 1_780_624_800_000);
     assert_eq!(project.last_opened_at, 1_780_628_400_000);
 }
@@ -387,9 +411,26 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
             "0003_project_integer_ids",
             include_str!("../migrations/0003_project_integer_ids.sql"),
         ),
+        ("0004_issues", include_str!("../migrations/0004_issues.sql")),
+        (
+            "0006_agent_profiles_and_project_overrides",
+            include_str!("../migrations/0006_agent_profiles_and_project_overrides.sql"),
+        ),
+        (
+            "0007_restructure_agent_profiles",
+            include_str!("../migrations/0007_restructure_agent_profiles.sql"),
+        ),
+        (
+            "0008_agent_sessions_and_session_events",
+            include_str!("../migrations/0008_agent_sessions_and_session_events.sql"),
+        ),
         (
             "0010_project_completion_policy",
             include_str!("../migrations/0010_project_completion_policy.sql"),
+        ),
+        (
+            "0022_agent_worktree_execution",
+            include_str!("../migrations/0022_agent_worktree_execution.sql"),
         ),
     ]);
 
@@ -404,6 +445,11 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
         project.completion_policy,
         redwhisk_lib::types::project::ProjectCompletionPolicy::Manual
     );
+    assert_eq!(
+        project.worktree_location,
+        ProjectWorktreeLocation::RepoSibling
+    );
+    assert_eq!(project.worktree_setup_command, "");
     assert_eq!(project.created_at, 1_780_624_800_000);
     assert_eq!(project.last_opened_at, 1_780_628_400_000);
 }
@@ -1108,6 +1154,8 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
             name: "RedWhisk Desktop".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("update project settings");
 
@@ -1153,6 +1201,8 @@ fn update_project_settings_rejects_blank_name() {
             name: "   ".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::Manual,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect_err("blank name should fail");
 
@@ -1192,6 +1242,8 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             name: "Moved Repo".to_string(),
             repo_path: moved_repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "pnpm install\npnpm test".to_string(),
         })
         .expect("updated project");
 
@@ -1207,6 +1259,49 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
         updated_project.completion_policy,
         ProjectCompletionPolicy::AgentAutoCommit
     );
+    assert_eq!(
+        updated_project.worktree_location,
+        ProjectWorktreeLocation::RepoSibling
+    );
+    assert_eq!(
+        updated_project.worktree_setup_command,
+        "pnpm install\npnpm test"
+    );
+}
+
+#[test]
+fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_entry() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("repo-without-worktrees-ignore");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    fs::write(repo_dir.join(".gitignore"), "target/\n").expect("gitignore");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+    let project = service
+        .create_project(CreateProjectInput {
+            name: "repo-without-worktrees-ignore".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::Manual,
+        })
+        .expect("created project");
+
+    let error = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: project.id,
+            name: "Repo".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::Manual,
+            worktree_location: ProjectWorktreeLocation::RepoInternal,
+            worktree_setup_command: "".to_string(),
+        })
+        .expect_err("repo internal worktrees should require .gitignore entry");
+
+    assert_eq!(error.code, CommandErrorCode::ProjectRepoPathInvalid);
 }
 
 #[test]
@@ -1237,6 +1332,8 @@ fn update_project_settings_rejects_non_git_repo_path() {
             name: "Initial Repo".to_string(),
             repo_path: invalid_repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::Manual,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect_err("non git repo should be rejected");
 

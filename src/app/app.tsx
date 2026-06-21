@@ -15,6 +15,7 @@ import {
   validateProjectRepoPath,
   type CreateProjectInput,
   type ProjectCompletionPolicy,
+  type ProjectWorktreeLocation,
   type ProjectRecord,
   type ProjectListItem,
 } from "../features/project/project-commands";
@@ -25,6 +26,8 @@ export interface ProjectSummary {
   name: string;
   path: string;
   completionPolicy: ProjectCompletionPolicy;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
   recentOpenedAt: string;
   status: "available" | "missing";
 }
@@ -272,6 +275,8 @@ function toProjectSummary(
     name: project.name,
     path: project.repoPath,
     completionPolicy: project.completionPolicy,
+    worktreeLocation: project.worktreeLocation ?? "repo_sibling",
+    worktreeSetupCommand: project.worktreeSetupCommand ?? "",
     recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,
     status: "pathStatus" in project ? project.pathStatus : "available",
   };

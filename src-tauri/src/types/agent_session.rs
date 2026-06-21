@@ -22,6 +22,7 @@ pub struct StartAgentSessionInput {
     pub completion_policy_override: Option<ProjectCompletionPolicy>,
     pub workspace_mode: Option<WorkspaceMode>,
     pub target_branch: Option<String>,
+    pub worktree_setup_command: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -175,6 +176,7 @@ pub struct AgentSessionRecord {
     pub workspace_path: Option<String>,
     pub completion_policy: Option<ProjectCompletionPolicy>,
     pub worktree_root_path: Option<String>,
+    pub worktree_setup_command: Option<String>,
     pub log_path: String,
     pub latest_output: Option<String>,
     pub last_active_at: i64,

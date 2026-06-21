@@ -1,24 +1,31 @@
 ## Why
 
-当前 `Agent Profile` 只能配置命令、作用域与 workflow skills，无法声明该 agent 在当前仓库里执行 `worktree` 模式时的工作目录根路径。`Issue Run` 对话框也只有 profile 与 workflow skill 选择，不能覆盖项目默认的提交策略，更不能决定这次执行是跑在当前分支还是独立 worktree 中。
+当前项目通用设置只能配置提交策略，无法声明当前仓库执行 `worktree` 模式时的工作目录根位置，也无法配置 worktree 创建后的初始化动作。`Issue Run` 对话框只有 profile 与 workflow skill 选择，不能覆盖项目默认的提交策略，更不能决定这次执行是跑在当前分支还是独立 worktree 中。
 
 这会带来三类问题：
 
-- 用户无法为不同 agent 显式配置 worktree 根目录，导致运行时只能退回当前仓库目录，无法隔离多条 issue 的开发环境。
+- 用户无法为项目显式配置 worktree 根目录策略，导致运行时只能退回当前仓库目录，无法隔离多条 issue 的开发环境。
+- 创建 worktree 后缺少项目初始化命令，常见 TypeScript、Python、Go、Rust、Java 项目需要用户手工安装依赖。
 - backlog issue 的运行入口缺少“开发模式 + 目标分支 + 提交策略”的执行上下文，无法把一次运行稳定映射到具体的 git 生命周期。
 - 当前 issue 完成链路默认只观察主仓库 `repo_path` 的提交状态，尚未覆盖“在临时 worktree 分支开发、完成后自动合并并清理”的场景。
 
 ## What Changes
 
-- 在创建与编辑 agent 的表单中新增 `Worktree path` 文本字段，默认值为 `<repoPath>.worktrees`，允许用户覆盖；若用户输入自定义路径且路径不存在，前端需要提示，后端也要拒绝保存无效路径。
-- 扩展 agent profile 数据模型，持久化 `worktree_path`，并让项目级 profile 的默认值始终基于当前项目仓库路径计算。
+- 从创建与编辑 agent 的表单中移除 `Worktree path` 字段。
+- 在 Project General settings 中新增 `Worktree path` 下拉字段，持久化为固定枚举值，运行时按当前仓库路径动态解析真实路径：
+  - 仓库同级目录下的 `<repoName>.worktrees`
+  - 当前仓库内的 `.worktrees`
+  - `~/.redwhisk/worktrees/<repoName>`
+- 当选择当前仓库内 `.worktrees` 时，保存项目设置必须校验仓库存在 `.gitignore`，且包含 `.worktrees/` 或兼容的 `.worktree/` 忽略项。
+- 在 Project General settings 中新增三行 `Worktree setup after creation` textarea，用于配置 worktree 创建后的初始化命令；空值时 Issue Run 对话框显示按项目路径/常见语言推断的占位符，用户可在单次运行中覆盖。
 - 在 issue 运行对话框中，于 `Workflow skill` 下方新增 `Commit strategy` 字段，默认继承当前项目的 `completionPolicy`，但允许本次运行覆盖。
 - 在 issue 运行对话框中新增 `开发模式` 区块：
   - 左侧为 `Worktree` / `Current branch` 下拉框，并记忆该项目上次执行时的选择。
   - 右侧为仓库本地分支下拉框，默认选中当前分支；仅在 `Worktree` 模式下允许修改。
 - 当用户以 `Worktree` 模式启动 issue 时，运行时需要：
   - 记录这次选择的开发模式、目标分支与提交策略。
-  - 在 agent profile 指定的 `worktree_path` 下创建基于目标分支的独立 worktree。
+  - 按项目级 worktree 位置枚举解析真实路径，并在该路径下创建基于目标分支的独立 worktree。
+  - 记录 worktree 创建后的初始化命令快照。
   - 在该 worktree 中创建一个以 issue ID 为核心的临时开发分支，并让 agent 在此分支中运行。
 - 当 issue 任务完成且本次运行创建了 worktree 时，系统需要：
   - 检查临时开发分支是否已合并回用户选择的目标分支。
@@ -29,7 +36,7 @@
 
 ### Modified Capabilities
 
-- `settings-ui`: 扩展 agent profile 表单，支持 worktree 根路径配置与校验提示。
+- `settings-ui`: 扩展 Project General settings，支持 worktree 位置枚举、仓库内 `.gitignore` 安全校验与初始化命令配置。
 - `issues-ui`: 扩展 issue run dialog，支持提交策略覆盖、开发模式选择、目标分支选择与最近一次选择记忆。
 
 ### Added Capabilities

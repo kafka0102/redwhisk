@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::types::project::{ProjectCompletionPolicy, ProjectSummary};
+use crate::types::project::{ProjectCompletionPolicy, ProjectSummary, ProjectWorktreeLocation};
 use crate::types::project_terminal_config::ProjectTerminalConfig;
 
 pub struct ProjectRepository<'connection> {
@@ -15,7 +15,7 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_repo_path(&self, repo_path: &str) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, completion_policy, created_at, last_opened_at FROM projects WHERE repo_path = ?1",
+                "SELECT id, name, repo_path, completion_policy, worktree_location, worktree_setup_command, created_at, last_opened_at FROM projects WHERE repo_path = ?1",
                 params![repo_path],
                 project_from_row,
             )
@@ -25,7 +25,7 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, completion_policy, created_at, last_opened_at FROM projects WHERE id = ?1",
+                "SELECT id, name, repo_path, completion_policy, worktree_location, worktree_setup_command, created_at, last_opened_at FROM projects WHERE id = ?1",
                 params![id],
                 project_from_row,
             )
@@ -34,7 +34,7 @@ impl<'connection> ProjectRepository<'connection> {
 
     pub fn list_recent(&self) -> rusqlite::Result<Vec<ProjectSummary>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, name, repo_path, completion_policy, created_at, last_opened_at
+            "SELECT id, name, repo_path, completion_policy, worktree_location, worktree_setup_command, created_at, last_opened_at
              FROM projects
              ORDER BY last_opened_at DESC, created_at DESC, name ASC",
         )?;
@@ -53,8 +53,8 @@ impl<'connection> ProjectRepository<'connection> {
         completion_policy: ProjectCompletionPolicy,
     ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
-            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
-             VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?3)",
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy, worktree_location, worktree_setup_command)
+             VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?3, 'repo_sibling', '')",
             params![
                 name,
                 repo_path,
@@ -72,13 +72,32 @@ impl<'connection> ProjectRepository<'connection> {
         repo_path: &str,
         completion_policy: ProjectCompletionPolicy,
     ) -> rusqlite::Result<ProjectSummary> {
+        self.insert_or_get_existing_with_settings(
+            name,
+            repo_path,
+            completion_policy,
+            ProjectWorktreeLocation::RepoSibling,
+            "",
+        )
+    }
+
+    pub fn insert_or_get_existing_with_settings(
+        &self,
+        name: &str,
+        repo_path: &str,
+        completion_policy: ProjectCompletionPolicy,
+        worktree_location: ProjectWorktreeLocation,
+        worktree_setup_command: &str,
+    ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
-            "INSERT OR IGNORE INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
-             VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?3)",
+            "INSERT OR IGNORE INTO projects (name, repo_path, created_at, last_opened_at, completion_policy, worktree_location, worktree_setup_command)
+             VALUES (?1, ?2, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?3, ?4, ?5)",
             params![
                 name,
                 repo_path,
                 project_completion_policy_to_str(&completion_policy),
+                project_worktree_location_to_str(&worktree_location),
+                worktree_setup_command,
             ],
         )?;
 
@@ -91,6 +110,8 @@ impl<'connection> ProjectRepository<'connection> {
         name: &str,
         repo_path: &std::path::Path,
         completion_policy: ProjectCompletionPolicy,
+        worktree_location: ProjectWorktreeLocation,
+        worktree_setup_command: &str,
     ) -> rusqlite::Result<ProjectSummary> {
         let repo_path = repo_path.to_string_lossy().to_string();
 
@@ -98,7 +119,13 @@ impl<'connection> ProjectRepository<'connection> {
             return Ok(project);
         }
 
-        self.insert_or_get_existing(name, &repo_path, completion_policy)
+        self.insert_or_get_existing_with_settings(
+            name,
+            &repo_path,
+            completion_policy,
+            worktree_location,
+            worktree_setup_command,
+        )
     }
 
     pub fn update_last_opened_at(&self, id: i64) -> rusqlite::Result<ProjectSummary> {
@@ -135,17 +162,23 @@ impl<'connection> ProjectRepository<'connection> {
         name: &str,
         repo_path: &str,
         completion_policy: ProjectCompletionPolicy,
+        worktree_location: ProjectWorktreeLocation,
+        worktree_setup_command: &str,
     ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
             "UPDATE projects
              SET name = ?1,
                  repo_path = ?2,
-                 completion_policy = ?3
-             WHERE id = ?4",
+                 completion_policy = ?3,
+                 worktree_location = ?4,
+                 worktree_setup_command = ?5
+             WHERE id = ?6",
             params![
                 name,
                 repo_path,
                 project_completion_policy_to_str(&completion_policy),
+                project_worktree_location_to_str(&worktree_location),
+                worktree_setup_command,
                 id
             ],
         )?;
@@ -268,8 +301,10 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary>
         name: row.get(1)?,
         repo_path: row.get(2)?,
         completion_policy: project_completion_policy_from_str(&row.get::<_, String>(3)?)?,
-        created_at: row.get(4)?,
-        last_opened_at: row.get(5)?,
+        worktree_location: project_worktree_location_from_str(&row.get::<_, String>(4)?)?,
+        worktree_setup_command: row.get(5)?,
+        created_at: row.get(6)?,
+        last_opened_at: row.get(7)?,
     })
 }
 
@@ -299,5 +334,24 @@ fn project_completion_policy_to_str(value: &ProjectCompletionPolicy) -> &'static
     match value {
         ProjectCompletionPolicy::Manual => "manual",
         ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
+    }
+}
+
+pub fn project_worktree_location_from_str(
+    value: &str,
+) -> rusqlite::Result<ProjectWorktreeLocation> {
+    match value {
+        "repo_sibling" => Ok(ProjectWorktreeLocation::RepoSibling),
+        "repo_internal" => Ok(ProjectWorktreeLocation::RepoInternal),
+        "user_home" => Ok(ProjectWorktreeLocation::UserHome),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+pub fn project_worktree_location_to_str(value: &ProjectWorktreeLocation) -> &'static str {
+    match value {
+        ProjectWorktreeLocation::RepoSibling => "repo_sibling",
+        ProjectWorktreeLocation::RepoInternal => "repo_internal",
+        ProjectWorktreeLocation::UserHome => "user_home",
     }
 }

@@ -13,7 +13,6 @@ import {
   saveAgentProfile,
   saveProjectLabel,
   testAgentCommand,
-  validateAgentWorktreePath,
   type AgentSkillListResponse,
   type AgentProfileRecord,
   type AgentType,
@@ -42,7 +41,6 @@ vi.mock("./settings-commands", () => ({
   listProjectLabels: vi.fn(),
   saveAgentProfile: vi.fn(),
   saveProjectLabel: vi.fn(),
-  validateAgentWorktreePath: vi.fn(),
 }));
 
 const settingsEventMocks = vi.hoisted(() => {
@@ -88,7 +86,6 @@ const listAgentSkillsMock = vi.mocked(listAgentSkills);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const saveProjectLabelMock = vi.mocked(saveProjectLabel);
-const validateAgentWorktreePathMock = vi.mocked(validateAgentWorktreePath);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
 const { open } = await import("@tauri-apps/plugin-dialog");
@@ -101,7 +98,6 @@ const projectProfile: AgentProfileRecord = {
   name: "Project Codex",
   agentType: "codex",
   command: "/usr/local/bin/codex",
-  worktreePath: "/tmp/redwhisk.worktrees",
   scope: "project",
   projectId: 1,
   mode: "full-auto",
@@ -116,7 +112,6 @@ const globalProfile: AgentProfileRecord = {
   name: "Global Codex",
   agentType: "codex",
   command: "/usr/local/bin/codex",
-  worktreePath: "/tmp/redwhisk.worktrees",
   scope: "global",
   projectId: null,
   mode: "full-auto",
@@ -167,7 +162,6 @@ describe("ProjectSettingsActivity", () => {
     listProjectLabelsMock.mockReset();
     saveAgentProfileMock.mockReset();
     saveProjectLabelMock.mockReset();
-    validateAgentWorktreePathMock.mockReset();
     updateProjectSettingsMock.mockReset();
     validateProjectRepoPathMock.mockReset();
     openDialogMock.mockReset();
@@ -182,10 +176,6 @@ describe("ProjectSettingsActivity", () => {
     });
     deleteAgentProfileMock.mockResolvedValue(undefined);
     deleteProjectLabelMock.mockResolvedValue(undefined);
-    validateAgentWorktreePathMock.mockImplementation(async ({ path }) => ({
-      path,
-      exists: path.startsWith("/existing/"),
-    }));
     confirmSpy.mockReset();
     confirmSpy.mockReturnValue(true);
     updateProjectSettingsMock.mockResolvedValue({
@@ -193,6 +183,8 @@ describe("ProjectSettingsActivity", () => {
       name: "RedWhisk",
       repoPath: "/tmp/redwhisk",
       completionPolicy: "agent_auto_commit",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
     });
@@ -795,7 +787,7 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.getByRole("combobox", { name: "Scope" })).toHaveValue(
       "Global",
     );
-    expect(screen.getByLabelText("Worktree path")).toHaveValue("");
+    expect(screen.queryByLabelText("Worktree path")).not.toBeInTheDocument();
     expect(screen.queryByText(/Detected:/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Mode")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Prompt template")).not.toBeInTheDocument();
@@ -823,15 +815,17 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 
-  it("defaults project worktree path from repo path and saves it unchanged", async () => {
+  it("saves project worktree location in general settings", async () => {
     const user = userEvent.setup();
-    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
-    saveAgentProfileMock.mockResolvedValue({
-      ...globalProfile,
-      name: "Scoped Codex",
-      scope: "project",
-      projectId: 1,
-      worktreePath: "/tmp/redwhisk.worktrees",
+    updateProjectSettingsMock.mockResolvedValue({
+      id: 1,
+      name: "RedWhisk",
+      repoPath: "/tmp/redwhisk",
+      completionPolicy: "manual",
+      worktreeLocation: "repo_internal",
+      worktreeSetupCommand: "",
+      createdAt: 1,
+      lastOpenedAt: 2,
     });
 
     render(
@@ -841,70 +835,54 @@ describe("ProjectSettingsActivity", () => {
         projectId={1}
         projectName="RedWhisk"
         projectPath="/tmp/redwhisk"
+        worktreeLocation="repo_sibling"
+        worktreeSetupCommand=""
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Agents" }));
-    await user.click(await screen.findByRole("button", { name: "New agent" }));
-    await user.click(screen.getByRole("combobox", { name: "Scope" }));
-    await user.click(screen.getByRole("option", { name: "Project" }));
-    await user.type(
-      screen.getByLabelText("Agent profile name"),
-      "Scoped Codex",
-    );
-    expect(screen.getByLabelText("Worktree path")).toHaveValue(
-      "/tmp/redwhisk.worktrees",
-    );
-
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(saveAgentProfileMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          worktreePath: "/tmp/redwhisk.worktrees",
-          scope: "project",
-          projectId: 1,
-        }),
-      ),
-    );
-    expect(validateAgentWorktreePathMock).not.toHaveBeenCalledWith({
-      path: "/tmp/redwhisk.worktrees",
-    });
-  });
-
-  it("blocks saving when a custom worktree path does not exist", async () => {
-    const user = userEvent.setup();
-    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
-
-    render(
-      <ProjectSettingsActivity
-        completionPolicy="manual"
-        onProjectUpdated={onProjectUpdated}
-        projectId={1}
-        projectName="RedWhisk"
-        projectPath="/tmp/redwhisk"
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Agents" }));
-    await user.click(await screen.findByRole("button", { name: "New agent" }));
-    await user.type(screen.getByLabelText("Agent profile name"), "My Codex");
-    await user.clear(screen.getByLabelText("Worktree path"));
-    await user.type(
-      screen.getByLabelText("Worktree path"),
-      "/custom/worktrees",
+    await selectShadcnOption(
+      user,
+      screen,
+      "Worktree path",
+      "/tmp/redwhisk/.worktrees",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(validateAgentWorktreePathMock).toHaveBeenLastCalledWith({
-        path: "/custom/worktrees",
+      expect(updateProjectSettingsMock).toHaveBeenCalledWith({
+        projectId: 1,
+        name: "RedWhisk",
+        repoPath: "/tmp/redwhisk",
+        completionPolicy: "manual",
+        worktreeLocation: "repo_internal",
+        worktreeSetupCommand: "",
       }),
     );
-    expect(
-      screen.getByText("Worktree path does not exist."),
-    ).toBeInTheDocument();
-    expect(saveAgentProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps project worktree path options synchronized with the repository path", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/tmp/redwhisk");
+
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk-old"
+        worktreeLocation="repo_sibling"
+        worktreeSetupCommand=""
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Choose folder" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Worktree path")).toHaveTextContent(
+        "/tmp/redwhisk.worktrees",
+      ),
+    );
   });
 
   it("keeps a manually entered command path after testing and saves it unchanged", async () => {
@@ -1693,6 +1671,8 @@ describe("ProjectSettingsActivity", () => {
         name: "RedWhisk Desktop",
         repoPath: "/tmp/redwhisk",
         completionPolicy: "agent_auto_commit",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "",
       }),
     );
     expect(onProjectUpdated).toHaveBeenCalledWith(
@@ -1744,6 +1724,8 @@ describe("ProjectSettingsActivity", () => {
         name: "RedWhisk",
         repoPath: "/tmp/other-repo",
         completionPolicy: "manual",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "",
       }),
     );
   });

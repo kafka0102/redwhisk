@@ -2,7 +2,7 @@
 
 当前实现里：
 
-- agent profile 只保存命令、scope、workflow skills 等静态配置，没有 worktree 根目录。
+- agent profile 只保存命令、scope、workflow skills 等静态配置；worktree 根位置属于项目通用设置。
 - `IssueRunDialog` 只把 `projectId`、`issueId`、`agentProfileId` 与最终 prompt 发给 `start_agent_session`。
 - `AgentSessionService::prepare_session_launch` 永远把 `project.repo_path` 作为 `working_dir`。
 - issue 的完成链路默认观察 `project.repo_path` 的 git 状态，并假设运行中的 agent session 直接作用在该仓库工作区。
@@ -31,6 +31,7 @@ agent 始终在临时开发分支中工作；完成后系统负责把它合并�
 - 目标分支是什么
 - 临时开发分支是什么
 - 这次 issue 运行时采用了什么 completion policy
+- 这次 issue 运行时采用了什么 worktree 初始化命令
 
 因此需要在 session 持久化层保存一份 execution context。最小设计建议是为 `agent_sessions` 新增字段，或新增独立 session metadata 表，记录：
 
@@ -40,37 +41,34 @@ agent 始终在临时开发分支中工作；完成后系统负责把它合并�
 - `workspace_path`
 - `completion_policy_snapshot`
 - `worktree_root_path`
+- `worktree_setup_command`
 
 这样 review / completion 阶段可以直接读取，不需要依赖当前 UI 状态回推。
 
-### 3. agent profile 的 `worktree_path` 只在项目级 profile 下提供稳定默认值
+### 3. worktree 根位置归属 Project General settings，并保存为枚举
 
-默认值定义为 `<repoPath>.worktrees`。例如：
+worktree 根位置依赖项目仓库路径，不适合放在可跨项目复用的 agent profile 上。Project General settings 保存固定枚举，运行时按当前 `repo_path` 动态解析真实路径：
 
-- repo path: `/home/xx/itsm-risk`
-- default worktree path: `/home/xx/itsm-risk.worktrees`
+- `repo_sibling`: 仓库上一级目录下的 `<repoName>.worktrees`
+- `repo_internal`: 当前仓库下的 `.worktrees`
+- `user_home`: `~/.redwhisk/worktrees/<repoName>`
 
-这里有一个边界：全局 agent profile 可能跨项目复用，而默认值依赖当前项目仓库路径。因此设计取舍为：
+这样 repo path 变更后，UI 展示和运行时解析都会自动同步，而数据库中不需要迁移完整路径字符串。
 
-- 所有 profile 都允许持久化 `worktree_path`
-- 但只有在当前表单上下文能拿到项目 `repoPath` 时，才自动填入 `<repoPath>.worktrees`
-- 若当前是 global profile 且没有项目 repo path，上层表单传入空字符串时不自动补默认值；若是从项目 Settings 打开 global profile，则可按当前项目 repo path 预填，用户可手工改
+### 4. 仓库内 worktree 目录必须被 `.gitignore` 忽略
 
-这能兼容现有 UI 结构，而不用先重构 profile 的作用域模型。
+选择 `repo_internal` 会在当前仓库下创建 `.worktrees`。为避免误提交 worktree 里的代码，保存 Project General settings 时必须校验：
 
-### 4. 路径校验分为“默认值容忍不存在”和“自定义值必须存在”
+- 仓库存在 `.gitignore`
+- `.gitignore` 包含 `.worktrees/`，并兼容接受 `.worktree/`
 
-用户要求默认值可能指向一个尚未存在的目录，因此不能要求默认值在保存前必须存在。否则会和默认行为冲突。
+`repo_sibling` 与 `user_home` 不在仓库内部，不需要这个校验。
 
-建议规则：
+### 5. worktree 初始化命令按“项目默认 + 本次覆盖”执行
 
-- 如果当前值等于该项目 repo path 计算出的默认值 `<repoPath>.worktrees`，允许目录不存在；运行时创建 worktree 前再自动 `mkdir -p`
-- 如果用户把值改成非默认路径，则前端立即校验该路径是否存在；不存在则提示并阻止保存
-- 后端 `save_agent_profile` 也执行同样的兜底校验，防止前端绕过
+Project General settings 提供三行 textarea 保存默认初始化命令，例如 `pnpm install`、`pip install -r requirements.txt`、`go mod download`、`cargo fetch` 或 `mvn dependency:resolve`。Issue Run Dialog 读取该默认值作为 placeholder；用户可在单次运行里覆盖，启动 session 时保存快照，避免项目设置后续变更导致运行上下文漂移。
 
-这样既满足“默认目录可不存在”，也满足“自定义目录必须存在”。
-
-### 5. completion policy 覆盖按“本次运行快照”执行
+### 6. completion policy 覆盖按“本次运行快照”执行
 
 run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是本次 issue 运行的覆盖值。因此：
 
@@ -84,16 +82,12 @@ run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是�
 
 ## Data Model
 
-### Agent Profile
+### Project Settings
 
-扩展 `agent_profiles`：
+扩展 `projects`：
 
-- `worktree_path TEXT NOT NULL DEFAULT ''`
-
-前后端类型同步增加：
-
-- `AgentProfileRecord.worktreePath`
-- `SaveAgentProfileInput.worktreePath`
+- `worktree_location TEXT NOT NULL DEFAULT 'repo_sibling'`
+- `worktree_setup_command TEXT NOT NULL DEFAULT ''`
 
 ### Session Execution Context
 
@@ -105,27 +99,20 @@ run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是�
 - `workspace_path TEXT`
 - `completion_policy TEXT`
 - `worktree_root_path TEXT`
+- `worktree_setup_command TEXT`
 
 如果仓库更倾向低风险迁移，也可新建 `agent_session_execution_contexts` 表并以 `session_id` 外键关联；但对当前代码结构而言，直接扩展 `agent_sessions` 更简单，因为 session 查询已经是所有 issue/agent 视图的核心入口。
 
 ## Frontend Design
 
-### Agent Profile Form
+### Project General Settings
 
-在 `Workflow Skills` 下方新增：
+在 `Commit strategy` 下方新增：
 
-- `Worktree path` 文本框
+- `Worktree path` 下拉框，显示由当前 repo path 推导出的三个真实路径，保存枚举值
+- `Worktree setup after creation` 三行 textarea，保存项目默认初始化命令
 
-表单行为：
-
-- 初始值优先级：
-  1. 编辑已有 profile 时使用已保存值
-  2. 新建时若能拿到当前项目 `repoPath`，使用 `<repoPath>.worktrees`
-  3. 否则为空
-- 如果用户输入值与默认值不同，则触发存在性校验
-- 不存在时显示行内错误并阻止保存
-
-需要从父组件把 `projectPath` 传入 `AgentProfileForm`，否则无法计算默认值。
+Agent Profile Form 不再展示或保存 `Worktree path`。
 
 ### Issue Run Dialog
 
@@ -137,7 +124,8 @@ run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是�
 4. `开发模式`
    - 左：`Worktree` / `Current branch`
    - 右：本地分支下拉框
-5. `Final prompt`
+5. `Worktree setup after creation`
+6. `Final prompt`
 
 交互规则：
 
@@ -161,6 +149,7 @@ run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是�
 - `completionPolicyOverride`
 - `workspaceMode`
 - `targetBranch`
+- `worktreeSetupCommand`
 
 启动流程：
 
@@ -170,11 +159,11 @@ run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是�
    - `working_dir = project.repo_path`
    - `workspace_branch = current branch`
 4. 若 `workspaceMode = worktree`
-   - 计算 `worktree_root_path`
-   - 若 root 不存在且是默认路径，则创建目录
+   - 根据项目 `worktree_location` 和当前 `repo_path` 计算 `worktree_root_path`
+   - 若 root 不存在，则创建目录
    - 基于 `targetBranch` 创建 worktree 目录，例如 `<worktree_root>/<issue-slug>`
    - 在新 worktree 中创建并 checkout 临时开发分支
-   - `working_dir = worktree_path`
+   - `working_dir = workspace_path`
 5. 启动 agent process / PTY
 6. 持久化 session 与 execution context
 7. 记下最近一次 run dialog 选择
@@ -247,7 +236,7 @@ worktree 目录命名建议：
 该 change 涉及：
 
 - 前端两处关键表单
-- agent profile 与 agent session migration
+- project settings 与 agent session migration
 - 新 git/worktree 生命周期
 - issue completion 行为变化
 

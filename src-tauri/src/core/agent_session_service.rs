@@ -50,7 +50,7 @@ use crate::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, IssueRecord, IssueStatus,
 };
 use crate::types::issue_action::IssueActionType;
-use crate::types::project::ProjectCompletionPolicy;
+use crate::types::project::{ProjectCompletionPolicy, ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
 const SESSION_LOG_DIR_NAME: &str = "session-logs";
@@ -75,6 +75,7 @@ struct SessionLaunchContext {
     workspace_path: Option<String>,
     completion_policy: Option<ProjectCompletionPolicy>,
     worktree_root_path: Option<String>,
+    worktree_setup_command: Option<String>,
 }
 
 pub struct AgentSessionService<'connection> {
@@ -289,6 +290,7 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.workspace_path.as_deref(),
                 launch.completion_policy,
                 launch.worktree_root_path.as_deref(),
+                launch.worktree_setup_command.as_deref(),
                 &launch.log_path,
                 launch.started_at,
             )?;
@@ -499,6 +501,7 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.workspace_path.as_deref(),
                 launch.completion_policy,
                 launch.worktree_root_path.as_deref(),
+                launch.worktree_setup_command.as_deref(),
                 &structured_log_path,
                 launch.started_at,
             )?;
@@ -715,6 +718,7 @@ impl<'connection> AgentSessionService<'connection> {
                     Some(working_dir.as_str()),
                     None,
                     None,
+                    None,
                     &log_path,
                     started_at,
                 )?;
@@ -903,6 +907,14 @@ impl<'connection> AgentSessionService<'connection> {
                 .completion_policy_override
                 .unwrap_or(project.completion_policy),
         );
+        let worktree_setup_command = Some(
+            input
+                .worktree_setup_command
+                .as_deref()
+                .unwrap_or(&project.worktree_setup_command)
+                .trim()
+                .to_string(),
+        );
 
         match workspace_mode {
             WorkspaceMode::CurrentBranch => Ok(SessionLaunchContext {
@@ -917,11 +929,12 @@ impl<'connection> AgentSessionService<'connection> {
                 workspace_path: Some(project.repo_path.clone()),
                 completion_policy,
                 worktree_root_path: None,
+                worktree_setup_command: worktree_setup_command.clone(),
             }),
             WorkspaceMode::Worktree => {
                 let target_branch =
                     resolve_target_branch(&branch_info, input.target_branch.as_deref())?;
-                let worktree_root_path = resolve_worktree_root_path(&profile, &project.repo_path)?;
+                let worktree_root_path = resolve_worktree_root_path(&project)?;
                 let created = create_worktree_for_issue(
                     &project.repo_path,
                     &worktree_root_path,
@@ -942,6 +955,7 @@ impl<'connection> AgentSessionService<'connection> {
                     workspace_path: Some(created.workspace_path),
                     completion_policy,
                     worktree_root_path: Some(created.worktree_root_path),
+                    worktree_setup_command,
                 })
             }
         }
@@ -2241,18 +2255,40 @@ fn resolve_target_branch(
     .with_detail(ErrorDetail::new("GitBranch").with_value("targetBranch", target_branch)))
 }
 
-fn resolve_worktree_root_path(
-    profile: &AgentProfileRow,
-    repo_path: &str,
-) -> Result<String, CommandError> {
-    let trimmed = profile.worktree_path.trim();
-    let path = if trimmed.is_empty() {
-        format!("{repo_path}.worktrees")
-    } else {
-        trimmed.to_string()
+fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, CommandError> {
+    let repo_path = Path::new(&project.repo_path);
+    let repo_name = repo_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "Project 路径无效。",
+            )
+        })?;
+
+    let path = match project.worktree_location {
+        ProjectWorktreeLocation::RepoSibling => repo_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(format!("{repo_name}.worktrees")),
+        ProjectWorktreeLocation::RepoInternal => repo_path.join(".worktrees"),
+        ProjectWorktreeLocation::UserHome => {
+            let home_dir = std::env::var("HOME").map_err(|_| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "无法解析用户 Home 目录。",
+                )
+            })?;
+            Path::new(&home_dir)
+                .join(".redwhisk")
+                .join("worktrees")
+                .join(repo_name)
+        }
     };
 
-    Ok(path)
+    Ok(path.to_string_lossy().to_string())
 }
 
 fn build_command_snapshot(profile: &AgentProfileRow) -> String {
@@ -3252,6 +3288,7 @@ mod tests {
             workspace_path: None,
             completion_policy: Some(ProjectCompletionPolicy::Manual),
             worktree_root_path: None,
+            worktree_setup_command: None,
             log_path: log_path.to_string(),
             latest_output: None,
             last_active_at: 1,
@@ -3281,8 +3318,8 @@ mod tests {
             .expect("insert project");
         connection
             .execute(
-                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, worktree_path)
-                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0, '')",
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
                 [],
             )
             .expect("insert profile");

@@ -5,7 +5,6 @@ use crate::core::settings_service::SettingsService;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, DeleteAgentProfileInput,
     ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
-    ValidateAgentWorktreePathInput, ValidateAgentWorktreePathResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_label::{
@@ -50,16 +49,6 @@ pub fn save_agent_profile(
 ) -> Result<AgentProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::save_agent_profile_in_data_dir(data_dir, input)
-}
-
-#[tauri::command]
-pub fn validate_agent_worktree_path(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: ValidateAgentWorktreePathInput,
-) -> Result<ValidateAgentWorktreePathResult, CommandError> {
-    let data_dir = prepare_settings_data_dir(&app, &state)?;
-    SettingsService::validate_agent_worktree_path_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]
