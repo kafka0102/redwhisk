@@ -1,0 +1,22 @@
+version: 1
+change: session-workspace-live-inspector
+phase: proposal-ready
+ambiguity: low
+complexity: unknown
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/session-workspace-live-inspector/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: proposal handoff from 4 file(s); primary artifact: openspec/changes/session-workspace-live-inspector/proposal.md
+handoff_hash: a8f7864c1caf6107b351f3ec998b4c6280d044186c701f430a71e12ec5da72ee
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-06-21
+updated_at: 2026-06-21T08:30:54Z
