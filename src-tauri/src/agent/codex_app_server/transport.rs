@@ -12,8 +12,10 @@
 //! `AgentPermissionRequest`。
 
 use std::collections::HashMap;
+use std::env;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc;
@@ -94,13 +96,14 @@ impl CodexTransport {
     pub fn spawn(binary: &str, cwd: Option<&str>) -> Result<Self, CodexAppServerError> {
         let (program, args) = split_command_line(binary)?;
         let resolved_program = resolve_spawn_program(program);
-        let mut command = Command::new(&resolved_program);
+        let mut command = Command::new(&resolved_program.program);
         command
             .args(args)
             .arg("app-server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        apply_spawn_path(&mut command, &resolved_program.path_entries);
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
         }
@@ -311,12 +314,58 @@ fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), CodexAppServer
     Ok((program, parts.collect()))
 }
 
-fn resolve_spawn_program(program: &str) -> String {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedSpawnProgram {
+    program: String,
+    path_entries: Vec<PathBuf>,
+}
+
+fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
     if Path::new(program).components().count() > 1 {
-        return program.to_string();
+        return ResolvedSpawnProgram {
+            program: program.to_string(),
+            path_entries: spawn_path_entries_for_program(program),
+        };
     }
 
-    run_command_lookup(program).unwrap_or_else(|_| program.to_string())
+    let resolved_program = run_command_lookup(program).unwrap_or_else(|_| program.to_string());
+    let path_entries = if resolved_program == program {
+        Vec::new()
+    } else {
+        spawn_path_entries_for_program(&resolved_program)
+    };
+
+    ResolvedSpawnProgram {
+        program: resolved_program,
+        path_entries,
+    }
+}
+
+fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
+    Path::new(program)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(|parent| vec![parent.to_path_buf()])
+        .unwrap_or_default()
+}
+
+fn apply_spawn_path(command: &mut Command, path_entries: &[PathBuf]) {
+    if let Some(path) = build_spawn_path(env::var_os("PATH").as_deref(), path_entries) {
+        command.env("PATH", path);
+    }
+}
+
+fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> Option<OsString> {
+    if path_entries.is_empty() {
+        return None;
+    }
+
+    let mut paths: Vec<PathBuf> = path_entries.to_vec();
+    if let Some(current_path) = current_path {
+        paths.extend(env::split_paths(current_path));
+    }
+
+    env::join_paths(paths).ok()
 }
 
 fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {
@@ -507,10 +556,36 @@ mod tests {
     #[test]
     fn resolve_spawn_program_keeps_path_commands() {
         assert_eq!(
-            resolve_spawn_program("/opt/codex/bin/codex"),
+            resolve_spawn_program("/opt/codex/bin/codex").program,
             "/opt/codex/bin/codex"
         );
-        assert_eq!(resolve_spawn_program("./codex"), "./codex");
+        assert_eq!(resolve_spawn_program("./codex").program, "./codex");
+    }
+
+    #[test]
+    fn resolve_spawn_program_adds_program_parent_to_child_path() {
+        assert_eq!(
+            resolve_spawn_program("/opt/codex/bin/codex").path_entries,
+            vec![PathBuf::from("/opt/codex/bin")]
+        );
+    }
+
+    #[test]
+    fn build_spawn_path_prepends_program_parent_to_existing_path() {
+        let path = build_spawn_path(
+            Some(OsStr::new("/usr/bin:/bin")),
+            &[PathBuf::from("/opt/codex/bin")],
+        )
+        .expect("spawn path");
+
+        assert_eq!(
+            env::split_paths(&path).collect::<Vec<_>>(),
+            vec![
+                PathBuf::from("/opt/codex/bin"),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+            ]
+        );
     }
 
     #[test]
