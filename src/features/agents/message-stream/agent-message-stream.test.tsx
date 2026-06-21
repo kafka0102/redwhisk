@@ -61,7 +61,7 @@ describe("AgentMessageStream", () => {
     expect(screen.getByText("我先想想")).toBeInTheDocument();
   });
 
-  it("渲染 tool_call 卡片与状态 badge", async () => {
+  it("渲染 tool_call 卡片并由工具行展开详情", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
       items: [
@@ -84,8 +84,8 @@ describe("AgentMessageStream", () => {
       expect(screen.getByText("Shell")).toBeInTheDocument();
     });
     expect(screen.getAllByText(/ls -la/)).toHaveLength(2);
-    expect(screen.getByText("完成")).toBeInTheDocument();
-    expect(screen.getByText("Shell details")).toBeInTheDocument();
+    expect(screen.queryByText("完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("Shell details")).not.toBeInTheDocument();
     const output = screen.getByText("file.txt");
     const details = output.closest("details") as HTMLDetailsElement | null;
     expect(details?.open).toBe(false);
@@ -142,8 +142,15 @@ describe("AgentMessageStream", () => {
     await waitFor(() => {
       expect(screen.getByText("Search")).toBeInTheDocument();
     });
-    expect(screen.getByText("Search details and 1 result")).toBeInTheDocument();
-    expect(screen.getAllByText("Claude 最新模型")).toHaveLength(2);
+    expect(
+      screen.queryByText("Search details and 1 result"),
+    ).not.toBeInTheDocument();
+    const queryTexts = screen.getAllByText("Claude 最新模型");
+    expect(queryTexts).toHaveLength(2);
+    const details = queryTexts[0]?.closest(
+      "details",
+    ) as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
     expect(screen.getByText("Mode")).toBeInTheDocument();
     expect(screen.getByText("content")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute(
@@ -175,7 +182,11 @@ describe("AgentMessageStream", () => {
       expect(screen.getByText("Search")).toBeInTheDocument();
     });
     expect(screen.getByText("weather: Beijing")).toBeInTheDocument();
-    expect(screen.getByText("Tool details")).toBeInTheDocument();
+    expect(screen.queryByText("Tool details")).not.toBeInTheDocument();
+    const details = screen
+      .getByText("weather: Beijing")
+      .closest("details") as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
   });
 
   it("渲染 todo 清单", async () => {
