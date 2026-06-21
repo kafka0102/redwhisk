@@ -1,6 +1,6 @@
 version: 1
 change: session-workspace-live-inspector
-phase: review
+phase: done
 ambiguity: low
 complexity: high
 implementation_path: superpowers
@@ -16,7 +16,7 @@ handoff_purpose: review
 handoff_summary: review handoff from 4 file(s); primary artifact: openspec/changes/session-workspace-live-inspector/proposal.md
 handoff_hash: 4ca83f294a9cd9d02961f2a3bf2c209c1b5121bc72e2c3dc2dc0d06dbc5d9422
 touched_files_b64: b3BlbnNwZWMvY2hhbmdlcy9zZXNzaW9uLXdvcmtzcGFjZS1saXZlLWluc3BlY3Rvci90YXNrcy5tZAo=
-review_result: pending
-archive: pending
+review_result: accepted
+archive: archived
 created_at: 2026-06-21
-updated_at: 2026-06-21T10:53:30Z
+updated_at: 2026-06-21T10:57:44Z
