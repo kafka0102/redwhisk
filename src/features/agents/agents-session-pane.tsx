@@ -28,7 +28,6 @@ interface AgentsSessionPaneProps {
   attentionErrorMessage: string | null;
   canRenderTransitionButton: boolean;
   canRenderTransitionMenu: boolean;
-  canViewSummary: boolean;
   cleanErrorMessage: string | null;
   isTransitionMenuOpen: boolean;
   isTransitionPending: boolean;
@@ -43,7 +42,6 @@ interface AgentsSessionPaneProps {
   onCloseWorkspaceTab: (
     tab: Exclude<SessionWorkspaceTabKind, "session">,
   ) => void;
-  onOpenSummary: () => void;
   onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
   onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
@@ -60,7 +58,6 @@ export function AgentsSessionPane({
   attentionErrorMessage,
   canRenderTransitionButton,
   canRenderTransitionMenu,
-  canViewSummary,
   cleanErrorMessage,
   isTransitionMenuOpen,
   isTransitionPending,
@@ -73,7 +70,6 @@ export function AgentsSessionPane({
   isSidePanelOpen,
   onAcknowledgeSessionAttention,
   onCloseWorkspaceTab,
-  onOpenSummary,
   onSelectWorkspaceTab,
   onToggleSidePanel,
   onToggleTransitionMenu,
@@ -168,15 +164,6 @@ export function AgentsSessionPane({
                   size={16}
                   strokeWidth={1.8}
                 />
-              </button>
-            ) : null}
-            {canViewSummary ? (
-              <button
-                className="agents-session-toolbar__action"
-                type="button"
-                onClick={onOpenSummary}
-              >
-                View Summary
               </button>
             ) : null}
           </div>

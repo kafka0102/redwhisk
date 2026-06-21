@@ -23,7 +23,6 @@ import {
   completeIssueClean,
   completeIssueManual,
   detectAgentCommitCompletion,
-  getIssueSummary,
   listIssues,
   markIssueReview,
   prepareAgentCommitCompletion,
@@ -108,7 +107,6 @@ vi.mock("../issues/issue-commands", () => ({
   completeIssueManual: vi.fn(),
   completeIssueClean: vi.fn(),
   detectAgentCommitCompletion: vi.fn(),
-  getIssueSummary: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
   prepareAgentCommitCompletion: vi.fn(),
@@ -123,7 +121,6 @@ const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
-const getIssueSummaryMock = vi.mocked(getIssueSummary);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
 const prepareAgentCommitCompletionMock = vi.mocked(
@@ -247,7 +244,6 @@ describe("AgentsActivity", () => {
     completeIssueManualMock.mockReset();
     completeIssueCleanMock.mockReset();
     detectAgentCommitCompletionMock.mockReset();
-    getIssueSummaryMock.mockReset();
     prepareAgentCommitCompletionMock.mockReset();
     sendAgentCommitPromptMock.mockReset();
     markIssueReviewMock.mockReset();
@@ -351,35 +347,6 @@ describe("AgentsActivity", () => {
         updatedAt: 1_780_639_000_000,
       },
       message: "已检测到新的 commit，Issue 已完成。",
-    });
-    getIssueSummaryMock.mockResolvedValue({
-      issue: {
-        id: 23,
-        projectId: 1,
-        title: "Newest completed issue",
-        description: "Completed description",
-        status: "completed",
-        linkedSessionId: 601,
-        linkedSessionStatus: "closed",
-        linkedSessionAttention: "none",
-        linkedSessionLogPath: "/tmp/completed.log",
-        createdAt: 1_780_632_000_000,
-        updatedAt: 1_780_639_000_000,
-      },
-      sessionStartedAt: 1_780_638_000_000,
-      sessionClosedAt: 1_780_639_000_000,
-      completion: {
-        option: "agent_auto_commit",
-        result: "completed",
-        commitHash: "abc1234",
-        failureReason: null,
-        headBefore: "1111111",
-        headAfter: "abc1234",
-        changedFilesJson: "[]",
-        createdAt: 1_780_639_000_000,
-        source: "completion_attempt",
-      },
-      diagnostics: [],
     });
     prepareAgentCommitCompletionMock.mockResolvedValue({
       issueId: 22,
@@ -3801,8 +3768,7 @@ describe("AgentsActivity", () => {
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
   });
 
-  it("opens completed issue summary from the header", async () => {
-    const user = userEvent.setup();
+  it("omits completed issue summary actions from the session header", async () => {
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {
@@ -3828,123 +3794,14 @@ describe("AgentsActivity", () => {
       await screen.findByRole("heading", {
         name: "#23 Newest completed issue",
       }),
-    );
-    await user.click(screen.getByRole("button", { name: "View Summary" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
-    expect(dialog).toHaveFocus();
-    expect(
-      within(dialog).getByText("Commit hash: abc1234"),
     ).toBeInTheDocument();
-  });
-
-  it("opens completed issue summary from the header for closed completed sessions", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 601,
-          issueId: 23,
-          issueTitle: "Newest completed issue",
-          issueStatus: "completed",
-          title: null,
-          agentType: "codex",
-          status: "closed",
-          attention: "none",
-          logPath: "/tmp/completed.log",
-          lastActiveAt: 1_780_639_000_000,
-          startedAt: 1_780_638_000_000,
-          closedAt: 1_780_639_000_000,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={601} projectId={1} />);
-
     expect(
-      await screen.findByRole("button", { name: "View Summary" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "View Summary" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
     expect(openPathMock).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "View Summary" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
-    expect(
-      within(dialog).getByText("Commit hash: abc1234"),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("Log path: /tmp/completed.log"),
-    ).toBeInTheDocument();
-  });
-
-  it("opens completed issue summary from the header for stopped completed sessions", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 601,
-          issueId: 23,
-          issueTitle: "Newest completed issue",
-          issueStatus: "completed",
-          title: null,
-          agentType: "codex",
-          status: "stopped",
-          attention: "none",
-          logPath: "/tmp/completed.log",
-          lastActiveAt: 1_780_639_000_000,
-          startedAt: 1_780_638_000_000,
-          closedAt: null,
-        },
-      ],
-    });
-    getIssueSummaryMock.mockResolvedValueOnce({
-      issue: {
-        id: 23,
-        projectId: 1,
-        title: "Newest completed issue",
-        description: "Completed description",
-        status: "completed",
-        linkedSessionId: 601,
-        linkedSessionStatus: "stopped",
-        linkedSessionAttention: "none",
-        linkedSessionLogPath: "/tmp/completed.log",
-        createdAt: 1_780_632_000_000,
-        updatedAt: 1_780_639_000_000,
-      },
-      sessionStartedAt: 1_780_638_000_000,
-      sessionClosedAt: null,
-      completion: {
-        option: "complete_manual",
-        result: "completed",
-        commitHash: null,
-        failureReason: null,
-        headBefore: null,
-        headAfter: null,
-        changedFilesJson: null,
-        createdAt: 1_780_639_000_000,
-        source: "issue_action_fallback",
-      },
-      diagnostics: [
-        "已完成 Issue 关联的 Session 状态异常：stopped。",
-        "已完成 Issue 关联的 Session 缺少 closed_at。",
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={601} projectId={1} />);
-
-    expect(
-      await screen.findByRole("button", { name: "View Summary" }),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "View Summary" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
-    expect(
-      within(dialog).getByText(
-        "已完成 Issue 关联的 Session 状态异常：stopped。",
-      ),
-    ).toBeInTheDocument();
   });
 
   it("omits the completed header log opener when the log path is missing", async () => {
@@ -3970,8 +3827,13 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={601} projectId={1} />);
 
     expect(
-      await screen.findByRole("button", { name: "View Summary" }),
+      await screen.findByRole("heading", {
+        name: "#23 Newest completed issue",
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "View Summary" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
