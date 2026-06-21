@@ -23,8 +23,10 @@
 - `SessionSidePanel`：右侧辅助面板容器，管理 `变更/文件` Tab。
 - `SessionChangesPanel`：渲染筛选菜单、刷新按钮和 mock 变更文件列表。
 - `SessionFileTreePanel`：渲染 mock 文件树与文件类型图标。
+- `SessionDiffPlaceholder`：渲染左侧变更 Tab 的 Diff 占位内容，后续可替换为真实 Diff viewer。
+- `SessionFilePreviewPlaceholder`：渲染左侧文件 Tab 的代码预览占位内容，后续可替换为真实文件读取与高亮。
 
-避免把 Tab 状态塞入全局 store；该状态只属于当前选中 Session 工作区。
+避免把 Tab 状态塞入全局 store；该状态只属于当前选中 Session 工作区。实现时不得把右侧变更/文件树、左侧 Diff 占位和文件内容占位全部写入单个文件；即使当前内容是 mock 或占位，也要按上述边界组件化，便于后续接入真实数据源。
 
 ## 状态模型
 

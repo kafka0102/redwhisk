@@ -1,12 +1,13 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, PanelRightOpen, Terminal } from "lucide-react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
-import {
-  formatSessionStatusLabel,
-  formatSessionTitle,
-  shouldShowExplicitSessionStatus,
-} from "./agent-session-formatters";
+import { formatSessionTitle } from "./agent-session-formatters";
+import { SessionWorkspaceTabs } from "./session-workspace-tabs";
+import type {
+  SessionWorkspaceFile,
+  SessionWorkspaceTabKind,
+} from "./session-workspace-types";
 
 export interface LinkedSessionIssue {
   issueId: number;
@@ -33,9 +34,17 @@ interface AgentsSessionPaneProps {
   linkedIssue: LinkedSessionIssue | null;
   manualErrorMessage: string | null;
   markReviewErrorMessage: string | null;
+  activeWorkspaceTab: SessionWorkspaceTabKind;
+  changeTab: SessionWorkspaceFile | null;
+  fileTab: SessionWorkspaceFile | null;
+  isSidePanelOpen: boolean;
   onAcknowledgeSessionAttention: (sessionId: number) => void;
-  onOpenIssue: () => void;
+  onCloseWorkspaceTab: (
+    tab: Exclude<SessionWorkspaceTabKind, "session">,
+  ) => void;
   onOpenSummary: () => void;
+  onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
+  onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
   onTransitionAction: (action: SessionIssueTransition) => void;
   projectId: number;
@@ -57,9 +66,15 @@ export function AgentsSessionPane({
   linkedIssue,
   manualErrorMessage,
   markReviewErrorMessage,
+  activeWorkspaceTab,
+  changeTab,
+  fileTab,
+  isSidePanelOpen,
   onAcknowledgeSessionAttention,
-  onOpenIssue,
+  onCloseWorkspaceTab,
   onOpenSummary,
+  onSelectWorkspaceTab,
+  onToggleSidePanel,
   onToggleTransitionMenu,
   onTransitionAction,
   projectId,
@@ -73,17 +88,11 @@ export function AgentsSessionPane({
       {selectedSession ? (
         <div className="agents-session-toolbar">
           <div className="agents-session-toolbar__copy">
-            <p className="agents-session-toolbar__eyebrow">当前会话</p>
             {linkedIssue ? (
-              <h3 className="agents-session-toolbar__issue-heading">{`#issue${linkedIssue.issueId} ${linkedIssue.issueTitle}`}</h3>
+              <h3 className="agents-session-toolbar__issue-heading">{`#${linkedIssue.issueId} ${linkedIssue.issueTitle}`}</h3>
             ) : (
               <h3>{formatSessionTitle(selectedSession)}</h3>
             )}
-            {shouldShowExplicitSessionStatus(selectedSession) ? (
-              <p className="agents-session-toolbar__status">{`Status: ${formatSessionStatusLabel(
-                selectedSession,
-              )}`}</p>
-            ) : null}
           </div>
           <div className="agents-session-toolbar__actions">
             {canRenderTransitionButton ? (
@@ -138,11 +147,26 @@ export function AgentsSessionPane({
             ) : null}
             {linkedIssue ? (
               <button
-                className="agents-session-toolbar__action"
+                aria-label="打开终端"
+                className="agents-session-toolbar__icon-action"
                 type="button"
-                onClick={onOpenIssue}
               >
-                Open Issue
+                <Terminal aria-hidden="true" size={16} strokeWidth={1.8} />
+              </button>
+            ) : null}
+            {linkedIssue ? (
+              <button
+                aria-label="打开 Session 侧边栏"
+                aria-pressed={isSidePanelOpen}
+                className="agents-session-toolbar__icon-action"
+                type="button"
+                onClick={onToggleSidePanel}
+              >
+                <PanelRightOpen
+                  aria-hidden="true"
+                  size={16}
+                  strokeWidth={1.8}
+                />
               </button>
             ) : null}
             {canViewSummary ? (
@@ -184,27 +208,36 @@ export function AgentsSessionPane({
           </p>
         ) : null}
       </div>
-      <div
-        className="agents-terminal-host"
-        onMouseDown={() => {
-          if (selectedSession) {
-            onAcknowledgeSessionAttention(selectedSession.sessionId);
-          }
-        }}
-      >
-        {selectedSession ? (
-          <AgentSessionView
-            projectId={projectId}
-            sessionId={selectedSession.sessionId}
-            agentType={selectedSession.agentType}
-          />
-        ) : (
-          <p className="empty-state">
-            Agent sessions will appear here after a session has been started for
-            this project.
-          </p>
-        )}
-      </div>
+      <SessionWorkspaceTabs
+        activeTab={activeWorkspaceTab}
+        changeTab={changeTab}
+        fileTab={fileTab}
+        sessionContent={
+          <div
+            className="agents-terminal-host"
+            onMouseDown={() => {
+              if (selectedSession) {
+                onAcknowledgeSessionAttention(selectedSession.sessionId);
+              }
+            }}
+          >
+            {selectedSession ? (
+              <AgentSessionView
+                projectId={projectId}
+                sessionId={selectedSession.sessionId}
+                agentType={selectedSession.agentType}
+              />
+            ) : (
+              <p className="empty-state">
+                Agent sessions will appear here after a session has been started
+                for this project.
+              </p>
+            )}
+          </div>
+        }
+        onCloseTab={onCloseWorkspaceTab}
+        onSelectTab={onSelectWorkspaceTab}
+      />
     </div>
   );
 }
