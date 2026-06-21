@@ -452,7 +452,7 @@ fn ensure_child_started(
 }
 
 pub(crate) fn build_shell_command_line(command: &str, prompt: Option<&str>) -> String {
-    let mut command_line = format!("exec {}", shell_quote(command));
+    let mut command_line = format!("exec {command}");
     if let Some(prompt) = prompt {
         command_line.push(' ');
         command_line.push_str(&shell_quote(prompt));
@@ -482,4 +482,25 @@ fn build_command_builder(command: &str, prompt: Option<&str>) -> CommandBuilder 
 
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_shell_command_line;
+
+    #[test]
+    fn build_shell_command_line_preserves_command_arguments() {
+        assert_eq!(
+            build_shell_command_line("claude --permission-mode bypassPermissions", None),
+            "exec claude --permission-mode bypassPermissions || exit $?"
+        );
+    }
+
+    #[test]
+    fn build_shell_command_line_quotes_prompt_argument() {
+        assert_eq!(
+            build_shell_command_line("codex --dangerously-bypass-approvals-and-sandbox", Some("fix 'bug'")),
+            "exec codex --dangerously-bypass-approvals-and-sandbox 'fix '\"'\"'bug'\"'\"'' || exit $?"
+        );
+    }
 }
