@@ -15,7 +15,7 @@ handoff_context: openspec/changes/session-workspace-live-inspector/.onespec.yaml
 handoff_purpose: plan
 handoff_summary: plan handoff from 4 file(s); primary artifact: openspec/changes/session-workspace-live-inspector/proposal.md
 handoff_hash: a8f7864c1caf6107b351f3ec998b4c6280d044186c701f430a71e12ec5da72ee
-touched_files_b64: null
+touched_files_b64: b3BlbnNwZWMvY2hhbmdlcy9zZXNzaW9uLXdvcmtzcGFjZS1saXZlLWluc3BlY3Rvci90YXNrcy5tZAo=
 review_result: pending
 archive: pending
 created_at: 2026-06-21
