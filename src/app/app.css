@@ -4280,7 +4280,18 @@ details[open] > summary .agents-message__summary-chevron {
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
+  width: fit-content;
   padding: 2px 0;
+}
+
+.agents-message__tool-details > .agents-message__tool-header {
+  cursor: pointer;
+  list-style: none;
+}
+
+.agents-message__tool-details
+  > .agents-message__tool-header::-webkit-details-marker {
+  display: none;
 }
 
 .agents-message__tool-name {
@@ -4293,7 +4304,45 @@ details[open] > summary .agents-message__summary-chevron {
   font-weight: 500;
 }
 
-.agents-message__tool-name svg {
+.agents-message__tool-icon {
+  position: relative;
+  display: inline-grid;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  place-items: center;
+}
+
+.agents-message__tool-type-icon,
+.agents-message__tool-expand-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.agents-message__tool-expand-icon {
+  opacity: 0;
+}
+
+.agents-message__tool--expandable:hover .agents-message__tool-type-icon,
+.agents-message__tool-details:focus-within .agents-message__tool-type-icon,
+.agents-message__tool-details[open] .agents-message__tool-type-icon {
+  opacity: 0;
+}
+
+.agents-message__tool--expandable:hover .agents-message__tool-expand-icon,
+.agents-message__tool-details:focus-within .agents-message__tool-expand-icon,
+.agents-message__tool-details[open] .agents-message__tool-expand-icon {
+  opacity: 1;
+}
+
+.agents-message__tool-details[open] .agents-message__tool-expand-icon {
+  transform: rotate(90deg);
+}
+
+.agents-message__tool-name svg,
+.agents-message__tool-icon svg {
   flex: 0 0 auto;
 }
 
@@ -4345,21 +4394,6 @@ details[open] > summary .agents-message__summary-chevron {
 
 .agents-message__tool-output {
   width: min(680px, 100%);
-}
-
-.agents-message__tool-output-summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: fit-content;
-  color: var(--color-text-subtle);
-  font-size: 11.5px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.agents-message__tool-output-summary::-webkit-details-marker {
-  display: none;
 }
 
 .agents-message__output {

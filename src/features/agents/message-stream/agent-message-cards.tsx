@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Terminal,
   ChevronDown,
+  ChevronRight,
   ExternalLink,
   FileEdit,
   FilePlus,
@@ -121,29 +122,85 @@ function ToolCallCard({
   item: Extract<AgentTimelineItem, { type: "tool_call" }>;
 }) {
   const presentation = buildToolCallPresentation(item.name, item.detail);
+  const hasExpandableDetail = hasToolCallDetail(item.detail);
   return (
     <article className="agents-message__entry agents-message__entry--tool">
-      <div className="agents-message__tool">
-        <div className="agents-message__tool-header">
-          <span className="agents-message__tool-name">
-            <ToolCallIcon detail={item.detail} />
-            <span className="agents-message__tool-display-name">
-              {presentation.displayName}
-            </span>
-            {presentation.summary ? (
-              <span className="agents-message__tool-summary">
-                {presentation.summary}
-              </span>
-            ) : null}
-          </span>
-          <ToolCallStatusBadge status={item.status} />
-        </div>
-        <ToolCallDetail detail={item.detail} />
+      <div
+        className={`agents-message__tool${
+          hasExpandableDetail ? " agents-message__tool--expandable" : ""
+        }`}
+      >
+        {hasExpandableDetail ? (
+          <details className="agents-message__tool-details">
+            <summary className="agents-message__tool-header">
+              <ToolCallHeader
+                detail={item.detail}
+                presentation={presentation}
+                status={item.status}
+                isExpandable
+              />
+            </summary>
+            <ToolCallDetail detail={item.detail} />
+          </details>
+        ) : (
+          <>
+            <div className="agents-message__tool-header">
+              <ToolCallHeader
+                detail={item.detail}
+                presentation={presentation}
+                status={item.status}
+                isExpandable={false}
+              />
+            </div>
+            <ToolCallDetail detail={item.detail} />
+          </>
+        )}
         {item.error ? (
           <p className="agents-message__tool-error">{item.error}</p>
         ) : null}
       </div>
     </article>
+  );
+}
+
+function ToolCallHeader({
+  detail,
+  presentation,
+  status,
+  isExpandable,
+}: {
+  detail: ToolCallDetail;
+  presentation: ToolCallPresentation;
+  status: ToolCallStatus;
+  isExpandable: boolean;
+}) {
+  return (
+    <>
+      <span className="agents-message__tool-name">
+        <span className="agents-message__tool-icon" aria-hidden="true">
+          <span className="agents-message__tool-type-icon">
+            <ToolCallIcon detail={detail} />
+          </span>
+          {isExpandable ? (
+            <ChevronRight
+              aria-hidden="true"
+              size={13}
+              strokeWidth={1.8}
+              className="agents-message__tool-expand-icon"
+            />
+          ) : null}
+        </span>
+        <span className="agents-message__tool-display-name">
+          {presentation.displayName}
+        </span>
+        {presentation.summary ? (
+          <span className="agents-message__tool-summary">
+            {presentation.summary}
+          </span>
+        ) : null}
+      </span>
+      <ToolCallStatusBadge status={status} />
+    </>
   );
 }
 
@@ -167,6 +224,9 @@ function ToolCallIcon({ detail }: { detail: ToolCallDetail }) {
 }
 
 function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
+  if (status === "completed") {
+    return null;
+  }
   if (status === "running") {
     return (
       <Badge variant="secondary" className="agents-message__tool-status">
@@ -194,11 +254,6 @@ function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
       </Badge>
     );
   }
-  return (
-    <Badge variant="outline" className="agents-message__tool-status">
-      完成
-    </Badge>
-  );
 }
 
 function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
@@ -207,26 +262,17 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
       return (
         <div className="agents-message__tool-body">
           {detail.output || detail.exitCode != null ? (
-            <details className="agents-message__tool-output">
-              <summary className="agents-message__tool-output-summary">
-                <span>Shell details</span>
-                {detail.exitCode != null ? (
-                  <span className="agents-message__exit-code">{`exit ${detail.exitCode}`}</span>
-                ) : null}
-                <ChevronDown
-                  aria-hidden="true"
-                  size={13}
-                  strokeWidth={1.8}
-                  className="agents-message__summary-chevron"
-                />
-              </summary>
+            <div className="agents-message__tool-output">
+              {detail.exitCode != null ? (
+                <span className="agents-message__exit-code">{`exit ${detail.exitCode}`}</span>
+              ) : null}
               <code className="agents-message__command agents-message__command--details">
                 {detail.command}
               </code>
               {detail.output ? (
                 <pre className="agents-message__output">{detail.output}</pre>
               ) : null}
-            </details>
+            </div>
           ) : null}
         </div>
       );
@@ -234,21 +280,12 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
       return (
         <div className="agents-message__tool-body">
           {detail.content ? (
-            <details className="agents-message__tool-output">
-              <summary className="agents-message__tool-output-summary">
-                <span>Read details</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  size={13}
-                  strokeWidth={1.8}
-                  className="agents-message__summary-chevron"
-                />
-              </summary>
+            <div className="agents-message__tool-output">
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
               <pre className="agents-message__output">{detail.content}</pre>
-            </details>
+            </div>
           ) : null}
         </div>
       );
@@ -256,23 +293,14 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
       return (
         <div className="agents-message__tool-body">
           {detail.diff ? (
-            <details className="agents-message__tool-output">
-              <summary className="agents-message__tool-output-summary">
-                <span>Edit details</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  size={13}
-                  strokeWidth={1.8}
-                  className="agents-message__summary-chevron"
-                />
-              </summary>
+            <div className="agents-message__tool-output">
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
               <pre className="agents-message__output agents-message__output--diff">
                 {detail.diff}
               </pre>
-            </details>
+            </div>
           ) : null}
         </div>
       );
@@ -280,37 +308,19 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
       return (
         <div className="agents-message__tool-body">
           {detail.content ? (
-            <details className="agents-message__tool-output">
-              <summary className="agents-message__tool-output-summary">
-                <span>Write details</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  size={13}
-                  strokeWidth={1.8}
-                  className="agents-message__summary-chevron"
-                />
-              </summary>
+            <div className="agents-message__tool-output">
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
               <pre className="agents-message__output">{detail.content}</pre>
-            </details>
+            </div>
           ) : null}
         </div>
       );
     case "search":
       return (
         <div className="agents-message__tool-body">
-          <details className="agents-message__tool-output">
-            <summary className="agents-message__tool-output-summary">
-              <span>{formatSearchSummary(detail)}</span>
-              <ChevronDown
-                aria-hidden="true"
-                size={13}
-                strokeWidth={1.8}
-                className="agents-message__summary-chevron"
-              />
-            </summary>
+          <div className="agents-message__tool-output">
             <div className="agents-message__search-details">
               <div className="agents-message__detail-row">
                 <span className="agents-message__detail-label">Query</span>
@@ -336,7 +346,7 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
                 <p className="agents-message__search-empty">没有返回匹配项</p>
               )}
             </div>
-          </details>
+          </div>
         </div>
       );
     case "sub_agent":
@@ -359,26 +369,36 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
       return (
         <div className="agents-message__tool-body">
           {detail.rawInput || detail.rawOutput ? (
-            <details className="agents-message__tool-output">
-              <summary className="agents-message__tool-output-summary">
-                <span>Tool details</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  size={13}
-                  strokeWidth={1.8}
-                  className="agents-message__summary-chevron"
-                />
-              </summary>
+            <div className="agents-message__tool-output">
               {detail.rawInput ? (
                 <pre className="agents-message__output">{detail.rawInput}</pre>
               ) : null}
               {detail.rawOutput ? (
                 <pre className="agents-message__output">{detail.rawOutput}</pre>
               ) : null}
-            </details>
+            </div>
           ) : null}
         </div>
       );
+  }
+}
+
+function hasToolCallDetail(detail: ToolCallDetail): boolean {
+  switch (detail.type) {
+    case "shell":
+      return Boolean(detail.output) || detail.exitCode != null;
+    case "read":
+      return Boolean(detail.content);
+    case "edit":
+      return Boolean(detail.diff);
+    case "write":
+      return Boolean(detail.content);
+    case "search":
+      return true;
+    case "unknown":
+      return Boolean(detail.rawInput || detail.rawOutput);
+    default:
+      return false;
   }
 }
 
@@ -398,16 +418,6 @@ function SearchMatch({ match }: { match: string }) {
       <span>{match}</span>
     </a>
   );
-}
-
-function formatSearchSummary(
-  detail: Extract<ToolCallDetail, { type: "search" }>,
-): string {
-  const count = detail.matches.length;
-  if (count === 0) {
-    return "Search details";
-  }
-  return `Search details and ${count} result${count === 1 ? "" : "s"}`;
 }
 
 function extractFirstUrl(text: string): string | null {
