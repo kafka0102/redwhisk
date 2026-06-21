@@ -31,7 +31,7 @@ impl AgentCommandDetector for ShellAgentCommandDetector {
     }
 }
 
-fn run_command_lookup(command: &str) -> Result<String, String> {
+pub(crate) fn run_command_lookup(command: &str) -> Result<String, String> {
     let trimmed = command.trim();
     if trimmed.is_empty() {
         return Err("Agent command 不能为空。".to_string());

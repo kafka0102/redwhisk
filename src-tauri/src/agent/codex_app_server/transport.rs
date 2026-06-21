@@ -13,6 +13,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc;
@@ -20,6 +21,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use serde_json::Value;
+
+use crate::agent::command_detector::run_command_lookup;
 
 /// 默认请求超时（与 paseo 一致：14 天，等价于不超时，仅兜底死循环）。
 const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
@@ -90,7 +93,8 @@ impl CodexTransport {
     /// 失败返回 `BinaryNotFound` / `SpawnFailed`。
     pub fn spawn(binary: &str, cwd: Option<&str>) -> Result<Self, CodexAppServerError> {
         let (program, args) = split_command_line(binary)?;
-        let mut command = Command::new(program);
+        let resolved_program = resolve_spawn_program(program);
+        let mut command = Command::new(&resolved_program);
         command
             .args(args)
             .arg("app-server")
@@ -307,6 +311,14 @@ fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), CodexAppServer
     Ok((program, parts.collect()))
 }
 
+fn resolve_spawn_program(program: &str) -> String {
+    if Path::new(program).components().count() > 1 {
+        return program.to_string();
+    }
+
+    run_command_lookup(program).unwrap_or_else(|_| program.to_string())
+}
+
 fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
@@ -482,6 +494,24 @@ fn dispatch_notification(state: &TransportState, value: Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn split_command_line_preserves_program_and_args() {
+        let (program, args) =
+            split_command_line("codex --dangerously-bypass-approvals-and-sandbox").unwrap();
+
+        assert_eq!(program, "codex");
+        assert_eq!(args, vec!["--dangerously-bypass-approvals-and-sandbox"]);
+    }
+
+    #[test]
+    fn resolve_spawn_program_keeps_path_commands() {
+        assert_eq!(
+            resolve_spawn_program("/opt/codex/bin/codex"),
+            "/opt/codex/bin/codex"
+        );
+        assert_eq!(resolve_spawn_program("./codex"), "./codex");
+    }
 
     #[test]
     fn dispatch_response_routes_result_to_pending() {
