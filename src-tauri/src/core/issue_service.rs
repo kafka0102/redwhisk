@@ -540,6 +540,24 @@ impl<'connection> IssueService<'connection> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
         })?;
+        let session = AgentSessionRepository::new(self.issue_repository.connection())
+            .find_by_id(linked_session_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+                )
+            })?;
+        let project = self.require_project(input.project_id)?;
+
+        if session.workspace_mode == WorkspaceMode::Worktree {
+            finalize_worktree_completion(&project.repo_path, &session)
+                .map_err(|error| issue_worktree_merge_error(error, &session))?;
+        }
 
         let completed_issue = IssueRepository::complete_review_issue_manually_in_transaction(
             &transaction,
@@ -1116,9 +1134,10 @@ impl<'connection> IssueService<'connection> {
             operation_state: GitOperationState::None,
             is_clean: false,
         };
-        let after_snapshot = read_git_snapshot(&session.working_dir).map_err(issue_git_error)?;
+        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
+        let after_snapshot = read_git_snapshot(&detection_repo_path).map_err(issue_git_error)?;
         let detection =
-            detect_commit_result(&session.working_dir, &before_snapshot, &after_snapshot)
+            detect_commit_result(&detection_repo_path, &before_snapshot, &after_snapshot)
                 .map_err(issue_git_error)?;
 
         let commit_hash = match detection {
@@ -1199,7 +1218,8 @@ impl<'connection> IssueService<'connection> {
         };
 
         if session.workspace_mode == WorkspaceMode::Worktree {
-            finalize_worktree_completion(&project.repo_path, &session).map_err(issue_git_error)?;
+            finalize_worktree_completion(&project.repo_path, &session)
+                .map_err(|error| issue_worktree_merge_error(error, &session))?;
         }
 
         let completed_issue = IssueRepository::complete_review_issue_cleanly_in_transaction(
@@ -1703,7 +1723,15 @@ impl<'connection> IssueService<'connection> {
             .with_detail(
                 ErrorDetail::new("GitStatus")
                     .with_value("head", snapshot.head.clone())
-                    .with_value("isClean", true),
+                    .with_value("isClean", true)
+                    .with_value(
+                        "workspaceMode",
+                        workspace_mode_to_str(&session.workspace_mode),
+                    )
+                    .with_value(
+                        "targetBranch",
+                        session.target_branch.as_deref().unwrap_or(""),
+                    ),
             ));
         }
 
@@ -2145,6 +2173,9 @@ fn finalize_worktree_completion(
     let Some(workspace_path) = session.workspace_path.as_deref() else {
         return Ok(());
     };
+    if !Path::new(workspace_path).exists() {
+        return Ok(());
+    }
 
     if !is_branch_merged(repo_path, target_branch, workspace_branch)
         .map_err(map_worktree_git_error)?
@@ -2175,6 +2206,28 @@ fn map_worktree_git_error(
             crate::git::status::GitStatusError::InvalidRepoPath(path)
         }
     }
+}
+
+fn issue_worktree_merge_error(
+    error: crate::git::status::GitStatusError,
+    session: &AgentSessionRecord,
+) -> CommandError {
+    issue_git_error(error).with_detail(
+        ErrorDetail::new("WorktreeMerge")
+            .with_value("sessionId", session.id)
+            .with_value(
+                "targetBranch",
+                session.target_branch.as_deref().unwrap_or(""),
+            )
+            .with_value(
+                "workspaceBranch",
+                session.workspace_branch.as_deref().unwrap_or(""),
+            )
+            .with_value(
+                "workspacePath",
+                session.workspace_path.as_deref().unwrap_or(""),
+            ),
+    )
 }
 
 fn validate_title(title: &str) -> Result<String, CommandError> {
@@ -2243,12 +2296,32 @@ fn issue_git_error(error: crate::git::status::GitStatusError) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
+fn completion_detection_repo_path(project_repo_path: &str, session: &AgentSessionRecord) -> String {
+    if session.workspace_mode == WorkspaceMode::Worktree
+        && session
+            .workspace_path
+            .as_deref()
+            .is_some_and(|workspace_path| !Path::new(workspace_path).exists())
+    {
+        return project_repo_path.to_string();
+    }
+
+    session.working_dir.clone()
+}
+
 fn issue_status_to_str(status: &IssueStatus) -> &'static str {
     match status {
         IssueStatus::Backlog => "backlog",
         IssueStatus::Running => "running",
         IssueStatus::Review => "review",
         IssueStatus::Completed => "completed",
+    }
+}
+
+fn workspace_mode_to_str(mode: &WorkspaceMode) -> &'static str {
+    match mode {
+        WorkspaceMode::CurrentBranch => "current_branch",
+        WorkspaceMode::Worktree => "worktree",
     }
 }
 
@@ -2263,14 +2336,15 @@ fn issue_status_rank(status: &IssueStatus) -> u8 {
 
 fn build_agent_commit_completion_prompt(issue_title: &str, head: &str) -> String {
     format!(
-        "请仅处理当前 Issue 相关改动，并在确认无误后提交。\n\
+        "请获取本次修改相关的代码，检查当前 Issue 涉及的文件变更；只暂存并提交与本次 Issue 直接相关的文件，不要提交无关改动。\n\
 Issue: {issue_title}\n\
 当前 HEAD: {head}\n\
 要求：\n\
 - 只包含当前 Issue 直接相关文件\n\
+- 不要提交无关改动\n\
 - 先自检再提交\n\
 - 使用中文 Conventional Commit\n\
-- 完成后汇报提交结果与验证命令\n"
+- 完成后请回复 commit hash、提交结果与验证命令\n"
     )
 }
 

@@ -29,7 +29,9 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::read_git_snapshot;
-use crate::git::worktree::{create_worktree_for_issue, list_local_branches, GitBranchInfo};
+use crate::git::worktree::{
+    cleanup_worktree, create_worktree_for_issue, list_local_branches, GitBranchInfo,
+};
 use crate::types::agent_profile::{AgentScope, AgentType};
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
@@ -942,6 +944,17 @@ impl<'connection> AgentSessionService<'connection> {
                     &target_branch,
                 )
                 .map_err(agent_session_start_error)?;
+                if let Err(error) = run_worktree_setup_command(
+                    &created.workspace_path,
+                    worktree_setup_command.as_deref(),
+                ) {
+                    let _ = cleanup_worktree(
+                        &project.repo_path,
+                        &created.workspace_path,
+                        &created.workspace_branch,
+                    );
+                    return Err(error);
+                }
 
                 Ok(SessionLaunchContext {
                     profile,
@@ -2289,6 +2302,66 @@ fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, Comman
     };
 
     Ok(path.to_string_lossy().to_string())
+}
+
+fn run_worktree_setup_command(
+    workspace_path: &str,
+    setup_command: Option<&str>,
+) -> Result<(), CommandError> {
+    let setup_command = setup_command
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(setup_command) = setup_command else {
+        return Ok(());
+    };
+
+    let workspace = Path::new(workspace_path);
+    if !workspace.is_dir() {
+        return Err(CommandError::new(
+            CommandErrorCode::AgentSessionStartFailed,
+            "Worktree 初始化目录不可访问。",
+        )
+        .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path)));
+    }
+
+    let mut command = shell_command(setup_command);
+    let output = command
+        .current_dir(workspace)
+        .output()
+        .map_err(agent_session_start_error)?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    Err(CommandError::new(
+        CommandErrorCode::AgentSessionStartFailed,
+        "Worktree 初始化命令执行失败。",
+    )
+    .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path))
+    .with_detail(ErrorDetail::new("Command").with_value("command", setup_command))
+    .with_detail(
+        ErrorDetail::new("ExitStatus")
+            .with_value("code", output.status.code().map_or(-1, i32::from)),
+    )
+    .with_detail(ErrorDetail::new("Output").with_value(
+        "stderr",
+        String::from_utf8_lossy(&output.stderr).trim().to_string(),
+    )))
+}
+
+#[cfg(windows)]
+fn shell_command(command: &str) -> Command {
+    let mut shell = Command::new("cmd");
+    shell.args(["/C", command]);
+    shell
+}
+
+#[cfg(not(windows))]
+fn shell_command(command: &str) -> Command {
+    let mut shell = Command::new("sh");
+    shell.args(["-lc", command]);
+    shell
 }
 
 fn build_command_snapshot(profile: &AgentProfileRow) -> String {

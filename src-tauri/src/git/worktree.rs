@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -33,6 +34,7 @@ pub enum GitWorktreeError {
 pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo, GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     let current_branch = run_git(&repo_path, &["branch", "--show-current"])?;
+    let worktree_branches = list_worktree_branches(&repo_path, &current_branch)?;
     let output = run_git(
         &repo_path,
         &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
@@ -41,6 +43,8 @@ pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo,
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
+        .filter(|line| !worktree_branches.contains(*line))
+        .filter(|line| !is_issue_worktree_branch(line))
         .map(str::to_string)
         .collect::<Vec<_>>();
     local_branches.sort();
@@ -119,13 +123,14 @@ pub fn merge_branch_into_target(
         &repo_path,
         &["merge", "--no-ff", "--no-edit", source_branch],
     );
-    let checkout_back = run_git(&repo_path, &["checkout", &original_branch]);
 
-    if let Err(error) = checkout_back {
+    if let Err(error) = merge_result {
+        let _ = run_git(&repo_path, &["checkout", &original_branch]);
         return Err(error);
     }
 
-    merge_result.map(|_| original_branch)
+    run_git(&repo_path, &["checkout", &original_branch])?;
+    Ok(original_branch)
 }
 
 pub fn cleanup_worktree(
@@ -141,6 +146,37 @@ pub fn cleanup_worktree(
     run_git(&repo_path, &["branch", "-D", workspace_branch])?;
     run_git(&repo_path, &["worktree", "prune"])?;
     Ok(())
+}
+
+fn list_worktree_branches(
+    repo_path: &Path,
+    current_branch: &str,
+) -> Result<HashSet<String>, GitWorktreeError> {
+    let output = run_git(repo_path, &["worktree", "list", "--porcelain"])?;
+    let mut branches = HashSet::new();
+
+    for line in output.lines().map(str::trim) {
+        let Some(branch) = line.strip_prefix("branch refs/heads/") else {
+            continue;
+        };
+
+        if branch != current_branch {
+            branches.insert(branch.to_string());
+        }
+    }
+
+    Ok(branches)
+}
+
+fn is_issue_worktree_branch(branch: &str) -> bool {
+    branch
+        .strip_prefix("issue-")
+        .and_then(|suffix| suffix.chars().next())
+        .is_some_and(|first| first.is_ascii_digit())
+        || branch
+            .strip_prefix("issue/")
+            .and_then(|suffix| suffix.chars().next())
+            .is_some_and(|first| first.is_ascii_digit())
 }
 
 fn ensure_repo_dir(repo_path: &Path) -> Result<PathBuf, GitWorktreeError> {

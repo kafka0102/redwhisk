@@ -46,12 +46,12 @@
 
 ## 7. Review 反馈：Done 提交检查与 Worktree 合并流程
 
-- [ ] 7.1 标记 issue 为 Done / 完成前，按 session execution context 检查本次 issue 相关未提交代码；手动提交策略时弹窗阻止完成，自动提交策略时向当前 agent session 注入本地化提交提示词。
-- [ ] 7.2 自动提交提示词改为“获取本次修改相关的代码”，并按全局语言设置选择中文或英文模板；提交检测需异步等待新 commit 出现后再继续完成流程。
-- [ ] 7.3 本地分支下拉框只展示可作为 merge-back base 的仓库本地有效分支，排除附加 worktree 正在占用的分支与临时 issue 分支。
-- [ ] 7.4 Worktree 模式启动时，先创建 `issue-{id}-xxx` worktree，再执行配置的初始化命令并等待完成；初始化期间展示进度窗口，失败时关闭 run dialog 但不跳转 Settings，并阻止启动 agent session。
-- [ ] 7.5 Worktree-backed issue 标记完成时，先检查记录的 worktree 是否仍存在；不存在则跳过 worktree 合并清理，存在则先做提交检查再执行 merge-back。
-- [ ] 7.6 点击完成时必须展示确认框，明确将临时分支合入记录的目标分支；目标分支为 `main` / `master` 时使用高风险文案，其他分支也必须确认。
-- [ ] 7.7 自动 merge-back 期间展示异步进度窗口，逐步展示检查提交、检查 worktree、合并分支与清理 worktree 等步骤。
-- [ ] 7.8 若 merge-back 发生冲突，关闭进度窗口，保持 issue 在 review，跳转或停留在当前 session，并自动发送提示词要求 agent 解决冲突并合并到最初记录的目标分支。
-- [ ] 7.9 补充前端与 Rust 测试，覆盖自动提交提示词、手动提交阻止、分支过滤、初始化等待、完成确认、合并进度和冲突接管。
+- [x] 7.1 标记 issue 为 Done / 完成前，按 session execution context 检查本次 issue 相关未提交代码；手动提交策略时弹窗阻止完成，自动提交策略时向当前 agent session 注入本地化提交提示词。
+- [x] 7.2 自动提交提示词改为“获取本次修改相关的代码”，并按全局语言设置选择中文或英文模板；提交检测需异步等待新 commit 出现后再继续完成流程。
+- [x] 7.3 本地分支下拉框只展示可作为 merge-back base 的仓库本地有效分支，排除附加 worktree 正在占用的分支与临时 issue 分支。
+- [x] 7.4 Worktree 模式启动时，先创建 `issue-{id}-xxx` worktree，再执行配置的初始化命令并等待完成；初始化期间展示进度窗口，失败时关闭 run dialog 但不跳转 Settings，并阻止启动 agent session。
+- [x] 7.5 Worktree-backed issue 标记完成时，先检查记录的 worktree 是否仍存在；不存在则跳过 worktree 合并清理，存在则先做提交检查再执行 merge-back。
+- [x] 7.6 点击完成时必须展示确认框，明确将临时分支合入记录的目标分支；目标分支为 `main` / `master` 时使用高风险文案，其他分支也必须确认。
+- [x] 7.7 自动 merge-back 期间展示异步进度窗口，逐步展示检查提交、检查 worktree、合并分支与清理 worktree 等步骤。
+- [x] 7.8 若 merge-back 发生冲突，关闭进度窗口，保持 issue 在 review，跳转或停留在当前 session，并自动发送提示词要求 agent 解决冲突并合并到最初记录的目标分支。
+- [x] 7.9 补充前端与 Rust 测试，覆盖自动提交提示词、手动提交阻止、分支过滤、初始化等待、完成确认、合并进度和冲突接管。

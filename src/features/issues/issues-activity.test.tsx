@@ -12,17 +12,23 @@ import {
   completeIssueManual,
   createIssue,
   deleteIssue,
+  detectAgentCommitCompletion,
   exportIssueAttachment,
   getIssueSummary,
   listIssues,
   markIssueReview,
+  prepareAgentCommitCompletion,
   previewIssueAttachment,
+  sendAgentCommitPrompt,
   startAgentSession,
   updateIssue,
   type IssueAttachmentRecord,
   type IssueRecord,
 } from "./issue-commands";
-import { listAgentSessions } from "../agents/agent-session-commands";
+import {
+  injectAgentSessionPrompt,
+  listAgentSessions,
+} from "../agents/agent-session-commands";
 import {
   listAgentProfiles,
   listProjectLabels,
@@ -35,17 +41,21 @@ vi.mock("./issue-commands", () => ({
   completeIssueManual: vi.fn(),
   createIssue: vi.fn(),
   deleteIssue: vi.fn(),
+  detectAgentCommitCompletion: vi.fn(),
   exportIssueAttachment: vi.fn(),
   getIssueSummary: vi.fn(),
   getProjectGitBranches: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
+  prepareAgentCommitCompletion: vi.fn(),
   previewIssueAttachment: vi.fn(),
+  sendAgentCommitPrompt: vi.fn(),
   startAgentSession: vi.fn(),
   updateIssue: vi.fn(),
 }));
 
 vi.mock("../agents/agent-session-commands", () => ({
+  injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
 }));
 
@@ -135,13 +145,19 @@ const advanceIssueStatusMock = vi.mocked(advanceIssueStatus);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const createIssueMock = vi.mocked(createIssue);
 const deleteIssueMock = vi.mocked(deleteIssue);
+const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
 const exportIssueAttachmentMock = vi.mocked(exportIssueAttachment);
 const getIssueSummaryMock = vi.mocked(getIssueSummary);
 const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
+const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
+const prepareAgentCommitCompletionMock = vi.mocked(
+  prepareAgentCommitCompletion,
+);
 const previewIssueAttachmentMock = vi.mocked(previewIssueAttachment);
+const sendAgentCommitPromptMock = vi.mocked(sendAgentCommitPrompt);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
@@ -305,13 +321,17 @@ describe("IssuesActivity", () => {
     completeIssueManualMock.mockReset();
     createIssueMock.mockReset();
     deleteIssueMock.mockReset();
+    detectAgentCommitCompletionMock.mockReset();
     exportIssueAttachmentMock.mockReset();
     getIssueSummaryMock.mockReset();
     getProjectGitBranchesMock.mockReset();
+    injectAgentSessionPromptMock.mockReset();
     listAgentSessionsMock.mockReset();
     listIssuesMock.mockReset();
     markIssueReviewMock.mockReset();
+    prepareAgentCommitCompletionMock.mockReset();
     previewIssueAttachmentMock.mockReset();
+    sendAgentCommitPromptMock.mockReset();
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
@@ -330,9 +350,24 @@ describe("IssuesActivity", () => {
       return { labels: [] };
     });
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
+    injectAgentSessionPromptMock.mockResolvedValue({
+      sessionId: 1,
+      codexSessionId: "thread-1",
+    });
     getProjectGitBranchesMock.mockResolvedValue({
       currentBranch: "main",
       localBranches: ["main", "develop", "release"],
+    });
+    prepareAgentCommitCompletionMock.mockRejectedValue({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前仓库无未提交改动，请直接使用 Complete。",
+      details: [
+        {
+          "@type": "GitStatus",
+          isClean: true,
+          targetBranch: "dev",
+        },
+      ],
     });
   });
 
@@ -1912,6 +1947,239 @@ describe("IssuesActivity", () => {
       screen.getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
 
+    confirmSpy.mockRestore();
+  });
+
+  it("sends an agent commit prompt before completing a dirty auto-commit review issue", async () => {
+    const user = userEvent.setup();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 503,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    prepareAgentCommitCompletionMock.mockResolvedValueOnce({
+      issueId: reviewWithSession.id,
+      sessionId: 503,
+      option: "complete_agent_commit",
+      head: "abc123",
+      changedFilesCount: 1,
+      changedFiles: [{ status: "M", path: "tracked.txt" }],
+      completionPrompt:
+        "请获取本次修改相关的代码，检查当前 issue 涉及的文件变更。",
+    });
+    sendAgentCommitPromptMock.mockResolvedValueOnce({
+      issueId: reviewWithSession.id,
+      sessionId: 503,
+      codexSessionId: "thread-503",
+    });
+    detectAgentCommitCompletionMock.mockResolvedValueOnce({
+      outcome: "completed",
+      issue: {
+        ...reviewWithSession,
+        status: "completed",
+        linkedSessionStatus: "closed",
+        updatedAt: reviewWithSession.updatedAt + 1_000,
+      },
+      message: "已检测到新的 commit，Issue 已完成。",
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: reviewWithSession.id,
+    });
+    expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: reviewWithSession.id,
+    });
+    expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: reviewWithSession.id,
+    });
+    expect(completeIssueManualMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("button", { name: "View Summary" }),
+    ).toBeInTheDocument();
+  });
+
+  it("blocks Done when related dirty files exist and completion policy is manual", async () => {
+    const user = userEvent.setup();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 504,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前 Project 未启用 agent_auto_commit 完成策略。",
+      details: [
+        {
+          "@type": "CompletionPolicy",
+          completionPolicy: "manual",
+        },
+      ],
+    });
+
+    renderIssuesActivity({ projectCompletionPolicy: "manual" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    expect(completeIssueManualMock).not.toHaveBeenCalled();
+    expect(
+      within(dialog).getByText(
+        "当前分支中有未提交的代码，请提交后再标记完成。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("confirms merge into a worktree target branch before finishing Done", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 505,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前仓库无未提交改动，请直接使用 Complete。",
+      details: [
+        {
+          "@type": "GitStatus",
+          isClean: true,
+          targetBranch: "dev",
+        },
+      ],
+    });
+    completeIssueManualMock.mockResolvedValueOnce({
+      ...reviewWithSession,
+      status: "completed",
+      linkedSessionStatus: "closed",
+      updatedAt: reviewWithSession.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "即将完成当前 issue，并把临时分支合入目标分支 dev。确认继续吗？",
+    );
+    expect(completeIssueManualMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: reviewWithSession.id,
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it("hands off worktree merge conflicts to the linked agent session", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onOpenAgentsActivity = vi.fn();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 506,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前仓库无未提交改动，请直接使用 Complete。",
+      details: [
+        {
+          "@type": "GitStatus",
+          isClean: true,
+          targetBranch: "dev",
+        },
+      ],
+    });
+    let rejectMerge!: (error: unknown) => void;
+    const mergePromise = new Promise<IssueRecord>((_, reject) => {
+      rejectMerge = reject;
+    });
+    completeIssueManualMock.mockReturnValueOnce(mergePromise);
+    injectAgentSessionPromptMock.mockResolvedValueOnce({
+      sessionId: 506,
+      codexSessionId: "thread-506",
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Complete issue" }),
+    ).toBeInTheDocument();
+    rejectMerge({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前 Project 的 Git 状态不可用。",
+      details: [
+        {
+          "@type": "Cause",
+          message:
+            "git command failed for git merge --no-ff --no-edit issue-506",
+        },
+        {
+          "@type": "WorktreeMerge",
+          sessionId: 506,
+          targetBranch: "dev",
+          workspaceBranch: "issue-506",
+          workspacePath: "/tmp/worktrees/issue-506",
+        },
+      ],
+    });
+    await waitFor(() =>
+      expect(injectAgentSessionPromptMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 506,
+        kind: "follow_up",
+        prompt: expect.stringContaining(
+          "Please resolve the conflicts from merging issue-506 into the originally recorded target branch dev",
+        ),
+      }),
+    );
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(506);
+    expect(
+      screen.queryByRole("dialog", { name: "Complete issue" }),
+    ).not.toBeInTheDocument();
     confirmSpy.mockRestore();
   });
 
