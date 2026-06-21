@@ -34,9 +34,7 @@ pub enum AgentSessionError {
     Other(String),
 }
 
-impl From<crate::agent::codex_app_server::transport::CodexAppServerError>
-    for AgentSessionError
-{
+impl From<crate::agent::codex_app_server::transport::CodexAppServerError> for AgentSessionError {
     fn from(error: crate::agent::codex_app_server::transport::CodexAppServerError) -> Self {
         use crate::agent::codex_app_server::transport::CodexAppServerError;
         match error {

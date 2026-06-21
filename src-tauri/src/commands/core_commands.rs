@@ -1,4 +1,4 @@
-use tauri::{Manager, State};
+use tauri::State;
 
 use crate::app_state::AppState;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -9,7 +9,7 @@ pub fn initialize_local_data(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<LocalDataStatus, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::LocalDataInitializationFailed,
             "本地数据初始化失败。",

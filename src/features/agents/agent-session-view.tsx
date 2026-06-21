@@ -23,19 +23,25 @@ interface AgentSessionViewProps {
   projectId: number;
   sessionId: number;
   agentType: AgentType;
+  isTurnRunning?: boolean;
 }
 
 export function AgentSessionView({
   projectId,
   sessionId,
   agentType,
+  isTurnRunning = false,
 }: AgentSessionViewProps) {
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const capabilities = getAgentCapabilities(agentType);
+  const effectiveTurnStatus =
+    state.turnStatus === "running" || isTurnRunning
+      ? "running"
+      : state.turnStatus;
 
   return (
     <div className="agents-session-view" aria-label="Agent 结构化会话视图">
-      <AgentMessageStreamView state={state} />
+      <AgentMessageStreamView state={state} isTurnRunning={isTurnRunning} />
       <div className="agents-session-view__permissions">
         {state.pendingPermissions.map((request) => (
           <PermissionCard
@@ -50,7 +56,7 @@ export function AgentSessionView({
         projectId={projectId}
         sessionId={sessionId}
         capabilities={capabilities}
-        turnStatus={state.turnStatus}
+        turnStatus={effectiveTurnStatus}
         usage={state.usage}
         currentModelId={state.model}
         onMessageSent={(message) => {

@@ -142,7 +142,7 @@ fn prepare_project_data_dir(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<std::path::PathBuf, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::ProjectPersistenceFailed,
             "Project 保存失败。",

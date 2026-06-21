@@ -4136,6 +4136,10 @@ button:focus-visible {
   font-size: 12px;
 }
 
+.agents-message-stream__running span {
+  animation: agents-message-thinking-pulse 1.2s ease-in-out infinite;
+}
+
 .agents-message__spinner {
   animation: agents-message-spin 900ms linear infinite;
 }
@@ -4143,6 +4147,24 @@ button:focus-visible {
 @keyframes agents-message-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes agents-message-thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agents-message__spinner,
+  .agents-message-stream__running span {
+    animation: none;
   }
 }
 

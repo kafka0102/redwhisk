@@ -1,4 +1,4 @@
-use tauri::{Manager, State};
+use tauri::State;
 
 use crate::app_state::AppState;
 use crate::core::settings_service::SettingsService;
@@ -95,7 +95,7 @@ fn prepare_settings_data_dir(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<std::path::PathBuf, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::SettingsPersistenceFailed,
             "设置保存失败。",
