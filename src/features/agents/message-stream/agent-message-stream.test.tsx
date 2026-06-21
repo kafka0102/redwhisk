@@ -1,7 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentMessageStream } from "./agent-message-stream";
+import {
+  AgentMessageStream,
+  AgentMessageStreamView,
+} from "./agent-message-stream";
+import type { MessageStreamState } from "./message-stream-types";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(vi.fn())),
@@ -19,6 +23,23 @@ function setupStream(
 ) {
   readAgentTimelineMock.mockReset();
   readAgentTimelineMock.mockResolvedValue({ items });
+}
+
+function createMessageStreamState(
+  overrides: Partial<MessageStreamState> = {},
+): MessageStreamState {
+  return {
+    entries: [],
+    turnStatus: "idle",
+    usage: null,
+    pendingPermissions: [],
+    mode: null,
+    model: null,
+    lastSeq: null,
+    lastError: null,
+    isInitialized: true,
+    ...overrides,
+  };
 }
 
 describe("AgentMessageStream", () => {
@@ -43,6 +64,44 @@ describe("AgentMessageStream", () => {
       expect(screen.getByText("你好")).toBeInTheDocument();
     });
     expect(screen.getByText("你好！")).toBeInTheDocument();
+  });
+
+  it("运行指示器位于消息滚动栈内并跟随消息卡片之后", () => {
+    const { container } = render(
+      <AgentMessageStreamView
+        state={createMessageStreamState({
+          entries: [
+            {
+              id: "u1",
+              kind: "user_message",
+              item: {
+                type: "user_message",
+                text: "开始处理",
+                messageId: "u1",
+              },
+            },
+          ],
+          turnStatus: "running",
+        })}
+      />,
+    );
+
+    const scroll = container.querySelector(".agents-message-stream__scroll");
+    const messageCard = screen
+      .getByText("开始处理")
+      .closest(".agents-message__entry") as HTMLElement | null;
+    const running = screen
+      .getByText("正在思考…")
+      .closest(".agents-message-stream__running") as HTMLElement | null;
+
+    expect(scroll).toContainElement(running);
+    expect(running?.parentElement).toHaveClass(
+      "agents-message__entry",
+      "agents-message__entry--running",
+    );
+    expect(messageCard?.compareDocumentPosition(running!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("渲染 reasoning 折叠区", async () => {

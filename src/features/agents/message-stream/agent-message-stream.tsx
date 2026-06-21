@@ -69,7 +69,7 @@ export function AgentMessageStreamView({
       return;
     }
     node.scrollTop = node.scrollHeight;
-  }, [entries.length, lastSignature, turnStatus]);
+  }, [entries.length, lastSignature, turnStatus, shouldShowThinking]);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
     const distanceFromBottom =
@@ -97,22 +97,24 @@ export function AgentMessageStreamView({
           </p>
         ) : null}
         <AgentMessageCards entries={entries} />
+        {shouldShowThinking ? (
+          <div className="agents-message__entry agents-message__entry--running">
+            <div
+              className="agents-message-stream__running"
+              role="status"
+              aria-live="polite"
+            >
+              <LoaderCircle
+                aria-hidden="true"
+                size={13}
+                strokeWidth={2}
+                className="agents-message__spinner"
+              />
+              <span>正在思考…</span>
+            </div>
+          </div>
+        ) : null}
       </div>
-      {shouldShowThinking ? (
-        <div
-          className="agents-message-stream__running"
-          role="status"
-          aria-live="polite"
-        >
-          <LoaderCircle
-            aria-hidden="true"
-            size={13}
-            strokeWidth={2}
-            className="agents-message__spinner"
-          />
-          <span>正在思考…</span>
-        </div>
-      ) : null}
     </div>
   );
 }

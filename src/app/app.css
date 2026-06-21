@@ -4165,8 +4165,8 @@ button:focus-visible {
    =========================================================================== */
 
 .agents-message-stream {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
   background: color-mix(
@@ -4200,6 +4200,7 @@ button:focus-visible {
   display: grid;
   align-content: start;
   gap: 10px;
+  flex: 1;
   min-height: 0;
   padding: 28px 18px 18px;
   overflow-y: auto;
@@ -4222,9 +4223,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 18px;
+  width: min(720px, 100%);
+  padding: 8px 0 0;
   border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
   color: var(--color-text-muted);
   font-size: 12px;
 }
@@ -4278,7 +4279,8 @@ button:focus-visible {
 .agents-message__entry--tool,
 .agents-message__entry--todo,
 .agents-message__entry--error,
-.agents-message__entry--compaction {
+.agents-message__entry--compaction,
+.agents-message__entry--running {
   display: flex;
   justify-content: flex-start;
 }
