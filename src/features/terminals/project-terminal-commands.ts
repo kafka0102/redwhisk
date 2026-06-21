@@ -114,9 +114,12 @@ export function listProjectTerminals(
 export function restoreProjectTerminal(
   input: RestoreProjectTerminalInput,
 ): Promise<RestoreProjectTerminalResult> {
-  return invokeCommand<RestoreProjectTerminalResult>("restore_project_terminal", {
-    input,
-  });
+  return invokeCommand<RestoreProjectTerminalResult>(
+    "restore_project_terminal",
+    {
+      input,
+    },
+  );
 }
 
 export function writeProjectTerminal(

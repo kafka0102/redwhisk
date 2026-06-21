@@ -1,6 +1,4 @@
-import {
-  DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
-} from "../../shared/layout/sidebar-width";
+import { DEFAULT_ACTIVITY_SIDEBAR_WIDTH } from "../../shared/layout/sidebar-width";
 
 export interface ProjectTerminalCardState {
   configId: number;

@@ -95,9 +95,8 @@ export function ProjectSettingsActivity({
   projectPath = "",
 }: ProjectSettingsActivityProps) {
   const { messages } = useI18n();
-  const [internalActiveMenu, setInternalActiveMenu] = useState<SettingsMenu>(
-    requestedMenu,
-  );
+  const [internalActiveMenu, setInternalActiveMenu] =
+    useState<SettingsMenu>(requestedMenu);
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
@@ -109,17 +108,15 @@ export function ProjectSettingsActivity({
   );
   const [projectLabels, setProjectLabels] = useState<ProjectLabelRecord[]>([]);
   const [globalLabels, setGlobalLabels] = useState<ProjectLabelRecord[]>([]);
-  const [profilesErrorMessage, setProfilesErrorMessage] = useState<string | null>(
-    null,
-  );
+  const [profilesErrorMessage, setProfilesErrorMessage] = useState<
+    string | null
+  >(null);
   const [labelsErrorMessage, setLabelsErrorMessage] = useState<string | null>(
     null,
   );
   const [profilesLoadState, setProfilesLoadState] = useState<
     "loading" | "ready" | "error"
-  >(
-    "loading",
-  );
+  >("loading");
   const [labelsLoadState, setLabelsLoadState] = useState<
     "loading" | "ready" | "error"
   >("loading");
@@ -170,9 +167,7 @@ export function ProjectSettingsActivity({
   const currentLabels = [...currentProjectLabels, ...currentGlobalLabels].sort(
     (left, right) => left.id - right.id,
   );
-  const currentLabelsErrorMessage = isLabelsCurrent
-    ? labelsErrorMessage
-    : null;
+  const currentLabelsErrorMessage = isLabelsCurrent ? labelsErrorMessage : null;
   const currentLabelsLoadState = isLabelsCurrent ? labelsLoadState : "loading";
   const currentAddLabelForm =
     addLabelForm?.projectId === projectId ? addLabelForm : null;

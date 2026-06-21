@@ -127,7 +127,10 @@ export function IssueDescriptionEditor({
               className="issue-attachment-card"
             >
               <div className="issue-attachment-card__main">
-                <span className="issue-attachment-card__icon" aria-hidden="true">
+                <span
+                  className="issue-attachment-card__icon"
+                  aria-hidden="true"
+                >
                   <AttachmentKindIcon kind={attachment.kind} />
                 </span>
                 <span className="issue-attachment-card__name">

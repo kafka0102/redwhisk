@@ -31,7 +31,9 @@ export function buildRunPromptPreview(
   input: BuildRunPromptPreviewInput,
 ): RunPromptPreview {
   const issueTitle = input.issue.title.trim();
-  const issueDescription = stripAttachmentTokens(input.issue.description).trim();
+  const issueDescription = stripAttachmentTokens(
+    input.issue.description,
+  ).trim();
   const attachmentPaths =
     input.issue.attachments
       ?.map((attachment) => attachment.relativePath.trim())
@@ -103,21 +105,28 @@ export function buildRunPromptPreview(
   }
 
   if (attachmentPaths.length > 0) {
-    finalPromptSections.push([
-      "Attachments:",
-      ...attachmentPaths.map((path) => `- ${path}`),
-      "请先读取这些附件文件，再开始处理当前 issue。",
-    ].join("\n"));
+    finalPromptSections.push(
+      [
+        "Attachments:",
+        ...attachmentPaths.map((path) => `- ${path}`),
+        "请先读取这些附件文件，再开始处理当前 issue。",
+      ].join("\n"),
+    );
   }
 
   return {
-    finalPrompt: finalPromptSections.filter((section) => section.length > 0).join("\n\n"),
+    finalPrompt: finalPromptSections
+      .filter((section) => section.length > 0)
+      .join("\n\n"),
     sources,
   };
 }
 
 function stripAttachmentTokens(description: string): string {
-  return description.replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "");
+  return description.replace(
+    /^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm,
+    "",
+  );
 }
 
 function buildSkillInstruction(

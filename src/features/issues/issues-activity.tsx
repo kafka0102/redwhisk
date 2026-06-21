@@ -72,7 +72,9 @@ export function IssuesActivity({
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
   );
-  const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>(
+    [],
+  );
   const [labelsProjectId, setLabelsProjectId] = useState(projectId);
   const [labelsLoadState, setLabelsLoadState] = useState<
     "loading" | "ready" | "error"
@@ -152,13 +154,15 @@ export function IssuesActivity({
         }
 
         setAvailableLabels(
-          [...projectResponse.labels, ...globalResponse.labels].sort((left, right) => {
-            if (left.scope !== right.scope) {
-              return left.scope === "project" ? -1 : 1;
-            }
+          [...projectResponse.labels, ...globalResponse.labels].sort(
+            (left, right) => {
+              if (left.scope !== right.scope) {
+                return left.scope === "project" ? -1 : 1;
+              }
 
-            return left.name.localeCompare(right.name);
-          }),
+              return left.name.localeCompare(right.name);
+            },
+          ),
         );
         setLabelsProjectId(projectId);
         setLabelsErrorMessage(null);
@@ -491,7 +495,8 @@ export function IssuesActivity({
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
   const canViewSummary =
     dialogMode === "edit" && selectedIssue?.status === "completed";
-  const canOpenLinkedSession = hasLinkedSession && Boolean(onOpenAgentsActivity);
+  const canOpenLinkedSession =
+    hasLinkedSession && Boolean(onOpenAgentsActivity);
   const canDismissWithoutCloseButton = !hasUnsavedDialogChanges(
     dialogMode,
     form,
@@ -694,7 +699,9 @@ export function IssuesActivity({
         return;
       }
 
-      const remainingIssues = issues.filter((issue) => issue.id !== issueToDelete.id);
+      const remainingIssues = issues.filter(
+        (issue) => issue.id !== issueToDelete.id,
+      );
       setIssues(remainingIssues);
       setSelectedIssueId(remainingIssues[0]?.id ?? null);
       setDialogMode(null);
@@ -769,7 +776,9 @@ export function IssuesActivity({
             void handleDownloadAttachment(attachment)
           }
           onRemoveAttachment={handleRemoveAttachment}
-          onAdvanceStatus={(targetStatus) => void handleAdvanceStatus(targetStatus)}
+          onAdvanceStatus={(targetStatus) =>
+            void handleAdvanceStatus(targetStatus)
+          }
           onDeleteIssue={() => void handleDeleteIssue()}
           onOpenLinkedSession={openLinkedSession}
           onOpenSummary={handleOpenSummary}
@@ -1007,7 +1016,9 @@ function hasUnsavedDialogChanges(
   }
 
   const baseline =
-    dialogMode === "edit" && selectedIssue ? issueToForm(selectedIssue) : EMPTY_FORM;
+    dialogMode === "edit" && selectedIssue
+      ? issueToForm(selectedIssue)
+      : EMPTY_FORM;
 
   return (
     form.title !== baseline.title ||
@@ -1035,8 +1046,7 @@ function haveSameAttachments(
 
   return left.every(
     (attachment, index) =>
-      getAttachmentIdentity(attachment) ===
-      getAttachmentIdentity(right[index]),
+      getAttachmentIdentity(attachment) === getAttachmentIdentity(right[index]),
   );
 }
 

@@ -10,10 +10,7 @@ import {
 import { type AgentProfileRecord } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { formatDefaultSkills } from "./agent-profile-skills";
-import {
-  formatAgentTypeLabel,
-  getAgentLogoSrc,
-} from "../agents/agent-visuals";
+import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface AddFormState {

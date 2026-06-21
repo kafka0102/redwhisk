@@ -324,10 +324,14 @@ function CreateProjectDialog({
   onCreate,
 }: CreateProjectDialogProps) {
   const [projectNameValue, setProjectNameValue] = useState(initialDraft.name);
-  const [projectPathValue, setProjectPathValue] = useState(initialDraft.repoPath);
+  const [projectPathValue, setProjectPathValue] = useState(
+    initialDraft.repoPath,
+  );
   const [completionPolicyValue, setCompletionPolicyValue] =
     useState<ProjectCompletionPolicy>(initialDraft.completionPolicy);
-  const [suggestedName, setSuggestedName] = useState(initialDraft.suggestedName);
+  const [suggestedName, setSuggestedName] = useState(
+    initialDraft.suggestedName,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isChoosingRepoPath, setIsChoosingRepoPath] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);

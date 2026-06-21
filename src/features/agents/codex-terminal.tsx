@@ -28,7 +28,10 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
         subscribeOutput: (handler) =>
           subscribeAgentSessionTerminalOutput(
             (event: AgentSessionTerminalOutputEvent) => {
-              if (event.projectId !== projectId || event.sessionId !== sessionId) {
+              if (
+                event.projectId !== projectId ||
+                event.sessionId !== sessionId
+              ) {
                 return;
               }
 
@@ -38,7 +41,8 @@ export function CodexTerminal({ projectId, sessionId }: CodexTerminalProps) {
               });
             },
           ),
-        write: (data) => writeAgentSessionTerminal({ projectId, sessionId, data }),
+        write: (data) =>
+          writeAgentSessionTerminal({ projectId, sessionId, data }),
       }}
       transportKey={`agent:${projectId}:${sessionId}`}
     />
