@@ -21,6 +21,8 @@ pub struct CreateProjectInput {
     pub name: String,
     pub repo_path: String,
     pub completion_policy: ProjectCompletionPolicy,
+    pub worktree_location: ProjectWorktreeLocation,
+    pub worktree_setup_command: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

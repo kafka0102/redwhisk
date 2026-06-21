@@ -88,6 +88,8 @@ describe("command client", () => {
         name: "redwhisk",
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
         completionPolicy: "agent_auto_commit",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "pnpm install",
       }),
     ).resolves.toEqual({
       id: 1,
@@ -101,6 +103,8 @@ describe("command client", () => {
         name: "redwhisk",
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
         completionPolicy: "agent_auto_commit",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "pnpm install",
       },
     });
   });
