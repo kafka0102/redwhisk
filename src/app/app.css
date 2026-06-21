@@ -2561,38 +2561,6 @@ button:focus-visible {
   overflow: hidden;
 }
 
-.session-tab-placeholder {
-  min-height: 100%;
-  background: var(--color-surface-panel);
-}
-
-.session-tab-placeholder__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
-.session-tab-placeholder__header h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.32;
-}
-
-.session-tab-placeholder__body {
-  margin: 0;
-  padding: 16px 18px;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
 .session-diff-viewer {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -2630,6 +2598,28 @@ button:focus-visible {
 
 .session-viewer-state p {
   margin: 0;
+}
+
+.session-file-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-surface-panel);
+}
+
+.session-file-viewer__status {
+  min-width: 0;
+  overflow: hidden;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-side-panel {
@@ -2876,6 +2866,10 @@ button:focus-visible {
   padding: 6px 0 18px;
 }
 
+.session-file-tree__arborist {
+  min-width: 0;
+}
+
 .session-file-tree__folder,
 .session-file-tree__row {
   display: flex;
@@ -2892,11 +2886,8 @@ button:focus-visible {
 }
 
 .session-file-tree__folder {
+  padding-left: calc(12px + var(--tree-depth, 0) * 12px);
   color: var(--color-text-muted);
-}
-
-.session-file-tree__folder--nested {
-  padding-left: 24px;
 }
 
 .session-file-tree__row {
@@ -2904,7 +2895,9 @@ button:focus-visible {
 }
 
 .session-file-tree__row:hover,
-.session-file-tree__row:focus-visible {
+.session-file-tree__row:focus-visible,
+.session-file-tree__folder:hover,
+.session-file-tree__folder:focus-visible {
   background: #f7f8fa;
   outline: none;
 }

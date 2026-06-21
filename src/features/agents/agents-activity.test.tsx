@@ -72,9 +72,16 @@ vi.mock("@monaco-editor/react", () => ({
       "data-render-side-by-side": String(options?.renderSideBySide ?? true),
       "data-testid": "monaco-diff",
     }),
-  Editor: ({ value }: { value: string }) =>
+  Editor: ({
+    options,
+    value,
+  }: {
+    options?: { readOnly?: boolean };
+    value: string;
+  }) =>
     createElement("div", {
       "data-testid": "monaco-editor",
+      "data-read-only": String(options?.readOnly ?? false),
       "data-value": value,
     }),
 }));
@@ -692,6 +699,81 @@ describe("AgentsActivity", () => {
     });
 
     expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
+  });
+
+  it("opens a read-only file viewer when clicking a file tree file", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes",
+      files: [],
+    });
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [
+            {
+              id: "src/file.ts",
+              name: "file.ts",
+              path: "src/file.ts",
+              kind: "file",
+            },
+          ],
+        },
+      ],
+    });
+    readProjectWorktreeFileMock.mockResolvedValue({
+      filePath: "src/file.ts",
+      language: "typescript",
+      content: "export const value = 1;",
+      modifiedAt: 1,
+      sizeBytes: 23,
+      isBinary: false,
+      isTooLarge: false,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByRole("button", { name: /file.ts/ }));
+
+    expect(await screen.findByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 1;",
+    );
+  });
+
+  it("does not open a file tab when clicking a directory", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [],
+        },
+      ],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByRole("button", { name: /src/ }));
+
+    expect(screen.queryByRole("tab", { name: "src" })).not.toBeInTheDocument();
   });
 
   it("keeps newer file tree nodes when an older refresh returns last", async () => {
@@ -3647,10 +3729,14 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("tab", { name: "session-side-panel.tsx" }),
     ).toBeInTheDocument();
+    expect(await screen.findByTestId("monaco-editor")).toHaveAttribute(
+      "data-read-only",
+      "true",
+    );
     expect(
-      screen.getByRole("heading", { name: "session-side-panel.tsx" }),
+      screen.getByText("src/features/agents/session-side-panel.tsx"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/代码预览占位/)).toBeInTheDocument();
+    expect(screen.queryByText(/代码预览占位/)).not.toBeInTheDocument();
 
     await user.click(within(panel).getByRole("button", { name: /app\.css/ }));
 
@@ -3658,9 +3744,10 @@ describe("AgentsActivity", () => {
       screen.queryByRole("tab", { name: "session-side-panel.tsx" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "app.css" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "app.css" }),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-read-only",
+      "true",
+    );
   });
 
   it("keeps the terminal visible after linked issue header actions", async () => {
