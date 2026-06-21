@@ -10,6 +10,8 @@ export interface CreateProjectInput {
   name: string;
   repoPath: string;
   completionPolicy: ProjectCompletionPolicy;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
 }
 
 export interface ValidateProjectRepoPathInput {

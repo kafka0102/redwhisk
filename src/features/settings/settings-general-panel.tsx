@@ -10,6 +10,11 @@ import {
   validateProjectRepoPath,
 } from "../project/project-commands";
 import { ProjectDetailsForm } from "../project/project-details-form";
+import {
+  detectWorktreeSetupCommand,
+  initialWorktreeSetupCommand,
+  WORKTREE_SETUP_COMMAND_INPUT_PROMPT,
+} from "../project/worktree-setup-command";
 import type { ProjectSummary } from "../../app/app";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
@@ -104,8 +109,9 @@ function GeneralSettingsForm({
     useState<ProjectCompletionPolicy>(completionPolicy);
   const [worktreeLocationValue, setWorktreeLocationValue] =
     useState<ProjectWorktreeLocation>(worktreeLocation);
-  const [worktreeSetupCommandValue, setWorktreeSetupCommandValue] =
-    useState(worktreeSetupCommand);
+  const [worktreeSetupCommandValue, setWorktreeSetupCommandValue] = useState(
+    () => initialWorktreeSetupCommand(worktreeSetupCommand, projectPath),
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isChoosingRepoPath, setIsChoosingRepoPath] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -142,7 +148,18 @@ function GeneralSettingsForm({
       const validatedPath = await validateProjectRepoPath({
         repoPath: selectedPath,
       });
+      const currentDetectedCommand =
+        detectWorktreeSetupCommand(projectPathValue);
+      const nextDetectedCommand = detectWorktreeSetupCommand(
+        validatedPath.repoPath,
+      );
       setProjectPathValue(validatedPath.repoPath);
+      if (
+        worktreeSetupCommandValue.trim().length === 0 ||
+        worktreeSetupCommandValue === currentDetectedCommand
+      ) {
+        setWorktreeSetupCommandValue(nextDetectedCommand ?? "");
+      }
     } catch (error: unknown) {
       setErrorMessage(toCommandError(error).message);
     } finally {
@@ -203,20 +220,7 @@ function GeneralSettingsForm({
       worktreeLocationLabel="Worktree path"
       worktreeSetupCommand={worktreeSetupCommandValue}
       worktreeSetupCommandLabel="Worktree setup after creation"
-      worktreeSetupCommandPlaceholder={inferWorktreeSetupPlaceholder(
-        trimmedProjectPath,
-      )}
+      worktreeSetupCommandPlaceholder={WORKTREE_SETUP_COMMAND_INPUT_PROMPT}
     />
   );
-}
-
-function inferWorktreeSetupPlaceholder(projectPath: string): string {
-  const lowerPath = projectPath.toLowerCase();
-  if (lowerPath.includes("go")) return "go mod download";
-  if (lowerPath.includes("rust")) return "cargo fetch";
-  if (lowerPath.includes("python") || lowerPath.includes("py")) {
-    return "pip install -r requirements.txt";
-  }
-  if (lowerPath.includes("java")) return "mvn dependency:resolve";
-  return "pnpm install";
 }

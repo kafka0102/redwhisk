@@ -986,7 +986,9 @@ mod tests {
     use crate::core::project_service::ProjectService;
     use crate::db::connection::DatabaseConfig;
     use crate::db::project_repository::ProjectRepository;
-    use crate::types::project::{CreateProjectInput, ProjectCompletionPolicy};
+    use crate::types::project::{
+        CreateProjectInput, ProjectCompletionPolicy, ProjectWorktreeLocation,
+    };
     use crate::types::project_terminal::{
         CloseProjectTerminalInput, CreateProjectTerminalInput, DeleteProjectTerminalConfigInput,
         ListProjectTerminalsInput, ReadProjectTerminalInput, ResizeProjectTerminalInput,
@@ -1064,6 +1066,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: ".".to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         );
         assert!(project.is_err());
@@ -1079,6 +1083,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1193,6 +1199,8 @@ mod tests {
                 name: "transient-repo".to_string(),
                 repo_path: repo_dir.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1245,6 +1253,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1302,6 +1312,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1357,6 +1369,8 @@ mod tests {
                 name: "owner".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create owner project");
@@ -1366,6 +1380,8 @@ mod tests {
                 name: "other".to_string(),
                 repo_path: other_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create other project");
@@ -1450,6 +1466,8 @@ mod tests {
                 name: "owner".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create owner project");
@@ -1459,6 +1477,8 @@ mod tests {
                 name: "other".to_string(),
                 repo_path: other_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create other project");
@@ -1590,6 +1610,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1669,6 +1691,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1790,6 +1814,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -1920,6 +1946,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");
@@ -2040,6 +2068,8 @@ mod tests {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
                 completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
             },
         )
         .expect("create project");

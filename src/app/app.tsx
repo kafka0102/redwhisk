@@ -5,6 +5,11 @@ import { AppShell } from "./app-shell";
 import "./app.css";
 import { ProjectDetailsForm } from "../features/project/project-details-form";
 import { ProjectHome } from "../features/project/project-home";
+import {
+  detectWorktreeSetupCommand,
+  initialWorktreeSetupCommand,
+  WORKTREE_SETUP_COMMAND_INPUT_PROMPT,
+} from "../features/project/worktree-setup-command";
 import { I18nProvider } from "../shared/i18n/i18n";
 import {
   createProject,
@@ -38,6 +43,8 @@ interface CreateProjectDraft {
   openInNewWindow: boolean;
   repoPath: string;
   suggestedName: string;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
 }
 
 export function App() {
@@ -124,6 +131,11 @@ export function App() {
         openInNewWindow: false,
         repoPath: validatedProject.repoPath,
         suggestedName: validatedProject.suggestedName,
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: initialWorktreeSetupCommand(
+          "",
+          validatedProject.repoPath,
+        ),
       });
     } catch (error) {
       setProjectCreationError(toCommandError(error).message);
@@ -188,6 +200,8 @@ export function App() {
       openInNewWindow: true,
       repoPath: "",
       suggestedName: "",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
     });
   }, []);
 
@@ -334,6 +348,11 @@ function CreateProjectDialog({
   );
   const [completionPolicyValue, setCompletionPolicyValue] =
     useState<ProjectCompletionPolicy>(initialDraft.completionPolicy);
+  const [worktreeLocationValue, setWorktreeLocationValue] =
+    useState<ProjectWorktreeLocation>(initialDraft.worktreeLocation);
+  const [worktreeSetupCommandValue, setWorktreeSetupCommandValue] = useState(
+    initialDraft.worktreeSetupCommand,
+  );
   const [suggestedName, setSuggestedName] = useState(
     initialDraft.suggestedName,
   );
@@ -368,11 +387,22 @@ function CreateProjectDialog({
       });
       const shouldReplaceName =
         trimmedProjectName.length === 0 || trimmedProjectName === suggestedName;
+      const currentDetectedCommand =
+        detectWorktreeSetupCommand(projectPathValue);
+      const nextDetectedCommand = detectWorktreeSetupCommand(
+        validatedProject.repoPath,
+      );
 
       setProjectPathValue(validatedProject.repoPath);
       setSuggestedName(validatedProject.suggestedName);
       if (shouldReplaceName) {
         setProjectNameValue(validatedProject.suggestedName);
+      }
+      if (
+        worktreeSetupCommandValue.trim().length === 0 ||
+        worktreeSetupCommandValue === currentDetectedCommand
+      ) {
+        setWorktreeSetupCommandValue(nextDetectedCommand ?? "");
       }
     } catch (error: unknown) {
       setErrorMessage(toCommandError(error).message);
@@ -395,6 +425,8 @@ function CreateProjectDialog({
         name: trimmedProjectName,
         repoPath: trimmedProjectPath,
         completionPolicy: completionPolicyValue,
+        worktreeLocation: worktreeLocationValue,
+        worktreeSetupCommand: worktreeSetupCommandValue.trim(),
       });
     } catch (error: unknown) {
       setErrorMessage(toCommandError(error).message);
@@ -429,6 +461,8 @@ function CreateProjectDialog({
             onCompletionPolicyChange={setCompletionPolicyValue}
             onNameChange={setProjectNameValue}
             onSubmit={handleSubmit}
+            onWorktreeLocationChange={setWorktreeLocationValue}
+            onWorktreeSetupCommandChange={setWorktreeSetupCommandValue}
             projectName={projectNameValue}
             projectNameLabel="Project Name"
             repoPath={projectPathValue}
@@ -436,6 +470,13 @@ function CreateProjectDialog({
             submitDisabled={isSubmitDisabled}
             submitLabel="Create Project"
             submittingLabel="Creating Project"
+            worktreeLocation={worktreeLocationValue}
+            worktreeLocationLabel="Worktree path"
+            worktreeSetupCommand={worktreeSetupCommandValue}
+            worktreeSetupCommandLabel="Worktree setup after creation"
+            worktreeSetupCommandPlaceholder={
+              WORKTREE_SETUP_COMMAND_INPUT_PROMPT
+            }
           />
         </div>
       </div>

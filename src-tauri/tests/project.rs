@@ -472,6 +472,8 @@ fn create_project_persists_git_repo_with_confirmed_name() {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("created project");
 
@@ -499,6 +501,33 @@ fn create_project_persists_git_repo_with_confirmed_name() {
 }
 
 #[test]
+fn create_project_persists_worktree_settings() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+
+    let project = service
+        .create_project(CreateProjectInput {
+            name: "sample-repo".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::UserHome,
+            worktree_setup_command: "pnpm install\npnpm test  ".to_string(),
+        })
+        .expect("created project");
+
+    assert_eq!(project.worktree_location, ProjectWorktreeLocation::UserHome);
+    assert_eq!(project.worktree_setup_command, "pnpm install\npnpm test");
+}
+
+#[test]
 fn create_project_canonicalizes_equivalent_repo_paths() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = DatabaseConfig::new(temp_dir.path())
@@ -516,6 +545,8 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("direct project");
     let equivalent_project = service
@@ -523,6 +554,8 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.join(".").to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("equivalent project");
 
@@ -559,6 +592,8 @@ fn create_project_rejects_non_git_directory_without_insert() {
             name: "plain-dir".to_string(),
             repo_path: non_git_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect_err("non git repo should be rejected");
 
@@ -587,6 +622,8 @@ fn create_project_reports_missing_path_as_invalid_without_insert() {
             name: "missing-repo".to_string(),
             repo_path: missing_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect_err("missing path should be rejected");
 
@@ -614,6 +651,8 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
         name: "sample-repo".to_string(),
         repo_path: repo_dir.to_string_lossy().to_string(),
         completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
+        worktree_location: ProjectWorktreeLocation::RepoSibling,
+        worktree_setup_command: "".to_string(),
     };
 
     let first_project = service
@@ -1233,6 +1272,8 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             name: "initial-repo".to_string(),
             repo_path: initial_repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::Manual,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("created project");
 
@@ -1287,6 +1328,8 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             name: "repo-without-worktrees-ignore".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::Manual,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("created project");
 
@@ -1323,6 +1366,8 @@ fn update_project_settings_rejects_non_git_repo_path() {
             name: "initial-repo".to_string(),
             repo_path: initial_repo_dir.to_string_lossy().to_string(),
             completion_policy: ProjectCompletionPolicy::Manual,
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
         })
         .expect("created project");
 

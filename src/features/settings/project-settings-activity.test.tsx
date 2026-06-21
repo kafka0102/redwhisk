@@ -885,6 +885,45 @@ describe("ProjectSettingsActivity", () => {
     );
   });
 
+  it("uses a detected worktree setup command as the textarea value", () => {
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="Go Service"
+        projectPath="/tmp/go-service"
+        worktreeLocation="repo_sibling"
+        worktreeSetupCommand=""
+      />,
+    );
+
+    expect(screen.getByLabelText("Worktree setup after creation")).toHaveValue(
+      "go mod download",
+    );
+  });
+
+  it("prompts for setup command input when no command is detected", () => {
+    render(
+      <ProjectSettingsActivity
+        completionPolicy="manual"
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="Plain"
+        projectPath="/tmp/plain"
+        worktreeLocation="repo_sibling"
+        worktreeSetupCommand=""
+      />,
+    );
+
+    expect(screen.getByLabelText("Worktree setup after creation")).toHaveValue(
+      "",
+    );
+    expect(
+      screen.getByLabelText("Worktree setup after creation"),
+    ).toHaveAttribute("placeholder", "请输入创建 worktree 后的初始化操作");
+  });
+
   it("keeps a manually entered command path after testing and saves it unchanged", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });

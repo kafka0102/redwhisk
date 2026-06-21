@@ -28,14 +28,15 @@ impl<'connection> ProjectService<'connection> {
     ) -> Result<ProjectSummary, CommandError> {
         let validated_repo = validate_repo_path(&input.repo_path)?;
         let name = normalize_project_name(&input.name, &validated_repo.repo_path)?;
+        validate_worktree_location(&validated_repo.repo_path, input.worktree_location)?;
 
         self.repository
             .insert_or_get_existing_for_path(
                 &name,
                 &validated_repo.repo_path,
                 input.completion_policy,
-                ProjectWorktreeLocation::RepoSibling,
-                "",
+                input.worktree_location,
+                input.worktree_setup_command.trim(),
             )
             .map_err(project_database_error)
     }

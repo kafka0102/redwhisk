@@ -14,6 +14,7 @@ import type {
   ProjectCompletionPolicy,
   ProjectWorktreeLocation,
 } from "./project-commands";
+import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 
 interface ProjectDetailsFormProps {
   ariaStatusLabel: string;
@@ -202,10 +203,12 @@ export function ProjectDetailsForm({
           <textarea
             id="project-worktree-setup-command"
             aria-label={worktreeSetupCommandLabel}
+            autoCapitalize="none"
             className="min-h-[78px] w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isSubmitting}
             placeholder={worktreeSetupCommandPlaceholder}
             rows={3}
+            spellCheck={false}
             value={worktreeSetupCommand}
             onChange={(event) =>
               onWorktreeSetupCommandChange?.(event.target.value)
@@ -263,8 +266,8 @@ function buildWorktreeLocationOptions(
   const homePath = repoName ? `~/.redwhisk/worktrees/${repoName}` : "";
 
   return [
-    { value: "repo_sibling", label: siblingPath },
-    { value: "repo_internal", label: internalPath },
+    { value: "repo_sibling", label: formatHomePathForDisplay(siblingPath) },
+    { value: "repo_internal", label: formatHomePathForDisplay(internalPath) },
     { value: "user_home", label: homePath },
   ];
 }

@@ -17,6 +17,7 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
+import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 import { ProjectTerminalEditDialog } from "./project-terminal-edit-dialog";
 import { ProjectTerminal } from "./project-terminal";
 import {
@@ -46,12 +47,7 @@ const INACTIVE_TERMINAL_CARD_BACKGROUND = "var(--color-surface)";
 const INACTIVE_TERMINAL_CARD_BORDER = "var(--color-border)";
 
 function formatTerminalPathForDisplay(path: string): string {
-  const normalizedPath = path.trim();
-  if (!normalizedPath) {
-    return "";
-  }
-
-  return normalizedPath.replace(/^\/(?:users|home)\/[^/]+/i, "~");
+  return formatHomePathForDisplay(path);
 }
 
 export function ProjectTerminalsActivity({

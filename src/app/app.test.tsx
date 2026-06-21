@@ -702,6 +702,15 @@ describe("App project entry", () => {
     expect(
       within(projectDialog).getByLabelText("Git completion strategy"),
     ).toHaveTextContent("Auto Commit");
+    expect(
+      within(projectDialog).getByLabelText("Worktree path"),
+    ).toHaveTextContent("~/workspace/new-repo.worktrees");
+    expect(
+      within(projectDialog).getByLabelText("Worktree setup after creation"),
+    ).toHaveValue("");
+    expect(
+      within(projectDialog).getByLabelText("Worktree setup after creation"),
+    ).toHaveAttribute("placeholder", "请输入创建 worktree 后的初始化操作");
     await user.click(
       within(projectDialog).getByRole("button", { name: "Create Project" }),
     );
@@ -709,6 +718,8 @@ describe("App project entry", () => {
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
       completionPolicy: "agent_auto_commit",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
     });
     expect(
       await screen.findByRole("heading", { name: "Issues" }),
@@ -969,6 +980,8 @@ describe("App project entry", () => {
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
       completionPolicy: "agent_auto_commit",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
     });
     expect(openProjectWindowMock).toHaveBeenCalledWith({
       projectId: 4,

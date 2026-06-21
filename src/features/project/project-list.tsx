@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ProjectSummary } from "../../app/app";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 
 interface ProjectListProps {
   isCreatingProject: boolean;
@@ -37,44 +38,6 @@ function getProjectColor(project: ProjectSummary) {
   return PROJECT_ICON_COLORS[hash % PROJECT_ICON_COLORS.length];
 }
 
-function inferHomeDirectory(paths: string[]) {
-  for (const path of paths) {
-    const unixMatch = path.match(/^(\/Users\/[^/]+|\/home\/[^/]+)(?:\/|$)/);
-
-    if (unixMatch) {
-      return unixMatch[1];
-    }
-
-    const windowsMatch = path.match(/^([A-Za-z]:\\Users\\[^\\]+)(?:\\|$)/);
-
-    if (windowsMatch) {
-      return windowsMatch[1];
-    }
-  }
-
-  return null;
-}
-
-function formatProjectPath(path: string, homeDirectory: string | null) {
-  if (!homeDirectory) {
-    return path;
-  }
-
-  if (path === homeDirectory) {
-    return "~";
-  }
-
-  if (path.startsWith(`${homeDirectory}/`)) {
-    return `~/${path.slice(homeDirectory.length + 1)}`;
-  }
-
-  if (path.startsWith(`${homeDirectory}\\`)) {
-    return `~\\${path.slice(homeDirectory.length + 1)}`;
-  }
-
-  return path;
-}
-
 export function ProjectList({
   isCreatingProject,
   onCreateProject,
@@ -83,10 +46,6 @@ export function ProjectList({
 }: ProjectListProps) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const homeDirectory = useMemo(
-    () => inferHomeDirectory(projects.map((project) => project.path)),
-    [projects],
-  );
   const visibleProjects = useMemo(
     () =>
       normalizedQuery.length === 0
@@ -149,7 +108,7 @@ export function ProjectList({
               <span className="project-list__body">
                 <span className="project-list__name">{project.name}</span>
                 <span className="project-list__path">
-                  {formatProjectPath(project.path, homeDirectory)}
+                  {formatHomePathForDisplay(project.path)}
                 </span>
                 {project.status === "missing" ? (
                   <span className="project-list__meta">path unavailable</span>
