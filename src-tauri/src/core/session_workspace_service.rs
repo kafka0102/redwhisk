@@ -297,12 +297,19 @@ fn read_numstat(root: &Path, path: &str) -> (i64, i64, bool) {
         );
     }
 
-    let absolute_path = root.join(path);
-    if absolute_path.is_file() {
-        let additions = fs::read_to_string(absolute_path)
-            .map(|content| content.lines().count() as i64)
-            .unwrap_or(0);
-        return (additions, 0, false);
+    if let Ok(workspace_file) = resolve_workspace_file(root, path) {
+        if workspace_file.metadata.len() > MAX_TEXT_FILE_BYTES {
+            return (0, 0, false);
+        }
+        if let Ok(bytes) = fs::read(&workspace_file.absolute_path) {
+            if is_binary_bytes(&bytes) {
+                return (0, 0, true);
+            }
+            let additions = std::str::from_utf8(&bytes)
+                .map(|content| content.lines().count() as i64)
+                .unwrap_or(0);
+            return (additions, 0, false);
+        }
     }
 
     (0, 0, false)
@@ -377,33 +384,28 @@ fn read_directory_nodes(
 }
 
 fn read_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileContent, CommandError> {
-    let absolute_path = resolve_workspace_relative_path(root, file_path)?;
-    let metadata = fs::metadata(&absolute_path).map_err(workspace_io_error)?;
-    if !metadata.is_file() {
-        return Err(workspace_validation_error("路径不是文件。", file_path));
-    }
-
-    let size_bytes = metadata.len();
+    let workspace_file = resolve_workspace_file(root, file_path)?;
+    let size_bytes = workspace_file.metadata.len();
     let language = language_from_path(file_path);
     if size_bytes > MAX_TEXT_FILE_BYTES {
         return Ok(WorkspaceFileContent {
             file_path: file_path.to_string(),
             language,
             content: String::new(),
-            modified_at: modified_at_millis(&metadata),
+            modified_at: modified_at_millis(&workspace_file.metadata),
             size_bytes,
             is_binary: false,
             is_too_large: true,
         });
     }
 
-    let bytes = fs::read(&absolute_path).map_err(workspace_io_error)?;
-    if bytes.contains(&0) {
+    let bytes = fs::read(&workspace_file.absolute_path).map_err(workspace_io_error)?;
+    if is_binary_bytes(&bytes) {
         return Ok(WorkspaceFileContent {
             file_path: file_path.to_string(),
             language,
             content: String::new(),
-            modified_at: modified_at_millis(&metadata),
+            modified_at: modified_at_millis(&workspace_file.metadata),
             size_bytes,
             is_binary: true,
             is_too_large: false,
@@ -414,7 +416,7 @@ fn read_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileCont
         file_path: file_path.to_string(),
         language,
         content: String::from_utf8_lossy(&bytes).to_string(),
-        modified_at: modified_at_millis(&metadata),
+        modified_at: modified_at_millis(&workspace_file.metadata),
         size_bytes,
         is_binary: false,
         is_too_large: false,
@@ -446,7 +448,33 @@ fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffCont
         WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => String::new(),
         _ => {
             let original_path = change.old_path.as_deref().unwrap_or(&change.file_path);
-            run_git(root, &["show", &format!("HEAD:{original_path}")]).unwrap_or_default()
+            match read_head_file(root, original_path)? {
+                HeadFileRead::Content(content) => content,
+                HeadFileRead::Binary => {
+                    return Ok(WorkspaceDiffContent {
+                        file_path: change.file_path,
+                        old_path: change.old_path,
+                        kind: WorkspaceChangeKind::Binary,
+                        language: language_from_path(file_path),
+                        original_content: String::new(),
+                        modified_content: String::new(),
+                        is_binary: true,
+                        is_too_large: false,
+                    });
+                }
+                HeadFileRead::TooLarge => {
+                    return Ok(WorkspaceDiffContent {
+                        file_path: change.file_path,
+                        old_path: change.old_path,
+                        kind: change.kind,
+                        language: language_from_path(file_path),
+                        original_content: String::new(),
+                        modified_content: String::new(),
+                        is_binary: false,
+                        is_too_large: true,
+                    });
+                }
+            }
         }
     };
 
@@ -480,6 +508,73 @@ fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffCont
         is_binary: false,
         is_too_large: false,
     })
+}
+
+struct WorkspaceFile {
+    absolute_path: PathBuf,
+    metadata: fs::Metadata,
+}
+
+fn resolve_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFile, CommandError> {
+    let absolute_path = resolve_workspace_relative_path(root, file_path)?;
+    let metadata = fs::symlink_metadata(&absolute_path).map_err(workspace_io_error)?;
+    if metadata.file_type().is_symlink() {
+        return Err(workspace_validation_error(
+            "路径不能是符号链接。",
+            file_path,
+        ));
+    }
+    if !metadata.is_file() {
+        return Err(workspace_validation_error("路径不是文件。", file_path));
+    }
+
+    Ok(WorkspaceFile {
+        absolute_path,
+        metadata,
+    })
+}
+
+enum HeadFileRead {
+    Content(String),
+    Binary,
+    TooLarge,
+}
+
+fn read_head_file(root: &Path, path: &str) -> Result<HeadFileRead, CommandError> {
+    let object_spec = format!("HEAD:{path}");
+    let size_output = match run_git(root, &["cat-file", "-s", &object_spec]) {
+        Ok(output) => output,
+        Err(_) => return Ok(HeadFileRead::Content(String::new())),
+    };
+    let size = size_output.trim().parse::<u64>().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "Git blob 大小无法解析。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+    if size > MAX_TEXT_FILE_BYTES {
+        return Ok(HeadFileRead::TooLarge);
+    }
+
+    let bytes = run_git_bytes(root, &["show", &object_spec])?;
+    if is_binary_bytes(&bytes) {
+        return Ok(HeadFileRead::Binary);
+    }
+
+    String::from_utf8(bytes)
+        .map(HeadFileRead::Content)
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "Git 输出不是 UTF-8。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })
+}
+
+fn is_binary_bytes(bytes: &[u8]) -> bool {
+    bytes.contains(&0) || std::str::from_utf8(bytes).is_err()
 }
 
 fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
@@ -548,13 +643,12 @@ fn file_name_from_path(path: &str) -> String {
 }
 
 fn file_metadata_signature(root: &Path, path: &str) -> String {
-    let absolute_path = root.join(path);
-    fs::metadata(absolute_path)
+    resolve_workspace_file(root, path)
         .map(|metadata| {
             format!(
                 "{}:{}",
-                metadata.len(),
-                modified_at_millis(&metadata).unwrap_or_default()
+                metadata.metadata.len(),
+                modified_at_millis(&metadata.metadata).unwrap_or_default()
             )
         })
         .unwrap_or_else(|_| "missing".to_string())
@@ -641,5 +735,100 @@ mod tests {
         let result = resolve_workspace_relative_path(&root, "linked/secret.txt");
 
         assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn changes_do_not_read_untracked_symlink_target_outside_workspace() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("workspace");
+        let outside = temp_dir.path().join("outside.txt");
+        fs::create_dir_all(&root).expect("create root");
+        init_git_repo(&root);
+        fs::write(&outside, "one\ntwo\nthree\n").expect("write outside");
+        std::os::unix::fs::symlink(&outside, root.join("linked.txt")).expect("symlink");
+
+        let changes = read_workspace_changes(&root).expect("read changes");
+        let linked = changes
+            .files
+            .iter()
+            .find(|file| file.file_path == "linked.txt")
+            .expect("linked change");
+
+        assert_eq!(linked.additions, 0);
+        assert_eq!(linked.deletions, 0);
+        assert_ne!(
+            linked.metadata_signature,
+            file_metadata_signature_for_test(&outside)
+        );
+    }
+
+    #[test]
+    fn changes_mark_untracked_nul_file_as_binary() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("payload.bin"), b"hello\0world\n").expect("write binary");
+
+        let changes = read_workspace_changes(root).expect("read changes");
+        let binary = changes
+            .files
+            .iter()
+            .find(|file| file.file_path == "payload.bin")
+            .expect("binary change");
+
+        assert!(binary.is_binary);
+        assert_eq!(binary.additions, 0);
+        assert_eq!(binary.deletions, 0);
+    }
+
+    #[test]
+    fn diff_marks_large_head_content_too_large_without_returning_original() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        let large_content = "a".repeat((MAX_TEXT_FILE_BYTES + 1) as usize);
+        fs::write(root.join("large.txt"), large_content).expect("write large");
+        git(root, &["add", "large.txt"]);
+        git(root, &["commit", "-m", "add large"]);
+        fs::write(root.join("large.txt"), "small\n").expect("write small");
+
+        let diff = read_workspace_diff(root, "large.txt").expect("read diff");
+
+        assert!(diff.is_too_large);
+        assert!(!diff.is_binary);
+        assert!(diff.original_content.is_empty());
+        assert!(diff.modified_content.is_empty());
+    }
+
+    fn init_git_repo(root: &Path) {
+        git(root, &["init"]);
+        git(root, &["config", "user.email", "test@example.com"]);
+        git(root, &["config", "user.name", "Test User"]);
+    }
+
+    fn git(root: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn file_metadata_signature_for_test(path: &Path) -> String {
+        fs::metadata(path)
+            .map(|metadata| {
+                format!(
+                    "{}:{}",
+                    metadata.len(),
+                    modified_at_millis(&metadata).unwrap_or_default()
+                )
+            })
+            .unwrap_or_else(|_| "missing".to_string())
     }
 }
