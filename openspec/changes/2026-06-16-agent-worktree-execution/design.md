@@ -22,6 +22,8 @@
 
 agent 始终在临时开发分支中工作；完成后系统负责把它合并回目标分支，再删除临时分支和 worktree。
 
+补充约束：目标分支下拉框只能展示当前仓库内的有效本地分支，必须排除附加 worktree 正在占用的分支、临时 issue 分支以及其他不可作为 merge-back base 的分支。这样用户在 `Worktree` 模式下选择的是“最终要合入的基础分支”，而不是其他并行 worktree 的开发分支。
+
 ### 2. 把运行期选择显式持久化到 session 上
 
 仅靠 localStorage 记忆 UI 选择不足以支撑完成阶段的自动合并与清理，因为完成时必须知道：
@@ -68,6 +70,8 @@ worktree 根位置依赖项目仓库路径，不适合放在可跨项目复用�
 
 Project General settings 提供三行 textarea 保存默认初始化命令，例如 `pnpm install`、`pip install -r requirements.txt`、`go mod download`、`cargo fetch` 或 `mvn dependency:resolve`。Issue Run Dialog 读取该默认值作为 placeholder；用户可在单次运行里覆盖，启动 session 时保存快照，避免项目设置后续变更导致运行上下文漂移。
 
+执行顺序必须是：先创建 worktree 和临时开发分支，再在新 worktree 中执行初始化命令，并等待初始化命令结束后再启动 agent session。初始化过程中 run dialog 可以关闭，但不应立即跳转到 Settings；UI 应展示一个小型进度窗口，逐步提示“创建 worktree”“执行初始化命令”“启动 agent session”等当前步骤。若初始化失败，保留 issue 在 `backlog` 或未启动状态，并展示失败原因。
+
 ### 6. completion policy 覆盖按“本次运行快照”执行
 
 run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是本次 issue 运行的覆盖值。因此：
@@ -79,6 +83,46 @@ run dialog 中新增的 `Commit strategy` 不是在修改项目配置，而是�
 - review / completion 阶段优先使用 session 快照，而不是再次读取项目当前设置
 
 否则如果项目设置在 session 运行中被别人修改，完成行为会漂移。
+
+### 7. Done 状态前的提交检查与本地化提示词
+
+当用户把 issue 状态改为 `Done` / `完成` 时，系统不能直接完成状态流转，而要先检查当前执行上下文里的代码提交情况：
+
+- 若没有与本次 issue 相关的未提交代码，继续后续完成流程。
+- 若存在未提交代码，先读取该 session 的 completion policy 快照。
+- 若 completion policy 为 `agent_auto_commit`，系统向当前 agent session 注入一条本地化提示词，请 agent 只处理本次修改相关文件；随后异步轮询提交是否完成，检测到新 commit 后继续后续流程。
+- 若 completion policy 为 `manual`，系统弹出提示框，告知用户当前分支仍有未提交代码，需要提交后再标记完成，issue 保持 `review`。
+
+自动提交提示词按全局语言设置选择：
+
+中文：
+
+```text
+请获取本次修改相关的代码，检查当前 issue 涉及的文件变更；只暂存并提交与本次 issue 直接相关的文件，不要提交无关改动。提交完成后请回复 commit hash。
+```
+
+English:
+
+```text
+Please collect the code changes related to this issue, review the files changed for the current issue, and stage and commit only those relevant files. Do not include unrelated changes. Reply with the commit hash after the commit is complete.
+```
+
+这里的关键是“本次修改相关的代码”，而不是“提交所有 git 修改”。如果其他 AI 或用户同时在同一仓库中修改了不同文件，自动提交只能覆盖当前 issue / 当前 session 相关的文件。
+
+### 8. Worktree 完成确认、合并进度与冲突接管
+
+当 worktree-backed issue 被标记为 `Done` / `完成` 时，系统先检查记录的 worktree 是否仍存在：
+
+- 若 worktree 已不存在，跳过 worktree 清理与合并，继续普通完成流程。
+- 若 worktree 仍存在，先执行上面的提交检查，再执行 merge-back。
+
+点击完成前必须显示确认提示，明确即将把临时分支合入记录的目标分支。目标分支是 `main` / `master` 时，确认文案要更醒目；目标分支是其他低位分支时，也仍然需要确认，因为当前阶段执行的是本地合并，后续可能扩展为 PR / MR 流程。
+
+merge-back 是异步流程，UI 应展示进度窗口，逐步展示检查 worktree、检查提交、切换目标分支、合并临时分支、清理 worktree 等步骤。若合并无冲突，系统正常完成并清理 worktree。若发现冲突，系统关闭进度弹窗，把 issue 保持在 `review`，并让当前 agent session 接管冲突处理：
+
+- 如果当前仍在 Session 页面，保持页面不变。
+- 如果当前不在 Session 页面，跳转到该 session 页面。
+- 自动向当前 session 发送一条中英文都可读的提示词，说明合并目标、冲突状态和要求：解决冲突，并把临时开发分支的代码合并到最初记录的目标分支，例如 `master`、`main`、`dev` 或 `devlop`。
 
 ## Data Model
 
