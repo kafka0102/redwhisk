@@ -75,7 +75,7 @@ export function AgentsSettingsPanel({
         <div className="min-w-0 overflow-x-auto rounded-[var(--radius-card)] border border-border bg-card">
           <Table
             aria-label={messages.settings.configuredAgents}
-            className="min-w-[820px]"
+            className="min-w-[820px] [&_td]:text-sm [&_th]:text-sm"
           >
             <TableHeader>
               <TableRow className="hover:bg-transparent">
