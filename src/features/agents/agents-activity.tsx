@@ -18,7 +18,6 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
-import { IssueSummaryDialog } from "../issues/issue-summary-dialog";
 import {
   completeIssueClean,
   completeIssueManual,
@@ -103,7 +102,6 @@ export function AgentsActivity({
   const [isNewSessionMenuOpen, setIsNewSessionMenuOpen] = useState(false);
   const [agentCommitPreview, setAgentCommitPreview] =
     useState<AgentCommitCompletionPreview | null>(null);
-  const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
@@ -324,8 +322,6 @@ export function AgentsActivity({
     isPreparingAgentCommit ||
     isSendingAgentCommitPrompt ||
     isDetectingAgentCommitCompletion;
-  const canViewSummary = linkedIssue?.issueStatus === "completed";
-
   const refreshSessions = useCallback(async () => {
     const response = await listAgentSessions(projectId);
     const nextSessions = applySessionListOverlays(response.sessions);
@@ -716,14 +712,6 @@ export function AgentsActivity({
     }
   }
 
-  function handleOpenSummary() {
-    if (!linkedIssue || linkedIssue.issueStatus !== "completed") {
-      return;
-    }
-
-    setSummaryIssueId(linkedIssue.issueId);
-  }
-
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
       const dragState = dragStateRef.current;
@@ -872,7 +860,6 @@ export function AgentsActivity({
           attentionErrorMessage={attentionErrorMessage}
           canRenderTransitionButton={canRenderTransitionButton}
           canRenderTransitionMenu={canRenderTransitionMenu}
-          canViewSummary={canViewSummary}
           cleanErrorMessage={completeCleanErrorMessage}
           isTransitionMenuOpen={isTransitionMenuOpen}
           isTransitionPending={isTransitionPending}
@@ -887,7 +874,6 @@ export function AgentsActivity({
             void acknowledgeSessionAttention(sessionId);
           }}
           onCloseWorkspaceTab={workspaceCache.closeWorkspaceTab}
-          onOpenSummary={handleOpenSummary}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTab}
           onToggleSidePanel={() =>
             setIsSessionSidePanelOpen(
@@ -996,13 +982,6 @@ export function AgentsActivity({
             </div>
           </div>
         </div>
-      ) : null}
-      {summaryIssueId != null ? (
-        <IssueSummaryDialog
-          issueId={summaryIssueId}
-          projectId={projectId}
-          onClose={() => setSummaryIssueId(null)}
-        />
       ) : null}
     </main>
   );
