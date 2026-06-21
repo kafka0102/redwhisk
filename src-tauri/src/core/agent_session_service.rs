@@ -417,6 +417,7 @@ impl<'connection> AgentSessionService<'connection> {
                     let _ = child.wait();
                 }
                 Err(agent_session_transaction_error_for_issue(
+                    self.issue_repository.connection(),
                     error,
                     input.issue_id,
                 ))
@@ -559,8 +560,13 @@ impl<'connection> AgentSessionService<'connection> {
             })
         })();
 
-        let result = transaction_result
-            .map_err(|error| agent_session_transaction_error_for_issue(error, input.issue_id))?;
+        let result = transaction_result.map_err(|error| {
+            agent_session_transaction_error_for_issue(
+                self.issue_repository.connection(),
+                error,
+                input.issue_id,
+            )
+        })?;
         let mode = codex_mode_from_profile(&launch.profile)?;
         let config = CodexSessionConfig {
             project_id: input.project_id,
@@ -2746,17 +2752,33 @@ fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
 }
 
 fn agent_session_transaction_error_for_issue(
+    connection: &rusqlite::Connection,
     error: rusqlite::Error,
     issue_id: i64,
 ) -> CommandError {
     if let rusqlite::Error::SqliteFailure(_, Some(message)) = &error {
         if message.contains("UNIQUE constraint failed: agent_sessions.issue_id") {
-            return CommandError::new(
+            let mut command_error = CommandError::new(
                 CommandErrorCode::AgentSessionAlreadyExists,
                 "当前 Issue 已存在关联 Agent Session。",
             )
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
             .with_detail(ErrorDetail::new("Cause").with_value("message", message.clone()));
+
+            if let Ok(Some(existing_session)) =
+                AgentSessionRepository::new(connection).find_by_issue_id(issue_id)
+            {
+                command_error = command_error.with_detail(
+                    ErrorDetail::new("AgentSession")
+                        .with_value("sessionId", existing_session.id)
+                        .with_value(
+                            "status",
+                            format!("{:?}", existing_session.status).to_lowercase(),
+                        ),
+                );
+            }
+
+            return command_error;
         }
     }
 
