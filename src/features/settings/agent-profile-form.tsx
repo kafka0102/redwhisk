@@ -558,8 +558,10 @@ function SearchableSelect({
           aria-autocomplete="list"
           aria-expanded={isOpen}
           aria-label={ariaLabel}
+          autoCapitalize="none"
           className="settings-input settings-search-select__input"
           role="combobox"
+          spellCheck={false}
           value={displayValue}
           onClick={() => {
             setActiveIndex(0);
@@ -702,8 +704,10 @@ function SearchableMultiSelect({
           aria-autocomplete="list"
           aria-expanded={isOpen}
           aria-label={ariaLabel}
+          autoCapitalize="none"
           className="settings-input settings-search-select__input"
           role="combobox"
+          spellCheck={false}
           value={displayValue}
           onClick={() => {
             setActiveIndex(0);

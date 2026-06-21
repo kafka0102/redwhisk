@@ -28,6 +28,11 @@ button {
   letter-spacing: 0;
 }
 
+input,
+textarea {
+  text-transform: none;
+}
+
 button:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
