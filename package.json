@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
@@ -29,8 +30,10 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "lucide-react": "^1.17.0",
+    "monaco-editor": "^0.55.1",
     "next-themes": "^0.4.6",
     "react": "^19.1.0",
+    "react-arborist": "^3.10.5",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.11.2",
