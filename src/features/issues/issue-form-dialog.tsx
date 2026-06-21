@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 import type {
   IssueAttachmentRecord,
@@ -238,9 +237,6 @@ function IssueEditableFields({
   return (
     <div className="issue-dialog__editor issue-dialog__editor--editable">
       <div className="issue-field">
-        <Label htmlFor="issue-title" className="text-xs text-muted-foreground">
-          Title
-        </Label>
         <Input
           ref={titleInputRef}
           id="issue-title"
