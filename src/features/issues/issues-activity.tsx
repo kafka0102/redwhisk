@@ -481,6 +481,7 @@ export function IssuesActivity({
     sessionId?: number | null;
   }) {
     setRunDialogIssue(null);
+    let resolvedSessionId = result.sessionId ?? null;
 
     try {
       const response = await listIssues({ projectId });
@@ -490,6 +491,11 @@ export function IssuesActivity({
 
       setIssues(response.issues);
       setSelectedIssueId(result.issueId);
+      if (resolvedSessionId == null) {
+        resolvedSessionId =
+          response.issues.find((issue) => issue.id === result.issueId)
+            ?.linkedSessionId ?? null;
+      }
     } catch (error) {
       if (activeProjectIdRef.current === projectId) {
         setErrorMessage(toCommandError(error).message);
@@ -497,9 +503,14 @@ export function IssuesActivity({
     } finally {
       if (
         activeProjectIdRef.current === projectId &&
-        result.sessionId != null
+        resolvedSessionId != null
       ) {
-        onOpenAgentsActivity?.(result.sessionId);
+        onOpenAgentsActivity?.(resolvedSessionId);
+      } else if (
+        activeProjectIdRef.current === projectId &&
+        result.sessionId == null
+      ) {
+        setErrorMessage("Agent Session 启动后未返回可打开的会话。");
       }
     }
   }
