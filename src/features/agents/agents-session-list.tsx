@@ -2,6 +2,7 @@ import { LayoutGrid, LoaderCircle, Plus } from "lucide-react";
 import type { RefObject } from "react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
+import type { AgentType } from "../settings/settings-commands";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "./agent-visuals";
 import {
   formatSessionStatusLabel,
@@ -9,26 +10,38 @@ import {
 } from "./agent-session-formatters";
 
 interface AgentsSessionListProps {
+  availableAgentTypes: AgentType[];
   errorMessage: string | null;
   isLoading: boolean;
+  isNewSessionMenuOpen: boolean;
+  isNewSessionDisabled: boolean;
   newSessionButtonRef: RefObject<HTMLButtonElement | null>;
-  onNewSession: () => void;
+  onCreateSession: (agentType: AgentType) => void;
+  onNewSessionMenuOpenChange: (open: boolean) => void;
   onSelectSession: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
+  sessionCreationErrorMessage: string | null;
   title: string;
 }
 
 export function AgentsSessionList({
+  availableAgentTypes,
   errorMessage,
   isLoading,
+  isNewSessionMenuOpen,
+  isNewSessionDisabled,
   newSessionButtonRef,
-  onNewSession,
+  onCreateSession,
+  onNewSessionMenuOpenChange,
   onSelectSession,
   selectedSessionId,
   sessions,
+  sessionCreationErrorMessage,
   title,
 }: AgentsSessionListProps) {
+  const shouldShowAgentTypePicker = availableAgentTypes.length > 1;
+
   return (
     <aside className="agents-sidebar" aria-label="Agent sessions">
       <div className="agents-sidebar__header">
@@ -47,21 +60,70 @@ export function AgentsSessionList({
           >
             <LayoutGrid aria-hidden="true" size={16} strokeWidth={1.8} />
           </button>
-          <button
-            aria-label="New session"
-            className="agents-toolbar-button"
-            ref={newSessionButtonRef}
-            type="button"
-            onClick={onNewSession}
-          >
-            <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
-          </button>
+          {shouldShowAgentTypePicker ? (
+            <div className="agents-session-create-menu">
+              <button
+                aria-expanded={isNewSessionMenuOpen}
+                aria-haspopup="menu"
+                aria-label="New session"
+                className="agents-toolbar-button"
+                disabled={isNewSessionDisabled}
+                ref={newSessionButtonRef}
+                type="button"
+                onClick={() =>
+                  onNewSessionMenuOpenChange(!isNewSessionMenuOpen)
+                }
+              >
+                <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
+              </button>
+              {isNewSessionMenuOpen ? (
+                <div className="agents-session-toolbar__menu" role="menu">
+                  {availableAgentTypes.map((agentType) => (
+                    <button
+                      key={agentType}
+                      className="agents-session-toolbar__menu-item"
+                      role="menuitem"
+                      type="button"
+                      onClick={() => onCreateSession(agentType)}
+                    >
+                      {formatAgentTypeLabel(agentType)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              aria-label="New session"
+              className="agents-toolbar-button"
+              disabled={isNewSessionDisabled}
+              ref={newSessionButtonRef}
+              type="button"
+              onClick={() => {
+                const [agentType] = availableAgentTypes;
+                if (agentType) {
+                  onCreateSession(agentType);
+                }
+              }}
+            >
+              <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
+            </button>
+          )}
         </div>
       </div>
 
       {errorMessage ? (
         <p className="issues-status" role="status" aria-label="Agents status">
           {errorMessage}
+        </p>
+      ) : null}
+      {sessionCreationErrorMessage ? (
+        <p
+          className="issues-status"
+          role="status"
+          aria-label="New session status"
+        >
+          {sessionCreationErrorMessage}
         </p>
       ) : null}
       {isLoading ? (
