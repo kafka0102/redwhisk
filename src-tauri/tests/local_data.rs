@@ -44,11 +44,12 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0023_project_labels",
             "0024_issue_labels",
             "0025_agent_session_list_order",
+            "0026_agent_sessions_active_issue_unique_index",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0025_agent_session_list_order".to_string())
+        Some("0026_agent_sessions_active_issue_unique_index".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -101,12 +102,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0023_project_labels",
             "0024_issue_labels",
             "0025_agent_session_list_order",
+            "0026_agent_sessions_active_issue_unique_index",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0025_agent_session_list_order".to_string())
+        Some("0026_agent_sessions_active_issue_unique_index".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -115,7 +117,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 25);
+    assert_eq!(schema_migrations_count, 26);
 }
 
 #[test]
