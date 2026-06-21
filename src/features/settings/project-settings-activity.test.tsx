@@ -807,7 +807,7 @@ describe("ProjectSettingsActivity", () => {
           command: "codex",
           scope: "global",
           projectId: null,
-          mode: "default",
+          mode: "full-access",
           dangerous: true,
           promptTemplate: "",
         }),

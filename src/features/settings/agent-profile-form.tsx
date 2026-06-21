@@ -53,7 +53,7 @@ export function AgentProfileForm({
   const [scopeValue, setScopeValue] = useState<AgentScope>(
     () => profile?.scope ?? scope,
   );
-  const [modeValue] = useState(() => profile?.mode ?? "default");
+  const [modeValue] = useState(() => profile?.mode ?? "full-access");
   const [dangerous] = useState(() => profile?.dangerous ?? true);
   const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>(() =>
     parseDefaultSkills(profile?.defaultSkill ?? "").map(toMissingSkillKey),
