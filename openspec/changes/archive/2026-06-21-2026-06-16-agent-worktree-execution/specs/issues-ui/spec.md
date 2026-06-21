@@ -8,6 +8,8 @@ The Issues page SHALL keep the compact backlog run dialog width while extending 
 - **THEN** the run dialog opens with a compact width variant
 - **AND** the run dialog shows agent profile selection, workflow skill, commit strategy, development mode, target branch, and final prompt
 
+## ADDED Requirements
+
 ### Requirement: Issue run dialog execution context
 The backlog issue run dialog SHALL let the user override commit strategy and choose where code runs before starting the agent session.
 

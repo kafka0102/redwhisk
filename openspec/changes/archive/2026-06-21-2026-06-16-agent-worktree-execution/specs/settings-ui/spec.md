@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Project general worktree settings
 Project General settings SHALL own the worktree root location and worktree setup command for issue execution.
