@@ -800,6 +800,99 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
 }
 
 #[test]
+fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo-soft-deleted-session");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        success_command(temp_dir.path()).to_string_lossy().as_ref(),
+    );
+    let deleted_session = {
+        let transaction = database
+            .connection
+            .unchecked_transaction()
+            .expect("transaction");
+        let session = AgentSessionRepository::insert_in_transaction(
+            &transaction,
+            project_id,
+            issue_id,
+            profile_id,
+            temp_dir.path().to_string_lossy().as_ref(),
+            "codex",
+            "Old prompt",
+            &WorkspaceMode::CurrentBranch,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "/tmp/redwhisk-soft-deleted-session.log",
+            1_780_000_000_000,
+        )
+        .expect("insert deleted session");
+        AgentSessionRepository::soft_delete_in_transaction(
+            &transaction,
+            session.id,
+            1_780_000_000_001,
+        )
+        .expect("soft delete session");
+        transaction.commit().expect("commit deleted session");
+        session
+    };
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: None,
+                workspace_mode: None,
+                target_branch: None,
+                worktree_setup_command: None,
+            },
+        )
+        .expect("soft-deleted session should not block a new run");
+
+    assert_ne!(result.session_id, deleted_session.id);
+    let active_session = AgentSessionRepository::new(&database.connection)
+        .find_by_issue_id(issue_id)
+        .expect("find active session")
+        .expect("active session");
+    assert_eq!(active_session.id, result.session_id);
+    assert_eq!(active_session.issue_id, Some(issue_id));
+
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue should exist");
+    assert_eq!(issue.status, IssueStatus::Running);
+
+    let total_sessions_for_issue = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM agent_sessions WHERE issue_id = ?1",
+            [issue_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("session count");
+    assert_eq!(total_sessions_for_issue, 2);
+}
+
+#[test]
 fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
