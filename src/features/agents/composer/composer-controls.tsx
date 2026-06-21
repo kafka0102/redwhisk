@@ -1,4 +1,4 @@
-// composer 控制行（纯展示）：附件图标 + 模型菜单/只读模型信息 + 发送/取消按钮 + 用量条。
+// composer 控制行（纯展示）：附件图标 + 模型菜单/只读模型信息 + 发送/终止按钮 + 用量。
 
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 
@@ -7,7 +7,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui";
 import type { AgentCapabilities } from "../agent-capabilities";
 import { ComposerContextMeter } from "./composer-context-meter";
@@ -49,7 +48,13 @@ export function ComposerControls({
     capabilities.supportsModelSwitching && !isModelReadOnly;
   const showReadOnlyModel =
     isModelReadOnly || !capabilities.supportsModelSwitching;
-  const modelLabel = selectedModelId ?? fallbackModelLabel(capabilities);
+  const modelLabel = formatModelLabel(
+    selectedModelId,
+    models,
+    fallbackModelLabel(capabilities),
+  );
+  const modelPlaceholder =
+    modelsError ?? (isLoadingModels ? "加载中…" : "无可用模型");
 
   return (
     <div className="agents-composer__controls">
@@ -80,16 +85,14 @@ export function ComposerControls({
                 className="agents-composer__select"
                 size="sm"
               >
-                <SelectValue
-                  placeholder={
-                    modelsError ?? (isLoadingModels ? "加载中…" : "无可用模型")
-                  }
-                />
+                <span data-slot="select-value">
+                  {modelLabel ?? modelPlaceholder}
+                </span>
               </SelectTrigger>
               <SelectContent align="start" className="agents-composer__menu">
                 {models.map((model) => (
                   <SelectItem key={model.modelId} value={model.modelId}>
-                    {model.displayName ?? model.modelId}
+                    {formatModelLabel(model.modelId, models, null)}
                     {model.isDefault ? "（默认）" : ""}
                   </SelectItem>
                 ))}
@@ -114,16 +117,15 @@ export function ComposerControls({
           <button
             type="button"
             className="agents-composer__cancel"
-            aria-label="取消当前回复"
+            aria-label="终止当前任务"
             onClick={onCancel}
           >
             <Square
               aria-hidden="true"
-              size={13}
+              size={12}
               strokeWidth={2}
               fill="currentColor"
             />
-            <span>停止</span>
           </button>
         ) : (
           <button
@@ -134,7 +136,6 @@ export function ComposerControls({
             onClick={onSubmit}
           >
             <ArrowUp aria-hidden="true" size={13} strokeWidth={2} />
-            <span>发送</span>
           </button>
         )}
       </div>
@@ -144,4 +145,20 @@ export function ComposerControls({
 
 function fallbackModelLabel(capabilities: AgentCapabilities): string | null {
   return capabilities.modelTypeLabel;
+}
+
+function formatModelLabel(
+  modelId: string | null,
+  models: AgentModel[],
+  fallback: string | null,
+): string | null {
+  if (modelId == null) {
+    return fallback;
+  }
+  const model = models.find((candidate) => candidate.modelId === modelId);
+  return normalizeModelLabel(model?.displayName ?? modelId);
+}
+
+function normalizeModelLabel(label: string): string {
+  return label.replace(/^gpt\b/i, "GPT").replace(/^gpt(?=[-.0-9])/i, "GPT");
 }

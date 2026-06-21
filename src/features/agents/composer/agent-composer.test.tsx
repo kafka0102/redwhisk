@@ -179,10 +179,18 @@ describe("AgentComposer", () => {
     expect(textarea).toHaveValue("你好\n");
   });
 
-  it("turnStatus=running 时显示停止按钮并调用 cancelAgentTurn", async () => {
+  it("发送按钮仅显示图标，不展示文字", async () => {
+    await renderComposer();
+    const sendButton = screen.getByRole("button", { name: "发送消息" });
+    expect(sendButton).toBeInTheDocument();
+    expect(sendButton).not.toHaveTextContent("发送");
+  });
+
+  it("turnStatus=running 时显示终止按钮并调用 cancelAgentTurn", async () => {
     const user = userEvent.setup();
     await renderComposer({ turnStatus: "running" });
-    const stopButton = screen.getByRole("button", { name: "取消当前回复" });
+    const stopButton = screen.getByRole("button", { name: "终止当前任务" });
+    expect(stopButton).not.toHaveTextContent("停止");
     await user.click(stopButton);
     await waitFor(() => {
       expect(cancelAgentTurnMock).toHaveBeenCalledWith({
@@ -192,25 +200,18 @@ describe("AgentComposer", () => {
     });
   });
 
-  it("无 usage 时用量条显示占位「—」", async () => {
+  it("无 usage 时不显示上下文用量", async () => {
     await renderComposer({ usage: null });
-    expect(screen.getByText(/上下文：—/)).toBeInTheDocument();
+    expect(screen.queryByText(/上下文/)).not.toBeInTheDocument();
   });
 
-  it("有 usage 时渲染用量比例文本", async () => {
+  it("有 usage 时渲染用量文本与百分比详情", async () => {
     await renderComposer({ usage: SAMPLE_USAGE });
-    // 30000 / 200000 = 15% → "30k / 200k"
-    expect(screen.getByText(/30k \/ 200k/)).toBeInTheDocument();
-  });
-
-  it("用量接近上限（≥80%）显示 warning 文案", async () => {
-    await renderComposer({
-      usage: {
-        contextWindowUsedTokens: 180000,
-        contextWindowMaxTokens: 200000,
-      },
-    });
-    expect(screen.getByText(/接近上限/)).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "15",
+    );
+    expect(screen.getByText("已使用 15%")).toBeInTheDocument();
   });
 
   it("添加附件后渲染 chip 与缺口提示文案", async () => {
@@ -284,6 +285,13 @@ describe("AgentComposer", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
+  });
+
+  it("模型选中值使用统一展示大小写", async () => {
+    await renderComposer({ currentModelId: "gpt-5" });
+    expect(
+      screen.getByRole("combobox", { name: "选择模型" }),
+    ).toHaveTextContent("GPT-5");
   });
 
   it("capabilities 关闭模型与 Think 时不请求模型列表，显示只读 Claude 类型", async () => {
