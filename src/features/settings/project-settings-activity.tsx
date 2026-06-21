@@ -5,7 +5,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Bot, Info, Plus, Tag } from "lucide-react";
+import { Bot, Info, Tag } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import {
@@ -473,7 +473,6 @@ export function ProjectSettingsActivity({
                     setEditingProfile(null);
                   }}
                 >
-                  <Plus aria-hidden="true" size={14} strokeWidth={2} />
                   <span>{messages.settings.newAgent}</span>
                 </Button>
               ) : activeMenu === "labels" ? (
@@ -486,7 +485,6 @@ export function ProjectSettingsActivity({
                     setEditingLabel(null);
                   }}
                 >
-                  <Plus aria-hidden="true" size={14} strokeWidth={2} />
                   <span>{messages.settings.newLabel}</span>
                 </Button>
               ) : null
