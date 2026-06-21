@@ -10,6 +10,7 @@ import {
 import {
   listAgentSessions,
   setAgentSessionAttention,
+  startStructuredAgentSession,
   type StartStructuredAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
@@ -17,7 +18,6 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
-import { TemporarySessionDialog } from "./temporary-session-dialog";
 import { IssueSummaryDialog } from "../issues/issue-summary-dialog";
 import {
   completeIssueClean,
@@ -33,6 +33,10 @@ import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
 import { AgentsSessionList } from "./agents-session-list";
 import {
+  listAgentProfiles,
+  type AgentType,
+} from "../settings/settings-commands";
+import {
   AgentsSessionPane,
   type LinkedSessionIssue,
   type SessionIssueTransition,
@@ -45,6 +49,7 @@ const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MIN_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MAX_WIDTH = 450;
+const DEFAULT_SESSION_TITLE = "Untitled Session";
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
@@ -88,10 +93,16 @@ export function AgentsActivity({
   >(null);
   const [completeAgentCommitErrorMessage, setCompleteAgentCommitErrorMessage] =
     useState<string | null>(null);
+  const [sessionCreationErrorMessage, setSessionCreationErrorMessage] =
+    useState<string | null>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
+  const [availableAgentTypes, setAvailableAgentTypes] = useState<AgentType[]>(
+    [],
+  );
+  const [isNewSessionMenuOpen, setIsNewSessionMenuOpen] = useState(false);
   const [agentCommitPreview, setAgentCommitPreview] =
     useState<AgentCommitCompletionPreview | null>(null);
-  const [isTemporarySessionDialogOpen, setIsTemporarySessionDialogOpen] =
-    useState(false);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
@@ -174,6 +185,86 @@ export function AgentsActivity({
       window.clearInterval(intervalId);
     };
   }, [applySessionListOverlays, projectId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAgentTypes() {
+      setIsLoadingAgentTypes(true);
+      setSessionCreationErrorMessage(null);
+
+      try {
+        const [projectResponse, globalResponse] = await Promise.all([
+          listAgentProfiles({ scope: "project", projectId }),
+          listAgentProfiles({ scope: "global", projectId: null }),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const mergedProfiles = [
+          ...projectResponse.profiles,
+          ...globalResponse.profiles,
+        ];
+        const nextAgentTypes = Array.from(
+          new Set(mergedProfiles.map((profile) => profile.agentType)),
+        );
+        setAvailableAgentTypes(nextAgentTypes);
+        if (nextAgentTypes.length === 0) {
+          setSessionCreationErrorMessage(
+            "No agent profiles available. Configure an agent in Settings first.",
+          );
+        }
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setAvailableAgentTypes([]);
+        setSessionCreationErrorMessage(toCommandError(error).message);
+      } finally {
+        if (isMounted) {
+          setIsLoadingAgentTypes(false);
+        }
+      }
+    }
+
+    void loadAgentTypes();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!isNewSessionMenuOpen) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (newSessionButtonRef.current?.contains(target)) {
+        return;
+      }
+
+      const menu = document.querySelector(".agents-session-create-menu");
+      if (menu?.contains(target)) {
+        return;
+      }
+
+      setIsNewSessionMenuOpen(false);
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isNewSessionMenuOpen]);
 
   const visibleSessions = useMemo(
     () => sessions.filter((session) => getSessionIssueGroup(session) !== null),
@@ -665,17 +756,6 @@ export function AgentsActivity({
     };
   }, []);
 
-  function openTemporarySessionDialog() {
-    setIsTemporarySessionDialogOpen(true);
-  }
-
-  function closeTemporarySessionDialog() {
-    setIsTemporarySessionDialogOpen(false);
-    window.requestAnimationFrame(() => {
-      newSessionButtonRef.current?.focus();
-    });
-  }
-
   async function handleTemporarySessionStarted(
     result: StartStructuredAgentSessionResult,
   ) {
@@ -686,19 +766,56 @@ export function AgentsActivity({
     onSelectSession?.(result.sessionId);
   }
 
+  async function createSession(agentType: AgentType) {
+    if (isCreatingSession) {
+      return;
+    }
+
+    setSessionCreationErrorMessage(null);
+    setIsCreatingSession(true);
+    setIsNewSessionMenuOpen(false);
+
+    try {
+      const result = await startStructuredAgentSession({
+        projectId,
+        title: DEFAULT_SESSION_TITLE,
+        agentType,
+      });
+      await handleTemporarySessionStarted(result);
+    } catch (error) {
+      setSessionCreationErrorMessage(toCommandError(error).message);
+    } finally {
+      setIsCreatingSession(false);
+      window.requestAnimationFrame(() => {
+        newSessionButtonRef.current?.focus();
+      });
+    }
+  }
+
   return (
     <main
       className="activity-surface activity-surface--agents"
       style={{ "--agents-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <AgentsSessionList
+        availableAgentTypes={availableAgentTypes}
         errorMessage={errorMessage}
         isLoading={isLoading}
+        isNewSessionMenuOpen={isNewSessionMenuOpen}
+        isNewSessionDisabled={
+          isLoadingAgentTypes ||
+          isCreatingSession ||
+          availableAgentTypes.length === 0
+        }
         newSessionButtonRef={newSessionButtonRef}
-        onNewSession={openTemporarySessionDialog}
+        onCreateSession={(agentType) => {
+          void createSession(agentType);
+        }}
+        onNewSessionMenuOpenChange={setIsNewSessionMenuOpen}
         onSelectSession={handleSelectSession}
         selectedSessionId={selectedSession?.sessionId ?? null}
         sessions={visibleSessions}
+        sessionCreationErrorMessage={sessionCreationErrorMessage}
         title={messages.app.agents}
       />
 
@@ -814,13 +931,6 @@ export function AgentsActivity({
         ) : null}
       </section>
 
-      {isTemporarySessionDialogOpen ? (
-        <TemporarySessionDialog
-          projectId={projectId}
-          onClose={closeTemporarySessionDialog}
-          onStarted={handleTemporarySessionStarted}
-        />
-      ) : null}
       {agentCommitPreview ? (
         <div className="issue-dialog-overlay">
           <div
