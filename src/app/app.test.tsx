@@ -28,6 +28,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 const mockAppWindow = {
   isMaximized: vi.fn(),
   maximize: vi.fn(),
+  unmaximize: vi.fn(),
 };
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -110,8 +111,10 @@ describe("App project entry", () => {
     getCurrentWindowMock.mockClear();
     mockAppWindow.isMaximized.mockReset();
     mockAppWindow.maximize.mockReset();
+    mockAppWindow.unmaximize.mockReset();
     mockAppWindow.isMaximized.mockResolvedValue(false);
     mockAppWindow.maximize.mockResolvedValue(undefined);
+    mockAppWindow.unmaximize.mockResolvedValue(undefined);
     initializeLocalDataMock.mockResolvedValue({
       databaseExists: true,
       currentVersion: "0001_core",
@@ -215,7 +218,7 @@ describe("App project entry", () => {
     expect(initializeLocalDataMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(listProjectsMock).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByRole("heading", { name: "Projects" }),
+      await screen.findByRole("searchbox", { name: "Search projects" }),
     ).toBeInTheDocument();
   });
 
@@ -223,25 +226,111 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("heading", { name: "Projects" }),
+      await screen.findByRole("searchbox", { name: "Search projects" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "New Project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Projects" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Local Git repositories available/i),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("navigation", { name: "Activity Bar" }),
     ).not.toBeInTheDocument();
 
-    const projectGrid = screen.getByRole("list", { name: "Local projects" });
-    const projectCards = within(projectGrid).getAllByRole("listitem");
-    expect(projectCards).toHaveLength(3);
+    const projectList = screen.getByRole("list", { name: "Local projects" });
+    const projectRows = within(projectList).getAllByRole("listitem");
+    expect(projectRows).toHaveLength(2);
     expect(
-      within(projectCards[projectCards.length - 1]).getByRole("button", {
-        name: "Create Project",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(projectCards[0]).getByRole("button", {
+      within(projectRows[0]).getByRole("button", {
         name: "Open project RedWhisk",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("filters projects locally by project name and clears the search", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open project Local Agents Lab" }),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search projects" }),
+      "red",
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open project RedWhisk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open project Local Agents Lab" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(
+      screen.getByRole("button", { name: "Open project RedWhisk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open project Local Agents Lab" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shortens project paths under the user home directory", async () => {
+    render(<App />);
+
+    expect(
+      await screen.findByText("~/workspace/kafka/redwhisk"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("/Users/kafka0102/workspace/kafka/redwhisk"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks the Project Home window header as draggable and toggles maximize on double-click", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await screen.findByRole("searchbox", { name: "Search projects" });
+    const header = document.querySelector(".project-home__window-header");
+
+    expect(header).toHaveAttribute("data-tauri-drag-region");
+
+    await user.dblClick(header!);
+
+    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
+    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.maximize).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.unmaximize).not.toHaveBeenCalled();
+  });
+
+  it("restores the Project Home window from its draggable header", async () => {
+    mockAppWindow.isMaximized.mockResolvedValue(true);
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await screen.findByRole("searchbox", { name: "Search projects" });
+    const header = document.querySelector(".project-home__window-header");
+
+    expect(header).toHaveAttribute("data-tauri-drag-region");
+
+    await user.dblClick(header!);
+
+    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
+    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.unmaximize).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.maximize).not.toHaveBeenCalled();
   });
 
   it("opens directly to a project workbench when the window URL carries a project id", async () => {
@@ -271,7 +360,7 @@ describe("App project entry", () => {
     );
   });
 
-  it("maximizes the current window when clicking empty header space", async () => {
+  it("maximizes the current window when double-clicking empty header space", async () => {
     window.history.replaceState(null, "", "/?projectId=1");
     const user = userEvent.setup();
 
@@ -284,11 +373,34 @@ describe("App project entry", () => {
 
     expect(header).not.toBeNull();
 
-    await user.click(header!);
+    await user.dblClick(header!);
 
     await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
     expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
     expect(mockAppWindow.maximize).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.unmaximize).not.toHaveBeenCalled();
+  });
+
+  it("restores the current window when double-clicking a maximized header", async () => {
+    window.history.replaceState(null, "", "/?projectId=1");
+    mockAppWindow.isMaximized.mockResolvedValue(true);
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const switcher = await screen.findByRole("button", {
+      name: "Current project RedWhisk",
+    });
+    const header = switcher.closest(".workbench__header");
+
+    expect(header).not.toBeNull();
+
+    await user.dblClick(header!);
+
+    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
+    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.unmaximize).toHaveBeenCalledTimes(1);
+    expect(mockAppWindow.maximize).not.toHaveBeenCalled();
   });
 
   it("does not maximize the window when clicking the project switcher trigger", async () => {
@@ -507,19 +619,26 @@ describe("App project entry", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("shows only the create card when there are no saved projects", async () => {
+  it("shows the project toolbar and an empty list when there are no saved projects", async () => {
     currentProjectList = { projects: [] };
 
     render(<App />);
 
-    const projectGrid = await screen.findByRole("list", {
-      name: "Local projects",
-    });
-    const projectCards = within(projectGrid).getAllByRole("listitem");
-    expect(projectCards).toHaveLength(1);
     expect(
-      within(projectCards[0]).getByRole("button", { name: "Create Project" }),
+      await screen.findByRole("searchbox", { name: "Search projects" }),
+    ).toHaveAttribute("placeholder", "searching projects");
+    expect(
+      screen.getByRole("button", { name: "New Project" }),
     ).toBeInTheDocument();
+    const projectList = screen.getByRole("list", { name: "Local projects" });
+    expect(within(projectList).queryAllByRole("listitem")).toHaveLength(0);
+    expect(
+      screen.queryByRole("heading", { name: "Projects" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("RedWhisk")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Local Git repositories available/i),
+    ).not.toBeInTheDocument();
   });
 
   it("shows missing project path errors without opening the Activity Bar", async () => {
@@ -544,7 +663,7 @@ describe("App project entry", () => {
     expect(screen.getByText(/path unavailable/i)).toBeInTheDocument();
   });
 
-  it("creates a project from the create card and opens Issues", async () => {
+  it("creates a project from the toolbar and opens Issues", async () => {
     const user = userEvent.setup();
     openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/new-repo");
     createProjectMock.mockResolvedValue({
@@ -559,7 +678,7 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Create Project" }),
+      await screen.findByRole("button", { name: "New Project" }),
     );
 
     expect(openDialogMock).toHaveBeenCalledWith({
@@ -616,7 +735,7 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Create Project" }),
+      await screen.findByRole("button", { name: "New Project" }),
     );
 
     expect(
@@ -629,7 +748,7 @@ describe("App project entry", () => {
       screen.queryByRole("navigation", { name: "Activity Bar" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Projects" }),
+      screen.getByRole("searchbox", { name: "Search projects" }),
     ).toBeInTheDocument();
   });
 
@@ -640,7 +759,7 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Create Project" }),
+      await screen.findByRole("button", { name: "New Project" }),
     );
 
     expect(
@@ -665,7 +784,7 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Create Project" }),
+      await screen.findByRole("button", { name: "New Project" }),
     );
     await user.click(screen.getByRole("button", { name: "Creating Project" }));
 
@@ -673,7 +792,7 @@ describe("App project entry", () => {
 
     resolveDialog(null);
     expect(
-      await screen.findByRole("button", { name: "Create Project" }),
+      await screen.findByRole("button", { name: "New Project" }),
     ).toBeEnabled();
   });
 
@@ -688,7 +807,7 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Create Project" }),
+      await screen.findByRole("button", { name: "New Project" }),
     );
     const projectDialog = await screen.findByRole("dialog", {
       name: "New Project",
@@ -720,7 +839,7 @@ describe("App project entry", () => {
       await screen.findByRole("status", { name: "Local data status" }),
     ).toHaveTextContent("本地数据初始化失败。");
     expect(
-      screen.getByRole("heading", { name: "Projects" }),
+      screen.getByRole("searchbox", { name: "Search projects" }),
     ).toBeInTheDocument();
   });
 
