@@ -43,6 +43,7 @@ interface IssuesActivityProps {
   onOpenAgentsActivity?: (sessionId: number) => void;
   onOpenProjectSettingsLabels?: () => void;
   requestedIssueId?: number | null;
+  worktreeSetupCommand?: string;
 }
 
 export function IssuesActivity({
@@ -51,6 +52,7 @@ export function IssuesActivity({
   onOpenAgentsActivity,
   onOpenProjectSettingsLabels,
   requestedIssueId = null,
+  worktreeSetupCommand = "",
 }: IssuesActivityProps) {
   const { messages } = useI18n();
   const [issues, setIssues] = useState<IssueRecord[]>([]);
@@ -793,6 +795,7 @@ export function IssuesActivity({
           issue={runDialogIssue}
           projectCompletionPolicy={projectCompletionPolicy}
           projectId={projectId}
+          worktreeSetupCommand={worktreeSetupCommand}
           onClose={closeRunDialog}
           onStarted={handleRunStarted}
         />

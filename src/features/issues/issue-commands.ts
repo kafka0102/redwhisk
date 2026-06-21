@@ -213,6 +213,7 @@ export interface StartAgentSessionInput {
   completionPolicyOverride?: ProjectCompletionPolicy | null;
   workspaceMode?: WorkspaceMode;
   targetBranch?: string | null;
+  worktreeSetupCommand?: string | null;
 }
 
 export interface StartAgentSessionResult {

@@ -6,9 +6,11 @@ The runtime SHALL support launching an issue agent session inside a dedicated gi
 #### Scenario: Starting an issue in worktree mode
 - **WHEN** the user starts a backlog issue with development mode `Worktree`
 - **THEN** the runtime records the selected target branch, completion policy snapshot, and workspace mode for that session
-- **AND** creates a worktree under the agent profile's configured `Worktree path`
+- **AND** resolves the worktree root from the project's configured worktree location enum and current repository path
+- **AND** creates a worktree under that resolved root path
 - **AND** creates a temporary development branch inside that worktree using the issue ID as the naming base
 - **AND** launches the agent session inside that worktree directory
+- **AND** records the project default or run-level overridden worktree setup command as a session snapshot
 
 #### Scenario: Starting an issue in current branch mode
 - **WHEN** the user starts a backlog issue with development mode `Current branch`

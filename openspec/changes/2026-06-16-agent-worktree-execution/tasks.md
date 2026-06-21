@@ -34,3 +34,12 @@
 - [x] 5.4 运行 `cargo test --manifest-path src-tauri/Cargo.toml agent_session`。
 - [x] 5.5 运行 `cargo test --manifest-path src-tauri/Cargo.toml issue`。
 - [x] 5.6 运行 `cargo test --manifest-path src-tauri/Cargo.toml settings`。
+
+## 6. Review 反馈：Project 级 worktree 设置与初始化
+
+- [x] 6.1 从 Agent Profile 表单、前后端类型、repository 与 settings service 中移除 `worktree_path`。
+- [x] 6.2 将 worktree 位置迁移到 Project General settings，保存为 `repo_sibling`、`repo_internal`、`user_home` 三个枚举值。
+- [x] 6.3 按当前 repo path 动态展示三种 worktree 真实路径，并在 repo path 变化后同步刷新显示。
+- [x] 6.4 对 `repo_internal` 保存增加 `.gitignore` 安全校验，要求忽略 `.worktrees/` 或兼容的 `.worktree/`。
+- [x] 6.5 在 Project General settings 增加三行 `Worktree setup after creation` textarea，并在 Issue Run Dialog 中支持单次运行覆盖。
+- [x] 6.6 运行更新后的前端相关测试与 Rust 相关测试。

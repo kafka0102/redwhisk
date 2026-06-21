@@ -7,6 +7,14 @@ pub enum ProjectCompletionPolicy {
     AgentAutoCommit,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectWorktreeLocation {
+    RepoSibling,
+    RepoInternal,
+    UserHome,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectInput {
@@ -35,6 +43,8 @@ pub struct UpdateProjectSettingsInput {
     pub name: String,
     pub repo_path: String,
     pub completion_policy: ProjectCompletionPolicy,
+    pub worktree_location: ProjectWorktreeLocation,
+    pub worktree_setup_command: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -57,6 +67,8 @@ pub struct ProjectSummary {
     pub name: String,
     pub repo_path: String,
     pub completion_policy: ProjectCompletionPolicy,
+    pub worktree_location: ProjectWorktreeLocation,
+    pub worktree_setup_command: String,
     pub created_at: i64,
     pub last_opened_at: i64,
 }
@@ -74,6 +86,8 @@ pub struct ProjectListItem {
     pub name: String,
     pub repo_path: String,
     pub completion_policy: ProjectCompletionPolicy,
+    pub worktree_location: ProjectWorktreeLocation,
+    pub worktree_setup_command: String,
     pub created_at: i64,
     pub last_opened_at: i64,
     pub path_status: ProjectPathStatus,

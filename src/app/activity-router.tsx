@@ -7,7 +7,10 @@ import {
 } from "../features/settings/project-settings-activity";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
 import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
-import type { ProjectCompletionPolicy } from "../features/project/project-commands";
+import type {
+  ProjectCompletionPolicy,
+  ProjectWorktreeLocation,
+} from "../features/project/project-commands";
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -34,6 +37,8 @@ interface ActivityRouterProps {
   projectId: number;
   projectName: string;
   projectPath: string;
+  projectWorktreeLocation: ProjectWorktreeLocation;
+  projectWorktreeSetupCommand: string;
   projectTerminalsState: ProjectTerminalsActivityState;
   requestedIssueId: number | null;
 }
@@ -52,6 +57,8 @@ export function ActivityRouter({
   projectId,
   projectName,
   projectPath,
+  projectWorktreeLocation,
+  projectWorktreeSetupCommand,
   projectTerminalsState,
   requestedIssueId,
 }: ActivityRouterProps) {
@@ -90,6 +97,8 @@ export function ActivityRouter({
         projectId={projectId}
         projectName={projectName}
         projectPath={projectPath}
+        worktreeLocation={projectWorktreeLocation}
+        worktreeSetupCommand={projectWorktreeSetupCommand}
       />
     );
   }
@@ -105,6 +114,7 @@ export function ActivityRouter({
       projectCompletionPolicy={projectCompletionPolicy}
       projectId={projectId}
       requestedIssueId={requestedIssueId}
+      worktreeSetupCommand={projectWorktreeSetupCommand}
     />
   );
 }

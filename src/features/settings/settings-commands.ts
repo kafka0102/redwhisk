@@ -16,7 +16,6 @@ export interface AgentProfileRecord {
   name: string;
   agentType: AgentType;
   command: string;
-  worktreePath?: string;
   scope: AgentScope;
   projectId: number | null;
   mode: string;
@@ -36,22 +35,12 @@ export interface SaveAgentProfileInput {
   name: string;
   agentType: AgentType;
   command: string;
-  worktreePath: string;
   scope: AgentScope;
   projectId: number | null;
   mode: string;
   dangerous: boolean;
   defaultSkill: string;
   promptTemplate: string;
-}
-
-export interface ValidateAgentWorktreePathInput {
-  path: string;
-}
-
-export interface ValidateAgentWorktreePathResult {
-  path: string;
-  exists: boolean;
 }
 
 export interface AgentProfileListResponse {
@@ -160,17 +149,6 @@ export function saveAgentProfile(
   return invokeCommand<AgentProfileRecord>("save_agent_profile", {
     input,
   });
-}
-
-export function validateAgentWorktreePath(
-  input: ValidateAgentWorktreePathInput,
-): Promise<ValidateAgentWorktreePathResult> {
-  return invokeCommand<ValidateAgentWorktreePathResult>(
-    "validate_agent_worktree_path",
-    {
-      input,
-    },
-  );
 }
 
 export function deleteAgentProfile(

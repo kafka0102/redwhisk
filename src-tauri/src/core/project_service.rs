@@ -9,8 +9,8 @@ use crate::git::repository::is_git_repository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
-    ProjectSummary, UpdateProjectCompletionPolicyInput, UpdateProjectSettingsInput,
-    ValidateProjectRepoPathResponse,
+    ProjectSummary, ProjectWorktreeLocation, UpdateProjectCompletionPolicyInput,
+    UpdateProjectSettingsInput, ValidateProjectRepoPathResponse,
 };
 
 pub struct ProjectService<'connection> {
@@ -34,6 +34,8 @@ impl<'connection> ProjectService<'connection> {
                 &name,
                 &validated_repo.repo_path,
                 input.completion_policy,
+                ProjectWorktreeLocation::RepoSibling,
+                "",
             )
             .map_err(project_database_error)
     }
@@ -88,6 +90,7 @@ impl<'connection> ProjectService<'connection> {
     ) -> Result<ProjectSummary, CommandError> {
         let validated_repo = validate_repo_path(&input.repo_path)?;
         let project_name = normalize_project_name(&input.name, &validated_repo.repo_path)?;
+        validate_worktree_location(&validated_repo.repo_path, input.worktree_location)?;
 
         self.project_by_id(input.project_id)?;
 
@@ -97,6 +100,8 @@ impl<'connection> ProjectService<'connection> {
                 &project_name,
                 &validated_repo.repo_path.to_string_lossy(),
                 input.completion_policy,
+                input.worktree_location,
+                input.worktree_setup_command.trim(),
             )
             .map_err(project_database_error)
     }
@@ -331,6 +336,54 @@ fn normalize_project_name(name: &str, repo_path: &Path) -> Result<String, Comman
     Ok(project_name.to_string())
 }
 
+fn validate_worktree_location(
+    repo_path: &Path,
+    worktree_location: ProjectWorktreeLocation,
+) -> Result<(), CommandError> {
+    if worktree_location != ProjectWorktreeLocation::RepoInternal {
+        return Ok(());
+    }
+
+    let gitignore_path = repo_path.join(".gitignore");
+    let gitignore = std::fs::read_to_string(&gitignore_path).map_err(|_| {
+        CommandError::new(
+            CommandErrorCode::ProjectRepoPathInvalid,
+            "选择仓库内 .worktrees 目录时，仓库必须包含 .gitignore。",
+        )
+        .with_detail(
+            ErrorDetail::new("RepoPath")
+                .with_value("path", repo_path.to_string_lossy().to_string()),
+        )
+    })?;
+
+    if gitignore.lines().any(is_worktree_gitignore_entry) {
+        return Ok(());
+    }
+
+    Err(CommandError::new(
+        CommandErrorCode::ProjectRepoPathInvalid,
+        "选择仓库内 .worktrees 目录时，.gitignore 必须忽略 .worktrees/。",
+    )
+    .with_detail(
+        ErrorDetail::new("RepoPath").with_value("path", repo_path.to_string_lossy().to_string()),
+    ))
+}
+
+fn is_worktree_gitignore_entry(line: &str) -> bool {
+    let entry = line.trim();
+    matches!(
+        entry,
+        ".worktrees"
+            | ".worktrees/"
+            | "/.worktrees"
+            | "/.worktrees/"
+            | ".worktree"
+            | ".worktree/"
+            | "/.worktree"
+            | "/.worktree/"
+    )
+}
+
 fn project_list_item(project: ProjectSummary) -> ProjectListItem {
     let path_status = if project_path_is_available(&project.repo_path) {
         ProjectPathStatus::Available
@@ -343,6 +396,8 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         name: project.name,
         repo_path: project.repo_path,
         completion_policy: project.completion_policy,
+        worktree_location: project.worktree_location,
+        worktree_setup_command: project.worktree_setup_command,
         created_at: project.created_at,
         last_opened_at: project.last_opened_at,
         path_status,

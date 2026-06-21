@@ -7,7 +7,6 @@ import {
   listAgentSkills,
   saveAgentProfile,
   testAgentCommand,
-  validateAgentWorktreePath,
   type AgentSkillRecord,
   type AgentSkillsUpdatedEvent,
   type AgentProfileRecord,
@@ -33,7 +32,6 @@ interface AgentProfileFormProps {
   mode: "create" | "edit";
   scope: AgentScope;
   projectId: number | null;
-  projectPath?: string;
   profile?: AgentProfileRecord | null;
   onCancel: () => void;
   onSaved: (profile: AgentProfileRecord) => void;
@@ -43,20 +41,15 @@ export function AgentProfileForm({
   mode,
   scope,
   projectId,
-  projectPath = "",
   profile,
   onCancel,
   onSaved,
 }: AgentProfileFormProps) {
-  const defaultWorktreePath = buildDefaultWorktreePath(projectPath);
   const [name, setName] = useState(() => profile?.name ?? "");
   const [agentType, setAgentType] = useState<AgentType>(
     () => profile?.agentType ?? "codex",
   );
   const [command, setCommand] = useState(() => profile?.command ?? "");
-  const [worktreePath, setWorktreePath] = useState(
-    () => profile?.worktreePath ?? defaultWorktreePath,
-  );
   const [scopeValue, setScopeValue] = useState<AgentScope>(
     () => profile?.scope ?? scope,
   );
@@ -70,32 +63,15 @@ export function AgentProfileForm({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isValidatingWorktreePath, setIsValidatingWorktreePath] =
-    useState(false);
-  const [worktreePathError, setWorktreePathError] = useState<string | null>(
-    null,
-  );
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
   const [skills, setSkills] = useState<AgentSkillRecord[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
   const [skillLoadFailed, setSkillLoadFailed] = useState(false);
   const isMountedRef = useRef(true);
   const skillRequestSequenceRef = useRef(0);
-  const worktreePathValidationSequenceRef = useRef(0);
   const toastTimeoutRef = useRef<number | null>(null);
-  const didEditWorktreePathRef = useRef(false);
 
   const skillProjectId = scopeValue === "project" ? projectId : null;
-  const trimmedWorktreePath = worktreePath.trim();
-  const isDefaultWorktreePath =
-    trimmedWorktreePath.length > 0 &&
-    defaultWorktreePath.length > 0 &&
-    trimmedWorktreePath === defaultWorktreePath;
-  const shouldSkipWorktreePathValidation =
-    trimmedWorktreePath.length === 0 ||
-    defaultWorktreePath.length === 0 ||
-    isDefaultWorktreePath;
-
   const loadSkills = useCallback(() => {
     const requestSequence = skillRequestSequenceRef.current + 1;
     skillRequestSequenceRef.current = requestSequence;
@@ -129,20 +105,12 @@ export function AgentProfileForm({
     }
   }, [agentType, skillProjectId]);
 
-  const isCurrentValidationRequest = useCallback((requestSequence: number) => {
-    return (
-      isMountedRef.current &&
-      worktreePathValidationSequenceRef.current === requestSequence
-    );
-  }, []);
-
   useEffect(() => {
     isMountedRef.current = true;
 
     return () => {
       isMountedRef.current = false;
       skillRequestSequenceRef.current += 1;
-      worktreePathValidationSequenceRef.current += 1;
       if (toastTimeoutRef.current !== null) {
         window.clearTimeout(toastTimeoutRef.current);
       }
@@ -313,54 +281,8 @@ export function AgentProfileForm({
     }
   }
 
-  async function validateCustomWorktreePath(): Promise<boolean> {
-    if (shouldSkipWorktreePathValidation) {
-      setWorktreePathError(null);
-      setIsValidatingWorktreePath(false);
-      worktreePathValidationSequenceRef.current += 1;
-      return true;
-    }
-
-    const requestSequence = worktreePathValidationSequenceRef.current + 1;
-    worktreePathValidationSequenceRef.current = requestSequence;
-    setIsValidatingWorktreePath(true);
-    setWorktreePathError(null);
-
-    try {
-      const result = await validateAgentWorktreePath({
-        path: trimmedWorktreePath,
-      });
-      if (!isCurrentValidationRequest(requestSequence)) {
-        return false;
-      }
-
-      if (!result.exists) {
-        setWorktreePathError("Worktree path does not exist.");
-        return false;
-      }
-
-      setWorktreePathError(null);
-      return true;
-    } catch (error: unknown) {
-      if (!isCurrentValidationRequest(requestSequence)) {
-        return false;
-      }
-
-      setWorktreePathError(toCommandError(error).message);
-      return false;
-    } finally {
-      if (isCurrentValidationRequest(requestSequence)) {
-        setIsValidatingWorktreePath(false);
-      }
-    }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const isValidWorktreePath = await validateCustomWorktreePath();
-    if (!isValidWorktreePath) {
-      return;
-    }
     setIsSaving(true);
     setStatusMessage(null);
     setToastMessage(null);
@@ -372,7 +294,6 @@ export function AgentProfileForm({
         name,
         agentType,
         command,
-        worktreePath: trimmedWorktreePath,
         scope: scopeValue,
         projectId: effectiveProjectId,
         mode: modeValue,
@@ -389,11 +310,7 @@ export function AgentProfileForm({
   }
 
   const isSubmitDisabled =
-    isSaving ||
-    isValidatingWorktreePath ||
-    worktreePathError !== null ||
-    name.trim().length === 0 ||
-    command.trim().length === 0;
+    isSaving || name.trim().length === 0 || command.trim().length === 0;
 
   const dialogTitle = mode === "create" ? "New agent" : "Edit Agent";
 
@@ -501,48 +418,6 @@ export function AgentProfileForm({
             </div>
           </div>
 
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor="agent-profile-worktree-path"
-              className="text-xs text-muted-foreground"
-            >
-              Worktree path
-            </Label>
-            <Input
-              id="agent-profile-worktree-path"
-              aria-label="Worktree path"
-              value={worktreePath}
-              onBlur={() => {
-                if (!didEditWorktreePathRef.current) {
-                  return;
-                }
-                void validateCustomWorktreePath();
-              }}
-              onChange={(event) => {
-                didEditWorktreePathRef.current = true;
-                setWorktreePath(event.target.value);
-                if (worktreePathError !== null) {
-                  setWorktreePathError(null);
-                }
-              }}
-            />
-            {isDefaultWorktreePath ? (
-              <span className="text-xs text-muted-foreground">
-                默认路径允许当前不存在，运行时会按需创建。
-              </span>
-            ) : null}
-            {isValidatingWorktreePath ? (
-              <span className="text-xs text-muted-foreground">
-                校验路径中...
-              </span>
-            ) : null}
-            {worktreePathError ? (
-              <span role="alert" className="text-xs text-destructive">
-                {worktreePathError}
-              </span>
-            ) : null}
-          </div>
-
           <SearchableSelect
             label="Scope"
             ariaLabel="Scope"
@@ -624,14 +499,6 @@ export function AgentProfileForm({
       </form>
     </div>
   );
-}
-
-function buildDefaultWorktreePath(projectPath: string): string {
-  const trimmedProjectPath = projectPath.trim();
-  if (trimmedProjectPath.length === 0) {
-    return "";
-  }
-  return `${trimmedProjectPath}.worktrees`;
 }
 
 interface SearchableSelectOption {

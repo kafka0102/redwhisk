@@ -34,7 +34,6 @@ import {
   listAgentProfiles,
   saveAgentProfile,
   testAgentCommand,
-  validateAgentWorktreePath,
 } from "../../features/settings/settings-commands";
 import {
   closeProjectTerminal,
@@ -198,6 +197,8 @@ describe("command client", () => {
       name: "RedWhisk Desktop",
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       completionPolicy: "agent_auto_commit",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_624_800_000,
     });
@@ -208,12 +209,16 @@ describe("command client", () => {
         name: "RedWhisk Desktop",
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
         completionPolicy: "agent_auto_commit",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "",
       }),
     ).resolves.toEqual({
       id: 1,
       name: "RedWhisk Desktop",
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       completionPolicy: "agent_auto_commit",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_624_800_000,
     });
@@ -223,6 +228,8 @@ describe("command client", () => {
         name: "RedWhisk Desktop",
         repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
         completionPolicy: "agent_auto_commit",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "",
       },
     });
   });
@@ -651,7 +658,6 @@ describe("command client", () => {
           name: "Codex",
           agentType: "codex",
           command: "/usr/local/bin/codex",
-          worktreePath: "/tmp/redwhisk.worktrees",
           scope: "global",
           projectId: null,
           mode: "full-auto",
@@ -672,7 +678,6 @@ describe("command client", () => {
           name: "Codex",
           agentType: "codex",
           command: "/usr/local/bin/codex",
-          worktreePath: "/tmp/redwhisk.worktrees",
           scope: "global",
           projectId: null,
           mode: "full-auto",
@@ -694,7 +699,6 @@ describe("command client", () => {
       name: "Codex",
       agentType: "codex",
       command: "/usr/local/bin/codex",
-      worktreePath: "/tmp/redwhisk.worktrees",
       scope: "global",
       projectId: null,
       mode: "full-auto",
@@ -709,7 +713,6 @@ describe("command client", () => {
         name: "Codex",
         agentType: "codex",
         command: "/usr/local/bin/codex",
-        worktreePath: "/tmp/redwhisk.worktrees",
         scope: "global",
         projectId: null,
         mode: "full-auto",
@@ -722,7 +725,6 @@ describe("command client", () => {
       name: "Codex",
       agentType: "codex",
       command: "/usr/local/bin/codex",
-      worktreePath: "/tmp/redwhisk.worktrees",
       scope: "global",
       projectId: null,
       mode: "full-auto",
@@ -736,7 +738,6 @@ describe("command client", () => {
         name: "Codex",
         agentType: "codex",
         command: "/usr/local/bin/codex",
-        worktreePath: "/tmp/redwhisk.worktrees",
         scope: "global",
         projectId: null,
         mode: "full-auto",
@@ -756,23 +757,6 @@ describe("command client", () => {
     });
   });
 
-  it("invokes Rust Core through the validate agent worktree path command", async () => {
-    invokeMock.mockResolvedValue({
-      path: "/tmp/redwhisk.worktrees",
-      exists: true,
-    });
-
-    await expect(
-      validateAgentWorktreePath({ path: "/tmp/redwhisk.worktrees" }),
-    ).resolves.toEqual({
-      path: "/tmp/redwhisk.worktrees",
-      exists: true,
-    });
-    expect(invokeMock).toHaveBeenCalledWith("validate_agent_worktree_path", {
-      input: { path: "/tmp/redwhisk.worktrees" },
-    });
-  });
-
   it("invokes Rust Core through the start agent session command", async () => {
     invokeMock.mockResolvedValue({
       sessionId: 7,
@@ -788,6 +772,7 @@ describe("command client", () => {
         completionPolicyOverride: "agent_auto_commit",
         workspaceMode: "worktree",
         targetBranch: "main",
+        worktreeSetupCommand: "pnpm install",
       }),
     ).resolves.toEqual({
       sessionId: 7,
@@ -802,6 +787,7 @@ describe("command client", () => {
         completionPolicyOverride: "agent_auto_commit",
         workspaceMode: "worktree",
         targetBranch: "main",
+        worktreeSetupCommand: "pnpm install",
       },
     });
   });

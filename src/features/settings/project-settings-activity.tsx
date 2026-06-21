@@ -17,7 +17,10 @@ import {
   type ProjectLabelRecord,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
-import type { ProjectCompletionPolicy } from "../project/project-commands";
+import type {
+  ProjectCompletionPolicy,
+  ProjectWorktreeLocation,
+} from "../project/project-commands";
 import type { ProjectSummary } from "../../app/app";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
@@ -83,6 +86,8 @@ interface ProjectSettingsActivityProps {
   projectId: number;
   projectName: string;
   projectPath?: string;
+  worktreeLocation?: ProjectWorktreeLocation;
+  worktreeSetupCommand?: string;
 }
 
 export function ProjectSettingsActivity({
@@ -93,6 +98,8 @@ export function ProjectSettingsActivity({
   projectId,
   projectName,
   projectPath = "",
+  worktreeLocation = "repo_sibling",
+  worktreeSetupCommand = "",
 }: ProjectSettingsActivityProps) {
   const { messages } = useI18n();
   const [internalActiveMenu, setInternalActiveMenu] =
@@ -491,6 +498,8 @@ export function ProjectSettingsActivity({
                 projectId={projectId}
                 projectName={projectName}
                 projectPath={projectPath}
+                worktreeLocation={worktreeLocation}
+                worktreeSetupCommand={worktreeSetupCommand}
                 onProjectUpdated={onProjectUpdated}
               />
             ) : null}
@@ -504,7 +513,6 @@ export function ProjectSettingsActivity({
                 loadState={currentProfilesLoadState}
                 profiles={currentProfiles}
                 projectId={projectId}
-                projectPath={projectPath}
                 onAddFormChange={handleAddFormChange}
                 onDeleteProfile={handleDeleteProfile}
                 onEditingProfileChange={handleEditingProfileChange}

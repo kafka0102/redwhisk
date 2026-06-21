@@ -115,6 +115,8 @@ describe("AppShell terminals activity persistence", () => {
           name: "RedWhisk",
           path: "/tmp/redwhisk",
           completionPolicy: "agent_auto_commit",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
         }}
@@ -159,6 +161,8 @@ describe("AppShell terminals activity persistence", () => {
           name: "RedWhisk",
           path: "/tmp/redwhisk",
           completionPolicy: "agent_auto_commit",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
         }}
@@ -190,6 +194,8 @@ describe("AppShell terminals activity persistence", () => {
           name: "RedWhisk",
           path: "/tmp/redwhisk",
           completionPolicy: "agent_auto_commit",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
         }}

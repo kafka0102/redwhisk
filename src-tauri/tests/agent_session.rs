@@ -122,6 +122,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "workspace_path",
             "completion_policy",
             "worktree_root_path",
+            "worktree_setup_command",
             "list_inserted_at",
         ]
     );
@@ -165,6 +166,7 @@ fn start_agent_session_rejects_blank_prompt_snapshot() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("blank prompt should be rejected");
@@ -199,6 +201,7 @@ fn start_agent_session_rejects_non_backlog_issue() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("review issue should be rejected");
@@ -237,6 +240,7 @@ fn start_agent_session_rejects_project_profile_from_another_project() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("project profile should be bound to the same project");
@@ -274,6 +278,7 @@ fn start_agent_session_rejects_deleted_agent_profile() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("deleted profile should be rejected");
@@ -312,6 +317,7 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect("start should succeed");
@@ -545,6 +551,7 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect("first start should succeed");
@@ -560,6 +567,7 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("second start should be rejected");
@@ -626,6 +634,7 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("start should fail when command cannot start");
@@ -742,6 +751,7 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
         )
         .expect_err("insert-time unique violation should map to existing-session error");
@@ -788,6 +798,7 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
             &manager,
         )
@@ -859,14 +870,22 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
         .expect("repo path");
     let repo_path = std::path::PathBuf::from(repo_path);
     let issue_id = insert_issue(&database.connection, project_id, "backlog");
-    let worktree_root = temp_dir.path().join("agent-worktrees");
+    database
+        .connection
+        .execute(
+            "UPDATE projects
+             SET worktree_location = 'repo_internal',
+                 worktree_setup_command = 'pnpm install'
+             WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree settings");
     let profile = AgentProfileRepository::new(&database.connection)
         .save_profile(
             None,
             "Codex",
             AgentType::Codex,
             success_command(temp_dir.path()).to_string_lossy().as_ref(),
-            worktree_root.to_string_lossy().as_ref(),
             &AgentScope::Project,
             Some(project_id),
             "full-auto",
@@ -893,6 +912,7 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
                 completion_policy_override: Some(ProjectCompletionPolicy::AgentAutoCommit),
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
+                worktree_setup_command: Some("pnpm install\npnpm test".to_string()),
             },
         )
         .expect("start worktree session");
@@ -910,7 +930,11 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
     );
     assert_eq!(
         session.worktree_root_path.as_deref(),
-        Some(worktree_root.to_string_lossy().as_ref())
+        Some(repo_path.join(".worktrees").to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        session.worktree_setup_command.as_deref(),
+        Some("pnpm install\npnpm test")
     );
     let workspace_path = session.workspace_path.expect("workspace path");
     assert!(std::path::Path::new(&workspace_path).is_dir());
@@ -920,6 +944,95 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
         .as_deref()
         .is_some_and(|value| value.starts_with("issue-")));
     assert_eq!(session.working_dir, workspace_path);
+}
+
+#[test]
+fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_override() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sibling-worktree-session-project");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    database
+        .connection
+        .execute(
+            "UPDATE projects
+             SET worktree_location = ?1,
+                 worktree_setup_command = 'cargo fetch'
+             WHERE id = ?2",
+            rusqlite::params!["repo_sibling", project_id],
+        )
+        .expect("update project worktree settings");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: Some(ProjectCompletionPolicy::Manual),
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: None,
+            },
+        )
+        .expect("start worktree session");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session exists");
+    assert_eq!(
+        session.worktree_root_path.as_deref(),
+        Some(
+            repo_path
+                .parent()
+                .expect("repo parent")
+                .join(format!(
+                    "{}.worktrees",
+                    repo_path
+                        .file_name()
+                        .expect("repo directory name")
+                        .to_string_lossy()
+                ))
+                .to_string_lossy()
+                .as_ref()
+        )
+    );
+    assert_eq!(
+        session.worktree_setup_command.as_deref(),
+        Some("cargo fetch")
+    );
 }
 
 #[test]
@@ -953,6 +1066,7 @@ fn complete_issue_manual_with_pty_terminates_tracked_session() {
                 completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
+                worktree_setup_command: None,
             },
             &manager,
         )
@@ -1157,7 +1271,6 @@ fn agent_session_repository_reads_sessions_for_claude_profiles() {
             "Claude",
             AgentType::Claude,
             "/usr/local/bin/claude",
-            "",
             &AgentScope::Global,
             None,
             "default",
@@ -2634,7 +2747,6 @@ fn insert_agent_profile_with_command(
             "Codex",
             AgentType::Codex,
             command,
-            "",
             &scope,
             project_id,
             "full-auto",

@@ -247,7 +247,6 @@ const projectProfile = {
   name: "Project Codex",
   agentType: "codex" as const,
   command: "/usr/local/bin/codex",
-  worktreePath: "/tmp/redwhisk.worktrees",
   scope: "project" as const,
   projectId: 1,
   mode: "full-auto",
@@ -262,7 +261,6 @@ const globalProfile = {
   name: "Global Codex",
   agentType: "codex" as const,
   command: "/usr/local/bin/codex",
-  worktreePath: "/tmp/redwhisk.worktrees",
   scope: "global" as const,
   projectId: null,
   mode: "full-auto",
@@ -1197,6 +1195,7 @@ describe("IssuesActivity", () => {
       completionPolicyOverride: "agent_auto_commit",
       workspaceMode: "current_branch",
       targetBranch: "main",
+      worktreeSetupCommand: "pnpm install",
     });
     expect(
       within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
@@ -1265,7 +1264,50 @@ describe("IssuesActivity", () => {
       completionPolicyOverride: "agent_auto_commit",
       workspaceMode: "worktree",
       targetBranch: "develop",
+      worktreeSetupCommand: "pnpm install",
     });
+  }, 10_000);
+
+  it("shows inferred worktree setup command and submits user overrides", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity({
+      worktreeSetupCommand: "pnpm install",
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const setupField = within(dialog).getByLabelText(
+      "Worktree setup after creation",
+    );
+    expect(setupField).toHaveAttribute("placeholder", "pnpm install");
+
+    await user.type(setupField, "pnpm install\npnpm test");
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreeSetupCommand: "pnpm install\npnpm test",
+      }),
+    );
   });
 
   it("closes the run dialog and refreshes issues when start succeeds", async () => {
@@ -2071,6 +2113,7 @@ function renderIssuesActivity(
       <IssuesActivity
         projectCompletionPolicy="agent_auto_commit"
         projectId={1}
+        worktreeSetupCommand="pnpm install"
         {...props}
       />
     </I18nProvider>,

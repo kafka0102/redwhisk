@@ -30,7 +30,6 @@ interface AgentsSettingsPanelProps {
   loadState: "loading" | "ready" | "error";
   profiles: AgentProfileRecord[];
   projectId: number;
-  projectPath?: string;
   onAddFormChange: (form: AddFormState | null) => void;
   onDeleteProfile: (profile: AgentProfileRecord) => void;
   onEditingProfileChange: (state: EditingProfileState | null) => void;
@@ -45,7 +44,6 @@ export function AgentsSettingsPanel({
   loadState,
   profiles,
   projectId,
-  projectPath = "",
   onAddFormChange,
   onDeleteProfile,
   onEditingProfileChange,
@@ -172,7 +170,6 @@ export function AgentsSettingsPanel({
           mode="create"
           scope="global"
           projectId={addForm.projectId}
-          projectPath={projectPath}
           onCancel={() => onAddFormChange(null)}
           onSaved={onProfileSaved}
         />
@@ -184,7 +181,6 @@ export function AgentsSettingsPanel({
           mode="edit"
           scope={editingProfile.profile.scope}
           projectId={projectId}
-          projectPath={projectPath}
           profile={editingProfile.profile}
           onCancel={() => onEditingProfileChange(null)}
           onSaved={onProfileSaved}

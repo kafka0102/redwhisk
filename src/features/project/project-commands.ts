@@ -26,6 +26,10 @@ export interface OpenProjectInput {
 }
 
 export type ProjectCompletionPolicy = "manual" | "agent_auto_commit";
+export type ProjectWorktreeLocation =
+  | "repo_sibling"
+  | "repo_internal"
+  | "user_home";
 
 export interface UpdateProjectCompletionPolicyInput {
   projectId: number;
@@ -37,6 +41,8 @@ export interface UpdateProjectSettingsInput {
   name: string;
   repoPath: string;
   completionPolicy: ProjectCompletionPolicy;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
 }
 
 export interface ProjectRecord {
@@ -44,6 +50,8 @@ export interface ProjectRecord {
   name: string;
   repoPath: string;
   completionPolicy: ProjectCompletionPolicy;
+  worktreeLocation?: ProjectWorktreeLocation;
+  worktreeSetupCommand?: string;
   createdAt: number;
   lastOpenedAt: number;
 }

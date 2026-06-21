@@ -180,9 +180,11 @@ export function AppShell({
               onSelectAgentSession={setActiveAgentSessionId}
               activeProjectSettingsMenu={activeProjectSettingsMenu}
               projectCompletionPolicy={project.completionPolicy}
+              projectWorktreeSetupCommand={project.worktreeSetupCommand}
               projectId={project.id}
               projectName={project.name}
               projectPath={project.path}
+              projectWorktreeLocation={project.worktreeLocation}
               projectTerminalsState={projectTerminalsState}
               requestedIssueId={requestedIssueId}
             />

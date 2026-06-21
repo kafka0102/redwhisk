@@ -10,7 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import type { ProjectCompletionPolicy } from "./project-commands";
+import type {
+  ProjectCompletionPolicy,
+  ProjectWorktreeLocation,
+} from "./project-commands";
 
 interface ProjectDetailsFormProps {
   ariaStatusLabel: string;
@@ -29,6 +32,8 @@ interface ProjectDetailsFormProps {
   onCompletionPolicyChange: (value: ProjectCompletionPolicy) => void;
   onNameChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onWorktreeLocationChange?: (value: ProjectWorktreeLocation) => void;
+  onWorktreeSetupCommandChange?: (value: string) => void;
   projectName: string;
   projectNameLabel: string;
   repoPath: string;
@@ -37,6 +42,11 @@ interface ProjectDetailsFormProps {
   submitDisabled: boolean;
   submitLabel: string;
   submittingLabel: string;
+  worktreeLocation?: ProjectWorktreeLocation;
+  worktreeLocationLabel?: string;
+  worktreeSetupCommand?: string;
+  worktreeSetupCommandLabel?: string;
+  worktreeSetupCommandPlaceholder?: string;
 }
 
 export function ProjectDetailsForm({
@@ -56,6 +66,8 @@ export function ProjectDetailsForm({
   onCompletionPolicyChange,
   onNameChange,
   onSubmit,
+  onWorktreeLocationChange,
+  onWorktreeSetupCommandChange,
   projectName,
   projectNameLabel,
   repoPath,
@@ -64,7 +76,14 @@ export function ProjectDetailsForm({
   submitDisabled,
   submitLabel,
   submittingLabel,
+  worktreeLocation = "repo_sibling",
+  worktreeLocationLabel,
+  worktreeSetupCommand = "",
+  worktreeSetupCommandLabel,
+  worktreeSetupCommandPlaceholder = "",
 }: ProjectDetailsFormProps) {
+  const worktreeOptions = buildWorktreeLocationOptions(repoPath);
+
   return (
     <form className={className} onSubmit={onSubmit}>
       <div className="grid gap-1.5">
@@ -136,6 +155,64 @@ export function ProjectDetailsForm({
           </SelectContent>
         </Select>
       </div>
+      {worktreeLocationLabel ? (
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="project-worktree-location"
+            className="text-xs text-muted-foreground"
+          >
+            {worktreeLocationLabel}
+          </Label>
+          <Select
+            items={worktreeOptions.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+            value={worktreeLocation}
+            onValueChange={(value) =>
+              onWorktreeLocationChange?.(value as ProjectWorktreeLocation)
+            }
+          >
+            <SelectTrigger
+              id="project-worktree-location"
+              aria-label={worktreeLocationLabel}
+              className="w-full"
+              disabled={isSubmitting}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {worktreeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      {worktreeSetupCommandLabel ? (
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor="project-worktree-setup-command"
+            className="text-xs text-muted-foreground"
+          >
+            {worktreeSetupCommandLabel}
+          </Label>
+          <textarea
+            id="project-worktree-setup-command"
+            aria-label={worktreeSetupCommandLabel}
+            className="min-h-[78px] w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSubmitting}
+            placeholder={worktreeSetupCommandPlaceholder}
+            rows={3}
+            value={worktreeSetupCommand}
+            onChange={(event) =>
+              onWorktreeSetupCommandChange?.(event.target.value)
+            }
+          />
+        </div>
+      ) : null}
       {errorMessage ? (
         <p
           className="settings-status"
@@ -167,4 +244,32 @@ export function ProjectDetailsForm({
       </div>
     </form>
   );
+}
+
+interface WorktreeLocationOption {
+  value: ProjectWorktreeLocation;
+  label: string;
+}
+
+function buildWorktreeLocationOptions(
+  repoPath: string,
+): WorktreeLocationOption[] {
+  const trimmedRepoPath = repoPath.trim();
+  const repoName = repoNameFromPath(trimmedRepoPath);
+  const siblingPath =
+    trimmedRepoPath.length === 0 ? "" : `${trimmedRepoPath}.worktrees`;
+  const internalPath =
+    trimmedRepoPath.length === 0 ? "" : `${trimmedRepoPath}/.worktrees`;
+  const homePath = repoName ? `~/.redwhisk/worktrees/${repoName}` : "";
+
+  return [
+    { value: "repo_sibling", label: siblingPath },
+    { value: "repo_internal", label: internalPath },
+    { value: "user_home", label: homePath },
+  ];
+}
+
+function repoNameFromPath(repoPath: string): string {
+  const parts = repoPath.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] ?? "";
 }

@@ -41,6 +41,7 @@ interface IssueRunDialogProps {
   issue: Pick<IssueRecord, "id" | "title" | "description" | "attachments">;
   projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
+  worktreeSetupCommand?: string;
   onClose: () => void;
   onStarted: (result: StartAgentSessionResult) => void | Promise<void>;
 }
@@ -54,6 +55,7 @@ export function IssueRunDialog({
   issue,
   projectCompletionPolicy,
   projectId,
+  worktreeSetupCommand = "",
   onClose,
   onStarted,
 }: IssueRunDialogProps) {
@@ -70,6 +72,7 @@ export function IssueRunDialog({
   const [workspaceMode, setWorkspaceMode] =
     useState<WorkspaceMode>("current_branch");
   const [targetBranch, setTargetBranch] = useState("");
+  const [setupCommand, setSetupCommand] = useState("");
   const [branchState, setBranchState] = useState<ProjectGitBranchListResult>({
     currentBranch: "",
     localBranches: [],
@@ -231,6 +234,9 @@ export function IssueRunDialog({
     workspaceMode === "current_branch"
       ? branchState.currentBranch
       : targetBranch.trim();
+  const trimmedSetupCommand = setupCommand.trim();
+  const effectiveSetupCommand =
+    trimmedSetupCommand.length > 0 ? trimmedSetupCommand : worktreeSetupCommand;
 
   const isStartDisabled =
     isLoadingProfiles ||
@@ -290,6 +296,7 @@ export function IssueRunDialog({
         completionPolicyOverride: completionPolicy,
         workspaceMode,
         targetBranch: effectiveTargetBranch,
+        worktreeSetupCommand: effectiveSetupCommand,
       });
       await onStarted(result);
     } catch (error) {
@@ -538,6 +545,23 @@ export function IssueRunDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="run-worktree-setup-command"
+                className="text-xs text-muted-foreground"
+              >
+                Worktree setup after creation
+              </Label>
+              <Textarea
+                id="run-worktree-setup-command"
+                aria-label="Worktree setup after creation"
+                placeholder={worktreeSetupCommand}
+                rows={3}
+                value={setupCommand}
+                onChange={(event) => setSetupCommand(event.target.value)}
+              />
             </div>
 
             <div className="grid gap-1.5">
