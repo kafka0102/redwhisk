@@ -1038,6 +1038,7 @@ impl<'connection> AgentSessionService<'connection> {
                     is_turn_running: is_structured_turn_running(&row.log_path)
                         .unwrap_or(None)
                         .unwrap_or(is_session_running),
+                    workspace_mode: row.workspace_mode,
                     log_path: row.log_path,
                     latest_output,
                     last_active_at: row.last_active_at,

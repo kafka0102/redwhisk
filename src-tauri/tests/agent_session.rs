@@ -1386,6 +1386,10 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
     );
     assert_eq!(response.sessions[0].agent_profile_id, profile_id);
     assert_eq!(
+        response.sessions[0].workspace_mode,
+        WorkspaceMode::CurrentBranch
+    );
+    assert_eq!(
         response.sessions[1].issue_title.as_deref(),
         Some("Older running issue")
     );

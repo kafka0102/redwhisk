@@ -26,6 +26,7 @@ import type { ProjectCompletionPolicy } from "../project/project-commands";
 import {
   listAgentSessions,
   type AgentSessionListItem,
+  type WorkspaceMode as SessionWorkspaceMode,
 } from "../agents/agent-session-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import { buildRunPromptPreview } from "./run-prompt-builder";
@@ -72,7 +73,6 @@ export function IssueRunDialog({
   const [workspaceMode, setWorkspaceMode] =
     useState<WorkspaceMode>("current_branch");
   const [targetBranch, setTargetBranch] = useState("");
-  const [setupCommand, setSetupCommand] = useState("");
   const [branchState, setBranchState] = useState<ProjectGitBranchListResult>({
     currentBranch: "",
     localBranches: [],
@@ -122,6 +122,12 @@ export function IssueRunDialog({
         });
         const recentWorkspaceSelection =
           readRecentWorkspaceSelection(projectId);
+        const initialWorkspaceMode = resolveInitialWorkspaceMode({
+          currentBranch: branchesResponse.currentBranch,
+          recentWorkspaceMode: resolveMostRecentIssueWorkspaceMode(
+            sessionsResponse.sessions,
+          ),
+        });
         const resolvedTargetBranch = resolveInitialTargetBranch({
           currentBranch: branchesResponse.currentBranch,
           localBranches: branchesResponse.localBranches,
@@ -139,9 +145,7 @@ export function IssueRunDialog({
             : null,
         );
         setCompletionPolicy(projectCompletionPolicy);
-        setWorkspaceMode(
-          recentWorkspaceSelection?.workspaceMode ?? "current_branch",
-        );
+        setWorkspaceMode(initialWorkspaceMode);
         setTargetBranch(resolvedTargetBranch);
         setBranchState(branchesResponse);
         setHasLoadedRunContext(true);
@@ -234,9 +238,7 @@ export function IssueRunDialog({
     workspaceMode === "current_branch"
       ? branchState.currentBranch
       : targetBranch.trim();
-  const trimmedSetupCommand = setupCommand.trim();
-  const effectiveSetupCommand =
-    trimmedSetupCommand.length > 0 ? trimmedSetupCommand : worktreeSetupCommand;
+  const effectiveSetupCommand = worktreeSetupCommand.trim();
 
   const isStartDisabled =
     isLoadingProfiles ||
@@ -549,23 +551,6 @@ export function IssueRunDialog({
 
             <div className="grid gap-1.5">
               <Label
-                htmlFor="run-worktree-setup-command"
-                className="text-xs text-muted-foreground"
-              >
-                Worktree setup after creation
-              </Label>
-              <Textarea
-                id="run-worktree-setup-command"
-                aria-label="Worktree setup after creation"
-                placeholder={worktreeSetupCommand}
-                rows={3}
-                value={setupCommand}
-                onChange={(event) => setSetupCommand(event.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label
                 htmlFor="run-final-prompt"
                 className="text-xs text-muted-foreground"
               >
@@ -745,6 +730,35 @@ function saveRecentWorkspaceSelection(
   } catch {
     // Ignore local storage failures and fall back to in-memory defaults.
   }
+}
+
+function resolveInitialWorkspaceMode({
+  currentBranch,
+  recentWorkspaceMode,
+}: {
+  currentBranch: string;
+  recentWorkspaceMode: SessionWorkspaceMode | null;
+}): WorkspaceMode {
+  if (isMainlineBranch(currentBranch)) {
+    return "worktree";
+  }
+
+  return recentWorkspaceMode === "worktree" ? "worktree" : "current_branch";
+}
+
+function resolveMostRecentIssueWorkspaceMode(
+  sessions: AgentSessionListItem[],
+): SessionWorkspaceMode | null {
+  const latestIssueSession = sessions
+    .filter((session) => session.issueId !== null)
+    .sort(compareSessionsByMostRecent)[0];
+
+  return latestIssueSession?.workspaceMode ?? null;
+}
+
+function isMainlineBranch(branch: string): boolean {
+  const normalizedBranch = branch.trim();
+  return normalizedBranch === "main" || normalizedBranch === "master";
 }
 
 function resolveInitialTargetBranch({

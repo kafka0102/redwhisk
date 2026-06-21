@@ -1126,14 +1126,14 @@ describe("IssuesActivity", () => {
       "Agent auto commit",
     );
     expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
-      "Current branch",
+      "Worktree",
     );
     expect(within(dialog).getByLabelText("Target branch")).toHaveTextContent(
       "main",
     );
     expect(
       within(dialog).getByRole("combobox", { name: "Target branch" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     expect(
       within(dialog).queryByLabelText("Working directory"),
     ).not.toBeInTheDocument();
@@ -1228,7 +1228,7 @@ describe("IssuesActivity", () => {
       agentProfileId: 100,
       promptSnapshot: existingIssueRunPrompt,
       completionPolicyOverride: "agent_auto_commit",
-      workspaceMode: "current_branch",
+      workspaceMode: "worktree",
       targetBranch: "main",
       worktreeSetupCommand: "pnpm install",
     });
@@ -1303,7 +1303,173 @@ describe("IssuesActivity", () => {
     });
   }, 10_000);
 
-  it("shows inferred worktree setup command and submits user overrides", async () => {
+  it("defaults master and main branches to worktree mode", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    getProjectGitBranchesMock.mockResolvedValue({
+      currentBranch: "master",
+      localBranches: ["master", "develop"],
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
+      "Worktree",
+    );
+    expect(within(dialog).getByLabelText("Target branch")).toHaveTextContent(
+      "master",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceMode: "worktree",
+        targetBranch: "master",
+        worktreeSetupCommand: "pnpm install",
+      }),
+    );
+  });
+
+  it("defaults non-main branches to the most recent issue session workspace mode", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: existingIssue.id,
+          issueTitle: existingIssue.title,
+          issueStatus: "completed",
+          agentProfileId: projectProfile.id,
+          canCompleteClean: false,
+          canCompleteAgentCommit: false,
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          isTurnRunning: false,
+          workspaceMode: "worktree",
+          logPath: "/tmp/redwhisk/session.log",
+          latestOutput: null,
+          lastActiveAt: 1_780_632_000_000,
+          startedAt: 1_780_632_000_000,
+          closedAt: 1_780_633_000_000,
+        },
+      ],
+    });
+    getProjectGitBranchesMock.mockResolvedValue({
+      currentBranch: "feature/redesign",
+      localBranches: ["feature/redesign", "develop"],
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 302,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
+      "Worktree",
+    );
+    expect(within(dialog).getByLabelText("Target branch")).toHaveTextContent(
+      "feature/redesign",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceMode: "worktree",
+        targetBranch: "feature/redesign",
+      }),
+    );
+  });
+
+  it("keeps non-main branches on current branch without a previous issue session", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "redwhisk.issue-run.recent-workspace-selection",
+      JSON.stringify({
+        "1": { workspaceMode: "worktree", targetBranch: "develop" },
+      }),
+    );
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    getProjectGitBranchesMock.mockResolvedValue({
+      currentBranch: "feature/redesign",
+      localBranches: ["feature/redesign", "develop"],
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 302,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
+      "Current branch",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceMode: "current_branch",
+        targetBranch: "feature/redesign",
+      }),
+    );
+  });
+
+  it("hides the worktree setup command field while still using project settings", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
@@ -1330,19 +1496,62 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
-    const setupField = within(dialog).getByLabelText(
-      "Worktree setup after creation",
-    );
-    expect(setupField).toHaveAttribute("placeholder", "pnpm install");
+    expect(
+      within(dialog).queryByLabelText("Worktree setup after creation"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByPlaceholderText("pnpm install"),
+    ).not.toBeInTheDocument();
 
-    await user.type(setupField, "pnpm install\npnpm test");
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
 
     expect(startAgentSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        worktreeSetupCommand: "pnpm install\npnpm test",
+        worktreeSetupCommand: "pnpm install",
       }),
     );
+  });
+
+  it("re-enables the start action after a start failure", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock
+      .mockRejectedValueOnce({
+        code: "AGENT_SESSION_START_FAILED",
+        message: "Agent 启动失败。",
+      })
+      .mockResolvedValueOnce({
+        sessionId: 301,
+        issueId: existingIssue.id,
+      });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Run Existing issue" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+
+    await user.click(startButton);
+
+    expect(within(dialog).getByText("Agent 启动失败。")).toBeInTheDocument();
+    await waitFor(() => expect(startButton).toBeEnabled());
+
+    await user.click(startButton);
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(2);
   });
 
   it("closes the run dialog and refreshes issues when start succeeds", async () => {
