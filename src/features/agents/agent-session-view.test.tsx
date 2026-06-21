@@ -161,6 +161,30 @@ describe("AgentSessionView", () => {
     expect(screen.getByText("正在思考…")).toBeInTheDocument();
   });
 
+  it("从 session 列表恢复运行中轮次时立即显示思考状态", async () => {
+    setupTimeline([
+      {
+        type: "user_message",
+        text: "北京今天天气如何？",
+        messageId: "u1",
+      } as never,
+    ]);
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        isTurnRunning={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("北京今天天气如何？")).toBeInTheDocument();
+    });
+    expect(screen.getByText("正在思考…")).toBeInTheDocument();
+  });
+
   it("claude agentType 时 composer 不渲染模型 Select", async () => {
     setupTimeline([]);
 

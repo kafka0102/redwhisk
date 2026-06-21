@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, State};
 
 use crate::agent_skill::index::AgentSkillIndex;
 use crate::agent_skill::service::AgentSkillService;
@@ -111,7 +111,7 @@ fn prepare_agent_skill_data_dir(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<PathBuf, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::ProjectPersistenceFailed,
             "Project 读取失败。",

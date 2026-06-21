@@ -39,6 +39,7 @@ export function AgentMessageStream({
 
 interface AgentMessageStreamViewProps {
   state: MessageStreamState;
+  isTurnRunning?: boolean;
 }
 
 /**
@@ -47,10 +48,14 @@ interface AgentMessageStreamViewProps {
  * 供 `AgentSessionView` 等父组件统一调 `useAgentMessageStream` 后下传，
  * 避免消息流与 composer 各自订阅形成双数据源。
  */
-export function AgentMessageStreamView({ state }: AgentMessageStreamViewProps) {
+export function AgentMessageStreamView({
+  state,
+  isTurnRunning = false,
+}: AgentMessageStreamViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const { entries, turnStatus, isInitialized, lastError } = state;
+  const shouldShowThinking = turnStatus === "running" || isTurnRunning;
 
   // 新内容到达时，若用户贴底则滚动到底。
   const lastSignature =
@@ -93,7 +98,7 @@ export function AgentMessageStreamView({ state }: AgentMessageStreamViewProps) {
         ) : null}
         <AgentMessageCards entries={entries} />
       </div>
-      {turnStatus === "running" ? (
+      {shouldShowThinking ? (
         <div
           className="agents-message-stream__running"
           role="status"

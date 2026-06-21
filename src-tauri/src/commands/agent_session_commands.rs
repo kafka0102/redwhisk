@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{Manager, State};
+use tauri::State;
 
 use crate::agent::session_handle::AgentSessionHandle;
 use crate::app_state::AppState;
@@ -30,7 +30,7 @@ pub fn list_agent_sessions(
     state: State<'_, AppState>,
     project_id: i64,
 ) -> Result<AgentSessionListResponse, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 查询失败。",
@@ -64,7 +64,7 @@ pub fn start_agent_session(
     state: State<'_, AppState>,
     input: StartAgentSessionInput,
 ) -> Result<StartAgentSessionResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 启动失败。",
@@ -118,7 +118,7 @@ pub fn get_project_git_branches(
     state: State<'_, AppState>,
     input: ProjectGitBranchListInput,
 ) -> Result<ProjectGitBranchListResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Git 分支查询失败。",
@@ -147,7 +147,7 @@ pub fn start_standalone_agent_session(
     state: State<'_, AppState>,
     input: StartStandaloneAgentSessionInput,
 ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 启动失败。",
@@ -195,7 +195,7 @@ pub fn read_agent_session_terminal(
     state: State<'_, AppState>,
     input: ReadAgentSessionTerminalInput,
 ) -> Result<ReadAgentSessionTerminalResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 终端读取失败。",
@@ -218,7 +218,7 @@ pub fn write_agent_session_terminal(
     state: State<'_, AppState>,
     input: WriteAgentSessionTerminalInput,
 ) -> Result<(), CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 终端写入失败。",
@@ -235,7 +235,7 @@ pub fn restore_agent_session_terminal(
     state: State<'_, AppState>,
     input: RestoreAgentSessionTerminalInput,
 ) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 终端恢复失败。",
@@ -252,7 +252,7 @@ pub fn set_agent_session_attention(
     state: State<'_, AppState>,
     input: SetAgentSessionAttentionInput,
 ) -> Result<SetAgentSessionAttentionResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 关注状态更新失败。",
@@ -281,7 +281,7 @@ pub fn inject_agent_session_prompt(
     state: State<'_, AppState>,
     input: InjectAgentSessionPromptInput,
 ) -> Result<InjectAgentSessionPromptResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session prompt 注入失败。",
@@ -298,7 +298,7 @@ pub fn resize_agent_session_terminal(
     state: State<'_, AppState>,
     input: ResizeAgentSessionTerminalInput,
 ) -> Result<(), CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 终端调整失败。",
@@ -339,7 +339,7 @@ fn require_structured_handle(
 fn open_agent_session_database(
     app: &tauri::AppHandle,
 ) -> Result<crate::db::connection::Database, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 数据目录不可用。",
@@ -378,7 +378,7 @@ pub fn start_structured_agent_session(
     state: State<'_, AppState>,
     input: StartStructuredAgentSessionInput,
 ) -> Result<StartStructuredAgentSessionResult, CommandError> {
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 启动失败。",
@@ -545,7 +545,7 @@ pub fn save_agent_attachment(
     // 归属校验（不依赖句柄，session 行存在即可）。
     service.find_project_session_record(input.project_id, input.session_id)?;
 
-    let data_dir = app.path().app_data_dir().map_err(|error| {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "附件保存失败：数据目录不可用。",

@@ -5,12 +5,14 @@ pub mod commands;
 pub mod core;
 pub mod db;
 pub mod git;
+pub mod local_data_path;
 pub mod types;
 
 use agent::latest_output_writer::LatestOutputWriter;
 use app_state::AppState;
 use commands::agent_skill_commands::trigger_global_skill_refresh;
 use core::local_data_service::LocalDataService;
+use local_data_path::redwhisk_data_dir;
 use tauri::{Emitter, Manager};
 
 const AGENT_SESSION_TERMINAL_OUTPUT_EVENT: &str = "agent-session-terminal-output";
@@ -23,7 +25,7 @@ pub fn run() {
         .manage(AppState::new(LocalDataService::new()))
         .setup(|app| {
             let app_handle = app.handle().clone();
-            let latest_output_writer = LatestOutputWriter::new(app.path().app_data_dir()?);
+            let latest_output_writer = LatestOutputWriter::new(redwhisk_data_dir(app.handle())?);
             let state = app.state::<AppState>();
             state.pty_sessions.set_output_sink(move |event| {
                 latest_output_writer.record_terminal_output(&event);

@@ -226,6 +226,7 @@ export function AgentsSessionPane({
                 projectId={projectId}
                 sessionId={selectedSession.sessionId}
                 agentType={selectedSession.agentType}
+                isTurnRunning={selectedSession.isTurnRunning}
               />
             ) : (
               <p className="empty-state">

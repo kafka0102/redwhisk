@@ -11,10 +11,11 @@ use std::io::Write;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
+use crate::local_data_path::redwhisk_data_dir;
 use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvelope};
 
 /// 结构化 Agent 事件流的 Tauri event 名。
@@ -114,7 +115,7 @@ impl AgentEventBroadcaster {
         let Some(app_handle) = self.app_handle.get() else {
             return;
         };
-        let Ok(data_dir) = app_handle.path().app_data_dir() else {
+        let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
             return;
         };
         let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
