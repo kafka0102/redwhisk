@@ -3097,6 +3097,11 @@ button:focus-visible {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.issue-dialog--progress {
+  width: min(420px, calc(100vw - 56px));
+  min-height: auto;
+}
+
 .issue-dialog__body--single {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -3351,6 +3356,49 @@ button:focus-visible {
   color: var(--color-danger);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.issue-completion-progress {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.issue-completion-progress__step {
+  align-items: center;
+  color: var(--color-text-subtle);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.issue-completion-progress__step--active {
+  color: var(--color-text);
+}
+
+.issue-completion-progress__step--done {
+  color: var(--color-text-muted);
+}
+
+.issue-completion-progress__marker {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.issue-completion-progress__step--active .issue-completion-progress__marker {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.issue-completion-progress__step--done .issue-completion-progress__marker {
+  background: var(--color-text-muted);
+  border-color: var(--color-text-muted);
 }
 
 .issue-dialog__footer {

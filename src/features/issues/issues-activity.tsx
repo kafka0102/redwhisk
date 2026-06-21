@@ -7,10 +7,13 @@ import {
   completeIssueManual,
   createIssue,
   deleteIssue,
+  detectAgentCommitCompletion,
   exportIssueAttachment,
   listIssues,
   markIssueReview,
+  prepareAgentCommitCompletion,
   previewIssueAttachment,
+  sendAgentCommitPrompt,
   updateIssue,
   type IssueStatus,
   type IssueAttachmentRecord,
@@ -29,6 +32,7 @@ import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
+import { injectAgentSessionPrompt } from "../agents/agent-session-commands";
 import {
   listProjectLabels,
   type ProjectLabelRecord,
@@ -54,7 +58,7 @@ export function IssuesActivity({
   requestedIssueId = null,
   worktreeSetupCommand = "",
 }: IssuesActivityProps) {
-  const { messages } = useI18n();
+  const { locale, messages } = useI18n();
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
     requestedIssueId,
@@ -74,6 +78,8 @@ export function IssuesActivity({
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
   );
+  const [completionProgress, setCompletionProgress] =
+    useState<CompletionProgressState | null>(null);
   const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>(
     [],
   );
@@ -112,6 +118,7 @@ export function IssuesActivity({
       setForm(EMPTY_FORM);
       setIsSaving(false);
       setDialogErrorMessage(null);
+      setCompletionProgress(null);
 
       try {
         const response = await listIssues({ projectId });
@@ -270,6 +277,7 @@ export function IssuesActivity({
     setRunDialogIssue(null);
     setSummaryIssueId(null);
     setAttachmentPreview(null);
+    setCompletionProgress(null);
     const closingMode = dialogMode;
     const previousSelectedIssue =
       issues.find((issue) => issue.id === previousSelectedIssueIdRef.current) ??
@@ -343,7 +351,11 @@ export function IssuesActivity({
       }
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
-        setDialogErrorMessage(toCommandError(error).message);
+        if (error instanceof CompletionCancelledError) {
+          setDialogErrorMessage(null);
+        } else {
+          setDialogErrorMessage(toCommandError(error).message);
+        }
       }
     } finally {
       if (activeProjectIdRef.current === requestProjectId) {
@@ -642,19 +654,19 @@ export function IssuesActivity({
         setIssues((currentIssues) => mergeIssue(currentIssues, reviewedIssue));
         setSelectedIssueId(reviewedIssue.id);
         setForm(issueToForm(reviewedIssue));
-        updatedIssue = await completeIssueManual({
-          projectId: requestProjectId,
-          issueId: currentIssue.id,
-        });
+        updatedIssue = await completeIssueWithCompletionChecks(
+          requestProjectId,
+          currentIssue.id,
+        );
       } else if (
         targetStatus === "completed" &&
         currentIssue.status === "review" &&
         currentIssue.linkedSessionStatus === "running"
       ) {
-        updatedIssue = await completeIssueManual({
-          projectId: requestProjectId,
-          issueId: currentIssue.id,
-        });
+        updatedIssue = await completeIssueWithCompletionChecks(
+          requestProjectId,
+          currentIssue.id,
+        );
       } else {
         updatedIssue = await advanceIssueStatus({
           projectId: requestProjectId,
@@ -670,15 +682,164 @@ export function IssuesActivity({
       setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
       setSelectedIssueId(updatedIssue.id);
       setForm(issueToForm(updatedIssue));
+      setCompletionProgress(null);
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
-        setDialogErrorMessage(toCommandError(error).message);
+        if (error instanceof CompletionCancelledError) {
+          setDialogErrorMessage(null);
+        } else if (error instanceof WorktreeMergeConflictError) {
+          await handOffWorktreeMergeConflict(
+            requestProjectId,
+            currentIssue,
+            error.detail,
+          );
+        } else {
+          setCompletionProgress(null);
+          setDialogErrorMessage(toCommandError(error).message);
+        }
       }
     } finally {
       if (activeProjectIdRef.current === requestProjectId) {
         setIsSaving(false);
       }
     }
+  }
+
+  async function completeIssueWithCompletionChecks(
+    requestProjectId: number,
+    issueId: number,
+  ): Promise<IssueRecord> {
+    try {
+      setCompletionProgress({
+        title: getCompletionProgressTitle(locale),
+        steps: buildCompletionProgressSteps(locale, "checking_commit"),
+      });
+      await prepareAgentCommitCompletion({
+        projectId: requestProjectId,
+        issueId,
+      });
+    } catch (error) {
+      const commandError = toCommandError(error);
+      if (isManualCompletionPolicyError(commandError)) {
+        throw Object.assign(
+          new Error("当前分支中有未提交的代码，请提交后再标记完成。"),
+          { cause: error },
+        );
+      }
+
+      if (!isCleanGitStatusError(commandError)) {
+        throw error;
+      }
+
+      const cleanGitDetail = getCleanGitStatusDetail(commandError);
+      const isConfirmed = window.confirm(
+        buildCompletionConfirmMessage(cleanGitDetail.targetBranch),
+      );
+      if (!isConfirmed) {
+        setCompletionProgress(null);
+        throw new CompletionCancelledError();
+      }
+
+      setCompletionProgress({
+        title: getCompletionProgressTitle(locale),
+        steps: buildCompletionProgressSteps(locale, "merging"),
+      });
+
+      try {
+        const issue = await completeIssueManual({
+          projectId: requestProjectId,
+          issueId,
+        });
+        setCompletionProgress({
+          title: getCompletionProgressTitle(locale),
+          steps: buildCompletionProgressSteps(locale, "completed"),
+        });
+        return issue;
+      } catch (completeError) {
+        const conflictDetail = getWorktreeMergeDetail(
+          toCommandError(completeError),
+        );
+        if (conflictDetail) {
+          setCompletionProgress(null);
+          throw new WorktreeMergeConflictError(conflictDetail);
+        }
+
+        throw completeError;
+      }
+    }
+
+    setCompletionProgress({
+      title: getCompletionProgressTitle(locale),
+      steps: buildCompletionProgressSteps(locale, "requesting_commit"),
+    });
+    await sendAgentCommitPrompt({
+      projectId: requestProjectId,
+      issueId,
+    });
+    setCompletionProgress({
+      title: getCompletionProgressTitle(locale),
+      steps: buildCompletionProgressSteps(locale, "waiting_commit"),
+    });
+    let result: Awaited<ReturnType<typeof detectAgentCommitCompletion>>;
+    try {
+      result = await detectAgentCommitCompletion({
+        projectId: requestProjectId,
+        issueId,
+      });
+    } catch (detectError) {
+      const conflictDetail = getWorktreeMergeDetail(
+        toCommandError(detectError),
+      );
+      if (conflictDetail) {
+        setCompletionProgress(null);
+        throw new WorktreeMergeConflictError(conflictDetail);
+      }
+
+      throw detectError;
+    }
+
+    if (result.outcome !== "completed") {
+      throw new Error(result.message);
+    }
+
+    setCompletionProgress({
+      title: getCompletionProgressTitle(locale),
+      steps: buildCompletionProgressSteps(locale, "completed"),
+    });
+    return result.issue;
+  }
+
+  async function handOffWorktreeMergeConflict(
+    requestProjectId: number,
+    issue: IssueRecord,
+    detail: WorktreeMergeDetail,
+  ) {
+    const sessionId = detail.sessionId ?? issue.linkedSessionId;
+    if (sessionId == null) {
+      setDialogErrorMessage(
+        locale === "zh"
+          ? "代码合并存在冲突，但未找到可接管的 Agent Session。"
+          : "Merge conflict detected, but no agent session is available.",
+      );
+      return;
+    }
+
+    const prompt = buildWorktreeMergeConflictPrompt(detail, locale);
+    await injectAgentSessionPrompt({
+      projectId: requestProjectId,
+      sessionId,
+      prompt,
+      kind: "follow_up",
+    });
+
+    if (activeProjectIdRef.current !== requestProjectId) {
+      return;
+    }
+
+    setDialogErrorMessage(null);
+    setDialogMode(null);
+    setForm(EMPTY_FORM);
+    onOpenAgentsActivity?.(sessionId);
   }
 
   async function handleDeleteIssue() {
@@ -813,7 +974,257 @@ export function IssuesActivity({
           onClose={() => setAttachmentPreview(null)}
         />
       ) : null}
+      {completionProgress ? (
+        <IssueCompletionProgressDialog progress={completionProgress} />
+      ) : null}
     </main>
+  );
+}
+
+type CompletionProgressStepId =
+  | "checking_commit"
+  | "requesting_commit"
+  | "waiting_commit"
+  | "checking_worktree"
+  | "merging"
+  | "cleaning"
+  | "completed";
+
+interface CompletionProgressStep {
+  id: CompletionProgressStepId;
+  label: string;
+  status: "pending" | "active" | "done";
+}
+
+interface CompletionProgressState {
+  title: string;
+  steps: CompletionProgressStep[];
+}
+
+class CompletionCancelledError extends Error {
+  constructor() {
+    super("completion cancelled");
+  }
+}
+
+class WorktreeMergeConflictError extends Error {
+  constructor(readonly detail: WorktreeMergeDetail) {
+    super("worktree merge conflict");
+  }
+}
+
+interface WorktreeMergeDetail {
+  sessionId?: number | null;
+  targetBranch?: string;
+  workspaceBranch?: string;
+  workspacePath?: string;
+}
+
+function isManualCompletionPolicyError(error: {
+  details?: unknown[];
+}): boolean {
+  return hasDetailValue(
+    error,
+    "CompletionPolicy",
+    "completionPolicy",
+    "manual",
+  );
+}
+
+function isCleanGitStatusError(error: { details?: unknown[] }): boolean {
+  return hasDetailValue(error, "GitStatus", "isClean", true);
+}
+
+function getCleanGitStatusDetail(error: { details?: unknown[] }): {
+  targetBranch?: string;
+} {
+  const detail = (error.details ?? []).find((item) => {
+    return (
+      !!item &&
+      typeof item === "object" &&
+      (item as Record<string, unknown>)["@type"] === "GitStatus" &&
+      (item as Record<string, unknown>).isClean === true
+    );
+  });
+
+  if (!detail || typeof detail !== "object") {
+    return {};
+  }
+
+  const values = detail as Record<string, unknown>;
+  return {
+    targetBranch:
+      typeof values.targetBranch === "string" ? values.targetBranch : undefined,
+  };
+}
+
+function hasDetailValue(
+  error: { details?: unknown[] },
+  type: string,
+  key: string,
+  expectedValue: unknown,
+): boolean {
+  return (error.details ?? []).some((detail) => {
+    if (!detail || typeof detail !== "object") {
+      return false;
+    }
+
+    const values = detail as Record<string, unknown>;
+    return values["@type"] === type && values[key] === expectedValue;
+  });
+}
+
+function buildCompletionConfirmMessage(targetBranch?: string): string {
+  if (!targetBranch) {
+    return "即将完成当前 issue，并在需要时把临时分支合入记录的目标分支。确认继续吗？";
+  }
+
+  if (targetBranch === "main" || targetBranch === "master") {
+    return `即将完成当前 issue，并把临时分支合入高风险目标分支 ${targetBranch}。确认继续吗？`;
+  }
+
+  return `即将完成当前 issue，并把临时分支合入目标分支 ${targetBranch}。确认继续吗？`;
+}
+
+function getWorktreeMergeDetail(error: {
+  details?: unknown[];
+}): WorktreeMergeDetail | null {
+  const detail = (error.details ?? []).find((item) => {
+    return (
+      !!item &&
+      typeof item === "object" &&
+      (item as Record<string, unknown>)["@type"] === "WorktreeMerge"
+    );
+  });
+
+  if (!detail || typeof detail !== "object") {
+    return null;
+  }
+
+  const values = detail as Record<string, unknown>;
+  return {
+    sessionId:
+      typeof values.sessionId === "number" ? values.sessionId : undefined,
+    targetBranch:
+      typeof values.targetBranch === "string" ? values.targetBranch : undefined,
+    workspaceBranch:
+      typeof values.workspaceBranch === "string"
+        ? values.workspaceBranch
+        : undefined,
+    workspacePath:
+      typeof values.workspacePath === "string"
+        ? values.workspacePath
+        : undefined,
+  };
+}
+
+function getCompletionProgressTitle(locale: string): string {
+  return locale === "zh" ? "完成 issue" : "Complete issue";
+}
+
+function buildCompletionProgressSteps(
+  locale: string,
+  activeStep: CompletionProgressStepId,
+): CompletionProgressStep[] {
+  const labels =
+    locale === "zh"
+      ? {
+          checking_commit: "检查未提交改动",
+          requesting_commit: "请求 Agent 提交相关代码",
+          waiting_commit: "等待并检测新 commit",
+          checking_worktree: "检查 worktree 是否存在",
+          merging: "合并临时分支到目标分支",
+          cleaning: "清理 worktree 与临时分支",
+          completed: "完成",
+        }
+      : {
+          checking_commit: "Check uncommitted changes",
+          requesting_commit: "Ask agent to commit related code",
+          waiting_commit: "Wait for and detect a new commit",
+          checking_worktree: "Check whether the worktree still exists",
+          merging: "Merge temporary branch into target branch",
+          cleaning: "Clean up worktree and temporary branch",
+          completed: "Done",
+        };
+  const ids: CompletionProgressStepId[] = [
+    "checking_commit",
+    "requesting_commit",
+    "waiting_commit",
+    "checking_worktree",
+    "merging",
+    "cleaning",
+    "completed",
+  ];
+  const activeIndex = ids.indexOf(activeStep);
+
+  return ids.map((id, index) => ({
+    id,
+    label: labels[id],
+    status:
+      index < activeIndex
+        ? "done"
+        : index === activeIndex
+          ? "active"
+          : "pending",
+  }));
+}
+
+function buildWorktreeMergeConflictPrompt(
+  detail: WorktreeMergeDetail,
+  locale: string,
+): string {
+  const targetBranch = detail.targetBranch || "target branch";
+  const workspaceBranch = detail.workspaceBranch || "temporary issue branch";
+  const workspacePath = detail.workspacePath || "current worktree";
+
+  if (locale === "zh") {
+    return [
+      "代码合并存在冲突，需要你接管处理。",
+      `请解决临时分支 ${workspaceBranch} 合并到最初记录的目标分支 ${targetBranch} 时产生的冲突。`,
+      `相关 worktree：${workspacePath}`,
+      "解决冲突后，请完成合并并确保代码最终合入目标分支。",
+    ].join("\n");
+  }
+
+  return [
+    "A merge conflict was detected and needs your help.",
+    `Please resolve the conflicts from merging ${workspaceBranch} into the originally recorded target branch ${targetBranch}.`,
+    `Related worktree: ${workspacePath}`,
+    "After resolving conflicts, complete the merge and make sure the code lands on the target branch.",
+  ].join("\n");
+}
+
+function IssueCompletionProgressDialog({
+  progress,
+}: {
+  progress: CompletionProgressState;
+}) {
+  return (
+    <div className="issue-dialog-overlay">
+      <div
+        aria-label={progress.title}
+        aria-modal="true"
+        className="issue-dialog issue-dialog--progress"
+        role="dialog"
+      >
+        <div className="issue-dialog__header">
+          <h3>{progress.title}</h3>
+        </div>
+        <div className="issue-dialog__body issue-dialog__body--single">
+          <ol className="issue-completion-progress" role="status">
+            {progress.steps.map((step) => (
+              <li
+                className={`issue-completion-progress__step issue-completion-progress__step--${step.status}`}
+                key={step.id}
+              >
+                <span className="issue-completion-progress__marker" />
+                <span>{step.label}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </div>
   );
 }
 

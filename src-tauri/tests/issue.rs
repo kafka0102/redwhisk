@@ -1028,6 +1028,107 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
 }
 
 #[test]
+fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("manual-complete-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "manual-complete-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Manual worktree review issue".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("manual-worktrees");
+    let workspace_path = worktree_root.join("issue-manual-worktree");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-manual-branch",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions
+             SET working_dir = ?1,
+                 workspace_mode = 'worktree',
+                 target_branch = 'main',
+                 workspace_branch = 'issue-manual-branch',
+                 workspace_path = ?1,
+                 worktree_root_path = ?2,
+                 completion_policy = 'manual'
+             WHERE id = ?3",
+            rusqlite::params![
+                workspace_path.to_string_lossy().to_string(),
+                worktree_root.to_string_lossy().to_string(),
+                session_id,
+            ],
+        )
+        .expect("update worktree session");
+
+    write_file(&workspace_path, "tracked.txt", "manual worktree change\n");
+    git(&workspace_path, &["add", "tracked.txt"]);
+    git(
+        &workspace_path,
+        &["commit", "-m", "manual worktree completion"],
+    );
+
+    let completed = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete manually");
+
+    assert_eq!(completed.status, IssueStatus::Completed);
+    assert!(!workspace_path.exists());
+    let main_content = fs::read_to_string(repo_dir.join("tracked.txt")).expect("read main file");
+    assert_eq!(main_content, "manual worktree change\n");
+    assert_eq!(
+        git_output(&repo_dir, &["branch", "--list", "issue-manual-branch"]),
+        ""
+    );
+}
+
+#[test]
 fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -1633,6 +1734,10 @@ fn prepare_agent_commit_completion_returns_preview_for_dirty_review_issue() {
     assert_eq!(preview.changed_files.len(), 1);
     assert_eq!(preview.changed_files[0].path, "tracked.txt");
     assert!(preview.completion_prompt.contains("Review issue"));
+    assert!(preview
+        .completion_prompt
+        .contains("请获取本次修改相关的代码"));
+    assert!(preview.completion_prompt.contains("不要提交无关改动"));
 }
 
 #[test]
@@ -2442,6 +2547,112 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
         git_output(&repo_dir, &["branch", "--list", "issue-branch"]),
         ""
     );
+}
+
+#[test]
+fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_missing() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir
+        .path()
+        .join("detect-agent-commit-missing-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    let initial_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "detect-agent-commit-missing-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Missing worktree review issue".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+    let workspace_path = temp_dir.path().join("deleted-worktree");
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions
+             SET working_dir = ?1,
+                 workspace_mode = 'worktree',
+                 target_branch = 'main',
+                 workspace_branch = 'issue-deleted',
+                 workspace_path = ?1,
+                 worktree_root_path = ?2,
+                 completion_policy = 'agent_auto_commit'
+             WHERE id = ?3",
+            rusqlite::params![
+                workspace_path.to_string_lossy().to_string(),
+                temp_dir
+                    .path()
+                    .join("worktrees")
+                    .to_string_lossy()
+                    .to_string(),
+                session_id,
+            ],
+        )
+        .expect("update worktree session");
+    database
+        .connection
+        .execute(
+            "INSERT INTO completion_attempts (
+                issue_id,
+                session_id,
+                option,
+                head_before,
+                head_after,
+                changed_files_json,
+                result,
+                created_at
+            ) VALUES (?1, ?2, 'agent_auto_commit', ?3, ?3, '[]', 'prompt_sent', 1780628500000)",
+            rusqlite::params![issue.id, session_id, initial_head],
+        )
+        .expect("insert attempt");
+    git(
+        &repo_dir,
+        &["commit", "--allow-empty", "-m", "agent completion"],
+    );
+
+    let completion_result = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect completion");
+
+    assert_eq!(
+        completion_result.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
+    );
+    assert_eq!(completion_result.issue.status, IssueStatus::Completed);
 }
 
 #[test]

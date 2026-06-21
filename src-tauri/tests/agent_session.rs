@@ -856,6 +856,52 @@ fn get_project_git_branches_returns_current_and_local_branches() {
 }
 
 #[test]
+fn get_project_git_branches_excludes_branches_checked_out_by_other_worktrees() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "branch-filter-worktree-project");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    git(&repo_path, &["checkout", "-b", "develop"]);
+    git(&repo_path, &["checkout", "main"]);
+    let worktree_path = temp_dir.path().join("parallel-worktree");
+    git(
+        &repo_path,
+        &[
+            "worktree",
+            "add",
+            worktree_path.to_string_lossy().as_ref(),
+            "develop",
+        ],
+    );
+    git(&repo_path, &["branch", "issue-42-review"]);
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .get_project_git_branches(ProjectGitBranchListInput { project_id })
+        .expect("git branches");
+
+    assert_eq!(result.current_branch, "main");
+    assert!(result.local_branches.contains(&"main".to_string()));
+    assert!(!result.local_branches.contains(&"develop".to_string()));
+    assert!(!result
+        .local_branches
+        .contains(&"issue-42-review".to_string()));
+}
+
+#[test]
 fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -875,7 +921,7 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
         .execute(
             "UPDATE projects
              SET worktree_location = 'repo_internal',
-                 worktree_setup_command = 'pnpm install'
+                 worktree_setup_command = 'printf project-setup > project-setup.txt'
              WHERE id = ?1",
             [project_id],
         )
@@ -912,7 +958,7 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
                 completion_policy_override: Some(ProjectCompletionPolicy::AgentAutoCommit),
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
-                worktree_setup_command: Some("pnpm install\npnpm test".to_string()),
+                worktree_setup_command: Some("printf run-setup > run-setup.txt".to_string()),
             },
         )
         .expect("start worktree session");
@@ -934,7 +980,7 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
     );
     assert_eq!(
         session.worktree_setup_command.as_deref(),
-        Some("pnpm install\npnpm test")
+        Some("printf run-setup > run-setup.txt")
     );
     let workspace_path = session.workspace_path.expect("workspace path");
     assert!(std::path::Path::new(&workspace_path).is_dir());
@@ -944,6 +990,139 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
         .as_deref()
         .is_some_and(|value| value.starts_with("issue-")));
     assert_eq!(session.working_dir, workspace_path);
+}
+
+#[test]
+fn start_agent_session_in_worktree_mode_runs_setup_command_before_agent_start() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-setup-project");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    database
+        .connection
+        .execute(
+            "UPDATE projects
+             SET worktree_location = 'repo_internal',
+                 worktree_setup_command = 'printf setup > setup-marker.txt'
+             WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree settings");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: Some(ProjectCompletionPolicy::Manual),
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: None,
+            },
+        )
+        .expect("start worktree session");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session exists");
+    let marker_path = std::path::Path::new(&session.working_dir).join("setup-marker.txt");
+    assert_eq!(
+        std::fs::read_to_string(marker_path).expect("setup marker"),
+        "setup"
+    );
+}
+
+#[test]
+fn start_agent_session_in_worktree_mode_rejects_failed_setup_command_without_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-setup-failure-project");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    database
+        .connection
+        .execute(
+            "UPDATE projects
+             SET worktree_location = 'repo_internal',
+                 worktree_setup_command = 'exit 17'
+             WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree settings");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                completion_policy_override: Some(ProjectCompletionPolicy::Manual),
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: None,
+            },
+        )
+        .expect_err("setup failure should block launch");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionStartFailed);
+    assert!(AgentSessionRepository::new(&database.connection)
+        .find_by_issue_id(issue_id)
+        .expect("find issue session")
+        .is_none());
+    let issue_status: String = database
+        .connection
+        .query_row(
+            "SELECT status FROM issues WHERE id = ?1",
+            [issue_id],
+            |row| row.get(0),
+        )
+        .expect("issue status");
+    assert_eq!(issue_status, "backlog");
 }
 
 #[test]
@@ -966,7 +1145,7 @@ fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_ove
         .execute(
             "UPDATE projects
              SET worktree_location = ?1,
-                 worktree_setup_command = 'cargo fetch'
+                 worktree_setup_command = 'printf project-setup > project-setup.txt'
              WHERE id = ?2",
             rusqlite::params!["repo_sibling", project_id],
         )
@@ -1031,7 +1210,7 @@ fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_ove
     );
     assert_eq!(
         session.worktree_setup_command.as_deref(),
-        Some("cargo fetch")
+        Some("printf project-setup > project-setup.txt")
     );
 }
 
