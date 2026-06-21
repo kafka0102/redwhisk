@@ -733,7 +733,7 @@ export function IssuesActivity({
       const commandError = toCommandError(error);
       if (isManualCompletionPolicyError(commandError)) {
         throw Object.assign(
-          new Error("当前分支中有未提交的代码，请提交后再标记完成。"),
+          new Error("当前项目中有未提交的代码，请提交后再标记完成。"),
           { cause: error },
         );
       }
