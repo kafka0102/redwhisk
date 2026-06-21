@@ -47,8 +47,10 @@ export function AppShell({
   const [activeAgentSessionId, setActiveAgentSessionId] = useState<
     number | null
   >(null);
-  const [projectTerminalsStateByProjectId, setProjectTerminalsStateByProjectId] =
-    useState<Record<number, ProjectTerminalsActivityState>>({});
+  const [
+    projectTerminalsStateByProjectId,
+    setProjectTerminalsStateByProjectId,
+  ] = useState<Record<number, ProjectTerminalsActivityState>>({});
   const [requestedIssueId, setRequestedIssueId] = useState<number | null>(null);
   const projectTerminalsState =
     projectTerminalsStateByProjectId[project.id] ??
@@ -64,14 +66,16 @@ export function AppShell({
         return {
           ...currentStateByProjectId,
           [project.id]:
-            typeof nextState === "function" ? nextState(currentState) : nextState,
+            typeof nextState === "function"
+              ? nextState(currentState)
+              : nextState,
         };
       });
     },
     [project.id],
   );
 
-  async function handleWorkbenchHeaderClick(
+  async function handleWorkbenchHeaderDoubleClick(
     event: React.MouseEvent<HTMLElement>,
   ) {
     if (
@@ -84,6 +88,7 @@ export function AppShell({
     const currentWindow = getCurrentWindow();
 
     if (await currentWindow.isMaximized()) {
+      await currentWindow.unmaximize();
       return;
     }
 
@@ -140,8 +145,8 @@ export function AppShell({
         <header
           className="workbench__header"
           data-tauri-drag-region
-          onClick={(event) => {
-            void handleWorkbenchHeaderClick(event);
+          onDoubleClick={(event) => {
+            void handleWorkbenchHeaderDoubleClick(event);
           }}
         >
           <ProjectSwitcher

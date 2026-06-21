@@ -1,5 +1,7 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
 import type { ProjectSummary } from "../../app/app";
-import { ProjectCardGrid } from "./project-card-grid";
+import { ProjectList } from "./project-list";
 
 interface ProjectHomeProps {
   isCreatingProject: boolean;
@@ -14,19 +16,27 @@ export function ProjectHome({
   projects,
   onProjectOpen,
 }: ProjectHomeProps) {
+  async function handleWindowHeaderDoubleClick() {
+    const currentWindow = getCurrentWindow();
+
+    if (await currentWindow.isMaximized()) {
+      await currentWindow.unmaximize();
+      return;
+    }
+
+    await currentWindow.maximize();
+  }
+
   return (
     <main className="project-home">
-      <header className="project-home__header">
-        <div>
-          <p className="eyebrow">RedWhisk</p>
-          <h1>Projects</h1>
-          <p className="project-home__lede">
-            Local Git repositories available to this workbench. Open one to
-            continue issue and agent work.
-          </p>
-        </div>
-      </header>
-      <ProjectCardGrid
+      <header
+        className="project-home__window-header"
+        data-tauri-drag-region
+        onDoubleClick={() => {
+          void handleWindowHeaderDoubleClick();
+        }}
+      />
+      <ProjectList
         isCreatingProject={isCreatingProject}
         projects={projects}
         onCreateProject={onCreateProject}
