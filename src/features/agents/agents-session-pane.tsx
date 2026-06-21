@@ -5,7 +5,8 @@ import { AgentSessionView } from "./agent-session-view";
 import { formatSessionTitle } from "./agent-session-formatters";
 import { SessionWorkspaceTabs } from "./session-workspace-tabs";
 import type {
-  SessionWorkspaceFile,
+  SessionWorkspaceChangeTab,
+  SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
 } from "./session-workspace-types";
 
@@ -35,8 +36,8 @@ interface AgentsSessionPaneProps {
   manualErrorMessage: string | null;
   markReviewErrorMessage: string | null;
   activeWorkspaceTab: SessionWorkspaceTabKind;
-  changeTab: SessionWorkspaceFile | null;
-  fileTab: SessionWorkspaceFile | null;
+  changeTab: SessionWorkspaceChangeTab | null;
+  fileTab: SessionWorkspaceFileTab | null;
   isSidePanelOpen: boolean;
   onAcknowledgeSessionAttention: (sessionId: number) => void;
   onCloseWorkspaceTab: (

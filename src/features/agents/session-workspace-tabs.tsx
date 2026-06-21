@@ -4,14 +4,15 @@ import type { ReactNode } from "react";
 import { SessionDiffPlaceholder } from "./session-diff-placeholder";
 import { SessionFilePreviewPlaceholder } from "./session-file-preview-placeholder";
 import type {
-  SessionWorkspaceFile,
+  SessionWorkspaceChangeTab,
+  SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
 } from "./session-workspace-types";
 
 interface SessionWorkspaceTabsProps {
   activeTab: SessionWorkspaceTabKind;
-  changeTab: SessionWorkspaceFile | null;
-  fileTab: SessionWorkspaceFile | null;
+  changeTab: SessionWorkspaceChangeTab | null;
+  fileTab: SessionWorkspaceFileTab | null;
   sessionContent: ReactNode;
   onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
   onSelectTab: (tab: SessionWorkspaceTabKind) => void;
@@ -115,8 +116,8 @@ function ClosableWorkspaceTab({
 
 function getSelectedTab(
   activeTab: SessionWorkspaceTabKind,
-  fileTab: SessionWorkspaceFile | null,
-  changeTab: SessionWorkspaceFile | null,
+  fileTab: SessionWorkspaceFileTab | null,
+  changeTab: SessionWorkspaceChangeTab | null,
 ): SessionWorkspaceTabKind {
   if (activeTab === "file" && fileTab) {
     return "file";
