@@ -7,43 +7,62 @@ import {
 } from "lucide-react";
 import type { CSSProperties } from "react";
 
-import { MOCK_FILE_TREE, type MockTreeNode } from "./session-mock-files";
+import type { WorkspaceFileTreeNode } from "./session-workspace-commands";
 
 interface SessionFileTreePanelProps {
-  onOpenFile: (file: MockTreeNode) => void;
+  errorMessage: string | null;
+  fileTree: WorkspaceFileTreeNode[];
+  isLoading: boolean;
+  onOpenFile: (file: WorkspaceFileTreeNode) => void;
 }
 
 export function SessionFileTreePanel({
+  errorMessage,
+  fileTree,
+  isLoading,
   onOpenFile,
 }: SessionFileTreePanelProps) {
+  const files = flattenFileTree(fileTree);
+
   return (
     <div className="session-file-tree" aria-label="Project file tree">
-      <div className="session-file-tree__folder">
-        <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
-        src
-      </div>
-      <div className="session-file-tree__folder session-file-tree__folder--nested">
-        <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
-        features / agents
-      </div>
-      {MOCK_FILE_TREE.map((file) => (
-        <button
-          key={file.filePath}
-          className="session-file-tree__row"
-          style={{ "--tree-depth": file.depth } as CSSProperties}
-          type="button"
-          onClick={() => onOpenFile(file)}
-        >
-          <FileTypeIcon extension={file.extension} />
-          <span>{file.fileName}</span>
-        </button>
-      ))}
+      {errorMessage ? (
+        <p className="session-side-panel__empty">{errorMessage}</p>
+      ) : null}
+      {files.length === 0 && !errorMessage ? (
+        <p className="session-side-panel__empty">
+          {isLoading ? "正在加载文件树..." : "暂无文件。"}
+        </p>
+      ) : null}
+      {files.map(({ depth, node }) =>
+        node.kind === "directory" ? (
+          <div
+            key={node.id}
+            className="session-file-tree__folder"
+            style={{ "--tree-depth": depth } as CSSProperties}
+          >
+            <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
+            {node.name}
+          </div>
+        ) : (
+          <button
+            key={node.id}
+            className="session-file-tree__row"
+            style={{ "--tree-depth": depth } as CSSProperties}
+            type="button"
+            onClick={() => onOpenFile(node)}
+          >
+            <FileTypeIcon extension={getFileExtension(node.name)} />
+            <span>{node.name}</span>
+          </button>
+        ),
+      )}
     </div>
   );
 }
 
 interface FileTypeIconProps {
-  extension: MockTreeNode["extension"];
+  extension: string;
 }
 
 function FileTypeIcon({ extension }: FileTypeIconProps) {
@@ -66,4 +85,19 @@ function FileTypeIcon({ extension }: FileTypeIconProps) {
   }
 
   return <FileCode2 aria-hidden="true" className={className} size={15} />;
+}
+
+function flattenFileTree(
+  nodes: WorkspaceFileTreeNode[],
+  depth = 0,
+): Array<{ depth: number; node: WorkspaceFileTreeNode }> {
+  return nodes.flatMap((node) => [
+    { depth, node },
+    ...flattenFileTree(node.children ?? [], depth + 1),
+  ]);
+}
+
+function getFileExtension(fileName: string): string {
+  const lastDotIndex = fileName.lastIndexOf(".");
+  return lastDotIndex >= 0 ? fileName.slice(lastDotIndex + 1) : "";
 }

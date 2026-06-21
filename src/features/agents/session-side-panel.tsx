@@ -1,22 +1,38 @@
-import { useState } from "react";
-
 import { SessionChangesPanel } from "./session-changes-panel";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
-import type { MockChangedFile, MockTreeNode } from "./session-mock-files";
-
-type SidePanelTab = "changes" | "files";
+import type {
+  WorkspaceChangedFile,
+  WorkspaceFileTreeNode,
+} from "./session-workspace-commands";
+import type { SessionSidePanelTab } from "./session-workspace-types";
 
 interface SessionSidePanelProps {
-  onOpenChangedFile: (file: MockChangedFile) => void;
-  onOpenFile: (file: MockTreeNode) => void;
+  activeTab: SessionSidePanelTab;
+  changes: WorkspaceChangedFile[];
+  changesErrorMessage: string | null;
+  fileTree: WorkspaceFileTreeNode[];
+  fileTreeErrorMessage: string | null;
+  isChangesLoading: boolean;
+  isFileTreeLoading: boolean;
+  onActiveTabChange: (tab: SessionSidePanelTab) => void;
+  onOpenChangedFile: (file: WorkspaceChangedFile) => void;
+  onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  onRefreshChanges: () => void;
 }
 
 export function SessionSidePanel({
+  activeTab,
+  changes,
+  changesErrorMessage,
+  fileTree,
+  fileTreeErrorMessage,
+  isChangesLoading,
+  isFileTreeLoading,
+  onActiveTabChange,
   onOpenChangedFile,
   onOpenFile,
+  onRefreshChanges,
 }: SessionSidePanelProps) {
-  const [activeTab, setActiveTab] = useState<SidePanelTab>("changes");
-
   return (
     <aside className="session-side-panel" aria-label="Session side panel">
       <div className="session-side-panel__tabs" role="tablist">
@@ -25,7 +41,7 @@ export function SessionSidePanel({
           className="session-side-panel__tab"
           role="tab"
           type="button"
-          onClick={() => setActiveTab("changes")}
+          onClick={() => onActiveTabChange("changes")}
         >
           变更
         </button>
@@ -34,16 +50,27 @@ export function SessionSidePanel({
           className="session-side-panel__tab"
           role="tab"
           type="button"
-          onClick={() => setActiveTab("files")}
+          onClick={() => onActiveTabChange("files")}
         >
           文件
         </button>
       </div>
       <div className="session-side-panel__content" role="tabpanel">
         {activeTab === "changes" ? (
-          <SessionChangesPanel onOpenChangedFile={onOpenChangedFile} />
+          <SessionChangesPanel
+            changes={changes}
+            errorMessage={changesErrorMessage}
+            isLoading={isChangesLoading}
+            onOpenChangedFile={onOpenChangedFile}
+            onRefreshChanges={onRefreshChanges}
+          />
         ) : (
-          <SessionFileTreePanel onOpenFile={onOpenFile} />
+          <SessionFileTreePanel
+            errorMessage={fileTreeErrorMessage}
+            fileTree={fileTree}
+            isLoading={isFileTreeLoading}
+            onOpenFile={onOpenFile}
+          />
         )}
       </div>
     </aside>

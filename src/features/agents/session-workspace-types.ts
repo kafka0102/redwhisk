@@ -1,6 +1,26 @@
+import type {
+  WorkspaceChangedFile,
+  WorkspaceDiffContent,
+  WorkspaceFileContent,
+} from "./session-workspace-commands";
+
 export interface SessionWorkspaceFile {
   fileName: string;
   filePath: string;
 }
 
+export interface SessionWorkspaceFileTab extends SessionWorkspaceFile {
+  content: WorkspaceFileContent | null;
+  isLoading: boolean;
+  errorMessage: string | null;
+}
+
+export interface SessionWorkspaceChangeTab extends SessionWorkspaceFile {
+  change: WorkspaceChangedFile;
+  diff: WorkspaceDiffContent | null;
+  isLoading: boolean;
+  errorMessage: string | null;
+}
+
 export type SessionWorkspaceTabKind = "session" | "file" | "changes";
+export type SessionSidePanelTab = "changes" | "files";

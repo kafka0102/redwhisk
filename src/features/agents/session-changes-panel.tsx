@@ -1,16 +1,24 @@
 import { Check, ChevronDown, Circle, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { MOCK_CHANGED_FILES, type MockChangedFile } from "./session-mock-files";
+import type { WorkspaceChangedFile } from "./session-workspace-commands";
 
 type ChangeFilter = "committed" | "uncommitted";
 
 interface SessionChangesPanelProps {
-  onOpenChangedFile: (file: MockChangedFile) => void;
+  changes: WorkspaceChangedFile[];
+  errorMessage: string | null;
+  isLoading: boolean;
+  onOpenChangedFile: (file: WorkspaceChangedFile) => void;
+  onRefreshChanges: () => void;
 }
 
 export function SessionChangesPanel({
+  changes,
+  errorMessage,
+  isLoading,
   onOpenChangedFile,
+  onRefreshChanges,
 }: SessionChangesPanelProps) {
   const [filter, setFilter] = useState<ChangeFilter>("uncommitted");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -95,13 +103,22 @@ export function SessionChangesPanel({
           aria-label="刷新变更"
           className="session-side-panel__refresh"
           type="button"
+          onClick={onRefreshChanges}
         >
           <RefreshCw aria-hidden="true" size={15} strokeWidth={1.8} />
         </button>
       </div>
       {filter === "uncommitted" ? (
         <div className="session-changes-panel__list">
-          {MOCK_CHANGED_FILES.map((file) => (
+          {errorMessage ? (
+            <p className="session-side-panel__empty">{errorMessage}</p>
+          ) : null}
+          {changes.length === 0 && !errorMessage ? (
+            <p className="session-side-panel__empty">
+              {isLoading ? "正在加载变更..." : "暂无未提交变更。"}
+            </p>
+          ) : null}
+          {changes.map((file) => (
             <ChangedFileRow
               key={file.filePath}
               file={file}
@@ -117,8 +134,8 @@ export function SessionChangesPanel({
 }
 
 interface ChangedFileRowProps {
-  file: MockChangedFile;
-  onOpenChangedFile: (file: MockChangedFile) => void;
+  file: WorkspaceChangedFile;
+  onOpenChangedFile: (file: WorkspaceChangedFile) => void;
 }
 
 function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
@@ -141,12 +158,15 @@ function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
         </span>
       </span>
       <span className="session-change-row__actions">
-        {file.isNew ? (
+        {file.kind === "added" || file.kind === "untracked" ? (
           <span className="session-change-row__new">新增</span>
         ) : null}
+        {file.kind === "deleted" ? (
+          <span className="session-change-row__new">删除</span>
+        ) : null}
         <span className="session-change-row__stats">
-          <span className="session-change-row__added">{file.added}</span>
-          <span className="session-change-row__deleted">{file.deleted}</span>
+          <span className="session-change-row__added">{`+${file.additions}`}</span>
+          <span className="session-change-row__deleted">{`-${file.deletions}`}</span>
         </span>
       </span>
       {isTooltipVisible ? (

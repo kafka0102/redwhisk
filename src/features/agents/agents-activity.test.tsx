@@ -31,6 +31,15 @@ import {
   updateIssue,
 } from "../issues/issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
+import {
+  getProjectWorktreeChanges,
+  getProjectWorktreeFileTree,
+  readProjectWorktreeDiff,
+  readProjectWorktreeFile,
+  type WorkspaceChangedFile,
+  type WorkspaceChangeKind,
+  type WorkspaceFileTreeNode,
+} from "./session-workspace-commands";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: vi.fn(),
@@ -51,6 +60,13 @@ vi.mock("./agent-session-commands", () => ({
   setAgentSessionAttention: vi.fn(),
   startStructuredAgentSession: vi.fn(),
   sendAgentMessage: vi.fn(),
+}));
+
+vi.mock("./session-workspace-commands", () => ({
+  getProjectWorktreeChanges: vi.fn(),
+  getProjectWorktreeFileTree: vi.fn(),
+  readProjectWorktreeDiff: vi.fn(),
+  readProjectWorktreeFile: vi.fn(),
 }));
 
 vi.mock("../settings/settings-commands", () => ({
@@ -85,6 +101,10 @@ const prepareAgentCommitCompletionMock = vi.mocked(
 const sendAgentCommitPromptMock = vi.mocked(sendAgentCommitPrompt);
 const updateIssueMock = vi.mocked(updateIssue);
 const openPathMock = vi.mocked(openPath);
+const getProjectWorktreeChangesMock = vi.mocked(getProjectWorktreeChanges);
+const getProjectWorktreeFileTreeMock = vi.mocked(getProjectWorktreeFileTree);
+const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
+const readProjectWorktreeFileMock = vi.mocked(readProjectWorktreeFile);
 
 async function findSessionList() {
   return screen.findByRole("list", { name: "Agent sessions" });
@@ -123,6 +143,53 @@ const defaultProfiles = {
   ],
 };
 
+function runningSession(sessionId: number, issueTitle = "Existing issue") {
+  return {
+    sessionId,
+    issueId: sessionId - 281,
+    issueTitle,
+    title: null,
+    agentType: "codex" as const,
+    status: "running" as const,
+    attention: "none" as const,
+    lastActiveAt: 1_780_637_000_000 + sessionId,
+    startedAt: 1_780_637_000_000,
+    closedAt: null,
+  };
+}
+
+function changedFile(
+  filePath: string,
+  kind: WorkspaceChangeKind,
+): WorkspaceChangedFile {
+  return {
+    filePath,
+    oldPath: null,
+    fileName: getLastPathSegment(filePath),
+    kind,
+    status: kind === "untracked" ? "??" : " M",
+    additions: 1,
+    deletions: 0,
+    isBinary: false,
+    contentHash: `${filePath}:${kind}`,
+    metadataSignature: `${filePath}:${kind}:meta`,
+  };
+}
+
+function fileNode(path: string): WorkspaceFileTreeNode {
+  return {
+    id: path,
+    name: getLastPathSegment(path),
+    path,
+    kind: "file",
+  };
+}
+
+function getLastPathSegment(path: string): string {
+  const segments = path.split("/");
+  return segments[segments.length - 1] ?? path;
+}
+
 describe("AgentsActivity", () => {
   beforeEach(() => {
     listAgentSessionsMock.mockReset();
@@ -137,6 +204,10 @@ describe("AgentsActivity", () => {
     sendAgentCommitPromptMock.mockReset();
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeFileTreeMock.mockReset();
+    readProjectWorktreeDiffMock.mockReset();
+    readProjectWorktreeFileMock.mockReset();
     openPathMock.mockReset();
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
@@ -291,6 +362,61 @@ describe("AgentsActivity", () => {
       profiles:
         scope === "project" ? defaultProfiles.project : defaultProfiles.global,
     }));
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "default-changes",
+      files: [
+        changedFile("src/features/agents/agents-activity.tsx", "modified"),
+        changedFile("src/features/agents/agents-session-pane.tsx", "modified"),
+        changedFile("src/features/agents/session-side-panel.tsx", "added"),
+        changedFile("src/features/agents/session-workspace-tabs.tsx", "added"),
+        changedFile("src/app/app.css", "modified"),
+        changedFile("src/features/agents/agents-activity.test.tsx", "modified"),
+      ],
+    });
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "default-tree",
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [
+            {
+              id: "src/features/agents/session-side-panel.tsx",
+              name: "session-side-panel.tsx",
+              path: "src/features/agents/session-side-panel.tsx",
+              kind: "file",
+            },
+            {
+              id: "src/app/app.css",
+              name: "app.css",
+              path: "src/app/app.css",
+              kind: "file",
+            },
+          ],
+        },
+      ],
+    });
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/placeholder.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "",
+      modifiedContent: "",
+      isBinary: false,
+      isTooLarge: false,
+    });
+    readProjectWorktreeFileMock.mockResolvedValue({
+      filePath: "src/placeholder.ts",
+      language: "typescript",
+      content: "",
+      modifiedAt: null,
+      sizeBytes: 0,
+      isBinary: false,
+      isTooLarge: false,
+    });
   });
 
   afterEach(() => {
@@ -383,6 +509,135 @@ describe("AgentsActivity", () => {
       screen.getByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+  });
+
+  it("refreshes uncommitted changes while the side panel is open", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock
+      .mockResolvedValueOnce({
+        signature: "one",
+        files: [changedFile("src/one.ts", "modified")],
+      })
+      .mockResolvedValueOnce({
+        signature: "two",
+        files: [
+          changedFile("src/one.ts", "modified"),
+          changedFile("src/two.ts", "added"),
+        ],
+      });
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    expect(
+      await screen.findByRole("button", { name: /one.ts/ }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 2_100));
+    });
+
+    expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
+  });
+
+  it("refreshes uncommitted changes immediately from the refresh button", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock
+      .mockResolvedValueOnce({
+        signature: "one",
+        files: [changedFile("src/one.ts", "modified")],
+      })
+      .mockResolvedValueOnce({
+        signature: "two",
+        files: [
+          changedFile("src/one.ts", "modified"),
+          changedFile("src/two.ts", "added"),
+        ],
+      });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    expect(
+      await screen.findByRole("button", { name: /one.ts/ }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "刷新变更" }));
+
+    expect(
+      await screen.findByRole("button", { name: /two.ts/ }),
+    ).toBeInTheDocument();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the file tree while the files tab is active", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeFileTreeMock
+      .mockResolvedValueOnce({
+        signature: "one",
+        nodes: [fileNode("src/one.ts")],
+      })
+      .mockResolvedValueOnce({
+        signature: "two",
+        nodes: [fileNode("src/one.ts"), fileNode("src/two.ts")],
+      });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(screen.getByRole("tab", { name: "文件" }));
+    expect(
+      await screen.findByRole("button", { name: /one.ts/ }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 5_100));
+    });
+
+    expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
+  }, 8_000);
+
+  it("restores cached workspace tab when switching back to a session", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes",
+      files: [changedFile("src/a.ts", "modified")],
+    });
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/a.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "old",
+      modifiedContent: "new",
+      isBinary: false,
+      isTooLarge: false,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301), runningSession(302, "Other issue")],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByRole("button", { name: /a.ts/ }));
+    expect(
+      await screen.findByRole("tab", { name: "a.ts" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Other issue/ }));
+    await user.click(screen.getByRole("button", { name: /Existing issue/ }));
+
+    expect(screen.getByRole("tab", { name: "a.ts" })).toBeInTheDocument();
   });
 
   it("uses a full-height split layout for the session list and workspace", async () => {
