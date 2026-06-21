@@ -723,6 +723,33 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
         None,
         success_command(temp_dir.path()).to_string_lossy().as_ref(),
     );
+    let created_session = {
+        let transaction = database
+            .connection
+            .unchecked_transaction()
+            .expect("transaction");
+        let session = AgentSessionRepository::insert_in_transaction(
+            &transaction,
+            project_id,
+            issue_id,
+            profile_id,
+            temp_dir.path().to_string_lossy().as_ref(),
+            "codex",
+            "Use this snapshot",
+            &WorkspaceMode::CurrentBranch,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "/tmp/redwhisk-session-race.log",
+            1_780_000_000_000,
+        )
+        .expect("insert existing session");
+        transaction.commit().expect("commit existing session");
+        session
+    };
     database
         .connection
         .execute_batch(
@@ -758,6 +785,13 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
 
     assert_eq!(error.code, CommandErrorCode::AgentSessionAlreadyExists);
     assert_eq!(error.message, "当前 Issue 已存在关联 Agent Session。");
+    let details = error.details.expect("details should exist");
+    assert!(details.iter().any(|detail| {
+        detail
+            == &redwhisk_lib::types::errors::ErrorDetail::new("AgentSession")
+                .with_value("sessionId", created_session.id)
+                .with_value("status", "running")
+    }));
     let issue = IssueRepository::new(&database.connection)
         .find_by_id(issue_id)
         .expect("find issue")
