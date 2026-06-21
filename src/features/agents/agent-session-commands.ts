@@ -196,7 +196,7 @@ export interface StartStructuredAgentSessionInput {
   title?: string;
   /** agent 类型，缺省 codex。决定走哪种 provider 实现。 */
   agentType?: AgentType;
-  /** auto / full-access / read-only，缺省 auto。 */
+  /** auto / full-access / read-only，缺省 full-access。 */
   mode?: string;
   /** 初始模型 id，缺省由 agent 选默认。 */
   model?: string;

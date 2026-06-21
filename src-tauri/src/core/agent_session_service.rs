@@ -57,6 +57,7 @@ use crate::types::session_event::SessionEventType;
 
 const SESSION_LOG_DIR_NAME: &str = "session-logs";
 const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
+const CODEX_DEFAULT_MODE_ID: &str = "full-access";
 const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
 const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
@@ -1596,8 +1597,8 @@ impl AgentSessionService<'_> {
         // 其他类型返回「暂不支持」。新增 Claude 等时在此扩展分支。
         let handle: Arc<dyn AgentSessionHandle> = match agent_type {
             AgentType::Codex => {
-                let mode = CodexMode::from_id(input.mode.as_deref().unwrap_or("auto")).ok_or_else(
-                    || {
+                let mode =
+                    codex_mode_from_structured_input(input.mode.as_deref()).ok_or_else(|| {
                         CommandError::new(
                             CommandErrorCode::AgentSessionValidationFailed,
                             "不支持的协作模式。",
@@ -1606,8 +1607,7 @@ impl AgentSessionService<'_> {
                         .with_detail(
                             ErrorDetail::new("Value").with_value("mode", input.mode.clone()),
                         )
-                    },
-                )?;
+                    })?;
                 let config = CodexSessionConfig {
                     project_id: input.project_id,
                     session_id,
@@ -2429,7 +2429,8 @@ fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, Comma
     }
 
     match normalized {
-        "" | "default" | "auto" => Ok(CodexMode::Auto),
+        "" | "default" => Ok(CodexMode::FullAccess),
+        "auto" => Ok(CodexMode::Auto),
         "full-auto" | "danger-full-access" | "dangerous" => Ok(CodexMode::FullAccess),
         "read_only" => Ok(CodexMode::ReadOnly),
         _ if profile.dangerous => Ok(CodexMode::FullAccess),
@@ -2440,6 +2441,10 @@ fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, Comma
         .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
         .with_detail(ErrorDetail::new("Value").with_value("mode", profile.mode.clone()))),
     }
+}
+
+fn codex_mode_from_structured_input(mode: Option<&str>) -> Option<CodexMode> {
+    CodexMode::from_id(mode.unwrap_or(CODEX_DEFAULT_MODE_ID))
 }
 
 fn build_log_path(
@@ -3034,9 +3039,10 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
 #[cfg(test)]
 mod tests {
     use super::{
-        agent_command_with_default_args, command_supports_prompt_argument,
-        detect_codex_session_id_from_home, latest_output_from_session_log,
-        normalize_submitted_prompt, read_timeline_from_session_log, AgentSessionService,
+        agent_command_with_default_args, codex_mode_from_profile, codex_mode_from_structured_input,
+        command_supports_prompt_argument, detect_codex_session_id_from_home,
+        latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
+        AgentSessionService, CodexMode,
     };
     use crate::db::agent_profile_repository::AgentProfileRepository;
     use crate::db::agent_session_repository::AgentSessionRepository;
@@ -3103,6 +3109,36 @@ mod tests {
         assert_eq!(
             agent_command_with_default_args(&profile),
             "claude --permission-mode bypassPermissions"
+        );
+    }
+
+    #[test]
+    fn codex_profile_default_mode_uses_full_access() {
+        let mut profile = test_agent_profile(AgentType::Codex, "codex");
+        profile.mode = "default".to_string();
+
+        assert_eq!(
+            codex_mode_from_profile(&profile).expect("mode"),
+            CodexMode::FullAccess
+        );
+    }
+
+    #[test]
+    fn codex_profile_empty_mode_uses_full_access() {
+        let mut profile = test_agent_profile(AgentType::Codex, "codex");
+        profile.mode = String::new();
+
+        assert_eq!(
+            codex_mode_from_profile(&profile).expect("mode"),
+            CodexMode::FullAccess
+        );
+    }
+
+    #[test]
+    fn structured_codex_session_defaults_to_full_access() {
+        assert_eq!(
+            codex_mode_from_structured_input(None),
+            Some(CodexMode::FullAccess)
         );
     }
 
