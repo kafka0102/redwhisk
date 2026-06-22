@@ -790,6 +790,11 @@ describe("AgentsActivity", () => {
     expect(
       screen
         .getByRole("button", { name: /app.tsx/ })
+        .querySelector(".session-file-tree__chevron--placeholder"),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /app.tsx/ })
         .querySelector(".session-file-tree__icon--tsx"),
     ).toBeInTheDocument();
     expect(
