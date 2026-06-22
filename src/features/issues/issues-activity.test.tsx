@@ -2470,7 +2470,9 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Delete issue" }),
     );
 
-    expect(confirmSpy).toHaveBeenCalledWith("确认删除这个 issue 吗？");
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Are you sure to delete this issue?",
+    );
     expect(deleteIssueMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: runningIssue.id,
@@ -2503,7 +2505,9 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Delete issue" }),
     );
 
-    expect(confirmSpy).toHaveBeenCalledWith("确认删除这个 issue 吗？");
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Are you sure to delete this issue?",
+    );
     expect(deleteIssueMock).not.toHaveBeenCalled();
     expect(
       screen.getByRole("dialog", { name: "Issue Detail" }),
