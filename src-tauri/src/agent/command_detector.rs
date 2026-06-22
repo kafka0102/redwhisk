@@ -1,8 +1,15 @@
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
 const DEFAULT_LOOKUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
+const LOOKUP_PATH_MARKER: &str = "__REDWHISK_LOOKUP_PATH__=";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CommandLookupResult {
+    pub command: String,
+    pub path: Option<OsString>,
+}
 
 pub trait AgentCommandDetector {
     fn detect_codex_command(&self) -> Result<String, String>;
@@ -34,6 +41,10 @@ impl AgentCommandDetector for ShellAgentCommandDetector {
 }
 
 pub(crate) fn run_command_lookup(command: &str) -> Result<String, String> {
+    run_command_lookup_with_path(command).map(|result| result.command)
+}
+
+pub(crate) fn run_command_lookup_with_path(command: &str) -> Result<CommandLookupResult, String> {
     let trimmed = command.trim();
     if trimmed.is_empty() {
         return Err("Agent command 不能为空。".to_string());
@@ -41,7 +52,7 @@ pub(crate) fn run_command_lookup(command: &str) -> Result<String, String> {
 
     let preferred_shell = env::var("SHELL").ok();
     let shells = shell_lookup_candidates(preferred_shell.as_deref());
-    run_command_lookup_with_shells_and_env(trimmed, &shells, &[])
+    run_command_lookup_with_path_with_shells_and_env(trimmed, &shells, &[])
 }
 
 fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
@@ -63,22 +74,32 @@ fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
     shells
 }
 
+#[cfg(test)]
 fn run_command_lookup_with_shells_and_env(
     command: &str,
     shells: &[String],
     environment_overrides: &[(&str, &OsStr)],
 ) -> Result<String, String> {
+    run_command_lookup_with_path_with_shells_and_env(command, shells, environment_overrides)
+        .map(|result| result.command)
+}
+
+fn run_command_lookup_with_path_with_shells_and_env(
+    command: &str,
+    shells: &[String],
+    environment_overrides: &[(&str, &OsStr)],
+) -> Result<CommandLookupResult, String> {
     let mut last_error = None;
 
     for shell in shells {
         let login_result =
-            run_shell_command_lookup(shell, &["-lc"], command, environment_overrides);
+            run_shell_command_lookup_with_path(shell, &["-lc"], command, environment_overrides);
         if let Ok(resolved_command) = login_result {
             return Ok(resolved_command);
         }
 
         let interactive_result =
-            run_shell_command_lookup(shell, &["-lic"], command, environment_overrides);
+            run_shell_command_lookup_with_path(shell, &["-lic"], command, environment_overrides);
         match interactive_result {
             Ok(resolved_command) => return Ok(resolved_command),
             Err(error) => last_error = Some(error),
@@ -88,17 +109,28 @@ fn run_command_lookup_with_shells_and_env(
     Err(last_error.unwrap_or_else(|| format!("未找到可执行命令：{}。", command)))
 }
 
+#[cfg(test)]
 fn run_shell_command_lookup(
     shell: &str,
     shell_args: &[&str],
     command: &str,
     environment_overrides: &[(&str, &OsStr)],
 ) -> Result<String, String> {
+    run_shell_command_lookup_with_path(shell, shell_args, command, environment_overrides)
+        .map(|result| result.command)
+}
+
+fn run_shell_command_lookup_with_path(
+    shell: &str,
+    shell_args: &[&str],
+    command: &str,
+    environment_overrides: &[(&str, &OsStr)],
+) -> Result<CommandLookupResult, String> {
     let quoted_command = shell_quote(command);
     let mut process = Command::new(shell);
-    process
-        .args(shell_args)
-        .arg(format!("command -v {}", quoted_command));
+    process.args(shell_args).arg(format!(
+        "command -v {quoted_command} && printf '\\n{LOOKUP_PATH_MARKER}%s\\n' \"$PATH\""
+    ));
     for (key, value) in environment_overrides {
         process.env(key, value);
     }
@@ -114,12 +146,31 @@ fn run_shell_command_lookup(
         });
     }
 
-    let resolved_command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut resolved_command = None;
+    let mut path = None;
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix(LOOKUP_PATH_MARKER) {
+            if !value.is_empty() {
+                path = Some(OsString::from(value));
+            }
+            continue;
+        }
+        if resolved_command.is_none() && !trimmed.is_empty() {
+            resolved_command = Some(trimmed.to_string());
+        }
+    }
+
+    let resolved_command = resolved_command.unwrap_or_default();
     if resolved_command.is_empty() {
         return Err(format!("未找到可执行命令：{}。", command));
     }
 
-    Ok(resolved_command)
+    Ok(CommandLookupResult {
+        command: resolved_command,
+        path,
+    })
 }
 
 fn shell_quote(value: &str) -> String {
@@ -191,6 +242,37 @@ mod tests {
             interactive_result.expect("interactive shell command"),
             command_path.display().to_string()
         );
+    }
+
+    #[test]
+    fn interactive_shell_lookup_returns_loaded_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        let command_path = bin_dir.join("redwhisk-test-agent");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("test command");
+        fs::set_permissions(&command_path, fs::Permissions::from_mode(0o755))
+            .expect("executable command");
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!("export PATH=\"{}:$PATH\"\n", bin_dir.display()),
+        )
+        .expect("zshrc");
+
+        let lookup = run_shell_command_lookup_with_path(
+            "/bin/zsh",
+            &["-lic"],
+            "redwhisk-test-agent",
+            &[
+                ("HOME", temp_dir.path().as_os_str()),
+                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
+            ],
+        )
+        .expect("interactive shell command");
+
+        assert_eq!(lookup.command, command_path.display().to_string());
+        let lookup_path = lookup.path.expect("lookup path");
+        assert!(env::split_paths(&lookup_path).any(|path| path == bin_dir));
     }
 
     #[test]
