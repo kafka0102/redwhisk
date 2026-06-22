@@ -1049,9 +1049,10 @@ impl<'connection> AgentSessionService<'connection> {
                     agent_type: row.agent_type,
                     status: row.status,
                     attention: row.attention,
-                    is_turn_running: is_structured_turn_running(&row.log_path)
-                        .unwrap_or(None)
-                        .unwrap_or(is_session_running),
+                    is_turn_running: is_session_running
+                        && is_structured_turn_running(&row.log_path)
+                            .unwrap_or(None)
+                            .unwrap_or(true),
                     workspace_mode: row.workspace_mode,
                     working_dir: row.working_dir,
                     workspace_path: row.workspace_path,
@@ -3516,6 +3517,46 @@ mod tests {
 
         fs::remove_file(completed_log_path).ok();
         fs::remove_file(active_log_path).ok();
+    }
+
+    #[test]
+    fn list_agent_sessions_does_not_report_stopped_session_turn_as_running() {
+        let database = setup_session_list_database();
+        let log_path =
+            std::env::temp_dir().join(format!("redwhisk-stopped-turn-{}.jsonl", current_millis()));
+        fs::write(
+            &log_path,
+            "{\"projectId\":1,\"sessionId\":303,\"seq\":1,\"epoch\":\"test\",\"event\":{\"type\":\"turn_started\",\"turnId\":\"t3\"}}\n",
+        )
+        .expect("write stopped turn log");
+        insert_session_list_row(
+            &database,
+            303,
+            Some(22),
+            Some("Stopped turn issue"),
+            Some("running"),
+            AgentSessionStatus::Stopped,
+            12,
+            Some(13),
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = 303",
+                params![log_path.to_string_lossy().to_string()],
+            )
+            .expect("set stopped log path");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let stopped_turn_session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 303)
+            .expect("stopped turn session");
+
+        assert!(!stopped_turn_session.is_turn_running);
+
+        fs::remove_file(log_path).ok();
     }
 
     fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {

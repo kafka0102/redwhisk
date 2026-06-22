@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::agent::session_handle::AgentSessionHandle;
+use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
@@ -430,10 +430,20 @@ pub fn cancel_agent_turn(
     let database = open_agent_session_database(&app)?;
     let service = build_agent_session_service(&database.connection);
     service.find_project_session_record(input.project_id, input.session_id)?;
-    let handle = require_structured_handle(&state, input.session_id)?;
-    handle
-        .cancel_turn()
-        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
+    let Some(handle) = state.agent_sessions.get(input.session_id) else {
+        return Ok(());
+    };
+
+    match handle.cancel_turn() {
+        Ok(()) => Ok(()),
+        Err(AgentSessionError::NotRunning(_)) => {
+            state.agent_sessions.unregister(input.session_id);
+            Ok(())
+        }
+        Err(error) => {
+            Err(crate::core::agent_session_service::agent_session_error_to_command_error(error))
+        }
+    }
 }
 
 #[tauri::command]
