@@ -49,6 +49,7 @@ pub struct IssueService<'connection> {
     issue_repository: IssueRepository<'connection>,
     issue_attachment_repository: IssueAttachmentRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
+    data_dir: PathBuf,
 }
 
 struct ReviewCompletionContext {
@@ -85,12 +86,14 @@ impl<'connection> IssueService<'connection> {
         issue_repository: IssueRepository<'connection>,
         project_repository: ProjectRepository<'connection>,
     ) -> Self {
+        let data_dir = infer_data_dir_from_connection(issue_repository.connection());
         Self {
             issue_attachment_repository: IssueAttachmentRepository::new(
                 issue_repository.connection(),
             ),
             issue_repository,
             project_repository,
+            data_dir,
         }
     }
 
@@ -186,7 +189,7 @@ impl<'connection> IssueService<'connection> {
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
-        let project = self.require_project(input.project_id)?;
+        self.require_project(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
         let label_ids = self.validate_issue_label_ids(input.project_id, &input.label_ids)?;
@@ -206,7 +209,7 @@ impl<'connection> IssueService<'connection> {
         .map_err(issue_database_error)?;
         let (created_files, saved_issue) = match persist_new_attachments(
             &transaction,
-            &project.repo_path,
+            &self.data_dir,
             issue.id,
             &input.attachments,
         ) {
@@ -264,7 +267,7 @@ impl<'connection> IssueService<'connection> {
     }
 
     pub fn update_issue(&self, input: UpdateIssueInput) -> Result<IssueRecord, CommandError> {
-        let project = self.require_project(input.project_id)?;
+        self.require_project(input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
         let label_ids = self.validate_issue_label_ids(input.project_id, &input.label_ids)?;
@@ -282,12 +285,8 @@ impl<'connection> IssueService<'connection> {
             IssueAttachmentRepository::new(self.issue_repository.connection())
                 .list_by_issue_id(issue.id)
                 .map_err(issue_database_error)?;
-        let (new_attachments, created_files) = persist_new_attachments(
-            &transaction,
-            &project.repo_path,
-            issue.id,
-            &input.attachments,
-        )?;
+        let (new_attachments, created_files) =
+            persist_new_attachments(&transaction, &self.data_dir, issue.id, &input.attachments)?;
         let rewritten_description = rewrite_attachment_tokens(&description, &new_attachments)?;
         let referenced_attachment_ids = parse_attachment_ids(&rewritten_description);
         let removed_attachments = existing_attachments
@@ -2144,6 +2143,14 @@ impl<'connection> IssueService<'connection> {
     }
 }
 
+fn infer_data_dir_from_connection(connection: &rusqlite::Connection) -> PathBuf {
+    connection
+        .path()
+        .filter(|path| !path.is_empty())
+        .and_then(|path| Path::new(path).parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from(".redwhisk"))
+}
+
 fn open_issue_database(
     data_dir: impl AsRef<Path>,
 ) -> Result<crate::db::connection::Database, CommandError> {
@@ -2509,7 +2516,7 @@ fn current_epoch_millis() -> Result<i64, CommandError> {
 
 fn persist_new_attachments(
     transaction: &rusqlite::Transaction<'_>,
-    repo_path: &str,
+    data_dir: &Path,
     issue_id: i64,
     attachments: &[IssueAttachmentInput],
 ) -> Result<(Vec<NewAttachmentPersistence>, Vec<PathBuf>), CommandError> {
@@ -2550,7 +2557,11 @@ fn persist_new_attachments(
             sanitize_attachment_file_name(&display_name)
         );
         let relative_path = format!(".redwhisk/issues/{issue_id}/attachments/{placeholder_name}");
-        let absolute_path = Path::new(repo_path).join(&relative_path);
+        let absolute_path = data_dir
+            .join("issues")
+            .join(issue_id.to_string())
+            .join("attachments")
+            .join(&placeholder_name);
         if let Some(parent) = absolute_path.parent() {
             fs::create_dir_all(parent).map_err(|error| {
                 cleanup_created_files(&created_files);
