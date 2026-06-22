@@ -258,17 +258,19 @@ impl CodexSessionHandle {
     /// 通过 codex `turn/interrupt` 请求实现；codex 随后会广播
     /// `turn/completed`（status 通常为 `canceled`）。
     pub fn cancel_turn(&self) -> Result<(), CodexAppServerError> {
-        let turn_id = {
+        let (thread_id, turn_id) = {
             let state = self
                 .state
                 .lock()
                 .map_err(|_| CodexAppServerError::Protocol("session 锁中毒".into()))?;
-            state.current_turn_id.clone()
+            (state.thread_id.clone(), state.current_turn_id.clone())
         };
         let Some(turn_id) = turn_id else {
             return Ok(());
         };
-        self.client.turn_interrupt(&turn_id)?;
+        let thread_id = thread_id
+            .ok_or_else(|| CodexAppServerError::Protocol("session 尚未拿到 threadId".into()))?;
+        self.client.turn_interrupt(&thread_id, &turn_id)?;
         Ok(())
     }
 
@@ -575,10 +577,10 @@ fn build_events(
             status,
             error_message,
         } => {
-            let usage = state
-                .lock()
-                .ok()
-                .and_then(|state| state.latest_usage.clone());
+            let usage = state.lock().ok().and_then(|mut state| {
+                state.current_turn_id = None;
+                state.latest_usage.clone()
+            });
             if status == "failed" || status == "aborted" {
                 vec![AgentStreamEvent::TurnFailed {
                     turn_id,
@@ -1043,6 +1045,25 @@ mod tests {
         let usage = state.lock().unwrap().latest_usage.clone().unwrap();
         assert_eq!(usage.context_window_max_tokens, Some(200_000));
         assert_eq!(usage.context_window_used_tokens, Some(500));
+    }
+
+    #[test]
+    fn build_events_turn_completed_clears_current_turn_id() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        state.lock().unwrap().current_turn_id = Some("t1".into());
+
+        let events = build_events(
+            &state,
+            CodexNotification::TurnCompleted {
+                turn_id: Some("t1".into()),
+                thread_id: Some("thr_1".into()),
+                status: "completed".into(),
+                error_message: None,
+            },
+        );
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(state.lock().unwrap().current_turn_id, None);
     }
 
     #[test]
