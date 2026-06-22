@@ -445,9 +445,10 @@ fn update_issue_rejects_missing_issue() {
 #[test]
 fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
+    let data_dir = temp_dir.path().join(".redwhisk");
     let repo_dir = temp_dir.path().join("attachment-create-repo");
     fs::create_dir_all(&repo_dir).expect("create repo dir");
-    let database = migrated_database(temp_dir.path());
+    let database = migrated_database(&data_dir);
     let project_id = insert_project_with_repo_path_and_policy(
         &database.connection,
         "attachment-create-repo",
@@ -489,6 +490,16 @@ fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
             issue.id, issue.attachments[0].stored_name
         )
     );
+    let expected_absolute_path = data_dir
+        .join("issues")
+        .join(issue.id.to_string())
+        .join("attachments")
+        .join(&issue.attachments[0].stored_name);
+    assert_eq!(
+        fs::canonicalize(&issue.attachments[0].absolute_path).expect("canonical saved attachment"),
+        fs::canonicalize(&expected_absolute_path).expect("canonical expected attachment")
+    );
+    assert!(!repo_dir.join(".redwhisk").exists());
     assert!(Path::new(&issue.attachments[0].absolute_path).exists());
     assert_eq!(
         fs::read_to_string(&issue.attachments[0].absolute_path).expect("read saved attachment"),
