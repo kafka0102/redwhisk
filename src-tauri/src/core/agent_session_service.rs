@@ -907,7 +907,11 @@ impl<'connection> AgentSessionService<'connection> {
             input.agent_profile_id,
             started_at,
         )?;
-        let command_snapshot = build_command_snapshot(&profile);
+        let command_snapshot = if profile.agent_type == AgentType::Codex {
+            build_structured_command_snapshot(&profile)
+        } else {
+            build_command_snapshot(&profile)
+        };
         let branch_info =
             list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
         let workspace_mode = input
@@ -2380,6 +2384,10 @@ fn build_command_snapshot(profile: &AgentProfileRow) -> String {
     agent_command_with_default_args(profile)
 }
 
+fn build_structured_command_snapshot(profile: &AgentProfileRow) -> String {
+    profile.command.trim().to_string()
+}
+
 fn agent_command_with_default_args(profile: &AgentProfileRow) -> String {
     match profile.agent_type {
         AgentType::Codex => ensure_codex_bypass_arg(&profile.command),
@@ -3041,7 +3049,8 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
 #[cfg(test)]
 mod tests {
     use super::{
-        agent_command_with_default_args, codex_mode_from_profile, codex_mode_from_structured_input,
+        agent_command_with_default_args, build_structured_command_snapshot,
+        codex_mode_from_profile, codex_mode_from_structured_input,
         command_supports_prompt_argument, detect_codex_session_id_from_home,
         latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
         AgentSessionService, CodexMode,
@@ -3102,6 +3111,13 @@ mod tests {
             agent_command_with_default_args(&profile),
             "codex --dangerously-bypass-approvals-and-sandbox"
         );
+    }
+
+    #[test]
+    fn structured_command_snapshot_keeps_codex_profile_command_unchanged() {
+        let profile = test_agent_profile(AgentType::Codex, " codex-asxs ");
+
+        assert_eq!(build_structured_command_snapshot(&profile), "codex-asxs");
     }
 
     #[test]
