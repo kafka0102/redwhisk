@@ -1,7 +1,15 @@
 import {
+  ChevronDown,
+  ChevronRight,
+  FileArchive,
+  FileBraces,
   FileCode2,
+  FileCog,
+  FileImage,
   FileJson2,
+  FileTerminal,
   FileText,
+  FileType,
   Folder,
   SquareCode,
 } from "lucide-react";
@@ -45,7 +53,7 @@ export function SessionFileTreePanel({
           height={600}
           idAccessor="id"
           indent={12}
-          openByDefault
+          openByDefault={false}
           overscanCount={8}
           rowHeight={28}
           width="100%"
@@ -76,6 +84,21 @@ function FileTreeRow({ node, onOpenFile, style }: FileTreeRowProps) {
         type="button"
         onClick={() => node.toggle()}
       >
+        {node.isOpen ? (
+          <ChevronDown
+            aria-hidden="true"
+            className="session-file-tree__chevron"
+            size={13}
+            strokeWidth={2}
+          />
+        ) : (
+          <ChevronRight
+            aria-hidden="true"
+            className="session-file-tree__chevron"
+            size={13}
+            strokeWidth={2}
+          />
+        )}
         <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
         <span>{node.data.name}</span>
       </button>
@@ -100,25 +123,64 @@ interface FileTypeIconProps {
 }
 
 function FileTypeIcon({ extension }: FileTypeIconProps) {
-  const className = `session-file-tree__icon session-file-tree__icon--${extension}`;
+  const className = `session-file-tree__icon session-file-tree__icon--${extension || "plain"}`;
 
-  if (extension === "css") {
-    return <SquareCode aria-hidden="true" className={className} size={15} />;
+  switch (extension) {
+    case "css":
+    case "scss":
+    case "sass":
+    case "less":
+      return <SquareCode aria-hidden="true" className={className} size={15} />;
+    case "html":
+    case "vue":
+    case "svelte":
+      return <FileCode2 aria-hidden="true" className={className} size={15} />;
+    case "json":
+    case "jsonc":
+    case "lock":
+      return <FileJson2 aria-hidden="true" className={className} size={15} />;
+    case "ts":
+    case "tsx":
+    case "js":
+    case "jsx":
+    case "rs":
+    case "go":
+    case "py":
+    case "java":
+    case "kt":
+    case "swift":
+      return <FileBraces aria-hidden="true" className={className} size={15} />;
+    case "md":
+    case "mdx":
+    case "txt":
+      return <FileText aria-hidden="true" className={className} size={15} />;
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "svg":
+      return <FileImage aria-hidden="true" className={className} size={15} />;
+    case "zip":
+    case "gz":
+    case "tar":
+      return <FileArchive aria-hidden="true" className={className} size={15} />;
+    case "sh":
+    case "zsh":
+    case "bash":
+      return (
+        <FileTerminal aria-hidden="true" className={className} size={15} />
+      );
+    case "toml":
+    case "yaml":
+    case "yml":
+    case "env":
+      return <FileCog aria-hidden="true" className={className} size={15} />;
+    case "":
+      return <FileText aria-hidden="true" className={className} size={15} />;
+    default:
+      return <FileType aria-hidden="true" className={className} size={15} />;
   }
-
-  if (extension === "rs") {
-    return <FileText aria-hidden="true" className={className} size={15} />;
-  }
-
-  if (extension === "vue") {
-    return <FileCode2 aria-hidden="true" className={className} size={15} />;
-  }
-
-  if (extension === "ts") {
-    return <FileJson2 aria-hidden="true" className={className} size={15} />;
-  }
-
-  return <FileCode2 aria-hidden="true" className={className} size={15} />;
 }
 
 function getFileExtension(fileName: string): string {

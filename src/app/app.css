@@ -2889,12 +2889,12 @@ button:focus-visible {
 }
 
 .session-file-tree__folder {
-  padding-left: calc(12px + var(--tree-depth, 0) * 12px);
+  padding-left: calc(6px + var(--tree-depth, 0) * 12px);
   color: var(--color-text-muted);
 }
 
 .session-file-tree__row {
-  padding-left: calc(12px + var(--tree-depth, 0) * 12px);
+  padding-left: calc(26px + var(--tree-depth, 0) * 12px);
 }
 
 .session-file-tree__row:hover,
@@ -2910,21 +2910,78 @@ button:focus-visible {
   color: var(--color-text-muted);
 }
 
+.session-file-tree__chevron {
+  flex: 0 0 13px;
+  color: var(--color-text-subtle);
+}
+
 .session-file-tree__icon--ts,
-.session-file-tree__icon--tsx {
+.session-file-tree__icon--tsx,
+.session-file-tree__icon--js,
+.session-file-tree__icon--jsx {
   color: #2563eb;
 }
 
-.session-file-tree__icon--vue {
+.session-file-tree__icon--json,
+.session-file-tree__icon--jsonc,
+.session-file-tree__icon--lock {
+  color: #c99700;
+}
+
+.session-file-tree__icon--vue,
+.session-file-tree__icon--svelte,
+.session-file-tree__icon--html {
   color: #16a34a;
 }
 
-.session-file-tree__icon--css {
+.session-file-tree__icon--css,
+.session-file-tree__icon--scss,
+.session-file-tree__icon--sass,
+.session-file-tree__icon--less {
   color: #7c3aed;
 }
 
-.session-file-tree__icon--rs {
+.session-file-tree__icon--rs,
+.session-file-tree__icon--go,
+.session-file-tree__icon--py,
+.session-file-tree__icon--java,
+.session-file-tree__icon--kt,
+.session-file-tree__icon--swift {
   color: #b45309;
+}
+
+.session-file-tree__icon--md,
+.session-file-tree__icon--mdx,
+.session-file-tree__icon--txt {
+  color: #475569;
+}
+
+.session-file-tree__icon--png,
+.session-file-tree__icon--jpg,
+.session-file-tree__icon--jpeg,
+.session-file-tree__icon--gif,
+.session-file-tree__icon--webp,
+.session-file-tree__icon--svg {
+  color: #1681d9;
+}
+
+.session-file-tree__icon--zip,
+.session-file-tree__icon--gz,
+.session-file-tree__icon--tar {
+  color: #65a30d;
+}
+
+.session-file-tree__icon--sh,
+.session-file-tree__icon--zsh,
+.session-file-tree__icon--bash {
+  color: #249447;
+}
+
+.session-file-tree__icon--toml,
+.session-file-tree__icon--yaml,
+.session-file-tree__icon--yml,
+.session-file-tree__icon--env {
+  color: #5f6368;
 }
 
 .terminal-surface-shell {
