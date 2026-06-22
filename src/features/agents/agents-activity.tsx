@@ -350,6 +350,10 @@ export function AgentsActivity({
     isPreparingAgentCommit ||
     isSendingAgentCommitPrompt ||
     isDetectingAgentCommitCompletion;
+  const isAgentCommitPreviewPending =
+    isCompletingManual ||
+    isSendingAgentCommitPrompt ||
+    isDetectingAgentCommitCompletion;
   const refreshSessions = useCallback(async () => {
     const response = await listAgentSessions(projectId);
     const nextSessions = applySessionListOverlays(response.sessions);
@@ -670,9 +674,24 @@ export function AgentsActivity({
   }
 
   function handleCloseAgentCommitPreview() {
-    if (isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion) {
+    if (isAgentCommitPreviewPending) {
       return;
     }
+    setAgentCommitPreview(null);
+  }
+
+  async function handleCompleteAgentCommitPreviewManually() {
+    if (!linkedIssue || !selectedSession) {
+      return;
+    }
+
+    const currentSession =
+      sessions.find(
+        (session) => session.sessionId === selectedSession.sessionId,
+      ) ?? selectedSession;
+
+    setCompleteAgentCommitErrorMessage(null);
+    await completeLinkedIssueManual(linkedIssue, currentSession);
     setAgentCommitPreview(null);
   }
 
@@ -1203,25 +1222,32 @@ export function AgentsActivity({
                     <p>No changed files.</p>
                   )}
                 </section>
-                <details className="settings-panel">
-                  <summary>Completion prompt</summary>
-                  <pre className="completion-preview__prompt">
-                    {agentCommitPreview.completionPrompt}
-                  </pre>
-                </details>
               </div>
             </div>
             <div className="issue-dialog__footer issue-dialog__footer--end">
               <button
-                disabled={
-                  isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion
-                }
+                className="issues-button issues-button--primary"
+                disabled={isAgentCommitPreviewPending}
                 type="button"
                 onClick={() => void handleConfirmAgentCommit()}
               >
-                {isSendingAgentCommitPrompt || isDetectingAgentCommitCompletion
-                  ? "Sending..."
-                  : "Confirm"}
+                提交代码
+              </button>
+              <button
+                className="issues-button"
+                disabled={isAgentCommitPreviewPending}
+                type="button"
+                onClick={() => void handleCompleteAgentCommitPreviewManually()}
+              >
+                标记完成
+              </button>
+              <button
+                className="issues-button"
+                disabled={isAgentCommitPreviewPending}
+                type="button"
+                onClick={handleCloseAgentCommitPreview}
+              >
+                取消
               </button>
             </div>
           </div>
