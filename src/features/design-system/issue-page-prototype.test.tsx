@@ -42,6 +42,11 @@ describe("IssuePagePrototypeSection", () => {
       screen.getByRole("button", { name: "In progress" }),
     ).toBeInTheDocument();
     expect(
+      within(screen.getByRole("complementary")).getByRole("heading", {
+        name: "Labels",
+      }),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByRole("button", { name: "Submit" }),
     ).not.toBeInTheDocument();
   });

@@ -374,7 +374,7 @@ function IssueSidebar({
   }
 
   return (
-    <aside className="flex min-h-[520px] flex-col border-l border-[var(--color-border)] pl-6">
+    <aside className="flex flex-col border-l border-[var(--color-border)] pl-6">
       {isEditable ? (
         <EditableLabelsSection
           labels={labels}
@@ -388,7 +388,7 @@ function IssueSidebar({
       {!isEditable ? <Divider /> : null}
 
       {!isEditable ? (
-        <LabelsDisplay labels={labels} />
+        <ReadonlyLabelsSection labels={labels} />
       ) : (
         <>
           <Divider />
@@ -414,11 +414,11 @@ function IssueSidebar({
       ) : null}
 
       {(mode === "edit" || mode === "readonly") && (
-        <div className="mt-auto pt-6">
+        <div>
           <Divider />
           <Button
             variant="destructive"
-            className="mt-5 w-full justify-center"
+            className="mt-4 w-full justify-center"
             onClick={onRequestDelete}
           >
             <Trash2 />
@@ -481,6 +481,15 @@ function LabelsDisplay({ labels }: { labels: PrototypeLabel[] }) {
           </LabelChip>
         ))}
       </div>
+    </section>
+  );
+}
+
+function ReadonlyLabelsSection({ labels }: { labels: PrototypeLabel[] }) {
+  return (
+    <section className="grid gap-3">
+      <h4 className="m-0 text-[13px] font-semibold leading-[1.32]">Labels</h4>
+      <LabelsDisplay labels={labels} />
     </section>
   );
 }
@@ -606,14 +615,15 @@ function AttachmentRow({
   onRemoveAttachment?: (attachmentId: string) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="min-w-0 flex-1 truncate rounded-[3px] bg-[var(--color-surface-muted)] px-2.5 py-1.5 text-[13px] font-medium leading-[1.45] text-[var(--color-text)]">
+    <div className="flex items-center justify-between gap-2 rounded-[3px] bg-[var(--color-surface-muted)] px-2.5 py-1.5">
+      <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-[1.45] text-[var(--color-text)]">
         {attachment.name}
       </span>
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon-sm"
+          className="size-6 rounded-[3px] bg-transparent hover:bg-[var(--color-accent-muted)]"
           aria-label={`Preview ${attachment.name}`}
           onClick={() => onPreviewAttachment(attachment)}
         >
@@ -623,6 +633,7 @@ function AttachmentRow({
           <Button
             variant="ghost"
             size="icon-sm"
+            className="size-6 rounded-[3px] bg-transparent hover:bg-[var(--color-accent-muted)]"
             aria-label={`Remove ${attachment.name}`}
             onClick={() => onRemoveAttachment?.(attachment.id)}
           >
@@ -731,7 +742,7 @@ function DeleteIssueDialog({
 }
 
 function Divider() {
-  return <div className="my-5 h-px bg-[var(--color-border)]" />;
+  return <div className="my-4 h-px bg-[var(--color-border)]" />;
 }
 
 function LabelChip({
