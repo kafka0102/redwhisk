@@ -1,12 +1,21 @@
-import { useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   ArrowLeft,
-  Clock3,
-  Hash,
+  ChevronDown,
+  Eye,
   Link2,
   Paperclip,
   Plus,
+  Settings,
   Trash2,
+  X,
 } from "lucide-react";
 
 import {
@@ -14,12 +23,35 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
   Input,
   Textarea,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type PrototypeMode = "create" | "edit" | "readonly";
+type IssueStatus = "backlog" | "running" | "review" | "completed";
+
+interface PrototypeAttachment {
+  id: string;
+  name: string;
+}
+
+interface PrototypeLabel {
+  id: string;
+  name: string;
+}
 
 const PROTOTYPE_MODES: Array<{
   id: PrototypeMode;
@@ -34,7 +66,7 @@ const PROTOTYPE_MODES: Array<{
   {
     id: "edit",
     label: "Edit issue",
-    description: "编辑页，顶部增加危险操作按钮。",
+    description: "编辑页，危险操作移至右侧底部。",
   },
   {
     id: "readonly",
@@ -43,16 +75,36 @@ const PROTOTYPE_MODES: Array<{
   },
 ];
 
-const EDITABLE_LABELS = [
-  { name: "ux", tone: "neutral" },
-  { name: "settings", tone: "neutral" },
-  { name: "issue-flow", tone: "neutral" },
-] as const;
+const AVAILABLE_LABELS: PrototypeLabel[] = [
+  { id: "ux", name: "ux" },
+  { id: "settings", name: "settings" },
+  { id: "issue-flow", name: "issue-flow" },
+  { id: "review", name: "review" },
+  { id: "bug", name: "bug" },
+];
 
-const READ_ONLY_ATTACHMENTS = [
-  "issue-form-notes.md",
-  "edit-flow-reference.png",
-] as const;
+const STATUS_OPTIONS: Array<{ id: IssueStatus; label: string }> = [
+  { id: "backlog", label: "Backlog" },
+  { id: "running", label: "In progress" },
+  { id: "review", label: "Review" },
+  { id: "completed", label: "Completed" },
+];
+
+const EDIT_ATTACHMENTS: PrototypeAttachment[] = [
+  { id: "edit-spec", name: "issue-form-split-spec.md" },
+  { id: "edit-reference", name: "page-transition-reference.png" },
+];
+
+const READONLY_ATTACHMENTS: PrototypeAttachment[] = [
+  { id: "readonly-notes", name: "issue-form-notes.md" },
+  { id: "readonly-reference", name: "edit-flow-reference.png" },
+];
+
+const EDITABLE_DESCRIPTION =
+  "Move create/edit entry points away from dialog overlay.\nSplit editable and read-only pages, but keep labels and attachments reusable.";
+
+const READONLY_DESCRIPTION =
+  "Replace the independent issue dialog with a dedicated page that takes over the current activity surface. Keep create and edit modes interactive, then split read-only viewing into a separate layout for non-backlog pages.";
 
 export function IssuePagePrototypeSection() {
   const [mode, setMode] = useState<PrototypeMode>("create");
@@ -76,7 +128,7 @@ export function IssuePagePrototypeSection() {
           <ul className="m-0 list-disc pl-5 text-[13px] leading-[1.45] text-muted-foreground">
             <li>创建、编辑、只读查看三种页面态已经拆开。</li>
             <li>内容区采用整页覆盖，不再使用 dialog overlay。</li>
-            <li>“In Progress / Review / 待办”页面暂未纳入本轮原型。</li>
+            <li>右侧栏覆盖 labels、附件、状态和删除等操作入口。</li>
           </ul>
         </CardContent>
       </Card>
@@ -103,7 +155,7 @@ export function IssuePagePrototypeSection() {
 
       <div className="overflow-auto rounded-[var(--radius-card)] border bg-[var(--color-surface-muted)]">
         <div className="min-w-[900px] bg-[var(--color-app)]">
-          <PrototypeSurface mode={mode} />
+          <PrototypeSurface key={mode} mode={mode} />
         </div>
       </div>
     </section>
@@ -112,46 +164,79 @@ export function IssuePagePrototypeSection() {
 
 function PrototypeSurface({ mode }: { mode: PrototypeMode }) {
   const isEditable = mode === "create" || mode === "edit";
+  const [status, setStatus] = useState<IssueStatus>("running");
+  const [labelIds, setLabelIds] = useState<string[]>(() =>
+    mode === "readonly" ? ["ux", "issue-flow", "review"] : ["ux", "settings"],
+  );
+  const [attachments, setAttachments] = useState<PrototypeAttachment[]>(() =>
+    mode === "edit"
+      ? EDIT_ATTACHMENTS
+      : mode === "readonly"
+        ? READONLY_ATTACHMENTS
+        : [],
+  );
+  const [previewAttachment, setPreviewAttachment] =
+    useState<PrototypeAttachment | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const selectedLabels = AVAILABLE_LABELS.filter((label) =>
+    labelIds.includes(label.id),
+  );
+
+  function toggleLabel(labelId: string) {
+    setLabelIds((currentLabelIds) =>
+      currentLabelIds.includes(labelId)
+        ? currentLabelIds.filter((id) => id !== labelId)
+        : [...currentLabelIds, labelId],
+    );
+  }
+
+  function addAttachments(files: FileList | null) {
+    if (!files?.length) {
+      return;
+    }
+
+    setAttachments((currentAttachments) => [
+      ...currentAttachments,
+      ...Array.from(files).map((file, index) => ({
+        id: `${Date.now()}-${index}-${file.name}`,
+        name: file.name,
+      })),
+    ]);
+  }
+
+  function removeAttachment(attachmentId: string) {
+    setAttachments((currentAttachments) =>
+      currentAttachments.filter((attachment) => attachment.id !== attachmentId),
+    );
+  }
 
   return (
     <div className="min-h-[760px] bg-[var(--color-app)] text-[13px] text-[var(--color-text)]">
       <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
         <div className="mx-auto flex min-h-14 items-center justify-between gap-4 px-[5%] py-3">
           <div className="min-w-0">
-            <h3 className="m-0 text-[16px] font-semibold leading-[1.25]">
+            <h3 className="m-0 truncate text-[16px] font-semibold leading-[1.25]">
               {mode === "create"
                 ? "New issue"
                 : mode === "edit"
                   ? "Edit issue"
-                  : "Issue detail"}
+                  : "Issue #184 · ID 184"}
             </h3>
-            <p className="mt-1 text-[12px] leading-[1.4] text-[var(--color-text-muted)]">
-              {mode === "readonly"
-                ? "Read-only page outside backlog lanes."
-                : "Full-page issue form replacing the current work surface."}
-            </p>
           </div>
           <div className="flex items-center gap-2">
             {mode === "readonly" ? (
               <>
                 <Button variant="ghost">
                   <ArrowLeft />
-                  Back to board
+                  Back
                 </Button>
-                <Badge variant="outline" className="rounded-[3px] px-2.5">
-                  In progress
-                </Badge>
+                <StatusMenu status={status} onStatusChange={setStatus} />
               </>
             ) : (
               <>
                 <Button variant="secondary">Cancel</Button>
                 <Button>Submit</Button>
-                {mode === "edit" ? (
-                  <Button variant="destructive">
-                    <Trash2 />
-                    Delete
-                  </Button>
-                ) : null}
               </>
             )}
           </div>
@@ -159,219 +244,494 @@ function PrototypeSurface({ mode }: { mode: PrototypeMode }) {
       </header>
 
       <main className="px-[5%] py-8">
-        <div className="mx-auto min-w-[900px]">
-          {isEditable ? (
-            <EditablePrototype mode={mode} />
-          ) : (
-            <ReadOnlyPrototype />
-          )}
+        <div className="mx-auto grid max-w-[1280px] grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-8">
+          <section className="min-w-0">
+            {isEditable ? <EditableMain mode={mode} /> : <ReadOnlyMain />}
+          </section>
+
+          <IssueSidebar
+            mode={mode}
+            labels={selectedLabels}
+            labelIds={labelIds}
+            attachments={attachments}
+            onToggleLabel={toggleLabel}
+            onAddAttachments={addAttachments}
+            onPreviewAttachment={setPreviewAttachment}
+            onRemoveAttachment={removeAttachment}
+            onRequestDelete={() => setIsDeleteDialogOpen(true)}
+          />
         </div>
       </main>
+
+      <AttachmentPreviewDialog
+        attachment={previewAttachment}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setPreviewAttachment(null);
+          }
+        }}
+      />
+      <DeleteIssueDialog
+        isOpen={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        mode={mode}
+      />
     </div>
   );
 }
 
-function EditablePrototype({ mode }: { mode: "create" | "edit" }) {
-  const titleValue =
-    mode === "edit" ? "Refactor issue form flow into page switch" : "";
-  const descriptionValue =
-    mode === "edit"
-      ? "Move create/edit entry points away from dialog overlay.\nSplit editable and read-only pages, but keep labels and attachments reusable."
-      : "";
+function EditableMain({ mode }: { mode: "create" | "edit" }) {
+  const [title, setTitle] = useState(() =>
+    mode === "edit" ? "Refactor issue form flow into page switch" : "",
+  );
+  const [description, setDescription] = useState(() =>
+    mode === "edit" ? EDITABLE_DESCRIPTION : "",
+  );
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <Input
-        aria-label="Issue title prototype"
+        aria-label="Issue title"
         className="h-11 rounded-[3px] border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-[16px] font-semibold shadow-none"
         placeholder="Issue title"
-        value={titleValue}
-        readOnly
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
       />
 
-      <Textarea
-        aria-label="Issue description prototype"
+      <AutoResizeTextarea
+        aria-label="Issue description"
         className="min-h-[176px] rounded-[3px] border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2.5 text-[13px] leading-[1.55] shadow-none"
         placeholder="Describe the task"
-        value={descriptionValue}
-        readOnly
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
         rows={8}
       />
-
-      <section className="grid gap-4 rounded-[5px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="grid gap-1">
-            <p className="m-0 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-              Labels
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {EDITABLE_LABELS.map((label) => (
-                <LabelChip key={label.name} tone={label.tone}>
-                  {label.name}
-                </LabelChip>
-              ))}
-              <button
-                type="button"
-                className="inline-flex size-6 items-center justify-center rounded-[3px] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]"
-                aria-label="Add label"
-              >
-                <Plus size={14} strokeWidth={1.9} />
-              </button>
-            </div>
-          </div>
-          <div className="grid justify-items-end gap-1">
-            <p className="m-0 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-              Attachments
-            </p>
-            <button
-              type="button"
-              className="inline-flex size-9 items-center justify-center rounded-[3px] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text-muted)]"
-              aria-label="Upload attachment"
-            >
-              <Plus size={16} strokeWidth={1.9} />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <p className="m-0 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-            Existing attachments
-          </p>
-          <div className="grid gap-2">
-            <AttachmentRow
-              name="issue-form-split-spec.md"
-              meta="Markdown note"
-            />
-            <AttachmentRow
-              name="page-transition-reference.png"
-              meta="Image reference"
-            />
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
 
-function ReadOnlyPrototype() {
-  return (
-    <div className="grid gap-6">
-      <section className="grid gap-3 border-b border-[var(--color-border)] pb-6">
-        <p className="m-0 text-[22px] font-semibold leading-[1.2]">
-          Refactor issue form flow into page switch
-        </p>
-        <p className="m-0 max-w-[72ch] whitespace-pre-wrap text-[13px] leading-[1.6] text-[var(--color-text-muted)]">
-          Replace the independent issue dialog with a dedicated page that takes
-          over the current activity surface. Keep create and edit modes
-          interactive, then split read-only viewing into a separate layout for
-          non-backlog pages.
-        </p>
-      </section>
-
-      <section className="grid gap-5 rounded-[5px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-        <div className="grid grid-cols-2 gap-x-10 gap-y-4">
-          <ReadOnlyMeta
-            icon={<Hash size={14} strokeWidth={1.9} />}
-            label="Issue"
-            value="#184"
-          />
-          <ReadOnlyMeta
-            icon={<Clock3 size={14} strokeWidth={1.9} />}
-            label="Created"
-            value="2026-06-22 14:18"
-          />
-          <ReadOnlyMeta
-            icon={<Link2 size={14} strokeWidth={1.9} />}
-            label="Linked session"
-            value="#77"
-            isInteractive
-          />
-          <ReadOnlyMeta
-            icon={<Paperclip size={14} strokeWidth={1.9} />}
-            label="Attachments"
-            value={`${READ_ONLY_ATTACHMENTS.length} files`}
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <p className="m-0 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-            Labels
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <LabelChip tone="neutral">ux</LabelChip>
-            <LabelChip tone="neutral">issue-flow</LabelChip>
-            <LabelChip tone="accent">review</LabelChip>
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <p className="m-0 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-            Attachment list
-          </p>
-          <div className="grid gap-2">
-            {READ_ONLY_ATTACHMENTS.map((attachment) => (
-              <AttachmentRow
-                key={attachment}
-                name={attachment}
-                meta="Read-only item"
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ReadOnlyMeta({
-  icon,
-  label,
+function AutoResizeTextarea({
   value,
-  isInteractive = false,
-}: {
-  icon: ReactNode;
-  label: string;
+  ...props
+}: ComponentProps<typeof Textarea> & {
   value: string;
-  isInteractive?: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [value]);
+
+  return <Textarea ref={textareaRef} value={value} {...props} />;
+}
+
+function ReadOnlyMain() {
+  return (
+    <article className="grid gap-3">
+      <h1 className="m-0 text-[22px] font-semibold leading-[1.2]">
+        Refactor issue form flow into page switch
+      </h1>
+      <p className="m-0 max-w-[72ch] whitespace-pre-wrap text-[13px] leading-[1.6] text-[var(--color-text)]">
+        {READONLY_DESCRIPTION}
+      </p>
+    </article>
+  );
+}
+
+function IssueSidebar({
+  mode,
+  labels,
+  labelIds,
+  attachments,
+  onToggleLabel,
+  onAddAttachments,
+  onPreviewAttachment,
+  onRemoveAttachment,
+  onRequestDelete,
+}: {
+  mode: PrototypeMode;
+  labels: PrototypeLabel[];
+  labelIds: string[];
+  attachments: PrototypeAttachment[];
+  onToggleLabel: (labelId: string) => void;
+  onAddAttachments: (files: FileList | null) => void;
+  onPreviewAttachment: (attachment: PrototypeAttachment) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+  onRequestDelete: () => void;
+}) {
+  const isEditable = mode === "create" || mode === "edit";
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  return (
+    <aside className="flex min-h-[520px] flex-col border-l border-[var(--color-border)] pl-6">
+      {isEditable ? (
+        <EditableLabelsSection
+          labels={labels}
+          labelIds={labelIds}
+          onToggleLabel={onToggleLabel}
+        />
+      ) : (
+        <ReadonlySessionSection />
+      )}
+
+      {!isEditable ? <Divider /> : null}
+
+      {!isEditable ? (
+        <LabelsDisplay labels={labels} />
+      ) : (
+        <>
+          <Divider />
+          <EditableAttachmentSection
+            attachments={attachments}
+            fileInputRef={fileInputRef}
+            onAddAttachments={onAddAttachments}
+            onOpenFilePicker={openFilePicker}
+            onPreviewAttachment={onPreviewAttachment}
+            onRemoveAttachment={onRemoveAttachment}
+          />
+        </>
+      )}
+
+      {!isEditable && attachments.length > 0 ? (
+        <>
+          <Divider />
+          <ReadonlyAttachmentSection
+            attachments={attachments}
+            onPreviewAttachment={onPreviewAttachment}
+          />
+        </>
+      ) : null}
+
+      {(mode === "edit" || mode === "readonly") && (
+        <div className="mt-auto pt-6">
+          <Divider />
+          <Button
+            variant="destructive"
+            className="mt-5 w-full justify-center"
+            onClick={onRequestDelete}
+          >
+            <Trash2 />
+            Delete issue
+          </Button>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function EditableLabelsSection({
+  labels,
+  labelIds,
+  onToggleLabel,
+}: {
+  labels: PrototypeLabel[];
+  labelIds: string[];
+  onToggleLabel: (labelId: string) => void;
 }) {
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center gap-1.5 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-        <span aria-hidden="true">{icon}</span>
-        <span>{label}</span>
+    <section className="grid gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="m-0 text-[13px] font-semibold leading-[1.32]">Labels</h4>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-sm" />}
+          >
+            <Settings />
+            <span className="sr-only">Select labels</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {AVAILABLE_LABELS.map((label) => (
+              <DropdownMenuCheckboxItem
+                key={label.id}
+                checked={labelIds.includes(label.id)}
+                onCheckedChange={() => onToggleLabel(label.id)}
+              >
+                {label.name}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      {isInteractive ? (
-        <button
-          type="button"
-          className="w-fit rounded-[3px] text-left text-[13px] font-medium leading-[1.45] text-[var(--color-text)] underline-offset-4 hover:underline"
+      <LabelsDisplay labels={labels} />
+    </section>
+  );
+}
+
+function LabelsDisplay({ labels }: { labels: PrototypeLabel[] }) {
+  return (
+    <section className="grid gap-2">
+      <div className="flex flex-wrap gap-2">
+        {labels.map((label) => (
+          <LabelChip
+            key={label.id}
+            tone={label.id === "review" ? "accent" : "neutral"}
+          >
+            {label.name}
+          </LabelChip>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EditableAttachmentSection({
+  attachments,
+  fileInputRef,
+  onAddAttachments,
+  onOpenFilePicker,
+  onPreviewAttachment,
+  onRemoveAttachment,
+}: {
+  attachments: PrototypeAttachment[];
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  onAddAttachments: (files: FileList | null) => void;
+  onOpenFilePicker: () => void;
+  onPreviewAttachment: (attachment: PrototypeAttachment) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+}) {
+  return (
+    <section className="grid gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="m-0 text-[13px] font-semibold leading-[1.32]">附件</h4>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Add attachment"
+          onClick={onOpenFilePicker}
         >
-          {value}
-        </button>
-      ) : (
-        <p className="m-0 text-[13px] font-medium leading-[1.45] text-[var(--color-text)]">
-          {value}
-        </p>
-      )}
+          <Plus />
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            onAddAttachments(event.target.files);
+            event.target.value = "";
+          }}
+        />
+      </div>
+      {attachments.length > 0 ? (
+        <AttachmentList
+          attachments={attachments}
+          canRemove
+          onPreviewAttachment={onPreviewAttachment}
+          onRemoveAttachment={onRemoveAttachment}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function ReadonlySessionSection() {
+  return (
+    <section className="grid gap-2">
+      <h4 className="m-0 text-[13px] font-semibold leading-[1.32]">Session</h4>
+      <button
+        type="button"
+        className="inline-flex w-fit items-center gap-1.5 rounded-[3px] text-[13px] font-medium leading-[1.45] text-[var(--color-text)] underline-offset-4 hover:underline"
+      >
+        <Link2 size={14} strokeWidth={1.9} />
+        #77
+      </button>
+    </section>
+  );
+}
+
+function ReadonlyAttachmentSection({
+  attachments,
+  onPreviewAttachment,
+}: {
+  attachments: PrototypeAttachment[];
+  onPreviewAttachment: (attachment: PrototypeAttachment) => void;
+}) {
+  return (
+    <section className="grid gap-3">
+      <h4 className="m-0 text-[13px] font-semibold leading-[1.32]">附件</h4>
+      <AttachmentList
+        attachments={attachments}
+        onPreviewAttachment={onPreviewAttachment}
+      />
+    </section>
+  );
+}
+
+function AttachmentList({
+  attachments,
+  canRemove = false,
+  onPreviewAttachment,
+  onRemoveAttachment,
+}: {
+  attachments: PrototypeAttachment[];
+  canRemove?: boolean;
+  onPreviewAttachment: (attachment: PrototypeAttachment) => void;
+  onRemoveAttachment?: (attachmentId: string) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      {attachments.map((attachment) => (
+        <AttachmentRow
+          key={attachment.id}
+          attachment={attachment}
+          canRemove={canRemove}
+          onPreviewAttachment={onPreviewAttachment}
+          onRemoveAttachment={onRemoveAttachment}
+        />
+      ))}
     </div>
   );
 }
 
-function AttachmentRow({ name, meta }: { name: string; meta: string }) {
+function AttachmentRow({
+  attachment,
+  canRemove,
+  onPreviewAttachment,
+  onRemoveAttachment,
+}: {
+  attachment: PrototypeAttachment;
+  canRemove: boolean;
+  onPreviewAttachment: (attachment: PrototypeAttachment) => void;
+  onRemoveAttachment?: (attachmentId: string) => void;
+}) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[3px] border border-[var(--color-border)] bg-[var(--color-surface-panel)] px-3 py-2">
-      <div className="min-w-0">
-        <p className="m-0 truncate text-[13px] font-medium leading-[1.45] text-[var(--color-text)]">
-          {name}
-        </p>
-        <p className="mt-0.5 text-[12px] leading-[1.35] text-[var(--color-text-muted)]">
-          {meta}
-        </p>
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0 flex-1 truncate rounded-[3px] bg-[var(--color-surface-muted)] px-2.5 py-1.5 text-[13px] font-medium leading-[1.45] text-[var(--color-text)]">
+        {attachment.name}
+      </span>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Preview ${attachment.name}`}
+          onClick={() => onPreviewAttachment(attachment)}
+        >
+          <Eye />
+        </Button>
+        {canRemove ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove ${attachment.name}`}
+            onClick={() => onRemoveAttachment?.(attachment.id)}
+          >
+            <X />
+          </Button>
+        ) : null}
       </div>
-      <Button variant="ghost" size="sm">
-        Open
-      </Button>
     </div>
   );
+}
+
+function StatusMenu({
+  status,
+  onStatusChange,
+}: {
+  status: IssueStatus;
+  onStatusChange: (status: IssueStatus) => void;
+}) {
+  const currentStatus = STATUS_OPTIONS.find((option) => option.id === status);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" />}>
+        {currentStatus?.label}
+        <ChevronDown />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuRadioGroup
+          value={status}
+          onValueChange={(nextStatus) =>
+            onStatusChange(nextStatus as IssueStatus)
+          }
+        >
+          {STATUS_OPTIONS.filter((option) => option.id !== status).map(
+            (option) => (
+              <DropdownMenuRadioItem key={option.id} value={option.id}>
+                {option.label}
+              </DropdownMenuRadioItem>
+            ),
+          )}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function AttachmentPreviewDialog({
+  attachment,
+  onOpenChange,
+}: {
+  attachment: PrototypeAttachment | null;
+  onOpenChange: (isOpen: boolean) => void;
+}) {
+  return (
+    <Dialog open={attachment !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md rounded-[var(--radius-dialog)]">
+        <DialogHeader>
+          <DialogTitle>附件预览</DialogTitle>
+          <DialogDescription>
+            {attachment?.name ?? "No attachment selected"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid min-h-32 place-items-center rounded-[3px] border border-[var(--color-border)] bg-[var(--color-surface-panel)] text-[13px] text-[var(--color-text-muted)]">
+          <Paperclip size={18} strokeWidth={1.9} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteIssueDialog({
+  isOpen,
+  mode,
+  onOpenChange,
+}: {
+  isOpen: boolean;
+  mode: PrototypeMode;
+  onOpenChange: (isOpen: boolean) => void;
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-md rounded-[var(--radius-dialog)]"
+        showCloseButton={false}
+      >
+        <DialogHeader>
+          <DialogTitle>确认删除 issue</DialogTitle>
+          <DialogDescription>
+            {mode === "readonly"
+              ? "此操作会删除当前只读 issue。"
+              : "此操作会删除正在编辑的 issue。"}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="rounded-b-[var(--radius-dialog)]">
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={() => onOpenChange(false)}>
+            <Trash2 />
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Divider() {
+  return <div className="my-5 h-px bg-[var(--color-border)]" />;
 }
 
 function LabelChip({
