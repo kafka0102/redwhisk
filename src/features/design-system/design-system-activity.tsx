@@ -9,6 +9,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Check, X, Plus, Paperclip, Trash2 } from "lucide-react";
+import { IssuePagePrototypeSection } from "./issue-page-prototype";
 
 const TYPE_SAMPLES = {
   headline: "text-[22px] font-semibold leading-[1.2]",
@@ -25,6 +26,7 @@ export function DesignSystemActivity() {
 
   const sections = [
     { id: "overview", label: "Overview" },
+    { id: "issue-prototype", label: "Issue Prototype" },
     { id: "colors", label: "Colors" },
     { id: "typography", label: "Typography" },
     { id: "buttons", label: "Buttons" },
@@ -68,6 +70,7 @@ export function DesignSystemActivity() {
 
         <div className="overflow-auto pr-2">
           {activeSection === "overview" && <OverviewSection />}
+          {activeSection === "issue-prototype" && <IssuePagePrototypeSection />}
           {activeSection === "colors" && <ColorsSection />}
           {activeSection === "typography" && <TypographySection />}
           {activeSection === "buttons" && <ButtonsSection />}
