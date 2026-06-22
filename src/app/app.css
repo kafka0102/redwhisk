@@ -3331,6 +3331,129 @@ button:focus-visible {
   background: var(--color-overlay);
 }
 
+.issue-page {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-area: kanban;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-app);
+  color: var(--color-text);
+  overflow: hidden;
+}
+
+.issue-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.issue-page__header h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-page__header-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.issue-page__body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 340px);
+  gap: 22px;
+  min-height: 0;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.issue-page__main {
+  min-height: 0;
+}
+
+.issue-page__side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--color-border);
+  padding-left: 18px;
+  overflow: auto;
+}
+
+.issue-page__divider {
+  flex: 0 0 auto;
+  height: 1px;
+  margin: 14px 0;
+  background: var(--color-border);
+}
+
+.issue-page__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.issue-page__section-header h4 {
+  margin: 0;
+}
+
+.issue-page__status {
+  padding: 0 16px 12px;
+}
+
+.issue-page__attachment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.issue-page__attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+}
+
+.issue-page__attachment-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-page__attachment-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
 .issue-dialog {
   position: relative;
   display: grid;
@@ -4057,6 +4180,24 @@ button:focus-visible {
   .issue-dialog__body {
     grid-template-columns: minmax(0, 1fr);
     overflow: auto;
+  }
+
+  .issue-page__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .issue-page__body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .issue-page__side {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+    padding-top: 14px;
+    padding-left: 0;
+    overflow: visible;
   }
 
   .issue-dialog__side {
