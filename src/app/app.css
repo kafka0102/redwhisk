@@ -2320,7 +2320,38 @@ button:focus-visible {
 }
 
 .agents-workspace--with-side-panel {
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 8px var(
+      --session-side-panel-width,
+      300px
+    );
+}
+
+.session-side-panel-splitter {
+  position: relative;
+  min-height: 0;
+  cursor: col-resize;
+  background: var(--color-surface);
+}
+
+.session-side-panel-splitter::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--color-border);
+  content: "";
+}
+
+.session-side-panel-splitter:hover::before,
+.session-side-panel-splitter:focus-visible::before {
+  background: var(--color-border-strong);
+}
+
+.session-side-panel-splitter:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-focus-ring);
 }
 
 .agents-terminal-pane {
@@ -2370,8 +2401,8 @@ button:focus-visible {
 
 .session-inline-terminal-splitter::before {
   position: absolute;
-  top: 2px;
   right: 0;
+  bottom: 0;
   left: 0;
   height: 1px;
   background: var(--color-border);
@@ -2624,7 +2655,6 @@ button:focus-visible {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  border-top: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 
@@ -2808,7 +2838,6 @@ button:focus-visible {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  border-left: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 
@@ -3955,6 +3984,10 @@ button:focus-visible {
 
   .agents-workspace--with-side-panel {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-side-panel-splitter {
+    display: none;
   }
 
   .session-side-panel {

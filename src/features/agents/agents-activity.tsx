@@ -60,6 +60,9 @@ const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MIN_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MAX_WIDTH = 450;
+const SESSION_SIDE_PANEL_DEFAULT_WIDTH = 300;
+const SESSION_SIDE_PANEL_MIN_WIDTH = 240;
+const SESSION_SIDE_PANEL_MAX_WIDTH = 560;
 const DEFAULT_SESSION_TITLE = "Untitled Session";
 
 interface AgentsActivityProps {
@@ -123,7 +126,14 @@ export function AgentsActivity({
     activeSessionId,
   );
   const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
+  const [sessionSidePanelWidth, setSessionSidePanelWidth] = useState(
+    SESSION_SIDE_PANEL_DEFAULT_WIDTH,
+  );
   const dragStateRef = useRef<{
+    startWidth: number;
+    startX: number;
+  } | null>(null);
+  const sidePanelDragStateRef = useRef<{
     startWidth: number;
     startX: number;
   } | null>(null);
@@ -771,6 +781,15 @@ export function AgentsActivity({
         setSidebarWidth(nextWidth);
       }
 
+      const sidePanelDragState = sidePanelDragStateRef.current;
+      if (sidePanelDragState) {
+        const deltaX = event.clientX - sidePanelDragState.startX;
+        const nextWidth = clampSessionSidePanelWidth(
+          sidePanelDragState.startWidth - deltaX,
+        );
+        setSessionSidePanelWidth(nextWidth);
+      }
+
       const terminalPanelDragState = terminalPanelDragStateRef.current;
       if (terminalPanelDragState) {
         const deltaY = event.clientY - terminalPanelDragState.startY;
@@ -790,6 +809,7 @@ export function AgentsActivity({
 
     function handleMouseUp() {
       dragStateRef.current = null;
+      sidePanelDragStateRef.current = null;
       terminalPanelDragStateRef.current = null;
       window.document.body.style.cursor = "";
       window.document.body.style.userSelect = "";
@@ -979,6 +999,20 @@ export function AgentsActivity({
     window.document.body.style.userSelect = "none";
   }
 
+  function handleSidePanelSplitterMouseDown(event: ReactMouseEvent) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    sidePanelDragStateRef.current = {
+      startWidth: sessionSidePanelWidth,
+      startX: event.clientX,
+    };
+    window.document.body.style.cursor = "col-resize";
+    window.document.body.style.userSelect = "none";
+  }
+
   async function handleTemporarySessionStarted(
     result: StartStructuredAgentSessionResult,
   ) {
@@ -1018,7 +1052,12 @@ export function AgentsActivity({
   return (
     <main
       className="activity-surface activity-surface--agents"
-      style={{ "--agents-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      style={
+        {
+          "--agents-sidebar-width": `${sidebarWidth}px`,
+          "--session-side-panel-width": `${sessionSidePanelWidth}px`,
+        } as CSSProperties
+      }
     >
       <AgentsSessionList
         availableAgentTypes={availableAgentTypes}
@@ -1158,25 +1197,67 @@ export function AgentsActivity({
           transitionPhase={sessionTransitionPhase}
         />
         {isSessionSidePanelOpen && linkedIssue ? (
-          <SessionSidePanel
-            activeTab={workspaceCache.sidePanelTab}
-            changes={workspaceCache.changes}
-            changesErrorMessage={workspaceCache.changesErrorMessage}
-            fileTree={workspaceCache.fileTree}
-            fileTreeErrorMessage={workspaceCache.fileTreeErrorMessage}
-            isChangesLoading={workspaceCache.isChangesLoading}
-            isFileTreeLoading={workspaceCache.isFileTreeLoading}
-            onActiveTabChange={workspaceCache.setSidePanelTab}
-            onOpenChangedFile={(file) => {
-              void workspaceCache.openChange(file);
-            }}
-            onOpenFile={(file) => {
-              void workspaceCache.openFile(file);
-            }}
-            onRefreshChanges={() => {
-              void workspaceCache.refreshChanges();
-            }}
-          />
+          <>
+            <div
+              aria-label="Resize session side panel"
+              aria-orientation="vertical"
+              aria-valuemax={SESSION_SIDE_PANEL_MAX_WIDTH}
+              aria-valuemin={SESSION_SIDE_PANEL_MIN_WIDTH}
+              aria-valuenow={sessionSidePanelWidth}
+              className="session-side-panel-splitter"
+              role="separator"
+              tabIndex={0}
+              onMouseDown={handleSidePanelSplitterMouseDown}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  setSessionSidePanelWidth((currentWidth) =>
+                    clampSessionSidePanelWidth(
+                      currentWidth + SIDEBAR_RESIZE_STEP,
+                    ),
+                  );
+                }
+
+                if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  setSessionSidePanelWidth((currentWidth) =>
+                    clampSessionSidePanelWidth(
+                      currentWidth - SIDEBAR_RESIZE_STEP,
+                    ),
+                  );
+                }
+
+                if (event.key === "Home") {
+                  event.preventDefault();
+                  setSessionSidePanelWidth(SESSION_SIDE_PANEL_DEFAULT_WIDTH);
+                }
+
+                if (event.key === "End") {
+                  event.preventDefault();
+                  setSessionSidePanelWidth(SESSION_SIDE_PANEL_MAX_WIDTH);
+                }
+              }}
+            />
+            <SessionSidePanel
+              activeTab={workspaceCache.sidePanelTab}
+              changes={workspaceCache.changes}
+              changesErrorMessage={workspaceCache.changesErrorMessage}
+              fileTree={workspaceCache.fileTree}
+              fileTreeErrorMessage={workspaceCache.fileTreeErrorMessage}
+              isChangesLoading={workspaceCache.isChangesLoading}
+              isFileTreeLoading={workspaceCache.isFileTreeLoading}
+              onActiveTabChange={workspaceCache.setSidePanelTab}
+              onOpenChangedFile={(file) => {
+                void workspaceCache.openChange(file);
+              }}
+              onOpenFile={(file) => {
+                void workspaceCache.openFile(file);
+              }}
+              onRefreshChanges={() => {
+                void workspaceCache.refreshChanges();
+              }}
+            />
+          </>
         ) : null}
       </section>
 
@@ -1254,6 +1335,13 @@ export function AgentsActivity({
         </div>
       ) : null}
     </main>
+  );
+}
+
+function clampSessionSidePanelWidth(width: number) {
+  return Math.min(
+    SESSION_SIDE_PANEL_MAX_WIDTH,
+    Math.max(SESSION_SIDE_PANEL_MIN_WIDTH, width),
   );
 }
 
