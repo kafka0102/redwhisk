@@ -112,6 +112,10 @@ function FileTreeRow({ node, onOpenFile, style }: FileTreeRowProps) {
       type="button"
       onClick={() => onOpenFile(node.data)}
     >
+      <span
+        aria-hidden="true"
+        className="session-file-tree__chevron session-file-tree__chevron--placeholder"
+      />
       <FileTypeIcon extension={getFileExtension(node.data.name)} />
       <span>{node.data.name}</span>
     </button>

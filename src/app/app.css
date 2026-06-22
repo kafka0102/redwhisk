@@ -2915,6 +2915,10 @@ button:focus-visible {
   color: var(--color-text-subtle);
 }
 
+.session-file-tree__chevron--placeholder {
+  visibility: hidden;
+}
+
 .session-file-tree__icon--ts,
 .session-file-tree__icon--tsx,
 .session-file-tree__icon--js,
