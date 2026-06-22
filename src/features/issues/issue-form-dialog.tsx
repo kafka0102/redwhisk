@@ -486,7 +486,7 @@ function IssueActionsAside({
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const currentStatus = selectedIssue?.status ?? "backlog";
   const currentStatusIndex = ISSUE_STATUS_ORDER.indexOf(currentStatus);
-  const deleteConfirmMessage = "确认删除这个 issue 吗？";
+  const deleteConfirmMessage = "Are you sure to delete this issue?";
 
   useEffect(() => {
     if (!isStatusMenuOpen) {
