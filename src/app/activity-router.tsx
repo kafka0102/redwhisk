@@ -109,6 +109,7 @@ export function ActivityRouter({
 
   return (
     <IssuesActivity
+      key={projectId}
       onOpenAgentsActivity={onOpenAgentsActivity}
       onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
       projectCompletionPolicy={projectCompletionPolicy}

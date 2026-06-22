@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
+import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import {
   getProjectGitBranches,
   advanceIssueStatus,
@@ -342,6 +343,7 @@ describe("IssuesActivity", () => {
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
+    resetIssuePageStateCacheForTests();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     listProjectLabelsMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
@@ -500,7 +502,7 @@ describe("IssuesActivity", () => {
     expect(normalCard).not.toHaveTextContent("Codex 需要确认");
   });
 
-  it("opens a backlog issue edit dialog without status or updated-at fields", async () => {
+  it("opens a backlog issue edit page without status or updated-at fields", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -510,30 +512,31 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", {
+    const page = screen.getByRole("form", {
       name: "Edit Issue",
     });
-    expect(within(dialog).getByLabelText("Title")).toHaveValue(
-      "Existing issue",
-    );
-    expect(within(dialog).getByLabelText("Description")).toHaveValue(
+    expect(
+      screen.queryByRole("dialog", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+    expect(within(page).getByLabelText("Title")).toHaveValue("Existing issue");
+    expect(within(page).getByLabelText("Description")).toHaveValue(
       "Existing description",
     );
     expect(
-      within(dialog).getByPlaceholderText("Issue title"),
+      within(page).getByPlaceholderText("Issue title"),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Description")).toBeInTheDocument();
+    expect(within(page).getByLabelText("Description")).toBeInTheDocument();
     expect(
-      within(dialog).queryByLabelText(/status|updated/i, {
+      within(page).queryByLabelText(/status|updated/i, {
         selector: "input, textarea, select",
       }),
     ).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("Backlog")).not.toBeInTheDocument();
+    expect(within(page).queryByText("Backlog")).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByText(formatTestTimestamp(existingIssue.updatedAt)),
+      within(page).queryByText(formatTestTimestamp(existingIssue.updatedAt)),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: "Run" }),
+      within(page).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
   });
 
@@ -541,7 +544,7 @@ describe("IssuesActivity", () => {
     ["in-progress", runningIssue],
     ["review", reviewIssue],
     ["done", completedIssue],
-  ])("opens %s issues as read-only details", async (_label, issue) => {
+  ])("opens %s issues as read-only details page", async (_label, issue) => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [issue] });
 
@@ -549,24 +552,29 @@ describe("IssuesActivity", () => {
 
     await user.click(await screen.findByRole("button", { name: issue.title }));
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
-    expect(dialog).toHaveFocus();
-    expect(within(dialog).getByText(issue.title)).toBeInTheDocument();
-    expect(within(dialog).getByText(issue.description)).toBeInTheDocument();
-    expect(dialog.querySelector(".issue-detail__divider")).toBeInTheDocument();
-    expect(within(dialog).queryByLabelText("Title")).not.toBeInTheDocument();
+    const page = screen.getByRole("region", { name: "Issue Detail" });
     expect(
-      within(dialog).queryByLabelText("Description"),
+      screen.queryByRole("dialog", { name: "Issue Detail" }),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: "Attach file" }),
+      within(page).getByRole("button", { name: "返回" }).querySelector("svg"),
+    ).toBeNull();
+    expect(within(page).getByText(issue.title)).toBeInTheDocument();
+    expect(within(page).getByText(issue.description)).toBeInTheDocument();
+    expect(page.querySelector(".issue-detail__divider")).toBeInTheDocument();
+    expect(within(page).queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(
+      within(page).queryByLabelText("Description"),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: "Save" }),
+      within(page).queryByRole("button", { name: "Attach file" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(page).queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
   });
 
-  it("closes the detail dialog with Escape and restores focus to the triggering card", async () => {
+  it("closes the edit page with Cancel and restores the issue board", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -577,13 +585,16 @@ describe("IssuesActivity", () => {
 
     expect(screen.getByLabelText("Title")).toHaveFocus();
 
-    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Backlog" })).toBeInTheDocument();
     expect(card).toHaveFocus();
   });
 
-  it("keeps Tab focus inside the issue dialog", async () => {
+  it("lets the issue page use normal page focus order", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -593,19 +604,14 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
-    expect(within(dialog).getByLabelText("Title")).toHaveFocus();
+    const page = screen.getByRole("form", { name: "Edit Issue" });
+    expect(within(page).getByLabelText("Title")).toHaveFocus();
 
     await user.tab({ shift: true });
-    expect(within(dialog).getByRole("button", { name: "Save" })).toHaveFocus();
-
-    await user.tab();
-    expect(
-      within(dialog).getByRole("button", { name: "Close issue dialog" }),
-    ).toHaveFocus();
+    expect(within(page).getByRole("button", { name: "Save" })).toHaveFocus();
   });
 
-  it("keeps the empty kanban and dialog input when issue creation fails", async () => {
+  it("keeps the empty kanban and page input when issue creation fails", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [] });
     createIssueMock.mockRejectedValue({
@@ -621,9 +627,9 @@ describe("IssuesActivity", () => {
     await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
-    const dialog = screen.getByRole("dialog", { name: "New Issue" });
+    const page = screen.getByRole("form", { name: "New Issue" });
     expect(
-      await within(dialog).findByRole("status", { name: "Dialog status" }),
+      await within(page).findByRole("status", { name: "Dialog status" }),
     ).toHaveTextContent("Issue title 不能为空。");
     expect(
       screen.queryByRole("button", { name: "draft local issue" }),
@@ -631,7 +637,7 @@ describe("IssuesActivity", () => {
     expect(screen.getByDisplayValue("draft local issue")).toBeInTheDocument();
   });
 
-  it("keeps the create dialog open while a create request is pending", async () => {
+  it("keeps the create page open while a create request is pending", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [] });
     createIssueMock.mockImplementation(
@@ -647,16 +653,12 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
     await user.keyboard("{Escape}");
 
-    expect(
-      screen.getByRole("dialog", { name: "New Issue" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
-    expect(
-      screen.queryByRole("button", { name: "Cancel" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
-  it("keeps lowercase input and closes the create dialog after save", async () => {
+  it("keeps lowercase input and closes the create page after save", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [] });
     createIssueMock.mockResolvedValue({
@@ -694,7 +696,7 @@ describe("IssuesActivity", () => {
       }),
     );
     expect(
-      screen.queryByRole("dialog", { name: "New Issue" }),
+      screen.queryByRole("form", { name: "New Issue" }),
     ).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "draft local issue" }),
@@ -742,12 +744,12 @@ describe("IssuesActivity", () => {
         labelIds: [],
       }),
     );
-    expect(createIssueMock.mock.calls[0]?.[0].description).toContain(
-      "{{issue-attachment-temp:",
+    expect(createIssueMock.mock.calls[0]?.[0].description).toBe(
+      "Read the config.",
     );
   });
 
-  it("closes the edit dialog after save", async () => {
+  it("closes the edit page after save", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     updateIssueMock.mockResolvedValue({
@@ -782,7 +784,7 @@ describe("IssuesActivity", () => {
       }),
     );
     expect(
-      screen.queryByRole("dialog", { name: "Edit Issue" }),
+      screen.queryByRole("form", { name: "Edit Issue" }),
     ).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Updated issue" }),
@@ -814,9 +816,9 @@ describe("IssuesActivity", () => {
       attachments: [],
       labelIds: [],
     });
-    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
+    const page = screen.getByRole("form", { name: "Edit Issue" });
     expect(
-      await within(dialog).findByRole("status", { name: "Dialog status" }),
+      await within(page).findByRole("status", { name: "Dialog status" }),
     ).toHaveTextContent("Issue 不存在。");
     expect(
       screen.getByRole("button", { name: "Existing issue" }),
@@ -962,6 +964,24 @@ describe("IssuesActivity", () => {
     expect(onOpenProjectSettingsLabels).toHaveBeenCalledTimes(1);
   });
 
+  it("restores an in-progress create page after the activity is unmounted and mounted again", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    const { unmount } = renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "New Issue" }));
+    await user.type(screen.getByLabelText("Title"), "kept draft");
+    await user.type(screen.getByLabelText("Description"), "kept body");
+
+    unmount();
+    renderIssuesActivity();
+
+    const page = await screen.findByRole("form", { name: "New Issue" });
+    expect(within(page).getByLabelText("Title")).toHaveValue("kept draft");
+    expect(within(page).getByLabelText("Description")).toHaveValue("kept body");
+  });
+
   it("restores the selected issue when create is canceled", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -972,33 +992,33 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     ).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "New Issue" }));
-    await user.click(
-      screen.getByRole("button", { name: "Close issue dialog" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
       screen.getByRole("button", { name: "Existing issue" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "New Issue" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("allows clicking outside to close an untouched create dialog", async () => {
+  it("closes an untouched create page with Cancel", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
     renderIssuesActivity();
 
     await user.click(screen.getByRole("button", { name: "New Issue" }));
-    const dialog = screen.getByRole("dialog", { name: "New Issue" });
+    const page = screen.getByRole("form", { name: "New Issue" });
 
-    await user.click(dialog.parentElement as HTMLElement);
+    await user.click(within(page).getByRole("button", { name: "Cancel" }));
 
     expect(
-      screen.queryByRole("dialog", { name: "New Issue" }),
+      screen.queryByRole("form", { name: "New Issue" }),
     ).not.toBeInTheDocument();
   });
 
-  it("keeps a dirty create dialog open on outside click and Escape until the close button is used", async () => {
+  it("keeps a dirty create page until Cancel is used", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -1006,28 +1026,16 @@ describe("IssuesActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "New Issue" }));
     await user.type(screen.getByLabelText("Title"), "dirty draft");
-    const dialog = screen.getByRole("dialog", { name: "New Issue" });
+    expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
 
-    await user.click(dialog.parentElement as HTMLElement);
-    expect(
-      screen.getByRole("dialog", { name: "New Issue" }),
-    ).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-    expect(
-      screen.getByRole("dialog", { name: "New Issue" }),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Close issue dialog" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
-      screen.queryByRole("dialog", { name: "New Issue" }),
+      screen.queryByRole("form", { name: "New Issue" }),
     ).not.toBeInTheDocument();
   });
 
-  it("treats reverted edit values as clean and allows outside click to close", async () => {
+  it("treats reverted edit values as clean and allows Cancel to close", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
@@ -1037,17 +1045,16 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
     const title = screen.getByLabelText("Title");
-    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
 
     await user.clear(title);
     await user.type(title, "Changed once");
     await user.clear(title);
     await user.type(title, existingIssue.title);
 
-    await user.click(dialog.parentElement as HTMLElement);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
-      screen.queryByRole("dialog", { name: "Edit Issue" }),
+      screen.queryByRole("form", { name: "Edit Issue" }),
     ).not.toBeInTheDocument();
   });
 
@@ -2046,13 +2053,13 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
+    const dialog = screen.getByRole("form", { name: "Edit Issue" });
     expect(
       within(dialog).queryByRole("button", { name: "Run" }),
     ).not.toBeInTheDocument();
   });
 
-  it("previews and downloads a draft attachment from the issue dialog", async () => {
+  it("previews and downloads a draft attachment from the issue page", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [] });
     openDialogMock.mockResolvedValue("/tmp/tsconfig.json");
@@ -2121,7 +2128,7 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Linked session issue" }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
+    const dialog = screen.getByRole("form", { name: "Edit Issue" });
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
@@ -2144,14 +2151,14 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Open linked session #401" }),
     );
 
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
     expect(
-      screen.queryByRole("dialog", { name: "Issue Detail" }),
+      screen.queryByRole("region", { name: "Issue Detail" }),
     ).not.toBeInTheDocument();
   });
 
@@ -2188,7 +2195,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
@@ -2258,7 +2265,7 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Review issue" }),
     );
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
@@ -2307,7 +2314,7 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Review issue" }),
     );
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
@@ -2354,7 +2361,7 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Review issue" }),
     );
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
@@ -2407,7 +2414,7 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Review issue" }),
     );
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
@@ -2465,7 +2472,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Delete issue" }),
     );
@@ -2478,7 +2485,7 @@ describe("IssuesActivity", () => {
       issueId: runningIssue.id,
     });
     expect(
-      screen.queryByRole("dialog", { name: "Issue Detail" }),
+      screen.queryByRole("region", { name: "Issue Detail" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Running issue" }),
@@ -2487,7 +2494,7 @@ describe("IssuesActivity", () => {
     confirmSpy.mockRestore();
   });
 
-  it("shows a delete link in the backlog edit dialog header and deletes the issue after confirmation", async () => {
+  it("shows a delete link in the backlog edit page header and deletes the issue after confirmation", async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
@@ -2501,7 +2508,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
+    const dialog = screen.getByRole("form", { name: "Edit Issue" });
     await user.click(within(dialog).getByRole("button", { name: "删除" }));
 
     expect(confirmSpy).toHaveBeenCalledWith(
@@ -2512,7 +2519,7 @@ describe("IssuesActivity", () => {
       issueId: existingIssue.id,
     });
     expect(
-      screen.queryByRole("dialog", { name: "Edit Issue" }),
+      screen.queryByRole("form", { name: "Edit Issue" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Existing issue" }),
@@ -2534,7 +2541,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "Delete issue" }),
     );
@@ -2544,7 +2551,7 @@ describe("IssuesActivity", () => {
     );
     expect(deleteIssueMock).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Issue Detail" }),
+      screen.getByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
 
     confirmSpy.mockRestore();
@@ -2584,7 +2591,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
@@ -2618,7 +2625,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
@@ -2630,7 +2637,7 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens completed issue summary from the issue detail dialog", async () => {
+  it("opens completed issue summary from the issue detail page", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
     getIssueSummaryMock.mockResolvedValue({
@@ -2662,7 +2669,7 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Issue Detail" });
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
     await user.click(
       within(dialog).getByRole("button", { name: "View Summary" }),
     );

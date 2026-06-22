@@ -27,11 +27,12 @@ import {
   type DialogMode,
   type IssueFormState,
 } from "./issue-activity-types";
-import { IssueFormDialog } from "./issue-form-dialog";
+import { IssueEditablePage, IssueReadOnlyPage } from "./issue-form-dialog";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
+import { issuePageStateCache } from "./issues-activity-cache";
 import { injectAgentSessionPrompt } from "../agents/agent-session-commands";
 import {
   listProjectLabels,
@@ -59,11 +60,14 @@ export function IssuesActivity({
   worktreeSetupCommand = "",
 }: IssuesActivityProps) {
   const { locale, messages } = useI18n();
+  const cachedPageState = issuePageStateCache.get(projectId) ?? null;
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
-    requestedIssueId,
+    cachedPageState?.selectedIssueId ?? requestedIssueId,
   );
-  const [dialogMode, setDialogMode] = useState<DialogMode | null>(null);
+  const [dialogMode, setDialogMode] = useState<DialogMode | null>(
+    cachedPageState?.dialogMode ?? null,
+  );
   const [runDialogIssue, setRunDialogIssue] = useState<Pick<
     IssueRecord,
     "id" | "title" | "description" | "attachments"
@@ -71,7 +75,9 @@ export function IssuesActivity({
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [attachmentPreview, setAttachmentPreview] =
     useState<AttachmentPreviewState | null>(null);
-  const [form, setForm] = useState<IssueFormState>(EMPTY_FORM);
+  const [form, setForm] = useState<IssueFormState>(
+    cachedPageState?.form ?? EMPTY_FORM,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -91,11 +97,10 @@ export function IssuesActivity({
     null,
   );
   const activeProjectIdRef = useRef(projectId);
-  const previousSelectedIssueIdRef = useRef<number | null>(null);
+  const previousSelectedIssueIdRef = useRef<number | null>(
+    cachedPageState?.previousSelectedIssueId ?? null,
+  );
   const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const dialogFormRef = useRef<HTMLFormElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const saveButtonRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef(new Map<number, HTMLButtonElement>());
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
@@ -106,16 +111,33 @@ export function IssuesActivity({
   }, [projectId]);
 
   useEffect(() => {
+    if (!dialogMode) {
+      issuePageStateCache.delete(projectId);
+      return;
+    }
+
+    issuePageStateCache.set(projectId, {
+      dialogMode,
+      form,
+      previousSelectedIssueId: previousSelectedIssueIdRef.current,
+      selectedIssueId,
+    });
+  }, [dialogMode, form, projectId, selectedIssueId]);
+
+  useEffect(() => {
     let isMounted = true;
 
     async function loadIssues() {
+      const cachedState = issuePageStateCache.get(projectId) ?? null;
       setIsLoading(true);
       setErrorMessage(null);
       setIssues([]);
-      setSelectedIssueId(null);
-      setDialogMode(null);
+      setSelectedIssueId(cachedState?.selectedIssueId ?? null);
+      setDialogMode(cachedState?.dialogMode ?? null);
       setRunDialogIssue(null);
-      setForm(EMPTY_FORM);
+      setForm(cachedState?.form ?? EMPTY_FORM);
+      previousSelectedIssueIdRef.current =
+        cachedState?.previousSelectedIssueId ?? null;
       setIsSaving(false);
       setDialogErrorMessage(null);
       setCompletionProgress(null);
@@ -126,12 +148,32 @@ export function IssuesActivity({
           return;
         }
 
+        const nextCachedState = issuePageStateCache.get(projectId) ?? null;
+        const cachedIssueExists =
+          nextCachedState?.dialogMode === "create" ||
+          response.issues.some(
+            (issue) => issue.id === nextCachedState?.selectedIssueId,
+          );
+
         setIssues(response.issues);
-        setSelectedIssueId(
-          response.issues.find((issue) => issue.id === requestedIssueId)?.id ??
-            response.issues[0]?.id ??
-            null,
-        );
+        if (nextCachedState && cachedIssueExists) {
+          setSelectedIssueId(nextCachedState.selectedIssueId);
+          setDialogMode(nextCachedState.dialogMode);
+          setForm(nextCachedState.form);
+          previousSelectedIssueIdRef.current =
+            nextCachedState.previousSelectedIssueId;
+        } else {
+          issuePageStateCache.delete(projectId);
+          setSelectedIssueId(
+            response.issues.find((issue) => issue.id === requestedIssueId)
+              ?.id ??
+              response.issues[0]?.id ??
+              null,
+          );
+          setDialogMode(null);
+          setForm(EMPTY_FORM);
+          previousSelectedIssueIdRef.current = null;
+        }
       } catch (error) {
         if (isMounted) {
           setErrorMessage(toCommandError(error).message);
@@ -212,10 +254,7 @@ export function IssuesActivity({
 
     if (dialogMode === "create" || selectedIssue?.status === "backlog") {
       titleInputRef.current?.focus();
-      return;
     }
-
-    dialogFormRef.current?.focus();
   }, [dialogMode, selectedIssue?.status]);
 
   const lanes = useMemo(
@@ -313,10 +352,7 @@ export function IssuesActivity({
         const createdIssue = await createIssue({
           projectId: requestProjectId,
           title: form.title,
-          description: buildIssueDescription(
-            form.description,
-            form.attachments,
-          ),
+          description: buildIssueDescription(form.description),
           attachments: serializeAttachments(form.attachments),
           labelIds: form.labelIds,
         });
@@ -333,10 +369,7 @@ export function IssuesActivity({
           projectId: requestProjectId,
           issueId: selectedIssue.id,
           title: form.title,
-          description: buildIssueDescription(
-            form.description,
-            form.attachments,
-          ),
+          description: buildIssueDescription(form.description),
           attachments: serializeAttachments(form.attachments),
           labelIds: form.labelIds,
         });
@@ -377,57 +410,6 @@ export function IssuesActivity({
     }
 
     createButtonRef.current?.focus();
-  }
-
-  function handleDialogKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
-    if (event.key === "Escape") {
-      if (canDismissWithoutCloseButton) {
-        event.preventDefault();
-        closeDialog();
-      }
-      return;
-    }
-
-    if (event.key !== "Tab") {
-      return;
-    }
-
-    const activeElement = document.activeElement;
-    const closeButton = closeButtonRef.current;
-    const saveButton = saveButtonRef.current;
-
-    if (
-      event.shiftKey &&
-      activeElement === titleInputRef.current &&
-      saveButton &&
-      !saveButton.disabled
-    ) {
-      event.preventDefault();
-      saveButton.focus();
-      return;
-    }
-
-    if (!event.shiftKey && activeElement === saveButton && closeButton) {
-      event.preventDefault();
-      closeButton.focus();
-      return;
-    }
-
-    const focusableElements = getFocusableDialogElements(dialogFormRef.current);
-    if (focusableElements.length === 0) {
-      return;
-    }
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-
-    if (event.shiftKey && activeElement === firstElement) {
-      event.preventDefault();
-      lastElement.focus();
-    } else if (!event.shiftKey && activeElement === lastElement) {
-      event.preventDefault();
-      firstElement.focus();
-    }
   }
 
   function openRunDialog(
@@ -522,11 +504,6 @@ export function IssuesActivity({
     dialogMode === "edit" && selectedIssue?.status === "completed";
   const canOpenLinkedSession =
     hasLinkedSession && Boolean(onOpenAgentsActivity);
-  const canDismissWithoutCloseButton = !hasUnsavedDialogChanges(
-    dialogMode,
-    form,
-    selectedIssue,
-  );
 
   async function handleSelectAttachment() {
     const selectedPath = await open({
@@ -919,28 +896,19 @@ export function IssuesActivity({
         onRunIssue={openRunDialog}
       />
 
-      {dialogMode ? (
-        <IssueFormDialog
+      {dialogMode && isBacklogDialog ? (
+        <IssueEditablePage
           mode={dialogMode}
           form={form}
           selectedIssue={selectedIssue}
           isSaving={isSaving}
-          canDismissWithoutCloseButton={canDismissWithoutCloseButton}
           errorMessage={dialogErrorMessage}
           availableLabels={currentAvailableLabels}
           isLoadingLabels={isLoadingLabels}
           labelsErrorMessage={currentLabelsErrorMessage}
-          hasLinkedSession={hasLinkedSession}
-          isBacklogDialog={isBacklogDialog}
-          canViewSummary={canViewSummary}
           titleInputRef={titleInputRef}
-          dialogFormRef={dialogFormRef}
-          closeButtonRef={closeButtonRef}
-          saveButtonRef={saveButtonRef}
-          canOpenAgentsActivity={canOpenLinkedSession}
-          onClose={closeDialog}
+          onCancel={closeDialog}
           onSubmit={handleSubmit}
-          onKeyDown={handleDialogKeyDown}
           onFormChange={setForm}
           onSelectAttachment={() => void handleSelectAttachment()}
           onPreviewAttachment={(attachment) =>
@@ -950,15 +918,35 @@ export function IssuesActivity({
             void handleDownloadAttachment(attachment)
           }
           onRemoveAttachment={handleRemoveAttachment}
+          onDeleteIssue={() => void handleDeleteIssue()}
+          onOpenProjectLabelsSettings={() => {
+            onOpenProjectSettingsLabels?.();
+          }}
+        />
+      ) : null}
+
+      {dialogMode && !isBacklogDialog ? (
+        <IssueReadOnlyPage
+          form={form}
+          selectedIssue={selectedIssue}
+          isSaving={isSaving}
+          errorMessage={dialogErrorMessage}
+          hasLinkedSession={hasLinkedSession}
+          canViewSummary={canViewSummary}
+          canOpenAgentsActivity={canOpenLinkedSession}
+          onBack={closeDialog}
+          onPreviewAttachment={(attachment) =>
+            void handlePreviewAttachment(attachment)
+          }
+          onDownloadAttachment={(attachment) =>
+            void handleDownloadAttachment(attachment)
+          }
           onAdvanceStatus={(targetStatus) =>
             void handleAdvanceStatus(targetStatus)
           }
           onDeleteIssue={() => void handleDeleteIssue()}
           onOpenLinkedSession={openLinkedSession}
           onOpenSummary={handleOpenSummary}
-          onOpenProjectLabelsSettings={() => {
-            onOpenProjectSettingsLabels?.();
-          }}
         />
       ) : null}
 
@@ -1285,20 +1273,8 @@ function markdownToExcerpt(markdown: string): string {
     .trim();
 }
 
-function buildIssueDescription(
-  description: string,
-  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-): string {
-  const trimmedDescription = description.trimEnd();
-  const attachmentTokens = attachments.map((attachment) =>
-    "id" in attachment
-      ? `{{issue-attachment:${attachment.id}}}`
-      : `{{issue-attachment-temp:${attachment.token}}}`,
-  );
-
-  return [trimmedDescription, ...attachmentTokens]
-    .filter((value) => value.length > 0)
-    .join("\n\n");
+function buildIssueDescription(description: string): string {
+  return description.trimEnd();
 }
 
 function serializeAttachments(
@@ -1429,72 +1405,4 @@ function toAttachmentPreviewState(
       ? convertFileSrc(preview.absolutePath)
       : null,
   };
-}
-
-function hasUnsavedDialogChanges(
-  dialogMode: DialogMode | null,
-  form: IssueFormState,
-  selectedIssue: IssueRecord | null,
-): boolean {
-  if (dialogMode === null) {
-    return false;
-  }
-
-  const baseline =
-    dialogMode === "edit" && selectedIssue
-      ? issueToForm(selectedIssue)
-      : EMPTY_FORM;
-
-  return (
-    form.title !== baseline.title ||
-    form.description !== baseline.description ||
-    !haveSameLabelIds(form.labelIds, baseline.labelIds) ||
-    !haveSameAttachments(form.attachments, baseline.attachments)
-  );
-}
-
-function haveSameLabelIds(left: number[], right: number[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((labelId, index) => labelId === right[index]);
-}
-
-function haveSameAttachments(
-  left: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-  right: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every(
-    (attachment, index) =>
-      getAttachmentIdentity(attachment) === getAttachmentIdentity(right[index]),
-  );
-}
-
-function getAttachmentIdentity(
-  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
-): string {
-  if ("id" in attachment) {
-    return `saved:${attachment.id}`;
-  }
-
-  return `draft:${attachment.token}`;
-}
-
-function getFocusableDialogElements(
-  dialogElement: HTMLFormElement | null,
-): HTMLElement[] {
-  if (!dialogElement) {
-    return [];
-  }
-
-  return Array.from(
-    dialogElement.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], a[href], [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((element) => element.tabIndex >= 0);
 }
