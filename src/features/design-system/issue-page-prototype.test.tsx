@@ -35,9 +35,9 @@ describe("IssuePagePrototypeSection", () => {
     await user.click(screen.getByRole("button", { name: "Read-only" }));
 
     expect(
-      screen.getByRole("heading", { name: "Issue #184 · ID 184" }),
+      screen.getByRole("heading", { name: "Issue #184" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "In progress" }),
     ).toBeInTheDocument();
