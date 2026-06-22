@@ -3791,7 +3791,98 @@ describe("AgentsActivity", () => {
     expect(
       within(panel).getByRole("tab", { name: "文件" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("separator", { name: "Resize session side panel" }),
+    ).toHaveAttribute("aria-valuenow", "300");
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+  });
+
+  it("resizes the session side panel with the keyboard separator control", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await user.click(
+      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+    );
+
+    const activity = screen
+      .getByRole("separator", { name: "Resize session list" })
+      .closest(".activity-surface--agents");
+    const separator = await screen.findByRole("separator", {
+      name: "Resize session side panel",
+    });
+
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "300px" });
+    separator.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(separator).toHaveAttribute("aria-valuenow", "316");
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "316px" });
+
+    await user.keyboard("{ArrowRight}");
+    expect(separator).toHaveAttribute("aria-valuenow", "300");
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "300px" });
+  });
+
+  it("resizes the session side panel when dragging the separator", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await user.click(
+      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+    );
+
+    const activity = screen
+      .getByRole("separator", { name: "Resize session list" })
+      .closest(".activity-surface--agents");
+    const separator = await screen.findByRole("separator", {
+      name: "Resize session side panel",
+    });
+
+    fireEvent.mouseDown(separator, { button: 0, clientX: 800 });
+    fireEvent.mouseMove(window, { clientX: 760 });
+
+    expect(separator).toHaveAttribute("aria-valuenow", "340");
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "340px" });
+
+    fireEvent.mouseUp(window);
   });
 
   it("opens a single replaceable changed-file tab from the session side panel", async () => {
