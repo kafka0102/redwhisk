@@ -709,12 +709,99 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
     await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByRole("button", { name: /src/ }));
     await user.click(await screen.findByRole("button", { name: /file.ts/ }));
 
     expect(await screen.findByTestId("monaco-editor")).toHaveAttribute(
       "data-value",
       "export const value = 1;",
     );
+  });
+
+  it("renders file tree folders collapsed with VS Code style disclosure arrows", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [fileNode("src/file.ts")],
+        },
+      ],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(screen.getByRole("tab", { name: "文件" }));
+
+    const folder = await screen.findByRole("button", { name: /src/ });
+    expect(folder).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: /file.ts/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      folder.querySelector(".session-file-tree__chevron.lucide-chevron-right"),
+    ).toBeInTheDocument();
+
+    await user.click(folder);
+
+    expect(folder).toHaveAttribute("aria-expanded", "true");
+    expect(
+      folder.querySelector(".session-file-tree__chevron.lucide-chevron-down"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /file.ts/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders distinct file icon classes for common file extensions", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [
+            fileNode("src/app.tsx"),
+            fileNode("src/app.css"),
+            fileNode("src/package.json"),
+          ],
+        },
+      ],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByRole("button", { name: /src/ }));
+
+    expect(
+      screen
+        .getByRole("button", { name: /app.tsx/ })
+        .querySelector(".session-file-tree__icon--tsx"),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /app.css/ })
+        .querySelector(".session-file-tree__icon--css"),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /package.json/ })
+        .querySelector(".session-file-tree__icon--json"),
+    ).toBeInTheDocument();
   });
 
   it("does not open a file tab when clicking a directory", async () => {
@@ -3706,6 +3793,7 @@ describe("AgentsActivity", () => {
       name: "Session side panel",
     });
     await user.click(within(panel).getByRole("tab", { name: "文件" }));
+    await user.click(within(panel).getByRole("button", { name: "src" }));
 
     await user.click(
       within(panel).getByRole("button", { name: /session-side-panel\.tsx/ }),
