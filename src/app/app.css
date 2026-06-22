@@ -2340,6 +2340,61 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.agents-session-main-stack {
+  display: grid;
+  grid-row: 3;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.agents-session-main-stack--with-terminal {
+  grid-template-rows:
+    minmax(0, 1fr) 6px
+    minmax(120px, var(--session-terminal-panel-height, 200px));
+}
+
+.agents-session-main-stack--with-terminal:has(
+  .session-inline-terminal-panel--maximized
+) {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.session-inline-terminal-splitter {
+  position: relative;
+  min-height: 6px;
+  cursor: row-resize;
+  background: var(--color-surface);
+}
+
+.session-inline-terminal-splitter::before {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--color-border);
+  content: "";
+}
+
+.session-inline-terminal-splitter:hover::before,
+.session-inline-terminal-splitter:focus-visible::before {
+  background: var(--color-border-strong);
+}
+
+.session-inline-terminal-splitter:focus-visible {
+  outline: 1px solid var(--color-border-strong);
+  outline-offset: -1px;
+}
+
+.agents-session-main-stack--with-terminal:has(
+    .session-inline-terminal-panel--maximized
+  )
+  .session-inline-terminal-splitter {
+  display: none;
+}
+
 :root[data-theme="dark"] .agents-terminal-pane {
   background: var(--color-surface-muted);
 }
@@ -2492,7 +2547,6 @@ button:focus-visible {
 
 .session-workspace-tabs {
   display: grid;
-  grid-row: 3;
   grid-template-rows: 40px minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
@@ -2562,6 +2616,129 @@ button:focus-visible {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.session-inline-terminal-panel {
+  display: grid;
+  grid-template-rows: 34px auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.session-inline-terminal-panel--maximized {
+  grid-template-rows: 34px auto;
+  height: auto;
+}
+
+.session-inline-terminal-panel__tabs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.session-inline-terminal-panel__tab-list {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.session-inline-terminal-panel__tab-shell {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  border-right: 1px solid var(--color-border);
+}
+
+.session-inline-terminal-panel__tab {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 150px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.session-inline-terminal-panel__tab[aria-selected="true"] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.session-inline-terminal-panel__tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-inline-terminal-panel__close,
+.session-inline-terminal-panel__icon {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-subtle);
+}
+
+.session-inline-terminal-panel__icon {
+  margin-left: 4px;
+  border: 1px solid transparent;
+}
+
+.session-inline-terminal-panel__close:hover,
+.session-inline-terminal-panel__close:focus-visible,
+.session-inline-terminal-panel__icon:hover,
+.session-inline-terminal-panel__icon:focus-visible,
+.session-inline-terminal-panel__icon[aria-pressed="true"] {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.session-inline-terminal-panel__close:disabled,
+.session-inline-terminal-panel__icon:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.session-inline-terminal-panel__spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.session-inline-terminal-panel__status {
+  margin: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.session-inline-terminal-panel__surface {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-inline-terminal-panel__surface .terminal-surface-shell {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
 }
 
 .session-diff-viewer {

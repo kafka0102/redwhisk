@@ -150,6 +150,8 @@ pub struct AgentSessionListItem {
     pub attention: AgentSessionAttention,
     pub is_turn_running: bool,
     pub workspace_mode: WorkspaceMode,
+    pub working_dir: String,
+    pub workspace_path: Option<String>,
     pub log_path: String,
     pub latest_output: Option<String>,
     pub last_active_at: i64,

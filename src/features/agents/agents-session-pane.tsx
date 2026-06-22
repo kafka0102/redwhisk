@@ -1,5 +1,11 @@
 import { ChevronDown, PanelRightOpen, Terminal } from "lucide-react";
 
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from "react";
+
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
 import { formatSessionTitle } from "./agent-session-formatters";
@@ -38,10 +44,15 @@ interface AgentsSessionPaneProps {
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
   isSidePanelOpen: boolean;
+  isTerminalPanelActive: boolean;
+  terminalPanel: ReactNode;
+  terminalPanelHeight: number;
   onAcknowledgeSessionAttention: (sessionId: number) => void;
   onCloseWorkspaceTab: (
     tab: Exclude<SessionWorkspaceTabKind, "session">,
   ) => void;
+  onOpenTerminalPanel: () => void;
+  onTerminalPanelSplitterMouseDown: (event: ReactMouseEvent) => void;
   onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
   onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
@@ -68,8 +79,13 @@ export function AgentsSessionPane({
   changeTab,
   fileTab,
   isSidePanelOpen,
+  isTerminalPanelActive,
+  terminalPanel,
+  terminalPanelHeight,
   onAcknowledgeSessionAttention,
   onCloseWorkspaceTab,
+  onOpenTerminalPanel,
+  onTerminalPanelSplitterMouseDown,
   onSelectWorkspaceTab,
   onToggleSidePanel,
   onToggleTransitionMenu,
@@ -145,8 +161,10 @@ export function AgentsSessionPane({
             {linkedIssue ? (
               <button
                 aria-label="打开终端"
+                aria-pressed={isTerminalPanelActive}
                 className="agents-session-toolbar__icon-action"
                 type="button"
+                onClick={onOpenTerminalPanel}
               >
                 <Terminal aria-hidden="true" size={16} strokeWidth={1.8} />
               </button>
@@ -196,37 +214,61 @@ export function AgentsSessionPane({
           </p>
         ) : null}
       </div>
-      <SessionWorkspaceTabs
-        activeTab={activeWorkspaceTab}
-        changeTab={changeTab}
-        fileTab={fileTab}
-        sessionContent={
-          <div
-            className="agents-terminal-host"
-            onMouseDown={() => {
-              if (selectedSession) {
-                onAcknowledgeSessionAttention(selectedSession.sessionId);
-              }
-            }}
-          >
-            {selectedSession ? (
-              <AgentSessionView
-                projectId={projectId}
-                sessionId={selectedSession.sessionId}
-                agentType={selectedSession.agentType}
-                isTurnRunning={selectedSession.isTurnRunning}
-              />
-            ) : (
-              <p className="empty-state">
-                Agent sessions will appear here after a session has been started
-                for this project.
-              </p>
-            )}
-          </div>
+      <div
+        className={`agents-session-main-stack${
+          terminalPanel ? " agents-session-main-stack--with-terminal" : ""
+        }`}
+        style={
+          {
+            "--session-terminal-panel-height": `${terminalPanelHeight}px`,
+          } as CSSProperties
         }
-        onCloseTab={onCloseWorkspaceTab}
-        onSelectTab={onSelectWorkspaceTab}
-      />
+      >
+        <SessionWorkspaceTabs
+          activeTab={activeWorkspaceTab}
+          changeTab={changeTab}
+          fileTab={fileTab}
+          sessionContent={
+            <div
+              className="agents-terminal-host"
+              onMouseDown={() => {
+                if (selectedSession) {
+                  onAcknowledgeSessionAttention(selectedSession.sessionId);
+                }
+              }}
+            >
+              {selectedSession ? (
+                <AgentSessionView
+                  projectId={projectId}
+                  sessionId={selectedSession.sessionId}
+                  agentType={selectedSession.agentType}
+                  isTurnRunning={selectedSession.isTurnRunning}
+                />
+              ) : (
+                <p className="empty-state">
+                  Agent sessions will appear here after a session has been
+                  started for this project.
+                </p>
+              )}
+            </div>
+          }
+          onCloseTab={onCloseWorkspaceTab}
+          onSelectTab={onSelectWorkspaceTab}
+        />
+        {terminalPanel ? (
+          <>
+            <div
+              aria-label="调整 Session 终端高度"
+              aria-orientation="horizontal"
+              className="session-inline-terminal-splitter"
+              role="separator"
+              tabIndex={0}
+              onMouseDown={onTerminalPanelSplitterMouseDown}
+            />
+            {terminalPanel}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

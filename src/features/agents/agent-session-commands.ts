@@ -27,6 +27,8 @@ export interface AgentSessionListItem {
   attention: AgentSessionAttention;
   isTurnRunning?: boolean;
   workspaceMode?: WorkspaceMode;
+  workingDir?: string;
+  workspacePath?: string | null;
   logPath?: string | null;
   latestOutput?: string | null;
   lastActiveAt: number;

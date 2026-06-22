@@ -28,6 +28,22 @@ pub struct CreateProjectTerminalResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateTemporaryProjectTerminalInput {
+    pub project_id: i64,
+    pub agent_session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTemporaryProjectTerminalResult {
+    pub session_id: i64,
+    pub name: String,
+    pub working_dir: String,
+    pub launch_command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListProjectTerminalsInput {
     pub project_id: i64,
 }
