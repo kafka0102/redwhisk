@@ -24,7 +24,7 @@ use std::thread;
 
 use serde_json::Value;
 
-use crate::agent::command_detector::run_command_lookup;
+use crate::agent::command_detector::run_command_lookup_with_path;
 
 /// 默认请求超时（与 paseo 一致：14 天，等价于不超时，仅兜底死循环）。
 const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
@@ -103,7 +103,11 @@ impl CodexTransport {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        apply_spawn_path(&mut command, &resolved_program.path_entries);
+        apply_spawn_path(
+            &mut command,
+            resolved_program.lookup_path.as_deref(),
+            &resolved_program.path_entries,
+        );
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
         }
@@ -317,6 +321,7 @@ fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), CodexAppServer
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ResolvedSpawnProgram {
     program: String,
+    lookup_path: Option<OsString>,
     path_entries: Vec<PathBuf>,
 }
 
@@ -324,11 +329,16 @@ fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
     if Path::new(program).components().count() > 1 {
         return ResolvedSpawnProgram {
             program: program.to_string(),
+            lookup_path: None,
             path_entries: spawn_path_entries_for_program(program),
         };
     }
 
-    let resolved_program = run_command_lookup(program).unwrap_or_else(|_| program.to_string());
+    let lookup_result = run_command_lookup_with_path(program).ok();
+    let resolved_program = lookup_result
+        .as_ref()
+        .map(|result| result.command.as_str())
+        .unwrap_or(program);
     let path_entries = if resolved_program == program {
         Vec::new()
     } else {
@@ -336,7 +346,8 @@ fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
     };
 
     ResolvedSpawnProgram {
-        program: resolved_program,
+        program: resolved_program.to_string(),
+        lookup_path: lookup_result.and_then(|result| result.path),
         path_entries,
     }
 }
@@ -349,20 +360,22 @@ fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-fn apply_spawn_path(command: &mut Command, path_entries: &[PathBuf]) {
-    if let Some(path) = build_spawn_path(env::var_os("PATH").as_deref(), path_entries) {
+fn apply_spawn_path(command: &mut Command, lookup_path: Option<&OsStr>, path_entries: &[PathBuf]) {
+    let fallback_path = env::var_os("PATH");
+    let current_path = lookup_path.or(fallback_path.as_deref());
+    if let Some(path) = build_spawn_path(current_path, path_entries) {
         command.env("PATH", path);
     }
 }
 
 fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> Option<OsString> {
-    if path_entries.is_empty() {
-        return None;
-    }
-
     let mut paths: Vec<PathBuf> = path_entries.to_vec();
     if let Some(current_path) = current_path {
         paths.extend(env::split_paths(current_path));
+    }
+
+    if paths.is_empty() {
+        return None;
     }
 
     env::join_paths(paths).ok()
@@ -582,6 +595,21 @@ mod tests {
             env::split_paths(&path).collect::<Vec<_>>(),
             vec![
                 PathBuf::from("/opt/codex/bin"),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_spawn_path_preserves_lookup_shell_path_without_program_parent() {
+        let path = build_spawn_path(Some(OsStr::new("/opt/node/bin:/usr/bin:/bin")), &[])
+            .expect("spawn path");
+
+        assert_eq!(
+            env::split_paths(&path).collect::<Vec<_>>(),
+            vec![
+                PathBuf::from("/opt/node/bin"),
                 PathBuf::from("/usr/bin"),
                 PathBuf::from("/bin"),
             ]
