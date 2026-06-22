@@ -2487,6 +2487,40 @@ describe("IssuesActivity", () => {
     confirmSpy.mockRestore();
   });
 
+  it("shows a delete link in the backlog edit dialog header and deletes the issue after confirmation", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
+    deleteIssueMock.mockResolvedValue({ issueId: existingIssue.id });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Existing issue",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Edit Issue" });
+    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Are you sure to delete this issue?",
+    );
+    expect(deleteIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: existingIssue.id,
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Existing issue" }),
+    ).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
   it("does not delete an issue when deletion confirmation is canceled", async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);

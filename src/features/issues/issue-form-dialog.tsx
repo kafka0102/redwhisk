@@ -86,6 +86,8 @@ export function IssueFormDialog({
   canOpenAgentsActivity,
 }: IssueFormDialogProps) {
   const isEditableDialog = mode === "create" || isBacklogDialog;
+  const canDeleteFromHeader = mode === "edit" && isBacklogDialog;
+  const deleteConfirmMessage = "Are you sure to delete this issue?";
   let dialogTitle = "Issue Detail";
   if (mode === "create") {
     dialogTitle = "New Issue";
@@ -117,16 +119,35 @@ export function IssueFormDialog({
       >
         <div className="issue-dialog__header">
           <h3>{dialogTitle}</h3>
-          <button
-            ref={closeButtonRef}
-            aria-label="Close issue dialog"
-            className="issue-dialog__close"
-            type="button"
-            disabled={isSaving}
-            onClick={onClose}
-          >
-            x
-          </button>
+          <div className="issue-dialog__header-actions">
+            {canDeleteFromHeader ? (
+              <button
+                className="issue-dialog__delete-link"
+                disabled={isSaving}
+                type="button"
+                onClick={() => {
+                  const isConfirmed = window.confirm(deleteConfirmMessage);
+                  if (!isConfirmed) {
+                    return;
+                  }
+
+                  onDeleteIssue();
+                }}
+              >
+                删除
+              </button>
+            ) : null}
+            <button
+              ref={closeButtonRef}
+              aria-label="Close issue dialog"
+              className="issue-dialog__close"
+              type="button"
+              disabled={isSaving}
+              onClick={onClose}
+            >
+              x
+            </button>
+          </div>
         </div>
         <div
           className={`issue-dialog__body${isBacklogDialog ? " issue-dialog__body--single" : ""}`}
