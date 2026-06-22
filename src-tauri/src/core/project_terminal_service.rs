@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PendingPtySession, PtyRegisterError, PtySessionManager, PtySpawnRequest,
 };
+use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
@@ -13,6 +14,7 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::ProjectSummary;
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
+    CreateTemporaryProjectTerminalInput, CreateTemporaryProjectTerminalResult,
     DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
     ListProjectTerminalsResult, ProjectTerminalSummary, ReadProjectTerminalInput,
     ReadProjectTerminalResult, ResizeProjectTerminalInput, RestoreProjectTerminalInput,
@@ -22,6 +24,7 @@ use crate::types::project_terminal::{
 use crate::types::project_terminal_config::ProjectTerminalConfig;
 
 const DEFAULT_PROJECT_TERMINAL_NAME: &str = "New Terminal";
+const TEMPORARY_PROJECT_TERMINAL_CONFIG_ID: i64 = -1;
 const PROJECT_TERMINAL_LOG_DIR_NAME: &str = "project-terminal-logs";
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
@@ -356,6 +359,93 @@ impl<'connection> ProjectTerminalService<'connection> {
         Ok(ListProjectTerminalsResult { terminals })
     }
 
+    pub fn create_temporary_terminal_for_agent_session(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: CreateTemporaryProjectTerminalInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<CreateTemporaryProjectTerminalResult, CommandError> {
+        let project = self.project_by_id(input.project_id)?;
+        let agent_session_repository =
+            AgentSessionRepository::new(self.project_repository.connection());
+        let agent_session = agent_session_repository
+            .find_by_id(input.agent_session_id)
+            .map_err(project_terminal_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::ProjectTerminalValidationFailed,
+                    "Agent Session 不存在。",
+                )
+                .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id))
+                .with_detail(
+                    ErrorDetail::new("AgentSession")
+                        .with_value("sessionId", input.agent_session_id),
+                )
+            })?;
+
+        if agent_session.project_id != project.id {
+            return Err(CommandError::new(
+                CommandErrorCode::ProjectTerminalValidationFailed,
+                "Agent Session 不属于当前 Project。",
+            )
+            .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id))
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", input.agent_session_id),
+            ));
+        }
+
+        let session_id = registry.allocate_session_id();
+        let log_path = terminal_log_path(data_dir.as_ref(), project.id, session_id)?;
+        let shell_command = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        let terminal_name = final_path_segment(&agent_session.working_dir);
+
+        let pending = pty_sessions
+            .spawn_pending(&PtySpawnRequest {
+                command: shell_command.clone(),
+                working_dir: agent_session.working_dir.clone(),
+                log_path: log_path.to_string_lossy().to_string(),
+                initial_prompt: None,
+                rows: 32,
+                cols: 120,
+                startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+                startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+            })
+            .map_err(project_terminal_start_error)?;
+
+        if let Err(error) = registry.insert(
+            session_id,
+            ProjectTerminalSession {
+                project_id: project.id,
+                config_id: TEMPORARY_PROJECT_TERMINAL_CONFIG_ID,
+                name: terminal_name.clone(),
+                log_path: log_path.to_string_lossy().to_string(),
+                is_active: true,
+            },
+        ) {
+            pending.terminate();
+            return Err(error);
+        }
+
+        let registry_on_exit = registry.clone();
+        if let Err(PtyRegisterError { message, pending }) =
+            pty_sessions.register_for_project(project.id, session_id, pending, move |_| {
+                registry_on_exit.mark_inactive(session_id);
+            })
+        {
+            let _ = registry.remove(project.id, session_id);
+            pending.terminate();
+            return Err(project_terminal_start_error(message));
+        }
+
+        Ok(CreateTemporaryProjectTerminalResult {
+            session_id,
+            name: terminal_name,
+            working_dir: agent_session.working_dir,
+            launch_command: shell_command,
+        })
+    }
+
     pub fn update_project_terminal_config(
         &self,
         input: UpdateProjectTerminalConfigInput,
@@ -589,6 +679,22 @@ impl<'connection> ProjectTerminalService<'connection> {
         let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectTerminalService::new(repository).create_terminal(
+            data_dir,
+            input,
+            registry,
+            pty_sessions,
+        )
+    }
+
+    pub fn create_temporary_terminal_for_agent_session_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: CreateTemporaryProjectTerminalInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<CreateTemporaryProjectTerminalResult, CommandError> {
+        let database = open_project_database(data_dir.as_ref())?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).create_temporary_terminal_for_agent_session(
             data_dir,
             input,
             registry,
@@ -842,6 +948,15 @@ fn preferred_project_terminal_session(
         .or_else(|| sessions.into_iter().next())
 }
 
+fn final_path_segment(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(path)
+        .to_string()
+}
+
 fn open_project_database(
     data_dir: impl AsRef<Path>,
 ) -> Result<crate::db::connection::Database, CommandError> {
@@ -984,15 +1099,18 @@ mod tests {
 
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::core::project_service::ProjectService;
+    use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::connection::DatabaseConfig;
     use crate::db::project_repository::ProjectRepository;
+    use crate::types::agent_session::WorkspaceMode;
     use crate::types::project::{
         CreateProjectInput, ProjectCompletionPolicy, ProjectWorktreeLocation,
     };
     use crate::types::project_terminal::{
-        CloseProjectTerminalInput, CreateProjectTerminalInput, DeleteProjectTerminalConfigInput,
-        ListProjectTerminalsInput, ReadProjectTerminalInput, ResizeProjectTerminalInput,
-        RestoreProjectTerminalInput, UpdateProjectTerminalConfigInput, WriteProjectTerminalInput,
+        CloseProjectTerminalInput, CreateProjectTerminalInput, CreateTemporaryProjectTerminalInput,
+        DeleteProjectTerminalConfigInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
+        ResizeProjectTerminalInput, RestoreProjectTerminalInput, UpdateProjectTerminalConfigInput,
+        WriteProjectTerminalInput,
     };
 
     use super::{restore_test_hooks, ProjectTerminalRegistry, ProjectTerminalService};
@@ -1185,6 +1303,102 @@ mod tests {
                 &manager,
             )
             .expect("close terminal");
+    }
+
+    #[test]
+    fn temporary_project_terminal_uses_agent_session_working_dir_without_persisting_config() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("redwhisk");
+        let worktree_dir = temp_dir.path().join("redwhisk.worktrees/issue-20-redwhisk");
+        std::fs::create_dir_all(repo_dir.join(".git")).expect("repo git dir");
+        std::fs::create_dir_all(&worktree_dir).expect("worktree dir");
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: repo_dir.to_string_lossy().to_string(),
+                completion_policy: ProjectCompletionPolicy::Manual,
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        database
+            .connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', ?1, 'full-auto', 1, '', '', 0)",
+                rusqlite::params![project.id],
+            )
+            .expect("insert profile");
+        let transaction = database
+            .connection
+            .unchecked_transaction()
+            .expect("transaction");
+        let agent_session = AgentSessionRepository::insert_standalone_in_transaction(
+            &transaction,
+            project.id,
+            "Issue 20",
+            101,
+            &worktree_dir.to_string_lossy(),
+            "codex",
+            "",
+            &WorkspaceMode::Worktree,
+            Some("develop"),
+            Some("issue-20-redwhisk"),
+            Some(&worktree_dir.to_string_lossy()),
+            Some(ProjectCompletionPolicy::Manual),
+            Some(&temp_dir.path().join("redwhisk.worktrees").to_string_lossy()),
+            None,
+            &temp_dir.path().join("agent-session.log").to_string_lossy(),
+            1,
+        )
+        .expect("insert agent session");
+        transaction.commit().expect("commit agent session");
+
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+        let created = service
+            .create_temporary_terminal_for_agent_session(
+                temp_dir.path(),
+                CreateTemporaryProjectTerminalInput {
+                    project_id: project.id,
+                    agent_session_id: agent_session.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create temporary terminal");
+
+        assert!(created.session_id < 0);
+        assert_eq!(created.name, "issue-20-redwhisk");
+        assert_eq!(created.working_dir, worktree_dir.to_string_lossy());
+        assert!(!created.launch_command.is_empty());
+
+        let configs = ProjectRepository::new(&database.connection)
+            .list_project_terminal_configs(project.id)
+            .expect("list terminal configs");
+        assert!(configs.is_empty());
+
+        service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: project.id,
+                    session_id: created.session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("close temporary terminal");
     }
 
     #[test]

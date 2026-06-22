@@ -49,6 +49,7 @@ pub fn run() {
             commands::project_commands::update_project_settings,
             commands::project_commands::validate_project_repo_path,
             commands::project_terminal_commands::create_project_terminal,
+            commands::project_terminal_commands::create_temporary_project_terminal,
             commands::project_terminal_commands::list_project_terminals,
             commands::project_terminal_commands::read_project_terminal,
             commands::project_terminal_commands::write_project_terminal,

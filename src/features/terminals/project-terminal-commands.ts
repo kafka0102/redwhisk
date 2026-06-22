@@ -14,6 +14,18 @@ export interface CreateProjectTerminalInput {
 
 export type CreateProjectTerminalResult = ProjectTerminalSummary;
 
+export interface CreateTemporaryProjectTerminalInput {
+  projectId: number;
+  agentSessionId: number;
+}
+
+export interface CreateTemporaryProjectTerminalResult {
+  sessionId: number;
+  name: string;
+  workingDir: string;
+  launchCommand: string;
+}
+
 export interface ListProjectTerminalsInput {
   projectId: number;
 }
@@ -93,6 +105,15 @@ export function createProjectTerminal(
   return invokeCommand<CreateProjectTerminalResult>("create_project_terminal", {
     input,
   });
+}
+
+export function createTemporaryProjectTerminal(
+  input: CreateTemporaryProjectTerminalInput,
+): Promise<CreateTemporaryProjectTerminalResult> {
+  return invokeCommand<CreateTemporaryProjectTerminalResult>(
+    "create_temporary_project_terminal",
+    { input },
+  );
 }
 
 export function readProjectTerminal(

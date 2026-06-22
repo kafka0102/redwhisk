@@ -12,6 +12,10 @@ impl<'connection> ProjectRepository<'connection> {
         Self { connection }
     }
 
+    pub fn connection(&self) -> &'connection Connection {
+        self.connection
+    }
+
     pub fn find_by_repo_path(&self, repo_path: &str) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(

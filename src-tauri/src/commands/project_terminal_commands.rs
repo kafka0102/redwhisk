@@ -5,6 +5,7 @@ use crate::core::project_terminal_service::ProjectTerminalService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
+    CreateTemporaryProjectTerminalInput, CreateTemporaryProjectTerminalResult,
     DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
     ListProjectTerminalsResult, ReadProjectTerminalInput, ReadProjectTerminalResult,
     ResizeProjectTerminalInput, RestoreProjectTerminalInput, RestoreProjectTerminalResult,
@@ -19,6 +20,21 @@ pub fn create_project_terminal(
 ) -> Result<CreateProjectTerminalResult, CommandError> {
     let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
     ProjectTerminalService::create_terminal_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn create_temporary_project_terminal(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: CreateTemporaryProjectTerminalInput,
+) -> Result<CreateTemporaryProjectTerminalResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::create_temporary_terminal_for_agent_session_in_data_dir(
         data_dir,
         input,
         &state.project_terminals,

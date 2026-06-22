@@ -1049,6 +1049,8 @@ impl<'connection> AgentSessionService<'connection> {
                         .unwrap_or(None)
                         .unwrap_or(is_session_running),
                     workspace_mode: row.workspace_mode,
+                    working_dir: row.working_dir,
+                    workspace_path: row.workspace_path,
                     log_path: row.log_path,
                     latest_output,
                     last_active_at: row.last_active_at,

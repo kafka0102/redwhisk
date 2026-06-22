@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -42,7 +43,18 @@ import {
 } from "./agents-session-pane";
 import { getSessionIssueGroup } from "./agent-session-formatters";
 import { SessionSidePanel } from "./session-side-panel";
+import { SessionInlineTerminalPanel } from "./session-inline-terminal-panel";
+import {
+  clampSessionTerminalPanelHeight,
+  createDefaultSessionInlineTerminalPanelState,
+  DEFAULT_SESSION_TERMINAL_PANEL_HEIGHT,
+  type SessionInlineTerminalPanelState,
+} from "./session-inline-terminal-panel-state";
 import { useSessionWorkspaceCache } from "./use-session-workspace-cache";
+import {
+  closeProjectTerminal,
+  createTemporaryProjectTerminal,
+} from "../terminals/project-terminal-commands";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -104,6 +116,8 @@ export function AgentsActivity({
     useState<AgentCommitCompletionPreview | null>(null);
   const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
+  const [terminalPanelStateBySessionId, setTerminalPanelStateBySessionId] =
+    useState<Record<number, SessionInlineTerminalPanelState>>({});
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
@@ -112,6 +126,11 @@ export function AgentsActivity({
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
+  } | null>(null);
+  const terminalPanelDragStateRef = useRef<{
+    sessionId: number;
+    startHeight: number;
+    startY: number;
   } | null>(null);
   const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
@@ -297,6 +316,15 @@ export function AgentsActivity({
     isSidePanelOpen: isSessionSidePanelOpen && linkedIssue !== null,
   });
   const sessionTransitionPhase = getSessionTransitionPhase(selectedSession);
+  const selectedTerminalPanelState =
+    currentSessionId == null
+      ? null
+      : (terminalPanelStateBySessionId[currentSessionId] ?? null);
+  const isTerminalPanelVisible =
+    selectedTerminalPanelState != null &&
+    (selectedTerminalPanelState.terminals.length > 0 ||
+      selectedTerminalPanelState.isCreating ||
+      selectedTerminalPanelState.errorMessage != null);
   const transitionButtonLabel =
     sessionTransitionPhase === "running"
       ? "Mark review"
@@ -715,20 +743,35 @@ export function AgentsActivity({
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
       const dragState = dragStateRef.current;
-      if (!dragState) {
-        return;
+      if (dragState) {
+        const deltaX = event.clientX - dragState.startX;
+        const nextWidth = Math.max(
+          AGENTS_SIDEBAR_MIN_WIDTH,
+          Math.min(AGENTS_SIDEBAR_MAX_WIDTH, dragState.startWidth + deltaX),
+        );
+        setSidebarWidth(nextWidth);
       }
 
-      const deltaX = event.clientX - dragState.startX;
-      const nextWidth = Math.max(
-        AGENTS_SIDEBAR_MIN_WIDTH,
-        Math.min(AGENTS_SIDEBAR_MAX_WIDTH, dragState.startWidth + deltaX),
-      );
-      setSidebarWidth(nextWidth);
+      const terminalPanelDragState = terminalPanelDragStateRef.current;
+      if (terminalPanelDragState) {
+        const deltaY = event.clientY - terminalPanelDragState.startY;
+        const nextHeight = clampSessionTerminalPanelHeight(
+          terminalPanelDragState.startHeight - deltaY,
+        );
+        setTerminalPanelStateBySessionId((currentStateBySessionId) => ({
+          ...currentStateBySessionId,
+          [terminalPanelDragState.sessionId]: {
+            ...(currentStateBySessionId[terminalPanelDragState.sessionId] ??
+              createDefaultSessionInlineTerminalPanelState()),
+            height: nextHeight,
+          },
+        }));
+      }
     }
 
     function handleMouseUp() {
       dragStateRef.current = null;
+      terminalPanelDragStateRef.current = null;
       window.document.body.style.cursor = "";
       window.document.body.style.userSelect = "";
     }
@@ -743,6 +786,179 @@ export function AgentsActivity({
       window.document.body.style.userSelect = "";
     };
   }, []);
+
+  function setTerminalPanelState(
+    sessionId: number,
+    updater: (
+      currentState: SessionInlineTerminalPanelState,
+    ) => SessionInlineTerminalPanelState | null,
+  ) {
+    setTerminalPanelStateBySessionId((currentStateBySessionId) => {
+      const currentState =
+        currentStateBySessionId[sessionId] ??
+        createDefaultSessionInlineTerminalPanelState();
+      const nextState = updater(currentState);
+      if (nextState === null) {
+        const { [sessionId]: _removedState, ...remainingStateBySessionId } =
+          currentStateBySessionId;
+        return remainingStateBySessionId;
+      }
+
+      return {
+        ...currentStateBySessionId,
+        [sessionId]: nextState,
+      };
+    });
+  }
+
+  async function createInlineTerminal(agentSessionId: number) {
+    const currentState = terminalPanelStateBySessionId[agentSessionId];
+    if (currentState?.isCreating) {
+      return;
+    }
+
+    setTerminalPanelState(agentSessionId, (panelState) => ({
+      ...panelState,
+      errorMessage: null,
+      isCreating: true,
+    }));
+
+    try {
+      const terminal = await createTemporaryProjectTerminal({
+        projectId,
+        agentSessionId,
+      });
+      setTerminalPanelState(agentSessionId, (panelState) => ({
+        ...panelState,
+        activeTerminalSessionId: terminal.sessionId,
+        errorMessage: null,
+        isCreating: false,
+        isMaximized: false,
+        terminals: [
+          ...panelState.terminals,
+          {
+            terminalSessionId: terminal.sessionId,
+            name: terminal.name,
+            workingDir: terminal.workingDir,
+            launchCommand: terminal.launchCommand,
+          },
+        ],
+      }));
+    } catch (error) {
+      setTerminalPanelState(agentSessionId, (panelState) => ({
+        ...panelState,
+        errorMessage: toCommandError(error).message,
+        isCreating: false,
+      }));
+    }
+  }
+
+  function handleOpenTerminalPanel() {
+    if (!selectedSession) {
+      return;
+    }
+
+    const panelState = terminalPanelStateBySessionId[selectedSession.sessionId];
+    if (panelState?.terminals.length) {
+      setTerminalPanelState(selectedSession.sessionId, (currentState) => ({
+        ...currentState,
+        isMaximized: false,
+      }));
+      return;
+    }
+
+    void createInlineTerminal(selectedSession.sessionId);
+  }
+
+  async function handleCloseInlineTerminal(terminalSessionId: number) {
+    if (!selectedSession) {
+      return;
+    }
+
+    const agentSessionId = selectedSession.sessionId;
+    setTerminalPanelState(agentSessionId, (panelState) => ({
+      ...panelState,
+      closingTerminalSessionIds: [
+        ...panelState.closingTerminalSessionIds,
+        terminalSessionId,
+      ],
+      errorMessage: null,
+    }));
+
+    try {
+      await closeProjectTerminal({ projectId, sessionId: terminalSessionId });
+      setTerminalPanelState(agentSessionId, (panelState) => {
+        const remainingTerminals = panelState.terminals.filter(
+          (terminal) => terminal.terminalSessionId !== terminalSessionId,
+        );
+        if (remainingTerminals.length === 0) {
+          return null;
+        }
+
+        const activeTerminalSessionId =
+          panelState.activeTerminalSessionId === terminalSessionId
+            ? remainingTerminals[0].terminalSessionId
+            : panelState.activeTerminalSessionId;
+
+        return {
+          ...panelState,
+          activeTerminalSessionId,
+          closingTerminalSessionIds:
+            panelState.closingTerminalSessionIds.filter(
+              (closingTerminalSessionId) =>
+                closingTerminalSessionId !== terminalSessionId,
+            ),
+          terminals: remainingTerminals,
+        };
+      });
+    } catch (error) {
+      setTerminalPanelState(agentSessionId, (panelState) => ({
+        ...panelState,
+        closingTerminalSessionIds: panelState.closingTerminalSessionIds.filter(
+          (closingTerminalSessionId) =>
+            closingTerminalSessionId !== terminalSessionId,
+        ),
+        errorMessage: toCommandError(error).message,
+      }));
+    }
+  }
+
+  function handleSelectInlineTerminal(terminalSessionId: number) {
+    if (!selectedSession) {
+      return;
+    }
+
+    setTerminalPanelState(selectedSession.sessionId, (panelState) => ({
+      ...panelState,
+      activeTerminalSessionId: terminalSessionId,
+    }));
+  }
+
+  function handleToggleTerminalPanelMaximized() {
+    if (!selectedSession) {
+      return;
+    }
+
+    setTerminalPanelState(selectedSession.sessionId, (panelState) => ({
+      ...panelState,
+      isMaximized: !panelState.isMaximized,
+    }));
+  }
+
+  function handleTerminalPanelSplitterMouseDown(event: ReactMouseEvent) {
+    if (event.button !== 0 || !selectedSession || !selectedTerminalPanelState) {
+      return;
+    }
+
+    event.preventDefault();
+    terminalPanelDragStateRef.current = {
+      sessionId: selectedSession.sessionId,
+      startHeight: selectedTerminalPanelState.height,
+      startY: event.clientY,
+    };
+    window.document.body.style.cursor = "row-resize";
+    window.document.body.style.userSelect = "none";
+  }
 
   async function handleTemporarySessionStarted(
     result: StartStructuredAgentSessionResult,
@@ -867,6 +1083,7 @@ export function AgentsActivity({
           changeTab={workspaceCache.changeTab}
           fileTab={workspaceCache.fileTab}
           isSidePanelOpen={isSessionSidePanelOpen}
+          isTerminalPanelActive={isTerminalPanelVisible}
           linkedIssue={linkedIssue}
           manualErrorMessage={completeManualErrorMessage}
           markReviewErrorMessage={markReviewErrorMessage}
@@ -874,7 +1091,11 @@ export function AgentsActivity({
             void acknowledgeSessionAttention(sessionId);
           }}
           onCloseWorkspaceTab={workspaceCache.closeWorkspaceTab}
+          onOpenTerminalPanel={handleOpenTerminalPanel}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTab}
+          onTerminalPanelSplitterMouseDown={
+            handleTerminalPanelSplitterMouseDown
+          }
           onToggleSidePanel={() =>
             setIsSessionSidePanelOpen(
               (currentIsSessionSidePanelOpen) => !currentIsSessionSidePanelOpen,
@@ -890,6 +1111,29 @@ export function AgentsActivity({
           }}
           projectId={projectId}
           selectedSession={selectedSession}
+          terminalPanel={
+            selectedSession && selectedTerminalPanelState ? (
+              <SessionInlineTerminalPanel
+                agentSessionId={selectedSession.sessionId}
+                projectId={projectId}
+                state={selectedTerminalPanelState}
+                onCloseTerminal={(terminalSessionId) => {
+                  void handleCloseInlineTerminal(terminalSessionId);
+                }}
+                onCreateTerminal={(agentSessionId) => {
+                  void createInlineTerminal(agentSessionId);
+                }}
+                onSelectTerminal={handleSelectInlineTerminal}
+                onToggleMaximized={handleToggleTerminalPanelMaximized}
+              />
+            ) : null
+          }
+          terminalPanelHeight={
+            selectedTerminalPanelState?.isMaximized
+              ? 0
+              : (selectedTerminalPanelState?.height ??
+                DEFAULT_SESSION_TERMINAL_PANEL_HEIGHT)
+          }
           transitionButtonLabel={transitionButtonLabel}
           transitionMenuOptions={transitionMenuOptions}
           transitionPhase={sessionTransitionPhase}

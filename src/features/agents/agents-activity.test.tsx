@@ -31,6 +31,10 @@ import {
 } from "../issues/issue-commands";
 import { listAgentProfiles } from "../settings/settings-commands";
 import {
+  closeProjectTerminal,
+  createTemporaryProjectTerminal,
+} from "../terminals/project-terminal-commands";
+import {
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
   readProjectWorktreeDiff,
@@ -52,6 +56,23 @@ vi.mock("./agent-session-view", () => ({
       "aria-label": "Agent 会话消息流",
       "data-testid": "agent-session-view",
     }),
+}));
+
+vi.mock("../terminals/project-terminal", () => ({
+  ProjectTerminal: ({
+    projectId,
+    sessionId,
+  }: {
+    projectId: number;
+    sessionId: number;
+  }) =>
+    createElement(
+      "div",
+      {
+        "data-testid": `inline-project-terminal:${projectId}:${sessionId}`,
+      },
+      `terminal ${sessionId}`,
+    ),
 }));
 
 vi.mock("@monaco-editor/react", () => ({
@@ -114,6 +135,11 @@ vi.mock("../issues/issue-commands", () => ({
   updateIssue: vi.fn(),
 }));
 
+vi.mock("../terminals/project-terminal-commands", () => ({
+  closeProjectTerminal: vi.fn(),
+  createTemporaryProjectTerminal: vi.fn(),
+}));
+
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
@@ -133,6 +159,10 @@ const getProjectWorktreeChangesMock = vi.mocked(getProjectWorktreeChanges);
 const getProjectWorktreeFileTreeMock = vi.mocked(getProjectWorktreeFileTree);
 const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
 const readProjectWorktreeFileMock = vi.mocked(readProjectWorktreeFile);
+const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
+const createTemporaryProjectTerminalMock = vi.mocked(
+  createTemporaryProjectTerminal,
+);
 
 async function findSessionList() {
   return screen.findByRole("list", { name: "Agent sessions" });
@@ -252,6 +282,8 @@ describe("AgentsActivity", () => {
     getProjectWorktreeFileTreeMock.mockReset();
     readProjectWorktreeDiffMock.mockReset();
     readProjectWorktreeFileMock.mockReset();
+    closeProjectTerminalMock.mockReset();
+    createTemporaryProjectTerminalMock.mockReset();
     openPathMock.mockReset();
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
@@ -262,6 +294,13 @@ describe("AgentsActivity", () => {
       threadId: "thread-701",
     });
     openPathMock.mockResolvedValue();
+    closeProjectTerminalMock.mockResolvedValue(undefined);
+    createTemporaryProjectTerminalMock.mockResolvedValue({
+      sessionId: -11,
+      name: "issue-20-redwhisk",
+      workingDir: "/tmp/worktrees/issue-20-redwhisk",
+      launchCommand: "/bin/zsh",
+    });
     sendAgentCommitPromptMock.mockResolvedValue({
       issueId: 22,
       sessionId: 502,
@@ -3859,6 +3898,176 @@ describe("AgentsActivity", () => {
       screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+  });
+
+  it("opens inline terminals for the selected agent session workspace", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          workspaceMode: "worktree",
+          workingDir: "/tmp/worktrees/issue-20-redwhisk",
+          workspacePath: "/tmp/worktrees/issue-20-redwhisk",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "#20 Existing issue" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "打开终端" }));
+
+    await waitFor(() => {
+      expect(createTemporaryProjectTerminalMock).toHaveBeenCalledWith({
+        projectId: 1,
+        agentSessionId: 301,
+      });
+    });
+    expect(
+      screen.getByRole("region", { name: "Session terminals" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "issue-20-redwhisk" }),
+    ).toHaveAttribute("title", "/tmp/worktrees/issue-20-redwhisk");
+    expect(
+      screen.getByTestId("inline-project-terminal:1:-11"),
+    ).toBeInTheDocument();
+  });
+
+  it("adds and closes inline terminal tabs and hides after the last close", async () => {
+    const user = userEvent.setup();
+    createTemporaryProjectTerminalMock
+      .mockResolvedValueOnce({
+        sessionId: -11,
+        name: "redwhisk",
+        workingDir: "/tmp/redwhisk",
+        launchCommand: "/bin/zsh",
+      })
+      .mockResolvedValueOnce({
+        sessionId: -12,
+        name: "redwhisk",
+        workingDir: "/tmp/redwhisk",
+        launchCommand: "/bin/zsh",
+      });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          workingDir: "/tmp/redwhisk",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "打开终端" }));
+    await screen.findByTestId("inline-project-terminal:1:-11");
+
+    await user.click(screen.getByRole("button", { name: "新增终端" }));
+
+    await waitFor(() => {
+      expect(createTemporaryProjectTerminalMock).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      screen.getByTestId("inline-project-terminal:1:-12"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "关闭终端 redwhisk" })[1],
+    );
+    await waitFor(() => {
+      expect(closeProjectTerminalMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: -12,
+      });
+    });
+    expect(
+      screen.getByTestId("inline-project-terminal:1:-11"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "关闭终端 redwhisk" }));
+
+    await waitFor(() => {
+      expect(closeProjectTerminalMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: -11,
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "Session terminals" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("maximizes and restores the session main content from the terminal tab row", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          workingDir: "/tmp/redwhisk",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "打开终端" }));
+    expect(
+      await screen.findByTestId("inline-project-terminal:1:-11"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "最大化 Session 主内容" }),
+    );
+
+    expect(
+      screen.queryByTestId("inline-project-terminal:1:-11"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "恢复 Session 终端" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "恢复 Session 终端" }));
+
+    expect(
+      screen.getByTestId("inline-project-terminal:1:-11"),
+    ).toBeInTheDocument();
   });
 
   it("omits completed issue summary actions from the session header", async () => {
