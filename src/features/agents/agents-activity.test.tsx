@@ -2789,32 +2789,102 @@ describe("AgentsActivity", () => {
       within(dialog).getByText("Completion option: complete_agent_commit"),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByText(
+      within(dialog).queryByText(
         "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
       ),
-    ).not.toBeVisible();
-
-    await user.click(within(dialog).getByText("Completion prompt"));
+    ).not.toBeInTheDocument();
     expect(
-      within(dialog).getByText(
-        "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
-      ),
+      within(dialog).queryByText("Completion prompt"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "提交代码" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "标记完成" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "取消" }),
     ).toBeInTheDocument();
 
-    expect(
-      within(dialog).queryByRole("button", { name: "Cancel" }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      within(dialog).getByRole("button", {
-        name: "Close completion confirmation",
-      }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Completion Confirmation" }),
       ).not.toBeInTheDocument(),
     );
     expect(completeIssueCleanMock).not.toHaveBeenCalled();
+  });
+
+  it("marks a dirty review session done directly from completion confirmation", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            canCompleteClean: false,
+            canCompleteAgentCommit: true,
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "completed",
+            canCompleteClean: false,
+            canCompleteAgentCommit: false,
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_639_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: 1_780_639_000_000,
+          },
+        ],
+      });
+
+    render(
+      <AgentsActivity
+        activeSessionId={502}
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Completion Confirmation",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "标记完成" }));
+
+    expect(completeIssueManualMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 22,
+    });
+    expect(sendAgentCommitPromptMock).not.toHaveBeenCalled();
+    expect(detectAgentCommitCompletionMock).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Mark done" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the review session active when agent commit detection does not complete", async () => {
@@ -2888,7 +2958,7 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
 
     expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -2983,7 +3053,7 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
 
     await waitFor(() =>
       expect(
@@ -3097,7 +3167,7 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
 
     await waitFor(() =>
       expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({

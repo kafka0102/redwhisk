@@ -3621,22 +3621,8 @@ button:focus-visible {
   font-size: 12px;
 }
 
-.completion-preview__files code,
-.completion-preview__prompt {
+.completion-preview__files code {
   font-family: var(--font-family-mono);
-}
-
-.completion-preview__prompt {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  overflow: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
-  color: var(--color-text);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
 }
 
 .issue-attachment-preview__image {
