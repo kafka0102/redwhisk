@@ -15,7 +15,8 @@ use crate::types::agent_session::{
     ProjectGitBranchListResult, ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
     ReadAgentTimelineInput, ReadAgentTimelineResult, ResizeAgentSessionTerminalInput,
     RespondAgentPermissionInput, RestoreAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
+    RestoreAgentSessionTerminalResult, ResumeStructuredAgentSessionInput,
+    ResumeStructuredAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
     SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
     StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
@@ -399,6 +400,40 @@ pub fn start_structured_agent_session(
     }
 
     AgentSessionService::start_structured_agent_session_in_data_dir(
+        data_dir,
+        input,
+        &state.agent_sessions,
+        &state.agent_event_broadcaster,
+    )
+}
+
+#[tauri::command]
+pub fn resume_structured_agent_session(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ResumeStructuredAgentSessionInput,
+) -> Result<ResumeStructuredAgentSessionResult, CommandError> {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 恢复失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    {
+        let mut local_data = state.local_data.lock().map_err(|_| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 恢复失败。",
+            )
+        })?;
+        local_data
+            .initialize(&data_dir)
+            .map_err(CommandError::from)?;
+    }
+
+    AgentSessionService::resume_structured_agent_session_in_data_dir(
         data_dir,
         input,
         &state.agent_sessions,

@@ -213,6 +213,16 @@ export interface StartStructuredAgentSessionResult {
   threadId: string;
 }
 
+export interface ResumeStructuredAgentSessionInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface ResumeStructuredAgentSessionResult {
+  sessionId: number;
+  threadId: string;
+}
+
 export interface AgentMessageAttachment {
   /** `saveAgentAttachment` 返回的落盘绝对路径。 */
   path: string;
@@ -289,6 +299,15 @@ export function startStructuredAgentSession(
 ): Promise<StartStructuredAgentSessionResult> {
   return invokeCommand<StartStructuredAgentSessionResult>(
     "start_structured_agent_session",
+    { input },
+  );
+}
+
+export function resumeStructuredAgentSession(
+  input: ResumeStructuredAgentSessionInput,
+): Promise<ResumeStructuredAgentSessionResult> {
+  return invokeCommand<ResumeStructuredAgentSessionResult>(
+    "resume_structured_agent_session",
     { input },
   );
 }

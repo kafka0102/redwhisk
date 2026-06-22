@@ -48,6 +48,12 @@ export interface AgentComposerProps {
    * 父组件在 message-stream 收到 `model_changed` 事件时下传新值。
    */
   currentModelId?: string | null;
+  /** 只读时禁用输入和发送；用于 completed issue 等不可继续的 session。 */
+  isReadOnly?: boolean;
+  /** 只读原因文案，显示在 composer 内部状态区。 */
+  readOnlyReason?: string;
+  /** 发送前执行的恢复动作；失败时阻止发送并保留输入。 */
+  onBeforeSend?: () => Promise<void>;
   /**
    * 可选：发送成功回调，供父组件做乐观用户消息合并（任务 6 用）。
    */

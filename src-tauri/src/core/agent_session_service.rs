@@ -38,7 +38,8 @@ use crate::types::agent_session::{
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentSessionTerminalResult,
     ReadAgentTimelineResult, ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalResult, SetAgentSessionAttentionInput,
+    RestoreAgentSessionTerminalResult, ResumeStructuredAgentSessionInput,
+    ResumeStructuredAgentSessionResult, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
     StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
     StartStructuredAgentSessionInput, StartStructuredAgentSessionResult, WorkspaceMode,
@@ -1660,6 +1661,185 @@ impl AgentSessionService<'_> {
             session_id,
             thread_id,
         })
+    }
+
+    pub fn resume_structured_agent_session_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ResumeStructuredAgentSessionInput,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<ResumeStructuredAgentSessionResult, CommandError> {
+        let database = DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        let service = AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        );
+        service.resume_structured_agent_session(
+            data_dir.as_ref(),
+            input,
+            agent_registry,
+            broadcaster,
+        )
+    }
+
+    pub fn resume_structured_agent_session(
+        &self,
+        _data_dir: &Path,
+        input: ResumeStructuredAgentSessionInput,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<ResumeStructuredAgentSessionResult, CommandError> {
+        let session = self.find_project_session(input.project_id, input.session_id)?;
+
+        if let Some(issue_id) = session.issue_id {
+            let issue = self
+                .issue_repository
+                .find_by_id(issue_id)
+                .map_err(agent_session_database_error)?
+                .ok_or_else(|| {
+                    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                        .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+                })?;
+            if issue.status == IssueStatus::Completed {
+                return Err(CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "已完成 Issue 的 Session 不能继续运行。",
+                )
+                .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
+                ));
+            }
+        }
+
+        let thread_id = session
+            .codex_session_id
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "当前 Session 缺少可续接的 Codex threadId。",
+                )
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+            })?;
+
+        if let Some(handle) = agent_registry.get(session.id) {
+            let active_thread_id = handle.thread_id().unwrap_or_else(|| thread_id.clone());
+            self.mark_structured_session_resumed(&session, &active_thread_id)?;
+            return Ok(ResumeStructuredAgentSessionResult {
+                session_id: session.id,
+                thread_id: active_thread_id,
+            });
+        }
+
+        let binary = if session.command_snapshot.trim().is_empty() {
+            ensure_codex_bypass_arg("codex")
+        } else {
+            session.command_snapshot.clone()
+        };
+        let cwd = session
+            .workspace_path
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| session.working_dir.clone());
+        let mode = codex_mode_from_structured_input(None).ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "不支持的协作模式。",
+            )
+            .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+        })?;
+        let config = CodexSessionConfig {
+            project_id: input.project_id,
+            session_id: session.id,
+            binary,
+            cwd,
+            mode,
+            broadcaster: broadcaster.clone(),
+            resume_thread_id: Some(thread_id),
+            model: None,
+            effort: None,
+        };
+        let codex_handle = CodexSessionHandle::start(config)
+            .map_err(|error| agent_session_error_to_command_error(error.into()))?;
+        let resumed_thread_id = codex_handle.thread_id().ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionStreamFailed,
+                "Agent 会话启动后未拿到 threadId。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+        })?;
+
+        if let Err(error) = self.mark_structured_session_resumed(&session, &resumed_thread_id) {
+            codex_handle.shutdown();
+            return Err(error);
+        }
+
+        broadcaster.register_session(session.id);
+        agent_registry.register(session.id, Arc::new(codex_handle));
+
+        Ok(ResumeStructuredAgentSessionResult {
+            session_id: session.id,
+            thread_id: resumed_thread_id,
+        })
+    }
+
+    fn mark_structured_session_resumed(
+        &self,
+        session: &crate::types::agent_session::AgentSessionRecord,
+        thread_id: &str,
+    ) -> Result<(), CommandError> {
+        let resumed_at = current_epoch_millis()?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        let updated_session = AgentSessionRepository::mark_running_in_transaction(
+            &transaction,
+            session.id,
+            resumed_at,
+        )
+        .map_err(agent_session_database_error)?;
+
+        if updated_session.is_none() {
+            transaction.commit().map_err(agent_session_database_error)?;
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 恢复失败。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
+        }
+
+        let payload = json!({
+            "sessionId": session.id,
+            "issueId": session.issue_id,
+            "status": "running",
+            "resumed": true,
+            "structuredStream": true,
+            "codexSessionId": thread_id,
+            "logPath": session.log_path,
+        })
+        .to_string();
+        EventRepository::insert_session_event_in_transaction(
+            &transaction,
+            session.id,
+            SessionEventType::SessionStarted,
+            &payload,
+            resumed_at,
+        )
+        .map_err(agent_session_database_error)?;
+        transaction.commit().map_err(agent_session_database_error)?;
+        Ok(())
     }
 
     pub fn list_agent_sessions_in_data_dir(

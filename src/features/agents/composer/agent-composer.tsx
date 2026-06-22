@@ -28,6 +28,9 @@ export function AgentComposer({
   turnStatus,
   usage,
   currentModelId,
+  isReadOnly = false,
+  readOnlyReason,
+  onBeforeSend,
   onMessageSent,
 }: AgentComposerProps) {
   const {
@@ -59,10 +62,12 @@ export function AgentComposer({
     projectId,
     sessionId,
     turnStatus,
+    isReadOnly,
+    onBeforeSend,
     onMessageSent,
   });
 
-  const canSend = text.trim() !== "" && !isSending;
+  const canSend = text.trim() !== "" && !isSending && !isReadOnly;
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Enter 发送，Shift+Enter 换行；IME 合成期（中文输入选词）不触发发送。
@@ -101,9 +106,15 @@ export function AgentComposer({
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={handleKeyDown}
+        disabled={isReadOnly}
         rows={3}
         style={{ maxHeight: TEXTAREA_MAX_HEIGHT_PX }}
       />
+      {isReadOnly && readOnlyReason ? (
+        <p className="agents-composer__notice" role="status">
+          {readOnlyReason}
+        </p>
+      ) : null}
       {submitError ? (
         <p className="agents-composer__error" role="status">
           {submitError}
@@ -135,6 +146,7 @@ export function AgentComposer({
         }}
         isSending={isSending}
         canSend={canSend}
+        isReadOnly={isReadOnly}
         onSubmit={() => {
           void handleSubmit();
         }}

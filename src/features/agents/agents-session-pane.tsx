@@ -242,6 +242,8 @@ export function AgentsSessionPane({
                   projectId={projectId}
                   sessionId={selectedSession.sessionId}
                   agentType={selectedSession.agentType}
+                  sessionStatus={selectedSession.status}
+                  issueStatus={selectedSession.issueStatus ?? null}
                   isTurnRunning={
                     selectedSession.status === "running" &&
                     selectedSession.isTurnRunning

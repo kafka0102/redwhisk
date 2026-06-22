@@ -22,6 +22,7 @@ interface ComposerControlsProps {
   onSelectModel: (modelId: string) => void;
   isSending: boolean;
   canSend: boolean;
+  isReadOnly: boolean;
   onAddAttachment: () => void;
   onSubmit: () => void;
   onCancel: () => void;
@@ -38,6 +39,7 @@ export function ComposerControls({
   onSelectModel,
   isSending,
   canSend,
+  isReadOnly,
   onAddAttachment,
   onSubmit,
   onCancel,
@@ -63,6 +65,7 @@ export function ComposerControls({
           type="button"
           className="agents-composer__attach"
           aria-label="添加附件"
+          disabled={isReadOnly}
           onClick={onAddAttachment}
         >
           <Paperclip aria-hidden="true" size={16} strokeWidth={1.9} />
@@ -77,7 +80,7 @@ export function ComposerControls({
                   onSelectModel(value);
                 }
               }}
-              disabled={!hasModels || isLoadingModels}
+              disabled={isReadOnly || !hasModels || isLoadingModels}
             >
               <SelectTrigger
                 id="agent-composer-model"

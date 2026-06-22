@@ -29,6 +29,8 @@ interface UseAgentComposerArgs {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
+  isReadOnly?: boolean;
+  onBeforeSend?: () => Promise<void>;
   onMessageSent?: (message: string) => void;
 }
 
@@ -91,6 +93,8 @@ export function useAgentComposer({
   projectId,
   sessionId,
   turnStatus,
+  isReadOnly = false,
+  onBeforeSend,
   onMessageSent,
 }: UseAgentComposerArgs): UseAgentComposerResult {
   const [text, setText] = useState("");
@@ -124,6 +128,9 @@ export function useAgentComposer({
   }, []);
 
   const handleSubmit = useCallback(async () => {
+    if (isReadOnly) {
+      return;
+    }
     const message = text.trim();
     if (message === "") {
       return;
@@ -142,6 +149,7 @@ export function useAgentComposer({
       }));
     setSubmitError(null);
     try {
+      await onBeforeSend?.();
       await sendAgentMessage({
         projectId,
         sessionId,
@@ -154,7 +162,15 @@ export function useAgentComposer({
     } catch (error) {
       setSubmitError(toCommandError(error).message);
     }
-  }, [text, attachments, projectId, sessionId, onMessageSent]);
+  }, [
+    isReadOnly,
+    text,
+    attachments,
+    onBeforeSend,
+    projectId,
+    sessionId,
+    onMessageSent,
+  ]);
 
   const handleCancel = useCallback(async () => {
     setSubmitError(null);
@@ -166,6 +182,9 @@ export function useAgentComposer({
   }, [projectId, sessionId, showCancelToast]);
 
   const handleAddAttachment = useCallback(async () => {
+    if (isReadOnly) {
+      return;
+    }
     const sourcePath = await open({
       directory: false,
       multiple: false,
@@ -217,7 +236,7 @@ export function useAgentComposer({
         ),
       );
     }
-  }, [projectId, sessionId]);
+  }, [isReadOnly, projectId, sessionId]);
 
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((current) =>
