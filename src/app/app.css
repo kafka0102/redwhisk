@@ -4463,7 +4463,6 @@ button:focus-visible {
   gap: 6px;
   width: min(720px, 100%);
   padding: 8px 0 0;
-  border-top: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: 12px;
 }
