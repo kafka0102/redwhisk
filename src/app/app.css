@@ -546,7 +546,7 @@ button:focus-visible {
 .settings-section--agents .settings-section__body,
 .settings-section--labels .settings-section__header,
 .settings-section--labels .settings-section__body {
-  width: min(100%, 1200px);
+  width: min(90vw, 100%);
 }
 
 .settings-section--global-preferences .settings-section__header,
