@@ -229,8 +229,12 @@ impl CodexAppServerClient {
     ///
     /// codex 收到后会让当前 turn 尽快结束（通常触发 `turn/completed`
     /// 通知，status 为 `canceled` / `aborted`）。
-    pub fn turn_interrupt(&self, turn_id: &str) -> Result<(), CodexAppServerError> {
-        let payload = json!({ "turnId": turn_id });
+    pub fn turn_interrupt(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> Result<(), CodexAppServerError> {
+        let payload = build_turn_interrupt_payload(thread_id, turn_id);
         self.transport.request("turn/interrupt", payload)?;
         Ok(())
     }
@@ -355,6 +359,13 @@ fn build_thread_start_payload(
     payload
 }
 
+fn build_turn_interrupt_payload(thread_id: &str, turn_id: &str) -> Value {
+    json!({
+        "threadId": thread_id,
+        "turnId": turn_id,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,6 +406,14 @@ mod tests {
         assert_eq!(PermissionDecision::Accept.as_str(), "accept");
         assert_eq!(PermissionDecision::Decline.as_str(), "decline");
         assert_eq!(PermissionDecision::Cancel.as_str(), "cancel");
+    }
+
+    #[test]
+    fn turn_interrupt_payload_includes_thread_and_turn_ids() {
+        let payload = build_turn_interrupt_payload("thr_1", "turn_1");
+
+        assert_eq!(payload["threadId"], "thr_1");
+        assert_eq!(payload["turnId"], "turn_1");
     }
 
     #[test]
