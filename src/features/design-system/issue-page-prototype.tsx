@@ -221,15 +221,15 @@ function PrototypeSurface({ mode }: { mode: PrototypeMode }) {
                 ? "New issue"
                 : mode === "edit"
                   ? "Edit issue"
-                  : "Issue #184 · ID 184"}
+                  : "Issue #184"}
             </h3>
           </div>
           <div className="flex items-center gap-2">
             {mode === "readonly" ? (
               <>
-                <Button variant="ghost">
+                <Button variant="outline">
                   <ArrowLeft />
-                  Back
+                  返回
                 </Button>
                 <StatusMenu status={status} onStatusChange={setStatus} />
               </>
@@ -418,7 +418,7 @@ function IssueSidebar({
           <Divider />
           <Button
             variant="destructive"
-            className="mt-4 w-full justify-center"
+            className="w-full justify-center"
             onClick={onRequestDelete}
           >
             <Trash2 />
