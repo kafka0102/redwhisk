@@ -280,6 +280,20 @@ pub struct StartStructuredAgentSessionResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ResumeStructuredAgentSessionInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumeStructuredAgentSessionResult {
+    pub session_id: i64,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SendAgentMessageInput {
     pub project_id: i64,
     pub session_id: i64,

@@ -5017,6 +5017,11 @@ details[open] > summary .agents-message__summary-chevron {
   color: var(--color-text);
 }
 
+.agents-composer__attach:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .agents-composer__attach:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
@@ -5047,6 +5052,12 @@ details[open] > summary .agents-message__summary-chevron {
 .agents-composer__error {
   margin: 0;
   color: var(--color-danger);
+  font-size: 12px;
+}
+
+.agents-composer__notice {
+  margin: 0;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 

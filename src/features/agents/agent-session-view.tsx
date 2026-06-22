@@ -12,17 +12,26 @@
 // - L188：composer 是 Codex Session View 底部固定输入框
 // - L214：上下文窗口用量来自 usage_updated 事件 → state.usage
 
+import { useCallback } from "react";
+
 import { AgentComposer } from "./composer/agent-composer";
 import { getAgentCapabilities } from "./agent-capabilities";
 import { AgentMessageStreamView } from "./message-stream/agent-message-stream";
 import { useAgentMessageStream } from "./message-stream/use-agent-message-stream";
 import { PermissionCard } from "./message-stream/permission-card";
-import type { AgentType } from "./agent-session-commands";
+import {
+  resumeStructuredAgentSession,
+  type AgentSessionStatus,
+  type AgentType,
+  type IssueStatus,
+} from "./agent-session-commands";
 
 interface AgentSessionViewProps {
   projectId: number;
   sessionId: number;
   agentType: AgentType;
+  sessionStatus?: AgentSessionStatus;
+  issueStatus?: IssueStatus | null;
   isTurnRunning?: boolean;
 }
 
@@ -30,6 +39,8 @@ export function AgentSessionView({
   projectId,
   sessionId,
   agentType,
+  sessionStatus = "running",
+  issueStatus = null,
   isTurnRunning = false,
 }: AgentSessionViewProps) {
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
@@ -38,6 +49,15 @@ export function AgentSessionView({
     state.turnStatus === "running" || isTurnRunning
       ? "running"
       : state.turnStatus;
+  const isReadOnly = issueStatus === "completed";
+  const shouldResumeBeforeSend =
+    sessionStatus !== "running" && issueStatus !== "completed";
+  const resumeBeforeSend = useCallback(async () => {
+    if (!shouldResumeBeforeSend) {
+      return;
+    }
+    await resumeStructuredAgentSession({ projectId, sessionId });
+  }, [projectId, sessionId, shouldResumeBeforeSend]);
 
   return (
     <div className="agents-session-view" aria-label="Agent 结构化会话视图">
@@ -53,12 +73,18 @@ export function AgentSessionView({
         ))}
       </div>
       <AgentComposer
+        key={sessionId}
         projectId={projectId}
         sessionId={sessionId}
         capabilities={capabilities}
         turnStatus={effectiveTurnStatus}
         usage={state.usage}
         currentModelId={state.model}
+        isReadOnly={isReadOnly}
+        readOnlyReason={
+          isReadOnly ? "已完成的 Issue 不能继续运行。" : undefined
+        }
+        onBeforeSend={resumeBeforeSend}
         onMessageSent={(message) => {
           dispatch({ type: "OPTIMISTIC_USER_MESSAGE", text: message });
         }}

@@ -18,8 +18,9 @@ use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
-    RestoreAgentSessionTerminalInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
-    StartStandaloneAgentSessionInput, WorkspaceMode,
+    RestoreAgentSessionTerminalInput, ResumeStructuredAgentSessionInput,
+    SetAgentSessionAttentionInput, StartAgentSessionInput, StartStandaloneAgentSessionInput,
+    WorkspaceMode,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
@@ -2253,6 +2254,99 @@ fn set_session_attention_rejects_non_running_session() {
         error.message,
         "只有运行中的 Agent Session 可以更新关注状态。"
     );
+}
+
+#[test]
+fn resume_structured_agent_session_rejects_completed_issue() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "resume-completed-project");
+    let issue_id = insert_issue(&database.connection, project_id, "completed");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Closed,
+        1_780_628_555_000,
+        Some(1_780_628_556_000),
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET codex_session_id = 'thread-completed' WHERE id = ?1",
+            rusqlite::params![session_id],
+        )
+        .expect("set codex session id");
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = redwhisk_lib::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+
+    let error = service
+        .resume_structured_agent_session(
+            temp_dir.path(),
+            ResumeStructuredAgentSessionInput {
+                project_id,
+                session_id,
+            },
+            &registry,
+            &broadcaster,
+        )
+        .expect_err("completed issue session should not resume");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+    assert_eq!(error.message, "已完成 Issue 的 Session 不能继续运行。");
+}
+
+#[test]
+fn mark_session_running_reopens_existing_session_record() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "resume-record-project");
+    let issue_id = insert_issue(&database.connection, project_id, "review");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Closed,
+        1_780_628_555_000,
+        Some(1_780_628_556_000),
+    );
+
+    let transaction = database
+        .connection
+        .unchecked_transaction()
+        .expect("transaction");
+    let reopened = AgentSessionRepository::mark_running_in_transaction(
+        &transaction,
+        session_id,
+        1_780_628_557_000,
+    )
+    .expect("mark running")
+    .expect("session reopened");
+    transaction.commit().expect("commit");
+
+    assert_eq!(reopened.id, session_id);
+    assert_eq!(reopened.status, AgentSessionStatus::Running);
+    assert_eq!(reopened.closed_at, None);
+    assert_eq!(reopened.last_active_at, 1_780_628_557_000);
+
+    let count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM agent_sessions WHERE issue_id = ?1 AND del = 0",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("count sessions");
+    assert_eq!(count, 1);
 }
 
 #[test]

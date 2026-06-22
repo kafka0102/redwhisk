@@ -339,6 +339,28 @@ impl<'connection> AgentSessionRepository<'connection> {
         Ok(changed > 0)
     }
 
+    pub fn mark_running_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        resumed_at: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = transaction.execute(
+            "UPDATE agent_sessions
+             SET status = 'running',
+                 attention = 'none',
+                 last_active_at = MAX(last_active_at + 1, ?2),
+                 closed_at = NULL
+             WHERE id = ?1 AND del = 0",
+            params![session_id, resumed_at],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, session_id)
+    }
+
     pub fn update_codex_session_id(
         &self,
         session_id: i64,

@@ -28,6 +28,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("./agent-session-commands", () => ({
   readAgentTimeline: vi.fn(),
+  resumeStructuredAgentSession: vi.fn(),
   sendAgentMessage: vi.fn(),
   cancelAgentTurn: vi.fn(),
   respondAgentPermission: vi.fn(),
@@ -43,9 +44,16 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
 
-const { readAgentTimeline, sendAgentMessage, listAgentModels } =
-  await import("./agent-session-commands");
+const {
+  readAgentTimeline,
+  resumeStructuredAgentSession,
+  sendAgentMessage,
+  listAgentModels,
+} = await import("./agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+const resumeStructuredAgentSessionMock = vi.mocked(
+  resumeStructuredAgentSession,
+);
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
 const listAgentModelsMock = vi.mocked(listAgentModels);
 
@@ -55,6 +63,13 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
   readAgentTimelineMock.mockResolvedValue({
     items: items as never,
   });
+  resumeStructuredAgentSessionMock.mockReset();
+  resumeStructuredAgentSessionMock.mockResolvedValue({
+    sessionId: 10,
+    threadId: "thread-10",
+  });
+  sendAgentMessageMock.mockReset();
+  sendAgentMessageMock.mockResolvedValue(undefined);
   listAgentModelsMock.mockReset();
   listAgentModelsMock.mockResolvedValue({ models: [] });
   mocks.listeners.length = 0;
@@ -197,5 +212,86 @@ describe("AgentSessionView", () => {
     });
 
     expect(screen.queryByLabelText("选择模型")).not.toBeInTheDocument();
+  });
+
+  it("已完成 Issue 的 session 禁用底部输入框", async () => {
+    setupTimeline([]);
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="completed"
+      />,
+    );
+
+    const textarea = await screen.findByLabelText("输入消息");
+    expect(textarea).toBeDisabled();
+    expect(
+      screen.getByText("已完成的 Issue 不能继续运行。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+  });
+
+  it("切换 session 后不沿用上一个 session 的输入错误", async () => {
+    setupTimeline([]);
+    sendAgentMessageMock.mockRejectedValueOnce(new Error("A session failed"));
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <AgentSessionView projectId={1} sessionId={10} agentType="codex" />,
+    );
+
+    await user.type(await screen.findByLabelText("输入消息"), "失败{Enter}");
+
+    expect(await screen.findByText("A session failed")).toBeInTheDocument();
+
+    setupTimeline([]);
+    rerender(
+      <AgentSessionView projectId={1} sessionId={11} agentType="codex" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("A session failed")).not.toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("输入消息")).toHaveValue("");
+  });
+
+  it("未完成的关闭 session 发送时先自动恢复再发送消息", async () => {
+    setupTimeline([]);
+    resumeStructuredAgentSessionMock.mockResolvedValueOnce({
+      sessionId: 10,
+      threadId: "thread-10",
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="review"
+      />,
+    );
+
+    await user.type(
+      await screen.findByLabelText("输入消息"),
+      "继续处理{Enter}",
+    );
+
+    await waitFor(() => {
+      expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+      });
+    });
+    expect(sendAgentMessageMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+      message: "继续处理",
+      attachments: [],
+    });
   });
 });
