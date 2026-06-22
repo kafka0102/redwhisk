@@ -200,6 +200,18 @@ describe("AgentComposer", () => {
     });
   });
 
+  it("终止失败时使用 toast 提示，不渲染为输入框下方错误", async () => {
+    cancelAgentTurnMock.mockRejectedValueOnce(new Error("后端不可达"));
+    const user = userEvent.setup();
+    await renderComposer({ turnStatus: "running" });
+
+    await user.click(screen.getByRole("button", { name: "终止当前任务" }));
+
+    const toast = await screen.findByText("后端不可达");
+    expect(toast).toHaveClass("agents-composer__toast");
+    expect(document.querySelector(".agents-composer__error")).toBeNull();
+  });
+
   it("无 usage 时不显示上下文用量", async () => {
     await renderComposer({ usage: null });
     expect(screen.queryByText(/上下文/)).not.toBeInTheDocument();

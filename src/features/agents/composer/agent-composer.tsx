@@ -49,6 +49,7 @@ export function AgentComposer({
     setText,
     attachments,
     submitError,
+    cancelToastMessage,
     isSending,
     handleSubmit,
     handleCancel,
@@ -112,6 +113,15 @@ export function AgentComposer({
         <p className="agents-composer__error" role="status">
           {`模型加载失败：${modelsError}`}
         </p>
+      ) : null}
+      {cancelToastMessage ? (
+        <div
+          className="agents-composer__toast"
+          role="status"
+          aria-live="polite"
+        >
+          {cancelToastMessage}
+        </div>
       ) : null}
       <ComposerControls
         capabilities={capabilities}

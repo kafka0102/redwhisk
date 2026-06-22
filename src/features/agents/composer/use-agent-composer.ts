@@ -11,7 +11,7 @@
 // 提交时收集 status === "saved" 的附件，映射为 `{ path, displayName, kind }`
 // 随消息一起发送；status === "saving" 的附件会阻止提交并提示用户等待。
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
@@ -37,6 +37,7 @@ export interface UseAgentComposerResult {
   setText: (value: string) => void;
   attachments: ComposerAttachment[];
   submitError: string | null;
+  cancelToastMessage: string | null;
   /** 派生自 turnStatus，供组件切换发送/取消按钮。 */
   isSending: boolean;
   /** 提交当前文本；空文本（trim 后）不发。 */
@@ -95,8 +96,32 @@ export function useAgentComposer({
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [cancelToastMessage, setCancelToastMessage] = useState<string | null>(
+    null,
+  );
+  const cancelToastTimeoutRef = useRef<number | null>(null);
 
   const isSending = turnStatus === "running";
+
+  useEffect(
+    () => () => {
+      if (cancelToastTimeoutRef.current !== null) {
+        window.clearTimeout(cancelToastTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const showCancelToast = useCallback((message: string) => {
+    setCancelToastMessage(message);
+    if (cancelToastTimeoutRef.current !== null) {
+      window.clearTimeout(cancelToastTimeoutRef.current);
+    }
+    cancelToastTimeoutRef.current = window.setTimeout(() => {
+      setCancelToastMessage(null);
+      cancelToastTimeoutRef.current = null;
+    }, 3_000);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const message = text.trim();
@@ -136,9 +161,9 @@ export function useAgentComposer({
     try {
       await cancelAgentTurn({ projectId, sessionId });
     } catch (error) {
-      setSubmitError(toCommandError(error).message);
+      showCancelToast(toCommandError(error).message);
     }
-  }, [projectId, sessionId]);
+  }, [projectId, sessionId, showCancelToast]);
 
   const handleAddAttachment = useCallback(async () => {
     const sourcePath = await open({
@@ -205,6 +230,7 @@ export function useAgentComposer({
     setText,
     attachments,
     submitError,
+    cancelToastMessage,
     isSending,
     handleSubmit,
     handleCancel,

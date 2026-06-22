@@ -5,7 +5,7 @@
 // ../agent-session-commands。
 
 import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TurnStatus } from "../message-stream/message-stream-types";
 import { useAgentComposer } from "./use-agent-composer";
@@ -108,6 +108,10 @@ beforeEach(() => {
   );
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("useAgentComposer", () => {
   it("初始状态：空文本、无附件、isSending 取决于 turnStatus", async () => {
     const { getState } = await renderProbe({
@@ -197,6 +201,29 @@ describe("useAgentComposer", () => {
       projectId: 1,
       sessionId: 10,
     });
+  });
+
+  it("handleCancel 失败时显示短时 toast 且不写入提交错误", async () => {
+    vi.useFakeTimers();
+    cancelAgentTurnMock.mockRejectedValueOnce(new Error("后端不可达"));
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "running",
+    });
+
+    await act(async () => {
+      await getState()!.handleCancel();
+    });
+
+    expect(getState()!.submitError).toBeNull();
+    expect(getState()!.cancelToastMessage).toBe("后端不可达");
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    expect(getState()!.cancelToastMessage).toBeNull();
   });
 
   it("添加附件成功：chip 从 saving 转为 saved", async () => {

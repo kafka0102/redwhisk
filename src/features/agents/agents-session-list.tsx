@@ -250,7 +250,9 @@ function getSessionStatusTone(session: AgentSessionListItem): string {
 }
 
 function shouldShowRunningSpinner(session: AgentSessionListItem): boolean {
-  const isTurnRunning = session.isTurnRunning ?? session.status === "running";
+  const isTurnRunning =
+    session.status === "running" &&
+    (session.isTurnRunning ?? session.status === "running");
 
   return (
     isTurnRunning &&
