@@ -360,6 +360,7 @@ button:focus-visible {
 }
 
 .activity-surface--issues {
+  position: relative;
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "header"
@@ -370,6 +371,13 @@ button:focus-visible {
   gap: 12px;
   padding: 18px 18px 8px;
   overflow: hidden;
+}
+
+.activity-surface--issues-form {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "kanban";
+  gap: 0;
+  padding: 0;
 }
 
 .activity-surface--settings {
@@ -1539,6 +1547,16 @@ button:focus-visible {
 
 .issue-description-editor__content p {
   margin: 0;
+}
+
+.issue-description-editor__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 
 .issue-description-editor__attachments {
@@ -3346,6 +3364,14 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.issue-page--fullscreen {
+  position: absolute;
+  inset: 0;
+  grid-area: unset;
+  border: 0;
+  border-radius: 0;
+}
+
 .issue-page__header {
   display: flex;
   align-items: center;
@@ -3355,6 +3381,20 @@ button:focus-visible {
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
+}
+
+.issue-page__header--fullscreen {
+  min-height: 64px;
+  padding: 0;
+}
+
+.issue-page__header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 5%;
 }
 
 .issue-page__header h3 {
@@ -3372,6 +3412,8 @@ button:focus-visible {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -3384,7 +3426,26 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.issue-page__body--fullscreen {
+  display: block;
+  padding: 22px 5% 18px;
+  overflow: auto;
+}
+
+.issue-page__content-shell {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+}
+
 .issue-page__main {
+  min-height: 0;
+}
+
+.issue-page__main--fullscreen {
+  display: grid;
+  gap: 16px;
   min-height: 0;
 }
 
@@ -3418,6 +3479,10 @@ button:focus-visible {
 
 .issue-page__status {
   padding: 0 16px 12px;
+}
+
+.issue-page__status--fullscreen {
+  padding: 0;
 }
 
 .issue-page__attachment-list {
@@ -3755,6 +3820,19 @@ button:focus-visible {
 
 .issue-dialog__delete-button:hover {
   color: #ff8787;
+}
+
+.issue-page__delete-button {
+  min-width: 72px;
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: #ffffff;
+}
+
+.issue-page__delete-button:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 92%, #000000);
+  background: color-mix(in srgb, var(--color-danger) 92%, #000000);
+  color: #ffffff;
 }
 
 .completion-preview__files {
@@ -4221,8 +4299,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
-  padding: 4px 0;
+  min-height: 24px;
+  padding: 0;
 }
 
 .issue-label-picker__selected {
@@ -4231,6 +4309,21 @@ button:focus-visible {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.issue-label-picker__inline {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.issue-label-picker--toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: auto;
 }
 
 .issue-label-picker__add-icon {
@@ -4270,6 +4363,59 @@ button:focus-visible {
 
 .issue-label-picker__menu--fixed {
   z-index: 1000;
+}
+
+.issue-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.issue-editor-toolbar__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.issue-editor-toolbar__icon-button:hover {
+  color: var(--color-text);
+}
+
+.issue-field--title input {
+  height: 48px;
+  padding: 0 14px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.issue-field--editor {
+  min-height: 0;
+}
+
+.issue-field--editor .issue-description-editor {
+  min-height: clamp(320px, 56vh, 620px);
+}
+
+.issue-delete-dialog {
+  max-width: 420px;
+  border-radius: var(--radius-dialog);
+}
+
+.issue-delete-dialog__footer {
+  border-top-color: var(--color-border);
 }
 
 .issue-label-picker__option--simple {

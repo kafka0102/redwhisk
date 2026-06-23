@@ -105,6 +105,7 @@ export function IssuesActivity({
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const editPageRunButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -398,18 +399,20 @@ export function IssuesActivity({
   }
 
   function restoreDialogTriggerFocus(fallbackIssue: IssueRecord | null) {
-    const trigger = dialogTriggerRef.current;
-    if (trigger?.isConnected) {
-      trigger.focus();
-      return;
-    }
+    requestAnimationFrame(() => {
+      const trigger = dialogTriggerRef.current;
+      if (trigger?.isConnected) {
+        trigger.focus();
+        return;
+      }
 
-    if (fallbackIssue) {
-      cardRefs.current.get(fallbackIssue.id)?.focus();
-      return;
-    }
+      if (fallbackIssue) {
+        cardRefs.current.get(fallbackIssue.id)?.focus();
+        return;
+      }
 
-    createButtonRef.current?.focus();
+      createButtonRef.current?.focus();
+    });
   }
 
   function openRunDialog(
@@ -455,7 +458,14 @@ export function IssuesActivity({
 
   function closeRunDialog() {
     setRunDialogIssue(null);
-    runDialogTriggerRef.current?.focus();
+    if (runDialogTriggerRef.current?.isConnected) {
+      runDialogTriggerRef.current.focus();
+      return;
+    }
+
+    if (editPageRunButtonRef.current?.isConnected) {
+      editPageRunButtonRef.current.focus();
+    }
   }
 
   async function handleRunStarted(result: {
@@ -504,6 +514,7 @@ export function IssuesActivity({
     dialogMode === "edit" && selectedIssue?.status === "completed";
   const canOpenLinkedSession =
     hasLinkedSession && Boolean(onOpenAgentsActivity);
+  const isEditablePageOpen = Boolean(dialogMode && isBacklogDialog);
 
   async function handleSelectAttachment() {
     const selectedPath = await open({
@@ -873,44 +884,63 @@ export function IssuesActivity({
   }
 
   return (
-    <main className="activity-surface activity-surface--issues">
-      <div className="issues-header">
-        <h2>{messages.issues.title}</h2>
-      </div>
-      {errorMessage ? (
-        <p className="issues-status" role="status" aria-label="Issues status">
-          {errorMessage}
-        </p>
+    <main
+      className={`activity-surface activity-surface--issues${
+        isEditablePageOpen ? " activity-surface--issues-form" : ""
+      }`}
+    >
+      {!isEditablePageOpen ? (
+        <>
+          <div className="issues-header">
+            <h2>{messages.issues.title}</h2>
+          </div>
+          {errorMessage ? (
+            <p
+              className="issues-status"
+              role="status"
+              aria-label="Issues status"
+            >
+              {errorMessage}
+            </p>
+          ) : null}
+          <IssuesKanban
+            isLoading={isLoading}
+            lanes={lanes}
+            selectedIssueId={selectedIssueId}
+            cardRefs={cardRefs}
+            createButtonRef={createButtonRef}
+            canRunIssue={canRunIssueFor}
+            formatTimestamp={formatLocalTimestamp}
+            toDescriptionExcerpt={markdownToExcerpt}
+            onCreateIssue={openCreateDialog}
+            onOpenIssue={openIssueDialog}
+            onRunIssue={openRunDialog}
+          />
+        </>
       ) : null}
-      <IssuesKanban
-        isLoading={isLoading}
-        lanes={lanes}
-        selectedIssueId={selectedIssueId}
-        cardRefs={cardRefs}
-        createButtonRef={createButtonRef}
-        canRunIssue={canRunIssueFor}
-        formatTimestamp={formatLocalTimestamp}
-        toDescriptionExcerpt={markdownToExcerpt}
-        onCreateIssue={openCreateDialog}
-        onOpenIssue={openIssueDialog}
-        onRunIssue={openRunDialog}
-      />
 
       {dialogMode && isBacklogDialog ? (
         <IssueEditablePage
           mode={dialogMode}
           form={form}
           selectedIssue={selectedIssue}
+          canRunIssue={selectedIssue ? canRunIssueFor(selectedIssue) : false}
           isSaving={isSaving}
           errorMessage={dialogErrorMessage}
           availableLabels={currentAvailableLabels}
           isLoadingLabels={isLoadingLabels}
           labelsErrorMessage={currentLabelsErrorMessage}
           titleInputRef={titleInputRef}
+          runButtonRef={editPageRunButtonRef}
           onCancel={closeDialog}
           onSubmit={handleSubmit}
           onFormChange={setForm}
           onSelectAttachment={() => void handleSelectAttachment()}
+          onRunIssue={() => {
+            if (selectedIssue) {
+              openRunDialog(selectedIssue, null);
+            }
+          }}
           onPreviewAttachment={(attachment) =>
             void handlePreviewAttachment(attachment)
           }
