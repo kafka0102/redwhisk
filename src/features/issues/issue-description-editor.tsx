@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   Download,
   Eye,
@@ -31,6 +31,7 @@ interface IssueDescriptionEditorProps {
   onChange: (value: string) => void;
   placeholder: string;
   ariaLabel: string;
+  footer?: ReactNode;
   attachments?: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
   onPreviewAttachment?: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
@@ -52,6 +53,7 @@ export function IssueDescriptionEditor({
   onChange,
   placeholder,
   ariaLabel,
+  footer,
   attachments = [],
   onPreviewAttachment,
   onDownloadAttachment,
@@ -168,6 +170,9 @@ export function IssueDescriptionEditor({
             </div>
           ))}
         </div>
+      ) : null}
+      {footer ? (
+        <div className="issue-description-editor__footer">{footer}</div>
       ) : null}
     </div>
   );

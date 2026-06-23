@@ -3,8 +3,10 @@ import {
   ChevronDown,
   Download,
   Eye,
+  FilePlus2,
+  Play,
+  Tag,
   Paperclip,
-  Plus,
   Trash2,
 } from "lucide-react";
 import {
@@ -16,6 +18,14 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent as UiDialogContent,
+  DialogDescription as UiDialogDescription,
+  DialogFooter as UiDialogFooter,
+  DialogHeader as UiDialogHeader,
+  DialogTitle as UiDialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 import type {
@@ -37,11 +47,14 @@ interface IssueEditablePageProps {
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
+  runButtonRef: RefObject<HTMLButtonElement | null>;
   selectedIssue: IssueRecord | null;
+  canRunIssue: boolean;
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (form: IssueFormState) => void;
   onSelectAttachment: () => void;
+  onRunIssue: () => void;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -85,11 +98,14 @@ export function IssueEditablePage({
   isLoadingLabels,
   labelsErrorMessage,
   titleInputRef,
+  runButtonRef,
   selectedIssue,
+  canRunIssue,
   onCancel,
   onSubmit,
   onFormChange,
   onSelectAttachment,
+  onRunIssue,
   onPreviewAttachment,
   onDownloadAttachment,
   onRemoveAttachment,
@@ -98,102 +114,128 @@ export function IssueEditablePage({
 }: IssueEditablePageProps) {
   const pageTitle = mode === "create" ? "New Issue" : "Edit Issue";
   const canDelete = mode === "edit" && selectedIssue?.status === "backlog";
-  const deleteConfirmMessage = "Are you sure to delete this issue?";
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   return (
-    <form
-      aria-label={pageTitle}
-      className="issue-page issue-page--editable"
-      onSubmit={onSubmit}
-    >
-      <header className="issue-page__header">
-        <h3>{pageTitle}</h3>
-        <div className="issue-page__header-actions">
-          {canDelete ? (
-            <button
-              className="issue-dialog__delete-link"
+    <>
+      <form
+        aria-label={pageTitle}
+        className="issue-page issue-page--editable issue-page--fullscreen"
+        onSubmit={onSubmit}
+      >
+        <header className="issue-page__header issue-page__header--fullscreen">
+          <div className="issue-page__header-inner">
+            <h3>{pageTitle}</h3>
+            <div className="issue-page__header-actions">
+              {mode === "edit" && selectedIssue && canRunIssue ? (
+                <Button
+                  ref={runButtonRef}
+                  aria-label={`Run ${selectedIssue.title}`}
+                  className="issues-button"
+                  disabled={isSaving}
+                  type="button"
+                  variant="outline"
+                  onClick={onRunIssue}
+                >
+                  <Play aria-hidden="true" size={14} strokeWidth={1.9} />
+                  <span>Run</span>
+                </Button>
+              ) : null}
+              <Button
+                className="issues-button"
+                disabled={isSaving}
+                type="button"
+                variant="secondary"
+                onClick={onCancel}
+              >
+                返回
+              </Button>
+              {canDelete ? (
+                <Button
+                  className="issue-page__delete-button"
+                  disabled={isSaving}
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                >
+                  删除
+                </Button>
+              ) : null}
+              <Button
+                className="issues-button issues-button--primary"
+                disabled={isSaving}
+                type="submit"
+              >
+                {mode === "create" ? "创建 Issue" : "保存"}
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <div className="issue-page__body issue-page__body--fullscreen">
+          <div className="issue-page__content-shell">
+            <IssueEditableFields
+              availableLabels={availableLabels}
+              form={form}
+              isLoadingLabels={isLoadingLabels}
+              isSaving={isSaving}
+              labelsErrorMessage={labelsErrorMessage}
+              titleInputRef={titleInputRef}
+              onFormChange={onFormChange}
+              onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
+              onSelectAttachment={onSelectAttachment}
+              onDownloadAttachment={onDownloadAttachment}
+              onPreviewAttachment={onPreviewAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+            />
+            <p
+              className="issue-dialog__status issue-page__status issue-page__status--fullscreen"
+              role="status"
+              aria-label="Dialog status"
+            >
+              {errorMessage}
+            </p>
+          </div>
+        </div>
+      </form>
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(nextOpen) => setIsDeleteDialogOpen(nextOpen)}
+      >
+        <UiDialogContent
+          className="issue-delete-dialog"
+          showCloseButton={false}
+        >
+          <UiDialogHeader>
+            <UiDialogTitle>确认删除 Issue</UiDialogTitle>
+            <UiDialogDescription>
+              删除后无法恢复。确认删除当前 Issue 吗？
+            </UiDialogDescription>
+          </UiDialogHeader>
+          <UiDialogFooter className="issue-delete-dialog__footer">
+            <Button
               disabled={isSaving}
               type="button"
+              variant="secondary"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              返回
+            </Button>
+            <Button
+              disabled={isSaving}
+              type="button"
+              variant="destructive"
               onClick={() => {
-                const isConfirmed = window.confirm(deleteConfirmMessage);
-                if (isConfirmed) {
-                  onDeleteIssue();
-                }
+                setIsDeleteDialogOpen(false);
+                onDeleteIssue();
               }}
             >
               删除
-            </button>
-          ) : null}
-          <Button
-            className="issues-button"
-            disabled={isSaving}
-            type="button"
-            variant="secondary"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            className="issues-button issues-button--primary"
-            disabled={isSaving}
-            type="submit"
-          >
-            {mode === "create" ? "Create Issue" : "Save"}
-          </Button>
-        </div>
-      </header>
-
-      <div className="issue-page__body">
-        <IssueEditableFields
-          form={form}
-          titleInputRef={titleInputRef}
-          onFormChange={onFormChange}
-          onDownloadAttachment={onDownloadAttachment}
-          onPreviewAttachment={onPreviewAttachment}
-          onRemoveAttachment={onRemoveAttachment}
-        />
-        <aside className="issue-page__side" aria-label="Issue metadata">
-          <IssueLabelsPicker
-            availableLabels={availableLabels}
-            isLoading={isLoadingLabels}
-            labelIds={form.labelIds}
-            labelsErrorMessage={labelsErrorMessage}
-            onChange={(labelIds) =>
-              onFormChange({
-                ...form,
-                labelIds,
-              })
-            }
-            onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
-          />
-          <div className="issue-page__divider" aria-hidden="true" />
-          <section className="issue-dialog__panel">
-            <div className="issue-page__section-header">
-              <h4>附件</h4>
-              <Button
-                aria-label="Attach file"
-                className="issues-button issues-button--icon issue-dialog__attach-button"
-                disabled={isSaving}
-                type="button"
-                variant="ghost"
-                onClick={onSelectAttachment}
-              >
-                <Plus aria-hidden="true" size={14} strokeWidth={2} />
-              </Button>
-            </div>
-            <p>{form.attachments.length} 个附件</p>
-          </section>
-        </aside>
-      </div>
-
-      <p
-        className="issue-dialog__status issue-page__status"
-        role="status"
-        aria-label="Dialog status"
-      >
-        {errorMessage}
-      </p>
-    </form>
+            </Button>
+          </UiDialogFooter>
+        </UiDialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -283,16 +325,28 @@ export function IssueReadOnlyPage({
 }
 
 function IssueEditableFields({
+  availableLabels,
   form,
+  isLoadingLabels,
+  isSaving,
+  labelsErrorMessage,
   titleInputRef,
   onFormChange,
+  onOpenProjectLabelsSettings,
+  onSelectAttachment,
   onDownloadAttachment,
   onPreviewAttachment,
   onRemoveAttachment,
 }: {
+  availableLabels: IssueLabelRecord[];
   form: IssueFormState;
+  isLoadingLabels: boolean;
+  isSaving: boolean;
+  labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
   onFormChange: (form: IssueFormState) => void;
+  onOpenProjectLabelsSettings: () => void;
+  onSelectAttachment: () => void;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -304,8 +358,8 @@ function IssueEditableFields({
   ) => void;
 }) {
   return (
-    <div className="issue-dialog__editor issue-dialog__editor--editable issue-page__main">
-      <div className="issue-field">
+    <div className="issue-page__main issue-page__main--fullscreen">
+      <div className="issue-field issue-field--title">
         <Input
           ref={titleInputRef}
           id="issue-title"
@@ -324,9 +378,37 @@ function IssueEditableFields({
           }
         />
       </div>
-      <div className="issue-field issue-field--grow">
+      <div className="issue-field issue-field--grow issue-field--editor">
         <IssueDescriptionEditor
           ariaLabel="Description"
+          footer={
+            <div className="issue-editor-toolbar">
+              <Button
+                aria-label="Attach file"
+                className="issue-editor-toolbar__icon-button"
+                disabled={isSaving}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+                onClick={onSelectAttachment}
+              >
+                <FilePlus2 aria-hidden="true" size={15} strokeWidth={1.9} />
+              </Button>
+              <IssueLabelsPicker
+                availableLabels={availableLabels}
+                isLoading={isLoadingLabels}
+                labelIds={form.labelIds}
+                labelsErrorMessage={labelsErrorMessage}
+                onChange={(labelIds) =>
+                  onFormChange({
+                    ...form,
+                    labelIds,
+                  })
+                }
+                onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
+              />
+            </div>
+          }
           placeholder="Describe the task"
           value={form.description}
           attachments={form.attachments}
@@ -361,9 +443,7 @@ function IssueLabelsPicker({
   onOpenProjectLabelsSettings: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLDivElement | null>(null);
   const selectedLabels = labelIds
     .map((labelId) =>
       availableLabels.find((labelOption) => labelOption.id === labelId),
@@ -372,15 +452,9 @@ function IssueLabelsPicker({
   const hasAvailableLabels = availableLabels.length > 0;
 
   useEffect(() => {
-    if (!isOpen || !triggerRef.current) {
+    if (!isOpen) {
       return;
     }
-
-    const rect = triggerRef.current.getBoundingClientRect();
-    setMenuPosition({
-      top: rect.bottom + window.scrollY + 4,
-      left: rect.left + window.scrollX,
-    });
 
     function handlePointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -406,9 +480,21 @@ function IssueLabelsPicker({
   }
 
   return (
-    <div className="issue-field issue-field--labels" ref={rootRef}>
-      <span className="issue-field__label">Labels</span>
-      <div className="issue-label-picker" ref={triggerRef}>
+    <div
+      className="issue-label-picker issue-label-picker--toolbar"
+      ref={rootRef}
+    >
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label="添加标签"
+        className="issue-editor-toolbar__icon-button"
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <Tag aria-hidden="true" size={15} strokeWidth={1.9} />
+      </button>
+      <div className="issue-label-picker__inline">
         <div className="issue-label-picker__trigger-area">
           <div className="issue-label-picker__selected">
             {selectedLabels.map((label) => (
@@ -421,33 +507,11 @@ function IssueLabelsPicker({
               </span>
             ))}
           </div>
-          <span
-            aria-expanded={isOpen}
-            aria-haspopup="listbox"
-            aria-label="添加标签"
-            className="issue-label-picker__add-icon"
-            role="button"
-            tabIndex={0}
-            onClick={() => setIsOpen((current) => !current)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                setIsOpen((current) => !current);
-              }
-            }}
-          >
-            <Plus aria-hidden="true" size={14} strokeWidth={2} />
-          </span>
         </div>
         {isOpen ? (
           <div
-            className="issue-label-picker__menu issue-label-picker__menu--fixed"
+            className="issue-label-picker__menu issue-label-picker__menu--dropdown"
             role="listbox"
-            style={{
-              position: "fixed",
-              top: menuPosition.top,
-              left: menuPosition.left,
-            }}
           >
             {labelsErrorMessage ? (
               <p className="issue-label-picker__state">{labelsErrorMessage}</p>

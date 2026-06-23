@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
@@ -20,6 +21,7 @@ import {
   validateProjectRepoPath,
   type ProjectListResponse,
 } from "../features/project/project-commands";
+import { resetIssuePageStateCacheForTests } from "../features/issues/issues-activity-cache";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -57,21 +59,26 @@ vi.mock("../features/settings/settings-commands", () => ({
 vi.mock("../features/issues/issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     ariaLabel,
+    footer,
     onChange,
     placeholder,
     value,
   }: {
     ariaLabel: string;
+    footer?: ReactNode;
     onChange: (value: string) => void;
     placeholder: string;
     value: string;
   }) => (
-    <textarea
-      aria-label={ariaLabel}
-      placeholder={placeholder}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+    <div>
+      <textarea
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {footer}
+    </div>
   ),
 }));
 
@@ -97,6 +104,7 @@ describe("App project entry", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();
+    resetIssuePageStateCacheForTests();
     openDialogMock.mockReset();
     createProjectMock.mockReset();
     initializeLocalDataMock.mockReset();
@@ -548,12 +556,10 @@ describe("App project entry", () => {
     await user.click(await screen.findByRole("button", { name: "New Issue" }));
     expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "添加标签" }),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.type(screen.getByLabelText("Description"), "small task shape");
-    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -598,10 +604,8 @@ describe("App project entry", () => {
       screen.getByLabelText("Description"),
       "Updated description",
     );
-    expect(
-      screen.getByRole("button", { name: "添加标签" }),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
       projectId: 1,
