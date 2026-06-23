@@ -4,7 +4,6 @@ import {
   Download,
   Eye,
   FilePlus2,
-  Play,
   Tag,
   Paperclip,
   Trash2,
@@ -37,6 +36,7 @@ import type {
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { IssueDescriptionEditor } from "./issue-description-editor";
 import type { DialogMode, IssueFormState } from "./issue-activity-types";
+import { IssueSurfaceHeader } from "./issue-surface-header";
 
 interface IssueEditablePageProps {
   mode: DialogMode;
@@ -47,14 +47,14 @@ interface IssueEditablePageProps {
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
-  runButtonRef: RefObject<HTMLButtonElement | null>;
+  runButtonRef?: RefObject<HTMLButtonElement | null>;
   selectedIssue: IssueRecord | null;
-  canRunIssue: boolean;
+  canRunIssue?: boolean;
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (form: IssueFormState) => void;
   onSelectAttachment: () => void;
-  onRunIssue: () => void;
+  onRunIssue?: () => void;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -98,14 +98,11 @@ export function IssueEditablePage({
   isLoadingLabels,
   labelsErrorMessage,
   titleInputRef,
-  runButtonRef,
   selectedIssue,
-  canRunIssue,
   onCancel,
   onSubmit,
   onFormChange,
   onSelectAttachment,
-  onRunIssue,
   onPreviewAttachment,
   onDownloadAttachment,
   onRemoveAttachment,
@@ -123,24 +120,12 @@ export function IssueEditablePage({
         className="issue-page issue-page--editable issue-page--fullscreen"
         onSubmit={onSubmit}
       >
-        <header className="issue-page__header issue-page__header--fullscreen">
-          <div className="issue-page__header-inner">
-            <h3>{pageTitle}</h3>
-            <div className="issue-page__header-actions">
-              {mode === "edit" && selectedIssue && canRunIssue ? (
-                <Button
-                  ref={runButtonRef}
-                  aria-label={`Run ${selectedIssue.title}`}
-                  className="issues-button"
-                  disabled={isSaving}
-                  type="button"
-                  variant="outline"
-                  onClick={onRunIssue}
-                >
-                  <Play aria-hidden="true" size={14} strokeWidth={1.9} />
-                  <span>Run</span>
-                </Button>
-              ) : null}
+        <IssueSurfaceHeader
+          title={pageTitle}
+          titleLevel={2}
+          variant="fullscreen"
+          actions={
+            <>
               <Button
                 className="issues-button"
                 disabled={isSaving}
@@ -150,9 +135,16 @@ export function IssueEditablePage({
               >
                 返回
               </Button>
+              <Button
+                className="issues-button issues-button--primary issue-page__commit-button"
+                disabled={isSaving}
+                type="submit"
+              >
+                {mode === "create" ? "创建 Issue" : "保存"}
+              </Button>
               {canDelete ? (
                 <Button
-                  className="issue-page__delete-button"
+                  className="issue-page__commit-button issue-page__delete-button"
                   disabled={isSaving}
                   type="button"
                   variant="destructive"
@@ -161,16 +153,9 @@ export function IssueEditablePage({
                   删除
                 </Button>
               ) : null}
-              <Button
-                className="issues-button issues-button--primary"
-                disabled={isSaving}
-                type="submit"
-              >
-                {mode === "create" ? "创建 Issue" : "保存"}
-              </Button>
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         <div className="issue-page__body issue-page__body--fullscreen">
           <div className="issue-page__content-shell">
@@ -262,25 +247,27 @@ export function IssueReadOnlyPage({
       aria-label="Issue Detail"
       className="issue-page issue-page--readonly"
     >
-      <header className="issue-page__header">
-        <h3>{selectedIssue ? `Issue #${selectedIssue.id}` : "Issue Detail"}</h3>
-        <div className="issue-page__header-actions">
-          <Button
-            className="issues-button"
-            disabled={isSaving}
-            type="button"
-            variant="secondary"
-            onClick={onBack}
-          >
-            返回
-          </Button>
-          <StatusMenu
-            isSaving={isSaving}
-            selectedIssue={selectedIssue}
-            onAdvanceStatus={onAdvanceStatus}
-          />
-        </div>
-      </header>
+      <IssueSurfaceHeader
+        title={selectedIssue ? `Issue #${selectedIssue.id}` : "Issue Detail"}
+        actions={
+          <>
+            <Button
+              className="issues-button"
+              disabled={isSaving}
+              type="button"
+              variant="secondary"
+              onClick={onBack}
+            >
+              返回
+            </Button>
+            <StatusMenu
+              isSaving={isSaving}
+              selectedIssue={selectedIssue}
+              onAdvanceStatus={onAdvanceStatus}
+            />
+          </>
+        }
+      />
 
       <div className="issue-page__body">
         <IssueReadOnlyDetails form={form} />
@@ -381,34 +368,6 @@ function IssueEditableFields({
       <div className="issue-field issue-field--grow issue-field--editor">
         <IssueDescriptionEditor
           ariaLabel="Description"
-          footer={
-            <div className="issue-editor-toolbar">
-              <Button
-                aria-label="Attach file"
-                className="issue-editor-toolbar__icon-button"
-                disabled={isSaving}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-                onClick={onSelectAttachment}
-              >
-                <FilePlus2 aria-hidden="true" size={15} strokeWidth={1.9} />
-              </Button>
-              <IssueLabelsPicker
-                availableLabels={availableLabels}
-                isLoading={isLoadingLabels}
-                labelIds={form.labelIds}
-                labelsErrorMessage={labelsErrorMessage}
-                onChange={(labelIds) =>
-                  onFormChange({
-                    ...form,
-                    labelIds,
-                  })
-                }
-                onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
-              />
-            </div>
-          }
           placeholder="Describe the task"
           value={form.description}
           attachments={form.attachments}
@@ -422,6 +381,34 @@ function IssueEditableFields({
           onPreviewAttachment={onPreviewAttachment}
           onRemoveAttachment={onRemoveAttachment}
         />
+        <div className="issue-editor-toolbar-shell">
+          <div className="issue-editor-toolbar">
+            <Button
+              aria-label="Attach file"
+              className="issue-editor-toolbar__icon-button"
+              disabled={isSaving}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+              onClick={onSelectAttachment}
+            >
+              <FilePlus2 aria-hidden="true" size={15} strokeWidth={1.9} />
+            </Button>
+            <IssueLabelsPicker
+              availableLabels={availableLabels}
+              isLoading={isLoadingLabels}
+              labelIds={form.labelIds}
+              labelsErrorMessage={labelsErrorMessage}
+              onChange={(labelIds) =>
+                onFormChange({
+                  ...form,
+                  labelIds,
+                })
+              }
+              onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

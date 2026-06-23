@@ -1012,19 +1012,54 @@ button:focus-visible {
   background: var(--color-surface-muted);
 }
 
-.issues-header {
+.issue-surface-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  grid-area: header;
   gap: 12px;
-  padding-bottom: 10px;
   border-bottom: 1px solid var(--color-border);
 }
 
-.issues-header h2 {
+.issue-surface-header--activity {
+  grid-area: header;
+  padding-bottom: 10px;
+}
+
+.issue-surface-header--fullscreen {
+  padding: 18px 18px 10px;
+  background: var(--color-surface);
+}
+
+.issue-surface-header--card {
+  min-height: var(--activity-header-height);
+  padding: 12px 16px;
+  background: var(--color-surface);
+}
+
+.issue-surface-header__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-surface-header--activity .issue-surface-header__title,
+.issue-surface-header--fullscreen .issue-surface-header__title,
+.issue-surface-header--card .issue-surface-header__title {
   font-size: 16px;
   line-height: 1.25;
+}
+
+.issue-surface-header__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .issues-kanban {
@@ -1547,16 +1582,6 @@ button:focus-visible {
 
 .issue-description-editor__content p {
   margin: 0;
-}
-
-.issue-description-editor__footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 8px 10px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
 }
 
 .issue-description-editor__attachments {
@@ -3373,52 +3398,6 @@ button:focus-visible {
   border-radius: 0;
 }
 
-.issue-page__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: var(--activity-header-height);
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
-.issue-page__header--fullscreen {
-  min-height: var(--activity-header-height);
-  padding: 0;
-}
-
-.issue-page__header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  min-height: inherit;
-  padding: 0 5%;
-}
-
-.issue-page__header h3 {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.issue-page__header-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .issue-page__body {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(260px, 340px);
@@ -3430,7 +3409,7 @@ button:focus-visible {
 
 .issue-page__body--fullscreen {
   display: block;
-  padding: 22px 5% 18px;
+  padding: 22px 10% 18px;
   overflow: auto;
 }
 
@@ -3824,8 +3803,12 @@ button:focus-visible {
   color: #ff8787;
 }
 
+.issue-page__commit-button {
+  justify-content: center;
+  min-width: 88px;
+}
+
 .issue-page__delete-button {
-  min-width: 72px;
   border-color: var(--color-danger);
   background: var(--color-danger);
   color: #ffffff;
@@ -4164,7 +4147,8 @@ button:focus-visible {
     padding-left: 86px;
   }
 
-  .issues-header {
+  .issue-surface-header--activity,
+  .issue-surface-header--fullscreen {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -4262,7 +4246,7 @@ button:focus-visible {
     overflow: auto;
   }
 
-  .issue-page__header {
+  .issue-surface-header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -4375,6 +4359,12 @@ button:focus-visible {
   width: 100%;
 }
 
+.issue-editor-toolbar-shell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+
 .issue-editor-toolbar__icon-button {
   display: inline-flex;
   align-items: center;
@@ -4397,13 +4387,16 @@ button:focus-visible {
 }
 
 .issue-field--title input {
-  height: 48px;
+  height: 44px;
   padding: 0 14px;
   font-size: 18px;
   font-weight: 600;
 }
 
 .issue-field--editor {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
   min-height: 0;
 }
 
