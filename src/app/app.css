@@ -369,8 +369,13 @@ button:focus-visible {
   height: 100%;
   min-height: 0;
   gap: 12px;
-  padding: 18px 18px 8px;
+  padding: 18px 0 8px;
   overflow: hidden;
+}
+
+.activity-surface--issues .issues-status,
+.activity-surface--issues .issues-kanban {
+  padding: 0 18px;
 }
 
 .activity-surface--issues-form {
@@ -1022,11 +1027,12 @@ button:focus-visible {
 
 .issue-surface-header--activity {
   grid-area: header;
-  padding-bottom: 10px;
+  min-height: var(--activity-header-height);
+  padding: 0 18px 10px;
 }
 
 .issue-surface-header--fullscreen {
-  padding: 18px 18px 10px;
+  padding: 12px 10% 10px;
   background: var(--color-surface);
 }
 
@@ -3803,11 +3809,6 @@ button:focus-visible {
   color: #ff8787;
 }
 
-.issue-page__commit-button {
-  justify-content: center;
-  min-width: 88px;
-}
-
 .issue-page__delete-button {
   border-color: var(--color-danger);
   background: var(--color-danger);
@@ -4339,11 +4340,11 @@ button:focus-visible {
 }
 
 .issue-label-picker__menu--dropdown {
-  top: 100%;
-  bottom: auto;
+  top: auto;
+  bottom: 100%;
   left: 0;
   right: auto;
-  margin-top: 4px;
+  margin-bottom: 4px;
   z-index: 50;
 }
 
