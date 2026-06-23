@@ -28,6 +28,7 @@ import {
   type IssueFormState,
 } from "./issue-activity-types";
 import { IssueEditablePage, IssueReadOnlyPage } from "./issue-form-dialog";
+import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
@@ -105,7 +106,6 @@ export function IssuesActivity({
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
-  const editPageRunButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -460,11 +460,6 @@ export function IssuesActivity({
     setRunDialogIssue(null);
     if (runDialogTriggerRef.current?.isConnected) {
       runDialogTriggerRef.current.focus();
-      return;
-    }
-
-    if (editPageRunButtonRef.current?.isConnected) {
-      editPageRunButtonRef.current.focus();
     }
   }
 
@@ -891,9 +886,11 @@ export function IssuesActivity({
     >
       {!isEditablePageOpen ? (
         <>
-          <div className="issues-header">
-            <h2>{messages.issues.title}</h2>
-          </div>
+          <IssueSurfaceHeader
+            title={messages.issues.title}
+            titleLevel={2}
+            variant="activity"
+          />
           {errorMessage ? (
             <p
               className="issues-status"
@@ -931,16 +928,10 @@ export function IssuesActivity({
           isLoadingLabels={isLoadingLabels}
           labelsErrorMessage={currentLabelsErrorMessage}
           titleInputRef={titleInputRef}
-          runButtonRef={editPageRunButtonRef}
           onCancel={closeDialog}
           onSubmit={handleSubmit}
           onFormChange={setForm}
           onSelectAttachment={() => void handleSelectAttachment()}
-          onRunIssue={() => {
-            if (selectedIssue) {
-              openRunDialog(selectedIssue, null);
-            }
-          }}
           onPreviewAttachment={(attachment) =>
             void handlePreviewAttachment(attachment)
           }

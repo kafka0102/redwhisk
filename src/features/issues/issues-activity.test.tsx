@@ -539,7 +539,7 @@ describe("IssuesActivity", () => {
       within(page).queryByText(formatTestTimestamp(existingIssue.updatedAt)),
     ).not.toBeInTheDocument();
     expect(
-      within(page).queryByRole("button", { name: "Run" }),
+      within(page).queryByRole("button", { name: /Run/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -614,6 +614,8 @@ describe("IssuesActivity", () => {
     const page = screen.getByRole("form", { name: "Edit Issue" });
     expect(within(page).getByLabelText("Title")).toHaveFocus();
 
+    await user.tab({ shift: true });
+    expect(within(page).getByRole("button", { name: "删除" })).toHaveFocus();
     await user.tab({ shift: true });
     expect(within(page).getByRole("button", { name: "保存" })).toHaveFocus();
   });
@@ -1112,20 +1114,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Agent profile")).toHaveFocus();
     expect(
       within(dialog).getByRole("heading", { name: "Run Issue #20" }),
@@ -1222,19 +1211,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     const promptField = within(dialog).getByLabelText(
       "Final prompt",
     ) as HTMLTextAreaElement;
@@ -1274,14 +1251,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    let dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    let { dialog } = await openExistingIssueRunDialog(user);
     await selectShadcnOption(
       user,
       within(dialog),
@@ -1298,10 +1268,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Close run dialog" }),
     );
 
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-    dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    ({ dialog } = await openExistingIssueRunDialog(user));
     expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
       "Worktree",
     );
@@ -1344,14 +1311,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
       "Worktree",
     );
@@ -1415,14 +1375,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
       "Worktree",
     );
@@ -1467,14 +1420,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
       "Current branch",
     );
@@ -1508,14 +1454,7 @@ describe("IssuesActivity", () => {
       worktreeSetupCommand: "pnpm install",
     });
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(
       within(dialog).queryByLabelText("Worktree setup after creation"),
     ).not.toBeInTheDocument();
@@ -1554,14 +1493,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     const startButton = within(dialog).getByRole("button", { name: "Start" });
 
     await user.click(startButton);
@@ -1603,19 +1535,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity({ onOpenAgentsActivity });
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
 
     await waitFor(() =>
@@ -1625,9 +1545,6 @@ describe("IssuesActivity", () => {
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
-    expect(
-      screen.getByRole("button", { name: "Open linked session #301" }),
-    ).toBeEnabled();
   });
 
   it("falls back to the refreshed linked session when start succeeds without a session id", async () => {
@@ -1659,19 +1576,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity({ onOpenAgentsActivity });
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
 
     await waitFor(() =>
@@ -1706,19 +1611,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
       "Project Claude (Project)",
     );
@@ -1757,19 +1650,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
       "Global Codex (Global)",
     );
@@ -1788,14 +1669,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(
       within(dialog).queryByLabelText("Workflow skill"),
     ).not.toBeInTheDocument();
@@ -1814,14 +1688,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     await selectShadcnOption(user, within(dialog), "Workflow skill", "None");
 
     expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
@@ -1849,14 +1716,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    let dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    let { dialog } = await openExistingIssueRunDialog(user);
     await selectShadcnOption(
       user,
       within(dialog),
@@ -1867,10 +1727,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Close run dialog" }),
     );
 
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-    dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    ({ dialog } = await openExistingIssueRunDialog(user));
     expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "review-skill",
     );
@@ -1896,14 +1753,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "skill-a",
     );
@@ -1922,20 +1772,8 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-
-    const runButton = screen.getByRole("button", {
-      name: "Run Existing issue",
-    });
-    await user.click(runButton);
-    const runDialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog: runDialog, runButton } =
+      await openExistingIssueRunDialog(user);
     expect(
       within(runDialog).queryByRole("button", { name: "Cancel" }),
     ).not.toBeInTheDocument();
@@ -1967,19 +1805,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Run Issue #20" });
+    const { dialog } = await openExistingIssueRunDialog(user);
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
 
     expect(
@@ -2021,17 +1847,7 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity({ onOpenAgentsActivity });
 
-    await user.click(
-      await screen.findByRole("button", { name: "Existing issue" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Run Existing issue" }),
-      ).toBeEnabled(),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Run Existing issue" }),
-    );
+    await openExistingIssueRunDialog(user);
     await user.click(
       within(screen.getByRole("dialog", { name: "Run Issue #20" })).getByRole(
         "button",
@@ -2045,9 +1861,6 @@ describe("IssuesActivity", () => {
       ).not.toBeInTheDocument(),
     );
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
-    expect(
-      screen.getByRole("button", { name: "Open linked session #301" }),
-    ).toBeEnabled();
   });
 
   it("shows a factual prompt when no agent profiles are available", async () => {
@@ -2062,7 +1875,7 @@ describe("IssuesActivity", () => {
 
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
     expect(
-      within(dialog).queryByRole("button", { name: "Run" }),
+      within(dialog).queryByRole("button", { name: /Run/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -2140,7 +1953,7 @@ describe("IssuesActivity", () => {
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: "Run" }),
+      within(dialog).queryByRole("button", { name: /Run/i }),
     ).not.toBeInTheDocument();
     expect(within(dialog).queryByText("#301")).not.toBeInTheDocument();
   });
@@ -2732,6 +2545,21 @@ function renderIssuesActivity(
       />
     </I18nProvider>,
   );
+}
+
+async function openExistingIssueRunDialog(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  const runButton = await screen.findByRole("button", {
+    name: "Run Existing issue",
+  });
+  await waitFor(() => expect(runButton).toBeEnabled());
+  await user.click(runButton);
+
+  return {
+    dialog: screen.getByRole("dialog", { name: "Run Issue #20" }),
+    runButton,
+  };
 }
 
 function formatTestTimestamp(epochMilliseconds: number): string {
