@@ -3,7 +3,6 @@ import {
   ChevronDown,
   Download,
   Eye,
-  FilePlus2,
   Tag,
   Paperclip,
   Trash2,
@@ -136,7 +135,7 @@ export function IssueEditablePage({
                 返回
               </Button>
               <Button
-                className="issues-button issues-button--primary issue-page__commit-button"
+                className="issues-button issues-button--primary"
                 disabled={isSaving}
                 type="submit"
               >
@@ -144,7 +143,7 @@ export function IssueEditablePage({
               </Button>
               {canDelete ? (
                 <Button
-                  className="issue-page__commit-button issue-page__delete-button"
+                  className="issues-button issue-page__delete-button"
                   disabled={isSaving}
                   type="button"
                   variant="destructive"
@@ -392,7 +391,7 @@ function IssueEditableFields({
               variant="ghost"
               onClick={onSelectAttachment}
             >
-              <FilePlus2 aria-hidden="true" size={15} strokeWidth={1.9} />
+              <Paperclip aria-hidden="true" size={16} strokeWidth={1.9} />
             </Button>
             <IssueLabelsPicker
               availableLabels={availableLabels}
