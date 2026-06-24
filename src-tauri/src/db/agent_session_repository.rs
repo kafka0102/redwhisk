@@ -137,6 +137,25 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    pub fn prune_broken_structured_standalone_sessions(
+        &self,
+        project_id: i64,
+        deleted_at: i64,
+    ) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET del = 1,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE project_id = ?1
+               AND issue_id IS NULL
+               AND del = 0
+               AND status IN ('stopped', 'crashed', 'closed')
+               AND log_path LIKE '%structured-project-%'
+               AND COALESCE(TRIM(codex_session_id), '') = ''",
+            params![project_id, deleted_at],
+        )
+    }
+
     pub fn list_running_by_project_id(
         &self,
         project_id: i64,

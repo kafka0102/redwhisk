@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use redwhisk_lib::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use redwhisk_lib::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
@@ -20,7 +21,7 @@ use redwhisk_lib::types::agent_session::{
     AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
     RestoreAgentSessionTerminalInput, ResumeStructuredAgentSessionInput,
     SetAgentSessionAttentionInput, StartAgentSessionInput, StartStandaloneAgentSessionInput,
-    WorkspaceMode,
+    StartStructuredAgentSessionInput, WorkspaceMode,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
@@ -709,6 +710,65 @@ fn start_standalone_agent_session_returns_start_failed_and_rolls_back_when_comma
             row.get::<_, i64>(0)
         })
         .expect("session event count");
+    assert_eq!(session_event_count, 0);
+}
+
+#[test]
+fn start_structured_agent_session_rolls_back_when_command_cannot_start() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "structured-standalone-fail-project");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        temp_dir
+            .path()
+            .join("missing-structured-command")
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let error = AgentSessionService::start_structured_agent_session_in_data_dir(
+        temp_dir.path(),
+        StartStructuredAgentSessionInput {
+            project_id,
+            title: Some("Scratch Session".to_string()),
+            agent_type: Some(AgentType::Codex),
+            agent_profile_id: Some(profile_id),
+            mode: None,
+            model: None,
+            effort: None,
+            resume_from_codex_session_id: None,
+        },
+        &registry,
+        &broadcaster,
+    )
+    .expect_err("structured standalone start should fail when command cannot start");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
+    assert_eq!(error.message, "Agent 会话调用失败。");
+
+    let session_count = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM agent_sessions WHERE del = 0",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("active agent session count");
+    assert_eq!(session_count, 0);
+
+    let session_event_count = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM session_events WHERE session_id IN (SELECT id FROM agent_sessions WHERE del = 0)",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("active session event count");
     assert_eq!(session_event_count, 0);
 }
 
@@ -2028,6 +2088,60 @@ fn set_session_attention_marks_running_session_and_records_manual_request_event(
     assert_eq!(payload["issueId"].as_i64(), Some(issue_id));
     assert_eq!(payload["attention"].as_str(), Some("requested"));
     assert_eq!(payload["trigger"].as_str(), Some("manual"));
+}
+
+#[test]
+fn list_agent_sessions_prunes_broken_structured_standalone_sessions() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-prune-project");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let broken_session_id = insert_standalone_agent_session_row(
+        &database.connection,
+        project_id,
+        profile_id,
+        AgentSessionStatus::Stopped,
+        AgentSessionAttention::None,
+        1_780_628_440_000,
+        Some(1_780_628_441_000),
+        "/tmp/structured-project-1-pid-123-1780628440000.jsonl",
+    );
+    let valid_session_id = insert_standalone_agent_session_row(
+        &database.connection,
+        project_id,
+        profile_id,
+        AgentSessionStatus::Stopped,
+        AgentSessionAttention::None,
+        1_780_628_442_000,
+        Some(1_780_628_443_000),
+        "/tmp/structured-project-1-pid-123-1780628442000.jsonl",
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET codex_session_id = 'thread-valid' WHERE id = ?1",
+            rusqlite::params![valid_session_id],
+        )
+        .expect("set valid session thread id");
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let response = service
+        .list_agent_sessions(project_id)
+        .expect("list sessions should succeed");
+
+    assert_eq!(response.sessions.len(), 1);
+    assert_eq!(response.sessions[0].session_id, valid_session_id);
+
+    let broken_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(broken_session_id)
+        .expect("find broken session");
+    assert!(broken_session.is_none());
 }
 
 #[test]
