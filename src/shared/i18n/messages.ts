@@ -73,12 +73,29 @@ export interface I18nMessages {
     deleteTerminal: (terminalName: string) => string;
   };
   issues: {
+    actionsLabel: string;
+    attachments: string;
+    back: string;
     backlog: string;
+    delete: string;
+    deleteConfirmMessage: string;
+    deleteConfirmTitle: string;
+    detailFallbackTitle: string;
+    detailRegionLabel: string;
+    detailTitle: (issueId: number) => string;
     done: string;
     inProgress: string;
+    labels: string;
     newIssue: string;
+    noLabels: string;
+    noSessionLinked: string;
+    openLinkedSession: (sessionId: number) => string;
+    openStatusOptions: string;
     review: string;
+    session: string;
+    statusLabel: string;
     title: string;
+    viewSummary: string;
   };
   agentsFeature: {
     done: string;
@@ -167,12 +184,29 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       deleteTerminal: (terminalName) => `Delete terminal "${terminalName}"`,
     },
     issues: {
+      actionsLabel: "Issue actions",
+      attachments: "Attachments",
+      back: "Back",
       backlog: "Backlog",
+      delete: "Delete",
+      deleteConfirmMessage: "Are you sure you want to delete this issue?",
+      deleteConfirmTitle: "Delete issue",
+      detailFallbackTitle: "Issue Detail",
+      detailRegionLabel: "Issue Detail",
+      detailTitle: (issueId) => `Issue #${issueId}`,
       done: "Done",
       inProgress: "In Progress",
+      labels: "Labels",
       newIssue: "New Issue",
+      noLabels: "No labels.",
+      noSessionLinked: "No session linked.",
+      openLinkedSession: (sessionId) => `Open linked session #${sessionId}`,
+      openStatusOptions: "Open status options",
       review: "Review",
+      session: "Session",
+      statusLabel: "Issue status",
       title: "Issues",
+      viewSummary: "View Summary",
     },
     agentsFeature: {
       done: "Done",
@@ -256,12 +290,29 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       deleteTerminal: (terminalName) => `删除终端「${terminalName}」`,
     },
     issues: {
+      actionsLabel: "Issue 操作",
+      attachments: "附件",
+      back: "返回",
       backlog: "待办",
+      delete: "删除",
+      deleteConfirmMessage: "删除后无法恢复。确认删除当前 Issue 吗？",
+      deleteConfirmTitle: "确认删除 Issue",
+      detailFallbackTitle: "Issue 详情",
+      detailRegionLabel: "Issue 详情",
+      detailTitle: (issueId) => `Issue #${issueId}`,
       done: "已完成",
       inProgress: "进行中",
+      labels: "Labels",
       newIssue: "新建议题",
+      noLabels: "暂无 labels。",
+      noSessionLinked: "暂无关联 Session。",
+      openLinkedSession: (sessionId) => `打开关联 Session #${sessionId}`,
+      openStatusOptions: "打开状态选项",
       review: "待验收",
+      session: "Session",
+      statusLabel: "Issue 状态",
       title: "Issues",
+      viewSummary: "查看总结",
     },
     agentsFeature: {
       done: "已完成",

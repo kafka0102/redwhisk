@@ -565,11 +565,12 @@ describe("IssuesActivity", () => {
     await user.click(await screen.findByRole("button", { name: issue.title }));
 
     const page = screen.getByRole("region", { name: "Issue Detail" });
+    expect(page).toHaveClass("issue-page--fullscreen");
     expect(
       screen.queryByRole("dialog", { name: "Issue Detail" }),
     ).not.toBeInTheDocument();
     expect(
-      within(page).getByRole("button", { name: "返回" }).querySelector("svg"),
+      within(page).getByRole("button", { name: "Back" }).querySelector("svg"),
     ).toBeNull();
     expect(within(page).getByText(issue.title)).toBeInTheDocument();
     expect(within(page).getByText(issue.description)).toBeInTheDocument();
@@ -2030,9 +2031,9 @@ describe("IssuesActivity", () => {
 
     expect(screen.getByRole("menuitem", { name: "Backlog" })).toBeDisabled();
     expect(
-      screen.getByRole("menuitem", { name: "In progress" }),
+      screen.getByRole("menuitem", { name: "In Progress" }),
     ).toBeDisabled();
-    expect(screen.getByRole("menuitem", { name: "In review" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Review" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Done" })).toBeEnabled();
 
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
@@ -2308,13 +2309,11 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await user.click(
-      within(dialog).getByRole("button", { name: "Delete issue" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     expect(
       screen.getByRole("dialog", {
-        name: "Are you sure to delete this issue?",
+        name: "Delete issue",
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete" }));
@@ -2407,20 +2406,18 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await user.click(
-      within(dialog).getByRole("button", { name: "Delete issue" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     expect(
       screen.getByRole("dialog", {
-        name: "Are you sure to delete this issue?",
+        name: "Delete issue",
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "取消" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", {
-          name: "Are you sure to delete this issue?",
+          name: "Delete issue",
         }),
       ).not.toBeInTheDocument(),
     );
