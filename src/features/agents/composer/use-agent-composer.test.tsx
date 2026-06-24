@@ -23,18 +23,26 @@ vi.mock("../agent-session-commands", () => ({
   sendAgentMessage: vi.fn(),
   cancelAgentTurn: vi.fn(),
   saveAgentAttachment: vi.fn(),
+  setAgentThinking: vi.fn(),
 }));
 
-const { sendAgentMessage, cancelAgentTurn, saveAgentAttachment } =
-  await import("../agent-session-commands");
+const {
+  sendAgentMessage,
+  cancelAgentTurn,
+  saveAgentAttachment,
+  setAgentThinking,
+} = await import("../agent-session-commands");
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
 const cancelAgentTurnMock = vi.mocked(cancelAgentTurn);
 const saveAgentAttachmentMock = vi.mocked(saveAgentAttachment);
+const setAgentThinkingMock = vi.mocked(setAgentThinking);
 
 interface ProbeProps {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
+  currentEffort?: string | null;
+  onBeforeSetEffort?: () => Promise<void>;
   onMessageSent?: (message: string) => void;
   onState: (state: UseAgentComposerResult) => void;
 }
@@ -43,6 +51,8 @@ function Probe({
   projectId,
   sessionId,
   turnStatus,
+  currentEffort,
+  onBeforeSetEffort,
   onMessageSent,
   onState,
 }: ProbeProps) {
@@ -50,6 +60,8 @@ function Probe({
     projectId,
     sessionId,
     turnStatus,
+    currentEffort,
+    onBeforeSetEffort,
     onMessageSent,
   });
   onState(state);
@@ -71,6 +83,8 @@ async function renderProbe(props: ProbeInput): Promise<{
       projectId={props.projectId}
       sessionId={props.sessionId}
       turnStatus={props.turnStatus}
+      currentEffort={props.currentEffort}
+      onBeforeSetEffort={props.onBeforeSetEffort}
       onMessageSent={props.onMessageSent}
       onState={captureState}
     />,
@@ -86,6 +100,8 @@ async function renderProbe(props: ProbeInput): Promise<{
           projectId={props.projectId}
           sessionId={props.sessionId}
           turnStatus={next.turnStatus ?? props.turnStatus}
+          currentEffort={props.currentEffort}
+          onBeforeSetEffort={props.onBeforeSetEffort}
           onMessageSent={props.onMessageSent}
           onState={captureState}
         />,
@@ -99,6 +115,7 @@ beforeEach(() => {
   dialogMocks.open.mockResolvedValue(null);
   sendAgentMessageMock.mockResolvedValue(undefined);
   cancelAgentTurnMock.mockResolvedValue(undefined);
+  setAgentThinkingMock.mockResolvedValue(undefined);
   saveAgentAttachmentMock.mockImplementation(
     async (input: { sourcePath: string; displayName: string }) => ({
       path: `/data/agent-attachments/1/${input.displayName}`,
@@ -371,5 +388,47 @@ describe("useAgentComposer", () => {
     await waitFor(() => {
       expect(getState()!.isSending).toBe(true);
     });
+  });
+
+  it("切换 Think 前执行恢复动作再设置 effort", async () => {
+    const onBeforeSetEffort = vi.fn().mockResolvedValue(undefined);
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "idle",
+      currentEffort: "medium",
+      onBeforeSetEffort,
+    });
+
+    await act(async () => {
+      await getState()!.handleSetEffort("high");
+    });
+
+    expect(onBeforeSetEffort).toHaveBeenCalledTimes(1);
+    expect(setAgentThinkingMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+      effort: "high",
+    });
+    expect(getState()!.effort).toBe("high");
+  });
+
+  it("Think 前置恢复失败时回滚 effort 且不设置后端", async () => {
+    const onBeforeSetEffort = vi.fn().mockRejectedValue(new Error("恢复失败"));
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "idle",
+      currentEffort: "medium",
+      onBeforeSetEffort,
+    });
+
+    await act(async () => {
+      await getState()!.handleSetEffort("high");
+    });
+
+    expect(setAgentThinkingMock).not.toHaveBeenCalled();
+    expect(getState()!.effort).toBe("medium");
+    expect(getState()!.submitError).toBe("恢复失败");
   });
 });

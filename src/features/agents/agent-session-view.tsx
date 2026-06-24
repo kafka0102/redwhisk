@@ -86,6 +86,7 @@ export function AgentSessionView({
         }
         onBeforeSend={resumeBeforeSend}
         onBeforeSelectModel={resumeBeforeSend}
+        onBeforeSetEffort={resumeBeforeSend}
         onMessageSent={(message) => {
           dispatch({ type: "OPTIMISTIC_USER_MESSAGE", text: message });
         }}
