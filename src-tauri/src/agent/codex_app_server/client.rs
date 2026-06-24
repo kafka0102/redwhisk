@@ -45,7 +45,7 @@ pub struct TurnStartParams {
     pub thread_id: String,
     pub input: TurnInput,
     pub model: Option<String>,
-    /// reasoning effort（codex `effort` 字段）：low / medium / high。
+    /// reasoning effort（codex `effort` 字段），由模型能力声明。
     pub effort: Option<String>,
     pub approval_policy: String,
     pub sandbox_policy: SandboxPolicy,

@@ -111,7 +111,7 @@ pub struct CodexSessionConfig {
     pub resume_thread_id: Option<String>,
     /// 初始模型（None 时由 codex 选默认）。
     pub model: Option<String>,
-    /// 初始 reasoning effort：low / medium / high。
+    /// 初始 reasoning effort，由模型能力声明。
     pub effort: Option<String>,
 }
 
@@ -1199,7 +1199,7 @@ while IFS= read -r line; do
       ;;
     *'"method":"model/list"'*)
       id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
-      printf '{"id":%s,"result":{"data":[{"id":"gpt-5","displayName":"GPT-5","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"medium"},{"reasoningEffort":"high"}]}]}}\n' "$id"
+      printf '{"id":%s,"result":{"data":[{"id":"gpt-5","displayName":"GPT-5","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"medium"},{"reasoningEffort":"high"},{"reasoningEffort":"xhigh"}]}]}}\n' "$id"
       ;;
   esac
 done
@@ -1225,7 +1225,12 @@ done
                 display_name: Some("GPT-5".into()),
                 is_default: Some(true),
                 default_reasoning_effort: None,
-                supported_reasoning_efforts: vec!["low".into(), "medium".into(), "high".into(),],
+                supported_reasoning_efforts: vec![
+                    "low".into(),
+                    "medium".into(),
+                    "high".into(),
+                    "xhigh".into(),
+                ],
             }]
         );
     }

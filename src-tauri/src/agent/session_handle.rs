@@ -80,7 +80,7 @@ pub trait AgentSessionHandle: Send + Sync {
     /// 切换模型。
     fn set_model(&self, model_id: String) -> Result<(), AgentSessionError>;
 
-    /// 切换 reasoning effort（Think 模式）；`None` 表示关闭。
+    /// 切换 reasoning effort（Think 模式）；`None` 表示未指定。
     fn set_effort(&self, effort: Option<String>) -> Result<(), AgentSessionError>;
 
     /// 切换协作模式。`mode_id` 为字符串（如 `auto` / `full-access` /

@@ -30,8 +30,8 @@ export interface ComposerAttachment {
   error?: string;
 }
 
-/** Think 模式（reasoning effort）取值；`null` 表示关闭。 */
-export type ComposerEffort = "low" | "medium" | "high" | null;
+/** Think 模式（reasoning effort）取值；来自模型声明，常见值为 low/medium/high/xhigh。 */
+export type ComposerEffort = string | null;
 
 /** AgentComposer 顶层组件的 props。 */
 export interface AgentComposerProps {

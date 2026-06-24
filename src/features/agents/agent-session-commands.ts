@@ -204,7 +204,7 @@ export interface StartStructuredAgentSessionInput {
   mode?: string;
   /** 初始模型 id，缺省由 agent 选默认。 */
   model?: string;
-  /** low / medium / high。 */
+  /** reasoning effort 由 Agent 模型声明，常见值为 low / medium / high / xhigh。 */
   effort?: string;
   /** 续接已存在的 agent threadId，缺省则新建 thread。 */
   resumeFromCodexSessionId?: string;
@@ -263,7 +263,7 @@ export interface SetAgentModelInput {
 export interface SetAgentThinkingInput {
   projectId: number;
   sessionId: number;
-  /** undefined 表示关闭 Think；low/medium/high 表示开启。 */
+  /** reasoning effort 由 Agent 模型声明，常见值为 low / medium / high / xhigh。 */
   effort?: string;
 }
 

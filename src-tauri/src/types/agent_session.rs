@@ -268,7 +268,7 @@ pub struct StartStructuredAgentSessionInput {
     pub mode: Option<String>,
     /// 初始模型 id（缺省由 agent 选默认）。
     pub model: Option<String>,
-    /// 初始 reasoning effort：low / medium / high。
+    /// 初始 reasoning effort，由 Agent 模型能力声明。
     pub effort: Option<String>,
     /// 续接已存在的 agent threadId（缺省则新建 thread）。
     pub resume_from_codex_session_id: Option<String>,
@@ -350,7 +350,7 @@ pub struct SetAgentModelInput {
 pub struct SetAgentThinkingInput {
     pub project_id: i64,
     pub session_id: i64,
-    /// None 表示关闭 Think 模式；Some(low|medium|high) 表示开启。
+    /// reasoning effort 由 Agent 模型声明，常见值为 low / medium / high / xhigh。
     pub effort: Option<String>,
 }
 

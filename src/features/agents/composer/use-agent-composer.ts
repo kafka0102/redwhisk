@@ -53,7 +53,7 @@ export interface UseAgentComposerResult {
   handleAddAttachment: () => Promise<void>;
   /** 移除指定 id 的附件草稿。 */
   handleRemoveAttachment: (id: string) => void;
-  /** 切换 Think effort；null 表示关闭。 */
+  /** 切换 Think effort。 */
   handleSetEffort: (effort: ComposerEffort) => Promise<void>;
 }
 
