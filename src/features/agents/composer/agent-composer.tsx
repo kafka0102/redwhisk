@@ -73,7 +73,7 @@ export function AgentComposer({
     onMessageSent,
   });
 
-  // Think 选项取当前模型的 supportedReasoningEfforts，空则回退 low/medium/high。
+  // Think 选项取当前模型的 supportedReasoningEfforts，空则回退常见取值。
   const thinkOptions = useMemo(() => {
     const currentModel = models.find(
       (model) => model.modelId === selectedModelId,
@@ -82,7 +82,7 @@ export function AgentComposer({
     if (supported.length > 0) {
       return supported;
     }
-    return ["low", "medium", "high"];
+    return ["low", "medium", "high", "xhigh"];
   }, [models, selectedModelId]);
 
   const canSend = text.trim() !== "" && !isSending && !isReadOnly;

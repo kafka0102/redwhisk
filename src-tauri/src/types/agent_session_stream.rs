@@ -410,14 +410,19 @@ mod tests {
             display_name: Some("GPT-5".into()),
             is_default: Some(true),
             default_reasoning_effort: Some("medium".into()),
-            supported_reasoning_efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supported_reasoning_efforts: vec![
+                "low".into(),
+                "medium".into(),
+                "high".into(),
+                "xhigh".into(),
+            ],
         };
 
         let value = serde_json::to_value(&model).unwrap();
         assert_eq!(value["modelId"], "gpt-5");
         assert_eq!(
             value["supportedReasoningEfforts"],
-            json!(["low", "medium", "high"])
+            json!(["low", "medium", "high", "xhigh"])
         );
     }
 }

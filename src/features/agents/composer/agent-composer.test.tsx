@@ -70,7 +70,8 @@ beforeEach(() => {
         modelId: "gpt-5",
         displayName: "GPT-5",
         isDefault: true,
-        supportedReasoningEfforts: ["low", "medium", "high"],
+        defaultReasoningEffort: "medium",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
       },
       {
         modelId: "gpt-4o",
@@ -297,6 +298,16 @@ describe("AgentComposer", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
+  });
+
+  it("Think 模式展示模型声明的超高档位且不提供关闭选项", async () => {
+    const user = userEvent.setup();
+    await renderComposer({ currentModelId: "gpt-5" });
+
+    await user.click(screen.getByRole("combobox", { name: "Think 模式" }));
+
+    expect(await screen.findByText("超高")).toBeInTheDocument();
+    expect(screen.queryByText("关闭")).not.toBeInTheDocument();
   });
 
   it("模型选中值使用统一展示大小写", async () => {

@@ -37,9 +37,8 @@ const EFFORT_LABELS: Record<string, string> = {
   low: "低",
   medium: "中",
   high: "高",
+  xhigh: "超高",
 };
-
-const OFF_VALUE = "__off__";
 
 export function ComposerControls({
   capabilities,
@@ -60,7 +59,11 @@ export function ComposerControls({
   onCancel,
   usage,
 }: ComposerControlsProps) {
-  const effortValue = effort ?? OFF_VALUE;
+  const currentModel = models.find(
+    (model) => model.modelId === selectedModelId,
+  );
+  const effortValue =
+    effort ?? currentModel?.defaultReasoningEffort ?? thinkOptions[0] ?? "";
   const hasModels = models.length > 0;
   const showModelSelect =
     capabilities.supportsModelSwitching && !isModelReadOnly;
@@ -133,9 +136,7 @@ export function ComposerControls({
             <Select
               value={effortValue}
               onValueChange={(value) => {
-                if (value === OFF_VALUE) {
-                  onSelectEffort(null);
-                } else if (typeof value === "string") {
+                if (typeof value === "string" && value !== "") {
                   onSelectEffort(value as ComposerEffort);
                 }
               }}
@@ -148,11 +149,10 @@ export function ComposerControls({
                 size="sm"
               >
                 <span data-slot="select-value">
-                  {effort === null ? "关闭" : (EFFORT_LABELS[effort] ?? effort)}
+                  {EFFORT_LABELS[effortValue] ?? effortValue}
                 </span>
               </SelectTrigger>
               <SelectContent align="start" className="agents-composer__menu">
-                <SelectItem value={OFF_VALUE}>关闭</SelectItem>
                 {thinkOptions.map((option) => (
                   <SelectItem key={option} value={option}>
                     {EFFORT_LABELS[option] ?? option}

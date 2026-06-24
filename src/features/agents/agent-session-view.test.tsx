@@ -307,7 +307,7 @@ describe("AgentSessionView", () => {
           modelId: "gpt-5",
           displayName: "GPT-5",
           isDefault: true,
-          supportedReasoningEfforts: ["low", "medium", "high"],
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
         },
         {
           modelId: "gpt-4o",
