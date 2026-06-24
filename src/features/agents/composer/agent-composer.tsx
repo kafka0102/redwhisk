@@ -9,7 +9,7 @@
 // - L213：模型前端只发 command；不可用时只展示只读模型信息
 // - L214：上下文窗口用量来自 usage_updated 事件 → props.usage
 
-import { type KeyboardEvent } from "react";
+import { useMemo, type KeyboardEvent } from "react";
 
 import { Textarea } from "@/components/ui";
 import { useAgentComposer } from "./use-agent-composer";
@@ -28,6 +28,7 @@ export function AgentComposer({
   turnStatus,
   usage,
   currentModelId,
+  currentEffort,
   isReadOnly = false,
   readOnlyReason,
   onBeforeSend,
@@ -51,6 +52,7 @@ export function AgentComposer({
     text,
     setText,
     attachments,
+    effort,
     submitError,
     cancelToastMessage,
     isSending,
@@ -58,14 +60,28 @@ export function AgentComposer({
     handleCancel,
     handleAddAttachment,
     handleRemoveAttachment,
+    handleSetEffort,
   } = useAgentComposer({
     projectId,
     sessionId,
     turnStatus,
+    currentEffort,
     isReadOnly,
     onBeforeSend,
     onMessageSent,
   });
+
+  // Think 选项取当前模型的 supportedReasoningEfforts，空则回退 low/medium/high。
+  const thinkOptions = useMemo(() => {
+    const currentModel = models.find(
+      (model) => model.modelId === selectedModelId,
+    );
+    const supported = currentModel?.supportedReasoningEfforts ?? [];
+    if (supported.length > 0) {
+      return supported;
+    }
+    return ["low", "medium", "high"];
+  }, [models, selectedModelId]);
 
   const canSend = text.trim() !== "" && !isSending && !isReadOnly;
 
@@ -143,6 +159,11 @@ export function AgentComposer({
         isModelReadOnly={isModelReadOnly}
         onSelectModel={(modelId) => {
           void selectModel(modelId);
+        }}
+        effort={effort}
+        thinkOptions={thinkOptions}
+        onSelectEffort={(nextEffort) => {
+          void handleSetEffort(nextEffort);
         }}
         isSending={isSending}
         canSend={canSend}

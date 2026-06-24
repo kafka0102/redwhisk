@@ -1,5 +1,5 @@
-// composer 核心 hook：管理文本、附件、提交错误，并暴露
-// 提交/取消/附件增删动作。
+// composer 核心 hook：管理文本、附件、Think effort、提交错误，并暴露
+// 提交/取消/附件增删/effort 切换动作。
 //
 // `isSending` 直接派生自父组件下传的 `turnStatus === "running"`，不本地维护，
 // 避免与 message-stream 形成双数据源。
@@ -9,7 +9,7 @@
 //   → saveAgentAttachment({ sourcePath, displayName=basename }) → savedPath
 //   → push chip（status saving → saved/error）
 // 提交时收集 status === "saved" 的附件，映射为 `{ path, displayName, kind }`
-// 随消息一起发送；status === "saving" 的附件会阻止提交并提示用户等待。
+// 随消息一起发送；`saving` 状态的附件会阻止提交并提示用户等待。
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -18,17 +18,19 @@ import {
   cancelAgentTurn,
   saveAgentAttachment,
   sendAgentMessage,
+  setAgentThinking,
 } from "../agent-session-commands";
 import type { AgentMessageAttachment } from "../agent-session-commands";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import { toCommandError } from "../../../shared/commands/command-error";
-import type { ComposerAttachment } from "./composer-types";
+import type { ComposerAttachment, ComposerEffort } from "./composer-types";
 import type { TurnStatus } from "../message-stream/message-stream-types";
 
 interface UseAgentComposerArgs {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
+  currentEffort?: ComposerEffort;
   isReadOnly?: boolean;
   onBeforeSend?: () => Promise<void>;
   onMessageSent?: (message: string) => void;
@@ -38,6 +40,7 @@ export interface UseAgentComposerResult {
   text: string;
   setText: (value: string) => void;
   attachments: ComposerAttachment[];
+  effort: ComposerEffort;
   submitError: string | null;
   cancelToastMessage: string | null;
   /** 派生自 turnStatus，供组件切换发送/取消按钮。 */
@@ -50,6 +53,8 @@ export interface UseAgentComposerResult {
   handleAddAttachment: () => Promise<void>;
   /** 移除指定 id 的附件草稿。 */
   handleRemoveAttachment: (id: string) => void;
+  /** 切换 Think effort；null 表示关闭。 */
+  handleSetEffort: (effort: ComposerEffort) => Promise<void>;
 }
 
 /** 生成简单的本地唯一 id（避免引入 uuid 依赖）。 */
@@ -65,7 +70,7 @@ function basenameOf(sourcePath: string): string {
 }
 
 /**
- * 根据扩展名推断附件种类（与后端 `analyze_attachment` 的前端镜像，仅用于 chip 图标）。
+ * 根据扩展名推断附件种类（与后端 `analyzeAttachment` 的前端镜像，仅用于 chip 图标）。
  * 后端 `saveAgentAttachment` 返回权威 kind，落盘成功后用后端值覆盖。
  */
 function inferKind(displayName: string): AgentAttachmentKindLiteral {
@@ -93,12 +98,14 @@ export function useAgentComposer({
   projectId,
   sessionId,
   turnStatus,
+  currentEffort,
   isReadOnly = false,
   onBeforeSend,
   onMessageSent,
 }: UseAgentComposerArgs): UseAgentComposerResult {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [cancelToastMessage, setCancelToastMessage] = useState<string | null>(
     null,
@@ -115,6 +122,10 @@ export function useAgentComposer({
     },
     [],
   );
+
+  useEffect(() => {
+    setEffort(currentEffort ?? null);
+  }, [currentEffort]);
 
   const showCancelToast = useCallback((message: string) => {
     setCancelToastMessage(message);
@@ -244,10 +255,30 @@ export function useAgentComposer({
     );
   }, []);
 
+  const handleSetEffort = useCallback(
+    async (nextEffort: ComposerEffort) => {
+      const previous = effort;
+      setEffort(nextEffort);
+      setSubmitError(null);
+      try {
+        await setAgentThinking({
+          projectId,
+          sessionId,
+          effort: nextEffort ?? undefined,
+        });
+      } catch (error) {
+        setEffort(previous);
+        setSubmitError(toCommandError(error).message);
+      }
+    },
+    [effort, projectId, sessionId],
+  );
+
   return {
     text,
     setText,
     attachments,
+    effort,
     submitError,
     cancelToastMessage,
     isSending,
@@ -255,5 +286,6 @@ export function useAgentComposer({
     handleCancel,
     handleAddAttachment,
     handleRemoveAttachment,
+    handleSetEffort,
   };
 }
