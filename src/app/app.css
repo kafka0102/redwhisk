@@ -1754,6 +1754,7 @@ button:focus-visible {
   gap: 12px;
   min-height: var(--activity-header-height);
   padding: 0 10px;
+  margin: -14px 0 0;
   border-bottom: 1px solid var(--color-border);
 }
 
