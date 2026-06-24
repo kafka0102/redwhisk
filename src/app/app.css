@@ -82,6 +82,13 @@ button:focus-visible {
 }
 
 /* Toast styles */
+.toaster {
+  top: 100px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+}
+
 .sonner-toast {
   padding: 12px 14px;
   border-radius: var(--radius-card);
