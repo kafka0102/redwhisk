@@ -148,9 +148,7 @@ export function ComposerControls({
                 size="sm"
               >
                 <span data-slot="select-value">
-                  {effort === null
-                    ? "关闭"
-                    : (EFFORT_LABELS[effort] ?? effort)}
+                  {effort === null ? "关闭" : (EFFORT_LABELS[effort] ?? effort)}
                 </span>
               </SelectTrigger>
               <SelectContent align="start" className="agents-composer__menu">

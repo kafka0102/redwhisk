@@ -358,17 +358,7 @@ impl CodexSessionHandle {
 
     /// 列出可用模型。
     pub fn list_models(&self) -> Result<Vec<AgentModel>, CodexAppServerError> {
-        let entries = self.client.model_list()?;
-        Ok(entries
-            .into_iter()
-            .map(|entry| AgentModel {
-                model_id: entry.id,
-                display_name: entry.display_name,
-                is_default: entry.is_default,
-                default_reasoning_effort: entry.default_reasoning_effort,
-                supported_reasoning_efforts: entry.supported_reasoning_efforts,
-            })
-            .collect())
+        Ok(map_model_entries(self.client.model_list()?))
     }
 
     /// 列出可用模式。
@@ -426,6 +416,33 @@ impl CodexSessionHandle {
             .ok()
             .and_then(|state| state.thread_id.clone())
     }
+}
+
+pub fn list_models_with_command(
+    binary: &str,
+    cwd: Option<&str>,
+) -> Result<Vec<AgentModel>, CodexAppServerError> {
+    let transport = CodexTransport::spawn(binary, cwd)?;
+    let client = CodexAppServerClient::new(transport.clone());
+    let result = (|| {
+        client.initialize(&InitializeParams::default())?;
+        Ok(map_model_entries(client.model_list()?))
+    })();
+    transport.shutdown();
+    result
+}
+
+fn map_model_entries(entries: Vec<super::client::CodexModelEntry>) -> Vec<AgentModel> {
+    entries
+        .into_iter()
+        .map(|entry| AgentModel {
+            model_id: entry.id,
+            display_name: entry.display_name,
+            is_default: entry.is_default,
+            default_reasoning_effort: entry.default_reasoning_effort,
+            supported_reasoning_efforts: entry.supported_reasoning_efforts,
+        })
+        .collect()
 }
 
 /// 将协议无关的 `AgentPermissionDecision` 转为 codex 内部的 `PermissionDecision`。
@@ -957,7 +974,11 @@ fn str_field(value: &Value, field: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
     use serde_json::json;
+    use tempfile::tempdir;
 
     #[test]
     fn codex_mode_round_trips_id() {
@@ -1159,5 +1180,53 @@ mod tests {
             json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf", "text_elements": [] })
         );
         assert_eq!(input.to_json(), Value::Array(blocks.to_vec()));
+    }
+
+    #[test]
+    fn list_models_with_command_reads_models_without_session_handle() {
+        let temp_dir = tempdir().expect("temp dir");
+        let script_path = temp_dir.path().join("mock-codex.sh");
+        fs::write(
+            &script_path,
+            r#"#!/bin/sh
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*)
+      id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"id":%s,"result":{"serverInfo":{"name":"mock"}}}\n' "$id"
+      ;;
+    *'"method":"initialized"'*)
+      ;;
+    *'"method":"model/list"'*)
+      id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"id":%s,"result":{"data":[{"id":"gpt-5","displayName":"GPT-5","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"medium"},{"reasoningEffort":"high"}]}]}}\n' "$id"
+      ;;
+  esac
+done
+"#,
+        )
+        .expect("write mock script");
+        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("chmod");
+
+        let models = list_models_with_command(
+            script_path
+                .to_str()
+                .expect("script path should be valid utf-8"),
+            None,
+        )
+        .expect("models");
+
+        assert_eq!(
+            models,
+            vec![AgentModel {
+                model_id: "gpt-5".into(),
+                display_name: Some("GPT-5".into()),
+                is_default: Some(true),
+                default_reasoning_effort: None,
+                supported_reasoning_efforts: vec!["low".into(), "medium".into(), "high".into(),],
+            }]
+        );
     }
 }

@@ -85,6 +85,7 @@ export function AgentSessionView({
           isReadOnly ? "已完成的 Issue 不能继续运行。" : undefined
         }
         onBeforeSend={resumeBeforeSend}
+        onBeforeSelectModel={resumeBeforeSend}
         onMessageSent={(message) => {
           dispatch({ type: "OPTIMISTIC_USER_MESSAGE", text: message });
         }}

@@ -48,6 +48,7 @@ const {
   readAgentTimeline,
   resumeStructuredAgentSession,
   sendAgentMessage,
+  setAgentModel,
   listAgentModels,
 } = await import("./agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
@@ -55,6 +56,7 @@ const resumeStructuredAgentSessionMock = vi.mocked(
   resumeStructuredAgentSession,
 );
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
+const setAgentModelMock = vi.mocked(setAgentModel);
 const listAgentModelsMock = vi.mocked(listAgentModels);
 
 function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
@@ -70,6 +72,8 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
   });
   sendAgentMessageMock.mockReset();
   sendAgentMessageMock.mockResolvedValue(undefined);
+  setAgentModelMock.mockReset();
+  setAgentModelMock.mockResolvedValue(undefined);
   listAgentModelsMock.mockReset();
   listAgentModelsMock.mockResolvedValue({ models: [] });
   mocks.listeners.length = 0;
@@ -292,6 +296,55 @@ describe("AgentSessionView", () => {
       sessionId: 10,
       message: "继续处理",
       attachments: [],
+    });
+  });
+
+  it("未完成的关闭 session 切换模型时先自动恢复再设置模型", async () => {
+    setupTimeline([]);
+    listAgentModelsMock.mockResolvedValueOnce({
+      models: [
+        {
+          modelId: "gpt-5",
+          displayName: "GPT-5",
+          isDefault: true,
+          supportedReasoningEfforts: ["low", "medium", "high"],
+        },
+        {
+          modelId: "gpt-4o",
+          displayName: "GPT-4o",
+          supportedReasoningEfforts: [],
+        },
+      ],
+    });
+    resumeStructuredAgentSessionMock.mockResolvedValueOnce({
+      sessionId: 10,
+      threadId: "thread-10",
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="review"
+      />,
+    );
+
+    await user.click(await screen.findByRole("combobox", { name: "选择模型" }));
+    await user.click(await screen.findByRole("option", { name: "GPT-4o" }));
+
+    await waitFor(() => {
+      expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+      });
+    });
+    expect(setAgentModelMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+      modelId: "gpt-4o",
     });
   });
 });

@@ -32,6 +32,7 @@ export function AgentComposer({
   isReadOnly = false,
   readOnlyReason,
   onBeforeSend,
+  onBeforeSelectModel,
   onMessageSent,
 }: AgentComposerProps) {
   const {
@@ -46,6 +47,7 @@ export function AgentComposer({
     sessionId,
     currentModelId,
     enabled: capabilities.supportsModelSwitching,
+    onBeforeSelectModel,
   });
 
   const {
