@@ -27,7 +27,8 @@ import {
   type DialogMode,
   type IssueFormState,
 } from "./issue-activity-types";
-import { IssueEditablePage, IssueReadOnlyPage } from "./issue-form-dialog";
+import { IssueEditablePage } from "./issue-editable-page";
+import { IssueReadOnlyPage } from "./issue-read-only-page";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
@@ -927,7 +928,6 @@ export function IssuesActivity({
           mode={dialogMode}
           form={form}
           selectedIssue={selectedIssue}
-          canRunIssue={selectedIssue ? canRunIssueFor(selectedIssue) : false}
           isSaving={isSaving}
           errorMessage={dialogErrorMessage}
           availableLabels={currentAvailableLabels}
