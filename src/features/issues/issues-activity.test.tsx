@@ -35,6 +35,7 @@ import {
   listProjectLabels,
 } from "../settings/settings-commands";
 import { I18nProvider } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 import { selectShadcnOption } from "../../test/select-helpers";
 
 vi.mock("./issue-commands", () => ({
@@ -72,6 +73,12 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn((path: string) => `asset://${path}`),
+}));
+
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+  },
 }));
 
 vi.mock("./issue-description-editor", () => ({
@@ -169,6 +176,7 @@ const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
+const toastSuccessMock = vi.mocked(toast.success);
 
 const existingIssue: IssueRecord = {
   id: 20,
@@ -343,6 +351,7 @@ describe("IssuesActivity", () => {
     openDialogMock.mockReset();
     saveDialogMock.mockReset();
     convertFileSrcMock.mockReset();
+    toastSuccessMock.mockReset();
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
@@ -2321,6 +2330,7 @@ describe("IssuesActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Running issue" }),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
   it("shows a delete button in the backlog edit page header and deletes the issue after dialog confirmation", async () => {
@@ -2354,6 +2364,7 @@ describe("IssuesActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Existing issue" }),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
   it("closes the backlog edit delete dialog without deleting", async () => {

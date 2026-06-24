@@ -180,6 +180,7 @@ const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
 const createTemporaryProjectTerminalMock = vi.mocked(
   createTemporaryProjectTerminal,
 );
+const toastSuccessMock = vi.mocked(toast.success);
 const toastErrorMock = vi.mocked(toast.error);
 
 async function findSessionList() {
@@ -304,6 +305,7 @@ describe("AgentsActivity", () => {
     closeProjectTerminalMock.mockReset();
     createTemporaryProjectTerminalMock.mockReset();
     openPathMock.mockReset();
+    toastSuccessMock.mockReset();
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
       attention: "requested",
@@ -1536,6 +1538,7 @@ describe("AgentsActivity", () => {
         "Agent sessions will appear here after a session has been started for this project.",
       ),
     ).toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
   it("shows a factual message when no agent profiles are available", async () => {

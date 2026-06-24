@@ -951,6 +951,7 @@ export function AgentsActivity({
       if (nextSelectedSession) {
         onSelectSession?.(nextSelectedSession.sessionId);
       }
+      toast.success(messages.toast.deleteSuccess);
     } catch (error) {
       setDeleteSessionErrorMessage(toCommandError(error).message);
       try {

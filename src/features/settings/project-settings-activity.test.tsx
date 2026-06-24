@@ -26,6 +26,7 @@ import {
   openShadcnSelect,
   selectShadcnOption,
 } from "../../test/select-helpers";
+import { toast } from "../../shared/toast";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -77,6 +78,12 @@ vi.mock("../project/project-commands", () => ({
   validateProjectRepoPath: vi.fn(),
 }));
 
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+  },
+}));
+
 const detectCodexCommandMock = vi.mocked(detectCodexCommand);
 const deleteAgentProfileMock = vi.mocked(deleteAgentProfile);
 const deleteProjectLabelMock = vi.mocked(deleteProjectLabel);
@@ -88,6 +95,7 @@ const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const saveProjectLabelMock = vi.mocked(saveProjectLabel);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
+const toastSuccessMock = vi.mocked(toast.success);
 const { open } = await import("@tauri-apps/plugin-dialog");
 const openDialogMock = vi.mocked(open);
 const onProjectUpdated = vi.fn();
@@ -163,6 +171,7 @@ describe("ProjectSettingsActivity", () => {
     saveProjectLabelMock.mockReset();
     updateProjectSettingsMock.mockReset();
     validateProjectRepoPathMock.mockReset();
+    toastSuccessMock.mockReset();
     openDialogMock.mockReset();
     settingsEventMocks.listeners.length = 0;
     settingsEventMocks.unlisten.mockReset();
@@ -551,6 +560,7 @@ describe("ProjectSettingsActivity", () => {
       expect(deleteProjectLabelMock).toHaveBeenCalledWith({ id: 11 }),
     );
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
   it("shows agents in a table below the header action", async () => {
@@ -707,6 +717,7 @@ describe("ProjectSettingsActivity", () => {
     );
     expect(screen.queryByText("Project Codex")).not.toBeInTheDocument();
     expect(screen.getByText("Global Codex")).toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
   it("opens the edit form from table row action buttons with click and keyboard shortcuts", async () => {

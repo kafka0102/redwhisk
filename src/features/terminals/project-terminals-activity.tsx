@@ -13,6 +13,7 @@ import { Pencil, Plus, X } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
@@ -242,6 +243,7 @@ export function ProjectTerminalsActivity({
       if (editingTerminal?.configId === configId) {
         setEditingTerminal(null);
       }
+      toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
       setTerminalStatusMessage(toCommandError(error).message);
     } finally {
