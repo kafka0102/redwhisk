@@ -2632,6 +2632,13 @@ button:focus-visible {
   border-bottom-left-radius: 0;
 }
 
+.agents-session-toolbar__action--danger {
+  min-height: 30px;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-danger);
+}
+
 .agents-session-toolbar__menu {
   position: absolute;
   top: calc(100% + 6px);

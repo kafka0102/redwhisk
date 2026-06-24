@@ -35,6 +35,7 @@ interface AgentsSessionPaneProps {
   canRenderTransitionButton: boolean;
   canRenderTransitionMenu: boolean;
   cleanErrorMessage: string | null;
+  deleteSessionErrorMessage: string | null;
   isTransitionMenuOpen: boolean;
   isTransitionPending: boolean;
   linkedIssue: LinkedSessionIssue | null;
@@ -43,6 +44,7 @@ interface AgentsSessionPaneProps {
   activeWorkspaceTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
+  isDeletingSession: boolean;
   isSidePanelOpen: boolean;
   isTerminalPanelActive: boolean;
   terminalPanel: ReactNode;
@@ -51,6 +53,7 @@ interface AgentsSessionPaneProps {
   onCloseWorkspaceTab: (
     tab: Exclude<SessionWorkspaceTabKind, "session">,
   ) => void;
+  onDeleteSession: () => void;
   onOpenTerminalPanel: () => void;
   onTerminalPanelSplitterMouseDown: (event: ReactMouseEvent) => void;
   onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
@@ -70,6 +73,7 @@ export function AgentsSessionPane({
   canRenderTransitionButton,
   canRenderTransitionMenu,
   cleanErrorMessage,
+  deleteSessionErrorMessage,
   isTransitionMenuOpen,
   isTransitionPending,
   linkedIssue,
@@ -78,12 +82,14 @@ export function AgentsSessionPane({
   activeWorkspaceTab,
   changeTab,
   fileTab,
+  isDeletingSession,
   isSidePanelOpen,
   isTerminalPanelActive,
   terminalPanel,
   terminalPanelHeight,
   onAcknowledgeSessionAttention,
   onCloseWorkspaceTab,
+  onDeleteSession,
   onOpenTerminalPanel,
   onTerminalPanelSplitterMouseDown,
   onSelectWorkspaceTab,
@@ -96,6 +102,10 @@ export function AgentsSessionPane({
   transitionMenuOptions,
   transitionPhase,
 }: AgentsSessionPaneProps) {
+  const canRenderSessionActions = selectedSession !== null;
+  const canRenderDeleteButton =
+    selectedSession !== null && selectedSession.issueId === null;
+
   return (
     <div className="agents-terminal-pane">
       {selectedSession ? (
@@ -158,7 +168,17 @@ export function AgentsSessionPane({
                 ) : null}
               </div>
             ) : null}
-            {linkedIssue ? (
+            {canRenderDeleteButton ? (
+              <button
+                className="agents-session-toolbar__action agents-session-toolbar__action--danger"
+                disabled={isDeletingSession}
+                type="button"
+                onClick={onDeleteSession}
+              >
+                删除
+              </button>
+            ) : null}
+            {canRenderSessionActions ? (
               <button
                 aria-label="打开终端"
                 aria-pressed={isTerminalPanelActive}
@@ -169,7 +189,7 @@ export function AgentsSessionPane({
                 <Terminal aria-hidden="true" size={16} strokeWidth={1.8} />
               </button>
             ) : null}
-            {linkedIssue ? (
+            {canRenderSessionActions ? (
               <button
                 aria-label="打开 Session 侧边栏"
                 aria-pressed={isSidePanelOpen}
@@ -206,6 +226,11 @@ export function AgentsSessionPane({
         {agentCommitErrorMessage ? (
           <p className="issues-status" role="status">
             {agentCommitErrorMessage}
+          </p>
+        ) : null}
+        {deleteSessionErrorMessage ? (
+          <p className="issues-status" role="status">
+            {deleteSessionErrorMessage}
           </p>
         ) : null}
         {attentionErrorMessage ? (

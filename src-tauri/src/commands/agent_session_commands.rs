@@ -11,8 +11,9 @@ use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
 use crate::types::agent_session::{
     AgentPermissionDecision, AgentSessionListResponse, CancelAgentTurnInput,
-    InjectAgentSessionPromptInput, InjectAgentSessionPromptResult, ListAgentModelsInput,
-    ListAgentModelsResult, ListAgentModesInput, ListAgentModesResult, ProjectGitBranchListInput,
+    DeleteAgentSessionInput, DeleteAgentSessionResult, InjectAgentSessionPromptInput,
+    InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
+    ListAgentModesInput, ListAgentModesResult, ProjectGitBranchListInput,
     ProjectGitBranchListResult, ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
     ReadAgentTimelineInput, ReadAgentTimelineResult, ResizeAgentSessionTerminalInput,
     RespondAgentPermissionInput, RestoreAgentSessionTerminalInput,
@@ -440,6 +441,23 @@ pub fn resume_structured_agent_session(
         &state.agent_sessions,
         &state.agent_event_broadcaster,
     )
+}
+
+#[tauri::command]
+pub fn delete_agent_session(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteAgentSessionInput,
+) -> Result<DeleteAgentSessionResult, CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    let result = service.delete_standalone_session(input.project_id, input.session_id)?;
+
+    if let Some(handle) = state.agent_sessions.unregister(input.session_id) {
+        handle.shutdown();
+    }
+
+    Ok(result)
 }
 
 #[tauri::command]

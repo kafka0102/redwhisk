@@ -84,6 +84,7 @@ pub fn run() {
             commands::agent_session_commands::resize_agent_session_terminal,
             commands::agent_session_commands::start_structured_agent_session,
             commands::agent_session_commands::resume_structured_agent_session,
+            commands::agent_session_commands::delete_agent_session,
             commands::agent_session_commands::send_agent_message,
             commands::agent_session_commands::cancel_agent_turn,
             commands::agent_session_commands::respond_agent_permission,

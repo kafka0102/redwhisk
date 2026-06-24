@@ -1424,6 +1424,61 @@ impl<'connection> AgentSessionService<'connection> {
         self.find_project_session(project_id, session_id)
     }
 
+    pub fn delete_standalone_session(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<crate::types::agent_session::DeleteAgentSessionResult, CommandError> {
+        let session = self.find_project_session(project_id, session_id)?;
+        if session.issue_id.is_some() {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "关联 Issue 的 Agent Session 不能从 Sessions 视图删除。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
+        }
+
+        let deleted_at = current_epoch_millis()?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        let deleted = AgentSessionRepository::soft_delete_in_transaction(
+            &transaction,
+            session_id,
+            deleted_at,
+        )
+        .map_err(agent_session_database_error)?;
+        if deleted {
+            let payload = json!({
+                "sessionId": session_id,
+                "issueId": session.issue_id,
+                "reason": "session_deleted",
+            })
+            .to_string();
+            EventRepository::insert_session_event_in_transaction(
+                &transaction,
+                session_id,
+                SessionEventType::SessionClosed,
+                &payload,
+                deleted_at,
+            )
+            .map_err(agent_session_database_error)?;
+        }
+        transaction.commit().map_err(agent_session_database_error)?;
+
+        if !deleted {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 删除失败。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
+        }
+
+        Ok(crate::types::agent_session::DeleteAgentSessionResult { session_id })
+    }
+
     pub fn read_agent_timeline(
         &self,
         project_id: i64,
@@ -3356,6 +3411,7 @@ mod tests {
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
     use crate::db::agent_session_repository::AgentSessionRepository;
+    use crate::db::event_repository::EventRepository;
     use crate::db::issue_repository::IssueRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
@@ -3368,6 +3424,7 @@ mod tests {
         AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
     };
     use crate::types::project::ProjectCompletionPolicy;
+    use crate::types::session_event::SessionEventType;
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
@@ -3966,6 +4023,62 @@ mod tests {
             .expect("standalone session");
 
         assert!(!standalone_session.is_turn_running);
+    }
+
+    #[test]
+    fn delete_standalone_session_soft_deletes_session() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            305,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let result = service
+            .delete_standalone_session(1, 305)
+            .expect("delete standalone session");
+
+        assert_eq!(result.session_id, 305);
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        assert!(!session_ids(&response.sessions).contains(&305));
+
+        let events = EventRepository::new(&database)
+            .list_session_events(305)
+            .expect("list session events");
+        assert!(events.iter().any(|event| {
+            event.event_type == SessionEventType::SessionClosed
+                && event
+                    .payload_json
+                    .contains("\"reason\":\"session_deleted\"")
+        }));
+    }
+
+    #[test]
+    fn delete_standalone_session_rejects_linked_issue_session() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            306,
+            Some(26),
+            Some("Linked issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let result = service.delete_standalone_session(1, 306);
+
+        assert!(result.is_err());
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        assert!(session_ids(&response.sessions).contains(&306));
     }
 
     fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {

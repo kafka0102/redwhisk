@@ -15,6 +15,7 @@ import claudeLogoSrc from "../../assets/images/claude.svg";
 import codexLogoSrc from "../../assets/images/codex.svg";
 import { AgentsActivity } from "./agents-activity";
 import {
+  deleteAgentSession,
   listAgentSessions,
   setAgentSessionAttention,
   startStructuredAgentSession,
@@ -108,6 +109,7 @@ vi.mock("@monaco-editor/react", () => ({
 }));
 
 vi.mock("./agent-session-commands", () => ({
+  deleteAgentSession: vi.fn(),
   listAgentSessions: vi.fn(),
   setAgentSessionAttention: vi.fn(),
   startStructuredAgentSession: vi.fn(),
@@ -155,6 +157,7 @@ vi.mock("../../shared/toast", () => ({
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const deleteAgentSessionMock = vi.mocked(deleteAgentSession);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
@@ -283,6 +286,7 @@ async function flushMicrotasks() {
 describe("AgentsActivity", () => {
   beforeEach(() => {
     listAgentSessionsMock.mockReset();
+    deleteAgentSessionMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
     startStructuredAgentSessionMock.mockReset();
     listIssuesMock.mockReset();
@@ -307,6 +311,9 @@ describe("AgentsActivity", () => {
     startStructuredAgentSessionMock.mockResolvedValue({
       sessionId: 701,
       threadId: "thread-701",
+    });
+    deleteAgentSessionMock.mockResolvedValue({
+      sessionId: 701,
     });
     openPathMock.mockResolvedValue();
     closeProjectTerminalMock.mockResolvedValue(undefined);
@@ -1434,6 +1441,98 @@ describe("AgentsActivity", () => {
     expect(newSessionButton).toHaveFocus();
     expect(
       screen.getByRole("heading", { level: 3, name: "Untitled Session" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows standalone session header actions without issue status controls", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 701,
+          issueId: null,
+          issueTitle: null,
+          title: "Untitled Session",
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_500_000,
+          startedAt: 1_780_638_500_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={701} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "Untitled Session",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "打开终端" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark review" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open status options" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deletes a standalone session after confirmation", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm");
+    confirmSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 701,
+            issueId: null,
+            issueTitle: null,
+            title: "Untitled Session",
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_500_000,
+            startedAt: 1_780_638_500_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [],
+      })
+      .mockResolvedValue({
+        sessions: [],
+      });
+
+    render(<AgentsActivity activeSessionId={701} projectId={1} />);
+
+    const deleteButton = await screen.findByRole("button", { name: "删除" });
+    await user.click(deleteButton);
+
+    expect(deleteAgentSessionMock).not.toHaveBeenCalled();
+
+    await user.click(deleteButton);
+
+    await waitFor(() =>
+      expect(deleteAgentSessionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 701,
+      }),
+    );
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(
+      await screen.findByText(
+        "Agent sessions will appear here after a session has been started for this project.",
+      ),
     ).toBeInTheDocument();
   });
 

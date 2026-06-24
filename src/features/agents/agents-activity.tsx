@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import {
+  deleteAgentSession,
   listAgentSessions,
   setAgentSessionAttention,
   startStructuredAgentSession,
@@ -109,7 +110,11 @@ export function AgentsActivity({
   >(null);
   const [completeAgentCommitErrorMessage, setCompleteAgentCommitErrorMessage] =
     useState<string | null>(null);
+  const [deleteSessionErrorMessage, setDeleteSessionErrorMessage] = useState<
+    string | null
+  >(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
   const [availableAgentProfiles, setAvailableAgentProfiles] = useState<
     AgentProfileRecord[]
@@ -322,7 +327,7 @@ export function AgentsActivity({
   const workspaceCache = useSessionWorkspaceCache({
     projectId,
     sessionId: currentSessionId,
-    isSidePanelOpen: isSessionSidePanelOpen && linkedIssue !== null,
+    isSidePanelOpen: isSessionSidePanelOpen && selectedSession !== null,
   });
   const sessionTransitionPhase = getSessionTransitionPhase(selectedSession);
   const selectedTerminalPanelState =
@@ -358,7 +363,8 @@ export function AgentsActivity({
     isCompletingClean ||
     isPreparingAgentCommit ||
     isSendingAgentCommitPrompt ||
-    isDetectingAgentCommitCompletion;
+    isDetectingAgentCommitCompletion ||
+    isDeletingSession;
   const isAgentCommitPreviewPending =
     isCompletingManual ||
     isSendingAgentCommitPrompt ||
@@ -908,6 +914,53 @@ export function AgentsActivity({
     void createInlineTerminal(selectedSession.sessionId);
   }
 
+  async function handleDeleteSession() {
+    if (!selectedSession || selectedSession.issueId !== null) {
+      return;
+    }
+
+    const confirmed = window.confirm("确认删除该 Session？");
+    if (!confirmed) {
+      return;
+    }
+
+    const deletedSessionId = selectedSession.sessionId;
+    setIsTransitionMenuOpen(false);
+    setDeleteSessionErrorMessage(null);
+    setIsDeletingSession(true);
+
+    try {
+      await deleteAgentSession({ projectId, sessionId: deletedSessionId });
+      setTerminalPanelStateBySessionId(
+        ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
+          remainingState,
+      );
+      setSessions((currentSessions) =>
+        currentSessions.filter(
+          (session) => session.sessionId !== deletedSessionId,
+        ),
+      );
+      const refreshedSessions = await refreshSessions();
+      const nextSelectedSession =
+        refreshedSessions.find(
+          (session) => getSessionIssueGroup(session) !== null,
+        ) ?? null;
+      setSelectedSessionId(nextSelectedSession?.sessionId ?? null);
+      if (nextSelectedSession) {
+        onSelectSession?.(nextSelectedSession.sessionId);
+      }
+    } catch (error) {
+      setDeleteSessionErrorMessage(toCommandError(error).message);
+      try {
+        await refreshSessions();
+      } catch {
+        // Keep the command failure visible; polling can retry the refresh.
+      }
+    } finally {
+      setIsDeletingSession(false);
+    }
+  }
+
   async function handleCloseInlineTerminal(terminalSessionId: number) {
     if (!selectedSession) {
       return;
@@ -1129,7 +1182,7 @@ export function AgentsActivity({
 
       <section
         className={`agents-workspace${
-          isSessionSidePanelOpen && linkedIssue
+          isSessionSidePanelOpen && selectedSession
             ? " agents-workspace--with-side-panel"
             : ""
         }`}
@@ -1141,11 +1194,13 @@ export function AgentsActivity({
           canRenderTransitionButton={canRenderTransitionButton}
           canRenderTransitionMenu={canRenderTransitionMenu}
           cleanErrorMessage={completeCleanErrorMessage}
+          deleteSessionErrorMessage={deleteSessionErrorMessage}
           isTransitionMenuOpen={isTransitionMenuOpen}
           isTransitionPending={isTransitionPending}
           activeWorkspaceTab={workspaceCache.activeWorkspaceTab}
           changeTab={workspaceCache.changeTab}
           fileTab={workspaceCache.fileTab}
+          isDeletingSession={isDeletingSession}
           isSidePanelOpen={isSessionSidePanelOpen}
           isTerminalPanelActive={isTerminalPanelVisible}
           linkedIssue={linkedIssue}
@@ -1155,6 +1210,9 @@ export function AgentsActivity({
             void acknowledgeSessionAttention(sessionId);
           }}
           onCloseWorkspaceTab={workspaceCache.closeWorkspaceTab}
+          onDeleteSession={() => {
+            void handleDeleteSession();
+          }}
           onOpenTerminalPanel={handleOpenTerminalPanel}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTab}
           onTerminalPanelSplitterMouseDown={
@@ -1202,7 +1260,7 @@ export function AgentsActivity({
           transitionMenuOptions={transitionMenuOptions}
           transitionPhase={sessionTransitionPhase}
         />
-        {isSessionSidePanelOpen && linkedIssue ? (
+        {isSessionSidePanelOpen && selectedSession ? (
           <>
             <div
               aria-label="Resize session side panel"
