@@ -273,7 +273,7 @@ describe("AgentComposer", () => {
     });
   });
 
-  it("模型来源为历史非运行中 session 时不显示错误，改为只读模型信息", async () => {
+  it("模型来源请求失败时显示真实错误而不是退化为 Codex 标签", async () => {
     listAgentModelsMock.mockRejectedValueOnce(
       new Error("当前 Session 没有运行中的结构化会话。"),
     );
@@ -282,9 +282,9 @@ describe("AgentComposer", () => {
       expect(listAgentModelsMock).toHaveBeenCalled();
     });
     expect(
-      screen.queryByText(/模型加载失败：当前 Session 没有运行中的结构化会话/),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("当前模型类型")).toHaveTextContent("Codex");
+      screen.getByText(/模型加载失败：当前 Session 没有运行中的结构化会话/),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("当前模型类型")).not.toBeInTheDocument();
   });
 
   it("渲染无可见文字标签的模型与 Think 选择器", async () => {

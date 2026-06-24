@@ -24,6 +24,7 @@ interface UseAgentModelsArgs {
   sessionId: number;
   currentModelId?: string | null;
   enabled: boolean;
+  onBeforeSelectModel?: () => Promise<void>;
 }
 
 export interface UseAgentModelsResult {
@@ -50,6 +51,7 @@ export function useAgentModels({
   sessionId,
   currentModelId,
   enabled,
+  onBeforeSelectModel,
 }: UseAgentModelsArgs): UseAgentModelsResult {
   const [models, setModels] = useState<AgentModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -84,14 +86,7 @@ export function useAgentModels({
         if (isDisposed) {
           return;
         }
-        const message = toCommandError(loadError).message;
-        if (isNotRunningModelSourceError(message)) {
-          setModels([]);
-          setError(null);
-          setIsReadOnly(true);
-          return;
-        }
-        setError(message);
+        setError(toCommandError(loadError).message);
       } finally {
         if (!isDisposed) {
           setIsLoading(false);
@@ -113,13 +108,14 @@ export function useAgentModels({
     async (modelId: string) => {
       setError(null);
       try {
+        await onBeforeSelectModel?.();
         await setAgentModel({ projectId, sessionId, modelId });
         // 后端经 model_changed 事件回传 currentModelId，Select 自动跟随。
       } catch (selectError) {
         setError(toCommandError(selectError).message);
       }
     },
-    [projectId, sessionId],
+    [onBeforeSelectModel, projectId, sessionId],
   );
 
   return {
@@ -130,11 +126,4 @@ export function useAgentModels({
     isReadOnly,
     selectModel,
   };
-}
-
-function isNotRunningModelSourceError(message: string): boolean {
-  return (
-    message.includes("没有运行中的结构化会话") ||
-    message.includes("not running")
-  );
 }

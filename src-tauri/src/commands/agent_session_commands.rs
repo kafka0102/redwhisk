@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::agent::codex_app_server::session::list_models_with_command;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
@@ -557,11 +558,26 @@ pub fn list_agent_models(
 ) -> Result<ListAgentModelsResult, CommandError> {
     let database = open_agent_session_database(&app)?;
     let service = build_agent_session_service(&database.connection);
-    service.find_project_session_record(input.project_id, input.session_id)?;
-    let handle = require_structured_handle(&state, input.session_id)?;
-    let models = handle
-        .list_models()
-        .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)?;
+    let session = service.find_project_session_record(input.project_id, input.session_id)?;
+    let models = if let Some(handle) = state.agent_sessions.get(input.session_id) {
+        handle
+            .list_models()
+            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)?
+    } else {
+        let command = if session.command_snapshot.trim().is_empty() {
+            "codex"
+        } else {
+            session.command_snapshot.as_str()
+        };
+        let cwd = session
+            .workspace_path
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(session.working_dir.as_str());
+        list_models_with_command(command, Some(cwd)).map_err(|error| {
+            crate::core::agent_session_service::agent_session_error_to_command_error(error.into())
+        })?
+    };
     Ok(ListAgentModelsResult { models })
 }
 
