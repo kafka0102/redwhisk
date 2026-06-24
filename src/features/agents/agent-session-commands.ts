@@ -114,6 +114,15 @@ export interface StartStandaloneAgentSessionResult {
   sessionId: number;
 }
 
+export interface DeleteAgentSessionInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface DeleteAgentSessionResult {
+  sessionId: number;
+}
+
 export function listAgentSessions(
   projectId: number,
 ): Promise<AgentSessionListResponse> {
@@ -179,6 +188,14 @@ export function startStandaloneAgentSession(
       input,
     },
   );
+}
+
+export function deleteAgentSession(
+  input: DeleteAgentSessionInput,
+): Promise<DeleteAgentSessionResult> {
+  return invokeCommand<DeleteAgentSessionResult>("delete_agent_session", {
+    input,
+  });
 }
 
 // ---------------------------------------------------------------------------
