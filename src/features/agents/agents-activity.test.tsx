@@ -34,6 +34,7 @@ import {
   closeProjectTerminal,
   createTemporaryProjectTerminal,
 } from "../terminals/project-terminal-commands";
+import { toast } from "../../shared/toast";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
@@ -140,6 +141,19 @@ vi.mock("../terminals/project-terminal-commands", () => ({
   createTemporaryProjectTerminal: vi.fn(),
 }));
 
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    loading: vi.fn(),
+    message: vi.fn(),
+    dismiss: vi.fn(),
+    update: vi.fn(),
+  },
+}));
+
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
@@ -163,6 +177,7 @@ const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
 const createTemporaryProjectTerminalMock = vi.mocked(
   createTemporaryProjectTerminal,
 );
+const toastErrorMock = vi.mocked(toast.error);
 
 async function findSessionList() {
   return screen.findByRole("list", { name: "Agent sessions" });
@@ -1410,6 +1425,7 @@ describe("AgentsActivity", () => {
         projectId: 1,
         title: "Untitled Session",
         agentType: "codex",
+        agentProfileId: 101,
       }),
     );
     await waitFor(() =>
@@ -1442,11 +1458,12 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    expect(
-      await screen.findByText(
-        "No agent profiles available. Configure an agent in Settings first.",
-      ),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New session" }),
+      ).toBeDisabled(),
+    );
+    expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
   it("shows an agent type picker when multiple agent types are configured", async () => {
@@ -1613,6 +1630,7 @@ describe("AgentsActivity", () => {
         projectId: 1,
         title: "Untitled Session",
         agentType: "claude",
+        agentProfileId: 102,
       }),
     );
     await waitFor(() =>
@@ -1658,7 +1676,9 @@ describe("AgentsActivity", () => {
         name: "New session",
       }),
     );
-    expect(await screen.findByText("Agent 进程启动失败。")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("Agent 进程启动失败。");
+    });
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
   });
 

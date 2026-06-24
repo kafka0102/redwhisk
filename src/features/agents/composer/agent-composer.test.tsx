@@ -287,14 +287,14 @@ describe("AgentComposer", () => {
     expect(screen.getByLabelText("当前模型类型")).toHaveTextContent("Codex");
   });
 
-  it("渲染无可见标签的模型选择器，不渲染 Think 选择器", async () => {
+  it("渲染无可见文字标签的模型与 Think 选择器", async () => {
     await renderComposer();
     expect(
       screen.getByRole("combobox", { name: "选择模型" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("combobox", { name: "Think 模式" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("combobox", { name: "Think 模式" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
   });
