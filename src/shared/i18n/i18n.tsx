@@ -115,6 +115,16 @@ export function useI18n(): I18nContextValue {
   return context;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function useTheme() {
+  const context = useContext(I18nContext);
+  if (!context) {
+    return DEFAULT_I18N_CONTEXT;
+  }
+
+  return context;
+}
+
 function getSystemTheme(): "light" | "dark" {
   if (!canMatchDarkScheme()) {
     return "light";

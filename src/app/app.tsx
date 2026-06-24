@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { AppShell } from "./app-shell";
+import { Toaster } from "../components/ui/sonner";
 import "./app.css";
 import { ProjectDetailsForm } from "../features/project/project-details-form";
 import { ProjectHome } from "../features/project/project-home";
@@ -268,6 +269,7 @@ export function App() {
           projects={projects}
           onProjectsRefresh={refreshProjects}
         />
+        <Toaster />
         {createProjectDraft ? (
           <CreateProjectDialog
             key={createProjectDraft.repoPath}

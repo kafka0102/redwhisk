@@ -21,7 +21,6 @@ interface AgentsSessionListProps {
   onSelectSession: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
-  sessionCreationErrorMessage: string | null;
   title: string;
 }
 
@@ -37,7 +36,6 @@ export function AgentsSessionList({
   onSelectSession,
   selectedSessionId,
   sessions,
-  sessionCreationErrorMessage,
   title,
 }: AgentsSessionListProps) {
   const shouldShowAgentTypePicker = availableAgentTypes.length > 1;
@@ -115,15 +113,6 @@ export function AgentsSessionList({
       {errorMessage ? (
         <p className="issues-status" role="status" aria-label="Agents status">
           {errorMessage}
-        </p>
-      ) : null}
-      {sessionCreationErrorMessage ? (
-        <p
-          className="issues-status"
-          role="status"
-          aria-label="New session status"
-        >
-          {sessionCreationErrorMessage}
         </p>
       ) : null}
       {isLoading ? (
