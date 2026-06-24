@@ -1057,7 +1057,7 @@ impl<'connection> AgentSessionService<'connection> {
                     is_turn_running: is_session_running
                         && is_structured_turn_running(&row.log_path)
                             .unwrap_or(None)
-                            .unwrap_or(true),
+                            .unwrap_or(row.issue_id.is_some()),
                     workspace_mode: row.workspace_mode,
                     working_dir: row.working_dir,
                     workspace_path: row.workspace_path,
@@ -1436,6 +1436,12 @@ impl<'connection> AgentSessionService<'connection> {
             match handle.read_timeline() {
                 Ok(items) => return Ok(ReadAgentTimelineResult { items }),
                 Err(AgentSessionError::NotRunning(_)) => {}
+                Err(AgentSessionError::Protocol(message))
+                    if session.issue_id.is_none()
+                        && is_empty_standalone_thread_timeline_error(&message) =>
+                {
+                    return Ok(ReadAgentTimelineResult { items: Vec::new() });
+                }
                 Err(error) => return Err(agent_session_error_to_command_error(error)),
             }
         }
@@ -2851,6 +2857,11 @@ fn timeline_item_from_log_value(value: Value) -> Option<Option<AgentTimelineItem
         .map(Some)
 }
 
+fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
+    message.contains("includeTurns is unavailable before first user message")
+        || message.contains("is not materialized yet")
+}
+
 fn is_structured_turn_running(path: &str) -> Result<Option<bool>, CommandError> {
     if path.trim().is_empty() {
         return Ok(None);
@@ -3342,6 +3353,7 @@ mod tests {
         latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
         AgentSessionService, CodexMode,
     };
+    use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::issue_repository::IssueRepository;
@@ -3349,16 +3361,74 @@ mod tests {
     use crate::db::project_repository::ProjectRepository;
     use crate::types::agent_profile::{AgentScope, AgentType};
     use crate::types::agent_session::{
-        AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode,
+        AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
+        AgentSessionStatus, WorkspaceMode,
     };
     use crate::types::agent_session_stream::{
-        AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+        AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
     };
     use crate::types::project::ProjectCompletionPolicy;
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
+    use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TimelineProtocolErrorHandle {
+        message: String,
+    }
+
+    impl AgentSessionHandle for TimelineProtocolErrorHandle {
+        fn send_message(
+            &self,
+            _text: String,
+            _attachments: Vec<AgentMessageAttachment>,
+        ) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn cancel_turn(&self) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn respond_permission(
+            &self,
+            _request_id: &str,
+            _decision: AgentPermissionDecision,
+        ) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn set_model(&self, _model_id: String) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn set_effort(&self, _effort: Option<String>) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn set_mode(&self, _mode_id: &str) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn list_models(&self) -> Result<Vec<AgentModel>, AgentSessionError> {
+            Ok(Vec::new())
+        }
+
+        fn list_modes(&self) -> Vec<AgentMode> {
+            Vec::new()
+        }
+
+        fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
+            Err(AgentSessionError::Protocol(self.message.clone()))
+        }
+
+        fn shutdown(&self) {}
+
+        fn thread_id(&self) -> Option<String> {
+            Some("thread-test".to_string())
+        }
+    }
 
     #[test]
     fn normalize_submitted_prompt_appends_carriage_return_only_when_missing() {
@@ -3574,6 +3644,34 @@ mod tests {
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("最终输出")
         );
+    }
+
+    #[test]
+    fn read_agent_timeline_treats_unmaterialized_standalone_thread_as_empty() {
+        let database = setup_session_list_database();
+        let started_at = current_millis();
+        insert_session_list_row(
+            &database,
+            401,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            started_at,
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let handle: Arc<dyn AgentSessionHandle> = Arc::new(TimelineProtocolErrorHandle {
+            message:
+                "codex app-server 返回错误：thread test-thread is not materialized yet; includeTurns is unavailable before first user message".to_string(),
+        });
+
+        let result = service
+            .read_agent_timeline(1, 401, Some(handle))
+            .expect("read empty standalone timeline");
+
+        assert!(result.items.is_empty());
     }
 
     #[test]
@@ -3843,6 +3941,31 @@ mod tests {
         assert!(!stopped_turn_session.is_turn_running);
 
         fs::remove_file(log_path).ok();
+    }
+
+    #[test]
+    fn list_agent_sessions_does_not_report_empty_standalone_session_turn_as_running() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            304,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let standalone_session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 304)
+            .expect("standalone session");
+
+        assert!(!standalone_session.is_turn_running);
     }
 
     fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {
