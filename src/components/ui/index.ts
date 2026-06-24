@@ -1,4 +1,10 @@
 export { Button, buttonVariants } from "./button";
+export {
+  ConfirmDialog,
+  type ConfirmDialogOptions,
+  type ConfirmDialogProps,
+} from "./confirm-dialog";
+export { useConfirmDialog } from "./use-confirm-dialog";
 export { Input } from "./input";
 export { Textarea } from "./textarea";
 export { Label } from "./label";

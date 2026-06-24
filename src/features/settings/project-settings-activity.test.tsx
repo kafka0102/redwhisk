@@ -91,7 +91,6 @@ const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
 const { open } = await import("@tauri-apps/plugin-dialog");
 const openDialogMock = vi.mocked(open);
 const onProjectUpdated = vi.fn();
-const confirmSpy = vi.spyOn(window, "confirm");
 
 const projectProfile: AgentProfileRecord = {
   id: 1,
@@ -176,8 +175,6 @@ describe("ProjectSettingsActivity", () => {
     });
     deleteAgentProfileMock.mockResolvedValue(undefined);
     deleteProjectLabelMock.mockResolvedValue(undefined);
-    confirmSpy.mockReset();
-    confirmSpy.mockReturnValue(true);
     updateProjectSettingsMock.mockResolvedValue({
       id: 1,
       name: "RedWhisk",
@@ -544,6 +541,12 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
 
     await user.click(screen.getByRole("button", { name: "Delete Urgent" }));
+    expect(
+      screen.getByRole("dialog", {
+        name: 'Are you sure you want to delete Agent Profile "Urgent"?',
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
     await waitFor(() =>
       expect(deleteProjectLabelMock).toHaveBeenCalledWith({ id: 11 }),
     );
@@ -649,7 +652,6 @@ describe("ProjectSettingsActivity", () => {
 
   it("confirms before deleting an agent profile from the table", async () => {
     const user = userEvent.setup();
-    confirmSpy.mockReturnValue(false);
 
     render(
       <ProjectSettingsActivity
@@ -665,8 +667,18 @@ describe("ProjectSettingsActivity", () => {
       await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Are you sure you want to delete Agent Profile "Project Codex"?',
+    expect(
+      screen.getByRole("dialog", {
+        name: 'Are you sure you want to delete Agent Profile "Project Codex"?',
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: 'Are you sure you want to delete Agent Profile "Project Codex"?',
+        }),
+      ).not.toBeInTheDocument(),
     );
     expect(deleteAgentProfileMock).not.toHaveBeenCalled();
     expect(screen.getByText("Project Codex")).toBeInTheDocument();
@@ -688,6 +700,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
+    await user.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() =>
       expect(deleteAgentProfileMock).toHaveBeenCalledWith({ id: 1 }),

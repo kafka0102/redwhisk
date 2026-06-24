@@ -1487,8 +1487,6 @@ describe("AgentsActivity", () => {
 
   it("deletes a standalone session after confirmation", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm");
-    confirmSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
     listAgentSessionsMock
       .mockResolvedValueOnce({
         sessions: [
@@ -1517,10 +1515,15 @@ describe("AgentsActivity", () => {
 
     const deleteButton = await screen.findByRole("button", { name: "删除" });
     await user.click(deleteButton);
+    expect(
+      screen.getByRole("dialog", { name: "确认删除该 Session？" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
 
     expect(deleteAgentSessionMock).not.toHaveBeenCalled();
 
     await user.click(deleteButton);
+    await user.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() =>
       expect(deleteAgentSessionMock).toHaveBeenCalledWith({
@@ -1528,7 +1531,6 @@ describe("AgentsActivity", () => {
         sessionId: 701,
       }),
     );
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
     expect(
       await screen.findByText(
         "Agent sessions will appear here after a session has been started for this project.",

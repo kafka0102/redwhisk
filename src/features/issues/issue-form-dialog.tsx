@@ -16,6 +16,7 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent as UiDialogContent,
@@ -653,20 +654,20 @@ function IssueActionsAside({
           View Summary
         </Button>
       ) : null}
-      <button
-        className="issue-dialog__delete-button"
-        disabled={isSaving}
-        type="button"
-        onClick={() => {
-          const isConfirmed = window.confirm(deleteConfirmMessage);
-          if (isConfirmed) {
-            onDeleteIssue();
-          }
-        }}
+      <ConfirmDialog
+        confirmLabel="Delete"
+        message={deleteConfirmMessage}
+        onConfirm={onDeleteIssue}
       >
-        <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
-        <span>Delete issue</span>
-      </button>
+        <button
+          className="issue-dialog__delete-button"
+          disabled={isSaving}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
+          <span>Delete issue</span>
+        </button>
+      </ConfirmDialog>
     </section>
   );
 }

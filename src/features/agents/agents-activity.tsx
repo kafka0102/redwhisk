@@ -58,6 +58,7 @@ import {
   closeProjectTerminal,
   createTemporaryProjectTerminal,
 } from "../terminals/project-terminal-commands";
+import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -83,6 +84,7 @@ export function AgentsActivity({
 }: AgentsActivityProps) {
   const { messages } = useI18n();
   const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attentionErrorMessage, setAttentionErrorMessage] = useState<
@@ -919,7 +921,7 @@ export function AgentsActivity({
       return;
     }
 
-    const confirmed = window.confirm("确认删除该 Session？");
+    const confirmed = await confirm({ message: "确认删除该 Session？" });
     if (!confirmed) {
       return;
     }
@@ -1398,6 +1400,7 @@ export function AgentsActivity({
           </div>
         </div>
       ) : null}
+      {confirmationDialog}
     </main>
   );
 }
