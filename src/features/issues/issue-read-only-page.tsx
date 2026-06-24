@@ -14,6 +14,7 @@ import type { IssueFormState } from "./issue-activity-types";
 import { IssueAttachmentList } from "./issue-attachment-list";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { IssueSurfaceHeader } from "./issue-surface-header";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueReadOnlyPageProps {
   form: IssueFormState;
@@ -52,15 +53,21 @@ export function IssueReadOnlyPage({
   onOpenLinkedSession,
   onOpenSummary,
 }: IssueReadOnlyPageProps) {
+  const { messages } = useI18n();
   const labels = selectedIssue?.labels ?? [];
+  const title = selectedIssue
+    ? messages.issues.detailTitle(selectedIssue.id)
+    : messages.issues.detailFallbackTitle;
 
   return (
     <section
-      aria-label="Issue Detail"
-      className="issue-page issue-page--readonly"
+      aria-label={messages.issues.detailRegionLabel}
+      className="issue-page issue-page--readonly issue-page--fullscreen"
     >
       <IssueSurfaceHeader
-        title={selectedIssue ? `Issue #${selectedIssue.id}` : "Issue Detail"}
+        title={title}
+        titleLevel={2}
+        variant="fullscreen"
         actions={
           <>
             <Button
@@ -70,37 +77,56 @@ export function IssueReadOnlyPage({
               variant="secondary"
               onClick={onBack}
             >
-              返回
+              {messages.issues.back}
             </Button>
             <StatusMenu
               isSaving={isSaving}
               selectedIssue={selectedIssue}
               onAdvanceStatus={onAdvanceStatus}
             />
+            <ConfirmDialog
+              confirmLabel={messages.issues.delete}
+              message={messages.issues.deleteConfirmMessage}
+              title={messages.issues.deleteConfirmTitle}
+              onConfirm={onDeleteIssue}
+            >
+              <Button
+                className="issues-button issue-page__delete-button"
+                disabled={isSaving}
+                type="button"
+                variant="destructive"
+              >
+                <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
+                {messages.issues.delete}
+              </Button>
+            </ConfirmDialog>
           </>
         }
       />
 
-      <div className="issue-page__body">
+      <div className="issue-page__body issue-page__body--readonly-fullscreen">
         <IssueReadOnlyDetails form={form} />
-        <aside className="issue-page__side" aria-label="Issue actions">
+        <aside
+          className="issue-page__side"
+          aria-label={messages.issues.actionsLabel}
+        >
           <IssueActionsAside
             selectedIssue={selectedIssue}
             hasLinkedSession={hasLinkedSession}
             canViewSummary={canViewSummary}
             isSaving={isSaving}
             canOpenAgentsActivity={canOpenAgentsActivity}
-            onDeleteIssue={onDeleteIssue}
+            messages={messages}
             onOpenLinkedSession={onOpenLinkedSession}
             onOpenSummary={onOpenSummary}
           />
           <div className="issue-page__divider" aria-hidden="true" />
-          <IssueReadOnlyLabels labels={labels} />
+          <IssueReadOnlyLabels labels={labels} messages={messages} />
           {form.attachments.length > 0 ? (
             <>
               <div className="issue-page__divider" aria-hidden="true" />
               <section className="issue-dialog__panel">
-                <h4>附件</h4>
+                <h4>{messages.issues.attachments}</h4>
                 <IssueAttachmentList
                   attachments={form.attachments}
                   onDownloadAttachment={onDownloadAttachment}
@@ -115,7 +141,7 @@ export function IssueReadOnlyPage({
       <p
         className="issue-dialog__status issue-page__status"
         role="status"
-        aria-label="Dialog status"
+        aria-label={messages.issues.statusLabel}
       >
         {errorMessage}
       </p>
@@ -133,10 +159,16 @@ function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
   );
 }
 
-function IssueReadOnlyLabels({ labels }: { labels: IssueLabelRecord[] }) {
+function IssueReadOnlyLabels({
+  labels,
+  messages,
+}: {
+  labels: IssueLabelRecord[];
+  messages: ReturnType<typeof useI18n>["messages"];
+}) {
   return (
     <section className="issue-dialog__panel">
-      <h4>Labels</h4>
+      <h4>{messages.issues.labels}</h4>
       {labels.length > 0 ? (
         <div className="issue-label-picker__selected">
           {labels.map((label) => (
@@ -150,7 +182,7 @@ function IssueReadOnlyLabels({ labels }: { labels: IssueLabelRecord[] }) {
           ))}
         </div>
       ) : (
-        <p>No labels.</p>
+        <p>{messages.issues.noLabels}</p>
       )}
     </section>
   );
@@ -162,7 +194,7 @@ function IssueActionsAside({
   canViewSummary,
   isSaving,
   canOpenAgentsActivity,
-  onDeleteIssue,
+  messages,
   onOpenLinkedSession,
   onOpenSummary,
 }: {
@@ -171,19 +203,21 @@ function IssueActionsAside({
   canViewSummary: boolean;
   isSaving: boolean;
   canOpenAgentsActivity: boolean;
-  onDeleteIssue: () => void;
+  messages: ReturnType<typeof useI18n>["messages"];
   onOpenLinkedSession: () => void;
   onOpenSummary: () => void;
 }) {
-  const deleteConfirmMessage = "Are you sure to delete this issue?";
-
   return (
     <section className="issue-dialog__panel issue-dialog__panel--stack">
       <div className="issue-dialog__meta-row">
-        <span className="issue-dialog__meta-label">Linked session</span>
+        <span className="issue-dialog__meta-label">
+          {messages.issues.session}
+        </span>
         {hasLinkedSession && selectedIssue?.linkedSessionId != null ? (
           <button
-            aria-label={`Open linked session #${selectedIssue.linkedSessionId}`}
+            aria-label={messages.issues.openLinkedSession(
+              selectedIssue.linkedSessionId,
+            )}
             className="issue-dialog__session-link"
             type="button"
             disabled={isSaving || !canOpenAgentsActivity}
@@ -192,7 +226,9 @@ function IssueActionsAside({
             {`#${selectedIssue.linkedSessionId}`}
           </button>
         ) : (
-          <span className="issue-dialog__meta-value">No session linked.</span>
+          <span className="issue-dialog__meta-value">
+            {messages.issues.noSessionLinked}
+          </span>
         )}
       </div>
       {canViewSummary ? (
@@ -203,23 +239,9 @@ function IssueActionsAside({
           variant="outline"
           onClick={onOpenSummary}
         >
-          View Summary
+          {messages.issues.viewSummary}
         </Button>
       ) : null}
-      <ConfirmDialog
-        confirmLabel="Delete"
-        message={deleteConfirmMessage}
-        onConfirm={onDeleteIssue}
-      >
-        <button
-          className="issue-dialog__delete-button"
-          disabled={isSaving}
-          type="button"
-        >
-          <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
-          <span>Delete issue</span>
-        </button>
-      </ConfirmDialog>
     </section>
   );
 }
@@ -233,6 +255,7 @@ function StatusMenu({
   isSaving: boolean;
   onAdvanceStatus: (targetStatus: IssueStatus) => void;
 }) {
+  const { messages } = useI18n();
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const currentStatus = selectedIssue?.status ?? "backlog";
@@ -255,18 +278,20 @@ function StatusMenu({
 
   return (
     <div ref={statusMenuRef} className="issue-dialog__status-menu">
-      <button
+      <Button
         aria-expanded={isStatusMenuOpen}
         aria-haspopup="menu"
-        aria-label="Open status options"
+        aria-label={messages.issues.openStatusOptions}
         className="issue-dialog__status-trigger"
         disabled={isSaving}
+        size="sm"
         type="button"
+        variant="outline"
         onClick={() => setIsStatusMenuOpen((currentValue) => !currentValue)}
       >
-        <span>{statusLabelFor(currentStatus)}</span>
+        <span>{statusLabelFor(currentStatus, messages)}</span>
         <ChevronDown aria-hidden="true" size={14} strokeWidth={1.9} />
-      </button>
+      </Button>
       {isStatusMenuOpen ? (
         <div className="issue-dialog__status-popup" role="menu">
           {ISSUE_STATUS_ORDER.map((status) => {
@@ -288,7 +313,7 @@ function StatusMenu({
                   }
                 }}
               >
-                <span>{statusLabelFor(status)}</span>
+                <span>{statusLabelFor(status, messages)}</span>
                 {isCurrent ? (
                   <Check aria-hidden="true" size={14} strokeWidth={2} />
                 ) : null}
@@ -308,15 +333,18 @@ const ISSUE_STATUS_ORDER: IssueStatus[] = [
   "completed",
 ];
 
-function statusLabelFor(status: IssueStatus): string {
+function statusLabelFor(
+  status: IssueStatus,
+  messages: ReturnType<typeof useI18n>["messages"],
+): string {
   switch (status) {
     case "backlog":
-      return "Backlog";
+      return messages.issues.backlog;
     case "running":
-      return "In progress";
+      return messages.issues.inProgress;
     case "review":
-      return "In review";
+      return messages.issues.review;
     case "completed":
-      return "Done";
+      return messages.issues.done;
   }
 }

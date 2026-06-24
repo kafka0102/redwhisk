@@ -1080,6 +1080,7 @@ button:focus-visible {
 }
 
 .issue-surface-header--fullscreen {
+  min-height: var(--activity-header-height);
   padding: 12px 10% 10px;
   background: var(--color-surface);
 }
@@ -3475,6 +3476,10 @@ button:focus-visible {
   overflow: auto;
 }
 
+.issue-page__body--readonly-fullscreen {
+  padding: 22px 10% 18px;
+}
+
 .issue-page__content-shell {
   display: grid;
   gap: 12px;
@@ -3740,9 +3745,7 @@ button:focus-visible {
 
 .issue-dialog__meta-row {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  align-items: center;
-  column-gap: 12px;
+  gap: 6px;
 }
 
 .issue-dialog__meta-label {
@@ -3763,7 +3766,7 @@ button:focus-visible {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #7fc9ff;
+  color: var(--color-text);
   font-size: 12px;
   line-height: 1.4;
   cursor: pointer;
@@ -3771,7 +3774,6 @@ button:focus-visible {
 }
 
 .issue-dialog__session-link:hover {
-  color: #a7dbff;
   text-decoration: underline;
 }
 
@@ -3790,11 +3792,11 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
   color: var(--color-text);
   font-size: 12px;
   line-height: 1.4;
@@ -3803,8 +3805,7 @@ button:focus-visible {
 }
 
 .issue-dialog__status-trigger:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  background: var(--color-surface-muted);
 }
 
 .issue-dialog__status-popup {
@@ -3845,24 +3846,6 @@ button:focus-visible {
 .issue-dialog__status-option:disabled {
   color: var(--color-text-subtle);
   cursor: not-allowed;
-}
-
-.issue-dialog__delete-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #ff6b6b;
-  font-size: 12px;
-  line-height: 1.4;
-  cursor: pointer;
-}
-
-.issue-dialog__delete-button:hover {
-  color: #ff8787;
 }
 
 .issue-page__delete-button {
