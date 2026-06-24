@@ -49,6 +49,7 @@ const {
   resumeStructuredAgentSession,
   sendAgentMessage,
   setAgentModel,
+  setAgentThinking,
   listAgentModels,
 } = await import("./agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
@@ -57,6 +58,7 @@ const resumeStructuredAgentSessionMock = vi.mocked(
 );
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
 const setAgentModelMock = vi.mocked(setAgentModel);
+const setAgentThinkingMock = vi.mocked(setAgentThinking);
 const listAgentModelsMock = vi.mocked(listAgentModels);
 
 function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
@@ -74,6 +76,8 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
   sendAgentMessageMock.mockResolvedValue(undefined);
   setAgentModelMock.mockReset();
   setAgentModelMock.mockResolvedValue(undefined);
+  setAgentThinkingMock.mockReset();
+  setAgentThinkingMock.mockResolvedValue(undefined);
   listAgentModelsMock.mockReset();
   listAgentModelsMock.mockResolvedValue({ models: [] });
   mocks.listeners.length = 0;
@@ -345,6 +349,52 @@ describe("AgentSessionView", () => {
       projectId: 1,
       sessionId: 10,
       modelId: "gpt-4o",
+    });
+  });
+
+  it("未完成的关闭 session 切换 Think 时先自动恢复再设置 effort", async () => {
+    setupTimeline([]);
+    listAgentModelsMock.mockResolvedValueOnce({
+      models: [
+        {
+          modelId: "gpt-5",
+          displayName: "GPT-5",
+          isDefault: true,
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+    });
+    resumeStructuredAgentSessionMock.mockResolvedValueOnce({
+      sessionId: 10,
+      threadId: "thread-10",
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="review"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("combobox", { name: "Think 模式" }),
+    );
+    await user.click(await screen.findByRole("option", { name: "高" }));
+
+    await waitFor(() => {
+      expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+      });
+    });
+    expect(setAgentThinkingMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+      effort: "high",
     });
   });
 });

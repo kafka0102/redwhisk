@@ -33,6 +33,7 @@ export function AgentComposer({
   readOnlyReason,
   onBeforeSend,
   onBeforeSelectModel,
+  onBeforeSetEffort,
   onMessageSent,
 }: AgentComposerProps) {
   const {
@@ -70,6 +71,7 @@ export function AgentComposer({
     currentEffort,
     isReadOnly,
     onBeforeSend,
+    onBeforeSetEffort,
     onMessageSent,
   });
 

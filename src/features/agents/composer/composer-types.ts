@@ -63,6 +63,8 @@ export interface AgentComposerProps {
   onBeforeSend?: () => Promise<void>;
   /** 切换模型前执行的恢复动作；失败时阻止模型切换。 */
   onBeforeSelectModel?: () => Promise<void>;
+  /** 切换 Think effort 前执行的恢复动作；失败时阻止 effort 切换。 */
+  onBeforeSetEffort?: () => Promise<void>;
   /**
    * 可选：发送成功回调，供父组件做乐观用户消息合并（任务 6 用）。
    */

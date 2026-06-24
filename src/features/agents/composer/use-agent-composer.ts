@@ -33,6 +33,7 @@ interface UseAgentComposerArgs {
   currentEffort?: ComposerEffort;
   isReadOnly?: boolean;
   onBeforeSend?: () => Promise<void>;
+  onBeforeSetEffort?: () => Promise<void>;
   onMessageSent?: (message: string) => void;
 }
 
@@ -101,6 +102,7 @@ export function useAgentComposer({
   currentEffort,
   isReadOnly = false,
   onBeforeSend,
+  onBeforeSetEffort,
   onMessageSent,
 }: UseAgentComposerArgs): UseAgentComposerResult {
   const [text, setText] = useState("");
@@ -261,6 +263,7 @@ export function useAgentComposer({
       setEffort(nextEffort);
       setSubmitError(null);
       try {
+        await onBeforeSetEffort?.();
         await setAgentThinking({
           projectId,
           sessionId,
@@ -271,7 +274,7 @@ export function useAgentComposer({
         setSubmitError(toCommandError(error).message);
       }
     },
-    [effort, projectId, sessionId],
+    [effort, onBeforeSetEffort, projectId, sessionId],
   );
 
   return {
