@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 /// 顶层结构化事件，对应 `agent-session-stream-event` 广播载荷中的 `event` 字段。
 ///
-/// 设计参考 paseo 的 `AgentStreamEvent`：把 codex app-server 的 notification
-/// 归一化为按 `type` 区分的 union，前端用 `switch` 分发渲染。
+/// 把 codex app-server 的 notification 归一化为按 `type` 区分的 union，
+/// 前端用 `switch` 分发渲染。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     rename_all = "snake_case",
@@ -64,7 +64,7 @@ pub enum AgentStreamEvent {
     ModelChanged { model_id: String },
 }
 
-/// timeline 项，对应 paseo `AgentTimelineItem`。
+/// timeline 项。
 ///
 /// `tool_call` 通过 `detail` 二次分发到具体工具类型（shell / edit / search 等），
 /// 让每种工具都有定制 UI 而非裸 stdout。
@@ -169,7 +169,7 @@ pub enum ToolCallStatus {
     Canceled,
 }
 
-/// 搜索模式，对应 paseo search detail 的 `mode`。
+/// 搜索模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchMode {

@@ -8,7 +8,7 @@
 //!   审批），转成 `PermissionRequested` 事件并挂起，等待前端
 //!   `respond_permission` 回调
 //! - 累积 agent_message / reasoning 增量，避免每个 delta 都广播一条
-//!   timeline 事件（参考 paseo 双缓冲合并策略，首版采用简单 append）
+//!   timeline 事件（首版采用简单 append）
 //!
 //! 本模块只做会话级编排，不做持久化（timeline 持久化在任务 3 的
 //! service 层处理）。
@@ -36,7 +36,7 @@ use crate::types::agent_session_stream::{
 
 /// codex mode 预设（approvalPolicy + sandbox）。
 ///
-/// 与 paseo `MODE_PRESETS` 对齐：auto（默认）/ full-access / read-only。
+/// codex mode 预设：auto（默认）/ full-access / read-only。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CodexMode {
     Auto,
@@ -638,7 +638,7 @@ fn build_events(
             thread_id: _,
         } => {
             // 首版策略：每次 delta 累积后广播一条带最新完整文本的 timeline。
-            // 后续可改为 48ms 合并（参考 paseo），但首版优先正确性。
+            // 后续可改为 48ms 合并，但首版优先正确性。
             let text = {
                 let mut state = match state.lock() {
                     Ok(state) => state,
