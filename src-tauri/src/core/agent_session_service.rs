@@ -998,6 +998,10 @@ impl<'connection> AgentSessionService<'connection> {
             project_completion_capabilities(&project.repo_path, project.completion_policy);
 
         self.agent_session_repository
+            .prune_broken_structured_standalone_sessions(project_id, current_epoch_millis()?)
+            .map_err(agent_session_database_error)?;
+
+        self.agent_session_repository
             .prune_completed_over_limit(
                 project_id,
                 AGENT_SESSION_COMPLETED_LIST_LIMIT,
@@ -1571,7 +1575,7 @@ impl AgentSessionService<'_> {
             (
                 profile.id,
                 profile.agent_type.clone(),
-                ensure_codex_bypass_arg(&profile.command),
+                build_structured_command_snapshot(&profile),
             )
         } else {
             // 没有指定 profile id，找第一个可用的 profile（先 project scope，后 global scope）。
@@ -1595,8 +1599,8 @@ impl AgentSessionService<'_> {
             {
                 (
                     profile.id,
-                    profile.agent_type,
-                    ensure_codex_bypass_arg(&profile.command),
+                    profile.agent_type.clone(),
+                    build_structured_command_snapshot(&profile),
                 )
             } else {
                 let requested_agent_type_literal = match requested_agent_type {
@@ -1616,6 +1620,15 @@ impl AgentSessionService<'_> {
                 ));
             }
         };
+
+        if agent_type != AgentType::Codex {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "暂不支持的 agent 类型。",
+            )
+            .with_detail(ErrorDetail::new("Field").with_value("name", "agentType"))
+            .with_detail(ErrorDetail::new("Value").with_value("agentType", "claude")));
+        }
 
         let title = input
             .title
@@ -1666,66 +1679,85 @@ impl AgentSessionService<'_> {
 
         let session_id = session.id;
 
-        // 按 agent_type 分支构造具体 provider 句柄。当前仅 Codex 有实现；
-        // 其他类型返回「暂不支持」。新增 Claude 等时在此扩展分支。
-        let handle: Arc<dyn AgentSessionHandle> = match agent_type {
-            AgentType::Codex => {
-                let mode =
-                    codex_mode_from_structured_input(input.mode.as_deref()).ok_or_else(|| {
-                        CommandError::new(
-                            CommandErrorCode::AgentSessionValidationFailed,
-                            "不支持的协作模式。",
-                        )
-                        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-                        .with_detail(
-                            ErrorDetail::new("Value").with_value("mode", input.mode.clone()),
-                        )
-                    })?;
-                let config = CodexSessionConfig {
-                    project_id: input.project_id,
-                    session_id,
-                    binary: command_snapshot,
-                    cwd: cwd.clone(),
-                    mode,
-                    broadcaster: broadcaster.clone(),
-                    resume_thread_id: input.resume_from_codex_session_id.clone(),
-                    model: input.model.clone(),
-                    effort: input.effort.clone(),
-                };
-                let codex_handle = CodexSessionHandle::start(config)
-                    .map_err(|e| agent_session_error_to_command_error(e.into()))?;
-                Arc::new(codex_handle)
-            }
-            AgentType::Claude => {
-                return Err(CommandError::new(
-                    CommandErrorCode::AgentSessionValidationFailed,
-                    "暂不支持的 agent 类型。",
-                )
-                .with_detail(ErrorDetail::new("Field").with_value("name", "agentType"))
-                .with_detail(ErrorDetail::new("Value").with_value("agentType", "claude")));
+        let mode = codex_mode_from_structured_input(input.mode.as_deref()).ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "不支持的协作模式。",
+            )
+            .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+            .with_detail(ErrorDetail::new("Value").with_value("mode", input.mode.clone()))
+        })?;
+        let config = CodexSessionConfig {
+            project_id: input.project_id,
+            session_id,
+            binary: command_snapshot.clone(),
+            cwd: cwd.clone(),
+            mode,
+            broadcaster: broadcaster.clone(),
+            resume_thread_id: input.resume_from_codex_session_id.clone(),
+            model: input.model.clone(),
+            effort: input.effort.clone(),
+        };
+        let codex_handle = match CodexSessionHandle::start(config) {
+            Ok(handle) => handle,
+            Err(error) => {
+                let _ = self.rollback_failed_structured_standalone_session(session_id);
+                return Err(agent_session_error_to_command_error(error.into()));
             }
         };
-        let thread_id = handle.thread_id().ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionStreamFailed,
-                "Agent 会话启动后未拿到 threadId。",
-            )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
-        })?;
+        let thread_id = match codex_handle.thread_id() {
+            Some(thread_id) => thread_id,
+            None => {
+                codex_handle.shutdown();
+                let _ = self.rollback_failed_structured_standalone_session(session_id);
+                return Err(CommandError::new(
+                    CommandErrorCode::AgentSessionStreamFailed,
+                    "Agent 会话启动后未拿到 threadId。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
+                ));
+            }
+        };
 
         // 回填 codex_session_id（agent threadId）。
-        self.agent_session_repository
+        if let Err(error) = self
+            .agent_session_repository
             .update_codex_session_id(session_id, &thread_id)
-            .map_err(agent_session_database_error)?;
+            .map_err(agent_session_database_error)
+        {
+            codex_handle.shutdown();
+            let _ = self.rollback_failed_structured_standalone_session(session_id);
+            return Err(error);
+        }
 
         // 注册到 broadcaster / registry，供前端订阅与后续命令取用。
         broadcaster.register_session(session_id);
-        agent_registry.register(session_id, handle);
+        agent_registry.register(session_id, Arc::new(codex_handle));
 
         Ok(StartStructuredAgentSessionResult {
             session_id,
             thread_id,
         })
+    }
+
+    fn rollback_failed_structured_standalone_session(
+        &self,
+        session_id: i64,
+    ) -> Result<(), CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        AgentSessionRepository::soft_delete_in_transaction(
+            &transaction,
+            session_id,
+            current_epoch_millis()?,
+        )
+        .map_err(agent_session_database_error)?;
+        transaction.commit().map_err(agent_session_database_error)?;
+        Ok(())
     }
 
     pub fn resume_structured_agent_session_in_data_dir(
