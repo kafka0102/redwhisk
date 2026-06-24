@@ -21,7 +21,7 @@ const AGENT_CAPABILITIES: Record<AgentType, AgentCapabilities> = {
   codex: {
     modelTypeLabel: "Codex",
     supportsModelSwitching: true,
-    supportsReasoningEffort: false,
+    supportsReasoningEffort: true,
     supportsModes: true,
   },
   claude: {

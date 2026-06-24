@@ -30,6 +30,9 @@ export interface ComposerAttachment {
   error?: string;
 }
 
+/** Think 模式（reasoning effort）取值；`null` 表示关闭。 */
+export type ComposerEffort = "low" | "medium" | "high" | null;
+
 /** AgentComposer 顶层组件的 props。 */
 export interface AgentComposerProps {
   projectId: number;
@@ -48,6 +51,10 @@ export interface AgentComposerProps {
    * 父组件在 message-stream 收到 `model_changed` 事件时下传新值。
    */
   currentModelId?: string | null;
+  /**
+   * 当前 Think effort。无独立事件流，可选初始化（任务 6 可由父组件持久化）。
+   */
+  currentEffort?: ComposerEffort;
   /** 只读时禁用输入和发送；用于 completed issue 等不可继续的 session。 */
   isReadOnly?: boolean;
   /** 只读原因文案，显示在 composer 内部状态区。 */

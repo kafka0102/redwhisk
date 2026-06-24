@@ -1,4 +1,4 @@
-// composer 控制行（纯展示）：附件图标 + 模型菜单/只读模型信息 + 发送/终止按钮 + 用量。
+// composer 控制行（纯展示）：附件图标 + 模型菜单/只读模型信息 + Think 菜单 + 发送/终止按钮 + 用量。
 
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 
@@ -11,6 +11,7 @@ import {
 import type { AgentCapabilities } from "../agent-capabilities";
 import { ComposerContextMeter } from "./composer-context-meter";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
+import type { ComposerEffort } from "./composer-types";
 
 interface ComposerControlsProps {
   capabilities: AgentCapabilities;
@@ -20,6 +21,9 @@ interface ComposerControlsProps {
   modelsError: string | null;
   isModelReadOnly: boolean;
   onSelectModel: (modelId: string) => void;
+  effort: ComposerEffort;
+  thinkOptions: string[];
+  onSelectEffort: (effort: ComposerEffort) => void;
   isSending: boolean;
   canSend: boolean;
   isReadOnly: boolean;
@@ -29,6 +33,14 @@ interface ComposerControlsProps {
   usage: AgentUsage | null;
 }
 
+const EFFORT_LABELS: Record<string, string> = {
+  low: "低",
+  medium: "中",
+  high: "高",
+};
+
+const OFF_VALUE = "__off__";
+
 export function ComposerControls({
   capabilities,
   models,
@@ -37,6 +49,9 @@ export function ComposerControls({
   modelsError,
   isModelReadOnly,
   onSelectModel,
+  effort,
+  thinkOptions,
+  onSelectEffort,
   isSending,
   canSend,
   isReadOnly,
@@ -45,11 +60,13 @@ export function ComposerControls({
   onCancel,
   usage,
 }: ComposerControlsProps) {
+  const effortValue = effort ?? OFF_VALUE;
   const hasModels = models.length > 0;
   const showModelSelect =
     capabilities.supportsModelSwitching && !isModelReadOnly;
   const showReadOnlyModel =
     isModelReadOnly || !capabilities.supportsModelSwitching;
+  const showThinkSelect = capabilities.supportsReasoningEffort && !isReadOnly;
   const modelLabel = formatModelLabel(
     selectedModelId,
     models,
@@ -111,6 +128,41 @@ export function ComposerControls({
               {modelLabel}
             </span>
           ) : null}
+
+          {showThinkSelect && (
+            <Select
+              value={effortValue}
+              onValueChange={(value) => {
+                if (value === OFF_VALUE) {
+                  onSelectEffort(null);
+                } else if (typeof value === "string") {
+                  onSelectEffort(value as ComposerEffort);
+                }
+              }}
+              disabled={isReadOnly}
+            >
+              <SelectTrigger
+                id="agent-composer-effort"
+                aria-label="Think 模式"
+                className="agents-composer__select"
+                size="sm"
+              >
+                <span data-slot="select-value">
+                  {effort === null
+                    ? "关闭"
+                    : (EFFORT_LABELS[effort] ?? effort)}
+                </span>
+              </SelectTrigger>
+              <SelectContent align="start" className="agents-composer__menu">
+                <SelectItem value={OFF_VALUE}>关闭</SelectItem>
+                {thinkOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {EFFORT_LABELS[option] ?? option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
