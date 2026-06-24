@@ -31,6 +31,7 @@ import {
 import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 import { AgentsSessionList } from "./agents-session-list";
 import {
   listAgentProfiles,
@@ -106,8 +107,6 @@ export function AgentsActivity({
     string | null
   >(null);
   const [completeAgentCommitErrorMessage, setCompleteAgentCommitErrorMessage] =
-    useState<string | null>(null);
-  const [sessionCreationErrorMessage, setSessionCreationErrorMessage] =
     useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
@@ -218,7 +217,6 @@ export function AgentsActivity({
 
     async function loadAgentTypes() {
       setIsLoadingAgentTypes(true);
-      setSessionCreationErrorMessage(null);
 
       try {
         const [projectResponse, globalResponse] = await Promise.all([
@@ -238,18 +236,13 @@ export function AgentsActivity({
           new Set(mergedProfiles.map((profile) => profile.agentType)),
         );
         setAvailableAgentTypes(nextAgentTypes);
-        if (nextAgentTypes.length === 0) {
-          setSessionCreationErrorMessage(
-            "No agent profiles available. Configure an agent in Settings first.",
-          );
-        }
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
         setAvailableAgentTypes([]);
-        setSessionCreationErrorMessage(toCommandError(error).message);
+        toast.error(toCommandError(error).message);
       } finally {
         if (isMounted) {
           setIsLoadingAgentTypes(false);
@@ -1028,7 +1021,6 @@ export function AgentsActivity({
       return;
     }
 
-    setSessionCreationErrorMessage(null);
     setIsCreatingSession(true);
     setIsNewSessionMenuOpen(false);
 
@@ -1040,7 +1032,7 @@ export function AgentsActivity({
       });
       await handleTemporarySessionStarted(result);
     } catch (error) {
-      setSessionCreationErrorMessage(toCommandError(error).message);
+      toast.error(toCommandError(error).message);
     } finally {
       setIsCreatingSession(false);
       window.requestAnimationFrame(() => {
@@ -1077,7 +1069,6 @@ export function AgentsActivity({
         onSelectSession={handleSelectSession}
         selectedSessionId={selectedSession?.sessionId ?? null}
         sessions={visibleSessions}
-        sessionCreationErrorMessage={sessionCreationErrorMessage}
         title={messages.app.agents}
       />
 
