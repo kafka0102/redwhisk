@@ -4,7 +4,7 @@
 
 **Goal:** 将 Settings 右侧内容统一为 80% 居中布局，并把 Agents 设置页改成 action card + table + 精简 New agent 弹窗。
 
-**Architecture:** 前端继续沿用 `ProjectSettingsActivity` 作为 Settings 页面入口，`AgentProfileForm` 负责创建/编辑 profile。布局规则落在 `docs/standards/settings-page-layout.md` 和 `src/app/app.css`，agent logo 通过一个共享 helper 复用现有 Codex / Claude SVG 资源。
+**Architecture:** 前端继续沿用 `ProjectSettingsActivity` 作为 Settings 页面入口，`AgentProfileForm` 负责创建/编辑 profile。布局规则落在 `docs/architecture-design/settings-page-layout.md` 和 `src/app/app.css`，agent logo 通过一个共享 helper 复用现有 Codex / Claude SVG 资源。
 
 **Tech Stack:** React 19、TypeScript、Vitest、Testing Library、Tauri command wrapper、CSS modules-by-convention in `src/app/app.css`。
 
@@ -12,7 +12,7 @@
 
 ## File Structure
 
-- Modify: `docs/standards/settings-page-layout.md`  
+- Modify: `docs/architecture-design/settings-page-layout.md`
   更新 Settings 右侧 80% 居中布局规范。
 - Create: `src/features/agents/agent-visuals.ts`  
   统一导出 agent 类型 label 和 logo src，供 Agents Session 与 Settings table 复用。
@@ -30,7 +30,7 @@
 ## Task 1: Settings 布局规范与共享 logo helper
 
 **Files:**
-- Modify: `docs/standards/settings-page-layout.md`
+- Modify: `docs/architecture-design/settings-page-layout.md`
 - Create: `src/features/agents/agent-visuals.ts`
 - Modify: `src/features/agents/agents-activity.tsx`
 - Test: `src/features/agents/agents-activity.test.tsx`
@@ -95,7 +95,7 @@
 
 - [ ] **Step 5: 更新 Settings 布局规范**
 
-  在 `docs/standards/settings-page-layout.md` 的“右侧内容模板”中，将原来的 `max-width: 900px` 规则替换为：
+  在 `docs/architecture-design/settings-page-layout.md` 的“右侧内容模板”中，将原来的 `max-width: 900px` 规则替换为：
 
   ```markdown
   右侧具体内容容器默认使用右侧区域的 `80%` 宽度，并在右侧区域内水平居中。容器必须保留 `min-width: 0`、响应式约束和溢出保护，避免窄屏时内容越界；当右侧区域过窄时可以退化为接近 `100%` 的可用宽度，但默认设计基线仍是 `80%`。
@@ -817,7 +817,7 @@
   ONESPEC_ENV="${ONESPEC_ENV:-$(find . "$HOME"/.codex "$HOME"/.claude "$HOME"/.cursor "$HOME"/.gemini "$HOME"/.copilot "$HOME"/.agents "$HOME"/.config -path '*/onespec/scripts/onespec-env.sh' -type f -print -quit 2>/dev/null)}"
   . "$ONESPEC_ENV"
   "$ONESPEC_BASH" "$ONESPEC_COMMIT" track redesign-settings-agents-layout \
-    docs/standards/settings-page-layout.md \
+    docs/architecture-design/settings-page-layout.md \
     docs/superpowers/plans/2026-06-13-redesign-settings-agents-layout.md \
     src/features/agents/agent-visuals.ts \
     src/features/agents/agents-activity.tsx \
@@ -834,7 +834,7 @@
   Run:
 
   ```bash
-  git add docs/standards/settings-page-layout.md \
+  git add docs/architecture-design/settings-page-layout.md \
     docs/superpowers/plans/2026-06-13-redesign-settings-agents-layout.md \
     src/features/agents/agent-visuals.ts \
     src/features/agents/agents-activity.tsx \

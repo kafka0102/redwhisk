@@ -5,32 +5,35 @@
 Agent 在执行任何任务前，**必须**先确认本次任务涉及哪些规范文档，并读取对应的 docs/ 文件：
 
 - **所有任务默认需要读取**：
-  - `docs/standards/README.md` - 规范文档索引
-  - `docs/standards/agent-development-rules.md` - Agent 开发通用规则
+  - `docs/README.md` - docs 总索引与三类文档分类
+  - `docs/architecture-design/agent-development-rules.md` - Agent 开发通用规则
 
 - **涉及 TypeScript/代码改动时**：
-  - `docs/standards/shared/engineering-spec.md` - TypeScript 工程规范
-  - `docs/standards/shared/coding-style.md` - 编码风格
+  - `docs/standards/engineering-spec.md` - TypeScript 工程规范
+  - `docs/standards/coding-style.md` - 编码风格
 
-- **涉及 UI/设计改动时**：
-  - `docs/DESIGN_GUIDE.md` - 设计系统指南
-  - `docs/standards/settings-page-layout.md` - Settings 页面布局规范（如适用）
+- **涉及 UI/设计/前端结构改动时**：
+  - `docs/architecture-design/design-guide.md` - 设计系统指南
+  - `docs/architecture-design/frontend-large-component-splitting-rules.md` - 前端大型组件拆分规则（涉及大型页面、Activity、组件拆分时）
+  - `docs/architecture-design/settings-page-layout.md` - Settings 页面布局规范（如适用）
 
 - **涉及 Git 提交时**：
-  - `docs/standards/shared/git-workflow.md` - Git 工作流规范
+  - `docs/standards/git-workflow.md` - Git 工作流规范
 
 ## 规范优先级
 
 1. 用户明确要求 >
-2. docs/** 正式文档 >
+2. docs/\*\* 正式文档 >
 3. AGENTS.md >
 4. 外部 skill / workflow / 模板默认行为
 
 当规范之间存在冲突时，以更具体的文档为准：
-- `docs/standards/agent-development-rules.md` 的特定规则 > 本文件的通用规则
-- `docs/standards/shared/` 下的专项规范 > 概括性说明
+
+- `docs/architecture-design/agent-development-rules.md` 的特定规则 > 本文件的通用规则
+- `docs/standards/` 下的专项规范 > 概括性说明
 
 ## Git Commit Rule
+
 - Agent 完成当前任务并完成必要验证后，应自动创建一次 git commit。
 - 自动提交顺序固定为：完成任务 -> 运行该任务所需验证 -> 暂存当前任务相关文件 -> 创建 git commit。
 - 自动提交只能包含当前任务直接相关的文件，禁止混入无关改动。
@@ -48,7 +51,6 @@ Agent 在执行任何任务前，**必须**先确认本次任务涉及哪些规�
 - 代码、命令、日志原文、API 名称、协议字段、环境变量名、文件名、路径、TypeScript/SQL/Prisma 标识符保持原样，不做翻译。
 - 如果模板或工具预置了英文标题，允许保留固定文件名与少量固定英文 token，但正文内容必须使用简体中文；若无兼容性要求，优先直接使用中文标题。
 - 在 spawn / Task / delegation 场景下，发给子 Agent 的 prompt 应显式重复“默认使用简体中文输出说明文字”这一要求，避免子 Agent 丢失语言上下文。
-
 
 ## Karpathy 风格编码纪律
 

@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 必须遵守 `docs/standards/agent-development-rules.md`、`docs/standards/shared/engineering-spec.md`、`docs/standards/shared/coding-style.md`、`docs/DESIGN_GUIDE.md`。
+- 必须遵守 `docs/architecture-design/agent-development-rules.md`、`docs/standards/engineering-spec.md`、`docs/standards/coding-style.md`、`docs/architecture-design/design-guide.md`。
 - 不新增第三方依赖，不修改数据库、Tauri command 或项目创建确认表单。
 - 搜索仅匹配项目名称，本地实时过滤；不匹配项目不渲染。
 - 搜索框 placeholder 固定为 `searching projects`，搜索框视觉为无边框。

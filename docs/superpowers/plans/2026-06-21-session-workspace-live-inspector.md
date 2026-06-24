@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Default explanatory text is Simplified Chinese; code identifiers, commands, API names, file paths, and protocol fields remain untranslated.
-- Before implementation, read `docs/standards/README.md`, `docs/standards/agent-development-rules.md`, `docs/standards/shared/engineering-spec.md`, `docs/standards/shared/coding-style.md`, and `docs/DESIGN_GUIDE.md`.
+- Before implementation, read `docs/README.md`, `docs/architecture-design/agent-development-rules.md`, `docs/standards/engineering-spec.md`, `docs/standards/coding-style.md`, and `docs/architecture-design/design-guide.md`.
 - Frontend command wrappers must use `invokeCommand` and camelCase TypeScript DTOs matching Rust DTOs.
 - Rust Tauri commands must use snake_case command names, camelCase serde DTOs, and structured `CommandError`.
 - React must not read the filesystem or run shell commands directly; repository data comes through Tauri commands.

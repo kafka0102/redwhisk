@@ -21,7 +21,7 @@
 - Modify `src/features/settings/project-settings-activity.tsx`: read Settings text from `useI18n`.
 - Modify `src/features/issues/issues-activity.tsx`: derive lane labels and primary visible labels from `useI18n`.
 - Modify `src/features/agents/agents-activity.tsx`: derive session group labels and empty copy from `useI18n`.
-- Modify docs `docs/standards/agent-development-rules.md` and `docs/standards/settings-page-layout.md`.
+- Modify docs `docs/architecture-design/agent-development-rules.md` and `docs/architecture-design/settings-page-layout.md`.
 - Backfill `openspec/changes/add-global-i18n-settings/tasks.md` and `.onespec.yaml`.
 
 ## Task 1: i18n Runtime
@@ -375,8 +375,8 @@ Expected: PASS.
 ## Task 6: Documentation, OpenSpec Backfill, and Full Verification
 
 **Files:**
-- Modify: `docs/standards/agent-development-rules.md`
-- Modify: `docs/standards/settings-page-layout.md`
+- Modify: `docs/architecture-design/agent-development-rules.md`
+- Modify: `docs/architecture-design/settings-page-layout.md`
 - Modify: `openspec/changes/add-global-i18n-settings/tasks.md`
 - Modify: `openspec/changes/add-global-i18n-settings/.onespec.yaml`
 
