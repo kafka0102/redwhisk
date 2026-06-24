@@ -4,7 +4,6 @@
 //! 类型化 `CodexNotification`。上层 `session` 再把它转成
 //! `AgentStreamEvent` 广播给前端。
 //!
-//! 覆盖的 method 取自 paseo codex-app-server-agent 实测集合，
 //! 优先处理现代 `item/*` 通道（codex 0.x 新协议）；旧版 `codex_event`
 //! 风格的 `msg.type=exec_command_*` 等通知因与 `item/*` 信息重叠，
 //! 首版不单独解析，遇到时归入 `Unknown`。

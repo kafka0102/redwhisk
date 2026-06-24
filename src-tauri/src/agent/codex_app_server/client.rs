@@ -29,8 +29,8 @@ pub struct InitializeParams {
 
 impl Default for InitializeParams {
     fn default() -> Self {
-        // 与 paseo 一致：使用非 originating 的 client identity，避免在
-        // provider usage log 里把请求标成 redwhisk 发起。
+        // 使用非 originating 的 client identity，避免在 provider usage log
+        // 里把请求标成 redwhisk 发起。
         Self {
             client_name: "redwhisk_codex_app_server".into(),
             client_title: "RedWhisk Codex App Server".into(),
@@ -79,7 +79,7 @@ pub fn text_user_input(text: &str) -> Value {
     })
 }
 
-/// codex sandbox 策略。对应 paseo `toSandboxPolicy` 的三种 type。
+/// codex sandbox 策略。覆盖 app-server 支持的三种 sandbox type。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SandboxPolicy {
     ReadOnly,

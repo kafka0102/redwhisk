@@ -112,4 +112,3 @@ RedWhisk 当前代码中：
 - Anthropic Claude Models overview：https://docs.anthropic.com/en/docs/about-claude/models/overview
 - Anthropic Choosing the right model：https://docs.anthropic.com/en/docs/about-claude/models/choosing-a-model
 - Anthropic Models API：https://docs.anthropic.com/en/api/models-list
-- 参考项目分析文档：`/Users/yujianjia/workspace/open/coding/paseo/docs/codex-agent-session-output.md`

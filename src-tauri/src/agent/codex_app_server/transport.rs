@@ -26,7 +26,7 @@ use serde_json::Value;
 
 use crate::agent::command_detector::run_command_lookup_with_path;
 
-/// 默认请求超时（与 paseo 一致：14 天，等价于不超时，仅兜底死循环）。
+/// 默认请求超时（14 天，等价于不超时，仅兜底死循环）。
 const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
 /// stderr 缓冲上限，避免内存膨胀；保留尾部用于诊断。
 const STDERR_BUFFER_LIMIT: usize = 8192;

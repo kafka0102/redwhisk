@@ -3,7 +3,7 @@
 //! 启动 `codex app-server` 子进程，通过 NDJSON over stdio 与之交互，
 //! 把 codex 的 JSON-RPC 通知归一化为 `AgentStreamEvent` 广播给前端。
 //!
-//! 模块拆分（避免逻辑过度集中，参考 paseo codex-app-server-agent）：
+//! 模块拆分（避免逻辑过度集中）：
 //! - `transport`：子进程生命周期 + NDJSON 帧解析 + JSON-RPC 消息分发
 //! - `notification`：codex 通知 method → 类型化 `CodexNotification`
 //! - `thread_item`：codex thread item → `AgentTimelineItem` 映射

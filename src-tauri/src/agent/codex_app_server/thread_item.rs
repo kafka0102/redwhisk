@@ -1,8 +1,7 @@
 //! codex thread item → `AgentTimelineItem` 映射。
 //!
-//! 对应 paseo `threadItemToTimeline` / `mapCodexExecNotificationToToolCall` /
-//! `mapCodexPatchNotificationToToolCall`。把 codex 原始 item 归一化为
-//! redwhisk 的 `AgentTimelineItem` 联合类型，让前端按 `type` 分发渲染。
+//! 把 codex 原始 item 归一化为 redwhisk 的 `AgentTimelineItem` 联合类型，
+//! 让前端按 `type` 分发渲染。
 //!
 //! 首版覆盖 codex 0.x 常见 item 类型：userMessage / agentMessage / reasoning /
 //! plan / commandExecution / fileChange / webSearch / contextCompaction。其余类型
@@ -234,7 +233,7 @@ fn map_unknown_tool_call(item: &Value, name: &str) -> Option<AgentTimelineItem> 
 /// 从 codex patch `changes` 字段抽取文件列表。
 ///
 /// changes 可能是数组（`[{path, content}]`）、单对象（`{path, content}`）
-/// 或路径到内容的映射。参考 paseo `parseCodexPatchChanges`。
+/// 或路径到内容的映射。
 fn parse_patch_changes(changes: &Value) -> Vec<PatchFile> {
     if changes.is_null() {
         return Vec::new();
@@ -437,7 +436,6 @@ fn normalize_plan_text(text: String) -> String {
 
 /// 从 codex `tokenUsage` 通知载荷提取 `AgentUsage`。
 ///
-/// 参考 paseo `toAgentUsage`：
 /// - `contextWindowMaxTokens` ← `model_context_window` / `modelContextWindow`
 /// - `contextWindowUsedTokens` ← `last.total_tokens` / `last.totalTokens`
 /// - `inputTokens` / `outputTokens` ← `last.inputTokens` / `last.outputTokens`
