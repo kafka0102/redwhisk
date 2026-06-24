@@ -8,6 +8,7 @@ import {
 import { Bot, Info, Tag } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
+import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import {
   deleteAgentProfile,
   deleteProjectLabel,
@@ -102,6 +103,7 @@ export function ProjectSettingsActivity({
   worktreeSetupCommand = "",
 }: ProjectSettingsActivityProps) {
   const { messages } = useI18n();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [internalActiveMenu, setInternalActiveMenu] =
     useState<SettingsMenu>(requestedMenu);
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
@@ -305,9 +307,9 @@ export function ProjectSettingsActivity({
   }
 
   async function handleDeleteProfile(profile: AgentProfileRecord) {
-    const isConfirmed = window.confirm(
-      messages.settings.deleteConfirm(profile.name),
-    );
+    const isConfirmed = await confirm({
+      message: messages.settings.deleteConfirm(profile.name),
+    });
     if (!isConfirmed) {
       return;
     }
@@ -330,9 +332,9 @@ export function ProjectSettingsActivity({
   }
 
   async function handleDeleteLabel(label: ProjectLabelRecord) {
-    const isConfirmed = window.confirm(
-      messages.settings.deleteConfirm(label.name),
-    );
+    const isConfirmed = await confirm({
+      message: messages.settings.deleteConfirm(label.name),
+    });
     if (!isConfirmed) {
       return;
     }
@@ -537,6 +539,7 @@ export function ProjectSettingsActivity({
           </SettingsContentFrame>
         </div>
       </div>
+      {confirmationDialog}
     </main>
   );
 }

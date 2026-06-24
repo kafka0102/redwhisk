@@ -1984,7 +1984,6 @@ describe("IssuesActivity", () => {
 
   it("shows a forward-only status menu and completes a running issue after confirmation", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     listIssuesMock.mockResolvedValue({
       issues: [
         {
@@ -2029,20 +2028,26 @@ describe("IssuesActivity", () => {
 
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
-    expect(confirmSpy).toHaveBeenCalledWith("session 未结束，确认要完成吗？");
-    expect(markIssueReviewMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: attentionIssue.id,
-    });
-    expect(completeIssueManualMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: attentionIssue.id,
-    });
+    expect(
+      screen.getByRole("dialog", { name: "session 未结束，确认要完成吗？" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(markIssueReviewMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: attentionIssue.id,
+      }),
+    );
+    await user.click(await screen.findByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(completeIssueManualMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: attentionIssue.id,
+      }),
+    );
     expect(
       screen.getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 
   it("sends an agent commit prompt before completing a dirty auto-commit review issue", async () => {
@@ -2150,7 +2155,6 @@ describe("IssuesActivity", () => {
 
   it("confirms merge into a worktree target branch before finishing Done", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const reviewWithSession = {
       ...reviewIssue,
       linkedSessionId: 505,
@@ -2187,19 +2191,22 @@ describe("IssuesActivity", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      "即将完成当前 issue，并把临时分支合入目标分支 dev。确认继续吗？",
+    expect(
+      screen.getByRole("dialog", {
+        name: "即将完成当前 issue，并把临时分支合入目标分支 dev。确认继续吗？",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(completeIssueManualMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: reviewWithSession.id,
+      }),
     );
-    expect(completeIssueManualMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: reviewWithSession.id,
-    });
-    confirmSpy.mockRestore();
   });
 
   it("hands off worktree merge conflicts to the linked agent session", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const onOpenAgentsActivity = vi.fn();
     const reviewWithSession = {
       ...reviewIssue,
@@ -2239,6 +2246,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(await screen.findByRole("button", { name: "确认" }));
 
     expect(
       await screen.findByRole("dialog", { name: "Complete issue" }),
@@ -2275,12 +2283,10 @@ describe("IssuesActivity", () => {
     expect(
       screen.queryByRole("dialog", { name: "Complete issue" }),
     ).not.toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
   it("soft deletes an issue after confirmation and removes it from the list", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
     deleteIssueMock.mockResolvedValue({ issueId: runningIssue.id });
 
@@ -2297,21 +2303,24 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Delete issue" }),
     );
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      "Are you sure to delete this issue?",
+    expect(
+      screen.getByRole("dialog", {
+        name: "Are you sure to delete this issue?",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(deleteIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: runningIssue.id,
+      }),
     );
-    expect(deleteIssueMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: runningIssue.id,
-    });
     expect(
       screen.queryByRole("region", { name: "Issue Detail" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Running issue" }),
     ).not.toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 
   it("shows a delete button in the backlog edit page header and deletes the issue after dialog confirmation", async () => {
@@ -2376,7 +2385,6 @@ describe("IssuesActivity", () => {
 
   it("does not delete an issue when deletion confirmation is canceled", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
 
     renderIssuesActivity();
@@ -2392,15 +2400,23 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Delete issue" }),
     );
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      "Are you sure to delete this issue?",
+    expect(
+      screen.getByRole("dialog", {
+        name: "Are you sure to delete this issue?",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "Are you sure to delete this issue?",
+        }),
+      ).not.toBeInTheDocument(),
     );
     expect(deleteIssueMock).not.toHaveBeenCalled();
     expect(
       screen.getByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 
   it("shows summary action and inline linked session entry for completed issues", async () => {

@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 
 import { Button } from "./button";
+import { ConfirmDialog } from "./confirm-dialog";
 import { Input } from "./input";
 import { Textarea } from "./textarea";
 
@@ -34,5 +36,33 @@ describe("desktop ui primitives", () => {
     expect(textarea).toHaveAttribute("data-slot", "textarea");
     expect(textarea).toHaveAttribute("autocapitalize", "none");
     expect(textarea).toHaveAttribute("spellcheck", "false");
+  });
+
+  it("confirms a destructive action with a message-only dialog", async () => {
+    const user = userEvent.setup();
+    const handleConfirm = vi.fn();
+
+    render(
+      <ConfirmDialog
+        message="确认要删除吗？"
+        confirmLabel="删除"
+        onConfirm={handleConfirm}
+      >
+        <Button>删除项目</Button>
+      </ConfirmDialog>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "删除项目" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认要删除吗？" });
+    expect(dialog).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(handleConfirm).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "删除项目" }));
+    await user.click(screen.getByRole("button", { name: "删除" }));
+
+    expect(handleConfirm).toHaveBeenCalledTimes(1);
   });
 });

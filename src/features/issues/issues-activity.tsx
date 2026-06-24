@@ -32,6 +32,7 @@ import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
+import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { issuePageStateCache } from "./issues-activity-cache";
 import { injectAgentSessionPrompt } from "../agents/agent-session-commands";
@@ -106,6 +107,7 @@ export function IssuesActivity({
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -610,7 +612,9 @@ export function IssuesActivity({
       selectedIssue.linkedSessionStatus === "running" &&
       selectedIssue.linkedSessionLatestOutput?.trim()
     ) {
-      const isConfirmed = window.confirm("session 未结束，确认要完成吗？");
+      const isConfirmed = await confirm({
+        message: "session 未结束，确认要完成吗？",
+      });
       if (!isConfirmed) {
         return;
       }
@@ -726,9 +730,9 @@ export function IssuesActivity({
       }
 
       const cleanGitDetail = getCleanGitStatusDetail(commandError);
-      const isConfirmed = window.confirm(
-        buildCompletionConfirmMessage(cleanGitDetail.targetBranch),
-      );
+      const isConfirmed = await confirm({
+        message: buildCompletionConfirmMessage(cleanGitDetail.targetBranch),
+      });
       if (!isConfirmed) {
         setCompletionProgress(null);
         throw new CompletionCancelledError();
@@ -997,6 +1001,7 @@ export function IssuesActivity({
       {completionProgress ? (
         <IssueCompletionProgressDialog progress={completionProgress} />
       ) : null}
+      {confirmationDialog}
     </main>
   );
 }
