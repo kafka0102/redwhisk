@@ -35,6 +35,7 @@ import { toast } from "../../shared/toast";
 import { AgentsSessionList } from "./agents-session-list";
 import {
   listAgentProfiles,
+  type AgentProfileRecord,
   type AgentType,
 } from "../settings/settings-commands";
 import {
@@ -110,6 +111,9 @@ export function AgentsActivity({
     useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
+  const [availableAgentProfiles, setAvailableAgentProfiles] = useState<
+    AgentProfileRecord[]
+  >([]);
   const [availableAgentTypes, setAvailableAgentTypes] = useState<AgentType[]>(
     [],
   );
@@ -232,6 +236,7 @@ export function AgentsActivity({
           ...projectResponse.profiles,
           ...globalResponse.profiles,
         ];
+        setAvailableAgentProfiles(mergedProfiles);
         const nextAgentTypes = Array.from(
           new Set(mergedProfiles.map((profile) => profile.agentType)),
         );
@@ -241,6 +246,7 @@ export function AgentsActivity({
           return;
         }
 
+        setAvailableAgentProfiles([]);
         setAvailableAgentTypes([]);
         toast.error(toCommandError(error).message);
       } finally {
@@ -1021,6 +1027,14 @@ export function AgentsActivity({
       return;
     }
 
+    const selectedProfile = availableAgentProfiles.find(
+      (profile) => profile.agentType === agentType,
+    );
+    if (selectedProfile == null) {
+      toast.error("未找到可用于当前 Agent 类型的 Agent Profile。");
+      return;
+    }
+
     setIsCreatingSession(true);
     setIsNewSessionMenuOpen(false);
 
@@ -1029,6 +1043,7 @@ export function AgentsActivity({
         projectId,
         title: DEFAULT_SESSION_TITLE,
         agentType,
+        agentProfileId: selectedProfile.id,
       });
       await handleTemporarySessionStarted(result);
     } catch (error) {

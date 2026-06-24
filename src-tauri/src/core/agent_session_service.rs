@@ -1501,13 +1501,9 @@ impl AgentSessionService<'_> {
     /// 启动结构化 Agent Session（codex app-server JSON-RPC 路径）。
     ///
     /// 与 PTY 路径并存：不创建 PTY 子进程，而是 spawn `codex app-server`
-    /// 并通过 `CodexSessionHandle` 走结构化事件流。session 行落到
-    /// `agent_sessions` 表（`agent_type=codex`，`codex_session_id` 存
-    /// codex threadId），但不写 `log_path` / `command_snapshot` 等 PTY
-    /// 专用字段（填占位空串以兼容 NOT NULL 约束）。
-    ///
-    /// 首版限制：codex binary 固定为 `"codex"`，不从 AgentProfile 解析
-    /// （profile 接入留到任务 6 收尾）。
+    /// 并通过 `CodexSessionHandle` 走结构化事件流。session 行会落到
+    /// `agent_sessions` 表，并记录 log 路径、command snapshot、绑定的
+    /// agent profile 与 `codex_session_id`（codex threadId）。
     pub fn start_structured_agent_session_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: StartStructuredAgentSessionInput,
@@ -1551,7 +1547,75 @@ impl AgentSessionService<'_> {
             error
         })?;
 
-        let agent_type = input.agent_type.unwrap_or(AgentType::Codex);
+        let requested_agent_type = input.agent_type.unwrap_or(AgentType::Codex);
+
+        // 查找 agent profile：先看有没有指定 id，否则按 agent 类型找第一个可用的 profile。
+        let (agent_profile_id, agent_type, command_snapshot) = if let Some(profile_id) =
+            input.agent_profile_id
+        {
+            let profile = self
+                .agent_profile_repository
+                .find_profile_by_id(profile_id)
+                .map_err(agent_session_database_error)?
+                .ok_or_else(|| {
+                    CommandError::new(
+                        CommandErrorCode::AgentProfileValidationFailed,
+                        "Agent Profile 不存在。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile_id),
+                    )
+                })?;
+            validate_profile_not_deleted(&profile)?;
+            validate_profile_scope(&profile, input.project_id)?;
+            (
+                profile.id,
+                profile.agent_type.clone(),
+                ensure_codex_bypass_arg(&profile.command),
+            )
+        } else {
+            // 没有指定 profile id，找第一个可用的 profile（先 project scope，后 global scope）。
+            let project_profiles = self
+                .agent_profile_repository
+                .list_profiles_by_scope(&AgentScope::Project, Some(input.project_id))
+                .map_err(agent_session_database_error)?;
+            let global_profiles = self
+                .agent_profile_repository
+                .list_profiles_by_scope(&AgentScope::Global, None)
+                .map_err(agent_session_database_error)?;
+
+            let all_profiles: Vec<_> = project_profiles
+                .into_iter()
+                .chain(global_profiles.into_iter())
+                .collect();
+
+            if let Some(profile) = all_profiles
+                .into_iter()
+                .find(|profile| profile.agent_type == requested_agent_type)
+            {
+                (
+                    profile.id,
+                    profile.agent_type,
+                    ensure_codex_bypass_arg(&profile.command),
+                )
+            } else {
+                let requested_agent_type_literal = match requested_agent_type {
+                    AgentType::Codex => "codex",
+                    AgentType::Claude => "claude",
+                };
+                return Err(CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "未找到可用于当前 Agent 类型的 Agent Profile。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentType")
+                        .with_value("agentType", requested_agent_type_literal),
+                )
+                .with_detail(
+                    ErrorDetail::new("Project").with_value("projectId", input.project_id),
+                ));
+            }
+        };
 
         let title = input
             .title
@@ -1561,8 +1625,7 @@ impl AgentSessionService<'_> {
         let started_at = current_epoch_millis()?;
         let log_path = build_structured_log_path(data_dir, input.project_id, started_at)?;
 
-        // 落 session 行。结构化会话没有 PTY 概念，PTY 专用字段填占位空串
-        // 以满足 NOT NULL；codex_session_id 在 handle.start 成功后回填。
+        // 落 session 行。
         let transaction = self
             .issue_repository
             .connection()
@@ -1572,8 +1635,10 @@ impl AgentSessionService<'_> {
             let session = insert_structured_session_in_transaction(
                 &transaction,
                 input.project_id,
+                agent_profile_id,
                 title.as_deref(),
                 &cwd,
+                &command_snapshot,
                 &log_path,
                 started_at,
             )?;
@@ -1619,7 +1684,7 @@ impl AgentSessionService<'_> {
                 let config = CodexSessionConfig {
                     project_id: input.project_id,
                     session_id,
-                    binary: ensure_codex_bypass_arg("codex"),
+                    binary: command_snapshot,
                     cwd: cwd.clone(),
                     mode,
                     broadcaster: broadcaster.clone(),
@@ -2362,14 +2427,15 @@ pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> 
 
 /// 在事务中插入一条结构化 session 行。
 ///
-/// 与 `insert_standalone_in_transaction` 不同：不依赖 `agent_profile_id`
-/// （结构化会话首版不绑定 profile），PTY 专用字段填占位空串以满足 NOT NULL
+/// 与 `insert_standalone_in_transaction` 不同：PTY 专用字段填占位空串以满足 NOT NULL
 /// 约束，`codex_session_id` 留空待 handle.start 后回填。
 fn insert_structured_session_in_transaction(
     transaction: &Transaction<'_>,
     project_id: i64,
+    agent_profile_id: i64,
     title: Option<&str>,
     working_dir: &str,
+    command_snapshot: &str,
     log_path: &str,
     started_at: i64,
 ) -> rusqlite::Result<crate::types::agent_session::AgentSessionRecord> {
@@ -2394,8 +2460,16 @@ fn insert_structured_session_in_transaction(
            list_inserted_at,
            last_active_at,
            started_at
-         ) VALUES (?1, NULL, ?2, 0, 'running', 'none', ?3, '', '', 'current_branch', NULL, NULL, ?3, NULL, NULL, ?4, ?5, ?5, ?5)",
-        params![project_id, title, working_dir, log_path, started_at],
+         ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, '', 'current_branch', NULL, NULL, ?4, NULL, NULL, ?6, ?7, ?7, ?7)",
+        params![
+            project_id,
+            title,
+            agent_profile_id,
+            working_dir,
+            command_snapshot,
+            log_path,
+            started_at
+        ],
     )?;
 
     let id = transaction.last_insert_rowid();

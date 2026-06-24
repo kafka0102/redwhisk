@@ -164,6 +164,7 @@ export function TemporarySessionDialog({
         projectId,
         title: title.trim(),
         agentType: selectedProfile.agentType,
+        agentProfileId: selectedProfile.id,
       });
       // 结构化路径启动后单独发首条消息（StartStructuredAgentSessionInput 不带 prompt）。
       const trimmedPrompt = promptDraft.trim();

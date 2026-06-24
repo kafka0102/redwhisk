@@ -261,6 +261,9 @@ pub struct StartStructuredAgentSessionInput {
     /// agent 类型（缺省 Codex）。决定走哪种 provider 实现。
     #[serde(default)]
     pub agent_type: Option<AgentType>,
+    /// agent profile id（可选，优先用 profile 的配置）。
+    #[serde(default)]
+    pub agent_profile_id: Option<i64>,
     /// 协作模式：auto / full-access / read-only。缺省 full-access。
     pub mode: Option<String>,
     /// 初始模型 id（缺省由 agent 选默认）。
