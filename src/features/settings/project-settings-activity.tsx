@@ -25,6 +25,7 @@ import type {
 import type { ProjectSummary } from "../../app/app";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
+import { toast } from "../../shared/toast";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
@@ -324,6 +325,7 @@ export function ProjectSettingsActivity({
       setEditingProfile((current) =>
         current?.profile.id === profile.id ? null : current,
       );
+      toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
       setProfilesErrorMessage(toCommandError(error).message);
     } finally {
@@ -349,6 +351,7 @@ export function ProjectSettingsActivity({
       setEditingLabel((current) =>
         current?.label.id === label.id ? null : current,
       );
+      toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
       setLabelsErrorMessage(toCommandError(error).message);
     } finally {

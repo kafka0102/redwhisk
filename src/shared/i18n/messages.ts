@@ -24,6 +24,9 @@ export interface I18nMessages {
     system: string;
     theme: string;
   };
+  toast: {
+    deleteSuccess: string;
+  };
   settings: {
     actions: string;
     agents: string;
@@ -114,6 +117,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       system: "System",
       theme: "Theme",
     },
+    toast: {
+      deleteSuccess: "Deleted successfully",
+    },
     settings: {
       actions: "Actions",
       agents: "Agents",
@@ -199,6 +205,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       settingsMenu: "全局设置菜单",
       system: "System",
       theme: "主题",
+    },
+    toast: {
+      deleteSuccess: "删除成功",
     },
     settings: {
       actions: "操作",

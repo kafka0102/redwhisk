@@ -42,6 +42,7 @@ import {
 } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 interface IssuesActivityProps {
@@ -871,6 +872,7 @@ export function IssuesActivity({
       setAttachmentPreview(null);
       setForm(EMPTY_FORM);
       restoreDialogTriggerFocus(remainingIssues[0] ?? null);
+      toast.success(messages.toast.deleteSuccess);
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
         setDialogErrorMessage(toCommandError(error).message);

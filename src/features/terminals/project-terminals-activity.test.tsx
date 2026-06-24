@@ -11,6 +11,7 @@ import {
   listProjectTerminals,
   updateProjectTerminalConfig,
 } from "./project-terminal-commands";
+import { toast } from "../../shared/toast";
 
 vi.mock("./project-terminal", () => ({
   ProjectTerminal: ({
@@ -33,10 +34,17 @@ vi.mock("./project-terminal-commands", () => ({
   updateProjectTerminalConfig: vi.fn(),
 }));
 
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+  },
+}));
+
 const createProjectTerminalMock = vi.mocked(createProjectTerminal);
 const deleteProjectTerminalConfigMock = vi.mocked(deleteProjectTerminalConfig);
 const listProjectTerminalsMock = vi.mocked(listProjectTerminals);
 const updateProjectTerminalConfigMock = vi.mocked(updateProjectTerminalConfig);
+const toastSuccessMock = vi.mocked(toast.success);
 
 function renderProjectTerminalsActivity() {
   function Harness() {
@@ -62,6 +70,7 @@ describe("ProjectTerminalsActivity", () => {
     deleteProjectTerminalConfigMock.mockReset();
     listProjectTerminalsMock.mockReset();
     updateProjectTerminalConfigMock.mockReset();
+    toastSuccessMock.mockReset();
     deleteProjectTerminalConfigMock.mockResolvedValue({
       configId: 102,
       sessionId: -2,
@@ -326,5 +335,6 @@ describe("ProjectTerminalsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Worker" }),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 });
