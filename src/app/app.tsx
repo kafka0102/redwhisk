@@ -61,6 +61,8 @@ export function App() {
     string | null
   >(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  const defaultLocale = getDefaultLocale();
+  const defaultMessages = I18N_MESSAGES[defaultLocale];
 
   useEffect(() => {
     let isMounted = true;
@@ -103,46 +105,61 @@ export function App() {
     };
   }, []);
 
-  async function handleCreateProject() {
-    if (isCreatingProject) {
-      return;
-    }
-
-    setProjectCreationError(null);
-    setProjectOpenError(null);
-    setIsCreatingProject(true);
-
-    try {
-      const selectedPath = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Git Repository",
-      });
-
-      if (typeof selectedPath !== "string") {
+  const startCreateProject = useCallback(
+    async (openInNewWindow: boolean) => {
+      if (isCreatingProject) {
         return;
       }
 
-      const validatedProject = await validateProjectRepoPath({
-        repoPath: selectedPath,
-      });
-      setCreateProjectDraft({
-        completionPolicy: "agent_auto_commit",
-        name: validatedProject.suggestedName,
-        openInNewWindow: false,
-        repoPath: validatedProject.repoPath,
-        suggestedName: validatedProject.suggestedName,
-        worktreeLocation: "repo_sibling",
-        worktreeSetupCommand: initialWorktreeSetupCommand(
-          "",
-          validatedProject.repoPath,
-        ),
-      });
-    } catch (error) {
-      setProjectCreationError(toCommandError(error).message);
-    } finally {
-      setIsCreatingProject(false);
-    }
+      setProjectCreationError(null);
+      setProjectOpenError(null);
+      setIsCreatingProject(true);
+
+      try {
+        const selectedPath = await open({
+          directory: true,
+          multiple: false,
+          title: defaultMessages.projectHome.selectGitRepository,
+        });
+
+        if (typeof selectedPath !== "string") {
+          return;
+        }
+
+        const validatedProject = await validateProjectRepoPath({
+          repoPath: selectedPath,
+        });
+        setCreateProjectDraft({
+          completionPolicy: "agent_auto_commit",
+          name: validatedProject.suggestedName,
+          openInNewWindow,
+          repoPath: validatedProject.repoPath,
+          suggestedName: validatedProject.suggestedName,
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: initialWorktreeSetupCommand(
+            "",
+            validatedProject.repoPath,
+          ),
+        });
+      } catch (error) {
+        setProjectCreationError(toCommandError(error).message);
+      } finally {
+        setIsCreatingProject(false);
+      }
+    },
+    [
+      defaultMessages.projectHome.selectGitRepository,
+      isCreatingProject,
+      setCreateProjectDraft,
+    ],
+  );
+
+  function handleCreateProject() {
+    void startCreateProject(false);
+  }
+
+  function handleCreateProjectFromSwitcher() {
+    void startCreateProject(true);
   }
 
   async function handleProjectOpen(project: ProjectSummary) {
@@ -191,23 +208,6 @@ export function App() {
     },
     [createProjectDraft],
   );
-
-  const handleCreateProjectFromSwitcher = useCallback(() => {
-    setProjectCreationError(null);
-    setProjectOpenError(null);
-    setCreateProjectDraft({
-      completionPolicy: "agent_auto_commit",
-      name: "",
-      openInNewWindow: true,
-      repoPath: "",
-      suggestedName: "",
-      worktreeLocation: "repo_sibling",
-      worktreeSetupCommand: "",
-    });
-  }, []);
-
-  const defaultLocale = getDefaultLocale();
-  const defaultMessages = I18N_MESSAGES[defaultLocale];
 
   if (!selectedProject) {
     const statusMessages = [
