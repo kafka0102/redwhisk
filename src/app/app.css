@@ -232,6 +232,7 @@ button:focus-visible {
   place-items: center;
   width: 36px;
   height: 36px;
+  margin-left: 4px;
   border-radius: var(--radius-icon);
   color: #ffffff;
   font-size: 15px;
