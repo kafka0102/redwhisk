@@ -84,6 +84,7 @@ export function LabelsSettingsPanel({
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>{messages.settings.name}</TableHead>
+                <TableHead>{messages.settings.agent}</TableHead>
                 <TableHead className="w-24">
                   {messages.settings.scope}
                 </TableHead>
@@ -112,10 +113,12 @@ export function LabelsSettingsPanel({
                       }}
                     >
                       <span className="min-w-0 truncate">{label.name}</span>
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        {label.agentName ?? messages.settings.none}
-                      </span>
                     </Button>
+                  </TableCell>
+                  <TableCell>
+                    <span className="block truncate text-muted-foreground">
+                      {label.agentName ?? messages.settings.none}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {label.scope === "global"
