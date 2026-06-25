@@ -52,6 +52,9 @@ export function AgentSessionView({
       ? "running"
       : state.turnStatus;
   const isReadOnly = issueStatus === "completed";
+  const readOnlyReason = isReadOnly
+    ? messages.agentsFeature.readOnlyCompletedIssue
+    : undefined;
   const shouldResumeBeforeSend =
     sessionStatus !== "running" && issueStatus !== "completed";
   const resumeBeforeSend = useCallback(async () => {
@@ -77,25 +80,25 @@ export function AgentSessionView({
           />
         ))}
       </div>
-      <AgentComposer
-        key={sessionId}
-        projectId={projectId}
-        sessionId={sessionId}
-        capabilities={capabilities}
-        turnStatus={effectiveTurnStatus}
-        usage={state.usage}
-        currentModelId={state.model}
-        isReadOnly={isReadOnly}
-        readOnlyReason={
-          isReadOnly ? messages.agentsFeature.readOnlyCompletedIssue : undefined
-        }
-        onBeforeSend={resumeBeforeSend}
-        onBeforeSelectModel={resumeBeforeSend}
-        onBeforeSetEffort={resumeBeforeSend}
-        onMessageSent={(message) => {
-          dispatch({ type: "OPTIMISTIC_USER_MESSAGE", text: message });
-        }}
-      />
+      {readOnlyReason ? null : (
+        <AgentComposer
+          key={sessionId}
+          projectId={projectId}
+          sessionId={sessionId}
+          capabilities={capabilities}
+          turnStatus={effectiveTurnStatus}
+          usage={state.usage}
+          currentModelId={state.model}
+          isReadOnly={isReadOnly}
+          readOnlyReason={readOnlyReason}
+          onBeforeSend={resumeBeforeSend}
+          onBeforeSelectModel={resumeBeforeSend}
+          onBeforeSetEffort={resumeBeforeSend}
+          onMessageSent={(message) => {
+            dispatch({ type: "OPTIMISTIC_USER_MESSAGE", text: message });
+          }}
+        />
+      )}
     </div>
   );
 }
