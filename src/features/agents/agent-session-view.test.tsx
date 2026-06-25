@@ -222,7 +222,7 @@ describe("AgentSessionView", () => {
     expect(screen.queryByLabelText("选择模型")).not.toBeInTheDocument();
   });
 
-  it("已完成 Issue 的 session 禁用底部输入框", async () => {
+  it("已完成 Issue 的 session 不渲染底部输入框", async () => {
     setupTimeline([]);
 
     render(
@@ -235,12 +235,16 @@ describe("AgentSessionView", () => {
       />,
     );
 
-    const textarea = await screen.findByLabelText("输入消息");
-    expect(textarea).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText("输入消息")).not.toBeInTheDocument();
     expect(
-      screen.getByText("已完成的 Issue 不能继续运行。"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+      screen.queryByText("已完成的 Issue 不能继续运行。"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "发送消息" }),
+    ).not.toBeInTheDocument();
   });
 
   it("切换 session 后不沿用上一个 session 的输入错误", async () => {
