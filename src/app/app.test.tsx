@@ -931,6 +931,7 @@ describe("App project entry", () => {
 
   it("creates a project from the switcher and opens it in a new window", async () => {
     const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/new-repo");
     createProjectMock.mockResolvedValue({
       id: 4,
       name: "new-repo",
@@ -954,23 +955,16 @@ describe("App project entry", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Create Project" }));
 
-    const projectDialog = await screen.findByRole("dialog", {
-      name: "New Project",
+    expect(openDialogMock).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      title: "Select Git Repository",
     });
-    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
-      "",
-    );
-    expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
-      "",
-    );
-
-    openDialogMock.mockResolvedValueOnce("/Users/kafka0102/workspace/new-repo");
-    await user.click(
-      within(projectDialog).getByRole("button", { name: "Choose folder" }),
-    );
-
     expect(validateProjectRepoPathMock).toHaveBeenCalledWith({
       repoPath: "/Users/kafka0102/workspace/new-repo",
+    });
+    const projectDialog = await screen.findByRole("dialog", {
+      name: "New Project",
     });
     expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
       "new-repo",
