@@ -70,7 +70,7 @@
   --radius-card: 5px;
   --radius-dialog: 7px;
   --radius-icon: 7px;
-  --activity-header-height: 56px;
+  --activity-header-height: 52px;
   --shadow-focus:
     0 0 0 2px var(--color-focus-offset), 0 0 0 4px var(--color-focus-ring);
   --background: #ffffff;

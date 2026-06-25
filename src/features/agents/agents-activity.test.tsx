@@ -36,6 +36,8 @@ import {
   createTemporaryProjectTerminal,
 } from "../terminals/project-terminal-commands";
 import { toast } from "../../shared/toast";
+import appCss from "../../app/app.css?raw";
+import tokensCss from "../../shared/styles/tokens.css?raw";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
@@ -1095,6 +1097,25 @@ describe("AgentsActivity", () => {
     ).closest(".activity-surface--agents");
 
     expect(activity).toHaveStyle({ "--agents-sidebar-width": "230px" });
+  });
+
+  it("uses fixed compact header heights for agents and issue surfaces", async () => {
+    expect(appCss).toMatch(
+      /\.issue-surface-header\s*\{(?=[^}]*align-items:\s*center;)[^}]*\}/s,
+    );
+    expect(appCss).toMatch(
+      /\.issue-surface-header--activity\s*\{(?=[^}]*height:\s*var\(--activity-header-height\);)(?![^}]*min-height:)[^}]*\}/s,
+    );
+    expect(appCss).toMatch(
+      /\.issue-surface-header--fullscreen\s*\{(?=[^}]*height:\s*var\(--activity-header-height\);)(?![^}]*min-height:)[^}]*\}/s,
+    );
+    expect(appCss).toMatch(
+      /\.agents-sidebar__header\s*\{(?=[^}]*align-items:\s*center;)(?=[^}]*height:\s*var\(--activity-header-height\);)(?![^}]*min-height:)[^}]*\}/s,
+    );
+    expect(appCss).toMatch(
+      /\.agents-session-toolbar\s*\{(?=[^}]*align-items:\s*center;)(?=[^}]*height:\s*var\(--activity-header-height\);)(?![^}]*min-height:)[^}]*\}/s,
+    );
+    expect(tokensCss).toMatch(/--activity-header-height:\s*52px;/);
   });
 
   it("keeps visible session order stable across polling updates", async () => {
