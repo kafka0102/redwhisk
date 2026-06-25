@@ -17,6 +17,7 @@ import {
   DialogTitle as UiDialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "../../shared/i18n/i18n";
 
 import type {
   IssueAttachmentRecord,
@@ -75,7 +76,9 @@ export function IssueEditablePage({
   onDeleteIssue,
   onOpenProjectLabelsSettings,
 }: IssueEditablePageProps) {
-  const pageTitle = mode === "create" ? "New Issue" : "Edit Issue";
+  const { messages } = useI18n();
+  const pageTitle =
+    mode === "create" ? messages.issues.newIssue : messages.issues.edit;
   const canDelete = mode === "edit" && selectedIssue?.status === "backlog";
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -99,14 +102,16 @@ export function IssueEditablePage({
                 variant="secondary"
                 onClick={onCancel}
               >
-                返回
+                {messages.issues.backEditable}
               </Button>
               <Button
                 className="issues-button issues-button--primary"
                 disabled={isSaving}
                 type="submit"
               >
-                {mode === "create" ? "创建 Issue" : "保存"}
+                {mode === "create"
+                  ? messages.issues.create
+                  : messages.issues.save}
               </Button>
               {canDelete ? (
                 <Button
@@ -116,7 +121,7 @@ export function IssueEditablePage({
                   variant="destructive"
                   onClick={() => setIsDeleteDialogOpen(true)}
                 >
-                  删除
+                  {messages.issues.deleteEditable}
                 </Button>
               ) : null}
             </>
@@ -142,7 +147,7 @@ export function IssueEditablePage({
             <p
               className="issue-dialog__status issue-page__status issue-page__status--fullscreen"
               role="status"
-              aria-label="Dialog status"
+              aria-label={messages.issues.dialogStatus}
             >
               {errorMessage}
             </p>
@@ -158,9 +163,9 @@ export function IssueEditablePage({
           showCloseButton={false}
         >
           <UiDialogHeader>
-            <UiDialogTitle>确认删除 Issue</UiDialogTitle>
+            <UiDialogTitle>{messages.issues.deleteConfirmTitle}</UiDialogTitle>
             <UiDialogDescription>
-              删除后无法恢复。确认删除当前 Issue 吗？
+              {messages.issues.deleteConfirmMessage}
             </UiDialogDescription>
           </UiDialogHeader>
           <UiDialogFooter className="issue-delete-dialog__footer">
@@ -170,7 +175,7 @@ export function IssueEditablePage({
               variant="secondary"
               onClick={() => setIsDeleteDialogOpen(false)}
             >
-              返回
+              {messages.issues.backEditable}
             </Button>
             <Button
               disabled={isSaving}
@@ -181,7 +186,7 @@ export function IssueEditablePage({
                 onDeleteIssue();
               }}
             >
-              删除
+              {messages.issues.deleteEditable}
             </Button>
           </UiDialogFooter>
         </UiDialogContent>
@@ -223,17 +228,18 @@ function IssueEditableFields({
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
 }) {
+  const { messages } = useI18n();
   return (
     <div className="issue-page__main issue-page__main--fullscreen">
       <div className="issue-field issue-field--title">
         <Input
           ref={titleInputRef}
           id="issue-title"
-          aria-label="Title"
+          aria-label={messages.issues.titleField}
           autoCapitalize="none"
           autoCorrect="off"
           name="title"
-          placeholder="Issue title"
+          placeholder={messages.issues.titlePlaceholder}
           spellCheck={false}
           value={form.title}
           onChange={(event) =>
@@ -246,8 +252,8 @@ function IssueEditableFields({
       </div>
       <div className="issue-field issue-field--grow issue-field--editor">
         <IssueDescriptionEditor
-          ariaLabel="Description"
-          placeholder="Describe the task"
+          ariaLabel={messages.issues.description}
+          placeholder={messages.issues.describeTask}
           value={form.description}
           attachments={form.attachments}
           onDownloadAttachment={onDownloadAttachment}
@@ -263,7 +269,7 @@ function IssueEditableFields({
         <div className="issue-editor-toolbar-shell">
           <div className="issue-editor-toolbar">
             <Button
-              aria-label="Attach file"
+              aria-label={messages.issues.addAttachment}
               className="issue-editor-toolbar__icon-button"
               disabled={isSaving}
               size="icon-sm"
@@ -308,6 +314,7 @@ function IssueLabelsPicker({
   onChange: (labelIds: number[]) => void;
   onOpenProjectLabelsSettings: () => void;
 }) {
+  const { messages } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedLabels = labelIds
@@ -353,7 +360,7 @@ function IssueLabelsPicker({
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        aria-label="添加标签"
+        aria-label={messages.issues.addLabel}
         className="issue-editor-toolbar__icon-button"
         type="button"
         onClick={() => setIsOpen((current) => !current)}
@@ -382,7 +389,9 @@ function IssueLabelsPicker({
             {labelsErrorMessage ? (
               <p className="issue-label-picker__state">{labelsErrorMessage}</p>
             ) : isLoading ? (
-              <p className="issue-label-picker__state">加载 Labels...</p>
+              <p className="issue-label-picker__state">
+                {messages.issues.labelsLoading}
+              </p>
             ) : hasAvailableLabels ? (
               <>
                 <div className="issue-label-picker__options">
@@ -430,7 +439,7 @@ function IssueLabelsPicker({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={openLabelsSettings}
                 >
-                  编辑 Labels
+                  {messages.issues.editLabels}
                 </button>
               </>
             ) : (
@@ -440,7 +449,7 @@ function IssueLabelsPicker({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={openLabelsSettings}
               >
-                添加标签
+                {messages.issues.addLabel}
               </button>
             )}
           </div>

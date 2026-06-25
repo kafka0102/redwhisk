@@ -141,7 +141,10 @@ export function AppShell({
           <Settings aria-hidden="true" size={18} strokeWidth={1.8} />
         </button>
       </nav>
-      <section className="workbench" aria-label={`${project.name} workbench`}>
+      <section
+        className="workbench"
+        aria-label={messages.app.workbench(project.name)}
+      >
         <header
           className="workbench__header"
           data-tauri-drag-region

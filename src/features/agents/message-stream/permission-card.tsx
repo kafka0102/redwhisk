@@ -20,6 +20,7 @@ import type {
 } from "../agent-stream-types";
 import type { AgentPermissionDecisionLiteral } from "../agent-session-commands";
 import { toCommandError } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface PermissionCardProps {
   request: AgentPermissionRequest;
@@ -48,6 +49,7 @@ export function PermissionCard({
   projectId,
   sessionId,
 }: PermissionCardProps) {
+  const { messages } = useI18n();
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -78,7 +80,7 @@ export function PermissionCard({
   return (
     <article
       className="agents-message__entry agents-permission-card"
-      aria-label="Agent 权限审批卡片"
+      aria-label={messages.agentsFeature.permissionCard}
       data-request-id={request.id}
     >
       <div className="agents-permission-card__header">

@@ -2,6 +2,7 @@ import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 
 import { ProjectTerminal } from "../terminals/project-terminal";
 import type { SessionInlineTerminalPanelState } from "./session-inline-terminal-panel-state";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionInlineTerminalPanelProps {
   agentSessionId: number;
@@ -22,6 +23,7 @@ export function SessionInlineTerminalPanel({
   onSelectTerminal,
   onToggleMaximized,
 }: SessionInlineTerminalPanelProps) {
+  const { messages } = useI18n();
   const activeTerminal =
     state.terminals.find(
       (terminal) =>
@@ -32,14 +34,14 @@ export function SessionInlineTerminalPanel({
 
   return (
     <section
-      aria-label="Session terminals"
+      aria-label={messages.agentsFeature.sessionTerminals}
       className={`session-inline-terminal-panel${
         state.isMaximized ? " session-inline-terminal-panel--maximized" : ""
       }`}
     >
       <div className="session-inline-terminal-panel__tabs">
         <div
-          aria-label="Session terminal tabs"
+          aria-label={messages.agentsFeature.sessionInlineTabs}
           className="session-inline-terminal-panel__tab-list"
           role="tablist"
         >
@@ -68,7 +70,9 @@ export function SessionInlineTerminalPanel({
                   </span>
                 </button>
                 <button
-                  aria-label={`关闭终端 ${terminal.name}`}
+                  aria-label={messages.agentsFeature.closeSessionTerminal(
+                    terminal.name,
+                  )}
                   className="session-inline-terminal-panel__close"
                   disabled={isClosing}
                   type="button"
@@ -81,7 +85,7 @@ export function SessionInlineTerminalPanel({
           })}
         </div>
         <button
-          aria-label="新增终端"
+          aria-label={messages.agentsFeature.newInlineTerminal}
           className="session-inline-terminal-panel__icon"
           disabled={state.isCreating}
           type="button"
@@ -92,7 +96,9 @@ export function SessionInlineTerminalPanel({
         <span className="session-inline-terminal-panel__spacer" />
         <button
           aria-label={
-            state.isMaximized ? "恢复 Session 终端" : "最大化 Session 主内容"
+            state.isMaximized
+              ? messages.agentsFeature.sessionInlineRestore
+              : messages.agentsFeature.sessionInlineMaximize
           }
           aria-pressed={state.isMaximized}
           className="session-inline-terminal-panel__icon"

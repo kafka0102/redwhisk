@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getIssueSummary, type IssueSummaryRecord } from "./issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueSummaryDialogProps {
   issueId: number;
@@ -14,6 +15,7 @@ export function IssueSummaryDialog({
   projectId,
   onClose,
 }: IssueSummaryDialogProps) {
+  const { messages } = useI18n();
   const [summary, setSummary] = useState<IssueSummaryRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function IssueSummaryDialog({
     >
       <div
         ref={dialogRef}
-        aria-label="Issue Summary"
+        aria-label={messages.issues.issueSummary}
         aria-modal="true"
         className="issue-dialog issue-dialog--compact"
         role="dialog"
@@ -106,10 +108,10 @@ export function IssueSummaryDialog({
         onKeyDown={handleKeyDown}
       >
         <div className="issue-dialog__header">
-          <h3>Issue Summary</h3>
+          <h3>{messages.issues.issueSummary}</h3>
           <button
             ref={closeButtonRef}
-            aria-label="Close issue summary"
+            aria-label={messages.issues.summaryClose}
             className="issue-dialog__close"
             type="button"
             onClick={onClose}
@@ -121,56 +123,91 @@ export function IssueSummaryDialog({
           <div className="issue-dialog__editor">
             {isLoading ? (
               <p className="issues-loading" role="status">
-                Loading summary...
+                {messages.issues.loadingSummary}
               </p>
             ) : null}
             {summary ? (
               <>
                 <section className="issue-dialog__panel">
-                  <h4>Issue</h4>
+                  <h4>{messages.issueSummary.issue}</h4>
                   <p>{`#${summary.issue.id} ${summary.issue.title}`}</p>
-                  <p>{`Status: ${summary.issue.status}`}</p>
-                  <p>{`Updated: ${formatLocalTimestamp(summary.issue.updatedAt)}`}</p>
+                  <p>{`${messages.issueSummary.status}: ${summary.issue.status}`}</p>
+                  <p>
+                    {`${messages.issueSummary.updatedAt}: ${formatLocalTimestamp(summary.issue.updatedAt)}`}
+                  </p>
                 </section>
                 <section className="issue-dialog__panel">
-                  <h4>Session</h4>
+                  <h4>{messages.issueSummary.session}</h4>
                   <p>
                     {summary.issue.linkedSessionId != null
-                      ? `Linked session #${summary.issue.linkedSessionId}`
-                      : "No linked session"}
-                  </p>
-                  <p>{`Session status: ${summary.issue.linkedSessionStatus ?? "unknown"}`}</p>
-                  <p>
-                    {`Started: ${formatOptionalTimestamp(summary.sessionStartedAt)}`}
+                      ? messages.issueSummary.linkedSession(
+                          summary.issue.linkedSessionId,
+                        )
+                      : messages.issueSummary.noLinkedSession}
                   </p>
                   <p>
-                    {`Closed: ${formatOptionalTimestamp(summary.sessionClosedAt)}`}
+                    {`${messages.issueSummary.sessionStatus}: ${
+                      summary.issue.linkedSessionStatus ??
+                      messages.issueSummary.unknown
+                    }`}
                   </p>
                   <p>
-                    {`Log path: ${summary.issue.linkedSessionLogPath ?? "missing"}`}
+                    {`${messages.issueSummary.startedAt}: ${formatOptionalTimestamp(
+                      summary.sessionStartedAt,
+                      messages.issueSummary.unknown,
+                    )}`}
+                  </p>
+                  <p>
+                    {`${messages.issueSummary.closedAt}: ${formatOptionalTimestamp(
+                      summary.sessionClosedAt,
+                      messages.issueSummary.unknown,
+                    )}`}
+                  </p>
+                  <p>
+                    {`${messages.issueSummary.logPath}: ${
+                      summary.issue.linkedSessionLogPath ??
+                      messages.issueSummary.unknown
+                    }`}
                   </p>
                 </section>
                 <section className="issue-dialog__panel">
-                  <h4>Completion</h4>
-                  <p>{`Option: ${summary.completion?.option ?? "unknown"}`}</p>
-                  <p>{`Result: ${summary.completion?.result ?? "unknown"}`}</p>
+                  <h4>{messages.issueSummary.completion}</h4>
                   <p>
-                    {`Commit hash: ${summary.completion?.commitHash ?? "未产生提交"}`}
+                    {`${messages.issueSummary.option}: ${
+                      summary.completion?.option ??
+                      messages.issueSummary.unknown
+                    }`}
+                  </p>
+                  <p>
+                    {`${messages.issueSummary.result}: ${
+                      summary.completion?.result ??
+                      messages.issueSummary.unknown
+                    }`}
+                  </p>
+                  <p>
+                    {`${messages.issueSummary.commitHash}: ${
+                      summary.completion?.commitHash ??
+                      messages.issueSummary.noCommit
+                    }`}
                   </p>
                   {summary.completion?.failureReason ? (
-                    <p>{`Failure reason: ${summary.completion.failureReason}`}</p>
+                    <p>
+                      {`${messages.issueSummary.failureReason}: ${summary.completion.failureReason}`}
+                    </p>
                   ) : null}
                   {summary.completion?.createdAt ? (
                     <p>
-                      {`Recorded: ${formatLocalTimestamp(summary.completion.createdAt)}`}
+                      {`${messages.issueSummary.recordedAt}: ${formatLocalTimestamp(summary.completion.createdAt)}`}
                     </p>
                   ) : null}
                   {summary.completion?.source ? (
-                    <p>{`Source: ${summary.completion.source}`}</p>
+                    <p>
+                      {`${messages.issueSummary.source}: ${summary.completion.source}`}
+                    </p>
                   ) : null}
                 </section>
                 <section className="issue-dialog__panel">
-                  <h4>Diagnostics</h4>
+                  <h4>{messages.issueSummary.diagnostics}</h4>
                   {summary.diagnostics.length > 0 ? (
                     <ul className="completion-preview__files">
                       {summary.diagnostics.map((diagnostic) => (
@@ -178,7 +215,7 @@ export function IssueSummaryDialog({
                       ))}
                     </ul>
                   ) : (
-                    <p>No diagnostics.</p>
+                    <p>{messages.issues.noDiagnostics}</p>
                   )}
                 </section>
               </>
@@ -188,7 +225,7 @@ export function IssueSummaryDialog({
         <p
           className="issue-dialog__status"
           role="status"
-          aria-label="Summary status"
+          aria-label={messages.issues.issueSummaryStatus}
         >
           {errorMessage}
         </p>
@@ -201,10 +238,13 @@ function formatLocalTimestamp(epochMilliseconds: number): string {
   return new Date(epochMilliseconds).toLocaleString();
 }
 
-function formatOptionalTimestamp(epochMilliseconds?: number | null): string {
+function formatOptionalTimestamp(
+  epochMilliseconds: number | null | undefined,
+  fallback: string,
+): string {
   return epochMilliseconds != null
     ? formatLocalTimestamp(epochMilliseconds)
-    : "unknown";
+    : fallback;
 }
 
 function getFocusableDialogElements(

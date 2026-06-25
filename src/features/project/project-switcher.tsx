@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ProjectSummary } from "../../app/app";
 import { openProjectWindow } from "./project-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface ProjectSwitcherProps {
   currentProject: ProjectSummary;
@@ -27,6 +28,7 @@ export function ProjectSwitcher({
   onProjectsRefresh,
   projects,
 }: ProjectSwitcherProps) {
+  const { messages } = useI18n();
   const popoverId = useId();
   const switcherRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -113,7 +115,9 @@ export function ProjectSwitcher({
         aria-controls={isOpen ? popoverId : undefined}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        aria-label={`Current project ${currentProject.name}`}
+        aria-label={messages.projectSwitcher.currentProjectWithName(
+          currentProject.name,
+        )}
         onClick={() => setIsOpen((current) => !current)}
       >
         <span className="project-switcher__trigger-name">
@@ -126,7 +130,7 @@ export function ProjectSwitcher({
           className="project-switcher__popover"
           id={popoverId}
           role="menu"
-          aria-label="Project Switcher"
+          aria-label={messages.projectSwitcher.menu}
         >
           <div className="project-switcher__actions">
             <button
@@ -141,7 +145,7 @@ export function ProjectSwitcher({
               >
                 <Plus size={15} strokeWidth={2} />
               </span>
-              <span>创建项目</span>
+              <span>{messages.projectSwitcher.createProject}</span>
             </button>
           </div>
           <div className="project-switcher__list">
@@ -171,13 +175,13 @@ export function ProjectSwitcher({
                   </span>
                   {project.status === "missing" ? (
                     <span className="project-switcher__item-status">
-                      path unavailable
+                      {messages.projectSwitcher.pathUnavailable}
                     </span>
                   ) : null}
                 </span>
                 {project.id === currentProject.id ? (
                   <Check
-                    aria-label="Current project"
+                    aria-label={messages.projectSwitcher.currentProject}
                     className="project-switcher__check"
                     size={18}
                     strokeWidth={1.8}
@@ -190,7 +194,7 @@ export function ProjectSwitcher({
             <p
               className="project-switcher__error"
               role="status"
-              aria-label="Project switcher status"
+              aria-label={messages.projectSwitcher.status}
             >
               {error}
             </p>

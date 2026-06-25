@@ -8,6 +8,7 @@ import {
   formatSessionStatusLabel,
   formatSessionTitle,
 } from "./agent-session-formatters";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface AgentsSessionListProps {
   availableAgentTypes: AgentType[];
@@ -38,20 +39,24 @@ export function AgentsSessionList({
   sessions,
   title,
 }: AgentsSessionListProps) {
+  const { messages } = useI18n();
   const shouldShowAgentTypePicker = availableAgentTypes.length > 1;
 
   return (
-    <aside className="agents-sidebar" aria-label="Agent sessions">
+    <aside
+      className="agents-sidebar"
+      aria-label={messages.agentsFeature.agentSessions}
+    >
       <div className="agents-sidebar__header">
         <div className="agents-sidebar__header-main">
           <h2>{title}</h2>
         </div>
         <div
           className="agents-sidebar__toolbar"
-          aria-label="Session list controls"
+          aria-label={messages.agentsFeature.sessionListControls}
         >
           <button
-            aria-label="Session list view"
+            aria-label={messages.agentsFeature.sessionListView}
             className="agents-toolbar-button"
             disabled
             type="button"
@@ -63,7 +68,7 @@ export function AgentsSessionList({
               <button
                 aria-expanded={isNewSessionMenuOpen}
                 aria-haspopup="menu"
-                aria-label="New session"
+                aria-label={messages.agentsFeature.newSession}
                 className="agents-toolbar-button"
                 disabled={isNewSessionDisabled}
                 ref={newSessionButtonRef}
@@ -92,7 +97,7 @@ export function AgentsSessionList({
             </div>
           ) : (
             <button
-              aria-label="New session"
+              aria-label={messages.agentsFeature.newSession}
               className="agents-toolbar-button"
               disabled={isNewSessionDisabled}
               ref={newSessionButtonRef}
@@ -111,18 +116,23 @@ export function AgentsSessionList({
       </div>
 
       {errorMessage ? (
-        <p className="issues-status" role="status" aria-label="Agents status">
+        <p
+          className="issues-status"
+          role="status"
+          aria-label={messages.agentsFeature.agentsStatus}
+        >
           {errorMessage}
         </p>
       ) : null}
       {isLoading ? (
         <p className="issues-loading" role="status">
-          Loading sessions...
+          {messages.agentsFeature.loadingSessions}
         </p>
       ) : null}
 
       {!isLoading && !errorMessage ? (
         <SessionRows
+          messages={messages}
           onSelect={onSelectSession}
           selectedSessionId={selectedSessionId}
           sessions={sessions}
@@ -133,29 +143,33 @@ export function AgentsSessionList({
 }
 
 interface SessionRowsProps {
+  messages: ReturnType<typeof useI18n>["messages"];
   onSelect: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
 }
 
 function SessionRows({
+  messages,
   onSelect,
   selectedSessionId,
   sessions,
 }: SessionRowsProps) {
   return (
     <div
-      aria-label="Agent sessions"
+      aria-label={messages.agentsFeature.agentSessions}
       className="agents-session-list"
       role="list"
     >
       {sessions.length === 0 ? (
-        <p className="agents-session-list__empty">No sessions.</p>
+        <p className="agents-session-list__empty">
+          {messages.agentsFeature.noSessions}
+        </p>
       ) : (
         sessions.map((session) => {
           const outputLine = formatSessionOutputLine(session.latestOutput);
           const statusTone = getSessionStatusTone(session);
-          const statusLabel = formatSessionStatusLabel(session);
+          const statusLabel = formatSessionStatusLabel(messages, session);
           const agentLabel = formatAgentTypeLabel(session.agentType);
 
           return (
@@ -169,7 +183,7 @@ function SessionRows({
                 <span className="agents-session-row__header">
                   {shouldShowRunningSpinner(session) ? (
                     <LoaderCircle
-                      aria-label="Session 正在运行"
+                      aria-label={messages.agentsFeature.sessionRunning}
                       className="agents-session-row__running-icon"
                       size={12}
                       strokeWidth={2}
@@ -181,7 +195,9 @@ function SessionRows({
                 </span>
                 <span className="agents-session-row__output">
                   <span
-                    aria-label={`Session 状态：${statusLabel}`}
+                    aria-label={messages.agentsFeature.sessionStatus(
+                      statusLabel,
+                    )}
                     className={buildSessionStatusDotClassName(statusTone)}
                   />
                   <span className="agents-session-row__latest-output">

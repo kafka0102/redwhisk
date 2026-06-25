@@ -5,6 +5,7 @@ import type {
   WorkspaceChangedFile,
   WorkspaceChangeKind,
 } from "./session-workspace-commands";
+import { useI18n } from "../../shared/i18n/i18n";
 
 type ChangeFilter = "committed" | "uncommitted";
 
@@ -23,11 +24,15 @@ export function SessionChangesPanel({
   onOpenChangedFile,
   onRefreshChanges,
 }: SessionChangesPanelProps) {
+  const { messages } = useI18n();
   const [filter, setFilter] = useState<ChangeFilter>("uncommitted");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
-  const filterLabel = filter === "uncommitted" ? "未提交" : "已提交";
+  const filterLabel =
+    filter === "uncommitted"
+      ? messages.agentsFeature.uncommitted
+      : messages.agentsFeature.committed;
 
   useEffect(() => {
     if (!isFilterOpen) {
@@ -84,7 +89,7 @@ export function SessionChangesPanel({
                 }}
               >
                 <Circle aria-hidden="true" size={13} strokeWidth={1.8} />
-                未提交
+                {messages.agentsFeature.uncommitted}
               </button>
               <button
                 aria-current={filter === "committed" ? "true" : undefined}
@@ -97,13 +102,13 @@ export function SessionChangesPanel({
                 }}
               >
                 <Check aria-hidden="true" size={13} strokeWidth={1.8} />
-                已提交
+                {messages.agentsFeature.committed}
               </button>
             </div>
           ) : null}
         </div>
         <button
-          aria-label="刷新变更"
+          aria-label={messages.agentsFeature.refreshChanges}
           className="session-side-panel__refresh"
           type="button"
           onClick={onRefreshChanges}
@@ -118,7 +123,9 @@ export function SessionChangesPanel({
           ) : null}
           {changes.length === 0 && !errorMessage ? (
             <p className="session-side-panel__empty">
-              {isLoading ? "正在加载变更..." : "暂无未提交变更。"}
+              {isLoading
+                ? messages.agentsFeature.loadingChanges
+                : messages.agentsFeature.noUncommittedChanges}
             </p>
           ) : null}
           {changes.map((file) => (
@@ -130,7 +137,9 @@ export function SessionChangesPanel({
           ))}
         </div>
       ) : (
-        <p className="session-side-panel__empty">已提交变更暂未实现。</p>
+        <p className="session-side-panel__empty">
+          {messages.agentsFeature.committedChangesNotImplemented}
+        </p>
       )}
     </div>
   );

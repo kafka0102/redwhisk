@@ -1,4 +1,5 @@
 import type { AttachmentPreviewState } from "./issue-activity-types";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueAttachmentPreviewDialogProps {
   preview: AttachmentPreviewState;
@@ -9,6 +10,7 @@ export function IssueAttachmentPreviewDialog({
   preview,
   onClose,
 }: IssueAttachmentPreviewDialogProps) {
+  const { messages } = useI18n();
   return (
     <div
       className="issue-dialog-overlay"
@@ -19,7 +21,7 @@ export function IssueAttachmentPreviewDialog({
       }}
     >
       <div
-        aria-label="Attachment Preview"
+        aria-label={messages.issues.attachmentPreview}
         aria-modal="true"
         className="issue-dialog issue-dialog--compact"
         role="dialog"
@@ -27,7 +29,7 @@ export function IssueAttachmentPreviewDialog({
         <div className="issue-dialog__header">
           <h3>{preview.displayName}</h3>
           <button
-            aria-label="Close attachment preview"
+            aria-label={messages.issues.closeAttachmentPreview}
             className="issue-dialog__close"
             type="button"
             onClick={onClose}

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui";
+import { useI18n } from "../../../shared/i18n/i18n";
 import type {
   AgentTimelineItem,
   ToolCallDetail,
@@ -43,6 +44,7 @@ export function AgentMessageCards({ entries }: AgentMessageCardsProps) {
 }
 
 function MessageCard({ entry }: { entry: MessageStreamEntry }) {
+  const { messages } = useI18n();
   const item = entry.item;
   switch (item.type) {
     case "user_message":
@@ -50,7 +52,12 @@ function MessageCard({ entry }: { entry: MessageStreamEntry }) {
     case "assistant_message":
       return <AssistantMessageCard item={item} />;
     case "reasoning":
-      return <ReasoningCard item={item} />;
+      return (
+        <ReasoningCard
+          item={item}
+          thinkingLabel={messages.agentsFeature.reasoningTitle}
+        />
+      );
     case "tool_call":
       return <ToolCallCard item={item} />;
     case "todo":
@@ -94,15 +101,17 @@ function AssistantMessageCard({
 
 function ReasoningCard({
   item,
+  thinkingLabel,
 }: {
   item: Extract<AgentTimelineItem, { type: "reasoning" }>;
+  thinkingLabel: string;
 }) {
   return (
     <article className="agents-message__entry agents-message__entry--reasoning">
       <details className="agents-message__reasoning">
         <summary className="agents-message__reasoning-summary">
           <Sparkles aria-hidden="true" size={13} strokeWidth={1.8} />
-          <span>Thinking</span>
+          <span>{thinkingLabel}</span>
           <ChevronDown
             aria-hidden="true"
             size={13}
@@ -224,6 +233,7 @@ function ToolCallIcon({ detail }: { detail: ToolCallDetail }) {
 }
 
 function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
+  const { messages } = useI18n();
   if (status === "completed") {
     return null;
   }
@@ -236,27 +246,28 @@ function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
           strokeWidth={2}
           className="agents-message__spinner"
         />
-        运行中
+        {messages.agentsFeature.toolRunning}
       </Badge>
     );
   }
   if (status === "failed") {
     return (
       <Badge variant="destructive" className="agents-message__tool-status">
-        失败
+        {messages.agentsFeature.toolFailed}
       </Badge>
     );
   }
   if (status === "canceled") {
     return (
       <Badge variant="outline" className="agents-message__tool-status">
-        已取消
+        {messages.agentsFeature.toolCanceled}
       </Badge>
     );
   }
 }
 
 function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
+  const { messages } = useI18n();
   switch (detail.type) {
     case "shell":
       return (
@@ -264,7 +275,9 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
           {detail.output || detail.exitCode != null ? (
             <div className="agents-message__tool-output">
               {detail.exitCode != null ? (
-                <span className="agents-message__exit-code">{`exit ${detail.exitCode}`}</span>
+                <span className="agents-message__exit-code">
+                  {messages.agentsFeature.exitCode(detail.exitCode)}
+                </span>
               ) : null}
               <code className="agents-message__command agents-message__command--details">
                 {detail.command}
@@ -323,13 +336,17 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
           <div className="agents-message__tool-output">
             <div className="agents-message__search-details">
               <div className="agents-message__detail-row">
-                <span className="agents-message__detail-label">Query</span>
+                <span className="agents-message__detail-label">
+                  {messages.agentsFeature.query}
+                </span>
                 <code className="agents-message__search-query">
                   {detail.query}
                 </code>
               </div>
               <div className="agents-message__detail-row">
-                <span className="agents-message__detail-label">Mode</span>
+                <span className="agents-message__detail-label">
+                  {messages.agentsFeature.mode}
+                </span>
                 <code className="agents-message__search-query">
                   {formatSearchMode(detail.mode)}
                 </code>
@@ -343,7 +360,9 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
                   ))}
                 </ul>
               ) : (
-                <p className="agents-message__search-empty">没有返回匹配项</p>
+                <p className="agents-message__search-empty">
+                  {messages.agentsFeature.noSearchMatches}
+                </p>
               )}
             </div>
           </div>
@@ -353,9 +372,13 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
       return (
         <div className="agents-message__tool-body">
           {detail.childSessionId ? (
-            <p className="agents-message__sub-agent">{`子会话：${detail.childSessionId}`}</p>
+            <p className="agents-message__sub-agent">
+              {messages.agentsFeature.subSession(detail.childSessionId)}
+            </p>
           ) : (
-            <p className="agents-message__sub-agent">子会话已启动</p>
+            <p className="agents-message__sub-agent">
+              {messages.agentsFeature.subSessionStarted}
+            </p>
           )}
         </div>
       );
@@ -542,12 +565,13 @@ function TodoCard({
 }: {
   item: Extract<AgentTimelineItem, { type: "todo" }>;
 }) {
+  const { messages } = useI18n();
   return (
     <article className="agents-message__entry agents-message__entry--todo">
       <div className="agents-message__todo">
         <div className="agents-message__todo-header">
           <ListChecks aria-hidden="true" size={13} strokeWidth={1.8} />
-          <span>待办清单</span>
+          <span>{messages.agentsFeature.todoList}</span>
         </div>
         <ul className="agents-message__todo-list">
           {item.items.map((todo, index) => (
@@ -593,9 +617,12 @@ function CompactionCard({
 }: {
   item: Extract<AgentTimelineItem, { type: "compaction" }>;
 }) {
+  const { messages } = useI18n();
   return (
     <article className="agents-message__entry agents-message__entry--compaction">
-      <p className="agents-message__compaction">上下文已压缩</p>
+      <p className="agents-message__compaction">
+        {messages.agentsFeature.contextCompacted}
+      </p>
     </article>
   );
 }

@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Check, X, Plus, Paperclip, Trash2 } from "lucide-react";
 import { IssuePagePrototypeSection } from "./issue-page-prototype";
+import { useI18n } from "../../shared/i18n/i18n";
 
 const TYPE_SAMPLES = {
   headline: "text-[22px] font-semibold leading-[1.2]",
@@ -22,19 +23,20 @@ const TYPE_SAMPLES = {
 } as const;
 
 export function DesignSystemActivity() {
+  const { messages } = useI18n();
   const [activeSection, setActiveSection] = useState("overview");
 
   const sections = [
-    { id: "overview", label: "Overview" },
-    { id: "issue-prototype", label: "Issue Prototype" },
-    { id: "colors", label: "Colors" },
-    { id: "typography", label: "Typography" },
-    { id: "buttons", label: "Buttons" },
-    { id: "inputs", label: "Inputs" },
-    { id: "cards", label: "Cards" },
-    { id: "layouts", label: "Layouts" },
-    { id: "spacing", label: "Spacing" },
-    { id: "radius", label: "Border Radius" },
+    { id: "overview", label: messages.designSystem.overview },
+    { id: "issue-prototype", label: messages.designSystem.issuePrototype },
+    { id: "colors", label: messages.designSystem.colors },
+    { id: "typography", label: messages.designSystem.typography },
+    { id: "buttons", label: messages.designSystem.buttons },
+    { id: "inputs", label: messages.designSystem.inputs },
+    { id: "cards", label: messages.designSystem.cards },
+    { id: "layouts", label: messages.designSystem.layouts },
+    { id: "spacing", label: messages.designSystem.spacing },
+    { id: "radius", label: messages.designSystem.borderRadius },
   ];
 
   return (
@@ -43,10 +45,10 @@ export function DesignSystemActivity() {
         <nav className="grid grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden border-r py-4">
           <div className="px-4">
             <h2 className="text-base font-semibold leading-[1.25]">
-              Design System
+              {messages.designSystem.title}
             </h2>
             <p className="mt-1 text-xs leading-[1.35] text-muted-foreground">
-              RedWhisk UI Component Library
+              {messages.designSystem.subtitle}
             </p>
           </div>
           <div className="grid auto-rows-min gap-0.5 overflow-auto px-2">
@@ -490,6 +492,8 @@ function Demo({
 }
 
 function ButtonsSection() {
+  const { messages } = useI18n();
+
   return (
     <section className="grid gap-6 pb-12">
       <SectionHeader
@@ -502,8 +506,8 @@ function ButtonsSection() {
         description="Current strongest action. Black on white (inverted in dark mode)"
       >
         <Demo>
-          <Button>Save</Button>
-          <Button disabled>Disabled</Button>
+          <Button>{messages.designSystem.save}</Button>
+          <Button disabled>{messages.designSystem.disabled}</Button>
         </Demo>
       </Showcase>
 
@@ -512,9 +516,9 @@ function ButtonsSection() {
         description="Cancel, Configure, and disabled follow-up workflow buttons"
       >
         <Demo>
-          <Button variant="secondary">Cancel</Button>
+          <Button variant="secondary">{messages.designSystem.cancel}</Button>
           <Button variant="secondary" disabled>
-            Disabled
+            {messages.designSystem.disabled}
           </Button>
         </Demo>
       </Showcase>
@@ -524,9 +528,9 @@ function ButtonsSection() {
         description="For subtle actions in panels"
       >
         <Demo>
-          <Button variant="ghost">Edit</Button>
+          <Button variant="ghost">{messages.designSystem.edit}</Button>
           <Button variant="ghost" disabled>
-            Disabled
+            {messages.designSystem.disabled}
           </Button>
         </Demo>
       </Showcase>
@@ -535,34 +539,38 @@ function ButtonsSection() {
         <Demo>
           <Button>
             <Plus size={16} />
-            New Issue
+            {messages.designSystem.newIssue}
           </Button>
           <Button variant="secondary">
             <Paperclip size={16} />
-            Attach
+            {messages.designSystem.attach}
           </Button>
           <Button variant="ghost">
             <Trash2 size={16} />
-            Delete
+            {messages.designSystem.delete}
           </Button>
         </Demo>
       </Showcase>
 
       <Showcase heading="Small Buttons">
         <Demo>
-          <Button size="sm">Save</Button>
+          <Button size="sm">{messages.designSystem.save}</Button>
           <Button variant="secondary" size="sm">
-            Cancel
+            {messages.designSystem.cancel}
           </Button>
         </Demo>
       </Showcase>
 
       <Showcase heading="Icon Only">
         <Demo>
-          <Button size="icon" aria-label="Check">
+          <Button size="icon" aria-label={messages.designSystem.check}>
             <Check size={16} />
           </Button>
-          <Button size="icon" variant="secondary" aria-label="Close">
+          <Button
+            size="icon"
+            variant="secondary"
+            aria-label={messages.designSystem.closeButton}
+          >
             <X size={16} />
           </Button>
         </Demo>
@@ -572,6 +580,8 @@ function ButtonsSection() {
 }
 
 function InputsSection() {
+  const { messages } = useI18n();
+
   return (
     <section className="grid gap-6 pb-12">
       <SectionHeader
@@ -581,9 +591,9 @@ function InputsSection() {
 
       <Showcase heading="Text Input">
         <Demo stacked>
-          <Input placeholder="Enter issue title" />
+          <Input placeholder={messages.designSystem.enterIssueTitle} />
           <Input value="Create local issue workflow" />
-          <Input disabled value="Cannot edit this" />
+          <Input disabled value={messages.designSystem.cannotEdit} />
         </Demo>
       </Showcase>
     </section>
@@ -591,6 +601,8 @@ function InputsSection() {
 }
 
 function CardsSection() {
+  const { messages } = useI18n();
+
   return (
     <section className="grid gap-6 pb-12">
       <SectionHeader
@@ -614,8 +626,10 @@ function CardsSection() {
                 Card content goes here. Keep it compact and focused.
               </p>
               <div className="flex justify-end gap-2">
-                <Button variant="secondary">Cancel</Button>
-                <Button>Confirm</Button>
+                <Button variant="secondary">
+                  {messages.designSystem.cancel}
+                </Button>
+                <Button>{messages.designSystem.confirm}</Button>
               </div>
             </CardContent>
           </Card>
@@ -625,10 +639,10 @@ function CardsSection() {
       <Showcase heading="Empty State">
         <Demo stacked>
           <Empty>
-            <EmptyTitle>No issues</EmptyTitle>
+            <EmptyTitle>{messages.designSystem.noIssues}</EmptyTitle>
             <Button>
               <Plus size={16} />
-              New Issue
+              {messages.designSystem.newIssue}
             </Button>
           </Empty>
         </Demo>
@@ -638,6 +652,8 @@ function CardsSection() {
 }
 
 function LayoutsSection() {
+  const { messages } = useI18n();
+
   return (
     <section className="grid gap-6 pb-12">
       <SectionHeader
@@ -649,26 +665,27 @@ function LayoutsSection() {
         <Demo stacked>
           <div className="rounded-[var(--radius-card)] border p-4">
             <div className="mb-2 text-xs text-muted-foreground">
-              &lt;PageLayout title=&quot;My Page&quot; subtitle=&quot;Subtitle
-              here&quot;&gt;
+              {`<PageLayout title="${messages.designSystem.myPage}" subtitle="${messages.designSystem.subtitleHere}">`}
             </div>
             <div className="rounded-[var(--radius-card)] border border-dashed p-4">
               <div className="mb-4 flex items-start justify-between gap-4 border-b pb-4">
                 <div>
                   <h3 className="m-0 text-[22px] font-semibold leading-[1.2]">
-                    My Page
+                    {messages.designSystem.myPage}
                   </h3>
                   <p className="mt-2 text-[13px] leading-[1.45] text-muted-foreground">
-                    Subtitle here
+                    {messages.designSystem.subtitleHere}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="secondary">Action</Button>
-                  <Button>Primary</Button>
+                  <Button variant="secondary">
+                    {messages.designSystem.action}
+                  </Button>
+                  <Button>{messages.designSystem.primary}</Button>
                 </div>
               </div>
               <div className="text-[13px] text-muted-foreground">
-                Page content goes here
+                {messages.designSystem.pageContent}
               </div>
             </div>
           </div>

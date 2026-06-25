@@ -9,9 +9,9 @@ import { ProjectHome } from "../features/project/project-home";
 import {
   detectWorktreeSetupCommand,
   initialWorktreeSetupCommand,
-  WORKTREE_SETUP_COMMAND_INPUT_PROMPT,
 } from "../features/project/worktree-setup-command";
-import { I18nProvider } from "../shared/i18n/i18n";
+import { I18nProvider, useI18n } from "../shared/i18n/i18n";
+import { I18N_MESSAGES, type Locale } from "../shared/i18n/messages";
 import {
   createProject,
   initializeLocalData,
@@ -206,18 +206,21 @@ export function App() {
     });
   }, []);
 
+  const defaultLocale = getDefaultLocale();
+  const defaultMessages = I18N_MESSAGES[defaultLocale];
+
   if (!selectedProject) {
     const statusMessages = [
       {
-        label: "Local data status",
+        label: defaultMessages.app.localDataStatus,
         message: localDataError,
       },
       {
-        label: "Project creation status",
+        label: defaultMessages.app.projectCreationStatus,
         message: projectCreationError,
       },
       {
-        label: "Project open status",
+        label: defaultMessages.app.openProjectStatus,
         message: projectOpenError,
       },
     ].filter(
@@ -226,7 +229,7 @@ export function App() {
     );
 
     return (
-      <>
+      <I18nProvider>
         {statusMessages.length > 0 ? (
           <div className="local-data-status-stack">
             {statusMessages.map((status) => (
@@ -255,7 +258,7 @@ export function App() {
             onCreate={handleCreateProjectConfirmed}
           />
         ) : null}
-      </>
+      </I18nProvider>
     );
   }
 
@@ -344,6 +347,7 @@ function CreateProjectDialog({
   onClose,
   onCreate,
 }: CreateProjectDialogProps) {
+  const { messages } = useI18n();
   const [projectNameValue, setProjectNameValue] = useState(initialDraft.name);
   const [projectPathValue, setProjectPathValue] = useState(
     initialDraft.repoPath,
@@ -377,7 +381,7 @@ function CreateProjectDialog({
       const selectedPath = await open({
         directory: true,
         multiple: false,
-        title: "Select Git Repository",
+        title: messages.createProject.selectGitRepository,
       });
 
       if (typeof selectedPath !== "string") {
@@ -442,19 +446,22 @@ function CreateProjectDialog({
       <div
         className="issue-dialog issue-dialog--compact"
         role="dialog"
-        aria-label="New Project"
+        aria-label={messages.createProject.dialogTitle}
       >
         <div className="issue-dialog__header">
-          <h3>New Project</h3>
+          <h3>{messages.createProject.dialogTitle}</h3>
         </div>
         <div className="issue-dialog__body issue-dialog__body--single">
           <ProjectDetailsForm
-            ariaStatusLabel="Project creation status"
-            cancelLabel="Cancel"
-            chooseFolderLabel="Choose folder"
+            ariaStatusLabel={messages.createProject.status}
+            autoCommitLabel={messages.createProject.autoCommit}
+            cancelLabel={messages.settings.cancel}
+            chooseFolderLabel={messages.projectHome.chooseFolder}
             className="settings-card settings-general-card project-details-card"
             completionPolicy={completionPolicyValue}
-            completionStrategyLabel="Git completion strategy"
+            completionStrategyLabel={
+              messages.createProject.gitCompletionStrategy
+            }
             errorMessage={errorMessage}
             isChoosingRepoPath={isChoosingRepoPath}
             isSubmitting={isSubmitting}
@@ -466,22 +473,33 @@ function CreateProjectDialog({
             onWorktreeLocationChange={setWorktreeLocationValue}
             onWorktreeSetupCommandChange={setWorktreeSetupCommandValue}
             projectName={projectNameValue}
-            projectNameLabel="Project Name"
+            projectNameLabel={messages.settings.projectName}
             repoPath={projectPathValue}
-            repoPathLabel="Repository path"
+            repoPathLabel={messages.settings.repositoryPath}
             submitDisabled={isSubmitDisabled}
-            submitLabel="Create Project"
-            submittingLabel="Creating Project"
+            submitLabel={messages.createProject.create}
+            submittingLabel={messages.createProject.creating}
             worktreeLocation={worktreeLocationValue}
-            worktreeLocationLabel="Worktree path"
+            worktreeLocationLabel={messages.settings.worktreePath}
             worktreeSetupCommand={worktreeSetupCommandValue}
-            worktreeSetupCommandLabel="Worktree setup after creation"
+            worktreeSetupCommandLabel={
+              messages.settings.worktreeSetupAfterCreation
+            }
             worktreeSetupCommandPlaceholder={
-              WORKTREE_SETUP_COMMAND_INPUT_PROMPT
+              messages.createProject.worktreeSetupPlaceholder
             }
           />
         </div>
       </div>
     </div>
   );
+}
+
+function getDefaultLocale(): Locale {
+  try {
+    const storedLocale = window.localStorage.getItem("redwhisk.locale");
+    return storedLocale === "zh" || storedLocale === "en" ? storedLocale : "en";
+  } catch {
+    return "en";
+  }
 }

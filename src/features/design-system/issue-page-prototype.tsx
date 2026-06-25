@@ -39,6 +39,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { useI18n } from "../../shared/i18n/i18n";
 
 type PrototypeMode = "create" | "edit" | "readonly";
 type IssueStatus = "backlog" | "running" | "review" | "completed";
@@ -107,13 +108,14 @@ const READONLY_DESCRIPTION =
   "Replace the independent issue dialog with a dedicated page that takes over the current activity surface. Keep create and edit modes interactive, then split read-only viewing into a separate layout for non-backlog pages.";
 
 export function IssuePagePrototypeSection() {
+  const { messages } = useI18n();
   const [mode, setMode] = useState<PrototypeMode>("create");
 
   return (
     <section className="grid gap-6 pb-12">
       <div>
         <h2 className="m-0 text-[22px] font-semibold leading-[1.2]">
-          Issue prototype
+          {messages.designSystem.issuePrototype}
         </h2>
         <p className="mt-1.5 text-[13px] leading-[1.45] text-muted-foreground">
           静态确认页。用于预览 issue 表单从弹窗切换为整页后的布局方向。
@@ -163,6 +165,7 @@ export function IssuePagePrototypeSection() {
 }
 
 function PrototypeSurface({ mode }: { mode: PrototypeMode }) {
+  const { messages } = useI18n();
   const isEditable = mode === "create" || mode === "edit";
   const [status, setStatus] = useState<IssueStatus>("running");
   const [labelIds, setLabelIds] = useState<string[]>(() =>
@@ -235,7 +238,9 @@ function PrototypeSurface({ mode }: { mode: PrototypeMode }) {
               </>
             ) : (
               <>
-                <Button variant="secondary">Cancel</Button>
+                <Button variant="secondary">
+                  {messages.designSystem.cancel}
+                </Button>
                 <Button>Submit</Button>
               </>
             )}
@@ -509,6 +514,8 @@ function EditableAttachmentSection({
   onPreviewAttachment: (attachment: PrototypeAttachment) => void;
   onRemoveAttachment: (attachmentId: string) => void;
 }) {
+  const { messages } = useI18n();
+
   return (
     <section className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -516,7 +523,7 @@ function EditableAttachmentSection({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Add attachment"
+          aria-label={messages.issues.addAttachment}
           onClick={onOpenFilePicker}
         >
           <Plus />
@@ -614,6 +621,7 @@ function AttachmentRow({
   onPreviewAttachment: (attachment: PrototypeAttachment) => void;
   onRemoveAttachment?: (attachmentId: string) => void;
 }) {
+  const { messages } = useI18n();
   return (
     <div className="flex items-center justify-between gap-2 rounded-[3px] bg-[var(--color-surface-muted)] px-2.5 py-1.5">
       <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-[1.45] text-[var(--color-text)]">
@@ -634,7 +642,9 @@ function AttachmentRow({
             variant="ghost"
             size="icon-sm"
             className="size-6 rounded-[3px] bg-transparent hover:bg-[var(--color-accent-muted)]"
-            aria-label={`Remove ${attachment.name}`}
+            aria-label={messages.agentsFeature.removeAttachment(
+              attachment.name,
+            )}
             onClick={() => onRemoveAttachment?.(attachment.id)}
           >
             <X />
@@ -687,11 +697,12 @@ function AttachmentPreviewDialog({
   attachment: PrototypeAttachment | null;
   onOpenChange: (isOpen: boolean) => void;
 }) {
+  const { messages } = useI18n();
   return (
     <Dialog open={attachment !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md rounded-[var(--radius-dialog)]">
         <DialogHeader>
-          <DialogTitle>附件预览</DialogTitle>
+          <DialogTitle>{messages.issues.attachmentPreview}</DialogTitle>
           <DialogDescription>
             {attachment?.name ?? "No attachment selected"}
           </DialogDescription>
@@ -713,6 +724,7 @@ function DeleteIssueDialog({
   mode: PrototypeMode;
   onOpenChange: (isOpen: boolean) => void;
 }) {
+  const { messages } = useI18n();
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
@@ -729,11 +741,11 @@ function DeleteIssueDialog({
         </DialogHeader>
         <DialogFooter className="rounded-b-[var(--radius-dialog)]">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancel
+            {messages.designSystem.cancel}
           </Button>
           <Button variant="destructive" onClick={() => onOpenChange(false)}>
             <Trash2 />
-            Delete
+            {messages.designSystem.delete}
           </Button>
         </DialogFooter>
       </DialogContent>

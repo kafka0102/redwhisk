@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { listIssues, type IssueRecord } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionIssueDrawerProps {
   issueId: number;
@@ -16,6 +17,7 @@ export function SessionIssueDrawer({
   projectId,
   onClose,
 }: SessionIssueDrawerProps) {
+  const { messages } = useI18n();
   const [issue, setIssue] = useState<IssueRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function SessionIssueDrawer({
           response.issues.find((candidate) => candidate.id === issueId) ?? null;
         setIssue(nextIssue);
         if (!nextIssue) {
-          setErrorMessage("Linked issue no longer exists.");
+          setErrorMessage(messages.agentsFeature.issueNotFound);
         }
       } catch (error) {
         if (!isMounted) {
@@ -58,21 +60,26 @@ export function SessionIssueDrawer({
     return () => {
       isMounted = false;
     };
-  }, [issueId, projectId]);
+  }, [issueId, messages.agentsFeature.issueNotFound, projectId]);
 
   const description = issue?.description?.trim().length
     ? issue.description
-    : "No details provided.";
+    : messages.agentsFeature.noDetailsProvided;
 
   return (
-    <aside className="agents-issue-drawer" aria-label="Issue details">
+    <aside
+      className="agents-issue-drawer"
+      aria-label={messages.agentsFeature.issueDetails}
+    >
       <div className="agents-issue-drawer__header">
         <div className="agents-issue-drawer__copy">
-          <p className="agents-issue-drawer__eyebrow">Issue</p>
+          <p className="agents-issue-drawer__eyebrow">
+            {messages.agentsFeature.issueEyebrow}
+          </p>
           <h4>{issue?.title ?? issueTitle}</h4>
         </div>
         <button
-          aria-label="Close issue details"
+          aria-label={messages.agentsFeature.closeIssueDetails}
           className="issue-dialog__close"
           type="button"
           onClick={onClose}
@@ -83,7 +90,7 @@ export function SessionIssueDrawer({
       <div className="agents-issue-drawer__body">
         {isLoading ? (
           <p className="issues-status" role="status">
-            Loading issue...
+            {messages.agentsFeature.loadingIssue}
           </p>
         ) : errorMessage ? (
           <p className="issues-status" role="status">
@@ -92,13 +99,13 @@ export function SessionIssueDrawer({
         ) : (
           <>
             <section className="issue-dialog__panel">
-              <h4>Title</h4>
+              <h4>{messages.agentsFeature.titleField}</h4>
               <p className="issue-detail__title">
                 {issue?.title ?? issueTitle}
               </p>
             </section>
             <section className="issue-dialog__panel">
-              <h4>Details</h4>
+              <h4>{messages.agentsFeature.detailsField}</h4>
               <div className="issue-detail__description">{description}</div>
             </section>
           </>

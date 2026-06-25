@@ -67,7 +67,6 @@ const AGENTS_SIDEBAR_MAX_WIDTH = 450;
 const SESSION_SIDE_PANEL_DEFAULT_WIDTH = 300;
 const SESSION_SIDE_PANEL_MIN_WIDTH = 240;
 const SESSION_SIDE_PANEL_MAX_WIDTH = 560;
-const DEFAULT_SESSION_TITLE = "Untitled Session";
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
@@ -343,15 +342,15 @@ export function AgentsActivity({
       selectedTerminalPanelState.errorMessage != null);
   const transitionButtonLabel =
     sessionTransitionPhase === "running"
-      ? "Mark review"
+      ? messages.agentsFeature.markReview
       : sessionTransitionPhase === "review"
-        ? "Mark done"
+        ? messages.agentsFeature.markDone
         : null;
   const transitionMenuOptions =
     sessionTransitionPhase === "running"
       ? ([
-          { action: "review", label: "Review" },
-          { action: "done", label: "Done" },
+          { action: "review", label: messages.agentsFeature.review },
+          { action: "done", label: messages.agentsFeature.done },
         ] satisfies Array<{
           action: SessionIssueTransition;
           label: string;
@@ -921,7 +920,9 @@ export function AgentsActivity({
       return;
     }
 
-    const confirmed = await confirm({ message: "确认删除该 Session？" });
+    const confirmed = await confirm({
+      message: messages.agentsFeature.confirmDeleteSession,
+    });
     if (!confirmed) {
       return;
     }
@@ -1087,7 +1088,7 @@ export function AgentsActivity({
       (profile) => profile.agentType === agentType,
     );
     if (selectedProfile == null) {
-      toast.error("未找到可用于当前 Agent 类型的 Agent Profile。");
+      toast.error(messages.agentsFeature.noProfilesForAgentType);
       return;
     }
 
@@ -1097,7 +1098,7 @@ export function AgentsActivity({
     try {
       const result = await startStructuredAgentSession({
         projectId,
-        title: DEFAULT_SESSION_TITLE,
+        title: messages.agentsFeature.temporarySessionDefaultTitle,
         agentType,
         agentProfileId: selectedProfile.id,
       });
@@ -1144,7 +1145,7 @@ export function AgentsActivity({
       />
 
       <div
-        aria-label="Resize session list"
+        aria-label={messages.agentsFeature.resizeSessionList}
         aria-orientation="vertical"
         aria-valuemax={AGENTS_SIDEBAR_MAX_WIDTH}
         aria-valuemin={AGENTS_SIDEBAR_MIN_WIDTH}
@@ -1189,7 +1190,7 @@ export function AgentsActivity({
             ? " agents-workspace--with-side-panel"
             : ""
         }`}
-        aria-label="Session workspace"
+        aria-label={messages.agentsFeature.sessionWorkspace}
       >
         <AgentsSessionPane
           agentCommitErrorMessage={completeAgentCommitErrorMessage}
@@ -1266,7 +1267,7 @@ export function AgentsActivity({
         {isSessionSidePanelOpen && selectedSession ? (
           <>
             <div
-              aria-label="Resize session side panel"
+              aria-label={messages.agentsFeature.resizeSessionSidePanel}
               aria-orientation="vertical"
               aria-valuemax={SESSION_SIDE_PANEL_MAX_WIDTH}
               aria-valuemin={SESSION_SIDE_PANEL_MIN_WIDTH}
@@ -1331,15 +1332,15 @@ export function AgentsActivity({
       {agentCommitPreview ? (
         <div className="issue-dialog-overlay">
           <div
-            aria-label="Completion Confirmation"
+            aria-label={messages.agentsFeature.completionConfirmation}
             aria-modal="true"
             className="issue-dialog issue-dialog--compact"
             role="dialog"
           >
             <div className="issue-dialog__header">
-              <h3>Completion Confirmation</h3>
+              <h3>{messages.agentsFeature.completionConfirmation}</h3>
               <button
-                aria-label="Close completion confirmation"
+                aria-label={messages.agentsFeature.closeCompletionConfirmation}
                 className="issue-dialog__close"
                 type="button"
                 onClick={handleCloseAgentCommitPreview}
@@ -1350,13 +1351,21 @@ export function AgentsActivity({
             <div className="issue-dialog__body issue-dialog__body--single">
               <div className="issue-dialog__editor">
                 <section className="issue-dialog__panel">
-                  <h4>Git summary</h4>
-                  <p>{`HEAD: ${agentCommitPreview.head}`}</p>
-                  <p>{`Changed files: ${agentCommitPreview.changedFilesCount}`}</p>
-                  <p>{`Completion option: ${agentCommitPreview.option}`}</p>
+                  <h4>{messages.agentsFeature.gitSummary}</h4>
+                  <p>{messages.agentsFeature.head(agentCommitPreview.head)}</p>
+                  <p>
+                    {messages.agentsFeature.changedFilesCount(
+                      agentCommitPreview.changedFilesCount,
+                    )}
+                  </p>
+                  <p>
+                    {messages.agentsFeature.completionOption(
+                      agentCommitPreview.option,
+                    )}
+                  </p>
                 </section>
                 <section className="issue-dialog__panel">
-                  <h4>Changed files</h4>
+                  <h4>{messages.agentsFeature.changedFiles}</h4>
                   {agentCommitPreview.changedFiles.length > 0 ? (
                     <ul className="completion-preview__files">
                       {agentCommitPreview.changedFiles.map((file) => (
@@ -1367,7 +1376,7 @@ export function AgentsActivity({
                       ))}
                     </ul>
                   ) : (
-                    <p>No changed files.</p>
+                    <p>{messages.agentsFeature.noChangedFiles}</p>
                   )}
                 </section>
               </div>

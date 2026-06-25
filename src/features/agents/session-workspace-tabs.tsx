@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { SessionDiffViewer } from "./session-diff-viewer";
 import { SessionFileViewer } from "./session-file-viewer";
+import { useI18n } from "../../shared/i18n/i18n";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
@@ -26,6 +27,7 @@ export function SessionWorkspaceTabs({
   onCloseTab,
   onSelectTab,
 }: SessionWorkspaceTabsProps) {
+  const { messages } = useI18n();
   const selectedTab = getSelectedTab(activeTab, fileTab, changeTab);
 
   return (
@@ -38,10 +40,11 @@ export function SessionWorkspaceTabs({
           type="button"
           onClick={() => onSelectTab("session")}
         >
-          Session
+          {messages.agentsFeature.sessionTab}
         </button>
         {fileTab ? (
           <ClosableWorkspaceTab
+            closeLabel={messages.agentsFeature.closeTab(fileTab.fileName)}
             label={fileTab.fileName}
             selected={selectedTab === "file"}
             tab="file"
@@ -51,6 +54,7 @@ export function SessionWorkspaceTabs({
         ) : null}
         {changeTab ? (
           <ClosableWorkspaceTab
+            closeLabel={messages.agentsFeature.closeTab(changeTab.fileName)}
             icon={<GitBranch aria-hidden="true" size={14} strokeWidth={1.8} />}
             label={changeTab.fileName}
             selected={selectedTab === "changes"}
@@ -74,6 +78,7 @@ export function SessionWorkspaceTabs({
 }
 
 interface ClosableWorkspaceTabProps {
+  closeLabel: string;
   icon?: ReactNode;
   label: string;
   selected: boolean;
@@ -83,6 +88,7 @@ interface ClosableWorkspaceTabProps {
 }
 
 function ClosableWorkspaceTab({
+  closeLabel,
   icon,
   label,
   selected,
@@ -103,7 +109,7 @@ function ClosableWorkspaceTab({
         <span className="session-workspace-tabs__label">{label}</span>
       </button>
       <button
-        aria-label={`关闭 ${label}`}
+        aria-label={closeLabel}
         className="session-workspace-tabs__close"
         type="button"
         onClick={() => onCloseTab(tab)}

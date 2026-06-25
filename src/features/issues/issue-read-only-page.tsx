@@ -77,7 +77,7 @@ export function IssueReadOnlyPage({
               variant="secondary"
               onClick={onBack}
             >
-              {messages.issues.back}
+              {messages.issues.backReadonly}
             </Button>
             <StatusMenu
               isSaving={isSaving}
@@ -85,9 +85,9 @@ export function IssueReadOnlyPage({
               onAdvanceStatus={onAdvanceStatus}
             />
             <ConfirmDialog
-              confirmLabel={messages.issues.delete}
+              confirmLabel={messages.issues.deleteReadonly}
               message={messages.issues.deleteConfirmMessage}
-              title={messages.issues.deleteConfirmTitle}
+              title={messages.issues.deleteConfirmTitleReadonly}
               onConfirm={onDeleteIssue}
             >
               <Button
@@ -97,7 +97,7 @@ export function IssueReadOnlyPage({
                 variant="destructive"
               >
                 <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
-                {messages.issues.delete}
+                {messages.issues.deleteReadonly}
               </Button>
             </ConfirmDialog>
           </>

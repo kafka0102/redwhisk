@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ProjectSummary } from "../../app/app";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { useI18n } from "../../shared/i18n/i18n";
 import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 
 interface ProjectListProps {
@@ -44,6 +45,7 @@ export function ProjectList({
   onProjectOpen,
   projects,
 }: ProjectListProps) {
+  const { messages } = useI18n();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleProjects = useMemo(
@@ -57,15 +59,18 @@ export function ProjectList({
   );
 
   return (
-    <section className="project-list-shell" aria-label="Projects">
+    <section
+      className="project-list-shell"
+      aria-label={messages.projectHome.projects}
+    >
       <div className="project-home__toolbar">
         <div className="project-search">
           <Search aria-hidden="true" size={15} strokeWidth={1.8} />
           <Input
             className="project-search__input"
             type="search"
-            aria-label="Search projects"
-            placeholder="searching projects"
+            aria-label={messages.projectHome.searchProjects}
+            placeholder={messages.projectHome.searchProjectsPlaceholder}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -73,7 +78,7 @@ export function ProjectList({
             <button
               className="project-search__clear"
               type="button"
-              aria-label="Clear search"
+              aria-label={messages.projectHome.clearSearch}
               onClick={() => setQuery("")}
             >
               <X aria-hidden="true" size={14} strokeWidth={1.9} />
@@ -86,16 +91,21 @@ export function ProjectList({
           disabled={isCreatingProject}
           onClick={onCreateProject}
         >
-          {isCreatingProject ? "Creating Project" : "New Project"}
+          {isCreatingProject
+            ? messages.projectHome.creatingProject
+            : messages.projectHome.newProject}
         </Button>
       </div>
-      <ul className="project-list" aria-label="Local projects">
+      <ul
+        className="project-list"
+        aria-label={messages.projectHome.localProjects}
+      >
         {visibleProjects.map((project) => (
           <li key={project.id} className="project-list__item">
             <button
               className="project-list__row"
               type="button"
-              aria-label={`Open project ${project.name}`}
+              aria-label={messages.projectHome.openProject(project.name)}
               onClick={() => onProjectOpen(project)}
             >
               <span
@@ -111,7 +121,9 @@ export function ProjectList({
                   {formatHomePathForDisplay(project.path)}
                 </span>
                 {project.status === "missing" ? (
-                  <span className="project-list__meta">path unavailable</span>
+                  <span className="project-list__meta">
+                    {messages.projectHome.pathUnavailable}
+                  </span>
                 ) : null}
               </span>
             </button>

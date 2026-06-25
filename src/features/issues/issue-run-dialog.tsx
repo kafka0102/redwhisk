@@ -29,6 +29,7 @@ import {
   type WorkspaceMode as SessionWorkspaceMode,
 } from "../agents/agent-session-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 import { parseDefaultSkills } from "../settings/agent-profile-skills";
 
@@ -60,6 +61,7 @@ export function IssueRunDialog({
   onClose,
   onStarted,
 }: IssueRunDialogProps) {
+  const { messages } = useI18n();
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
@@ -151,9 +153,7 @@ export function IssueRunDialog({
         setHasLoadedRunContext(true);
 
         if (mergedProfiles.length === 0) {
-          setStatusMessage(
-            "No agent profiles available. Configure an agent in Settings first.",
-          );
+          setStatusMessage(messages.agentsFeature.noProfilesForAgentType);
         }
       } catch (error) {
         if (!isMounted) {
@@ -174,7 +174,12 @@ export function IssueRunDialog({
     return () => {
       isMounted = false;
     };
-  }, [issue, projectCompletionPolicy, projectId]);
+  }, [
+    issue,
+    messages.agentsFeature.noProfilesForAgentType,
+    projectCompletionPolicy,
+    projectId,
+  ]);
 
   useEffect(() => {
     if (isLoadingProfiles || profiles.length === 0) {
@@ -328,17 +333,17 @@ export function IssueRunDialog({
     >
       <div
         ref={dialogRef}
-        aria-label={`Run Issue #${issue.id}`}
+        aria-label={messages.issues.runIssue(issue.id)}
         aria-modal="true"
         className="issue-dialog issue-dialog--compact"
         role="dialog"
         onKeyDown={handleKeyDown}
       >
         <div className="issue-dialog__header">
-          <h3>Run Issue #{issue.id}</h3>
+          <h3>{messages.issues.runIssue(issue.id)}</h3>
           <button
             ref={closeButtonRef}
-            aria-label="Close run dialog"
+            aria-label={messages.issues.runDialogClose}
             className="issue-dialog__close"
             type="button"
             onClick={onClose}
@@ -353,7 +358,7 @@ export function IssueRunDialog({
                 htmlFor="run-agent-profile"
                 className="text-xs text-muted-foreground"
               >
-                Agent profile
+                {messages.issues.agentProfile}
               </Label>
               <Select
                 items={profiles.map((profile) => ({
@@ -381,7 +386,7 @@ export function IssueRunDialog({
                 <SelectTrigger
                   ref={profileSelectRef}
                   id="run-agent-profile"
-                  aria-label="Agent profile"
+                  aria-label={messages.issues.agentProfile}
                   className="w-full"
                   disabled={
                     isLoadingProfiles || isStarting || profiles.length === 0
@@ -406,11 +411,14 @@ export function IssueRunDialog({
                   htmlFor="run-workflow-skill"
                   className="text-xs text-muted-foreground"
                 >
-                  Workflow skill
+                  {messages.issues.workflowSkill}
                 </Label>
                 <Select
                   items={[
-                    { value: NO_WORKFLOW_SKILL_VALUE, label: "None" },
+                    {
+                      value: NO_WORKFLOW_SKILL_VALUE,
+                      label: messages.settings.none,
+                    },
                     ...workflowSkillOptions.map((skill) => ({
                       value: skill,
                       label: skill,
@@ -432,7 +440,7 @@ export function IssueRunDialog({
                 >
                   <SelectTrigger
                     id="run-workflow-skill"
-                    aria-label="Workflow skill"
+                    aria-label={messages.issues.workflowSkill}
                     className="w-full"
                     disabled={isLoadingProfiles || isStarting}
                   >
@@ -440,7 +448,7 @@ export function IssueRunDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_WORKFLOW_SKILL_VALUE}>
-                      None
+                      {messages.settings.none}
                     </SelectItem>
                     {workflowSkillOptions.map((skill) => (
                       <SelectItem key={skill} value={skill}>
@@ -457,12 +465,15 @@ export function IssueRunDialog({
                 htmlFor="run-commit-strategy"
                 className="text-xs text-muted-foreground"
               >
-                Commit strategy
+                {messages.issues.commitStrategy}
               </Label>
               <Select
                 items={[
-                  { value: "manual", label: "Manual" },
-                  { value: "agent_auto_commit", label: "Agent auto commit" },
+                  { value: "manual", label: messages.settings.manual },
+                  {
+                    value: "agent_auto_commit",
+                    label: messages.issues.agentAutoCommit,
+                  },
                 ]}
                 value={completionPolicy}
                 onValueChange={(value) =>
@@ -471,16 +482,18 @@ export function IssueRunDialog({
               >
                 <SelectTrigger
                   id="run-commit-strategy"
-                  aria-label="Commit strategy"
+                  aria-label={messages.issues.commitStrategy}
                   className="w-full"
                   disabled={isLoadingBranches || isStarting}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="manual">
+                    {messages.settings.manual}
+                  </SelectItem>
                   <SelectItem value="agent_auto_commit">
-                    Agent auto commit
+                    {messages.issues.agentAutoCommit}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -491,13 +504,16 @@ export function IssueRunDialog({
                 htmlFor="run-development-mode"
                 className="text-xs text-muted-foreground"
               >
-                Development mode
+                {messages.issues.developmentMode}
               </Label>
               <div className="grid grid-cols-2 gap-2">
                 <Select
                   items={[
-                    { value: "current_branch", label: "Current branch" },
-                    { value: "worktree", label: "Worktree" },
+                    {
+                      value: "current_branch",
+                      label: messages.issues.currentBranch,
+                    },
+                    { value: "worktree", label: messages.issues.worktree },
                   ]}
                   value={workspaceMode}
                   onValueChange={(value) => {
@@ -506,7 +522,7 @@ export function IssueRunDialog({
                 >
                   <SelectTrigger
                     id="run-development-mode"
-                    aria-label="Development mode"
+                    aria-label={messages.issues.developmentMode}
                     className="w-full"
                     disabled={isLoadingBranches || isStarting}
                   >
@@ -514,9 +530,11 @@ export function IssueRunDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="current_branch">
-                      Current branch
+                      {messages.issues.currentBranch}
                     </SelectItem>
-                    <SelectItem value="worktree">Worktree</SelectItem>
+                    <SelectItem value="worktree">
+                      {messages.issues.worktree}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -528,7 +546,7 @@ export function IssueRunDialog({
                   onValueChange={(value) => setTargetBranch(value as string)}
                 >
                   <SelectTrigger
-                    aria-label="Target branch"
+                    aria-label={messages.issues.targetBranch}
                     className="w-full"
                     disabled={
                       isLoadingBranches ||
@@ -554,11 +572,11 @@ export function IssueRunDialog({
                 htmlFor="run-final-prompt"
                 className="text-xs text-muted-foreground"
               >
-                Final prompt
+                {messages.issues.finalPrompt}
               </Label>
               <Textarea
                 id="run-final-prompt"
-                aria-label="Final prompt"
+                aria-label={messages.issues.finalPrompt}
                 className="h-56 min-h-0 resize-none overflow-y-auto field-sizing-fixed font-mono text-xs leading-relaxed md:text-xs"
                 readOnly
                 rows={12}
@@ -570,7 +588,7 @@ export function IssueRunDialog({
         <p
           className="issue-dialog__status"
           role="status"
-          aria-label="Run status"
+          aria-label={messages.issues.runStatus}
         >
           {statusMessage}
         </p>
@@ -581,7 +599,7 @@ export function IssueRunDialog({
             disabled={isStartDisabled}
             onClick={() => void handleStart()}
           >
-            Start
+            {messages.issues.start}
           </Button>
         </div>
       </div>

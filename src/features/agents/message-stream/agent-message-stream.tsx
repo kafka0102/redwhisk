@@ -13,6 +13,7 @@ import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, type UIEvent } from "react";
 
 import type { AgentTimelineItem } from "../agent-stream-types";
+import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { AgentMessageCards } from "./agent-message-cards";
 import type {
@@ -52,6 +53,7 @@ export function AgentMessageStreamView({
   state,
   isTurnRunning = false,
 }: AgentMessageStreamViewProps) {
+  const { messages } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const { entries, turnStatus, isInitialized, lastError } = state;
@@ -80,7 +82,7 @@ export function AgentMessageStreamView({
   return (
     <div
       className="agents-message-stream"
-      aria-label="Agent 会话消息流"
+      aria-label={messages.agentsFeature.messageStream}
       data-initialized={isInitialized}
     >
       <div
@@ -89,7 +91,9 @@ export function AgentMessageStreamView({
         onScroll={handleScroll}
       >
         {isInitialized && entries.length === 0 && !lastError ? (
-          <p className="agents-message-stream__empty">发送一条消息开始对话。</p>
+          <p className="agents-message-stream__empty">
+            {messages.agentsFeature.emptyMessageStream}
+          </p>
         ) : null}
         {lastError && entries.length === 0 ? (
           <p className="agents-message-stream__error" role="status">
@@ -110,7 +114,7 @@ export function AgentMessageStreamView({
                 strokeWidth={2}
                 className="agents-message__spinner"
               />
-              <span>正在思考…</span>
+              <span>{messages.agentsFeature.thinking}</span>
             </div>
           </div>
         ) : null}

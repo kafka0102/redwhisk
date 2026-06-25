@@ -92,10 +92,10 @@ export function ProjectLabelForm({
   function validateName(nextName: string) {
     const trimmed = nextName.trim();
     if (trimmed.length === 0) {
-      return "Label name is required.";
+      return messages.settings.labelNameRequired;
     }
     if (trimmed.length > 15) {
-      return "Label name must be 15 characters or fewer.";
+      return messages.settings.labelNameTooLong;
     }
     return null;
   }
@@ -134,7 +134,10 @@ export function ProjectLabelForm({
     }
   }
 
-  const dialogTitle = mode === "create" ? "New label" : "Edit label";
+  const dialogTitle =
+    mode === "create"
+      ? messages.settings.newLabel
+      : messages.settings.editLabel;
 
   return (
     <div
@@ -155,7 +158,7 @@ export function ProjectLabelForm({
         <div className="issue-dialog__header">
           <h3>{dialogTitle}</h3>
           <button
-            aria-label="Close"
+            aria-label={messages.settings.close}
             className="issue-dialog__close"
             type="button"
             onClick={onCancel}
@@ -174,7 +177,7 @@ export function ProjectLabelForm({
             </Label>
             <Input
               id="label-name"
-              aria-label="Name"
+              aria-label={messages.settings.name}
               autoCapitalize="none"
               value={name}
               onChange={(event) => {
@@ -229,7 +232,7 @@ export function ProjectLabelForm({
             >
               <SelectTrigger
                 id="label-scope"
-                aria-label="Scope"
+                aria-label={messages.settings.scope}
                 className="w-full"
               >
                 <SelectValue />
@@ -254,7 +257,7 @@ export function ProjectLabelForm({
             </Label>
             <input
               id="label-color"
-              aria-label="Color"
+              aria-label={messages.settings.color}
               className="settings-input settings-label-form__color-input"
               type="color"
               value={color}
@@ -262,7 +265,7 @@ export function ProjectLabelForm({
             />
             <div
               className="settings-label-form__presets"
-              aria-label="Color presets"
+              aria-label={messages.settings.colorPresets}
             >
               {PRESET_COLORS.map((presetColor) => (
                 <button
@@ -300,7 +303,7 @@ export function ProjectLabelForm({
             >
               <SelectTrigger
                 id="label-agent"
-                aria-label="Agent"
+                aria-label={messages.settings.agent}
                 className="w-full"
               >
                 <SelectValue />
@@ -322,7 +325,7 @@ export function ProjectLabelForm({
                 htmlFor="label-workflow-skill"
                 className="text-xs text-muted-foreground"
               >
-                {messages.settings.workflowSkill}
+                {messages.settings.workflowSkillSingle}
               </Label>
               <Select
                 items={[
@@ -337,7 +340,7 @@ export function ProjectLabelForm({
               >
                 <SelectTrigger
                   id="label-workflow-skill"
-                  aria-label="Workflow Skill"
+                  aria-label={messages.settings.workflowSkillSingle}
                   className="w-full"
                 >
                   <SelectValue />
@@ -359,7 +362,7 @@ export function ProjectLabelForm({
           <p
             className="issue-dialog__status"
             role="status"
-            aria-label="Label status"
+            aria-label={messages.settings.labelStatus}
           >
             {statusMessage}
           </p>

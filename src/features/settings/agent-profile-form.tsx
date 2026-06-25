@@ -27,6 +27,7 @@ import {
   parseDefaultSkills,
   serializeDefaultSkills,
 } from "./agent-profile-skills";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface AgentProfileFormProps {
   mode: "create" | "edit";
@@ -45,6 +46,7 @@ export function AgentProfileForm({
   onCancel,
   onSaved,
 }: AgentProfileFormProps) {
+  const { messages } = useI18n();
   const [name, setName] = useState(() => profile?.name ?? "");
   const [agentType, setAgentType] = useState<AgentType>(
     () => profile?.agentType ?? "codex",
@@ -253,7 +255,7 @@ export function AgentProfileForm({
     const missingOptions = missingSkillNames.map((skillName) => ({
       value: toMissingSkillKey(skillName),
       label: skillName,
-      description: "Unavailable in current scope",
+      description: messages.agentsFeature.unavailableInCurrentScope,
     }));
     const visibleOptions = visibleSkills.map((skill) => ({
       value: skill.path,
@@ -262,7 +264,11 @@ export function AgentProfileForm({
     }));
 
     return dedupeOptionsByValue([...missingOptions, ...visibleOptions]);
-  }, [missingSkillNames, visibleSkills]);
+  }, [
+    messages.agentsFeature.unavailableInCurrentScope,
+    missingSkillNames,
+    visibleSkills,
+  ]);
 
   async function handleTestCommand() {
     setIsTesting(true);
@@ -273,7 +279,7 @@ export function AgentProfileForm({
       const testedCommand = command.trim();
       const testedCommandName = toCommandName(testedCommand);
       await testAgentCommand({ command: testedCommand });
-      showToast(`Command available: ${testedCommandName}`);
+      showToast(messages.settings.commandAvailable(testedCommandName));
     } catch (error: unknown) {
       showToast(toCommandError(error).message);
     } finally {
@@ -312,7 +318,10 @@ export function AgentProfileForm({
   const isSubmitDisabled =
     isSaving || name.trim().length === 0 || command.trim().length === 0;
 
-  const dialogTitle = mode === "create" ? "New agent" : "Edit Agent";
+  const dialogTitle =
+    mode === "create"
+      ? messages.settings.newAgent
+      : messages.settings.editAgent;
 
   return (
     <div
@@ -333,7 +342,7 @@ export function AgentProfileForm({
         <div className="issue-dialog__header">
           <h3>{dialogTitle}</h3>
           <button
-            aria-label="Close"
+            aria-label={messages.settings.close}
             className="issue-dialog__close"
             type="button"
             onClick={onCancel}
@@ -348,11 +357,11 @@ export function AgentProfileForm({
               htmlFor="agent-profile-name"
               className="text-xs text-muted-foreground"
             >
-              Name
+              {messages.settings.name}
             </Label>
             <Input
               id="agent-profile-name"
-              aria-label="Agent profile name"
+              aria-label={messages.settings.agentProfileName}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
@@ -363,7 +372,7 @@ export function AgentProfileForm({
               htmlFor="agent-profile-type"
               className="text-xs text-muted-foreground"
             >
-              Type
+              {messages.settings.type}
             </Label>
             <Select
               items={[
@@ -381,7 +390,7 @@ export function AgentProfileForm({
             >
               <SelectTrigger
                 id="agent-profile-type"
-                aria-label="Agent type"
+                aria-label={messages.settings.agentTypeLabel}
                 className="w-full"
               >
                 <SelectValue />
@@ -398,12 +407,12 @@ export function AgentProfileForm({
               htmlFor="agent-profile-command"
               className="text-xs text-muted-foreground"
             >
-              Command
+              {messages.settings.command}
             </Label>
             <div className="agent-dialog__command-row">
               <Input
                 id="agent-profile-command"
-                aria-label="Agent command"
+                aria-label={messages.settings.agentCommand}
                 value={command}
                 onChange={(event) => setCommand(event.target.value)}
               />
@@ -413,18 +422,20 @@ export function AgentProfileForm({
                 disabled={isDetecting || isTesting || isSaving}
                 onClick={handleTestCommand}
               >
-                {isTesting ? "测试中..." : "测试"}
+                {isTesting
+                  ? messages.settings.commandTesting
+                  : messages.settings.commandTest}
               </button>
             </div>
           </div>
 
           <SearchableSelect
-            label="Scope"
-            ariaLabel="Scope"
+            label={messages.settings.scope}
+            ariaLabel={messages.settings.scope}
             value={scopeValue}
             options={[
-              { value: "global", label: "Global" },
-              { value: "project", label: "Project" },
+              { value: "global", label: messages.settings.globalScope },
+              { value: "project", label: messages.settings.projectScope },
             ]}
             onChange={(nextScope) => {
               skillRequestSequenceRef.current += 1;
@@ -437,21 +448,27 @@ export function AgentProfileForm({
 
           <div className="agent-dialog__select-block">
             <SearchableMultiSelect
-              label="Workflow Skills"
-              ariaLabel="Workflow Skills"
+              label={messages.settings.workflowSkill}
+              ariaLabel={messages.settings.workflowSkill}
               values={effectiveSelectedSkillKeys}
               options={workflowSkillOptions}
               onChange={setSelectedSkillKeys}
             />
             <div className="agent-dialog__skill-list">
               {isLoadingSkills ? (
-                <p className="agent-dialog__skill-status">Loading skills...</p>
+                <p className="agent-dialog__skill-status">
+                  {messages.settings.loadingSkills}
+                </p>
               ) : null}
               {!isLoadingSkills && visibleSkills.length === 0 ? (
-                <p className="agent-dialog__skill-status">No skills</p>
+                <p className="agent-dialog__skill-status">
+                  {messages.settings.noSkills}
+                </p>
               ) : null}
               {skillLoadFailed ? (
-                <p className="agent-dialog__skill-status">Skill load failed</p>
+                <p className="agent-dialog__skill-status">
+                  {messages.settings.skillLoadFailed}
+                </p>
               ) : null}
             </div>
           </div>
@@ -461,7 +478,7 @@ export function AgentProfileForm({
           <p
             className="issue-dialog__status"
             role="status"
-            aria-label="Agent profile status"
+            aria-label={messages.settings.status}
           >
             {statusMessage}
           </p>
@@ -473,7 +490,7 @@ export function AgentProfileForm({
             type="submit"
             disabled={isSubmitDisabled}
           >
-            {isSaving ? "Saving..." : "Save"}
+            {isSaving ? messages.settings.saving : messages.settings.save}
           </button>
         </div>
 
@@ -481,7 +498,7 @@ export function AgentProfileForm({
           <div className="agent-dialog__toast" role="status" aria-live="polite">
             <span>{toastMessage}</span>
             <button
-              aria-label="Close message"
+              aria-label={messages.settings.closeMessage}
               className="agent-dialog__toast-close"
               type="button"
               onClick={() => {
@@ -520,6 +537,7 @@ function SearchableSelect({
   options: SearchableSelectOption[];
   value: string;
 }) {
+  const { messages } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -635,7 +653,9 @@ function SearchableSelect({
               </button>
             ))
           ) : (
-            <p className="settings-search-select__empty">No matches</p>
+            <p className="settings-search-select__empty">
+              {messages.settings.noMatches}
+            </p>
           )}
         </div>
       ) : null}
@@ -656,6 +676,7 @@ function SearchableMultiSelect({
   options: SearchableSelectOption[];
   values: string[];
 }) {
+  const { messages } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -815,7 +836,9 @@ function SearchableMultiSelect({
               );
             })
           ) : (
-            <p className="settings-search-select__empty">No matches</p>
+            <p className="settings-search-select__empty">
+              {messages.settings.noMatches}
+            </p>
           )}
         </div>
       ) : null}

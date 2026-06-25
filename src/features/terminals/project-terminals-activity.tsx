@@ -303,7 +303,7 @@ export function ProjectTerminalsActivity({
       >
         <aside
           className="project-terminals-sidebar"
-          aria-label="Project terminals"
+          aria-label={messages.settings.projectTerminals}
         >
           <div className="project-terminals-sidebar__header">
             <div className="project-terminals-sidebar__header-copy">
@@ -328,7 +328,7 @@ export function ProjectTerminalsActivity({
             <p
               className="issues-status"
               role="status"
-              aria-label="Terminals status"
+              aria-label={messages.settings.terminalsStatus}
             >
               {terminalStatusMessage}
             </p>
@@ -409,7 +409,7 @@ export function ProjectTerminalsActivity({
         </aside>
 
         <div
-          aria-label="Resize terminals list"
+          aria-label={messages.settings.splitterLabel}
           aria-orientation="vertical"
           aria-valuemax={PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH}
           aria-valuemin={DEFAULT_ACTIVITY_SIDEBAR_WIDTH}
@@ -463,7 +463,7 @@ export function ProjectTerminalsActivity({
 
         <section
           className="project-terminals-workspace"
-          aria-label="Terminal workspace"
+          aria-label={messages.agentsFeature.workspaceLabel}
         >
           {activeTerminal && activeSessionId !== null ? (
             <div className="project-terminals-workspace__surface">
