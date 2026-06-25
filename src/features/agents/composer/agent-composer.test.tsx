@@ -120,29 +120,29 @@ describe("AgentComposer", () => {
   it("渲染输入框、附件按钮与发送按钮（默认禁用）", async () => {
     await renderComposer();
     expect(
-      screen.getByRole("textbox", { name: "输入消息" }),
+      screen.getByRole("textbox", { name: "Message input" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "添加附件" }),
+      screen.getByRole("button", { name: "Add attachment" }),
     ).toBeInTheDocument();
-    const sendButton = screen.getByRole("button", { name: "发送消息" });
+    const sendButton = screen.getByRole("button", { name: "Send message" });
     expect(sendButton).toBeDisabled();
   });
 
   it("输入文本后发送按钮启用", async () => {
     const user = userEvent.setup();
     await renderComposer();
-    const textarea = screen.getByRole("textbox", { name: "输入消息" });
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "你好");
-    expect(screen.getByRole("button", { name: "发送消息" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
   });
 
   it("点击发送按钮调用 sendAgentMessage 并清空输入", async () => {
     const user = userEvent.setup();
     await renderComposer();
-    const textarea = screen.getByRole("textbox", { name: "输入消息" });
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "你好");
-    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await user.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => {
       expect(sendAgentMessageMock).toHaveBeenCalledWith({
         projectId: 1,
@@ -157,7 +157,7 @@ describe("AgentComposer", () => {
   it("Enter 发送消息", async () => {
     const user = userEvent.setup();
     await renderComposer();
-    const textarea = screen.getByRole("textbox", { name: "输入消息" });
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "你好");
     await user.type(textarea, "{Enter}");
     await waitFor(() => {
@@ -173,7 +173,7 @@ describe("AgentComposer", () => {
   it("Shift+Enter 不发送，插入换行", async () => {
     const user = userEvent.setup();
     await renderComposer();
-    const textarea = screen.getByRole("textbox", { name: "输入消息" });
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "你好");
     await user.type(textarea, "{Shift>}{Enter}{/Shift}");
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe("AgentComposer", () => {
 
   it("发送按钮仅显示图标，不展示文字", async () => {
     await renderComposer();
-    const sendButton = screen.getByRole("button", { name: "发送消息" });
+    const sendButton = screen.getByRole("button", { name: "Send message" });
     expect(sendButton).toBeInTheDocument();
     expect(sendButton).not.toHaveTextContent("发送");
   });
@@ -190,7 +190,9 @@ describe("AgentComposer", () => {
   it("turnStatus=running 时显示终止按钮并调用 cancelAgentTurn", async () => {
     const user = userEvent.setup();
     await renderComposer({ turnStatus: "running" });
-    const stopButton = screen.getByRole("button", { name: "终止当前任务" });
+    const stopButton = screen.getByRole("button", {
+      name: "Cancel current task",
+    });
     expect(stopButton).not.toHaveTextContent("停止");
     await user.click(stopButton);
     await waitFor(() => {
@@ -206,7 +208,9 @@ describe("AgentComposer", () => {
     const user = userEvent.setup();
     await renderComposer({ turnStatus: "running" });
 
-    await user.click(screen.getByRole("button", { name: "终止当前任务" }));
+    await user.click(
+      screen.getByRole("button", { name: "Cancel current task" }),
+    );
 
     const toast = await screen.findByText("后端不可达");
     expect(toast).toHaveClass("agents-composer__toast");
@@ -224,30 +228,34 @@ describe("AgentComposer", () => {
       "aria-valuenow",
       "15",
     );
-    expect(screen.getByText("已使用 15%")).toBeInTheDocument();
+    expect(screen.getByText("15% used")).toBeInTheDocument();
   });
 
   it("添加附件后渲染 chip 与缺口提示文案", async () => {
     dialogMocks.open.mockResolvedValue("/tmp/report.txt");
     const user = userEvent.setup();
     await renderComposer();
-    await user.click(screen.getByRole("button", { name: "添加附件" }));
+    await user.click(screen.getByRole("button", { name: "Add attachment" }));
     await waitFor(() => {
       expect(screen.getByText("report.txt")).toBeInTheDocument();
     });
-    expect(screen.getByText("附件已保存，暂不随消息发送")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Attachments are saved but will not be sent with messages yet.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("点击 chip 移除按钮删除附件", async () => {
     dialogMocks.open.mockResolvedValue("/tmp/report.txt");
     const user = userEvent.setup();
     await renderComposer();
-    await user.click(screen.getByRole("button", { name: "添加附件" }));
+    await user.click(screen.getByRole("button", { name: "Add attachment" }));
     await waitFor(() => {
       expect(screen.getByText("report.txt")).toBeInTheDocument();
     });
     await user.click(
-      screen.getByRole("button", { name: "移除附件 report.txt" }),
+      screen.getByRole("button", { name: "Remove attachment report.txt" }),
     );
     await waitFor(() => {
       expect(screen.queryByText("report.txt")).not.toBeInTheDocument();
@@ -258,9 +266,9 @@ describe("AgentComposer", () => {
     sendAgentMessageMock.mockRejectedValueOnce(new Error("网络中断"));
     const user = userEvent.setup();
     await renderComposer();
-    const textarea = screen.getByRole("textbox", { name: "输入消息" });
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "再试");
-    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await user.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => {
       expect(screen.getByText("网络中断")).toBeInTheDocument();
     });
@@ -270,7 +278,9 @@ describe("AgentComposer", () => {
     listAgentModelsMock.mockRejectedValueOnce(new Error("后端不可达"));
     await renderComposer();
     await waitFor(() => {
-      expect(screen.getByText(/模型加载失败：后端不可达/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Model load failed: 后端不可达/),
+      ).toBeInTheDocument();
     });
   });
 
@@ -283,18 +293,22 @@ describe("AgentComposer", () => {
       expect(listAgentModelsMock).toHaveBeenCalled();
     });
     expect(
-      screen.getByText(/模型加载失败：当前 Session 没有运行中的结构化会话/),
+      screen.getByText(
+        /Model load failed: 当前 Session 没有运行中的结构化会话/,
+      ),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("当前模型类型")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Current model type"),
+    ).not.toBeInTheDocument();
   });
 
   it("渲染无可见文字标签的模型与 Think 选择器", async () => {
     await renderComposer();
     expect(
-      screen.getByRole("combobox", { name: "选择模型" }),
+      screen.getByRole("combobox", { name: "Select model" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Think 模式" }),
+      screen.getByRole("combobox", { name: "Think mode" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
@@ -304,7 +318,7 @@ describe("AgentComposer", () => {
     const user = userEvent.setup();
     await renderComposer({ currentModelId: "gpt-5" });
 
-    await user.click(screen.getByRole("combobox", { name: "Think 模式" }));
+    await user.click(screen.getByRole("combobox", { name: "Think mode" }));
 
     expect(await screen.findByText("超高")).toBeInTheDocument();
     expect(screen.queryByText("关闭")).not.toBeInTheDocument();
@@ -313,7 +327,7 @@ describe("AgentComposer", () => {
   it("模型选中值使用统一展示大小写", async () => {
     await renderComposer({ currentModelId: "gpt-5" });
     expect(
-      screen.getByRole("combobox", { name: "选择模型" }),
+      screen.getByRole("combobox", { name: "Select model" }),
     ).toHaveTextContent("GPT-5");
   });
 
@@ -324,10 +338,12 @@ describe("AgentComposer", () => {
     expect(listAgentModelsMock).not.toHaveBeenCalled();
     expect(screen.queryByText("模型")).not.toBeInTheDocument();
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("当前模型类型")).toHaveTextContent("Claude");
+    expect(screen.getByLabelText("Current model type")).toHaveTextContent(
+      "Claude",
+    );
     // 发送按钮仍渲染。
     expect(
-      screen.getByRole("button", { name: "发送消息" }),
+      screen.getByRole("button", { name: "Send message" }),
     ).toBeInTheDocument();
   });
 });

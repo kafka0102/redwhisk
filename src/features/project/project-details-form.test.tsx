@@ -124,7 +124,7 @@ describe("ProjectDetailsForm", () => {
         submittingLabel="Saving..."
         worktreeSetupCommand="pnpm install"
         worktreeSetupCommandLabel="Worktree setup after creation"
-        worktreeSetupCommandPlaceholder="请输入创建 worktree 后的初始化操作"
+        worktreeSetupCommandPlaceholder="Enter initialization steps to run after creating the worktree"
       />,
     );
 
@@ -133,7 +133,7 @@ describe("ProjectDetailsForm", () => {
     expect(setupCommand).toHaveValue("pnpm install");
     expect(setupCommand).toHaveAttribute(
       "placeholder",
-      "请输入创建 worktree 后的初始化操作",
+      "Enter initialization steps to run after creating the worktree",
     );
   });
 });

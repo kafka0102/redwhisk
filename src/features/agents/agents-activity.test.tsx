@@ -57,7 +57,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 vi.mock("./agent-session-view", () => ({
   AgentSessionView: () =>
     createElement("div", {
-      "aria-label": "Agent 会话消息流",
+      "aria-label": "Agent session message stream",
       "data-testid": "agent-session-view",
     }),
 }));
@@ -588,7 +588,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("refreshes uncommitted changes while the side panel is open", async () => {
@@ -615,7 +617,7 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
-    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
+    fireEvent.click(screen.getByLabelText("Open session side panel"));
     await flushMicrotasks();
     expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
@@ -641,7 +643,7 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
-    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
+    fireEvent.click(screen.getByLabelText("Open session side panel"));
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -691,12 +693,12 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByLabelText("Open session side panel"));
     expect(
       await screen.findByRole("button", { name: /one.ts/ }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "刷新变更" }));
+    await user.click(screen.getByRole("button", { name: "Refresh changes" }));
 
     expect(
       await screen.findByRole("button", { name: /two.ts/ }),
@@ -721,8 +723,8 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
-    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
-    fireEvent.click(screen.getByRole("tab", { name: "文件" }));
+    fireEvent.click(screen.getByLabelText("Open session side panel"));
+    fireEvent.click(screen.getByRole("tab", { name: "Files" }));
     await flushMicrotasks();
     expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
@@ -772,8 +774,8 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
-    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
     await user.click(await screen.findByRole("button", { name: /src/ }));
     await user.click(await screen.findByRole("button", { name: /file.ts/ }));
 
@@ -802,8 +804,8 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
-    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
 
     const folder = await screen.findByRole("button", { name: /src/ });
     expect(folder).toHaveAttribute("aria-expanded", "false");
@@ -848,8 +850,8 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
-    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
     await user.click(await screen.findByRole("button", { name: /src/ }));
 
     expect(
@@ -893,8 +895,8 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
-    await user.click(screen.getByRole("tab", { name: "文件" }));
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
     await user.click(await screen.findByRole("button", { name: /src/ }));
 
     expect(screen.queryByRole("tab", { name: "src" })).not.toBeInTheDocument();
@@ -915,8 +917,8 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
-    fireEvent.click(screen.getByLabelText("打开 Session 侧边栏"));
-    fireEvent.click(screen.getByRole("tab", { name: "文件" }));
+    fireEvent.click(screen.getByLabelText("Open session side panel"));
+    fireEvent.click(screen.getByRole("tab", { name: "Files" }));
     expect(getProjectWorktreeFileTreeMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -968,7 +970,7 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByLabelText("Open session side panel"));
     await user.click(await screen.findByRole("button", { name: /a.ts/ }));
     expect(
       await screen.findByRole("tab", { name: "a.ts" }),
@@ -1001,7 +1003,7 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByLabelText("Open session side panel"));
     await user.click(await screen.findByRole("button", { name: /a.ts/ }));
 
     expect(await screen.findByTestId("monaco-diff")).toHaveAttribute(
@@ -1031,7 +1033,9 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await userEvent.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await userEvent.click(
+      await screen.findByLabelText("Open session side panel"),
+    );
 
     for (const label of ["新增", "修改", "删除", "重命名", "复制", "二进制"]) {
       expect(await screen.findByText(label)).toBeInTheDocument();
@@ -1059,10 +1063,12 @@ describe("AgentsActivity", () => {
     });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("打开 Session 侧边栏"));
+    await user.click(await screen.findByLabelText("Open session side panel"));
     await user.click(await screen.findByRole("button", { name: /image.png/ }));
 
-    expect(await screen.findByText("二进制文件不可预览。")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Binary files cannot be previewed."),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("monaco-diff")).not.toBeInTheDocument();
   });
 
@@ -1237,10 +1243,10 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：Review"),
+      within(sessionRow).getByLabelText("Session status: Review"),
     ).toHaveClass("agents-session-row__status-dot--review");
     expect(
-      within(sessionRow).queryByLabelText("Session 正在运行"),
+      within(sessionRow).queryByLabelText("Session is running"),
     ).not.toBeInTheDocument();
   });
 
@@ -1274,10 +1280,10 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：In Progress"),
+      within(sessionRow).getByLabelText("Session status: In Progress"),
     ).toHaveClass("agents-session-row__status-dot--in-progress");
     expect(
-      within(sessionRow).queryByLabelText("Session 正在运行"),
+      within(sessionRow).queryByLabelText("Session is running"),
     ).not.toBeInTheDocument();
   });
 
@@ -1311,7 +1317,7 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(sessionRow).getByLabelText("Session 正在运行"),
+      within(sessionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
   });
 
@@ -1499,12 +1505,12 @@ describe("AgentsActivity", () => {
         name: "Untitled Session",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "打开终端" }),
+      screen.getByRole("button", { name: "Open terminal" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+      screen.getByRole("button", { name: "Open session side panel" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
@@ -1542,10 +1548,10 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={701} projectId={1} />);
 
-    const deleteButton = await screen.findByRole("button", { name: "删除" });
+    const deleteButton = await screen.findByRole("button", { name: "Delete" });
     await user.click(deleteButton);
     expect(
-      screen.getByRole("dialog", { name: "确认删除该 Session？" }),
+      screen.getByRole("dialog", { name: "Delete this Session?" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "取消" }));
 
@@ -2064,25 +2070,25 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(attentionRow).getByLabelText("Session 状态：输出完成"),
+      within(attentionRow).getByLabelText("Session status: Output complete"),
     ).toHaveClass("agents-session-row__status-dot--attention");
     expect(
-      within(attentionRow).queryByLabelText("Session 正在运行"),
+      within(attentionRow).queryByLabelText("Session is running"),
     ).not.toBeInTheDocument();
-    expect(within(quietRow).getByLabelText("Session 状态：运行中")).toHaveClass(
-      "agents-session-row__status-dot--running",
-    );
     expect(
-      within(quietRow).getByLabelText("Session 正在运行"),
+      within(quietRow).getByLabelText("Session status: Running"),
+    ).toHaveClass("agents-session-row__status-dot--running");
+    expect(
+      within(quietRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
 
     await user.click(quietRow);
 
     expect(
-      within(attentionRow).getByLabelText("Session 状态：输出完成"),
+      within(attentionRow).getByLabelText("Session status: Output complete"),
     ).toHaveClass("agents-session-row__status-dot--attention");
     expect(
-      within(attentionRow).queryByLabelText("Session 正在运行"),
+      within(attentionRow).queryByLabelText("Session is running"),
     ).not.toBeInTheDocument();
     expect(attentionRow).not.toHaveTextContent("running");
     expect(quietRow).not.toHaveTextContent("running");
@@ -2115,7 +2121,7 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(completedRow).getByLabelText("Session 状态：closed"),
+      within(completedRow).getByLabelText("Session status: closed"),
     ).toHaveClass("agents-session-row__status-dot--done");
     expect(completedRow).toHaveTextContent("closed");
   });
@@ -2269,10 +2275,10 @@ describe("AgentsActivity", () => {
     });
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
     const initialRow = within(sessionList).getByRole("button", {
-      name: /Session 正在运行Polling issue/i,
+      name: /Session is runningPolling issue/i,
     });
     expect(
-      within(initialRow).getByLabelText("Session 状态：运行中"),
+      within(initialRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
 
     await act(async () => {
@@ -2283,10 +2289,10 @@ describe("AgentsActivity", () => {
       name: /^Polling issue/i,
     });
     expect(
-      within(refreshedRow).getByLabelText("Session 状态：输出完成"),
+      within(refreshedRow).getByLabelText("Session status: Output complete"),
     ).toHaveClass("agents-session-row__status-dot--attention");
     expect(
-      within(refreshedRow).queryByLabelText("Session 正在运行"),
+      within(refreshedRow).queryByLabelText("Session is running"),
     ).not.toBeInTheDocument();
   });
 
@@ -2329,19 +2335,19 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：运行中"),
+      within(sessionRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
     expect(
-      within(sessionRow).getByLabelText("Session 正在运行"),
+      within(sessionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
 
     await user.click(sessionRow);
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：运行中"),
+      within(sessionRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
     expect(
-      within(sessionRow).getByLabelText("Session 正在运行"),
+      within(sessionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
     expect(setAgentSessionAttentionMock).not.toHaveBeenCalled();
   });
@@ -2395,10 +2401,10 @@ describe("AgentsActivity", () => {
 
     fireEvent.click(sessionRow);
     expect(
-      within(sessionRow).getByLabelText("Session 状态：运行中"),
+      within(sessionRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
     expect(
-      within(sessionRow).getByLabelText("Session 正在运行"),
+      within(sessionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
 
     await act(async () => {
@@ -2406,10 +2412,10 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(sessionRow).getByLabelText("Session 状态：运行中"),
+      within(sessionRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
     expect(
-      within(sessionRow).getByLabelText("Session 正在运行"),
+      within(sessionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
   });
 
@@ -2485,7 +2491,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("hides mark review after command success when refreshing sessions fails", async () => {
@@ -2535,7 +2543,9 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("keeps mark review hidden when an older polling response returns running after command success", async () => {
@@ -2628,7 +2638,9 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("refreshes sessions after mark review command fails without unmounting terminal", async () => {
@@ -2683,7 +2695,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("hides mark review when the selected session has no linked running issue", async () => {
@@ -2743,7 +2757,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Review issue/i }));
     expect(
@@ -2833,7 +2849,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("shows the manual completion action on review header without placeholder follow-up actions", async () => {
@@ -2881,7 +2899,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("shows agent commit action for dirty review sessions and opens completion confirmation", async () => {
@@ -3401,7 +3421,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("keeps mark done hidden after command success when refreshing sessions fails", async () => {
@@ -3435,7 +3457,9 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("completes a linked running issue directly to done from the status menu", async () => {
@@ -3586,7 +3610,7 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(attentionRow).getByLabelText("Session 状态：输出完成"),
+      within(attentionRow).getByLabelText("Session status: Output complete"),
     ).toHaveClass("agents-session-row__status-dot--attention");
 
     await user.click(attentionRow);
@@ -3599,11 +3623,11 @@ describe("AgentsActivity", () => {
 
     await waitFor(() =>
       expect(
-        within(attentionRow).getByLabelText("Session 状态：运行中"),
+        within(attentionRow).getByLabelText("Session status: Running"),
       ).toHaveClass("agents-session-row__status-dot--running"),
     );
     expect(
-      within(attentionRow).getByLabelText("Session 正在运行"),
+      within(attentionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
   });
 
@@ -3753,7 +3777,9 @@ describe("AgentsActivity", () => {
         name: /Newest completed issue/i,
       }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("hides the info pane when the selected session has no linked issue", async () => {
@@ -3860,7 +3886,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: /#20.*Existing issue/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("keeps abnormal linked sessions on the terminal without a header log opener", async () => {
@@ -3926,7 +3954,7 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
 
     const splitButton = screen.getByRole("button", {
-      name: "打开 Session 侧边栏",
+      name: "Open session side panel",
     });
     expect(splitButton).toHaveAttribute("aria-pressed", "false");
 
@@ -3937,15 +3965,17 @@ describe("AgentsActivity", () => {
       name: "Session side panel",
     });
     expect(
-      within(panel).getByRole("tab", { name: "变更" }),
+      within(panel).getByRole("tab", { name: "Changes" }),
     ).toBeInTheDocument();
     expect(
-      within(panel).getByRole("tab", { name: "文件" }),
+      within(panel).getByRole("tab", { name: "Files" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize session side panel" }),
     ).toHaveAttribute("aria-valuenow", "300");
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("resizes the session side panel with the keyboard separator control", async () => {
@@ -3972,7 +4002,7 @@ describe("AgentsActivity", () => {
 
     await screen.findByRole("heading", { name: "#20 Existing issue" });
     await user.click(
-      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+      screen.getByRole("button", { name: "Open session side panel" }),
     );
 
     const activity = screen
@@ -4017,7 +4047,7 @@ describe("AgentsActivity", () => {
 
     await screen.findByRole("heading", { name: "#20 Existing issue" });
     await user.click(
-      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+      screen.getByRole("button", { name: "Open session side panel" }),
     );
 
     const activity = screen
@@ -4060,7 +4090,7 @@ describe("AgentsActivity", () => {
 
     await screen.findByRole("heading", { name: "#20 Existing issue" });
     await user.click(
-      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+      screen.getByRole("button", { name: "Open session side panel" }),
     );
 
     const panel = await screen.findByRole("complementary", {
@@ -4068,22 +4098,24 @@ describe("AgentsActivity", () => {
     });
     expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
     expect(
-      within(panel).getByRole("button", { name: "未提交" }),
+      within(panel).getByRole("button", { name: "Uncommitted" }),
     ).toBeInTheDocument();
     expect(
-      within(panel).getByRole("button", { name: "刷新变更" }),
+      within(panel).getByRole("button", { name: "Refresh changes" }),
     ).toBeInTheDocument();
 
-    await user.click(within(panel).getByRole("button", { name: "未提交" }));
+    await user.click(
+      within(panel).getByRole("button", { name: "Uncommitted" }),
+    );
     expect(
-      within(panel).getByRole("menuitem", { name: "已提交" }),
+      within(panel).getByRole("menuitem", { name: "Committed" }),
     ).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("heading", { name: "#20 Existing issue" }),
     );
     expect(
-      within(panel).queryByRole("menuitem", { name: "已提交" }),
+      within(panel).queryByRole("menuitem", { name: "Committed" }),
     ).not.toBeInTheDocument();
 
     await user.hover(
@@ -4143,12 +4175,12 @@ describe("AgentsActivity", () => {
 
     await screen.findByRole("heading", { name: "#20 Existing issue" });
     await user.click(
-      screen.getByRole("button", { name: "打开 Session 侧边栏" }),
+      screen.getByRole("button", { name: "Open session side panel" }),
     );
     const panel = await screen.findByRole("complementary", {
       name: "Session side panel",
     });
-    await user.click(within(panel).getByRole("tab", { name: "文件" }));
+    await user.click(within(panel).getByRole("tab", { name: "Files" }));
     await user.click(within(panel).getByRole("button", { name: "src" }));
 
     await user.click(
@@ -4209,7 +4241,9 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("complementary", { name: "Issue details" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
   });
 
   it("opens inline terminals for the selected agent session workspace", async () => {
@@ -4241,7 +4275,7 @@ describe("AgentsActivity", () => {
       await screen.findByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "打开终端" }));
+    await user.click(screen.getByRole("button", { name: "Open terminal" }));
 
     await waitFor(() => {
       expect(createTemporaryProjectTerminalMock).toHaveBeenCalledWith({
@@ -4296,10 +4330,12 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    await user.click(await screen.findByRole("button", { name: "打开终端" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Open terminal" }),
+    );
     await screen.findByTestId("inline-project-terminal:1:-11");
 
-    await user.click(screen.getByRole("button", { name: "新增终端" }));
+    await user.click(screen.getByRole("button", { name: "New terminal" }));
 
     await waitFor(() => {
       expect(createTemporaryProjectTerminalMock).toHaveBeenCalledTimes(2);
@@ -4309,7 +4345,7 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getAllByRole("button", { name: "关闭终端 redwhisk" })[1],
+      screen.getAllByRole("button", { name: "Close terminal redwhisk" })[1],
     );
     await waitFor(() => {
       expect(closeProjectTerminalMock).toHaveBeenCalledWith({
@@ -4321,7 +4357,9 @@ describe("AgentsActivity", () => {
       screen.getByTestId("inline-project-terminal:1:-11"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "关闭终端 redwhisk" }));
+    await user.click(
+      screen.getByRole("button", { name: "Close terminal redwhisk" }),
+    );
 
     await waitFor(() => {
       expect(closeProjectTerminalMock).toHaveBeenCalledWith({
@@ -4359,23 +4397,27 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    await user.click(await screen.findByRole("button", { name: "打开终端" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Open terminal" }),
+    );
     expect(
       await screen.findByTestId("inline-project-terminal:1:-11"),
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("button", { name: "最大化 Session 主内容" }),
+      screen.getByRole("button", { name: "Maximize session main content" }),
     );
 
     expect(
       screen.queryByTestId("inline-project-terminal:1:-11"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "恢复 Session 终端" }),
+      screen.getByRole("button", { name: "Restore session terminal" }),
     ).toHaveAttribute("aria-pressed", "true");
 
-    await user.click(screen.getByRole("button", { name: "恢复 Session 终端" }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore session terminal" }),
+    );
 
     expect(
       screen.getByTestId("inline-project-terminal:1:-11"),
