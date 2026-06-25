@@ -1075,13 +1075,13 @@ button:focus-visible {
 
 .issue-surface-header--activity {
   grid-area: header;
-  min-height: var(--activity-header-height);
-  padding: 0 18px 10px;
+  height: var(--activity-header-height);
+  padding: 0 18px;
 }
 
 .issue-surface-header--fullscreen {
-  min-height: var(--activity-header-height);
-  padding: 12px 10% 10px;
+  height: var(--activity-header-height);
+  padding: 0 10%;
   background: var(--color-surface);
 }
 
@@ -1801,7 +1801,7 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: var(--activity-header-height);
+  height: var(--activity-header-height);
   padding: 0 10px;
   margin: -14px 0 0;
   border-bottom: 1px solid var(--color-border);
@@ -2540,7 +2540,7 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: var(--activity-header-height);
+  height: var(--activity-header-height);
   padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
@@ -4187,12 +4187,6 @@ button:focus-visible {
     padding-left: 86px;
   }
 
-  .issue-surface-header--activity,
-  .issue-surface-header--fullscreen {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .activity-surface--issues {
     padding: 16px;
   }
@@ -4284,11 +4278,6 @@ button:focus-visible {
   .issue-dialog__body {
     grid-template-columns: minmax(0, 1fr);
     overflow: auto;
-  }
-
-  .issue-surface-header {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .issue-page__body {
