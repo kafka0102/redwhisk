@@ -421,6 +421,9 @@ describe("ProjectSettingsActivity", () => {
       screen.getByRole("columnheader", { name: "Name" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("columnheader", { name: "Agent" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("columnheader", { name: "Scope" }),
     ).toBeInTheDocument();
     expect(
