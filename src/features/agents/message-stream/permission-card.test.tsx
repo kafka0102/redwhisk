@@ -34,7 +34,9 @@ describe("PermissionCard", () => {
       <PermissionCard request={buildRequest()} projectId={1} sessionId={10} />,
     );
 
-    expect(screen.getByLabelText("Agent 权限审批卡片")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent permission approval card"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Run command: ls -la")).toBeInTheDocument();
     expect(screen.getByText("执行 shell 命令")).toBeInTheDocument();
     expect(screen.getByText("工具调用")).toBeInTheDocument();
@@ -141,7 +143,9 @@ describe("PermissionCard", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Agent 权限审批卡片")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent permission approval card"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Run command: ls -la")).not.toBeInTheDocument();
     expect(screen.queryByText("执行 shell 命令")).not.toBeInTheDocument();
   });

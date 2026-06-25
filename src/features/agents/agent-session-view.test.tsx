@@ -102,8 +102,12 @@ describe("AgentSessionView", () => {
       expect(screen.getByText("你好")).toBeInTheDocument();
     });
     expect(screen.getByText("你好！")).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
-    expect(screen.getByLabelText("输入消息")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Agent session message stream"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Message input" }),
+    ).toBeInTheDocument();
   });
 
   it("发送消息后乐观插入用户消息", async () => {
@@ -115,10 +119,15 @@ describe("AgentSessionView", () => {
     render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("输入消息")).toBeInTheDocument();
+      expect(
+        screen.getByRole("textbox", { name: "Message input" }),
+      ).toBeInTheDocument();
     });
 
-    await user.type(screen.getByLabelText("输入消息"), "测试消息{Enter}");
+    await user.type(
+      screen.getByRole("textbox", { name: "Message input" }),
+      "测试消息{Enter}",
+    );
 
     expect(sendAgentMessageMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -136,7 +145,9 @@ describe("AgentSessionView", () => {
     render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Agent session message stream"),
+      ).toBeInTheDocument();
     });
 
     emitEvent({
@@ -159,7 +170,7 @@ describe("AgentSessionView", () => {
     });
 
     expect(
-      await screen.findByLabelText("Agent 权限审批卡片"),
+      await screen.findByLabelText("Agent permission approval card"),
     ).toBeInTheDocument();
     expect(screen.getByText("Run command: ls")).toBeInTheDocument();
   });
@@ -170,7 +181,9 @@ describe("AgentSessionView", () => {
     render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Agent session message stream"),
+      ).toBeInTheDocument();
     });
 
     emitEvent({
@@ -181,7 +194,7 @@ describe("AgentSessionView", () => {
       event: { type: "turn_started", turnId: "t1" },
     });
 
-    expect(screen.getByText("正在思考…")).toBeInTheDocument();
+    expect(screen.getByText("Thinking...")).toBeInTheDocument();
   });
 
   it("从 session 列表恢复运行中轮次时立即显示思考状态", async () => {
@@ -205,7 +218,7 @@ describe("AgentSessionView", () => {
     await waitFor(() => {
       expect(screen.getByText("北京今天天气如何？")).toBeInTheDocument();
     });
-    expect(screen.getByText("正在思考…")).toBeInTheDocument();
+    expect(screen.getByText("Thinking...")).toBeInTheDocument();
   });
 
   it("claude agentType 时 composer 不渲染模型 Select", async () => {
@@ -216,10 +229,12 @@ describe("AgentSessionView", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("输入消息")).toBeInTheDocument();
+      expect(
+        screen.getByRole("textbox", { name: "Message input" }),
+      ).toBeInTheDocument();
     });
 
-    expect(screen.queryByLabelText("选择模型")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Select model")).not.toBeInTheDocument();
   });
 
   it("已完成 Issue 的 session 不渲染底部输入框", async () => {
@@ -236,14 +251,18 @@ describe("AgentSessionView", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Agent 会话消息流")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Agent session message stream"),
+      ).toBeInTheDocument();
     });
-    expect(screen.queryByLabelText("输入消息")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("已完成的 Issue 不能继续运行。"),
+      screen.queryByRole("textbox", { name: "Message input" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "发送消息" }),
+      screen.queryByText("Completed Issues cannot be run again."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Send message" }),
     ).not.toBeInTheDocument();
   });
 
@@ -255,7 +274,10 @@ describe("AgentSessionView", () => {
       <AgentSessionView projectId={1} sessionId={10} agentType="codex" />,
     );
 
-    await user.type(await screen.findByLabelText("输入消息"), "失败{Enter}");
+    await user.type(
+      await screen.findByRole("textbox", { name: "Message input" }),
+      "失败{Enter}",
+    );
 
     expect(await screen.findByText("A session failed")).toBeInTheDocument();
 
@@ -267,7 +289,9 @@ describe("AgentSessionView", () => {
     await waitFor(() => {
       expect(screen.queryByText("A session failed")).not.toBeInTheDocument();
     });
-    expect(screen.getByLabelText("输入消息")).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Message input" })).toHaveValue(
+      "",
+    );
   });
 
   it("未完成的关闭 session 发送时先自动恢复再发送消息", async () => {
@@ -289,7 +313,7 @@ describe("AgentSessionView", () => {
     );
 
     await user.type(
-      await screen.findByLabelText("输入消息"),
+      await screen.findByRole("textbox", { name: "Message input" }),
       "继续处理{Enter}",
     );
 
@@ -340,7 +364,9 @@ describe("AgentSessionView", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("combobox", { name: "选择模型" }));
+    await user.click(
+      await screen.findByRole("combobox", { name: "Select model" }),
+    );
     await user.click(await screen.findByRole("option", { name: "GPT-4o" }));
 
     await waitFor(() => {
@@ -385,7 +411,7 @@ describe("AgentSessionView", () => {
     );
 
     await user.click(
-      await screen.findByRole("combobox", { name: "Think 模式" }),
+      await screen.findByRole("combobox", { name: "Think mode" }),
     );
     await user.click(await screen.findByRole("option", { name: "高" }));
 

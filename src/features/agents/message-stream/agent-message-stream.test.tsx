@@ -47,7 +47,9 @@ describe("AgentMessageStream", () => {
     setupStream([]);
     render(<AgentMessageStream projectId={1} sessionId={1} />);
     await waitFor(() => {
-      expect(screen.getByText("发送一条消息开始对话。")).toBeInTheDocument();
+      expect(
+        screen.getByText("Send a message to start the conversation."),
+      ).toBeInTheDocument();
     });
   });
 
@@ -91,7 +93,7 @@ describe("AgentMessageStream", () => {
       .getByText("开始处理")
       .closest(".agents-message__entry") as HTMLElement | null;
     const running = screen
-      .getByText("正在思考…")
+      .getByText("Thinking...")
       .closest(".agents-message-stream__running") as HTMLElement | null;
 
     expect(scroll).toContainElement(running);
@@ -263,7 +265,7 @@ describe("AgentMessageStream", () => {
     });
     render(<AgentMessageStream projectId={1} sessionId={5} />);
     await waitFor(() => {
-      expect(screen.getByText("待办清单")).toBeInTheDocument();
+      expect(screen.getByText("Todo list")).toBeInTheDocument();
     });
     expect(screen.getByText("任务一")).toBeInTheDocument();
     expect(screen.getByText("任务二")).toBeInTheDocument();
@@ -287,7 +289,7 @@ describe("AgentMessageStream", () => {
     });
     render(<AgentMessageStream projectId={1} sessionId={7} />);
     await waitFor(() => {
-      expect(screen.getByText("上下文已压缩")).toBeInTheDocument();
+      expect(screen.getByText("Context compacted")).toBeInTheDocument();
     });
   });
 

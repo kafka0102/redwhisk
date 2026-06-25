@@ -556,10 +556,10 @@ describe("App project entry", () => {
     await user.click(await screen.findByRole("button", { name: "New Issue" }));
     expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
-    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
+    expect(screen.getByLabelText("Add label")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Title"), "draft local issue");
     await user.type(screen.getByLabelText("Description"), "small task shape");
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -604,8 +604,8 @@ describe("App project entry", () => {
       screen.getByLabelText("Description"),
       "Updated description",
     );
-    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "保存" }));
+    expect(screen.getByLabelText("Add label")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -714,7 +714,10 @@ describe("App project entry", () => {
     ).toHaveValue("");
     expect(
       within(projectDialog).getByLabelText("Worktree setup after creation"),
-    ).toHaveAttribute("placeholder", "请输入创建 worktree 后的初始化操作");
+    ).toHaveAttribute(
+      "placeholder",
+      "Enter initialization steps to run after creating the worktree",
+    );
     await user.click(
       within(projectDialog).getByRole("button", { name: "Create Project" }),
     );
@@ -949,7 +952,7 @@ describe("App project entry", () => {
     await user.click(
       screen.getByRole("button", { name: "Current project RedWhisk" }),
     );
-    await user.click(screen.getByRole("menuitem", { name: "创建项目" }));
+    await user.click(screen.getByRole("menuitem", { name: "Create Project" }));
 
     const projectDialog = await screen.findByRole("dialog", {
       name: "New Project",

@@ -510,8 +510,8 @@ describe("IssuesActivity", () => {
       name: "Linked session issue",
     });
 
-    expect(attentionCard).toHaveTextContent("Codex 需要确认");
-    expect(normalCard).not.toHaveTextContent("Codex 需要确认");
+    expect(attentionCard).toHaveTextContent("Codex needs confirmation");
+    expect(normalCard).not.toHaveTextContent("Codex needs confirmation");
   });
 
   it("opens a backlog issue edit page without status or updated-at fields", async () => {
@@ -583,7 +583,7 @@ describe("IssuesActivity", () => {
       within(page).queryByRole("button", { name: "Attach file" }),
     ).not.toBeInTheDocument();
     expect(
-      within(page).queryByRole("button", { name: "保存" }),
+      within(page).queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
   });
 
@@ -598,7 +598,7 @@ describe("IssuesActivity", () => {
 
     expect(screen.getByLabelText("Title")).toHaveFocus();
 
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
 
     expect(
       screen.queryByRole("form", { name: "Edit Issue" }),
@@ -625,9 +625,9 @@ describe("IssuesActivity", () => {
     expect(within(page).getByLabelText("Title")).toHaveFocus();
 
     await user.tab({ shift: true });
-    expect(within(page).getByRole("button", { name: "删除" })).toHaveFocus();
+    expect(within(page).getByRole("button", { name: "Delete" })).toHaveFocus();
     await user.tab({ shift: true });
-    expect(within(page).getByRole("button", { name: "保存" })).toHaveFocus();
+    expect(within(page).getByRole("button", { name: "Save" })).toHaveFocus();
   });
 
   it("keeps the empty kanban and page input when issue creation fails", async () => {
@@ -644,7 +644,7 @@ describe("IssuesActivity", () => {
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
     await user.type(screen.getByLabelText("Title"), "draft local issue");
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     const page = screen.getByRole("form", { name: "New Issue" });
     expect(
@@ -669,12 +669,12 @@ describe("IssuesActivity", () => {
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
     await user.type(screen.getByLabelText("Title"), "Pending issue");
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
     await user.keyboard("{Escape}");
 
     expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "创建 Issue" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "返回" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
   });
 
   it("keeps lowercase input and closes the create page after save", async () => {
@@ -703,7 +703,7 @@ describe("IssuesActivity", () => {
     expect(titleInput).toHaveValue("draft local issue");
     expect(descriptionInput).toHaveValue("small task shape");
 
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     await waitFor(() =>
       expect(createIssueMock).toHaveBeenCalledWith({
@@ -748,7 +748,7 @@ describe("IssuesActivity", () => {
     expect(openDialogMock).toHaveBeenCalled();
     expect(screen.getByText("tsconfig.json")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -790,7 +790,7 @@ describe("IssuesActivity", () => {
       screen.getByLabelText("Description"),
       "Updated description",
     );
-    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(updateIssueMock).toHaveBeenCalledWith({
@@ -825,7 +825,7 @@ describe("IssuesActivity", () => {
     );
     await user.clear(screen.getByLabelText("Title"));
     await user.type(screen.getByLabelText("Title"), "Failed update");
-    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -894,7 +894,7 @@ describe("IssuesActivity", () => {
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
     await user.type(screen.getByLabelText("Title"), "Late issue");
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
     rerender(
       <IssuesActivity
         projectCompletionPolicy="agent_auto_commit"
@@ -944,14 +944,14 @@ describe("IssuesActivity", () => {
     );
     await user.type(screen.getByLabelText("Title"), "Label issue");
     await user.type(screen.getByLabelText("Description"), "Needs a label");
-    await user.click(screen.getByRole("button", { name: "添加标签" }));
+    await user.click(screen.getByRole("button", { name: "Add label" }));
     await user.click(screen.getByRole("option", { name: "bug" }));
     await user.click(screen.getByRole("option", { name: "release" }));
-    await user.click(screen.getByRole("button", { name: "添加标签" }));
+    await user.click(screen.getByRole("button", { name: "Add label" }));
     expect(screen.getByText("bug")).toBeInTheDocument();
     expect(screen.getByText("release")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     await waitFor(() =>
       expect(createIssueMock).toHaveBeenCalledWith({
@@ -974,9 +974,9 @@ describe("IssuesActivity", () => {
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
-    await user.click(screen.getByRole("button", { name: "添加标签" }));
+    await user.click(screen.getByRole("button", { name: "Add label" }));
     const addLabelButtons = screen.getAllByRole("button", {
-      name: "添加标签",
+      name: "Add label",
     });
     await user.click(addLabelButtons[addLabelButtons.length - 1]);
 
@@ -1011,7 +1011,7 @@ describe("IssuesActivity", () => {
       await screen.findByRole("button", { name: "Existing issue" }),
     ).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "New Issue" }));
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
 
     expect(
       screen.getByRole("button", { name: "Existing issue" }),
@@ -1030,7 +1030,7 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("button", { name: "New Issue" }));
     const page = screen.getByRole("form", { name: "New Issue" });
 
-    await user.click(within(page).getByRole("button", { name: "返回" }));
+    await user.click(within(page).getByRole("button", { name: "Back" }));
 
     expect(
       screen.queryByRole("form", { name: "New Issue" }),
@@ -1047,7 +1047,7 @@ describe("IssuesActivity", () => {
     await user.type(screen.getByLabelText("Title"), "dirty draft");
     expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
 
     expect(
       screen.queryByRole("form", { name: "New Issue" }),
@@ -1070,7 +1070,7 @@ describe("IssuesActivity", () => {
     await user.clear(title);
     await user.type(title, existingIssue.title);
 
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
 
     expect(
       screen.queryByRole("form", { name: "Edit Issue" }),
@@ -2346,11 +2346,11 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
-    await user.click(within(dialog).getByRole("button", { name: "删除" }));
-    const deleteDialog = screen.getByRole("dialog", { name: "确认删除 Issue" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete Issue?" });
     expect(deleteDialog).toBeInTheDocument();
     await user.click(
-      within(deleteDialog).getByRole("button", { name: "删除" }),
+      within(deleteDialog).getByRole("button", { name: "Delete" }),
     );
 
     expect(deleteIssueMock).toHaveBeenCalledWith({
@@ -2379,11 +2379,11 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
-    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     await user.click(
-      within(screen.getByRole("dialog", { name: "确认删除 Issue" })).getByRole(
+      within(screen.getByRole("dialog", { name: "Delete Issue?" })).getByRole(
         "button",
-        { name: "返回" },
+        { name: "Back" },
       ),
     );
 

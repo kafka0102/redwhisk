@@ -948,7 +948,10 @@ describe("ProjectSettingsActivity", () => {
     );
     expect(
       screen.getByLabelText("Worktree setup after creation"),
-    ).toHaveAttribute("placeholder", "请输入创建 worktree 后的初始化操作");
+    ).toHaveAttribute(
+      "placeholder",
+      "Enter initialization steps to run after creating the worktree",
+    );
   });
 
   it("keeps a manually entered command path after testing and saves it unchanged", async () => {
@@ -983,7 +986,7 @@ describe("ProjectSettingsActivity", () => {
       screen.getByLabelText("Agent command"),
       "/opt/codex/bin/codex",
     );
-    await user.click(screen.getByRole("button", { name: "测试" }));
+    await user.click(screen.getByRole("button", { name: "Test" }));
 
     expect(testAgentCommandMock).toHaveBeenCalledWith({
       command: "/opt/codex/bin/codex",
@@ -1254,7 +1257,7 @@ describe("ProjectSettingsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await user.click(await screen.findByRole("button", { name: "New agent" }));
-    await user.click(screen.getByRole("button", { name: "测试" }));
+    await user.click(screen.getByRole("button", { name: "Test" }));
     expect(
       await screen.findByText("Command available: codex"),
     ).toBeInTheDocument();

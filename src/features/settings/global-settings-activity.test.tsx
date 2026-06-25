@@ -85,7 +85,7 @@ describe("GlobalSettingsActivity", () => {
     const user = userEvent.setup();
     renderGlobalSettings();
 
-    await user.click(screen.getByRole("button", { name: "中文" }));
+    await user.click(screen.getByRole("button", { name: "Chinese" }));
 
     expect(
       screen.getByRole("heading", { name: "偏好设置" }),
