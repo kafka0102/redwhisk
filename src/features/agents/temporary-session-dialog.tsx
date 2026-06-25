@@ -20,6 +20,7 @@ import {
   type AgentProfileRecord,
 } from "../settings/settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface TemporarySessionDialogProps {
   projectId: number;
@@ -29,22 +30,23 @@ interface TemporarySessionDialogProps {
   ) => Promise<void> | void;
 }
 
-const DEFAULT_SESSION_TITLE = "Untitled Session";
-const DEFAULT_PROMPT =
-  "Ask Codex to help with the current project without linking an issue.";
-
 export function TemporarySessionDialog({
   projectId,
   onClose,
   onStarted,
 }: TemporarySessionDialogProps) {
+  const { messages } = useI18n();
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
     null,
   );
-  const [title, setTitle] = useState(DEFAULT_SESSION_TITLE);
-  const [promptDraft, setPromptDraft] = useState(DEFAULT_PROMPT);
+  const [title, setTitle] = useState(
+    messages.agentsFeature.temporarySessionDefaultTitle,
+  );
+  const [promptDraft, setPromptDraft] = useState(
+    messages.agentsFeature.temporarySessionDefaultPrompt,
+  );
   const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLFormElement | null>(null);
@@ -76,9 +78,7 @@ export function TemporarySessionDialog({
         setSelectedProfileId(mergedProfiles[0]?.id ?? null);
 
         if (mergedProfiles.length === 0) {
-          setStatusMessage(
-            "No agent profiles available. Configure an agent in Settings first.",
-          );
+          setStatusMessage(messages.agentsFeature.noProfilesForAgentType);
         }
       } catch (error) {
         if (!isMounted) {
@@ -98,7 +98,7 @@ export function TemporarySessionDialog({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [messages.agentsFeature.noProfilesForAgentType, projectId]);
 
   useEffect(() => {
     titleInputRef.current?.focus();
@@ -201,7 +201,7 @@ export function TemporarySessionDialog({
     >
       <form
         ref={dialogRef}
-        aria-label="Session Dialog"
+        aria-label={messages.agentsFeature.sessionDialog}
         aria-modal="true"
         className="issue-dialog"
         role="dialog"
@@ -209,10 +209,10 @@ export function TemporarySessionDialog({
         onSubmit={handleSubmit}
       >
         <div className="issue-dialog__header">
-          <h3>Session Dialog</h3>
+          <h3>{messages.agentsFeature.sessionDialog}</h3>
           <button
             ref={closeButtonRef}
-            aria-label="Close session dialog"
+            aria-label={messages.settings.close}
             className="issue-dialog__close"
             type="button"
             onClick={onClose}
@@ -228,12 +228,12 @@ export function TemporarySessionDialog({
                 htmlFor="temporary-session-title"
                 className="text-xs text-muted-foreground"
               >
-                Title
+                {messages.agentsFeature.titleField}
               </Label>
               <Input
                 ref={titleInputRef}
                 id="temporary-session-title"
-                aria-label="Session title"
+                aria-label={messages.agentsFeature.titleField}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
               />
@@ -244,7 +244,7 @@ export function TemporarySessionDialog({
                 htmlFor="temporary-session-profile"
                 className="text-xs text-muted-foreground"
               >
-                Agent profile
+                {messages.issues.agentProfile}
               </Label>
               <Select
                 items={profiles.map((profile) => ({
@@ -260,7 +260,7 @@ export function TemporarySessionDialog({
               >
                 <SelectTrigger
                   id="temporary-session-profile"
-                  aria-label="Agent profile"
+                  aria-label={messages.issues.agentProfile}
                   className="w-full"
                   disabled={isLoadingProfiles || profiles.length === 0}
                 >
@@ -282,11 +282,11 @@ export function TemporarySessionDialog({
                 htmlFor="temporary-session-prompt"
                 className="text-xs text-muted-foreground"
               >
-                Prompt
+                {messages.agentsFeature.promptField}
               </Label>
               <Textarea
                 id="temporary-session-prompt"
-                aria-label="Initial prompt"
+                aria-label={messages.agentsFeature.promptField}
                 rows={10}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
@@ -298,7 +298,7 @@ export function TemporarySessionDialog({
         <p
           className="issue-dialog__status"
           role="status"
-          aria-label="Session dialog status"
+          aria-label={messages.agentsFeature.sessionDialogStatus}
         >
           {statusMessage}
         </p>
@@ -309,7 +309,9 @@ export function TemporarySessionDialog({
             type="submit"
             disabled={isStartDisabled}
           >
-            {isStarting ? "Starting..." : "Start"}
+            {isStarting
+              ? messages.agentsFeature.starting
+              : messages.agentsFeature.start}
           </button>
         </div>
       </form>

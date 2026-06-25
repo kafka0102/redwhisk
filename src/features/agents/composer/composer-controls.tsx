@@ -8,6 +8,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui";
+import { useI18n } from "../../../shared/i18n/i18n";
 import type { AgentCapabilities } from "../agent-capabilities";
 import { ComposerContextMeter } from "./composer-context-meter";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
@@ -59,6 +60,7 @@ export function ComposerControls({
   onCancel,
   usage,
 }: ComposerControlsProps) {
+  const { messages } = useI18n();
   const currentModel = models.find(
     (model) => model.modelId === selectedModelId,
   );
@@ -76,7 +78,8 @@ export function ComposerControls({
     fallbackModelLabel(capabilities),
   );
   const modelPlaceholder =
-    modelsError ?? (isLoadingModels ? "加载中…" : "无可用模型");
+    modelsError ??
+    (isLoadingModels ? messages.settings.loading : messages.settings.none);
 
   return (
     <div className="agents-composer__controls">
@@ -84,7 +87,7 @@ export function ComposerControls({
         <button
           type="button"
           className="agents-composer__attach"
-          aria-label="添加附件"
+          aria-label={messages.agentsFeature.addAttachment}
           disabled={isReadOnly}
           onClick={onAddAttachment}
         >
@@ -104,7 +107,7 @@ export function ComposerControls({
             >
               <SelectTrigger
                 id="agent-composer-model"
-                aria-label="选择模型"
+                aria-label={messages.agentsFeature.selectModel}
                 className="agents-composer__select"
                 size="sm"
               >
@@ -116,7 +119,7 @@ export function ComposerControls({
                 {models.map((model) => (
                   <SelectItem key={model.modelId} value={model.modelId}>
                     {formatModelLabel(model.modelId, models, null)}
-                    {model.isDefault ? "（默认）" : ""}
+                    {model.isDefault ? " (default)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -126,7 +129,7 @@ export function ComposerControls({
           {showReadOnlyModel && modelLabel ? (
             <span
               className="agents-composer__model-label"
-              aria-label="当前模型类型"
+              aria-label={messages.agentsFeature.currentModelType}
             >
               {modelLabel}
             </span>
@@ -144,7 +147,7 @@ export function ComposerControls({
             >
               <SelectTrigger
                 id="agent-composer-effort"
-                aria-label="Think 模式"
+                aria-label={messages.agentsFeature.thinkMode}
                 className="agents-composer__select"
                 size="sm"
               >
@@ -170,7 +173,7 @@ export function ComposerControls({
           <button
             type="button"
             className="agents-composer__cancel"
-            aria-label="终止当前任务"
+            aria-label={messages.agentsFeature.cancelCurrentTurn}
             onClick={onCancel}
           >
             <Square
@@ -184,7 +187,7 @@ export function ComposerControls({
           <button
             type="button"
             className="agents-composer__send"
-            aria-label="发送消息"
+            aria-label={messages.agentsFeature.sendMessage}
             disabled={!canSend}
             onClick={onSubmit}
           >

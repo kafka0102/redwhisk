@@ -1,4 +1,5 @@
 import type { AgentSessionListItem } from "./agent-session-commands";
+import type { I18nMessages } from "../../shared/i18n/messages";
 
 export type SessionIssueGroup = "inProcess" | "review" | "done";
 
@@ -30,6 +31,7 @@ export function getSessionIssueGroup(
 }
 
 export function formatSessionStatusLabel(
+  messages: I18nMessages,
   session: AgentSessionListItem,
 ): string {
   if (session.status === "crashed") {
@@ -41,23 +43,23 @@ export function formatSessionStatusLabel(
   }
 
   if (session.issueStatus === "completed") {
-    return "Done";
+    return messages.agentsFeature.done;
   }
 
   if (session.issueStatus === "review") {
-    return "Review";
+    return messages.agentsFeature.review;
   }
 
   if (session.issueStatus === "running" && session.isTurnRunning === false) {
-    return "In Progress";
+    return messages.agentsFeature.inProgress;
   }
 
   if (session.attention === "requested") {
-    return "输出完成";
+    return messages.agentsFeature.attentionOutputComplete;
   }
 
   if (session.status === "running") {
-    return "运行中";
+    return messages.agentsFeature.running;
   }
 
   return "closed";

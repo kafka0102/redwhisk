@@ -2,14 +2,20 @@ import { DiffEditor } from "@monaco-editor/react";
 
 import type { WorkspaceChangeKind } from "./session-workspace-commands";
 import type { SessionWorkspaceChangeTab } from "./session-workspace-types";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionDiffViewerProps {
   tab: SessionWorkspaceChangeTab;
 }
 
 export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
+  const { messages } = useI18n();
   if (tab.isLoading) {
-    return <p className="session-viewer-state">正在加载 diff...</p>;
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.loadingDiff}
+      </p>
+    );
   }
 
   if (tab.errorMessage) {
@@ -21,15 +27,24 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
   }
 
   if (!tab.diff) {
-    return <p className="session-viewer-state">请选择变更文件。</p>;
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.selectChangedFile}
+      </p>
+    );
   }
 
   if (tab.diff.isBinary || tab.diff.isTooLarge) {
     return (
-      <section className="session-viewer-state" aria-label="Diff 不可预览">
+      <section
+        className="session-viewer-state"
+        aria-label={messages.agentsFeature.diffUnavailable}
+      >
         <h3>{tab.fileName}</h3>
         <p>
-          {tab.diff.isBinary ? "二进制文件不可预览。" : "文件过大，暂不预览。"}
+          {tab.diff.isBinary
+            ? messages.agentsFeature.binaryPreviewUnavailable
+            : messages.agentsFeature.largeFilePreviewUnavailable}
         </p>
       </section>
     );
@@ -37,7 +52,7 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
 
   return (
     <section
-      aria-label={`${tab.fileName} diff`}
+      aria-label={messages.agentsFeature.diffView(tab.fileName)}
       className="session-diff-viewer"
     >
       <div className="session-diff-viewer__status">

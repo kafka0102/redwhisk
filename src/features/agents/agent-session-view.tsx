@@ -19,6 +19,7 @@ import { getAgentCapabilities } from "./agent-capabilities";
 import { AgentMessageStreamView } from "./message-stream/agent-message-stream";
 import { useAgentMessageStream } from "./message-stream/use-agent-message-stream";
 import { PermissionCard } from "./message-stream/permission-card";
+import { useI18n } from "../../shared/i18n/i18n";
 import {
   resumeStructuredAgentSession,
   type AgentSessionStatus,
@@ -43,6 +44,7 @@ export function AgentSessionView({
   issueStatus = null,
   isTurnRunning = false,
 }: AgentSessionViewProps) {
+  const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const capabilities = getAgentCapabilities(agentType);
   const effectiveTurnStatus =
@@ -60,7 +62,10 @@ export function AgentSessionView({
   }, [projectId, sessionId, shouldResumeBeforeSend]);
 
   return (
-    <div className="agents-session-view" aria-label="Agent 结构化会话视图">
+    <div
+      className="agents-session-view"
+      aria-label={messages.agentsFeature.structuredSessionView}
+    >
       <AgentMessageStreamView state={state} isTurnRunning={isTurnRunning} />
       <div className="agents-session-view__permissions">
         {state.pendingPermissions.map((request) => (
@@ -82,7 +87,7 @@ export function AgentSessionView({
         currentModelId={state.model}
         isReadOnly={isReadOnly}
         readOnlyReason={
-          isReadOnly ? "已完成的 Issue 不能继续运行。" : undefined
+          isReadOnly ? messages.agentsFeature.readOnlyCompletedIssue : undefined
         }
         onBeforeSend={resumeBeforeSend}
         onBeforeSelectModel={resumeBeforeSend}

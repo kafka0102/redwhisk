@@ -1,5 +1,6 @@
 import { SessionChangesPanel } from "./session-changes-panel";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
+import { useI18n } from "../../shared/i18n/i18n";
 import type {
   WorkspaceChangedFile,
   WorkspaceFileTreeNode,
@@ -33,8 +34,12 @@ export function SessionSidePanel({
   onOpenFile,
   onRefreshChanges,
 }: SessionSidePanelProps) {
+  const { messages } = useI18n();
   return (
-    <aside className="session-side-panel" aria-label="Session side panel">
+    <aside
+      className="session-side-panel"
+      aria-label={messages.agentsFeature.sessionSidePanel}
+    >
       <div className="session-side-panel__tabs" role="tablist">
         <button
           aria-selected={activeTab === "changes"}
@@ -43,7 +48,7 @@ export function SessionSidePanel({
           type="button"
           onClick={() => onActiveTabChange("changes")}
         >
-          变更
+          {messages.agentsFeature.changes}
         </button>
         <button
           aria-selected={activeTab === "files"}
@@ -52,7 +57,7 @@ export function SessionSidePanel({
           type="button"
           onClick={() => onActiveTabChange("files")}
         >
-          文件
+          {messages.agentsFeature.files}
         </button>
       </div>
       <div className="session-side-panel__content" role="tabpanel">

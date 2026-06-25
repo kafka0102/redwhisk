@@ -1,6 +1,7 @@
 import { Play, Plus } from "lucide-react";
 
 import type { IssueRecord, IssueStatus } from "./issue-commands";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueLane {
   status: IssueStatus;
@@ -48,11 +49,15 @@ export function IssuesKanban({
   formatTimestamp,
   toDescriptionExcerpt,
 }: IssuesKanbanProps) {
+  const { messages } = useI18n();
   return (
-    <section className="issues-kanban" aria-label="Issues kanban">
+    <section
+      className="issues-kanban"
+      aria-label={messages.issues.issuesKanban}
+    >
       {isLoading ? (
         <p className="issues-loading" role="status">
-          Loading issues...
+          {messages.issues.loadingIssues}
         </p>
       ) : null}
       {lanes.map((lane) => (
@@ -69,9 +74,9 @@ export function IssuesKanban({
               {lane.status === "backlog" ? (
                 <button
                   ref={createButtonRef}
-                  aria-label="New Issue"
+                  aria-label={messages.issues.newIssue}
                   className="issue-lane__create"
-                  title="New Issue"
+                  title={messages.issues.newIssue}
                   type="button"
                   onClick={(event) => onCreateIssue(event.currentTarget)}
                 >
@@ -95,7 +100,7 @@ export function IssuesKanban({
               />
             ))}
             {!isLoading && lane.issues.length === 0 ? (
-              <p className="issue-lane__empty">no issues</p>
+              <p className="issue-lane__empty">{messages.issues.emptyLane}</p>
             ) : null}
           </div>
         </section>
@@ -136,6 +141,7 @@ function IssueCard({
     trigger: HTMLElement | null,
   ) => void;
 }) {
+  const { messages } = useI18n();
   const metaId = `issue-card-meta-${issue.id}`;
   const attentionId = `issue-card-attention-${issue.id}`;
   const descriptionId = `issue-card-description-${issue.id}`;
@@ -184,7 +190,9 @@ function IssueCard({
                 className="attention-marker issue-card__attention"
               >
                 <span aria-hidden="true" className="attention-marker__dot" />
-                <span className="attention-marker__text">Codex 需要确认</span>
+                <span className="attention-marker__text">
+                  {messages.agentsFeature.attentionRequested}
+                </span>
               </span>
             ) : null}
             {issue.description ? (
@@ -195,7 +203,7 @@ function IssueCard({
           </button>
           {isRunnable ? (
             <button
-              aria-label={`Run ${issue.title}`}
+              aria-label={`${messages.issues.run} ${issue.title}`}
               className="issue-card__run"
               type="button"
               onClick={(event) => {
@@ -209,7 +217,9 @@ function IssueCard({
         {hasLabels ? (
           <span id={labelsId} className="issue-card__labels">
             <span className="sr-only">
-              {`Labels: ${labels.map((label) => label.name).join(", ")}`}
+              {`${messages.issues.labels}: ${labels
+                .map((label) => label.name)
+                .join(", ")}`}
             </span>
             {labels.map((label) => (
               <span

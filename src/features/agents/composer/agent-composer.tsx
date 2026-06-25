@@ -12,6 +12,7 @@
 import { useMemo, type KeyboardEvent } from "react";
 
 import { Textarea } from "@/components/ui";
+import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentComposer } from "./use-agent-composer";
 import { useAgentModels } from "./use-agent-models";
 import { ComposerAttachments } from "./composer-attachments";
@@ -36,6 +37,7 @@ export function AgentComposer({
   onBeforeSetEffort,
   onMessageSent,
 }: AgentComposerProps) {
+  const { messages } = useI18n();
   const {
     models,
     selectedModelId,
@@ -106,7 +108,7 @@ export function AgentComposer({
   return (
     <form
       className="agents-composer"
-      aria-label="Agent 消息输入"
+      aria-label={messages.agentsFeature.messageInputForm}
       onSubmit={(event) => {
         // 阻止 form 默认提交；实际发送由按钮/Enter 触发。
         event.preventDefault();
@@ -121,8 +123,8 @@ export function AgentComposer({
       />
       <Textarea
         className="agents-composer__textarea"
-        aria-label="输入消息"
-        placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+        aria-label={messages.agentsFeature.messageInput}
+        placeholder={messages.agentsFeature.messagePlaceholder}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={handleKeyDown}
@@ -142,7 +144,7 @@ export function AgentComposer({
       ) : null}
       {modelsError ? (
         <p className="agents-composer__error" role="status">
-          {`模型加载失败：${modelsError}`}
+          {messages.agentsFeature.modelLoadFailed(modelsError)}
         </p>
       ) : null}
       {cancelToastMessage ? (

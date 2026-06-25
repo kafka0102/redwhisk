@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import type { ComposerAttachment } from "./composer-types";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface ComposerAttachmentsProps {
   attachments: ComposerAttachment[];
@@ -34,6 +35,7 @@ export function ComposerAttachments({
   attachments,
   onRemove,
 }: ComposerAttachmentsProps) {
+  const { messages } = useI18n();
   if (attachments.length === 0) {
     return null;
   }
@@ -69,7 +71,9 @@ export function ComposerAttachments({
             <button
               type="button"
               className="agents-composer__chip-remove"
-              aria-label={`移除附件 ${attachment.displayName}`}
+              aria-label={messages.agentsFeature.removeAttachment(
+                attachment.displayName,
+              )}
               onClick={() => onRemove(attachment.id)}
             >
               <X aria-hidden="true" size={12} strokeWidth={2} />
@@ -78,7 +82,7 @@ export function ComposerAttachments({
         );
       })}
       <span className="agents-composer__attachments-hint">
-        附件已保存，暂不随消息发送
+        {messages.agentsFeature.attachmentsSavedHint}
       </span>
     </div>
   );

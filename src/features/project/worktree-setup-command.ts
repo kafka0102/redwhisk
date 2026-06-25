@@ -1,5 +1,5 @@
 export const WORKTREE_SETUP_COMMAND_INPUT_PROMPT =
-  "请输入创建 worktree 后的初始化操作";
+  "Enter setup commands after creating the worktree";
 
 export function detectWorktreeSetupCommand(projectPath: string): string | null {
   const lowerPath = projectPath.toLowerCase();

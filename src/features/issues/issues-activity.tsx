@@ -902,7 +902,7 @@ export function IssuesActivity({
             <p
               className="issues-status"
               role="status"
-              aria-label="Issues status"
+              aria-label={messages.issues.issuesStatus}
             >
               {errorMessage}
             </p>

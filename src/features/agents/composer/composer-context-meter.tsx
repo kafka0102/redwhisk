@@ -6,6 +6,7 @@
 // 视觉遵循 DESIGN_GUIDE：黑白灰优先、状态不只靠颜色（悬浮详情明确显示百分比）。
 
 import type { AgentUsage } from "../agent-stream-types";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface ComposerContextMeterProps {
   usage: AgentUsage | null;
@@ -22,6 +23,7 @@ function formatTokens(tokens: number): string {
 }
 
 export function ComposerContextMeter({ usage }: ComposerContextMeterProps) {
+  const { messages } = useI18n();
   const used = usage?.contextWindowUsedTokens;
   const max = usage?.contextWindowMaxTokens;
 
@@ -38,7 +40,7 @@ export function ComposerContextMeter({ usage }: ComposerContextMeterProps) {
   return (
     <span
       className="agents-composer__meter"
-      aria-label={`上下文窗口已使用 ${percent}%，${used.toLocaleString()} / ${max.toLocaleString()} tokens`}
+      aria-label={`${messages.agentsFeature.contextWindow} ${percent}%`}
       tabIndex={0}
     >
       <span
@@ -57,9 +59,11 @@ export function ComposerContextMeter({ usage }: ComposerContextMeterProps) {
         {`${usedLabel} / ${maxLabel}`}
       </span>
       <span className="agents-composer__meter-detail" role="tooltip">
-        <span className="agents-composer__meter-detail-title">上下文窗口</span>
+        <span className="agents-composer__meter-detail-title">
+          {messages.agentsFeature.contextWindow}
+        </span>
         <span className="agents-composer__meter-detail-percent">
-          {`已使用 ${percent}%`}
+          {messages.agentsFeature.contextUsed(percent)}
         </span>
         <span className="agents-composer__meter-detail-tokens">
           {`${usedLabel} / ${maxLabel} tokens`}

@@ -13,7 +13,6 @@ import { ProjectDetailsForm } from "../project/project-details-form";
 import {
   detectWorktreeSetupCommand,
   initialWorktreeSetupCommand,
-  WORKTREE_SETUP_COMMAND_INPUT_PROMPT,
 } from "../project/worktree-setup-command";
 import type { ProjectSummary } from "../../app/app";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -138,7 +137,7 @@ function GeneralSettingsForm({
       const selectedPath = await open({
         directory: true,
         multiple: false,
-        title: "Select Git Repository",
+        title: messages.projectHome.selectGitRepository,
       });
 
       if (typeof selectedPath !== "string") {
@@ -195,7 +194,7 @@ function GeneralSettingsForm({
     <ProjectDetailsForm
       ariaStatusLabel={`${messages.settings.general} ${messages.settings.status}`}
       autoCommitLabel={messages.settings.autoCommit}
-      chooseFolderLabel={messages.settings.chooseFolder}
+      chooseFolderLabel={messages.projectHome.chooseFolder}
       className="settings-card settings-general-card"
       completionPolicy={completionPolicyValue}
       completionStrategyLabel={messages.settings.completionStrategy}
@@ -217,10 +216,12 @@ function GeneralSettingsForm({
       submitLabel={messages.settings.save}
       submittingLabel={messages.settings.saving}
       worktreeLocation={worktreeLocationValue}
-      worktreeLocationLabel="Worktree path"
+      worktreeLocationLabel={messages.settings.worktreePath}
       worktreeSetupCommand={worktreeSetupCommandValue}
-      worktreeSetupCommandLabel="Worktree setup after creation"
-      worktreeSetupCommandPlaceholder={WORKTREE_SETUP_COMMAND_INPUT_PROMPT}
+      worktreeSetupCommandLabel={messages.settings.worktreeSetupAfterCreation}
+      worktreeSetupCommandPlaceholder={
+        messages.createProject.worktreeSetupPlaceholder
+      }
     />
   );
 }

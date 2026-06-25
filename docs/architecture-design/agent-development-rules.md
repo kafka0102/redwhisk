@@ -250,13 +250,23 @@ Agent command 检测必须考虑桌面应用启动环境与用户终端环境的
 
 ## 文案与国际化
 
-规划文档要求核心状态和命令支持 `zh-CN` / `en-US`，但当前代码尚无 `src/shared/i18n` 运行时字典，且已有故事记录该项为 deferred work。
+当前项目已具备 `src/shared/i18n` 运行时能力。前端页面文本必须按 locale 统一管理，不再允许继续扩大硬编码文案范围。
 
-因此当前新增功能应遵守：
+必须遵守：
 
-- 不扩大硬编码文案范围；新增核心状态、命令或错误文案时，优先集中在同一 formatter / helper 中。
+- 所有用户可见文本都必须国际化：包括页面标题、按钮、表单标签、占位符、空态、加载态、错误态、菜单项、提示语、`title`、`aria-label`、Dialog / Drawer / Popover 文案和状态文本。
+- 新增或修改页面文案时，不得直接在 TSX 中新增散落硬编码字符串；应接入 `src/shared/i18n/**`，或在 feature 内部建立由 locale 驱动的 formatter / messages helper。
+- 若一个 feature 内同时存在通用文案和复杂格式化文案，通用短文案优先进入共享消息字典，复杂拼接文案可保留在 feature formatter 中，但必须以 locale 为输入。
 - 不把 Codex 写死为通用 UI 命令语义；按钮和流程文案使用 Agent 泛称，配置项中体现 Codex。
-- 若任务本身涉及文案或 i18n，应优先补运行时字典，再迁移相关硬编码文案。
+- 迁移旧页面时，优先处理运行时真实可见路径，并顺手清理同一区域未国际化的 `placeholder`、`aria-label`、状态文案与空态文案，避免只做一半。
+
+推荐实现方式：
+
+1. 在 `src/shared/i18n/messages.ts` 中为稳定、跨页面复用的文案新增 namespace 或字段。
+2. 组件内通过 `useI18n()` 读取 `locale` 与 `messages`，不要直接访问 `localStorage` 或自行维护第二套 locale 状态。
+3. 对状态名、动态标题、确认文案、错误摘要等需要格式化的文本，优先封装为 `messages.xxx.someFormatter(...)` 或 feature 内 `formatXxx(locale, ...)`。
+4. 对大型 feature，不要把所有文案都堆进单个页面组件；可拆到同 feature 下的 `*-messages.ts`、formatter 或 helper，以降低页面复杂度。
+5. 测试中如果断言可见文案，默认以英文为基线；需要覆盖中文切换时，应显式设置 locale 并断言切换后的文本。
 
 ## 测试与验证规则
 

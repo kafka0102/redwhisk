@@ -17,6 +17,7 @@ import type { CSSProperties } from "react";
 import { Tree, type NodeRendererProps } from "react-arborist";
 
 import type { WorkspaceFileTreeNode } from "./session-workspace-commands";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionFileTreePanelProps {
   errorMessage: string | null;
@@ -31,19 +32,25 @@ export function SessionFileTreePanel({
   isLoading,
   onOpenFile,
 }: SessionFileTreePanelProps) {
+  const { messages } = useI18n();
   return (
-    <div className="session-file-tree" aria-label="Project file tree">
+    <div
+      className="session-file-tree"
+      aria-label={messages.agentsFeature.fileTree}
+    >
       {errorMessage ? (
         <p className="session-side-panel__empty">{errorMessage}</p>
       ) : null}
       {fileTree.length === 0 && !errorMessage ? (
         <p className="session-side-panel__empty">
-          {isLoading ? "正在加载文件树..." : "暂无文件。"}
+          {isLoading
+            ? messages.agentsFeature.loadingFileTree
+            : messages.agentsFeature.noFiles}
         </p>
       ) : null}
       {fileTree.length > 0 ? (
         <Tree<WorkspaceFileTreeNode>
-          aria-label="Project file tree"
+          aria-label={messages.agentsFeature.fileTree}
           childrenAccessor="children"
           className="session-file-tree__arborist"
           data={fileTree}

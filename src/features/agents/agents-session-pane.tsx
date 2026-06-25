@@ -10,6 +10,7 @@ import type { AgentSessionListItem } from "./agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
 import { formatSessionTitle } from "./agent-session-formatters";
 import { SessionWorkspaceTabs } from "./session-workspace-tabs";
+import { useI18n } from "../../shared/i18n/i18n";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
@@ -102,6 +103,7 @@ export function AgentsSessionPane({
   transitionMenuOptions,
   transitionPhase,
 }: AgentsSessionPaneProps) {
+  const { messages } = useI18n();
   const canRenderSessionActions = selectedSession !== null;
   const canRenderDeleteButton =
     selectedSession !== null && selectedSession.issueId === null;
@@ -137,7 +139,7 @@ export function AgentsSessionPane({
                     <button
                       aria-expanded={isTransitionMenuOpen}
                       aria-haspopup="menu"
-                      aria-label="Open status options"
+                      aria-label={messages.agentsFeature.openStatusOptions}
                       className="agents-session-toolbar__action agents-session-toolbar__action--split-toggle"
                       disabled={isTransitionPending}
                       type="button"
@@ -175,12 +177,12 @@ export function AgentsSessionPane({
                 type="button"
                 onClick={onDeleteSession}
               >
-                删除
+                {messages.agentsFeature.deleteSession}
               </button>
             ) : null}
             {canRenderSessionActions ? (
               <button
-                aria-label="打开终端"
+                aria-label={messages.agentsFeature.openTerminal}
                 aria-pressed={isTerminalPanelActive}
                 className="agents-session-toolbar__icon-action"
                 type="button"
@@ -191,7 +193,7 @@ export function AgentsSessionPane({
             ) : null}
             {canRenderSessionActions ? (
               <button
-                aria-label="打开 Session 侧边栏"
+                aria-label={messages.agentsFeature.openSessionSidePanel}
                 aria-pressed={isSidePanelOpen}
                 className="agents-session-toolbar__icon-action"
                 type="button"
@@ -288,7 +290,7 @@ export function AgentsSessionPane({
         {terminalPanel ? (
           <>
             <div
-              aria-label="调整 Session 终端高度"
+              aria-label={messages.agentsFeature.sessionTerminals}
               aria-orientation="horizontal"
               className="session-inline-terminal-splitter"
               role="separator"

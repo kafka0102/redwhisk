@@ -181,7 +181,7 @@ export function ProjectTerminalEditDialog({
             variant="outline"
             onClick={onClose}
           >
-            Cancel
+            {messages.settings.cancel}
           </Button>
           <Button disabled={isSaving || !isDirty} type="submit">
             {isSaving ? messages.settings.saving : messages.settings.save}

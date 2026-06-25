@@ -1,14 +1,20 @@
 import { Editor } from "@monaco-editor/react";
 
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
+import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionFileViewerProps {
   tab: SessionWorkspaceFileTab;
 }
 
 export function SessionFileViewer({ tab }: SessionFileViewerProps) {
+  const { messages } = useI18n();
   if (tab.isLoading) {
-    return <p className="session-viewer-state">正在加载文件...</p>;
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.loadingFile}
+      </p>
+    );
   }
 
   if (tab.errorMessage) {
@@ -20,17 +26,24 @@ export function SessionFileViewer({ tab }: SessionFileViewerProps) {
   }
 
   if (!tab.content) {
-    return <p className="session-viewer-state">请选择文件。</p>;
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.selectFile}
+      </p>
+    );
   }
 
   if (tab.content.isBinary || tab.content.isTooLarge) {
     return (
-      <section className="session-viewer-state" aria-label="File unavailable">
+      <section
+        className="session-viewer-state"
+        aria-label={messages.agentsFeature.fileUnavailable}
+      >
         <h3>{tab.fileName}</h3>
         <p>
           {tab.content.isBinary
-            ? "二进制文件不可预览。"
-            : "文件过大，暂不预览。"}
+            ? messages.agentsFeature.binaryPreviewUnavailable
+            : messages.agentsFeature.largeFilePreviewUnavailable}
         </p>
       </section>
     );
@@ -39,7 +52,7 @@ export function SessionFileViewer({ tab }: SessionFileViewerProps) {
   return (
     <section
       className="session-file-viewer"
-      aria-label={`${tab.fileName} file`}
+      aria-label={messages.agentsFeature.fileView(tab.fileName)}
     >
       <div className="session-file-viewer__status">{tab.filePath}</div>
       <Editor
