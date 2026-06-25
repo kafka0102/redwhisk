@@ -1104,6 +1104,12 @@ describe("AgentsActivity", () => {
       /\.issue-surface-header\s*\{(?=[^}]*align-items:\s*center;)[^}]*\}/s,
     );
     expect(appCss).toMatch(
+      /\.activity-surface--issues\s*\{(?=[^}]*padding:\s*0 0 8px;)[^}]*\}/s,
+    );
+    expect(appCss).toMatch(
+      /@media[^{}]*\([^)]*max-width:\s*640px[^)]*\)[\s\S]*?\.activity-surface--issues\s*\{(?=[^}]*padding:\s*0 0 16px;)[^}]*\}/s,
+    );
+    expect(appCss).toMatch(
       /\.issue-surface-header--activity\s*\{(?=[^}]*height:\s*var\(--activity-header-height\);)(?![^}]*min-height:)[^}]*\}/s,
     );
     expect(appCss).toMatch(

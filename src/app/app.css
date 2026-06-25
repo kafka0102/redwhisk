@@ -417,7 +417,7 @@ button:focus-visible {
   height: 100%;
   min-height: 0;
   gap: 12px;
-  padding: 18px 0 8px;
+  padding: 0 0 8px;
   overflow: hidden;
 }
 
@@ -4188,7 +4188,7 @@ button:focus-visible {
   }
 
   .activity-surface--issues {
-    padding: 16px;
+    padding: 0 0 16px;
   }
 
   .activity-surface--agents {
