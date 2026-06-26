@@ -24,7 +24,7 @@ use std::thread;
 
 use serde_json::Value;
 
-use crate::agent::command_detector::run_command_lookup_with_path;
+use crate::agent::command_detector::{run_command_lookup_with_path, CommandLookupResult};
 
 /// 默认请求超时（14 天，等价于不超时，仅兜底死循环）。
 const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
@@ -96,18 +96,22 @@ impl CodexTransport {
     pub fn spawn(binary: &str, cwd: Option<&str>) -> Result<Self, CodexAppServerError> {
         let (program, args) = split_command_line(binary)?;
         let resolved_program = resolve_spawn_program(program);
-        let mut command = Command::new(&resolved_program.program);
+        let mut command = if resolved_program.requires_shell {
+            shell_app_server_command(binary)
+        } else {
+            let mut command = Command::new(&resolved_program.program);
+            command.args(args).arg("app-server");
+            apply_spawn_path(
+                &mut command,
+                resolved_program.lookup_path.as_deref(),
+                &resolved_program.path_entries,
+            );
+            command
+        };
         command
-            .args(args)
-            .arg("app-server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        apply_spawn_path(
-            &mut command,
-            resolved_program.lookup_path.as_deref(),
-            &resolved_program.path_entries,
-        );
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
         }
@@ -323,18 +327,43 @@ struct ResolvedSpawnProgram {
     program: String,
     lookup_path: Option<OsString>,
     path_entries: Vec<PathBuf>,
+    requires_shell: bool,
 }
 
 fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
+    let lookup_result = if Path::new(program).components().count() > 1 {
+        None
+    } else {
+        run_command_lookup_with_path(program).ok()
+    };
+    resolve_spawn_program_from_lookup(program, lookup_result)
+}
+
+fn resolve_spawn_program_from_lookup(
+    program: &str,
+    lookup_result: Option<CommandLookupResult>,
+) -> ResolvedSpawnProgram {
     if Path::new(program).components().count() > 1 {
         return ResolvedSpawnProgram {
             program: program.to_string(),
             lookup_path: None,
             path_entries: spawn_path_entries_for_program(program),
+            requires_shell: false,
         };
     }
 
-    let lookup_result = run_command_lookup_with_path(program).ok();
+    let requires_shell = lookup_result
+        .as_ref()
+        .is_some_and(|result| !is_direct_executable_lookup(&result.command));
+    if requires_shell {
+        return ResolvedSpawnProgram {
+            program: program.to_string(),
+            lookup_path: lookup_result.and_then(|result| result.path),
+            path_entries: Vec::new(),
+            requires_shell: true,
+        };
+    }
+
     let resolved_program = lookup_result
         .as_ref()
         .map(|result| result.command.as_str())
@@ -349,7 +378,32 @@ fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
         program: resolved_program.to_string(),
         lookup_path: lookup_result.and_then(|result| result.path),
         path_entries,
+        requires_shell: false,
     }
+}
+
+fn is_direct_executable_lookup(command: &str) -> bool {
+    let trimmed = command.trim();
+    !trimmed.chars().any(char::is_whitespace) && Path::new(trimmed).components().count() > 1
+}
+
+fn build_shell_app_server_command_line(binary: &str) -> String {
+    format!("{} app-server", binary.trim())
+}
+
+#[cfg(unix)]
+fn shell_app_server_command(binary: &str) -> Command {
+    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let mut command = Command::new(shell);
+    command.args(["-lic", &build_shell_app_server_command_line(binary)]);
+    command
+}
+
+#[cfg(not(unix))]
+fn shell_app_server_command(binary: &str) -> Command {
+    let mut command = Command::new("cmd");
+    command.args(["/C", &build_shell_app_server_command_line(binary)]);
+    command
 }
 
 fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
@@ -580,6 +634,28 @@ mod tests {
         assert_eq!(
             resolve_spawn_program("/opt/codex/bin/codex").path_entries,
             vec![PathBuf::from("/opt/codex/bin")]
+        );
+    }
+
+    #[test]
+    fn resolve_spawn_program_uses_shell_for_alias_lookup() {
+        let resolved = resolve_spawn_program_from_lookup(
+            "cxa_headroom",
+            Some(CommandLookupResult {
+                command: "alias cxa_headroom='codex --model gpt-5'".to_string(),
+                path: None,
+            }),
+        );
+
+        assert_eq!(resolved.program, "cxa_headroom");
+        assert!(resolved.requires_shell);
+    }
+
+    #[test]
+    fn build_shell_app_server_command_line_keeps_alias_in_command_position() {
+        assert_eq!(
+            build_shell_app_server_command_line("cxa_headroom"),
+            "cxa_headroom app-server"
         );
     }
 
