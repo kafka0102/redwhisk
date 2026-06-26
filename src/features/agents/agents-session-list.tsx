@@ -1,4 +1,4 @@
-import { LayoutGrid, LoaderCircle, Plus } from "lucide-react";
+import { LoaderCircle, Plus } from "lucide-react";
 import type { RefObject } from "react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
@@ -55,14 +55,6 @@ export function AgentsSessionList({
           className="agents-sidebar__toolbar"
           aria-label={messages.agentsFeature.sessionListControls}
         >
-          <button
-            aria-label={messages.agentsFeature.sessionListView}
-            className="agents-toolbar-button"
-            disabled
-            type="button"
-          >
-            <LayoutGrid aria-hidden="true" size={16} strokeWidth={1.8} />
-          </button>
           {shouldShowAgentTypePicker ? (
             <div className="agents-session-create-menu">
               <button
