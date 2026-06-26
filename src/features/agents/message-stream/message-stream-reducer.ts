@@ -60,6 +60,7 @@ export function messageStreamReducer(
       return {
         ...createInitialState(),
         entries,
+        effort: action.effort ?? null,
         isInitialized: true,
       };
     }

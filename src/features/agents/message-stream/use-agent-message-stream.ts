@@ -54,11 +54,14 @@ export function useAgentMessageStream({
 
     async function initialize() {
       try {
-        const { items } = await readAgentTimeline({ projectId, sessionId });
+        const { items, effort } = await readAgentTimeline({
+          projectId,
+          sessionId,
+        });
         if (isDisposed) {
           return;
         }
-        dispatch({ type: "HYDRATE", items });
+        dispatch({ type: "HYDRATE", items, effort });
       } catch (error) {
         if (isDisposed) {
           return;

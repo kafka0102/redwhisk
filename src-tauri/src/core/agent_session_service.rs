@@ -86,6 +86,12 @@ struct SessionLaunchContext {
     worktree_setup_command: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+struct StructuredTimelineHistory {
+    items: Vec<AgentTimelineItem>,
+    effort: Option<String>,
+}
+
 pub struct AgentSessionService<'connection> {
     issue_repository: IssueRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
@@ -1490,20 +1496,31 @@ impl<'connection> AgentSessionService<'connection> {
 
         if let Some(handle) = handle {
             match handle.read_timeline() {
-                Ok(items) => return Ok(ReadAgentTimelineResult { items }),
+                Ok(items) => {
+                    return Ok(ReadAgentTimelineResult {
+                        items,
+                        effort: latest_effort_from_session_log(&session),
+                    });
+                }
                 Err(AgentSessionError::NotRunning(_)) => {}
                 Err(AgentSessionError::Protocol(message))
                     if session.issue_id.is_none()
                         && is_empty_standalone_thread_timeline_error(&message) =>
                 {
-                    return Ok(ReadAgentTimelineResult { items: Vec::new() });
+                    return Ok(ReadAgentTimelineResult {
+                        items: Vec::new(),
+                        effort: latest_effort_from_session_log(&session),
+                    });
                 }
                 Err(error) => return Err(agent_session_error_to_command_error(error)),
             }
         }
 
-        let items = read_timeline_from_session_log(&session)?;
-        Ok(ReadAgentTimelineResult { items })
+        let history = read_timeline_from_session_log(&session)?;
+        Ok(ReadAgentTimelineResult {
+            items: history.items,
+            effort: history.effort,
+        })
     }
 }
 
@@ -2847,30 +2864,36 @@ fn build_structured_log_path(
 
 fn read_timeline_from_session_log(
     session: &crate::types::agent_session::AgentSessionRecord,
-) -> Result<Vec<AgentTimelineItem>, CommandError> {
+) -> Result<StructuredTimelineHistory, CommandError> {
     if session.log_path.trim().is_empty() {
-        return Ok(Vec::new());
+        return Ok(StructuredTimelineHistory::default());
     }
 
     let path = Path::new(&session.log_path);
-    if let Some(items) = read_structured_timeline_log(path)? {
-        return Ok(items);
+    if let Some(history) = read_structured_timeline_log(path)? {
+        return Ok(history);
     }
 
-    read_terminal_timeline_log(path)
+    let items = read_terminal_timeline_log(path)?;
+    Ok(StructuredTimelineHistory {
+        items,
+        effort: None,
+    })
 }
 
 fn read_structured_timeline_log(
     path: &Path,
-) -> Result<Option<Vec<AgentTimelineItem>>, CommandError> {
+) -> Result<Option<StructuredTimelineHistory>, CommandError> {
     let file = match File::open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Some(Vec::new())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Some(StructuredTimelineHistory::default()));
+        }
         Err(error) => return Err(agent_session_start_error(error)),
     };
     let reader = BufReader::new(file);
     let mut saw_structured_line = false;
-    let mut items = Vec::new();
+    let mut history = StructuredTimelineHistory::default();
 
     for line in reader.lines() {
         let line = line.map_err(agent_session_start_error)?;
@@ -2878,48 +2901,88 @@ fn read_structured_timeline_log(
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
-            if saw_structured_line {
-                continue;
-            }
-            return Ok(None);
-        };
-        let Some(item) = timeline_item_from_log_value(value) else {
+
+        let Some(line_history) = structured_history_from_log_line(trimmed) else {
             if saw_structured_line {
                 continue;
             }
             return Ok(None);
         };
         saw_structured_line = true;
-        if let Some(item) = item {
-            items.push(item);
+        history.items.extend(line_history.items);
+        if line_history.effort.is_some() {
+            history.effort = line_history.effort;
         }
     }
 
     if saw_structured_line {
-        Ok(Some(items))
+        Ok(Some(history))
     } else {
         Ok(None)
     }
 }
 
-fn timeline_item_from_log_value(value: Value) -> Option<Option<AgentTimelineItem>> {
+fn structured_history_from_log_line(line: &str) -> Option<StructuredTimelineHistory> {
+    let stream = serde_json::Deserializer::from_str(line).into_iter::<Value>();
+    let mut saw_value = false;
+    let mut history = StructuredTimelineHistory::default();
+
+    for value in stream {
+        saw_value = true;
+        let value = value.ok()?;
+        let event = stream_event_from_log_value(value)?;
+        match event {
+            AgentStreamEvent::Timeline { item, .. } => history.items.push(item),
+            AgentStreamEvent::EffortChanged { effort } => history.effort = effort,
+            _ => {}
+        }
+    }
+
+    saw_value.then_some(history)
+}
+
+fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
     if let Ok(envelope) = serde_json::from_value::<AgentStreamEventEnvelope>(value.clone()) {
-        return Some(match envelope.event {
-            AgentStreamEvent::Timeline { item, .. } => Some(item),
-            _ => None,
-        });
+        return Some(envelope.event);
     }
 
     let event = value.get("event")?;
-    let event_type = event.get("type").and_then(Value::as_str)?;
-    if event_type != "timeline" {
-        return Some(None);
+    if let Ok(event) = serde_json::from_value::<AgentStreamEvent>(event.clone()) {
+        return Some(event);
     }
-    let item_value = event.get("item")?.clone();
-    serde_json::from_value::<AgentTimelineItem>(item_value)
+
+    match event.get("type").and_then(Value::as_str)? {
+        "timeline" => {
+            let item =
+                serde_json::from_value::<AgentTimelineItem>(event.get("item")?.clone()).ok()?;
+            Some(AgentStreamEvent::Timeline {
+                item,
+                turn_id: event
+                    .get("turnId")
+                    .and_then(Value::as_str)
+                    .map(String::from),
+                seq: 0,
+                timestamp: 0,
+            })
+        }
+        "effort_changed" => Some(AgentStreamEvent::EffortChanged {
+            effort: event
+                .get("effort")
+                .and_then(Value::as_str)
+                .map(String::from),
+        }),
+        _ => None,
+    }
+}
+
+fn latest_effort_from_session_log(
+    session: &crate::types::agent_session::AgentSessionRecord,
+) -> Option<String> {
+    let path = Path::new(&session.log_path);
+    read_structured_timeline_log(path)
         .ok()
-        .map(Some)
+        .flatten()
+        .and_then(|history| history.effort)
 }
 
 fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
@@ -3010,8 +3073,8 @@ fn latest_output_from_session_log(log_path: &str) -> Option<String> {
     }
 
     let path = Path::new(log_path);
-    if let Ok(Some(items)) = read_structured_timeline_log(path) {
-        for item in items.iter().rev() {
+    if let Ok(Some(history)) = read_structured_timeline_log(path) {
+        for item in history.items.iter().rev() {
             if let Some(output) = latest_output_from_timeline_item(item) {
                 return Some(output);
             }
@@ -3633,15 +3696,16 @@ mod tests {
         .expect("write structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let items = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_session_log(&session).expect("read timeline");
 
         assert_eq!(
-            items,
+            history.items,
             vec![AgentTimelineItem::AssistantMessage {
                 text: "历史回答".to_string(),
                 message_id: Some("msg-1".to_string()),
             }]
         );
+        assert_eq!(history.effort, None);
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("历史回答")
@@ -3663,10 +3727,10 @@ mod tests {
         .expect("write legacy structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let items = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_session_log(&session).expect("read timeline");
 
         assert_eq!(
-            items,
+            history.items,
             vec![
                 AgentTimelineItem::UserMessage {
                     text: "北京今天天气如何？".to_string(),
@@ -3678,9 +3742,36 @@ mod tests {
                 },
             ]
         );
+        assert_eq!(history.effort, None);
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("我会查询北京天气。")
+        );
+    }
+
+    #[test]
+    fn read_timeline_from_concatenated_structured_log_keeps_empty_messages_empty() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("concatenated-structured.jsonl");
+        fs::write(
+            &log_path,
+            concat!(
+                "{\"projectId\":2,\"sessionId\":26,\"seq\":1,\"epoch\":\"epoch-unknown\",\"event\":{\"type\":\"thread_started\",\"threadId\":\"019f042d\"}}",
+                "{\"projectId\":2,\"sessionId\":26,\"seq\":2,\"epoch\":\"epoch-unknown\",\"event\":{\"type\":\"thread_started\",\"threadId\":\"019f042d\"}}\n",
+                "\n",
+                "{\"projectId\":2,\"sessionId\":26,\"seq\":3,\"epoch\":\"epoch-unknown\",\"event\":{\"type\":\"effort_changed\",\"effort\":\"high\"}}\n"
+            ),
+        )
+        .expect("write concatenated structured log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let history = read_timeline_from_session_log(&session).expect("read timeline");
+
+        assert!(history.items.is_empty());
+        assert_eq!(history.effort.as_deref(), Some("high"));
+        assert_eq!(
+            latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
+            None
         );
     }
 
@@ -3695,10 +3786,11 @@ mod tests {
         .expect("write pty log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let items = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_session_log(&session).expect("read timeline");
 
-        assert_eq!(items.len(), 1);
-        match &items[0] {
+        assert_eq!(history.items.len(), 1);
+        assert_eq!(history.effort, None);
+        match &history.items[0] {
             AgentTimelineItem::AssistantMessage { text, message_id } => {
                 assert_eq!(message_id.as_deref(), Some("session-log"));
                 assert!(text.contains("Thinking..."));
@@ -3739,6 +3831,7 @@ mod tests {
             .expect("read empty standalone timeline");
 
         assert!(result.items.is_empty());
+        assert_eq!(result.effort, None);
     }
 
     #[test]

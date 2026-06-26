@@ -38,6 +38,7 @@ struct SessionCursor {
 pub struct AgentEventBroadcaster {
     app_handle: std::sync::Arc<OnceLock<AppHandle>>,
     cursors: std::sync::Arc<Mutex<HashMap<i64, SessionCursor>>>,
+    log_write_lock: std::sync::Arc<Mutex<()>>,
 }
 
 impl AgentEventBroadcaster {
@@ -128,6 +129,10 @@ impl AgentEventBroadcaster {
         if session.log_path.is_empty() {
             return;
         }
+
+        let Ok(_write_guard) = self.log_write_lock.lock() else {
+            return;
+        };
 
         if let Ok(mut file) = OpenOptions::new()
             .create(true)
