@@ -1566,11 +1566,10 @@ describe("AgentsActivity", () => {
         sessionId: 701,
       }),
     );
+    expect(await screen.findByText("No sessions.")).toBeInTheDocument();
     expect(
-      await screen.findByText(
-        "Agent sessions will appear here after a session has been started for this project.",
-      ),
-    ).toBeInTheDocument();
+      screen.queryByRole("tab", { name: "Session" }),
+    ).not.toBeInTheDocument();
     expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
@@ -4501,12 +4500,9 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={null} projectId={1} />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Agent sessions will appear here after a session has been started for this project.",
-        ),
-      ).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("No sessions.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Session" }),
+    ).not.toBeInTheDocument();
   });
 });

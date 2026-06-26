@@ -241,30 +241,28 @@ export function AgentsSessionPane({
           </p>
         ) : null}
       </div>
-      <div
-        className={`agents-session-main-stack${
-          terminalPanel ? " agents-session-main-stack--with-terminal" : ""
-        }`}
-        style={
-          {
-            "--session-terminal-panel-height": `${terminalPanelHeight}px`,
-          } as CSSProperties
-        }
-      >
-        <SessionWorkspaceTabs
-          activeTab={activeWorkspaceTab}
-          changeTab={changeTab}
-          fileTab={fileTab}
-          sessionContent={
-            <div
-              className="agents-terminal-host"
-              onMouseDown={() => {
-                if (selectedSession) {
-                  onAcknowledgeSessionAttention(selectedSession.sessionId);
+      {selectedSession ? (
+        <div
+          className={`agents-session-main-stack${
+            terminalPanel ? " agents-session-main-stack--with-terminal" : ""
+          }`}
+          style={
+            {
+              "--session-terminal-panel-height": `${terminalPanelHeight}px`,
+            } as CSSProperties
+          }
+        >
+          <SessionWorkspaceTabs
+            activeTab={activeWorkspaceTab}
+            changeTab={changeTab}
+            fileTab={fileTab}
+            sessionContent={
+              <div
+                className="agents-terminal-host"
+                onMouseDown={() =>
+                  onAcknowledgeSessionAttention(selectedSession.sessionId)
                 }
-              }}
-            >
-              {selectedSession ? (
+              >
                 <AgentSessionView
                   projectId={projectId}
                   sessionId={selectedSession.sessionId}
@@ -276,31 +274,26 @@ export function AgentsSessionPane({
                     selectedSession.isTurnRunning
                   }
                 />
-              ) : (
-                <p className="empty-state">
-                  Agent sessions will appear here after a session has been
-                  started for this project.
-                </p>
-              )}
-            </div>
-          }
-          onCloseTab={onCloseWorkspaceTab}
-          onSelectTab={onSelectWorkspaceTab}
-        />
-        {terminalPanel ? (
-          <>
-            <div
-              aria-label={messages.agentsFeature.sessionTerminals}
-              aria-orientation="horizontal"
-              className="session-inline-terminal-splitter"
-              role="separator"
-              tabIndex={0}
-              onMouseDown={onTerminalPanelSplitterMouseDown}
-            />
-            {terminalPanel}
-          </>
-        ) : null}
-      </div>
+              </div>
+            }
+            onCloseTab={onCloseWorkspaceTab}
+            onSelectTab={onSelectWorkspaceTab}
+          />
+          {terminalPanel ? (
+            <>
+              <div
+                aria-label={messages.agentsFeature.sessionTerminals}
+                aria-orientation="horizontal"
+                className="session-inline-terminal-splitter"
+                role="separator"
+                tabIndex={0}
+                onMouseDown={onTerminalPanelSplitterMouseDown}
+              />
+              {terminalPanel}
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
