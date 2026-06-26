@@ -171,6 +171,32 @@ describe("AgentSessionView", () => {
     });
   });
 
+  it("进入历史 session 时用 timeline 返回的 Think effort 初始化显示", async () => {
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [],
+      effort: "high",
+    });
+    listAgentModelsMock.mockResolvedValueOnce({
+      models: [
+        {
+          modelId: "gpt-5.5",
+          displayName: "GPT-5.5",
+          isDefault: true,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+    });
+
+    render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Think mode" }),
+      ).toHaveTextContent("高");
+    });
+  });
+
   it("permission_requested 事件到达后渲染权限卡片", async () => {
     setupTimeline([]);
 

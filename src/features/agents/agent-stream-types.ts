@@ -182,6 +182,7 @@ export interface SaveAgentAttachmentResult {
 
 export interface ReadAgentTimelineResult {
   items: AgentTimelineItem[];
+  effort?: string | null;
 }
 
 export type AgentAttachmentKindLiteral =

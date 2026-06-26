@@ -460,4 +460,5 @@ pub struct ReadAgentTimelineInput {
 #[serde(rename_all = "camelCase")]
 pub struct ReadAgentTimelineResult {
     pub items: Vec<AgentTimelineItem>,
+    pub effort: Option<String>,
 }

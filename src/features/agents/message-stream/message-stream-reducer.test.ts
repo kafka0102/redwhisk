@@ -68,6 +68,18 @@ describe("messageStreamReducer", () => {
       expect(state.entries[1].id).toBe("a1");
     });
 
+    it("用历史 effort 初始化 Think 状态", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [],
+        effort: "high",
+      });
+
+      expect(state.isInitialized).toBe(true);
+      expect(state.entries).toEqual([]);
+      expect(state.effort).toBe("high");
+    });
+
     it("用实时合并规则折叠历史 assistant delta 与工具状态", () => {
       const items: AgentTimelineItem[] = [
         { type: "assistant_message", text: "我", messageId: "a1" },

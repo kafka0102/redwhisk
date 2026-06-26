@@ -101,6 +101,25 @@ describe("useAgentMessageStream", () => {
     expect(state.entries[0].id).toBe("u1");
   });
 
+  it("readAgentTimeline 完成后用历史 effort 初始化 state", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: "high",
+    });
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      onState: () => {},
+    });
+    const state = getState()!;
+    expect(state.isInitialized).toBe(true);
+    expect(state.entries).toEqual([]);
+    expect(state.effort).toBe("high");
+  });
+
   it("readAgentTimeline 失败时设置 error 并标记 initialized", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockRejectedValue(new Error("db error"));
