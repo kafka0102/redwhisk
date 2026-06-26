@@ -206,6 +206,15 @@ impl CodexSessionHandle {
             config.session_id,
             AgentStreamEvent::ThreadStarted { thread_id },
         );
+        if config.effort.is_some() {
+            config.broadcaster.emit_stream_event(
+                config.project_id,
+                config.session_id,
+                AgentStreamEvent::EffortChanged {
+                    effort: config.effort.clone(),
+                },
+            );
+        }
 
         Ok(Self {
             client,
@@ -331,8 +340,13 @@ impl CodexSessionHandle {
                 .state
                 .lock()
                 .map_err(|_| CodexAppServerError::Protocol("session 锁中毒".into()))?;
-            state.effort = effort;
+            state.effort = effort.clone();
         }
+        self.config.broadcaster.emit_stream_event(
+            self.config.project_id,
+            self.config.session_id,
+            AgentStreamEvent::EffortChanged { effort },
+        );
         Ok(())
     }
 

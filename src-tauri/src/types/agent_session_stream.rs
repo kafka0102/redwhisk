@@ -62,6 +62,8 @@ pub enum AgentStreamEvent {
     },
     /// 模型切换。
     ModelChanged { model_id: String },
+    /// reasoning effort 切换或初始化。
+    EffortChanged { effort: Option<String> },
 }
 
 /// timeline 项。
@@ -424,5 +426,16 @@ mod tests {
             value["supportedReasoningEfforts"],
             json!(["low", "medium", "high", "xhigh"])
         );
+    }
+
+    #[test]
+    fn effort_changed_serializes_with_nullable_effort() {
+        let event = AgentStreamEvent::EffortChanged {
+            effort: Some("high".into()),
+        };
+
+        let value = serde_json::to_value(&event).unwrap();
+
+        assert_eq!(value, json!({ "type": "effort_changed", "effort": "high" }));
     }
 }

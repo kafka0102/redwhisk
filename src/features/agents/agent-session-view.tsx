@@ -89,6 +89,7 @@ export function AgentSessionView({
           turnStatus={effectiveTurnStatus}
           usage={state.usage}
           currentModelId={state.model}
+          currentEffort={state.effort}
           isReadOnly={isReadOnly}
           readOnlyReason={readOnlyReason}
           onBeforeSend={resumeBeforeSend}

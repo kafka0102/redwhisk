@@ -2,9 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::agent::codex_app_server::session::list_models_with_command;
+use crate::agent::codex_config;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
@@ -548,6 +549,22 @@ pub fn set_agent_thinking(
     let service = build_agent_session_service(&database.connection);
     service.find_project_session_record(input.project_id, input.session_id)?;
     let handle = require_structured_handle(&state, input.session_id)?;
+    if let Some(effort) = input.effort.as_deref() {
+        let home_dir = app.path().home_dir().map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent 配置保存失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+        codex_config::write_reasoning_effort_to_home(&home_dir, effort).map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent 配置保存失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+    }
     handle
         .set_effort(input.effort)
         .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)

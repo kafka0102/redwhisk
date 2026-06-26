@@ -139,6 +139,38 @@ describe("AgentSessionView", () => {
     expect(screen.getByText("测试消息")).toBeInTheDocument();
   });
 
+  it("收到配置中的 Think effort 后优先显示该值", async () => {
+    setupTimeline([]);
+    listAgentModelsMock.mockResolvedValueOnce({
+      models: [
+        {
+          modelId: "gpt-5.5",
+          displayName: "GPT-5.5",
+          isDefault: true,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+    });
+
+    render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
+
+    await screen.findByRole("combobox", { name: "Think mode" });
+    emitEvent({
+      projectId: 1,
+      sessionId: 10,
+      seq: 1,
+      epoch: "epoch-1",
+      event: { type: "effort_changed", effort: "high" } as never,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Think mode" }),
+      ).toHaveTextContent("高");
+    });
+  });
+
   it("permission_requested 事件到达后渲染权限卡片", async () => {
     setupTimeline([]);
 

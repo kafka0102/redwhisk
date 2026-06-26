@@ -36,6 +36,7 @@ export function createInitialState(): MessageStreamState {
     pendingPermissions: [],
     mode: null,
     model: null,
+    effort: null,
     lastSeq: null,
     lastError: null,
     isInitialized: false,
@@ -173,6 +174,9 @@ function applyEvent(
 
     case "model_changed":
       return { ...state, model: event.modelId };
+
+    case "effort_changed":
+      return { ...state, effort: event.effort };
 
     default:
       return state;

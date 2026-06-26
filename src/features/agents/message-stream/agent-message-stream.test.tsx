@@ -35,6 +35,7 @@ function createMessageStreamState(
     pendingPermissions: [],
     mode: null,
     model: null,
+    effort: null,
     lastSeq: null,
     lastError: null,
     isInitialized: true,
