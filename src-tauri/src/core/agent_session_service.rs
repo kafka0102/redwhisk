@@ -14,6 +14,7 @@ use rusqlite::{params, Transaction};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::agent::codex_config;
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
@@ -579,7 +580,7 @@ impl<'connection> AgentSessionService<'connection> {
             broadcaster: broadcaster.clone(),
             resume_thread_id: None,
             model: None,
-            effort: None,
+            effort: read_codex_reasoning_effort_from_data_dir(data_dir.as_ref()),
         };
         let codex_handle = match CodexSessionHandle::start(config) {
             Ok(handle) => handle,
@@ -1757,7 +1758,10 @@ impl AgentSessionService<'_> {
             broadcaster: broadcaster.clone(),
             resume_thread_id: input.resume_from_codex_session_id.clone(),
             model: input.model.clone(),
-            effort: input.effort.clone(),
+            effort: input
+                .effort
+                .clone()
+                .or_else(|| read_codex_reasoning_effort_from_data_dir(data_dir.as_ref())),
         };
         let codex_handle = match CodexSessionHandle::start(config) {
             Ok(handle) => handle,
@@ -1925,7 +1929,7 @@ impl AgentSessionService<'_> {
             broadcaster: broadcaster.clone(),
             resume_thread_id: Some(thread_id),
             model: None,
-            effort: None,
+            effort: read_codex_reasoning_effort_from_data_dir(_data_dir),
         };
         let codex_handle = CodexSessionHandle::start(config)
             .map_err(|error| agent_session_error_to_command_error(error.into()))?;
@@ -2778,6 +2782,12 @@ fn append_missing_args(command: &str, args: &[&str]) -> String {
 
 fn command_has_arg(command: &str, arg: &str) -> bool {
     command.split_whitespace().any(|part| part == arg)
+}
+
+fn read_codex_reasoning_effort_from_data_dir(data_dir: &Path) -> Option<String> {
+    data_dir
+        .parent()
+        .and_then(codex_config::read_reasoning_effort_from_home)
 }
 
 fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, CommandError> {

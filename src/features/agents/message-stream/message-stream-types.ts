@@ -33,6 +33,7 @@ export interface MessageStreamState {
   pendingPermissions: AgentPermissionRequest[];
   mode: string | null;
   model: string | null;
+  effort: string | null;
   lastSeq: number | null;
   lastError: string | null;
   /** readAgentTimeline 完成前为 false，完成后为 true。 */

@@ -38,7 +38,8 @@ export type AgentStreamEvent =
       currentModeId: string;
       availableModes: AgentMode[];
     }
-  | { type: "model_changed"; modelId: string };
+  | { type: "model_changed"; modelId: string }
+  | { type: "effort_changed"; effort: string | null };
 
 // ---------------------------------------------------------------------------
 // 广播载荷 envelope（对应 `AgentStreamEventEnvelope`）
