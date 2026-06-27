@@ -3,6 +3,7 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::IssueService;
+use crate::types::agent_session::AgentSessionStatus;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AdvanceIssueStatusInput, AgentCommitCompletionPreview, CompleteIssueCleanInput,
@@ -87,16 +88,13 @@ pub fn advance_issue_status(
     input: AdvanceIssueStatusInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let previous_issue = IssueService::list_issues_in_data_dir(&data_dir, input.project_id)?
+        .issues
+        .into_iter()
+        .find(|issue| issue.id == input.issue_id);
     let issue = IssueService::advance_issue_status_in_data_dir(data_dir, input)?;
 
-    if let Some(session_id) = issue.linked_session_id {
-        if issue.linked_session_status
-            == Some(crate::types::agent_session::AgentSessionStatus::Closed)
-            && state.pty_sessions.contains(session_id)
-        {
-            let _ = state.pty_sessions.kill(session_id);
-        }
-    }
+    shutdown_issue_session_after_status_change(&state, previous_issue.as_ref(), &issue);
 
     Ok(issue)
 }
@@ -108,7 +106,10 @@ pub fn complete_issue_manual(
     input: CompleteIssueManualInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::complete_issue_manual_in_data_dir(data_dir, input, &state.pty_sessions)
+    let issue =
+        AgentSessionService::complete_issue_manual_in_data_dir(data_dir, input, &state.pty_sessions)?;
+    shutdown_closed_issue_session(&state, &issue);
+    Ok(issue)
 }
 
 #[tauri::command]
@@ -118,7 +119,10 @@ pub fn complete_issue_clean(
     input: CompleteIssueCleanInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::complete_issue_clean_in_data_dir(data_dir, input, &state.pty_sessions)
+    let issue =
+        AgentSessionService::complete_issue_clean_in_data_dir(data_dir, input, &state.pty_sessions)?;
+    shutdown_closed_issue_session(&state, &issue);
+    Ok(issue)
 }
 
 #[tauri::command]
@@ -215,4 +219,46 @@ fn prepare_issue_data_dir(
     }
 
     Ok(data_dir)
+}
+
+fn shutdown_issue_session_after_status_change(
+    state: &State<'_, AppState>,
+    previous_issue: Option<&IssueRecord>,
+    issue: &IssueRecord,
+) {
+    if issue.linked_session_status == Some(AgentSessionStatus::Closed) {
+        if let Some(session_id) = issue.linked_session_id {
+            shutdown_runtime_session(state, session_id);
+        }
+        return;
+    }
+
+    let Some(previous_issue) = previous_issue else {
+        return;
+    };
+    if previous_issue.linked_session_status == Some(AgentSessionStatus::Running)
+        && issue.linked_session_id.is_none()
+    {
+        if let Some(session_id) = previous_issue.linked_session_id {
+            shutdown_runtime_session(state, session_id);
+        }
+    }
+}
+
+fn shutdown_closed_issue_session(state: &State<'_, AppState>, issue: &IssueRecord) {
+    if issue.linked_session_status == Some(AgentSessionStatus::Closed) {
+        if let Some(session_id) = issue.linked_session_id {
+            shutdown_runtime_session(state, session_id);
+        }
+    }
+}
+
+fn shutdown_runtime_session(state: &State<'_, AppState>, session_id: i64) {
+    if state.pty_sessions.contains(session_id) {
+        let _ = state.pty_sessions.kill(session_id);
+    }
+
+    if let Some(handle) = state.agent_sessions.unregister(session_id) {
+        handle.shutdown();
+    }
 }
