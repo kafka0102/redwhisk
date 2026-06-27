@@ -6,6 +6,7 @@ import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
+import { useAgentSessionNotifications } from "../features/agents/session-notifications/use-agent-session-notifications";
 import type { SettingsMenu } from "../features/settings/project-settings-activity";
 import {
   getDefaultProjectTerminalsActivityState,
@@ -40,6 +41,10 @@ export function AppShell({
   projects,
 }: AppShellProps) {
   const { messages } = useI18n();
+  useAgentSessionNotifications({
+    projectId: project.id,
+    projectName: project.name,
+  });
   const [activeActivity, setActiveActivity] = useState<ActivityKey>("issues");
   const [activeProjectSettingsMenu, setActiveProjectSettingsMenu] =
     useState<SettingsMenu>("general");

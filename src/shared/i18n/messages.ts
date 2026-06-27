@@ -31,6 +31,14 @@ export interface I18nMessages {
   toast: {
     deleteSuccess: string;
   };
+  agentNotifications: {
+    needsInputTitle: (projectName: string) => string;
+    permissionFallbackBody: string;
+    sessionFailedTitle: (projectName: string) => string;
+    sessionUpdatedTitle: (projectName: string) => string;
+    turnCompletedBody: (sessionId: number) => string;
+    turnFailedFallbackBody: string;
+  };
   settings: {
     actions: string;
     agent: string;
@@ -417,6 +425,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     toast: {
       deleteSuccess: "Deleted successfully",
+    },
+    agentNotifications: {
+      needsInputTitle: (projectName) => `${projectName} needs your input`,
+      permissionFallbackBody: "Agent is waiting for approval or input.",
+      sessionFailedTitle: (projectName) => `${projectName} session failed`,
+      sessionUpdatedTitle: (projectName) => `${projectName} session updated`,
+      turnCompletedBody: (sessionId) =>
+        `Session #${sessionId} has finished the latest turn.`,
+      turnFailedFallbackBody: "The latest agent turn failed.",
     },
     settings: {
       actions: "Actions",
@@ -806,6 +823,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     toast: {
       deleteSuccess: "删除成功",
+    },
+    agentNotifications: {
+      needsInputTitle: (projectName) => `${projectName} 需要你的输入`,
+      permissionFallbackBody: "Agent 正在等待审批或输入。",
+      sessionFailedTitle: (projectName) => `${projectName} 会话失败`,
+      sessionUpdatedTitle: (projectName) => `${projectName} 会话已更新`,
+      turnCompletedBody: (sessionId) =>
+        `会话 #${sessionId} 已完成最新一轮输出。`,
+      turnFailedFallbackBody: "Agent 最新一轮执行失败。",
     },
     settings: {
       actions: "操作",
