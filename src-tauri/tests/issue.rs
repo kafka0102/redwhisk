@@ -3336,6 +3336,98 @@ fn complete_issue_flow_redwhisk_worktree_rebases_fast_forwards_and_cleans_up() {
 }
 
 #[test]
+fn complete_issue_flow_blocks_missing_redwhisk_worktree_with_unmerged_branch() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-missing-redwhisk-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-missing-redwhisk-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "missing redwhisk worktree flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-flow-missing-redwhisk");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-flow-missing-redwhisk",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        session_id,
+        &workspace_path,
+        &worktree_root,
+        "issue-flow-missing-redwhisk",
+        WorktreeOwner::Redwhisk,
+        ProjectCompletionPolicy::Manual,
+    );
+    write_file(
+        &workspace_path,
+        "tracked.txt",
+        "missing worktree completed\n",
+    );
+    git(&workspace_path, &["commit", "-am", "missing worktree side"]);
+    fs::remove_dir_all(&workspace_path).expect("delete worktree path");
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("missing worktree should return blocked flow");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::AgentMergeBlocked);
+    assert_eq!(result.issue.status, IssueStatus::Review);
+    assert_eq!(
+        fs::read_to_string(repo_dir.join("tracked.txt")).expect("main content"),
+        "initial\n"
+    );
+    assert_ne!(
+        git_output(
+            &repo_dir,
+            &["branch", "--list", "issue-flow-missing-redwhisk"],
+        ),
+        ""
+    );
+    let flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .expect("flow exists");
+    assert_eq!(flow.phase, IssueCompletionPhase::AgentMergeBlocked);
+    assert!(flow
+        .failure_reason
+        .as_deref()
+        .is_some_and(|reason| reason.contains("尚未合入")));
+}
+
+#[test]
 fn complete_issue_flow_rebase_conflict_persists_merge_block_and_keeps_worktree() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-rebase-conflict-repo");
