@@ -55,11 +55,21 @@ The runtime SHALL route every Issue completion action through a persistent compl
 ### Requirement: Worktree completion merge-back and cleanup
 When an issue completion flow runs from a worktree branch, completion SHALL handle merge-back and cleanup according to whether RedWhisk created the worktree.
 
-#### Scenario: Completing after the recorded worktree was already removed
+#### Scenario: Completing after the recorded worktree was already removed and closed out
 - **WHEN** a completion flow runs for a session created in `Worktree` mode
 - **AND** the recorded worktree path no longer exists
-- **THEN** the runtime skips worktree merge-back and cleanup
+- **AND** the recorded workspace branch no longer exists or is already contained in the recorded target branch
+- **THEN** the runtime treats the worktree closeout as already handled and skips worktree merge-back and cleanup
 - **AND** continues the non-worktree completion checks that still apply to the issue
+
+#### Scenario: Completing after the recorded RedWhisk worktree was removed before merge-back
+- **WHEN** a completion flow runs for a session created in `Worktree` mode
+- **AND** the worktree is marked as RedWhisk-created
+- **AND** the recorded worktree path no longer exists
+- **AND** the workspace branch still exists and is not contained in the recorded target branch
+- **THEN** the Issue remains not completed
+- **AND** the runtime records the blocked completion phase and failure reason
+- **AND** it does not silently skip merge-back
 
 #### Scenario: RedWhisk-created worktree completes cleanly
 - **WHEN** the completion flow runs in a worktree marked as RedWhisk-created
