@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react";
 
 import { useI18n } from "../../../shared/i18n/i18n";
+import {
+  listAgentSessions,
+  readAgentTimeline,
+} from "../agent-session-commands";
+import type { AgentSessionListItem } from "../agent-session-commands";
 import { subscribeAgentSessionStream } from "../message-stream/agent-stream-events";
 import {
   createAgentSessionNotificationIntent,
@@ -10,23 +15,32 @@ import {
   agentSessionNotificationTransport,
   type AgentSessionNotificationTransport,
 } from "./agent-session-notification-transport";
+import { createAgentSessionStatusNotificationIntent } from "./session-monitor-rules";
+
+const DEFAULT_SESSION_STATUS_POLL_INTERVAL_MS = 1_500;
 
 interface UseAgentSessionNotificationsArgs {
+  pollIntervalMs?: number;
   projectId: number;
   projectName: string;
   transport?: AgentSessionNotificationTransport;
 }
 
 export function useAgentSessionNotifications({
+  pollIntervalMs = DEFAULT_SESSION_STATUS_POLL_INTERVAL_MS,
   projectId,
   projectName,
   transport = agentSessionNotificationTransport,
 }: UseAgentSessionNotificationsArgs): void {
   const { messages } = useI18n();
   const notifiedKeysRef = useRef<Set<string>>(new Set());
+  const sessionStatusByIdRef = useRef<
+    Map<number, AgentSessionListItem["status"]>
+  >(new Map());
 
   useEffect(() => {
     notifiedKeysRef.current.clear();
+    sessionStatusByIdRef.current.clear();
   }, [projectId]);
 
   useEffect(() => {
@@ -68,6 +82,57 @@ export function useAgentSessionNotifications({
       unlisten?.();
     };
   }, [messages.agentNotifications, projectId, projectName, transport]);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    async function refreshSessionStatuses() {
+      try {
+        const response = await listAgentSessions(projectId);
+        if (isDisposed) {
+          return;
+        }
+
+        const previousStatusById = sessionStatusByIdRef.current;
+        const nextStatusById = new Map<
+          number,
+          AgentSessionListItem["status"]
+        >();
+
+        response.sessions.forEach((session) => {
+          const previousStatus = previousStatusById.get(session.sessionId);
+          nextStatusById.set(session.sessionId, session.status);
+
+          if (
+            previousStatus === "running" &&
+            (session.status === "closed" || session.status === "crashed")
+          ) {
+            void deliverSessionStatusNotification({
+              messages,
+              projectId,
+              projectName,
+              session,
+              transport,
+            });
+          }
+        });
+
+        sessionStatusByIdRef.current = nextStatusById;
+      } catch {
+        // 状态轮询失败不影响主工作台；下次轮询会重新同步状态。
+      }
+    }
+
+    void refreshSessionStatuses();
+    const intervalId = window.setInterval(() => {
+      void refreshSessionStatuses();
+    }, pollIntervalMs);
+
+    return () => {
+      isDisposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [messages, pollIntervalMs, projectId, projectName, transport]);
 }
 
 async function deliverNotification(
@@ -87,4 +152,45 @@ async function deliverNotification(
   } catch {
     transport.showInAppNotification(intent);
   }
+}
+
+async function deliverSessionStatusNotification({
+  messages,
+  projectId,
+  projectName,
+  session,
+  transport,
+}: {
+  messages: ReturnType<typeof useI18n>["messages"];
+  projectId: number;
+  projectName: string;
+  session: AgentSessionListItem;
+  transport: AgentSessionNotificationTransport;
+}): Promise<void> {
+  let timelineItems: Awaited<ReturnType<typeof readAgentTimeline>>["items"];
+
+  try {
+    const timeline = await readAgentTimeline({
+      projectId,
+      sessionId: session.sessionId,
+    });
+    timelineItems = timeline.items;
+  } catch {
+    timelineItems = [];
+  }
+
+  const intent = createAgentSessionStatusNotificationIntent(
+    session,
+    timelineItems,
+    {
+      copy: messages.agentNotifications,
+      projectName,
+    },
+  );
+
+  if (!intent) {
+    return;
+  }
+
+  await deliverNotification(intent, transport);
 }
