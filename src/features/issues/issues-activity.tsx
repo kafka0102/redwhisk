@@ -445,6 +445,23 @@ export function IssuesActivity({
     setRunDialogIssue(issue);
   }
 
+  async function confirmRunIssueFromEditPage(trigger: HTMLElement | null) {
+    if (!selectedIssue || !canRunIssueFor(selectedIssue)) {
+      return;
+    }
+
+    const issueToRun = selectedIssue;
+    const isConfirmed = await confirm({
+      message: messages.issues.confirmRunIssue,
+    });
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    openRunDialog(issueToRun, trigger);
+  }
+
   function openLinkedSession() {
     if (!selectedIssue?.linkedSessionId) {
       return;
@@ -967,6 +984,11 @@ export function IssuesActivity({
           }
           onRemoveAttachment={handleRemoveAttachment}
           onDeleteIssue={() => void handleDeleteIssue()}
+          onRunIssue={
+            selectedIssue && canRunIssueFor(selectedIssue)
+              ? (trigger) => void confirmRunIssueFromEditPage(trigger)
+              : undefined
+          }
           onOpenProjectLabelsSettings={() => {
             onOpenProjectSettingsLabels?.();
           }}

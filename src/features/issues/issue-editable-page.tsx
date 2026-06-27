@@ -54,6 +54,7 @@ interface IssueEditablePageProps {
   ) => void;
   onDeleteIssue: () => void;
   onOpenProjectLabelsSettings: () => void;
+  onRunIssue?: (trigger: HTMLElement | null) => void;
 }
 
 export function IssueEditablePage({
@@ -75,6 +76,7 @@ export function IssueEditablePage({
   onRemoveAttachment,
   onDeleteIssue,
   onOpenProjectLabelsSettings,
+  onRunIssue,
 }: IssueEditablePageProps) {
   const { messages } = useI18n();
   const pageTitle =
@@ -104,6 +106,17 @@ export function IssueEditablePage({
               >
                 {messages.issues.backEditable}
               </Button>
+              {mode === "edit" && onRunIssue ? (
+                <Button
+                  className="issues-button"
+                  disabled={isSaving}
+                  type="button"
+                  variant="secondary"
+                  onClick={(event) => onRunIssue(event.currentTarget)}
+                >
+                  {messages.issues.run}
+                </Button>
+              ) : null}
               <Button
                 className="issues-button issues-button--primary"
                 disabled={isSaving}
