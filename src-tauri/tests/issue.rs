@@ -10,20 +10,27 @@ use redwhisk_lib::db::completion_attempt_repository::CompletionAttemptRepository
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::event_repository::EventRepository;
 use redwhisk_lib::db::issue_attachment_repository::IssueAttachmentRepository;
+use redwhisk_lib::db::issue_completion_flow_repository::IssueCompletionFlowRepository;
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
-use redwhisk_lib::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
+use redwhisk_lib::types::agent_session::{
+    AgentSessionAttention, AgentSessionStatus, WorktreeOwner,
+};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::{
     AdvanceIssueStatusInput, CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput,
     DeleteIssueInput, DetectAgentCommitCompletionInput, ExportIssueAttachmentInput,
-    GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind, IssueStatus,
+    GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind, IssueRecord, IssueStatus,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
     SendAgentCommitPromptInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
+use redwhisk_lib::types::issue_completion::{
+    CompleteIssueFlowAction, CompleteIssueFlowInput, IssueCompletionExternalWorktreeDecision,
+    IssueCompletionPhase,
+};
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 
@@ -963,8 +970,18 @@ fn mark_issue_review_rejects_cross_project_issue_without_action() {
 #[test]
 fn complete_issue_manual_closes_running_session_and_records_audit() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("complete-review-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
     let database = migrated_database(temp_dir.path());
-    let project_id = insert_project(&database.connection, "complete-review-repo");
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "complete-review-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
         ProjectRepository::new(&database.connection),
@@ -1205,8 +1222,18 @@ fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
 #[test]
 fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("summary-manual-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
     let database = migrated_database(temp_dir.path());
-    let project_id = insert_project(&database.connection, "summary-manual-repo");
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "summary-manual-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
         ProjectRepository::new(&database.connection),
@@ -1267,7 +1294,7 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
             .and_then(|info| info.commit_hash.as_deref()),
         None
     );
-    assert!(summary
+    assert!(!summary
         .diagnostics
         .iter()
         .any(|item| item.contains("缺少 CompletionAttempt 记录")));
@@ -1384,9 +1411,9 @@ fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_
     );
     assert_eq!(
         summary.completion.as_ref().map(|info| info.source.as_str()),
-        Some("issue_action_fallback")
+        Some("completion_attempt")
     );
-    assert!(summary
+    assert!(!summary
         .diagnostics
         .iter()
         .any(|item| item.contains("未找到可代表最终 completed")));
@@ -2491,6 +2518,8 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
                  workspace_branch = 'issue-branch',
                  workspace_path = ?1,
                  worktree_root_path = ?2,
+                 origin_branch = 'main',
+                 worktree_owner = 'redwhisk',
                  completion_policy = 'agent_auto_commit'
              WHERE id = ?3",
             rusqlite::params![
@@ -2618,6 +2647,8 @@ fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_mi
                  workspace_branch = 'issue-deleted',
                  workspace_path = ?1,
                  worktree_root_path = ?2,
+                 origin_branch = 'main',
+                 worktree_owner = 'redwhisk',
                  completion_policy = 'agent_auto_commit'
              WHERE id = ?3",
             rusqlite::params![
@@ -2664,6 +2695,643 @@ fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_mi
         redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
     );
     assert_eq!(completion_result.issue.status, IssueStatus::Completed);
+}
+
+#[test]
+fn complete_issue_flow_completes_review_issue_with_closed_linked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-closed-session-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-closed-session-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "closed flow",
+        "closed",
+    );
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("complete issue flow");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
+    assert_eq!(result.session_id, Some(session_id));
+    assert!(result.flow.is_none());
+    assert!(IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .is_none());
+}
+
+#[test]
+fn complete_issue_flow_manual_dirty_blocks_and_persists_flow() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-manual-dirty-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty manual\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-manual-dirty-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "manual dirty flow",
+        "running",
+    );
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("manual dirty blocks");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::ManualDirtyPrompt);
+    assert_eq!(result.issue.status, IssueStatus::Review);
+    let flow = result.flow.expect("flow");
+    assert_eq!(flow.phase, IssueCompletionPhase::ManualDirtyBlocked);
+    assert_eq!(flow.session_id, Some(session_id));
+    assert!(!flow.ignore_dirty);
+}
+
+#[test]
+fn complete_issue_flow_manual_dirty_ignore_continues_to_current_branch_completion() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-manual-ignore-dirty-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty accepted\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-manual-ignore-dirty-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "manual ignore dirty flow",
+        "running",
+    );
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: Some(true),
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("manual ignore dirty completes");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+}
+
+#[test]
+fn complete_issue_flow_auto_commit_dirty_waits_for_agent_commit_attempt() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-auto-dirty-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty agent\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-auto-dirty-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "auto dirty flow",
+        "running",
+    );
+    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
+    register_test_pty_session(&pty_sessions, session_id, &repo_dir, temp_dir.path());
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &pty_sessions,
+            &AgentSessionRegistry::new(),
+        )
+        .expect("auto dirty waits");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::WaitingAgentCommit);
+    assert_eq!(result.issue.status, IssueStatus::Review);
+    let flow = result.flow.expect("flow");
+    assert_eq!(flow.phase, IssueCompletionPhase::WaitingAgentCommit);
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].option.as_str(), "agent_auto_commit");
+    assert_eq!(attempts[0].result.as_str(), "prompt_sent");
+}
+
+#[test]
+fn complete_issue_flow_resumes_pending_agent_commit_after_new_commit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-auto-resume-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    let initial_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-auto-resume-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "auto resume flow",
+        "running",
+    );
+    database
+        .connection
+        .execute(
+            "INSERT INTO completion_attempts (
+                issue_id,
+                session_id,
+                option,
+                head_before,
+                head_after,
+                changed_files_json,
+                result,
+                created_at
+            ) VALUES (?1, ?2, 'agent_auto_commit', ?3, ?3, '[]', 'prompt_sent', 1780628500000)",
+            rusqlite::params![issue.id, session_id, initial_head],
+        )
+        .expect("insert pending attempt");
+    write_file(&repo_dir, "tracked.txt", "agent committed\n");
+    git(&repo_dir, &["commit", "-am", "agent completion"]);
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("resume completes");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts[0].result.as_str(), "completed");
+    assert!(attempts[0].commit_hash.is_some());
+}
+
+#[test]
+fn complete_issue_flow_redwhisk_worktree_rebases_fast_forwards_and_cleans_up() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-redwhisk-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-redwhisk-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "redwhisk worktree flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-flow-redwhisk");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-flow-redwhisk",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        session_id,
+        &workspace_path,
+        &worktree_root,
+        "issue-flow-redwhisk",
+        WorktreeOwner::Redwhisk,
+        ProjectCompletionPolicy::Manual,
+    );
+    write_file(&workspace_path, "tracked.txt", "worktree completed\n");
+    git(&workspace_path, &["commit", "-am", "worktree completion"]);
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("complete worktree");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
+    assert!(!workspace_path.exists());
+    assert_eq!(
+        fs::read_to_string(repo_dir.join("tracked.txt")).expect("main content"),
+        "worktree completed\n"
+    );
+    assert_eq!(
+        git_output(&repo_dir, &["branch", "--list", "issue-flow-redwhisk"]),
+        ""
+    );
+}
+
+#[test]
+fn complete_issue_flow_rebase_conflict_persists_merge_block_and_keeps_worktree() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-rebase-conflict-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-rebase-conflict-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "conflict worktree flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-flow-conflict");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-flow-conflict",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        session_id,
+        &workspace_path,
+        &worktree_root,
+        "issue-flow-conflict",
+        WorktreeOwner::Redwhisk,
+        ProjectCompletionPolicy::Manual,
+    );
+    write_file(&workspace_path, "tracked.txt", "worktree side\n");
+    git(&workspace_path, &["commit", "-am", "worktree side"]);
+    write_file(&repo_dir, "tracked.txt", "main side\n");
+    git(&repo_dir, &["commit", "-am", "main side"]);
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("merge blocked");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::AgentMergeBlocked);
+    assert_eq!(result.issue.status, IssueStatus::Review);
+    assert!(workspace_path.exists());
+    let flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .expect("flow exists");
+    assert_eq!(flow.phase, IssueCompletionPhase::AgentMergeBlocked);
+    assert_eq!(
+        flow.workspace_path.as_deref(),
+        Some(workspace_path.to_string_lossy().as_ref())
+    );
+}
+
+#[test]
+fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-external-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-external-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "external worktree flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-flow-external");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-flow-external",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        session_id,
+        &workspace_path,
+        &worktree_root,
+        "issue-flow-external",
+        WorktreeOwner::External,
+        ProjectCompletionPolicy::Manual,
+    );
+    write_file(&workspace_path, "tracked.txt", "external completed\n");
+    git(&workspace_path, &["commit", "-am", "external completion"]);
+
+    let confirm = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("confirm external");
+    assert_eq!(
+        confirm.action,
+        CompleteIssueFlowAction::ConfirmExternalWorktree
+    );
+    assert_eq!(confirm.issue.status, IssueStatus::Review);
+
+    let cancel = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: Some(IssueCompletionExternalWorktreeDecision::Cancel),
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("cancel pauses external");
+    assert_eq!(
+        cancel.action,
+        CompleteIssueFlowAction::ConfirmExternalWorktree
+    );
+    assert_eq!(cancel.issue.status, IssueStatus::Review);
+    assert!(cancel.message.contains("暂停"));
+
+    let skip = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: Some(IssueCompletionExternalWorktreeDecision::Skip),
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("skip completes external");
+    assert_eq!(skip.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(skip.issue.status, IssueStatus::Completed);
+    assert!(workspace_path.exists());
+}
+
+#[test]
+fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-legacy-bypass-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-legacy-bypass-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = issue_service(&database.connection);
+    let (manual_issue, _manual_session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "legacy manual flow",
+        "running",
+    );
+
+    let manual = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: manual_issue.id,
+        })
+        .expect("manual legacy entry delegates");
+    assert_eq!(manual.status, IssueStatus::Completed);
+    assert_eq!(
+        CompletionAttemptRepository::new(&database.connection)
+            .list_by_issue_id(manual_issue.id)
+            .expect("manual attempts")[0]
+            .option
+            .as_str(),
+        "complete_manual"
+    );
+    assert!(IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(manual_issue.id)
+        .expect("manual flow")
+        .is_none());
+
+    let (clean_issue, _clean_session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "legacy clean flow",
+        "running",
+    );
+
+    let clean = service
+        .complete_issue_clean(CompleteIssueCleanInput {
+            project_id,
+            issue_id: clean_issue.id,
+        })
+        .expect("clean legacy entry delegates");
+    assert_eq!(clean.status, IssueStatus::Completed);
+    assert_eq!(
+        CompletionAttemptRepository::new(&database.connection)
+            .list_by_issue_id(clean_issue.id)
+            .expect("clean attempts")[0]
+            .option
+            .as_str(),
+        "complete_clean"
+    );
+
+    let (detect_issue, detect_session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "legacy detect flow",
+        "running",
+    );
+    let before_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+    database
+        .connection
+        .execute(
+            "INSERT INTO completion_attempts (
+                issue_id,
+                session_id,
+                option,
+                head_before,
+                head_after,
+                changed_files_json,
+                result,
+                created_at
+            ) VALUES (?1, ?2, 'agent_auto_commit', ?3, ?3, '[]', 'prompt_sent', 1780628500000)",
+            rusqlite::params![detect_issue.id, detect_session_id, before_head],
+        )
+        .expect("insert pending attempt");
+    git(
+        &repo_dir,
+        &["commit", "--allow-empty", "-m", "legacy detect completion"],
+    );
+    let detect = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: detect_issue.id,
+        })
+        .expect("detect legacy entry delegates");
+    assert_eq!(
+        detect.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
+    );
 }
 
 #[test]
@@ -3099,22 +3767,31 @@ fn advance_issue_status_completes_running_issue_and_closes_linked_session() {
         "running",
     );
 
-    let completed = service
+    let error = service
         .advance_issue_status(AdvanceIssueStatusInput {
             project_id,
             issue_id: issue.id,
             target_status: IssueStatus::Completed,
         })
-        .expect("advance running issue to completed");
+        .expect_err("linked issue must use completion flow");
 
-    assert_eq!(completed.status, IssueStatus::Completed);
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    assert!(error.message.contains("complete_issue_flow"));
+    assert_eq!(
+        IssueRepository::new(&database.connection)
+            .find_by_id(issue.id)
+            .expect("query issue")
+            .expect("issue exists")
+            .status,
+        IssueStatus::Running
+    );
     assert_eq!(
         AgentSessionRepository::new(&database.connection)
             .find_by_id(session_id)
             .expect("query session")
             .expect("session exists")
             .status,
-        AgentSessionStatus::Closed
+        AgentSessionStatus::Running
     );
 }
 
@@ -3228,7 +3905,10 @@ fn advance_issue_status_returns_running_issue_to_backlog_and_soft_deletes_sessio
         .list_session_events(session_id)
         .expect("session events");
     let latest_session_event = session_events.last().expect("latest session event");
-    assert_eq!(latest_session_event.event_type, SessionEventType::SessionClosed);
+    assert_eq!(
+        latest_session_event.event_type,
+        SessionEventType::SessionClosed
+    );
 }
 
 #[test]
@@ -3471,6 +4151,122 @@ fn insert_agent_session_for_issue(
         )
         .expect("insert agent session");
     connection.last_insert_rowid()
+}
+
+fn issue_service(connection: &rusqlite::Connection) -> IssueService<'_> {
+    IssueService::new(
+        IssueRepository::new(connection),
+        ProjectRepository::new(connection),
+    )
+}
+
+fn create_review_issue_with_session(
+    connection: &rusqlite::Connection,
+    project_id: i64,
+    service: &IssueService<'_>,
+    title: &str,
+    session_status: &str,
+) -> (IssueRecord, i64) {
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: title.to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(connection);
+    let session_id = insert_agent_session_for_issue(
+        connection,
+        project_id,
+        issue.id,
+        profile_id,
+        session_status,
+    );
+    if matches!(session_status, "closed" | "crashed" | "stopped") {
+        connection
+            .execute(
+                "UPDATE agent_sessions SET closed_at = 1780628600000 WHERE id = ?1",
+                [session_id],
+            )
+            .expect("set closed_at");
+    }
+    let issue = IssueRepository::new(connection)
+        .find_by_id(issue.id)
+        .expect("issue")
+        .expect("issue exists");
+    (issue, session_id)
+}
+
+fn update_session_worktree(
+    connection: &rusqlite::Connection,
+    session_id: i64,
+    workspace_path: &Path,
+    worktree_root: &Path,
+    workspace_branch: &str,
+    owner: WorktreeOwner,
+    completion_policy: ProjectCompletionPolicy,
+) {
+    let completion_policy = match completion_policy {
+        ProjectCompletionPolicy::Manual => "manual",
+        ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
+    };
+    connection
+        .execute(
+            "UPDATE agent_sessions
+             SET working_dir = ?1,
+                 workspace_mode = 'worktree',
+                 target_branch = 'main',
+                 workspace_branch = ?2,
+                 workspace_path = ?1,
+                 origin_branch = 'main',
+                 worktree_owner = ?3,
+                 worktree_root_path = ?4,
+                 completion_policy = ?5
+             WHERE id = ?6",
+            rusqlite::params![
+                workspace_path.to_string_lossy().to_string(),
+                workspace_branch,
+                owner.as_str(),
+                worktree_root.to_string_lossy().to_string(),
+                completion_policy,
+                session_id,
+            ],
+        )
+        .expect("update worktree session");
+}
+
+fn register_test_pty_session(
+    pty_sessions: &redwhisk_lib::agent::pty_session_manager::PtySessionManager,
+    session_id: i64,
+    working_dir: &Path,
+    temp_dir: &Path,
+) {
+    let pending = pty_sessions
+        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
+            command: "/bin/sh".to_string(),
+            working_dir: working_dir.to_string_lossy().into_owned(),
+            log_path: temp_dir
+                .join(format!("session-{session_id}.log"))
+                .to_string_lossy()
+                .into_owned(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 25,
+        })
+        .expect("spawn pending");
+    pty_sessions
+        .register(session_id, pending, |_| {})
+        .expect("register session");
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {
