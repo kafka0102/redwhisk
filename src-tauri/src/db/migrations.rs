@@ -83,6 +83,9 @@ const AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_VERSION: &str =
     "0026_agent_sessions_active_issue_unique_index";
 const AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_SQL: &str =
     include_str!("../../migrations/0026_agent_sessions_active_issue_unique_index.sql");
+const ISSUE_COMPLETION_FLOWS_MIGRATION_VERSION: &str = "0027_issue_completion_flows";
+const ISSUE_COMPLETION_FLOWS_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0027_issue_completion_flows.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -256,6 +259,10 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_VERSION,
                     sql: AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_SQL,
+                },
+                Migration {
+                    version: ISSUE_COMPLETION_FLOWS_MIGRATION_VERSION,
+                    sql: ISSUE_COMPLETION_FLOWS_MIGRATION_SQL,
                 },
             ];
         }

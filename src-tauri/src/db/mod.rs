@@ -4,6 +4,7 @@ pub mod completion_attempt_repository;
 pub mod connection;
 pub mod event_repository;
 pub mod issue_attachment_repository;
+pub mod issue_completion_flow_repository;
 pub mod issue_repository;
 pub mod migrations;
 pub mod project_label_repository;

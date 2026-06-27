@@ -6,6 +6,7 @@ pub mod completion_attempt;
 pub mod errors;
 pub mod issue;
 pub mod issue_action;
+pub mod issue_completion;
 pub mod local_data;
 pub mod project;
 pub mod project_label;
