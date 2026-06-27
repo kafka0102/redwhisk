@@ -1,4 +1,5 @@
-export { Button, buttonVariants } from "./button";
+export { Button } from "./button";
+export { buttonVariants } from "./button-variants";
 export {
   ConfirmDialog,
   type ConfirmDialogOptions,
@@ -18,7 +19,8 @@ export {
   TableCell,
 } from "./table";
 export { Empty, EmptyTitle } from "./empty";
-export { Badge, badgeVariants } from "./badge";
+export { Badge } from "./badge";
+export { badgeVariants } from "./badge-variants";
 export { Separator } from "./separator";
 export { Checkbox } from "./checkbox";
 export { Switch } from "./switch";
@@ -84,6 +86,7 @@ export {
   ResizablePanelGroup,
 } from "./resizable";
 export { Toaster } from "./sonner";
+export { toast } from "./toast";
 export {
   Command,
   CommandDialog,
@@ -95,13 +98,8 @@ export {
   CommandShortcut,
   CommandSeparator,
 } from "./command";
-export {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  tabsListVariants,
-} from "./tabs";
+export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs";
+export { tabsListVariants } from "./tabs-variants";
 export {
   InputGroup,
   InputGroupAddon,

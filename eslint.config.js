@@ -24,10 +24,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": "error",
       // 未使用变量交由 @typescript-eslint 版本统一处理，避免与基础规则重复报错
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": [
