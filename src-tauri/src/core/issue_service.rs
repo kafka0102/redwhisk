@@ -882,10 +882,19 @@ impl<'connection> IssueService<'connection> {
         if !snapshot.is_clean {
             match option {
                 CompletionAttemptOption::CompleteClean => {
+                    let flow = self.upsert_completion_flow(
+                        issue.id,
+                        Some(session.id),
+                        IssueCompletionPhase::ManualDirtyBlocked,
+                        false,
+                        input.external_worktree_decision,
+                        &session,
+                        None,
+                    )?;
                     return Ok(self.flow_result(
                         CompleteIssueFlowAction::ManualDirtyPrompt,
                         issue,
-                        None,
+                        Some(flow),
                         "当前仓库存在未提交改动，不能直接完成。".to_string(),
                         &session,
                     ));
