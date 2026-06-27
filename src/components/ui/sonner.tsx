@@ -1,5 +1,5 @@
 import { useTheme } from "../../shared/i18n/i18n";
-import { Toaster as Sonner, type ToasterProps, toast } from "sonner";
+import { Toaster as Sonner, type ToasterProps } from "sonner";
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -33,4 +33,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
   );
 };
 
-export { Toaster, toast };
+export { Toaster };
