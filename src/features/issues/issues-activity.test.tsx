@@ -2452,6 +2452,63 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("button", { name: "Handle manually" }));
   });
 
+  it("continues completion when manual dirty changes are ignored", async () => {
+    const user = userEvent.setup();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 514,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    completeIssueFlowMock
+      .mockResolvedValueOnce({
+        action: "manual_dirty_prompt",
+        issue: reviewWithSession,
+        flow: null,
+        message: "当前工作区存在未提交改动，请确认是否继续完成。",
+        targetBranch: null,
+        workspaceBranch: null,
+        workspacePath: null,
+        sessionId: 514,
+      })
+      .mockResolvedValueOnce(
+        completedFlowResult({
+          ...reviewWithSession,
+          status: "completed",
+          linkedSessionStatus: "closed",
+          updatedAt: reviewWithSession.updatedAt + 1_000,
+        }),
+      );
+
+    renderIssuesActivity({ projectCompletionPolicy: "manual" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Ignore and continue" }),
+    );
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
+        projectId: 1,
+        issueId: reviewWithSession.id,
+        ignoreDirty: true,
+        externalWorktreeDecision: null,
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "View Summary" }),
+    ).toBeInTheDocument();
+  });
+
   it("confirms merge into a worktree target branch before finishing Done", async () => {
     const user = userEvent.setup();
     const reviewWithSession = {
@@ -2505,6 +2562,98 @@ describe("IssuesActivity", () => {
         issueId: reviewWithSession.id,
         ignoreDirty: null,
         externalWorktreeDecision: "merge_and_delete",
+      }),
+    );
+  });
+
+  it("supports skipping or canceling external worktree completion", async () => {
+    const user = userEvent.setup();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 515,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "confirm_external_worktree",
+      issue: reviewWithSession,
+      flow: null,
+      message: "需要确认外部 worktree。",
+      targetBranch: "dev",
+      workspaceBranch: "issue-515",
+      workspacePath: "/tmp/worktrees/issue-515",
+      sessionId: 515,
+    });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "confirm_external_worktree",
+      issue: reviewWithSession,
+      flow: null,
+      message: "完成已暂停。",
+      targetBranch: "dev",
+      workspaceBranch: "issue-515",
+      workspacePath: "/tmp/worktrees/issue-515",
+      sessionId: 515,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
+        projectId: 1,
+        issueId: reviewWithSession.id,
+        externalWorktreeDecision: "cancel",
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "View Summary" }),
+    ).not.toBeInTheDocument();
+
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "confirm_external_worktree",
+      issue: reviewWithSession,
+      flow: null,
+      message: "需要确认外部 worktree。",
+      targetBranch: "dev",
+      workspaceBranch: "issue-515",
+      workspacePath: "/tmp/worktrees/issue-515",
+      sessionId: 515,
+    });
+    completeIssueFlowMock.mockResolvedValueOnce(
+      completedFlowResult({
+        ...reviewWithSession,
+        status: "completed",
+        linkedSessionStatus: "closed",
+        updatedAt: reviewWithSession.updatedAt + 1_000,
+      }),
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Complete without merge" }),
+    );
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
+        projectId: 1,
+        issueId: reviewWithSession.id,
+        ignoreDirty: null,
+        externalWorktreeDecision: "skip",
       }),
     );
   });

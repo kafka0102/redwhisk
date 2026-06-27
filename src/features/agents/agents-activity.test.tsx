@@ -3075,6 +3075,7 @@ describe("AgentsActivity", () => {
     expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 22,
+      ignoreDirty: true,
     });
     expect(sendAgentCommitPromptMock).not.toHaveBeenCalled();
     expect(detectAgentCommitCompletionMock).not.toHaveBeenCalled();
