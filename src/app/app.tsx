@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { AppShell } from "./app-shell";
+import { resolveAppSurface } from "./app-surface";
 import { Toaster } from "../components/ui/sonner";
 import "./app.css";
 import { ProjectDetailsForm } from "../features/project/project-details-form";
@@ -25,6 +26,7 @@ import {
   type ProjectRecord,
   type ProjectListItem,
 } from "../features/project/project-commands";
+import { SessionMonitorSurface } from "../features/agents/session-notifications/session-monitor-surface";
 import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
@@ -49,6 +51,21 @@ interface CreateProjectDraft {
 }
 
 export function App() {
+  const appSurface = resolveAppSurface(window.location.search);
+
+  if (appSurface.type === "session-monitor") {
+    return (
+      <SessionMonitorSurface
+        ownerWindowLabel={appSurface.ownerWindowLabel}
+        projectId={appSurface.projectId}
+      />
+    );
+  }
+
+  return <ProjectApp />;
+}
+
+function ProjectApp() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(
     null,
   );
