@@ -1,12 +1,18 @@
 import { Bot, CircleDot, Palette, Settings, Terminal } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
-import { AgentSessionMonitorButton } from "../features/agents/session-notifications/agent-session-monitor-button";
+import {
+  closeSessionMonitorWindow,
+  OPEN_AGENT_SESSION_EVENT,
+  openSessionMonitorWindow,
+  type OpenAgentSessionEventPayload,
+} from "../features/agents/session-notifications/session-monitor-commands";
 import { useAgentSessionNotifications } from "../features/agents/session-notifications/use-agent-session-notifications";
 import type { SettingsMenu } from "../features/settings/project-settings-activity";
 import {
@@ -61,6 +67,55 @@ export function AppShell({
   const projectTerminalsState =
     projectTerminalsStateByProjectId[project.id] ??
     getDefaultProjectTerminalsActivityState();
+  const ownerWindowLabel = getCurrentWindow().label;
+
+  const openAgentSession = useCallback((sessionId: number) => {
+    setActiveAgentSessionId(sessionId);
+    setRequestedIssueId(null);
+    setActiveActivity("agents");
+    setIsGlobalSettingsOpen(false);
+  }, []);
+
+  useEffect(() => {
+    void openSessionMonitorWindow({
+      ownerWindowLabel,
+      projectId: project.id,
+    });
+
+    return () => {
+      void closeSessionMonitorWindow({ ownerWindowLabel });
+    };
+  }, [ownerWindowLabel, project.id]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+
+    async function subscribeOpenAgentSession() {
+      unlisten = await listen<OpenAgentSessionEventPayload>(
+        OPEN_AGENT_SESSION_EVENT,
+        (event) => {
+          if (event.payload.projectId !== project.id) {
+            return;
+          }
+
+          openAgentSession(event.payload.sessionId);
+        },
+      );
+
+      if (isDisposed) {
+        unlisten();
+        unlisten = null;
+      }
+    }
+
+    void subscribeOpenAgentSession();
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, [openAgentSession, project.id]);
 
   const handleProjectTerminalsStateChange = useCallback(
     (nextState: React.SetStateAction<ProjectTerminalsActivityState>) => {
@@ -173,10 +228,7 @@ export function AppShell({
               activeActivity={activeActivity}
               activeAgentSessionId={activeAgentSessionId}
               onOpenAgentsActivity={(sessionId) => {
-                setActiveAgentSessionId(sessionId);
-                setRequestedIssueId(null);
-                setActiveActivity("agents");
-                setIsGlobalSettingsOpen(false);
+                openAgentSession(sessionId);
               }}
               onOpenProjectSettingsLabels={() => {
                 setActiveProjectSettingsMenu("labels");
@@ -200,15 +252,6 @@ export function AppShell({
           )}
         </div>
       </section>
-      <AgentSessionMonitorButton
-        projectId={project.id}
-        onViewSession={(sessionId) => {
-          setActiveAgentSessionId(sessionId);
-          setRequestedIssueId(null);
-          setActiveActivity("agents");
-          setIsGlobalSettingsOpen(false);
-        }}
-      />
     </div>
   );
 }

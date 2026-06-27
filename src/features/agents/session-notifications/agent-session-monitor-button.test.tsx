@@ -11,10 +11,45 @@ vi.mock("../agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
 }));
 
+const windowMocks = vi.hoisted(() => ({
+  setPosition: vi.fn(),
+  setSize: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => ({
+    setPosition: windowMocks.setPosition,
+    setSize: windowMocks.setSize,
+  })),
+  LogicalPosition: class LogicalPosition {
+    constructor(
+      public x: number,
+      public y: number,
+    ) {}
+  },
+  LogicalSize: class LogicalSize {
+    constructor(
+      public width: number,
+      public height: number,
+    ) {}
+  },
+  primaryMonitor: vi.fn().mockResolvedValue({
+    scaleFactor: 1,
+    workArea: {
+      position: { x: 0, y: 0 },
+      size: { height: 900, width: 1440 },
+    },
+  }),
+}));
+
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 
 describe("AgentSessionMonitorButton", () => {
   beforeEach(() => {
+    windowMocks.setPosition.mockReset();
+    windowMocks.setPosition.mockResolvedValue(undefined);
+    windowMocks.setSize.mockReset();
+    windowMocks.setSize.mockResolvedValue(undefined);
     listAgentSessionsMock.mockReset();
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
   });
@@ -113,16 +148,42 @@ describe("AgentSessionMonitorButton", () => {
       expect(screen.getByText("Loaded later")).toBeInTheDocument();
     });
   });
+
+  it("resizes the native desktop monitor window when opened", async () => {
+    const user = userEvent.setup();
+
+    renderButton({ mode: "desktop" });
+
+    await waitFor(() => {
+      expect(windowMocks.setSize).toHaveBeenCalledWith(
+        expect.objectContaining({ height: 44, width: 44 }),
+      );
+    });
+
+    await user.hover(screen.getByRole("button", { name: "Session monitor" }));
+
+    await waitFor(() => {
+      expect(windowMocks.setSize).toHaveBeenCalledWith(
+        expect.objectContaining({ height: 460, width: 360 }),
+      );
+      expect(windowMocks.setPosition).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 1068, y: 220 }),
+      );
+    });
+  });
 });
 
 function renderButton({
+  mode,
   onViewSession = vi.fn(),
 }: {
+  mode?: "in-app" | "desktop";
   onViewSession?: (sessionId: number) => void;
 } = {}) {
   return render(
     <I18nProvider>
       <AgentSessionMonitorButton
+        mode={mode}
         onViewSession={onViewSession}
         projectId={1}
         refreshIntervalMs={10}

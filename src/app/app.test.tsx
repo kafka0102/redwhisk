@@ -28,6 +28,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 const mockAppWindow = {
+  label: "main",
   isMaximized: vi.fn(),
   maximize: vi.fn(),
   unmaximize: vi.fn(),
@@ -35,6 +36,10 @@ const mockAppWindow = {
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(() => mockAppWindow),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(vi.fn())),
 }));
 
 vi.mock("../features/project/project-commands", () => ({
@@ -45,6 +50,18 @@ vi.mock("../features/project/project-commands", () => ({
   openProjectWindow: vi.fn(),
   validateProjectRepoPath: vi.fn(),
 }));
+
+vi.mock(
+  "../features/agents/session-notifications/session-monitor-commands",
+  () => ({
+    closeSessionMonitorWindow: vi.fn(),
+    OPEN_AGENT_SESSION_EVENT: "open-agent-session",
+    openMonitoredAgentSession: vi.fn(),
+    openSessionMonitorWindow: vi.fn().mockResolvedValue({
+      windowLabel: "session-monitor-main",
+    }),
+  }),
+);
 
 vi.mock("../features/issues/issue-commands", () => ({
   createIssue: vi.fn(),
@@ -380,6 +397,7 @@ describe("App project entry", () => {
     const header = switcher.closest(".workbench__header");
 
     expect(header).not.toBeNull();
+    getCurrentWindowMock.mockClear();
 
     await user.dblClick(header!);
 
@@ -402,6 +420,7 @@ describe("App project entry", () => {
     const header = switcher.closest(".workbench__header");
 
     expect(header).not.toBeNull();
+    getCurrentWindowMock.mockClear();
 
     await user.dblClick(header!);
 
@@ -420,10 +439,10 @@ describe("App project entry", () => {
     const switcher = await screen.findByRole("button", {
       name: "Current project RedWhisk",
     });
+    getCurrentWindowMock.mockClear();
 
     await user.click(switcher);
 
-    expect(getCurrentWindowMock).not.toHaveBeenCalled();
     expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
     expect(mockAppWindow.maximize).not.toHaveBeenCalled();
     expect(

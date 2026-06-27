@@ -1,5 +1,11 @@
 import { Bot, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getCurrentWindow,
+  LogicalPosition,
+  LogicalSize,
+  primaryMonitor,
+} from "@tauri-apps/api/window";
 
 import { Button } from "../../../components/ui/button";
 import { useI18n } from "../../../shared/i18n/i18n";
@@ -15,14 +21,20 @@ import {
 
 const DEFAULT_MONITOR_REFRESH_INTERVAL_MS = 1_500;
 const MONITOR_CLOSE_DELAY_MS = 150;
+const DESKTOP_COLLAPSED_SIZE = 44;
+const DESKTOP_EXPANDED_HEIGHT = 460;
+const DESKTOP_EXPANDED_WIDTH = 360;
+const DESKTOP_MARGIN = 12;
 
 interface AgentSessionMonitorButtonProps {
+  mode?: "in-app" | "desktop";
   onViewSession: (sessionId: number) => void;
   projectId: number;
   refreshIntervalMs?: number;
 }
 
 export function AgentSessionMonitorButton({
+  mode = "in-app",
   onViewSession,
   projectId,
   refreshIntervalMs = DEFAULT_MONITOR_REFRESH_INTERVAL_MS,
@@ -40,6 +52,7 @@ export function AgentSessionMonitorButton({
     () => selectSessionMonitorItems(sessions),
     [sessions],
   );
+  const isDesktopMode = mode === "desktop";
 
   const loadSessions = useCallback(
     async (showLoading: boolean) => {
@@ -70,6 +83,14 @@ export function AgentSessionMonitorButton({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!isDesktopMode) {
+      return;
+    }
+
+    void resizeDesktopMonitorWindow(isOpen);
+  }, [isDesktopMode, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -119,7 +140,11 @@ export function AgentSessionMonitorButton({
 
   return (
     <div
-      className="agent-session-monitor"
+      className={
+        isDesktopMode
+          ? "agent-session-monitor agent-session-monitor--desktop"
+          : "agent-session-monitor"
+      }
       onFocus={openMonitor}
       onMouseEnter={openMonitor}
       onMouseLeave={scheduleCloseMonitor}
@@ -169,6 +194,31 @@ export function AgentSessionMonitorButton({
         </section>
       ) : null}
     </div>
+  );
+}
+
+async function resizeDesktopMonitorWindow(isOpen: boolean): Promise<void> {
+  const currentWindow = getCurrentWindow();
+  const monitor = await primaryMonitor();
+  const scaleFactor = monitor?.scaleFactor ?? 1;
+  const workAreaPosition = monitor?.workArea.position ?? { x: 0, y: 0 };
+  const workAreaSize = monitor?.workArea.size ?? {
+    height: DESKTOP_EXPANDED_HEIGHT * scaleFactor,
+    width: DESKTOP_EXPANDED_WIDTH * scaleFactor,
+  };
+  const width = isOpen ? DESKTOP_EXPANDED_WIDTH : DESKTOP_COLLAPSED_SIZE;
+  const height = isOpen ? DESKTOP_EXPANDED_HEIGHT : DESKTOP_COLLAPSED_SIZE;
+  const logicalWorkX = workAreaPosition.x / scaleFactor;
+  const logicalWorkY = workAreaPosition.y / scaleFactor;
+  const logicalWorkWidth = workAreaSize.width / scaleFactor;
+  const logicalWorkHeight = workAreaSize.height / scaleFactor;
+
+  await currentWindow.setSize(new LogicalSize(width, height));
+  await currentWindow.setPosition(
+    new LogicalPosition(
+      logicalWorkX + logicalWorkWidth - width - DESKTOP_MARGIN,
+      logicalWorkY + (logicalWorkHeight - height) / 2,
+    ),
   );
 }
 

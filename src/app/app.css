@@ -23,6 +23,10 @@ body {
   color: var(--color-text);
 }
 
+body.session-monitor-window {
+  background: transparent;
+}
+
 button {
   font: inherit;
   letter-spacing: 0;
@@ -424,6 +428,10 @@ button:focus-visible {
   background: var(--color-surface-muted);
 }
 
+.agent-session-monitor--desktop {
+  right: 4px;
+}
+
 .agent-session-monitor__panel {
   position: absolute;
   top: 50%;
@@ -438,6 +446,17 @@ button:focus-visible {
   background: var(--color-surface);
   box-shadow: 0 18px 48px var(--color-popover-shadow);
   transform: translateY(-50%);
+}
+
+.agent-session-monitor--desktop .agent-session-monitor__panel {
+  right: 40px;
+  width: min(300px, calc(100vw - 60px));
+}
+
+.session-monitor-surface {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
 }
 
 .agent-session-monitor__list {
