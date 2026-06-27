@@ -12,6 +12,13 @@ interface ComposerContextMeterProps {
   usage: AgentUsage | null;
 }
 
+const METER_SIZE = 18;
+const METER_CENTER = METER_SIZE / 2;
+const METER_STROKE_WIDTH = 3;
+const METER_RING_RADIUS = 7;
+const METER_OUTER_OUTLINE_RADIUS = METER_RING_RADIUS + METER_STROKE_WIDTH / 2;
+const METER_INNER_OUTLINE_RADIUS = METER_RING_RADIUS - METER_STROKE_WIDTH / 2;
+
 /** 把 token 数格式化为 k 简写（如 12300 → "12.3k"，<1000 原样）。 */
 function formatTokens(tokens: number): string {
   if (tokens >= 1000) {
@@ -36,27 +43,50 @@ export function ComposerContextMeter({ usage }: ComposerContextMeterProps) {
   const percent = Math.round(ratio * 100);
   const usedLabel = formatTokens(used);
   const maxLabel = formatTokens(max);
+  const progressLabel = `${messages.agentsFeature.contextWindow} ${percent}%`;
 
   return (
-    <span
-      className="agents-composer__meter"
-      aria-label={`${messages.agentsFeature.contextWindow} ${percent}%`}
-      tabIndex={0}
-    >
+    <span className="agents-composer__meter" tabIndex={0}>
       <span
-        className="agents-composer__meter-bar"
+        className="agents-composer__meter-ring"
         role="progressbar"
+        aria-label={progressLabel}
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <span
-          className="agents-composer__meter-fill"
-          style={{ width: `${percent}%` }}
-        />
-      </span>
-      <span className="agents-composer__meter-text">
-        {`${usedLabel} / ${maxLabel}`}
+        <svg
+          className="agents-composer__meter-svg"
+          viewBox={`0 0 ${METER_SIZE} ${METER_SIZE}`}
+          aria-hidden="true"
+        >
+          <circle
+            className="agents-composer__meter-outline"
+            cx={METER_CENTER}
+            cy={METER_CENTER}
+            r={METER_OUTER_OUTLINE_RADIUS}
+          />
+          <circle
+            className="agents-composer__meter-track"
+            cx={METER_CENTER}
+            cy={METER_CENTER}
+            r={METER_RING_RADIUS}
+          />
+          <circle
+            className="agents-composer__meter-progress"
+            cx={METER_CENTER}
+            cy={METER_CENTER}
+            r={METER_RING_RADIUS}
+            pathLength={100}
+            strokeDasharray={`${percent} 100`}
+          />
+          <circle
+            className="agents-composer__meter-outline"
+            cx={METER_CENTER}
+            cy={METER_CENTER}
+            r={METER_INNER_OUTLINE_RADIUS}
+          />
+        </svg>
       </span>
       <span className="agents-composer__meter-detail" role="tooltip">
         <span className="agents-composer__meter-detail-title">
