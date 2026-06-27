@@ -4,6 +4,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { GlobalSettingsActivity } from "./global-settings-activity";
+import {
+  closeSessionMonitorWindow,
+  openSessionMonitorWindow,
+} from "../agents/session-notifications/session-monitor-commands";
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => ({ label: "main" })),
+}));
+
+vi.mock("../agents/session-notifications/session-monitor-commands", () => ({
+  closeSessionMonitorWindow: vi.fn(),
+  openSessionMonitorWindow: vi.fn(),
+}));
+
+const closeSessionMonitorWindowMock = vi.mocked(closeSessionMonitorWindow);
+const openSessionMonitorWindowMock = vi.mocked(openSessionMonitorWindow);
 
 function renderGlobalSettings() {
   return render(
@@ -18,6 +34,14 @@ describe("GlobalSettingsActivity", () => {
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
     vi.stubGlobal("matchMedia", createMatchMedia(false));
+    closeSessionMonitorWindowMock.mockReset();
+    closeSessionMonitorWindowMock.mockResolvedValue({
+      windowLabel: "session-monitor",
+    });
+    openSessionMonitorWindowMock.mockReset();
+    openSessionMonitorWindowMock.mockResolvedValue({
+      windowLabel: "session-monitor",
+    });
   });
 
   it("renders Preferences with English language and Light theme by default", () => {
@@ -49,6 +73,11 @@ describe("GlobalSettingsActivity", () => {
       "aria-pressed",
       "false",
     );
+    expect(
+      screen.getByRole("switch", {
+        name: "Enable notification floating window",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 
@@ -105,6 +134,45 @@ describe("GlobalSettingsActivity", () => {
     expect(splitter).toHaveAttribute("aria-valuemin", "180");
     expect(splitter).toHaveAttribute("aria-valuemax", "420");
     expect(splitter).toHaveAttribute("aria-valuenow", "230");
+  });
+
+  it("persists the notification floating window preference and closes the monitor immediately", async () => {
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await user.click(
+      screen.getByRole("switch", {
+        name: "Enable notification floating window",
+      }),
+    );
+
+    expect(window.localStorage.getItem("redwhisk.sessionMonitor.enabled")).toBe(
+      "false",
+    );
+    expect(closeSessionMonitorWindowMock).toHaveBeenCalledWith({
+      ownerWindowLabel: "main",
+    });
+    expect(openSessionMonitorWindowMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the notification floating window immediately when re-enabled", async () => {
+    window.localStorage.setItem("redwhisk.sessionMonitor.enabled", "false");
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await user.click(
+      screen.getByRole("switch", {
+        name: "Enable notification floating window",
+      }),
+    );
+
+    expect(window.localStorage.getItem("redwhisk.sessionMonitor.enabled")).toBe(
+      "true",
+    );
+    expect(openSessionMonitorWindowMock).toHaveBeenCalledWith({
+      ownerWindowLabel: "main",
+    });
+    expect(closeSessionMonitorWindowMock).not.toHaveBeenCalled();
   });
 });
 

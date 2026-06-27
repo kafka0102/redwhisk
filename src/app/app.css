@@ -429,7 +429,7 @@ button:focus-visible {
 }
 
 .agent-session-monitor--desktop {
-  right: 4px;
+  right: 0;
 }
 
 .agent-session-monitor__panel {
@@ -457,6 +457,23 @@ button:focus-visible {
   width: 100vw;
   height: 100vh;
   background: transparent;
+}
+
+.global-preference-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 2px;
+}
+
+.global-preference-row label {
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .agent-session-monitor__list {

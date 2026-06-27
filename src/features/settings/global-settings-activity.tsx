@@ -6,11 +6,20 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { Button, Card, CardContent } from "@/components/ui";
+import { Button, Card, CardContent, Switch } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ThemePreference } from "../../shared/i18n/messages";
+import {
+  closeSessionMonitorWindow,
+  openSessionMonitorWindow,
+} from "../agents/session-notifications/session-monitor-commands";
+import {
+  getInitialSessionMonitorEnabled,
+  setSessionMonitorEnabledPreference,
+} from "../agents/session-notifications/session-monitor-preferences";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
@@ -24,6 +33,9 @@ const THEME_OPTIONS: ThemePreference[] = ["light", "dark", "system"];
 export function GlobalSettingsActivity() {
   const { locale, messages, setLocale, setThemePreference, themePreference } =
     useI18n();
+  const [isSessionMonitorEnabled, setIsSessionMonitorEnabled] = useState(
+    getInitialSessionMonitorEnabled,
+  );
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
@@ -32,6 +44,19 @@ export function GlobalSettingsActivity() {
     startX: number;
   } | null>(null);
   const preferencesLabel = messages.globalSettings.preferences;
+
+  function handleSessionMonitorEnabledChange(isEnabled: boolean) {
+    setIsSessionMonitorEnabled(isEnabled);
+    setSessionMonitorEnabledPreference(isEnabled);
+
+    const ownerWindowLabel = getCurrentWindow().label;
+    if (isEnabled) {
+      void openSessionMonitorWindow({ ownerWindowLabel });
+      return;
+    }
+
+    void closeSessionMonitorWindow({ ownerWindowLabel });
+  }
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
@@ -195,6 +220,20 @@ export function GlobalSettingsActivity() {
                         </Button>
                       ))}
                     </div>
+                  </section>
+
+                  <section className="global-preference-row">
+                    <label htmlFor="session-monitor-enabled">
+                      {messages.globalSettings.enableNotificationFloatingWindow}
+                    </label>
+                    <Switch
+                      id="session-monitor-enabled"
+                      checked={isSessionMonitorEnabled}
+                      aria-label={
+                        messages.globalSettings.enableNotificationFloatingWindow
+                      }
+                      onCheckedChange={handleSessionMonitorEnabledChange}
+                    />
                   </section>
                 </CardContent>
               </Card>
