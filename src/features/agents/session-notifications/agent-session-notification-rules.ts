@@ -5,7 +5,12 @@ export type AgentSessionNotificationLevel = "normal" | "urgent";
 export interface AgentSessionNotificationCopy {
   needsInputTitle: (projectName: string) => string;
   permissionFallbackBody: string;
+  sessionCompletedTitle: (projectName: string) => string;
+  sessionCompletionFallbackSummary: string;
   sessionFailedTitle: (projectName: string) => string;
+  sessionRecentMessagesLabel: string;
+  sessionStatusLine: (title: string, status: string) => string;
+  sessionSummaryLabel: string;
   sessionUpdatedTitle: (projectName: string) => string;
   turnCompletedBody: (sessionId: number) => string;
   turnFailedFallbackBody: string;
@@ -13,6 +18,7 @@ export interface AgentSessionNotificationCopy {
 
 export interface AgentSessionNotificationIntent {
   body: string;
+  durationMs?: number;
   key: string;
   level: AgentSessionNotificationLevel;
   title: string;

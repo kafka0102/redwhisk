@@ -399,6 +399,124 @@ button:focus-visible {
   min-height: 0;
 }
 
+.agent-session-monitor {
+  position: fixed;
+  z-index: 40;
+  top: 50%;
+  right: 12px;
+  display: grid;
+  justify-items: end;
+  transform: translateY(-50%);
+}
+
+.agent-session-monitor__button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 8px 24px var(--color-popover-shadow);
+}
+
+.agent-session-monitor__button:hover,
+.agent-session-monitor__button[aria-expanded="true"] {
+  background: var(--color-surface-muted);
+}
+
+.agent-session-monitor__panel {
+  position: absolute;
+  top: 50%;
+  right: 44px;
+  display: grid;
+  width: min(340px, calc(100vw - 72px));
+  max-height: min(420px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-dialog);
+  background: var(--color-surface);
+  box-shadow: 0 18px 48px var(--color-popover-shadow);
+  transform: translateY(-50%);
+}
+
+.agent-session-monitor__list {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-session-monitor__item {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.agent-session-monitor__item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.agent-session-monitor__row {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 7px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.agent-session-monitor__row:hover,
+.agent-session-monitor__row[aria-pressed="true"] {
+  background: var(--color-surface-muted);
+}
+
+.agent-session-monitor__row-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-session-monitor__title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.32;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-session-monitor__status-pill {
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.agent-session-monitor__updated,
+.agent-session-monitor__status {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.agent-session-monitor__status {
+  margin: 0;
+  padding: 8px;
+}
+
+.agent-session-monitor__view {
+  justify-self: end;
+  margin-right: 7px;
+}
+
 .activity-surface {
   display: grid;
   align-content: start;

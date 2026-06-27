@@ -132,7 +132,14 @@ function eventEnvelope(
 const TEST_COPY = {
   needsInputTitle: (projectName: string) => `${projectName} needs your input`,
   permissionFallbackBody: "Agent is waiting for approval or input.",
+  sessionCompletedTitle: (projectName: string) =>
+    `${projectName} session completed`,
+  sessionCompletionFallbackSummary: "No final summary was captured.",
   sessionFailedTitle: (projectName: string) => `${projectName} session failed`,
+  sessionRecentMessagesLabel: "Recent messages",
+  sessionStatusLine: (title: string, status: string) =>
+    `${title} finished with status ${status}.`,
+  sessionSummaryLabel: "Summary",
   sessionUpdatedTitle: (projectName: string) =>
     `${projectName} session updated`,
   turnCompletedBody: (sessionId: number) =>

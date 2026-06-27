@@ -34,7 +34,12 @@ export interface I18nMessages {
   agentNotifications: {
     needsInputTitle: (projectName: string) => string;
     permissionFallbackBody: string;
+    sessionCompletedTitle: (projectName: string) => string;
+    sessionCompletionFallbackSummary: string;
     sessionFailedTitle: (projectName: string) => string;
+    sessionRecentMessagesLabel: string;
+    sessionStatusLine: (title: string, status: string) => string;
+    sessionSummaryLabel: string;
     sessionUpdatedTitle: (projectName: string) => string;
     turnCompletedBody: (sessionId: number) => string;
     turnFailedFallbackBody: string;
@@ -324,7 +329,15 @@ export interface I18nMessages {
     permissionCard: string;
     sessionListControls: string;
     sessionListView: string;
+    sessionMonitor: string;
+    sessionMonitorEmpty: string;
+    sessionMonitorList: string;
+    sessionMonitorUpdatedAt: (updatedAt: string) => string;
+    sessionMonitorView: string;
     sessionRunning: string;
+    sessionClosed: string;
+    sessionCrashed: string;
+    sessionStopped: string;
     sessionStatus: (statusLabel: string) => string;
     issueDetailsTitle: string;
     fileTree: string;
@@ -448,7 +461,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     agentNotifications: {
       needsInputTitle: (projectName) => `${projectName} needs your input`,
       permissionFallbackBody: "Agent is waiting for approval or input.",
+      sessionCompletedTitle: (projectName) =>
+        `${projectName} session completed`,
+      sessionCompletionFallbackSummary: "No final summary was captured.",
       sessionFailedTitle: (projectName) => `${projectName} session failed`,
+      sessionRecentMessagesLabel: "Recent messages",
+      sessionStatusLine: (title, status) =>
+        `${title} finished with status ${status}.`,
+      sessionSummaryLabel: "Summary",
       sessionUpdatedTitle: (projectName) => `${projectName} session updated`,
       turnCompletedBody: (sessionId) =>
         `Session #${sessionId} has finished the latest turn.`,
@@ -753,7 +773,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       permissionCard: "Agent permission approval card",
       sessionListControls: "Session list controls",
       sessionListView: "Session list view",
+      sessionMonitor: "Session monitor",
+      sessionMonitorEmpty: "No sessions to show.",
+      sessionMonitorList: "Monitored sessions",
+      sessionMonitorUpdatedAt: (updatedAt) => `Updated ${updatedAt}`,
+      sessionMonitorView: "View session",
       sessionRunning: "Session is running",
+      sessionClosed: "Completed",
+      sessionCrashed: "Failed",
+      sessionStopped: "Stopped",
       sessionStatus: (statusLabel) => `Session status: ${statusLabel}`,
       issueDetailsTitle: "Issue details",
       fileTree: "Project file tree",
@@ -873,7 +901,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     agentNotifications: {
       needsInputTitle: (projectName) => `${projectName} 需要你的输入`,
       permissionFallbackBody: "Agent 正在等待审批或输入。",
+      sessionCompletedTitle: (projectName) => `${projectName} 会话已完成`,
+      sessionCompletionFallbackSummary: "未捕获最终总结。",
       sessionFailedTitle: (projectName) => `${projectName} 会话失败`,
+      sessionRecentMessagesLabel: "最近消息",
+      sessionStatusLine: (title, status) =>
+        `${title} 已结束，状态为 ${status}。`,
+      sessionSummaryLabel: "总结",
       sessionUpdatedTitle: (projectName) => `${projectName} 会话已更新`,
       turnCompletedBody: (sessionId) =>
         `会话 #${sessionId} 已完成最新一轮输出。`,
@@ -1170,7 +1204,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       permissionCard: "Agent 权限审批卡片",
       sessionListControls: "会话列表控制区",
       sessionListView: "会话列表视图",
+      sessionMonitor: "会话监控",
+      sessionMonitorEmpty: "暂无可展示会话。",
+      sessionMonitorList: "监控中的会话",
+      sessionMonitorUpdatedAt: (updatedAt) => `更新于 ${updatedAt}`,
+      sessionMonitorView: "查看会话",
       sessionRunning: "会话正在运行",
+      sessionClosed: "已完成",
+      sessionCrashed: "失败",
+      sessionStopped: "已停止",
       sessionStatus: (statusLabel) => `会话状态：${statusLabel}`,
       issueDetailsTitle: "Issue 详情",
       fileTree: "项目文件树",

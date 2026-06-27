@@ -36,8 +36,34 @@ vi.mock("../features/issues/issues-activity", () => ({
 }));
 
 vi.mock("../features/agents/agents-activity", () => ({
-  AgentsActivity: () => <div>agents activity</div>,
+  AgentsActivity: ({
+    activeSessionId,
+  }: {
+    activeSessionId?: number | null;
+  }) => <div>agents activity {activeSessionId}</div>,
 }));
+
+vi.mock(
+  "../features/agents/session-notifications/use-agent-session-notifications",
+  () => ({
+    useAgentSessionNotifications: vi.fn(),
+  }),
+);
+
+vi.mock(
+  "../features/agents/session-notifications/agent-session-monitor-button",
+  () => ({
+    AgentSessionMonitorButton: ({
+      onViewSession,
+    }: {
+      onViewSession: (sessionId: number) => void;
+    }) => (
+      <button type="button" onClick={() => onViewSession(7)}>
+        view monitored session
+      </button>
+    ),
+  }),
+);
 
 vi.mock("../features/settings/project-settings-activity", () => ({
   ProjectSettingsActivity: ({ activeMenu }: { activeMenu?: string }) => (
@@ -213,5 +239,38 @@ describe("AppShell terminals activity persistence", () => {
     expect(
       screen.getByRole("button", { name: "Project Settings" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens the selected agent session from the floating monitor", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppShell
+        onCreateProject={() => {}}
+        onProjectUpdated={() => {}}
+        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
+        project={{
+          id: 1,
+          name: "RedWhisk",
+          path: "/tmp/redwhisk",
+          completionPolicy: "agent_auto_commit",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          recentOpenedAt: "2026-06-15T00:00:00.000Z",
+          status: "available",
+        }}
+        projects={[]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "view monitored session" }),
+    );
+
+    expect(screen.getByText("agents activity 7")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });

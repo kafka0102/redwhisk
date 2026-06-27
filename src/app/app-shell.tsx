@@ -6,6 +6,7 @@ import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
+import { AgentSessionMonitorButton } from "../features/agents/session-notifications/agent-session-monitor-button";
 import { useAgentSessionNotifications } from "../features/agents/session-notifications/use-agent-session-notifications";
 import type { SettingsMenu } from "../features/settings/project-settings-activity";
 import {
@@ -199,6 +200,15 @@ export function AppShell({
           )}
         </div>
       </section>
+      <AgentSessionMonitorButton
+        projectId={project.id}
+        onViewSession={(sessionId) => {
+          setActiveAgentSessionId(sessionId);
+          setRequestedIssueId(null);
+          setActiveActivity("agents");
+          setIsGlobalSettingsOpen(false);
+        }}
+      />
     </div>
   );
 }
