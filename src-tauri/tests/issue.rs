@@ -2819,6 +2819,96 @@ fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_mi
 }
 
 #[test]
+fn complete_issue_flow_rejects_running_issue_before_review() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-running-before-review-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-running-before-review-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Running before review".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions
+             SET working_dir = ?1,
+                 workspace_mode = 'current_branch',
+                 target_branch = 'main',
+                 workspace_branch = 'main',
+                 workspace_path = ?1,
+                 origin_branch = 'main',
+                 completion_policy = 'manual'
+             WHERE id = ?2",
+            rusqlite::params![repo_dir.to_string_lossy().to_string(), session_id],
+        )
+        .expect("update session workspace");
+
+    let error = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect_err("running issue should require review first");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    assert!(error.message.contains("待验收"));
+
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Running);
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Running);
+    assert_eq!(stored_session.closed_at, None);
+}
+
+#[test]
 fn complete_issue_flow_completes_review_issue_with_closed_linked_session() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-closed-session-repo");
