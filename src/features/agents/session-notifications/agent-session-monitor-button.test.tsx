@@ -6,25 +6,32 @@ import { I18nProvider } from "../../../shared/i18n/i18n";
 import { listAgentSessions } from "../agent-session-commands";
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { AgentSessionMonitorButton } from "./agent-session-monitor-button";
-import { listMonitoredAgentSessions } from "./session-monitor-commands";
+import {
+  closeSessionMonitorWindow,
+  listMonitoredAgentSessions,
+} from "./session-monitor-commands";
 
 vi.mock("../agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
 }));
 
 vi.mock("./session-monitor-commands", () => ({
+  closeSessionMonitorWindow: vi.fn(),
   listMonitoredAgentSessions: vi.fn(),
 }));
 
 const windowMocks = vi.hoisted(() => ({
   setPosition: vi.fn(),
   setSize: vi.fn(),
+  startDragging: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(() => ({
+    label: "session-monitor",
     setPosition: windowMocks.setPosition,
     setSize: windowMocks.setSize,
+    startDragging: windowMocks.startDragging,
   })),
   LogicalPosition: class LogicalPosition {
     constructor(
@@ -48,6 +55,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const closeSessionMonitorWindowMock = vi.mocked(closeSessionMonitorWindow);
 const listMonitoredAgentSessionsMock = vi.mocked(listMonitoredAgentSessions);
 
 describe("AgentSessionMonitorButton", () => {
@@ -56,6 +64,12 @@ describe("AgentSessionMonitorButton", () => {
     windowMocks.setPosition.mockResolvedValue(undefined);
     windowMocks.setSize.mockReset();
     windowMocks.setSize.mockResolvedValue(undefined);
+    windowMocks.startDragging.mockReset();
+    windowMocks.startDragging.mockResolvedValue(undefined);
+    closeSessionMonitorWindowMock.mockReset();
+    closeSessionMonitorWindowMock.mockResolvedValue({
+      windowLabel: "session-monitor",
+    });
     listAgentSessionsMock.mockReset();
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
     listMonitoredAgentSessionsMock.mockReset();
@@ -192,8 +206,58 @@ describe("AgentSessionMonitorButton", () => {
         expect.objectContaining({ height: 460, width: 360 }),
       );
       expect(windowMocks.setPosition).toHaveBeenCalledWith(
-        expect.objectContaining({ x: 1068, y: 220 }),
+        expect.objectContaining({ x: 1072, y: 220 }),
       );
+    });
+  });
+
+  it("keeps a dragged desktop monitor position while expanding", async () => {
+    const user = userEvent.setup();
+
+    renderButton({ mode: "desktop" });
+
+    await waitFor(() => {
+      expect(windowMocks.setPosition).toHaveBeenCalledTimes(1);
+    });
+    const button = screen.getByRole("button", { name: "Session monitor" });
+
+    await user.pointer({
+      keys: "[MouseLeft>]",
+      target: button,
+    });
+    await user.pointer({ keys: "[/MouseLeft]", target: button });
+    windowMocks.setPosition.mockClear();
+
+    await user.hover(button);
+
+    await waitFor(() => {
+      expect(windowMocks.setSize).toHaveBeenCalledWith(
+        expect.objectContaining({ height: 460, width: 360 }),
+      );
+    });
+    expect(windowMocks.setPosition).not.toHaveBeenCalled();
+  });
+
+  it("supports dragging and closing the desktop monitor from the context menu", async () => {
+    const user = userEvent.setup();
+
+    renderButton({ mode: "desktop" });
+    const button = screen.getByRole("button", { name: "Session monitor" });
+
+    await user.pointer({
+      keys: "[MouseLeft>]",
+      target: button,
+    });
+    expect(windowMocks.startDragging).toHaveBeenCalled();
+
+    await user.pointer({
+      keys: "[MouseRight]",
+      target: button,
+    });
+    await user.click(await screen.findByRole("menuitem", { name: "Close" }));
+
+    expect(closeSessionMonitorWindowMock).toHaveBeenCalledWith({
+      ownerWindowLabel: "session-monitor",
     });
   });
 });

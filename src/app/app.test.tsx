@@ -294,6 +294,15 @@ describe("App project entry", () => {
     });
   });
 
+  it("does not open the global desktop session monitor when the preference is disabled", async () => {
+    window.localStorage.setItem("redwhisk.sessionMonitor.enabled", "false");
+
+    render(<App />);
+
+    await waitFor(() => expect(initializeLocalDataMock).toHaveBeenCalled());
+    expect(openSessionMonitorWindowMock).not.toHaveBeenCalled();
+  });
+
   it("opens to Project Home without the Activity Bar", async () => {
     render(<App />);
 

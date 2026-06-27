@@ -20,6 +20,7 @@ export interface I18nMessages {
     chinese: string;
     dark: string;
     english: string;
+    enableNotificationFloatingWindow: string;
     language: string;
     light: string;
     preferences: string;
@@ -330,8 +331,10 @@ export interface I18nMessages {
     sessionListControls: string;
     sessionListView: string;
     sessionMonitor: string;
+    sessionMonitorClose: string;
     sessionMonitorEmpty: string;
     sessionMonitorList: string;
+    sessionMonitorMenu: string;
     sessionMonitorUpdatedAt: (updatedAt: string) => string;
     sessionMonitorView: string;
     sessionRunning: string;
@@ -447,6 +450,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       chinese: "Chinese",
       dark: "Dark",
       english: "English",
+      enableNotificationFloatingWindow: "Enable notification floating window",
       language: "Language",
       light: "Light",
       preferences: "Preferences",
@@ -774,8 +778,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sessionListControls: "Session list controls",
       sessionListView: "Session list view",
       sessionMonitor: "Session monitor",
+      sessionMonitorClose: "Close",
       sessionMonitorEmpty: "No sessions to show.",
       sessionMonitorList: "Monitored sessions",
+      sessionMonitorMenu: "Session monitor menu",
       sessionMonitorUpdatedAt: (updatedAt) => `Updated ${updatedAt}`,
       sessionMonitorView: "View session",
       sessionRunning: "Session is running",
@@ -887,6 +893,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       chinese: "中文",
       dark: "深色",
       english: "English",
+      enableNotificationFloatingWindow: "启用通知浮窗",
       language: "语言",
       light: "浅色",
       preferences: "偏好设置",
@@ -1205,8 +1212,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sessionListControls: "会话列表控制区",
       sessionListView: "会话列表视图",
       sessionMonitor: "会话监控",
+      sessionMonitorClose: "关闭",
       sessionMonitorEmpty: "暂无可展示会话。",
       sessionMonitorList: "监控中的会话",
+      sessionMonitorMenu: "会话监控菜单",
       sessionMonitorUpdatedAt: (updatedAt) => `更新于 ${updatedAt}`,
       sessionMonitorView: "查看会话",
       sessionRunning: "会话正在运行",

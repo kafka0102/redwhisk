@@ -8,6 +8,11 @@ import {
 } from "@tauri-apps/api/window";
 
 import { Button } from "../../../components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "../../../components/ui/dropdown-menu";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { toCommandError } from "../../../shared/commands/command-error";
 import { listAgentSessions } from "../agent-session-commands";
@@ -18,14 +23,17 @@ import {
   formatSessionMonitorUpdatedAt,
   selectSessionMonitorItems,
 } from "./session-monitor-rules";
-import { listMonitoredAgentSessions } from "./session-monitor-commands";
+import {
+  closeSessionMonitorWindow,
+  listMonitoredAgentSessions,
+} from "./session-monitor-commands";
 
 const DEFAULT_MONITOR_REFRESH_INTERVAL_MS = 1_500;
 const MONITOR_CLOSE_DELAY_MS = 150;
 const DESKTOP_COLLAPSED_SIZE = 44;
 const DESKTOP_EXPANDED_HEIGHT = 460;
 const DESKTOP_EXPANDED_WIDTH = 360;
-const DESKTOP_MARGIN = 12;
+const DESKTOP_MARGIN = 8;
 
 interface AgentSessionMonitorButtonProps {
   mode?: "in-app" | "desktop";
@@ -43,12 +51,14 @@ export function AgentSessionMonitorButton({
   const { locale, messages } = useI18n();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     null,
   );
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const closeTimeoutRef = useRef<number | null>(null);
+  const hasUserDraggedDesktopWindowRef = useRef(false);
   const visibleSessions = useMemo(
     () => selectSessionMonitorItems(sessions),
     [sessions],
@@ -93,7 +103,10 @@ export function AgentSessionMonitorButton({
       return;
     }
 
-    void resizeDesktopMonitorWindow(isOpen);
+    void resizeDesktopMonitorWindow(
+      isOpen,
+      !hasUserDraggedDesktopWindowRef.current,
+    );
   }, [isDesktopMode, isOpen]);
 
   useEffect(() => {
@@ -142,6 +155,26 @@ export function AgentSessionMonitorButton({
     }, MONITOR_CLOSE_DELAY_MS);
   }
 
+  async function handleDesktopDrag(event: React.PointerEvent) {
+    if (!isDesktopMode || event.button !== 0) {
+      return;
+    }
+
+    try {
+      hasUserDraggedDesktopWindowRef.current = true;
+      await getCurrentWindow().startDragging();
+    } catch {
+      // Dragging is only a desktop affordance; keep the monitor usable if it fails.
+    }
+  }
+
+  function closeDesktopMonitor() {
+    setIsContextMenuOpen(false);
+    void closeSessionMonitorWindow({
+      ownerWindowLabel: getCurrentWindow().label,
+    });
+  }
+
   return (
     <div
       className={
@@ -153,19 +186,59 @@ export function AgentSessionMonitorButton({
       onMouseEnter={openMonitor}
       onMouseLeave={scheduleCloseMonitor}
     >
-      <Button
-        aria-expanded={isOpen}
-        aria-label={messages.agentsFeature.sessionMonitor}
-        className="agent-session-monitor__button"
-        size="icon"
-        type="button"
-        variant="secondary"
-        onClick={() => {
-          setIsOpen((currentValue) => !currentValue);
-        }}
-      >
-        <Bot aria-hidden="true" size={18} strokeWidth={1.8} />
-      </Button>
+      {isDesktopMode ? (
+        <DropdownMenu
+          open={isContextMenuOpen}
+          onOpenChange={setIsContextMenuOpen}
+        >
+          <Button
+            aria-expanded={isOpen}
+            aria-label={messages.agentsFeature.sessionMonitor}
+            className="agent-session-monitor__button"
+            size="icon"
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setIsOpen((currentValue) => !currentValue);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setIsContextMenuOpen(true);
+            }}
+            onPointerDown={handleDesktopDrag}
+          >
+            <Bot aria-hidden="true" size={18} strokeWidth={1.8} />
+          </Button>
+          <DropdownMenuContent
+            align="end"
+            aria-label={messages.agentsFeature.sessionMonitorMenu}
+            onMouseEnter={() => {
+              if (closeTimeoutRef.current !== null) {
+                window.clearTimeout(closeTimeoutRef.current);
+                closeTimeoutRef.current = null;
+              }
+            }}
+          >
+            <DropdownMenuItem onClick={closeDesktopMonitor}>
+              {messages.agentsFeature.sessionMonitorClose}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Button
+          aria-expanded={isOpen}
+          aria-label={messages.agentsFeature.sessionMonitor}
+          className="agent-session-monitor__button"
+          size="icon"
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setIsOpen((currentValue) => !currentValue);
+          }}
+        >
+          <Bot aria-hidden="true" size={18} strokeWidth={1.8} />
+        </Button>
+      )}
 
       {isOpen ? (
         <section
@@ -202,7 +275,10 @@ export function AgentSessionMonitorButton({
   );
 }
 
-async function resizeDesktopMonitorWindow(isOpen: boolean): Promise<void> {
+async function resizeDesktopMonitorWindow(
+  isOpen: boolean,
+  shouldPosition: boolean,
+): Promise<void> {
   const currentWindow = getCurrentWindow();
   const monitor = await primaryMonitor();
   const scaleFactor = monitor?.scaleFactor ?? 1;
@@ -219,12 +295,14 @@ async function resizeDesktopMonitorWindow(isOpen: boolean): Promise<void> {
   const logicalWorkHeight = workAreaSize.height / scaleFactor;
 
   await currentWindow.setSize(new LogicalSize(width, height));
-  await currentWindow.setPosition(
-    new LogicalPosition(
-      logicalWorkX + logicalWorkWidth - width - DESKTOP_MARGIN,
-      logicalWorkY + (logicalWorkHeight - height) / 2,
-    ),
-  );
+  if (shouldPosition) {
+    await currentWindow.setPosition(
+      new LogicalPosition(
+        logicalWorkX + logicalWorkWidth - width - DESKTOP_MARGIN,
+        logicalWorkY + (logicalWorkHeight - height) / 2,
+      ),
+    );
+  }
 }
 
 interface SessionMonitorRowsProps {

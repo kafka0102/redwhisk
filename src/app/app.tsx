@@ -34,6 +34,7 @@ import {
   openSessionMonitorWindow,
   type OpenAgentSessionEventPayload,
 } from "../features/agents/session-notifications/session-monitor-commands";
+import { getInitialSessionMonitorEnabled } from "../features/agents/session-notifications/session-monitor-preferences";
 import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
@@ -91,6 +92,10 @@ function ProjectApp() {
   const defaultMessages = I18N_MESSAGES[defaultLocale];
 
   useEffect(() => {
+    if (!getInitialSessionMonitorEnabled()) {
+      return;
+    }
+
     void openSessionMonitorWindow({
       ownerWindowLabel: getCurrentWindow().label,
     });

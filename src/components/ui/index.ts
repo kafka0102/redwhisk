@@ -21,6 +21,7 @@ export { Empty, EmptyTitle } from "./empty";
 export { Badge, badgeVariants } from "./badge";
 export { Separator } from "./separator";
 export { Checkbox } from "./checkbox";
+export { Switch } from "./switch";
 export {
   Dialog,
   DialogClose,
