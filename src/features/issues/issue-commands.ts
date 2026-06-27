@@ -185,6 +185,52 @@ export interface DetectAgentCommitCompletionResult {
   message: string;
 }
 
+export type IssueCompletionExternalWorktreeDecision =
+  | "merge_and_delete"
+  | "skip"
+  | "cancel";
+
+export type CompleteIssueFlowAction =
+  | "completed"
+  | "manual_dirty_prompt"
+  | "waiting_agent_commit"
+  | "confirm_external_worktree"
+  | "agent_merge_blocked"
+  | "no_commit_detected"
+  | "git_operation_blocked";
+
+export interface CompleteIssueFlowInput {
+  projectId: number;
+  issueId: number;
+  ignoreDirty?: boolean | null;
+  externalWorktreeDecision?: IssueCompletionExternalWorktreeDecision | null;
+}
+
+export interface IssueCompletionFlowRecord {
+  id: number;
+  issueId: number;
+  sessionId?: number | null;
+  phase: string;
+  ignoreDirty: boolean;
+  externalWorktreeDecision?: IssueCompletionExternalWorktreeDecision | null;
+  baseBranch?: string | null;
+  workspaceBranch?: string | null;
+  workspacePath?: string | null;
+  failureReason?: string | null;
+  updatedAt: number;
+}
+
+export interface CompleteIssueFlowResult {
+  action: CompleteIssueFlowAction;
+  issue: IssueRecord;
+  flow?: IssueCompletionFlowRecord | null;
+  message: string;
+  targetBranch?: string | null;
+  workspaceBranch?: string | null;
+  workspacePath?: string | null;
+  sessionId?: number | null;
+}
+
 export interface IssueSummaryCompletionInfo {
   option: string;
   result: string;
@@ -299,6 +345,14 @@ export function detectAgentCommitCompletion(
       input,
     },
   );
+}
+
+export function completeIssueFlow(
+  input: CompleteIssueFlowInput,
+): Promise<CompleteIssueFlowResult> {
+  return invokeCommand<CompleteIssueFlowResult>("complete_issue_flow", {
+    input,
+  });
 }
 
 export function getIssueSummary(

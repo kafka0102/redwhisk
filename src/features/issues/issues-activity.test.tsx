@@ -10,6 +10,7 @@ import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import {
   getProjectGitBranches,
   advanceIssueStatus,
+  completeIssueFlow,
   completeIssueManual,
   createIssue,
   deleteIssue,
@@ -41,6 +42,7 @@ import { selectShadcnOption } from "../../test/select-helpers";
 
 vi.mock("./issue-commands", () => ({
   advanceIssueStatus: vi.fn(),
+  completeIssueFlow: vi.fn(),
   completeIssueManual: vi.fn(),
   createIssue: vi.fn(),
   deleteIssue: vi.fn(),
@@ -154,6 +156,7 @@ vi.mock("./issue-description-editor", () => ({
 }));
 
 const advanceIssueStatusMock = vi.mocked(advanceIssueStatus);
+const completeIssueFlowMock = vi.mocked(completeIssueFlow);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const createIssueMock = vi.mocked(createIssue);
 const deleteIssueMock = vi.mocked(deleteIssue);
@@ -328,9 +331,35 @@ const existingIssueRunPrompt = [
 
 const existingIssueRunPromptWithoutSkill = "Existing description";
 
+function completedFlowResult(issue: Partial<IssueRecord> & { id: number }) {
+  const completedIssue: IssueRecord = {
+    id: issue.id,
+    projectId: issue.projectId ?? 1,
+    title: issue.title ?? "Completed issue",
+    description: issue.description ?? "",
+    status: "completed",
+    linkedSessionId: issue.linkedSessionId ?? null,
+    linkedSessionStatus: "closed",
+    linkedSessionAttention: "none",
+    createdAt: issue.createdAt ?? 1_780_632_000_000,
+    updatedAt: issue.updatedAt ?? 1_780_639_000_000,
+  };
+  return {
+    action: "completed" as const,
+    issue: completedIssue,
+    flow: null,
+    message: "Issue completed",
+    targetBranch: null,
+    workspaceBranch: null,
+    workspacePath: null,
+    sessionId: completedIssue.linkedSessionId,
+  };
+}
+
 describe("IssuesActivity", () => {
   beforeEach(() => {
     advanceIssueStatusMock.mockReset();
+    completeIssueFlowMock.mockReset();
     completeIssueManualMock.mockReset();
     createIssueMock.mockReset();
     deleteIssueMock.mockReset();
@@ -353,6 +382,12 @@ describe("IssuesActivity", () => {
     saveDialogMock.mockReset();
     convertFileSrcMock.mockReset();
     toastSuccessMock.mockReset();
+    completeIssueFlowMock.mockImplementation(async (input) =>
+      completedFlowResult({
+        id: input.issueId,
+        projectId: input.projectId,
+      }),
+    );
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
@@ -2152,12 +2187,14 @@ describe("IssuesActivity", () => {
       status: "review",
       updatedAt: attentionIssue.updatedAt + 1_000,
     });
-    completeIssueManualMock.mockResolvedValueOnce({
-      ...attentionIssue,
-      status: "completed",
-      linkedSessionStatus: "closed",
-      updatedAt: attentionIssue.updatedAt + 2_000,
-    });
+    completeIssueFlowMock.mockResolvedValueOnce(
+      completedFlowResult({
+        ...attentionIssue,
+        status: "completed",
+        linkedSessionStatus: "closed",
+        updatedAt: attentionIssue.updatedAt + 2_000,
+      }),
+    );
 
     renderIssuesActivity();
 
@@ -2193,11 +2230,12 @@ describe("IssuesActivity", () => {
         issueId: attentionIssue.id,
       }),
     );
-    await user.click(await screen.findByRole("button", { name: "确认" }));
     await waitFor(() =>
-      expect(completeIssueManualMock).toHaveBeenCalledWith({
+      expect(completeIssueFlowMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: attentionIssue.id,
+        ignoreDirty: null,
+        externalWorktreeDecision: null,
       }),
     );
     expect(
@@ -2293,11 +2331,13 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none",
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithClosedSession] });
-    advanceIssueStatusMock.mockResolvedValueOnce({
-      ...reviewWithClosedSession,
-      status: "completed",
-      updatedAt: reviewWithClosedSession.updatedAt + 1_000,
-    });
+    completeIssueFlowMock.mockResolvedValueOnce(
+      completedFlowResult({
+        ...reviewWithClosedSession,
+        status: "completed",
+        updatedAt: reviewWithClosedSession.updatedAt + 1_000,
+      }),
+    );
 
     renderIssuesActivity();
 
@@ -2311,10 +2351,11 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
     await waitFor(() =>
-      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+      expect(completeIssueFlowMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: reviewWithClosedSession.id,
-        targetStatus: "completed",
+        ignoreDirty: null,
+        externalWorktreeDecision: null,
       }),
     );
     expect(
@@ -2333,31 +2374,25 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none" as const,
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    prepareAgentCommitCompletionMock.mockResolvedValueOnce({
-      issueId: reviewWithSession.id,
-      sessionId: 503,
-      option: "complete_agent_commit",
-      head: "abc123",
-      changedFilesCount: 1,
-      changedFiles: [{ status: "M", path: "tracked.txt" }],
-      completionPrompt:
-        "请获取本次修改相关的代码，检查当前 issue 涉及的文件变更。",
-    });
-    sendAgentCommitPromptMock.mockResolvedValueOnce({
-      issueId: reviewWithSession.id,
-      sessionId: 503,
-      codexSessionId: "thread-503",
-    });
-    detectAgentCommitCompletionMock.mockResolvedValueOnce({
-      outcome: "completed",
-      issue: {
-        ...reviewWithSession,
-        status: "completed",
-        linkedSessionStatus: "closed",
-        updatedAt: reviewWithSession.updatedAt + 1_000,
-      },
-      message: "已检测到新的 commit，Issue 已完成。",
-    });
+    completeIssueFlowMock
+      .mockResolvedValueOnce({
+        action: "waiting_agent_commit",
+        issue: reviewWithSession,
+        flow: null,
+        message: "正在等待 Agent 提交。",
+        targetBranch: null,
+        workspaceBranch: null,
+        workspacePath: null,
+        sessionId: 503,
+      })
+      .mockResolvedValueOnce(
+        completedFlowResult({
+          ...reviewWithSession,
+          status: "completed",
+          linkedSessionStatus: "closed",
+          updatedAt: reviewWithSession.updatedAt + 1_000,
+        }),
+      );
 
     renderIssuesActivity();
 
@@ -2371,18 +2406,7 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: "确认" }));
 
-    expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: reviewWithSession.id,
-    });
-    expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: reviewWithSession.id,
-    });
-    expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: reviewWithSession.id,
-    });
+    await waitFor(() => expect(completeIssueFlowMock).toHaveBeenCalledTimes(2));
     expect(completeIssueManualMock).not.toHaveBeenCalled();
     expect(
       await screen.findByRole("button", { name: "View Summary" }),
@@ -2398,15 +2422,15 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none" as const,
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
-      code: "ISSUE_VALIDATION_FAILED",
-      message: "当前项目中有未提交的代码，请提交后再标记完成。",
-      details: [
-        {
-          "@type": "CompletionPolicy",
-          completionPolicy: "manual",
-        },
-      ],
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "manual_dirty_prompt",
+      issue: reviewWithSession,
+      flow: null,
+      message: "当前工作区存在未提交改动，请确认是否继续完成。",
+      targetBranch: null,
+      workspaceBranch: null,
+      workspacePath: null,
+      sessionId: 504,
     });
 
     renderIssuesActivity({ projectCompletionPolicy: "manual" });
@@ -2423,10 +2447,9 @@ describe("IssuesActivity", () => {
 
     expect(completeIssueManualMock).not.toHaveBeenCalled();
     expect(
-      within(dialog).getByText(
-        "当前项目中有未提交的代码，请提交后再标记完成。",
-      ),
+      await screen.findByRole("dialog", { name: "Uncommitted changes" }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Handle manually" }));
   });
 
   it("confirms merge into a worktree target branch before finishing Done", async () => {
@@ -2438,23 +2461,25 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none" as const,
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
-      code: "ISSUE_VALIDATION_FAILED",
-      message: "当前仓库无未提交改动，请直接使用 Complete。",
-      details: [
-        {
-          "@type": "GitStatus",
-          isClean: true,
-          targetBranch: "dev",
-        },
-      ],
-    });
-    completeIssueManualMock.mockResolvedValueOnce({
-      ...reviewWithSession,
-      status: "completed",
-      linkedSessionStatus: "closed",
-      updatedAt: reviewWithSession.updatedAt + 1_000,
-    });
+    completeIssueFlowMock
+      .mockResolvedValueOnce({
+        action: "confirm_external_worktree",
+        issue: reviewWithSession,
+        flow: null,
+        message: "需要确认外部 worktree。",
+        targetBranch: "dev",
+        workspaceBranch: "issue-505",
+        workspacePath: "/tmp/worktrees/issue-505",
+        sessionId: 505,
+      })
+      .mockResolvedValueOnce(
+        completedFlowResult({
+          ...reviewWithSession,
+          status: "completed",
+          linkedSessionStatus: "closed",
+          updatedAt: reviewWithSession.updatedAt + 1_000,
+        }),
+      );
 
     renderIssuesActivity();
 
@@ -2470,14 +2495,16 @@ describe("IssuesActivity", () => {
 
     expect(
       screen.getByRole("dialog", {
-        name: "即将完成当前 issue，并把临时分支合入目标分支 dev。确认继续吗？",
+        name: "External worktree",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Merge and delete" }));
     await waitFor(() =>
-      expect(completeIssueManualMock).toHaveBeenCalledWith({
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
         projectId: 1,
         issueId: reviewWithSession.id,
+        ignoreDirty: null,
+        externalWorktreeDecision: "merge_and_delete",
       }),
     );
   });
@@ -2492,22 +2519,16 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none" as const,
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
-      code: "ISSUE_VALIDATION_FAILED",
-      message: "当前仓库无未提交改动，请直接使用 Complete。",
-      details: [
-        {
-          "@type": "GitStatus",
-          isClean: true,
-          targetBranch: "dev",
-        },
-      ],
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "agent_merge_blocked",
+      issue: reviewWithSession,
+      flow: null,
+      message: "Agent worktree 合并被阻止，请手动处理冲突。",
+      targetBranch: "dev",
+      workspaceBranch: "issue-506",
+      workspacePath: "/tmp/worktrees/issue-506",
+      sessionId: 506,
     });
-    let rejectMerge!: (error: unknown) => void;
-    const mergePromise = new Promise<IssueRecord>((_, reject) => {
-      rejectMerge = reject;
-    });
-    completeIssueManualMock.mockReturnValueOnce(mergePromise);
     injectAgentSessionPromptMock.mockResolvedValueOnce({
       sessionId: 506,
       codexSessionId: "thread-506",
@@ -2524,29 +2545,7 @@ describe("IssuesActivity", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: "确认" }));
-    await user.click(await screen.findByRole("button", { name: "确认" }));
 
-    expect(
-      await screen.findByRole("dialog", { name: "Complete issue" }),
-    ).toBeInTheDocument();
-    rejectMerge({
-      code: "ISSUE_VALIDATION_FAILED",
-      message: "当前 Project 的 Git 状态不可用。",
-      details: [
-        {
-          "@type": "Cause",
-          message:
-            "git command failed for git merge --no-ff --no-edit issue-506",
-        },
-        {
-          "@type": "WorktreeMerge",
-          sessionId: 506,
-          targetBranch: "dev",
-          workspaceBranch: "issue-506",
-          workspacePath: "/tmp/worktrees/issue-506",
-        },
-      ],
-    });
     await waitFor(() =>
       expect(injectAgentSessionPromptMock).toHaveBeenCalledWith({
         projectId: 1,
