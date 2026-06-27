@@ -515,10 +515,14 @@ export function AgentsActivity({
     );
   }
 
-  async function completeLinkedIssueViaFlow(issueId: number) {
+  async function completeLinkedIssueViaFlow(
+    issueId: number,
+    options: { ignoreDirty?: boolean } = {},
+  ) {
     const result = await completeIssueFlow({
       projectId,
       issueId,
+      ignoreDirty: options.ignoreDirty ?? undefined,
     });
     if (result.action !== "completed") {
       throw new Error(result.message);
@@ -529,6 +533,7 @@ export function AgentsActivity({
   async function completeLinkedIssueManual(
     issue: NonNullable<typeof linkedIssue>,
     session: AgentSessionListItem,
+    options: { ignoreDirty?: boolean } = {},
   ) {
     const targetSessionId = session.sessionId;
     setIsTransitionMenuOpen(false);
@@ -539,7 +544,10 @@ export function AgentsActivity({
     let completedSessionId: number | null = null;
 
     try {
-      const completedIssue = await completeLinkedIssueViaFlow(issue.issueId);
+      const completedIssue = await completeLinkedIssueViaFlow(
+        issue.issueId,
+        options,
+      );
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
@@ -696,7 +704,9 @@ export function AgentsActivity({
       ) ?? selectedSession;
 
     setCompleteAgentCommitErrorMessage(null);
-    await completeLinkedIssueManual(linkedIssue, currentSession);
+    await completeLinkedIssueManual(linkedIssue, currentSession, {
+      ignoreDirty: true,
+    });
     setAgentCommitPreview(null);
   }
 
