@@ -832,6 +832,22 @@ impl<'connection> IssueService<'connection> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
+        if session.status == AgentSessionStatus::Running && issue.status != IssueStatus::Review {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "运行中的 Issue 必须先进入待验收后才能完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", issue.id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession")
+                    .with_value("sessionId", session.id)
+                    .with_value("status", "running"),
+            ));
+        }
 
         let effective_policy = session
             .completion_policy
