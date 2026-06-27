@@ -12,6 +12,9 @@ use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::event_repository::EventRepository;
+use redwhisk_lib::db::issue_completion_flow_repository::{
+    IssueCompletionFlowRecordInput, IssueCompletionFlowRepository,
+};
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
@@ -21,13 +24,16 @@ use redwhisk_lib::types::agent_session::{
     AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
     RestoreAgentSessionTerminalInput, ResumeStructuredAgentSessionInput,
     SetAgentSessionAttentionInput, StartAgentSessionInput, StartStandaloneAgentSessionInput,
-    StartStructuredAgentSessionInput, WorkspaceMode,
+    StartStructuredAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::IssueStatus;
 use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
+use redwhisk_lib::types::issue_completion::{
+    IssueCompletionExternalWorktreeDecision, IssueCompletionPhase,
+};
 use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 use serde_json::Value;
@@ -126,6 +132,8 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "worktree_root_path",
             "worktree_setup_command",
             "list_inserted_at",
+            "origin_branch",
+            "worktree_owner",
         ]
     );
 
@@ -140,6 +148,119 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "created_at"
         ]
     );
+
+    let completion_flow_columns = table_columns(&database.connection, "issue_completion_flows");
+    assert_eq!(
+        completion_flow_columns,
+        vec![
+            "id",
+            "issue_id",
+            "session_id",
+            "phase",
+            "ignore_dirty",
+            "external_worktree_decision",
+            "base_branch",
+            "workspace_branch",
+            "workspace_path",
+            "failure_reason",
+            "updated_at",
+        ]
+    );
+}
+
+#[test]
+fn issue_completion_flow_repository_upserts_finds_and_clears_by_issue_id() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "completion-flow-project");
+    let issue_id = insert_issue(&database.connection, project_id, "review");
+    let profile_id =
+        insert_agent_profile(&database.connection, AgentScope::Project, Some(project_id));
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_628_600_000,
+        None,
+    );
+
+    let mut transaction = database
+        .connection
+        .unchecked_transaction()
+        .expect("transaction");
+    let created = IssueCompletionFlowRepository::upsert_in_transaction(
+        &transaction,
+        IssueCompletionFlowRecordInput {
+            issue_id,
+            session_id: None,
+            phase: IssueCompletionPhase::CheckingDirty,
+            ignore_dirty: false,
+            external_worktree_decision: None,
+            base_branch: Some("main"),
+            workspace_branch: Some("feature/task"),
+            workspace_path: Some("/tmp/worktree"),
+            failure_reason: None,
+            updated_at: 1_780_628_600_000,
+        },
+    )
+    .expect("create flow");
+
+    assert_eq!(created.issue_id, issue_id);
+    assert_eq!(created.phase, IssueCompletionPhase::CheckingDirty);
+    assert!(!created.ignore_dirty);
+    assert_eq!(created.base_branch.as_deref(), Some("main"));
+
+    let updated = IssueCompletionFlowRepository::upsert_in_transaction(
+        &transaction,
+        IssueCompletionFlowRecordInput {
+            issue_id,
+            session_id: Some(session_id),
+            phase: IssueCompletionPhase::ConfirmingExternalWorktree,
+            ignore_dirty: true,
+            external_worktree_decision: Some(
+                IssueCompletionExternalWorktreeDecision::MergeAndDelete,
+            ),
+            base_branch: Some("main"),
+            workspace_branch: Some("feature/task"),
+            workspace_path: Some("/tmp/worktree"),
+            failure_reason: Some("needs confirmation"),
+            updated_at: 1_780_628_700_000,
+        },
+    )
+    .expect("update flow");
+
+    assert_eq!(updated.id, created.id);
+    assert_eq!(updated.session_id, Some(session_id));
+    assert_eq!(
+        updated.phase,
+        IssueCompletionPhase::ConfirmingExternalWorktree
+    );
+    assert!(updated.ignore_dirty);
+    assert_eq!(
+        updated.external_worktree_decision,
+        Some(IssueCompletionExternalWorktreeDecision::MergeAndDelete)
+    );
+    assert_eq!(
+        updated.failure_reason.as_deref(),
+        Some("needs confirmation")
+    );
+
+    let found =
+        IssueCompletionFlowRepository::find_by_issue_id_in_transaction(&transaction, issue_id)
+            .expect("find flow")
+            .expect("flow exists");
+    assert_eq!(found, updated);
+
+    IssueCompletionFlowRepository::clear_in_transaction(&transaction, issue_id)
+        .expect("clear flow");
+    assert!(
+        IssueCompletionFlowRepository::find_by_issue_id_in_transaction(&transaction, issue_id)
+            .expect("find after clear")
+            .is_none()
+    );
+
+    transaction.commit().expect("commit");
 }
 
 #[test]
@@ -343,6 +464,8 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
         redwhisk_lib::types::agent_session::AgentSessionAttention::None
     );
     assert_eq!(session.prompt_snapshot, "Use this snapshot");
+    assert_eq!(session.origin_branch.as_deref(), Some("main"));
+    assert_eq!(session.worktree_owner, WorktreeOwner::External);
     assert!(session.log_path.contains("session-logs"));
 
     let issue = IssueRepository::new(&database.connection)
@@ -801,6 +924,8 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
             None,
             None,
             None,
+            Some("main"),
+            WorktreeOwner::External,
             None,
             None,
             None,
@@ -889,6 +1014,8 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
             None,
             None,
             None,
+            Some("main"),
+            WorktreeOwner::External,
             None,
             None,
             None,
@@ -1158,6 +1285,8 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
 
     assert_eq!(session.workspace_mode, WorkspaceMode::Worktree);
     assert_eq!(session.target_branch.as_deref(), Some("main"));
+    assert_eq!(session.origin_branch.as_deref(), Some("main"));
+    assert_eq!(session.worktree_owner, WorktreeOwner::Redwhisk);
     assert_eq!(
         session.completion_policy,
         Some(ProjectCompletionPolicy::AgentAutoCommit)

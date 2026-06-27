@@ -12,6 +12,22 @@ pub enum WorkspaceMode {
     Worktree,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeOwner {
+    Redwhisk,
+    External,
+}
+
+impl WorktreeOwner {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Redwhisk => "redwhisk",
+            Self::External => "external",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartAgentSessionInput {
@@ -165,6 +181,8 @@ pub struct AgentSessionListItem {
     pub workspace_mode: WorkspaceMode,
     pub working_dir: String,
     pub workspace_path: Option<String>,
+    pub origin_branch: Option<String>,
+    pub worktree_owner: WorktreeOwner,
     pub log_path: String,
     pub latest_output: Option<String>,
     pub last_active_at: i64,
@@ -190,6 +208,8 @@ pub struct AgentSessionRecord {
     pub target_branch: Option<String>,
     pub workspace_branch: Option<String>,
     pub workspace_path: Option<String>,
+    pub origin_branch: Option<String>,
+    pub worktree_owner: WorktreeOwner,
     pub completion_policy: Option<ProjectCompletionPolicy>,
     pub worktree_root_path: Option<String>,
     pub worktree_setup_command: Option<String>,
