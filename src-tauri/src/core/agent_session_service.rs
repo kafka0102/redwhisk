@@ -33,7 +33,8 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::read_git_snapshot;
 use crate::git::worktree::{
-    cleanup_worktree, create_worktree_for_issue, list_local_branches, GitBranchInfo,
+    cleanup_worktree, create_worktree_for_issue, list_local_branches, restore_worktree_for_branch,
+    GitBranchInfo,
 };
 use crate::types::agent_profile::{AgentScope, AgentType};
 use crate::types::agent_session::{
@@ -1941,11 +1942,7 @@ impl AgentSessionService<'_> {
         } else {
             session.command_snapshot.clone()
         };
-        let cwd = session
-            .workspace_path
-            .clone()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| session.working_dir.clone());
+        let cwd = self.resolve_session_cwd_for_resume(&session)?;
         let mode = codex_mode_from_structured_input(None).ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
@@ -1986,6 +1983,68 @@ impl AgentSessionService<'_> {
             session_id: session.id,
             thread_id: resumed_thread_id,
         })
+    }
+
+    pub fn resolve_session_cwd_for_model_list(
+        &self,
+        session: &crate::types::agent_session::AgentSessionRecord,
+    ) -> Result<String, CommandError> {
+        let cwd = preferred_session_cwd(session);
+        if Path::new(&cwd).is_dir() {
+            return Ok(cwd);
+        }
+
+        let project = self.find_project_summary(session.project_id)?;
+        if Path::new(&project.repo_path).is_dir() {
+            return Ok(project.repo_path);
+        }
+
+        Err(missing_session_workspace_error(
+            session,
+            &cwd,
+            "Agent Session 工作区不存在，模型列表不可用。",
+        ))
+    }
+
+    fn resolve_session_cwd_for_resume(
+        &self,
+        session: &crate::types::agent_session::AgentSessionRecord,
+    ) -> Result<String, CommandError> {
+        let cwd = preferred_session_cwd(session);
+        if Path::new(&cwd).is_dir() {
+            return Ok(cwd);
+        }
+
+        let project = self.find_project_summary(session.project_id)?;
+        if should_restore_redwhisk_worktree(session) {
+            let workspace_path = session.workspace_path.as_deref().unwrap_or(&cwd);
+            let workspace_branch = session.workspace_branch.as_deref().unwrap_or_default();
+            restore_worktree_for_branch(&project.repo_path, workspace_path, workspace_branch)
+                .map_err(agent_session_start_error)?;
+            run_worktree_setup_command(workspace_path, session.worktree_setup_command.as_deref())?;
+            if Path::new(workspace_path).is_dir() {
+                return Ok(workspace_path.to_string());
+            }
+        }
+
+        Err(missing_session_workspace_error(
+            session,
+            &cwd,
+            "Agent Session 工作区不存在，无法恢复。",
+        ))
+    }
+
+    fn find_project_summary(
+        &self,
+        project_id: i64,
+    ) -> Result<crate::types::project::ProjectSummary, CommandError> {
+        self.project_repository
+            .find_by_id(project_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
+                    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
+            })
     }
 
     fn mark_structured_session_resumed(
@@ -3645,14 +3704,55 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
         .unwrap_or(false)
 }
 
+fn preferred_session_cwd(session: &crate::types::agent_session::AgentSessionRecord) -> String {
+    session
+        .workspace_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(session.working_dir.as_str())
+        .to_string()
+}
+
+fn should_restore_redwhisk_worktree(
+    session: &crate::types::agent_session::AgentSessionRecord,
+) -> bool {
+    session.workspace_mode == WorkspaceMode::Worktree
+        && session.worktree_owner == WorktreeOwner::Redwhisk
+        && session
+            .workspace_path
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        && session
+            .workspace_branch
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn missing_session_workspace_error(
+    session: &crate::types::agent_session::AgentSessionRecord,
+    cwd: &str,
+    message: &'static str,
+) -> CommandError {
+    let mut error = CommandError::new(CommandErrorCode::AgentSessionValidationFailed, message)
+        .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+        .with_detail(ErrorDetail::new("WorkingDir").with_value("path", cwd.to_string()));
+    if let Some(workspace_branch) = session.workspace_branch.as_deref() {
+        error = error.with_detail(
+            ErrorDetail::new("GitBranch").with_value("branch", workspace_branch.to_string()),
+        );
+    }
+    error
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         agent_command_with_default_args, build_structured_command_snapshot,
         codex_mode_from_profile, codex_mode_from_structured_input,
         command_supports_prompt_argument, detect_codex_session_id_from_home,
-        latest_output_from_session_log, normalize_submitted_prompt, read_timeline_from_session_log,
-        AgentSessionService, CodexMode,
+        latest_output_from_session_log, normalize_submitted_prompt, preferred_session_cwd,
+        read_timeline_from_session_log, should_restore_redwhisk_worktree, AgentSessionService,
+        CodexMode,
     };
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
@@ -3674,8 +3774,10 @@ mod tests {
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use tempfile::tempdir;
 
     struct TimelineProtocolErrorHandle {
         message: String,
@@ -4357,6 +4459,66 @@ mod tests {
         assert!(session_ids(&response.sessions).contains(&306));
     }
 
+    #[test]
+    fn resolve_session_cwd_for_resume_restores_missing_redwhisk_worktree() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        git(&repo_dir, &["branch", "issue-16"]);
+
+        let database = setup_session_list_database();
+        database
+            .execute(
+                "UPDATE projects SET repo_path = ?1 WHERE id = 1",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update project repo");
+        let service = test_agent_session_service(&database);
+        let session = test_worktree_session(worktree_path.to_string_lossy().as_ref());
+
+        let cwd = service
+            .resolve_session_cwd_for_resume(&session)
+            .expect("resolve cwd");
+
+        assert_eq!(cwd, worktree_path.to_string_lossy());
+        assert!(worktree_path.is_dir());
+        assert_eq!(
+            git_output(&worktree_path, &["branch", "--show-current"]),
+            "issue-16"
+        );
+        assert!(should_restore_redwhisk_worktree(&session));
+        assert_eq!(
+            preferred_session_cwd(&session),
+            worktree_path.to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn resolve_session_cwd_for_model_list_falls_back_to_project_repo_when_worktree_is_missing() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+
+        let database = setup_session_list_database();
+        database
+            .execute(
+                "UPDATE projects SET repo_path = ?1 WHERE id = 1",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update project repo");
+        let service = test_agent_session_service(&database);
+        let session = test_worktree_session(worktree_path.to_string_lossy().as_ref());
+
+        let cwd = service
+            .resolve_session_cwd_for_model_list(&session)
+            .expect("resolve model cwd");
+
+        assert_eq!(cwd, repo_dir.to_string_lossy());
+        assert!(!worktree_path.exists());
+    }
+
     fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create session dir");
@@ -4394,6 +4556,36 @@ mod tests {
             worktree_root_path: None,
             worktree_setup_command: None,
             log_path: log_path.to_string(),
+            latest_output: None,
+            last_active_at: 1,
+            started_at: 1,
+            closed_at: Some(2),
+        }
+    }
+
+    fn test_worktree_session(worktree_path: &str) -> AgentSessionRecord {
+        AgentSessionRecord {
+            id: 30,
+            project_id: 1,
+            issue_id: Some(16),
+            title: None,
+            agent_profile_id: 101,
+            codex_session_id: Some("thread-16".to_string()),
+            status: AgentSessionStatus::Stopped,
+            attention: AgentSessionAttention::None,
+            working_dir: worktree_path.to_string(),
+            command_snapshot: "codex".to_string(),
+            prompt_snapshot: String::new(),
+            workspace_mode: WorkspaceMode::Worktree,
+            target_branch: Some("devlop".to_string()),
+            workspace_branch: Some("issue-16".to_string()),
+            workspace_path: Some(worktree_path.to_string()),
+            origin_branch: Some("devlop".to_string()),
+            worktree_owner: WorktreeOwner::Redwhisk,
+            completion_policy: Some(ProjectCompletionPolicy::AgentAutoCommit),
+            worktree_root_path: None,
+            worktree_setup_command: Some(String::new()),
+            log_path: "/tmp/redwhisk-session-30.jsonl".to_string(),
             latest_output: None,
             last_active_at: 1,
             started_at: 1,
@@ -4519,5 +4711,48 @@ mod tests {
 
     fn session_ids(sessions: &[crate::types::agent_session::AgentSessionListItem]) -> Vec<i64> {
         sessions.iter().map(|session| session.session_id).collect()
+    }
+
+    fn create_git_repo(repo_dir: &Path) {
+        fs::create_dir_all(repo_dir).expect("create repo dir");
+        git(repo_dir, &["init"]);
+        git(repo_dir, &["config", "user.email", "redwhisk@example.test"]);
+        git(repo_dir, &["config", "user.name", "RedWhisk Test"]);
+        git(repo_dir, &["checkout", "-b", "devlop"]);
+        fs::write(repo_dir.join("base.txt"), "base\n").expect("write base file");
+        git(repo_dir, &["add", "base.txt"]);
+        git(repo_dir, &["commit", "-m", "initial"]);
+    }
+
+    fn git(repo_dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn git_output(repo_dir: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("git output utf8")
+            .trim()
+            .to_string()
     }
 }
