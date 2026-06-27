@@ -763,8 +763,68 @@ describe("IssuesActivity", () => {
         labelIds: [],
       }),
     );
-    expect(createIssueMock.mock.calls[0]?.[0].description).toBe(
-      "Read the config.",
+    expect(createIssueMock.mock.calls[0]?.[0].description).toMatch(
+      /^Read the config\.\n\n\{\{issue-attachment-temp:draft-[^}]+\}\}$/,
+    );
+  });
+
+  it("preserves saved attachment markers when re-saving an existing issue", async () => {
+    const user = userEvent.setup();
+    const attachment: IssueAttachmentRecord = {
+      id: 501,
+      issueId: existingIssue.id,
+      displayName: "spec.md",
+      relativePath: ".redwhisk/issues/20/attachments/spec.md",
+      absolutePath: "/tmp/spec.md",
+      mimeType: "text/markdown",
+      fileSize: 128,
+      kind: "text",
+      isPreviewable: true,
+      createdAt: 1_780_632_100_000,
+    };
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...existingIssue,
+          description: "Existing description\n\n{{issue-attachment:501}}",
+          attachments: [attachment],
+        },
+      ],
+    });
+    updateIssueMock.mockResolvedValue({
+      ...existingIssue,
+      description: "Existing description\n\n{{issue-attachment:501}}",
+      attachments: [attachment],
+      updatedAt: 1_780_635_600_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    expect(screen.getByText("spec.md")).toBeInTheDocument();
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Existing description",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: 20,
+        title: "Existing issue",
+        description: "Existing description\n\n{{issue-attachment:501}}",
+        attachments: [
+          {
+            attachmentId: 501,
+            displayName: "spec.md",
+            mimeType: "text/markdown",
+          },
+        ],
+        labelIds: [],
+      }),
     );
   });
 
