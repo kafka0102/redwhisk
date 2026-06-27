@@ -41,6 +41,7 @@
 - Modify: `src-tauri/src/commands/issue_commands.rs`，新增 unified completion command 并在完成后关闭 runtime session。
 - Modify: `src-tauri/src/lib.rs`，注册新增 command。
 - Test: `src-tauri/tests/agent_session.rs`、`src-tauri/tests/issue.rs`，必要时新增 `src-tauri/tests/git_worktree.rs` 或在现有 Rust module tests 中补覆盖。
+- Test: `src-tauri/tests/local_data.rs`，同步固定 migration 列表、当前版本和总数。
 
 前端新增/修改：
 
@@ -72,6 +73,7 @@ OpenSpec / OneSpec：
 - Modify: `src-tauri/src/db/agent_session_repository.rs`
 - Modify: `src-tauri/src/core/agent_session_service.rs`
 - Test: `src-tauri/tests/agent_session.rs`
+- Test: `src-tauri/tests/local_data.rs`
 
 **Interfaces:**
 - Produces enum `WorktreeOwner` in `types::agent_session` with serde snake_case values `redwhisk` and `external`.
@@ -141,6 +143,8 @@ const MIGRATION_0027_ISSUE_COMPLETION_FLOWS: &str =
 ```
 
 Add the matching `Migration { version: 27, name: "issue_completion_flows", sql: MIGRATION_0027_ISSUE_COMPLETION_FLOWS }` entry after version 26. Use the exact local `Migration` struct style in the file.
+
+Update `src-tauri/tests/local_data.rs` so the fixed migration assertions include `0027_issue_completion_flows`, the current version is `Some("0027_issue_completion_flows".to_string())`, and the schema migration count is `27`.
 
 - [ ] **Step 3: Add Rust flow types**
 
@@ -340,7 +344,7 @@ Expected: tests compile and all `agent_session` tests pass.
 Stage only Task 1 files:
 
 ```bash
-rtk git add src-tauri/migrations/0027_issue_completion_flows.sql src-tauri/src/db/migrations.rs src-tauri/src/types/issue_completion.rs src-tauri/src/db/issue_completion_flow_repository.rs src-tauri/src/types/mod.rs src-tauri/src/db/mod.rs src-tauri/src/types/agent_session.rs src-tauri/src/db/agent_session_repository.rs src-tauri/src/core/agent_session_service.rs src-tauri/tests/agent_session.rs
+rtk git add src-tauri/migrations/0027_issue_completion_flows.sql src-tauri/src/db/migrations.rs src-tauri/src/types/issue_completion.rs src-tauri/src/db/issue_completion_flow_repository.rs src-tauri/src/types/mod.rs src-tauri/src/db/mod.rs src-tauri/src/types/agent_session.rs src-tauri/src/db/agent_session_repository.rs src-tauri/src/core/agent_session_service.rs src-tauri/tests/agent_session.rs src-tauri/tests/local_data.rs
 rtk git commit -m "feat: 记录 issue 完成流程元数据"
 ```
 
