@@ -86,6 +86,25 @@ pub fn create_worktree_for_issue(
     })
 }
 
+pub fn current_branch(repo_path: impl AsRef<Path>) -> Result<String, GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    run_git(&repo_path, &["branch", "--show-current"])
+}
+
+pub fn is_additional_worktree(repo_path: impl AsRef<Path>) -> Result<bool, GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let git_dir = run_git(
+        &repo_path,
+        &["rev-parse", "--path-format=absolute", "--git-dir"],
+    )?;
+    let git_common_dir = run_git(
+        &repo_path,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )?;
+
+    Ok(git_dir != git_common_dir)
+}
+
 pub fn is_branch_merged(
     repo_path: impl AsRef<Path>,
     base_branch: &str,
@@ -109,6 +128,40 @@ pub fn is_branch_merged(
             message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         }),
     }
+}
+
+pub fn rebase_branch_onto(
+    repo_path: impl AsRef<Path>,
+    branch: &str,
+    base_branch: &str,
+) -> Result<(), GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    run_git(&repo_path, &["checkout", branch])?;
+    run_git(&repo_path, &["rebase", base_branch])?;
+    Ok(())
+}
+
+pub fn fast_forward_branch(
+    repo_path: impl AsRef<Path>,
+    target_branch: &str,
+    source_branch: &str,
+) -> Result<(), GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let original_branch = run_git(&repo_path, &["branch", "--show-current"])?;
+    run_git(&repo_path, &["checkout", target_branch])?;
+    let result = run_git(&repo_path, &["merge", "--ff-only", source_branch]);
+    let _ = run_git(&repo_path, &["checkout", &original_branch]);
+    result.map(|_| ())
+}
+
+pub fn rebase_and_fast_forward(
+    repo_path: impl AsRef<Path>,
+    worktree_path: impl AsRef<Path>,
+    target_branch: &str,
+    workspace_branch: &str,
+) -> Result<(), GitWorktreeError> {
+    rebase_branch_onto(worktree_path, workspace_branch, target_branch)?;
+    fast_forward_branch(repo_path, target_branch, workspace_branch)
 }
 
 pub fn merge_branch_into_target(
@@ -243,4 +296,122 @@ fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitWorktreeError> 
 
 fn format_git_command(args: &[&str]) -> String {
     format!("git {}", args.join(" "))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn rebases_additional_worktree_and_fast_forwards_target_branch() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-1");
+
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-1",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+        write_file(&worktree_path, "feature.txt", "feature\n");
+        git(&worktree_path, &["add", "feature.txt"]);
+        git(&worktree_path, &["commit", "-m", "feature"]);
+
+        write_file(&repo_dir, "main.txt", "main\n");
+        git(&repo_dir, &["add", "main.txt"]);
+        git(&repo_dir, &["commit", "-m", "main update"]);
+
+        assert!(is_additional_worktree(&worktree_path).expect("detect worktree"));
+        assert_eq!(
+            current_branch(&worktree_path).expect("current branch"),
+            "issue-1"
+        );
+
+        rebase_and_fast_forward(&repo_dir, &worktree_path, "main", "issue-1")
+            .expect("rebase and ff");
+
+        assert!(is_branch_merged(&repo_dir, "main", "issue-1").expect("merged"));
+        assert_eq!(current_branch(&repo_dir).expect("repo branch"), "main");
+    }
+
+    #[test]
+    fn rebase_conflict_returns_git_error_and_keeps_worktree_path() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-1");
+
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "shared.txt", "base\n");
+        git(&repo_dir, &["add", "shared.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-1",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+        write_file(&worktree_path, "shared.txt", "issue\n");
+        git(&worktree_path, &["add", "shared.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+
+        write_file(&repo_dir, "shared.txt", "main\n");
+        git(&repo_dir, &["add", "shared.txt"]);
+        git(&repo_dir, &["commit", "-m", "main change"]);
+
+        let result = rebase_and_fast_forward(&repo_dir, &worktree_path, "main", "issue-1");
+
+        assert!(matches!(
+            result,
+            Err(GitWorktreeError::GitCommandFailed { .. })
+        ));
+        assert!(worktree_path.exists());
+    }
+
+    fn create_repo(repo_dir: &Path) {
+        fs::create_dir_all(repo_dir).expect("create repo dir");
+        git(repo_dir, &["init"]);
+        git(repo_dir, &["config", "user.email", "redwhisk@example.test"]);
+        git(repo_dir, &["config", "user.name", "RedWhisk Test"]);
+        git(repo_dir, &["checkout", "-b", "main"]);
+    }
+
+    fn write_file(repo_dir: &Path, relative_path: &str, contents: &str) {
+        fs::write(repo_dir.join(relative_path), contents).expect("write file");
+    }
+
+    fn git(repo_dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .output()
+            .expect("run git");
+
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
