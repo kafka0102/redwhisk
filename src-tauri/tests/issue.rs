@@ -3119,7 +3119,7 @@ fn advance_issue_status_completes_running_issue_and_closes_linked_session() {
 }
 
 #[test]
-fn advance_issue_status_rejects_backward_transition() {
+fn advance_issue_status_allows_backward_transition_to_running() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project(&database.connection, "advance-backward-repo");
@@ -3144,15 +3144,91 @@ fn advance_issue_status_rejects_backward_transition() {
         )
         .expect("set review");
 
-    let error = service
+    let updated = service
         .advance_issue_status(AdvanceIssueStatusInput {
             project_id,
             issue_id: issue.id,
             target_status: IssueStatus::Running,
         })
-        .expect_err("backward transition should fail");
+        .expect("backward transition should succeed");
 
-    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    assert_eq!(updated.status, IssueStatus::Running);
+}
+
+#[test]
+fn advance_issue_status_returns_running_issue_to_backlog_and_soft_deletes_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "return-to-backlog-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Return me".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let updated = service
+        .advance_issue_status(AdvanceIssueStatusInput {
+            project_id,
+            issue_id: issue.id,
+            target_status: IssueStatus::Backlog,
+        })
+        .expect("return to backlog");
+
+    assert_eq!(updated.status, IssueStatus::Backlog);
+    assert_eq!(updated.linked_session_id, None);
+    assert_eq!(updated.linked_session_status, None);
+
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session");
+    assert!(stored_session.is_none());
+
+    let session_row: (String, i64) = database
+        .connection
+        .query_row(
+            "SELECT status, del FROM agent_sessions WHERE id = ?1",
+            [session_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("session row");
+    assert_eq!(session_row.0, "closed");
+    assert_eq!(session_row.1, 1);
+
+    let issue_actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert!(issue_actions
+        .iter()
+        .any(|action| action.action_type == IssueActionType::IssueStatusChanged));
+
+    let session_events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    let latest_session_event = session_events.last().expect("latest session event");
+    assert_eq!(latest_session_event.event_type, SessionEventType::SessionClosed);
 }
 
 #[test]

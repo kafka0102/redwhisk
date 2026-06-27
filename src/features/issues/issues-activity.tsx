@@ -609,14 +609,30 @@ export function IssuesActivity({
       return;
     }
 
+    const currentIssue = selectedIssue;
+    const isBackwardTransition =
+      issueStatusRank(targetStatus) < issueStatusRank(currentIssue.status);
+
     if (
       targetStatus === "completed" &&
-      selectedIssue.linkedSessionStatus === "running" &&
-      selectedIssue.linkedSessionLatestOutput?.trim()
+      currentIssue.linkedSessionStatus === "running"
     ) {
       const isConfirmed = await confirm({
-        message: "session 未结束，确认要完成吗？",
+        message: messages.issues.confirmCompleteWhileRunning,
       });
+      if (!isConfirmed) {
+        return;
+      }
+    } else if (isBackwardTransition) {
+      const message =
+        targetStatus === "backlog"
+          ? currentIssue.linkedSessionStatus === "running"
+            ? messages.issues.confirmTerminateAndReturnToBacklog
+            : messages.issues.confirmReturnToBacklog
+          : messages.issues.confirmMoveBackToStatus(
+              getIssueStatusLabel(targetStatus, messages),
+            );
+      const isConfirmed = await confirm({ message });
       if (!isConfirmed) {
         return;
       }
@@ -625,7 +641,6 @@ export function IssuesActivity({
     setDialogErrorMessage(null);
     setIsSaving(true);
     const requestProjectId = projectId;
-    const currentIssue = selectedIssue;
 
     try {
       let updatedIssue: IssueRecord;
@@ -1420,6 +1435,35 @@ function canRunIssueFor(
   issue: Pick<IssueRecord, "status" | "linkedSessionId">,
 ): boolean {
   return issue.status === "backlog" && issue.linkedSessionId == null;
+}
+
+function issueStatusRank(status: IssueStatus): number {
+  switch (status) {
+    case "backlog":
+      return 0;
+    case "running":
+      return 1;
+    case "review":
+      return 2;
+    case "completed":
+      return 3;
+  }
+}
+
+function getIssueStatusLabel(
+  status: IssueStatus,
+  messages: ReturnType<typeof useI18n>["messages"],
+): string {
+  switch (status) {
+    case "backlog":
+      return messages.issues.backlog;
+    case "running":
+      return messages.issues.inProgress;
+    case "review":
+      return messages.issues.review;
+    case "completed":
+      return messages.issues.done;
+  }
 }
 
 function toAttachmentPreviewState(

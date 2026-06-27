@@ -1992,27 +1992,18 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a forward-only status menu and completes a running issue after confirmation", async () => {
+  it("allows backward status choices and completes a running issue after confirmation", async () => {
     const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({
-      issues: [
-        {
-          ...attentionIssue,
-          linkedSessionLatestOutput: "agent produced output",
-        } as IssueRecord,
-      ],
-    });
+    listIssuesMock.mockResolvedValue({ issues: [attentionIssue] });
     markIssueReviewMock.mockResolvedValueOnce({
       ...attentionIssue,
       status: "review",
-      linkedSessionLatestOutput: "agent produced output",
       updatedAt: attentionIssue.updatedAt + 1_000,
     });
     completeIssueManualMock.mockResolvedValueOnce({
       ...attentionIssue,
       status: "completed",
       linkedSessionStatus: "closed",
-      linkedSessionLatestOutput: "agent produced output",
       updatedAt: attentionIssue.updatedAt + 2_000,
     });
 
@@ -2029,7 +2020,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
 
-    expect(screen.getByRole("menuitem", { name: "Backlog" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Backlog" })).toBeEnabled();
     expect(
       screen.getByRole("menuitem", { name: "In Progress" }),
     ).toBeDisabled();
@@ -2039,7 +2030,9 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
     expect(
-      screen.getByRole("dialog", { name: "session 未结束，确认要完成吗？" }),
+      screen.getByRole("dialog", {
+        name: "This issue is still running. Mark it as completed?",
+      }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认" }));
     await waitFor(() =>
@@ -2058,6 +2051,125 @@ describe("IssuesActivity", () => {
     expect(
       screen.getByRole("button", { name: "View Summary" }),
     ).toBeInTheDocument();
+  });
+
+  it("confirms before moving an issue backward to a non-backlog status", async () => {
+    const user = userEvent.setup();
+    const reviewWithClosedSession: IssueRecord = {
+      ...reviewIssue,
+      linkedSessionId: 601,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithClosedSession] });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...reviewWithClosedSession,
+      status: "running",
+      updatedAt: reviewWithClosedSession.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "In Progress" }));
+
+    expect(
+      screen.getByRole("dialog", {
+        name: "Move this issue back to In Progress?",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: reviewWithClosedSession.id,
+        targetStatus: "running",
+      }),
+    );
+  });
+
+  it("asks to terminate the running session before returning an issue to backlog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [attentionIssue] });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...attentionIssue,
+      status: "backlog",
+      linkedSessionId: null,
+      linkedSessionStatus: null,
+      linkedSessionAttention: null,
+      updatedAt: attentionIssue.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Attention issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
+
+    expect(
+      screen.getByRole("dialog", {
+        name: "This issue is still running. Stop it and return it to Backlog?",
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: attentionIssue.id,
+        targetStatus: "backlog",
+      }),
+    );
+  });
+
+  it("moves an inactive issue to completed without the extra running-session confirmation", async () => {
+    const user = userEvent.setup();
+    const reviewWithClosedSession: IssueRecord = {
+      ...reviewIssue,
+      linkedSessionId: 602,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithClosedSession] });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...reviewWithClosedSession,
+      status: "completed",
+      updatedAt: reviewWithClosedSession.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: reviewWithClosedSession.id,
+        targetStatus: "completed",
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", {
+        name: "This issue is still running. Mark it as completed?",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("sends an agent commit prompt before completing a dirty auto-commit review issue", async () => {
@@ -2105,6 +2217,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
 
     expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -2154,6 +2267,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
 
     expect(completeIssueManualMock).not.toHaveBeenCalled();
     expect(
@@ -2200,6 +2314,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
 
     expect(
       screen.getByRole("dialog", {
@@ -2256,6 +2371,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
     await user.click(await screen.findByRole("button", { name: "确认" }));
 
     expect(

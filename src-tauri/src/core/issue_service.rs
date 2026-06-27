@@ -478,21 +478,8 @@ impl<'connection> IssueService<'connection> {
             return self.hydrate_issue(issue);
         }
 
-        if issue_status_rank(&input.target_status) < issue_status_rank(&issue.status) {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "Issue 状态只能向前推进，不能回退。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status))
-                    .with_value("targetStatus", issue_status_to_str(&input.target_status)),
-            ));
-        }
-
         match input.target_status {
-            IssueStatus::Backlog => self.hydrate_issue(issue),
+            IssueStatus::Backlog => self.rollback_issue_to_backlog_with_transaction(input, issue),
             IssueStatus::Running | IssueStatus::Review | IssueStatus::Completed => {
                 self.advance_issue_status_with_transaction(input, issue)
             }
@@ -1966,6 +1953,103 @@ impl<'connection> IssueService<'connection> {
         Ok(updated_issue)
     }
 
+    fn rollback_issue_to_backlog_with_transaction(
+        &self,
+        input: AdvanceIssueStatusInput,
+        issue: IssueRecord,
+    ) -> Result<IssueRecord, CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+
+        let updated_issue = IssueRepository::update_status_in_transaction(
+            &transaction,
+            input.project_id,
+            input.issue_id,
+            IssueStatus::Backlog,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        if let Some(linked_session_id) = issue.linked_session_id {
+            if issue.linked_session_status == Some(AgentSessionStatus::Running) {
+                let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
+                    &transaction,
+                    linked_session_id,
+                    AgentSessionStatus::Closed,
+                    updated_issue.updated_at,
+                )
+                .map_err(issue_database_error)?
+                .ok_or_else(|| {
+                    CommandError::new(
+                        CommandErrorCode::IssueValidationFailed,
+                        "退回 Backlog 时关闭关联 Agent Session 失败。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+                    )
+                })?;
+
+                let session_event_payload = json!({
+                    "sessionId": closed_session.id,
+                    "issueId": closed_session.issue_id,
+                    "status": "closed",
+                    "reason": "status_menu_backlog_return",
+                    "logPath": closed_session.log_path,
+                })
+                .to_string();
+                EventRepository::insert_session_event_in_transaction(
+                    &transaction,
+                    closed_session.id,
+                    SessionEventType::SessionClosed,
+                    &session_event_payload,
+                    updated_issue.updated_at,
+                )
+                .map_err(issue_database_error)?;
+            }
+
+            let deleted = AgentSessionRepository::soft_delete_in_transaction(
+                &transaction,
+                linked_session_id,
+                updated_issue.updated_at,
+            )
+            .map_err(issue_database_error)?;
+            if !deleted {
+                return Err(CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "退回 Backlog 时移除关联 Agent Session 失败。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+                ));
+            }
+        }
+
+        let payload_json = json!({
+            "fromStatus": issue_status_to_str(&issue.status),
+            "toStatus": "backlog",
+            "linkedSessionId": issue.linked_session_id,
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            updated_issue.id,
+            IssueActionType::IssueStatusChanged,
+            &payload_json,
+            updated_issue.updated_at,
+        )
+        .map_err(issue_database_error)?;
+
+        let backlog_issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        transaction.commit().map_err(issue_database_error)?;
+        self.hydrate_issue(backlog_issue)
+    }
+
     fn complete_issue_from_review_in_transaction(
         &self,
         transaction: &rusqlite::Transaction<'_>,
@@ -2329,15 +2413,6 @@ fn workspace_mode_to_str(mode: &WorkspaceMode) -> &'static str {
     match mode {
         WorkspaceMode::CurrentBranch => "current_branch",
         WorkspaceMode::Worktree => "worktree",
-    }
-}
-
-fn issue_status_rank(status: &IssueStatus) -> u8 {
-    match status {
-        IssueStatus::Backlog => 0,
-        IssueStatus::Running => 1,
-        IssueStatus::Review => 2,
-        IssueStatus::Completed => 3,
     }
 }
 

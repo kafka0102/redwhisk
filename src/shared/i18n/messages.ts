@@ -196,6 +196,10 @@ export interface I18nMessages {
     summaryClose: string;
     runDialogClose: string;
     commitStrategy: string;
+    confirmCompleteWhileRunning: string;
+    confirmMoveBackToStatus: (statusLabel: string) => string;
+    confirmReturnToBacklog: string;
+    confirmTerminateAndReturnToBacklog: string;
     title: string;
     titleField: string;
     titlePlaceholder: string;
@@ -594,6 +598,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       summaryClose: "Close issue summary",
       runDialogClose: "Close run dialog",
       commitStrategy: "Commit strategy",
+      confirmCompleteWhileRunning:
+        "This issue is still running. Mark it as completed?",
+      confirmMoveBackToStatus: (statusLabel) =>
+        `Move this issue back to ${statusLabel}?`,
+      confirmReturnToBacklog:
+        "Are you sure you want to return this issue to Backlog?",
+      confirmTerminateAndReturnToBacklog:
+        "This issue is still running. Stop it and return it to Backlog?",
       title: "Issues",
       titleField: "Title",
       titlePlaceholder: "Issue title",
@@ -991,6 +1003,12 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       summaryClose: "关闭 Issue 总结",
       runDialogClose: "关闭运行弹窗",
       commitStrategy: "提交策略",
+      confirmCompleteWhileRunning: "当前 Issue 正在执行，是否标记为完成？",
+      confirmMoveBackToStatus: (statusLabel) =>
+        `确定要回退到 ${statusLabel} 阶段吗？`,
+      confirmReturnToBacklog: "确定要退回至 Backlog 阶段吗？",
+      confirmTerminateAndReturnToBacklog:
+        "当前 Issue 正在执行，是否终止并退回至 Backlog？",
       title: "Issues",
       titleField: "标题",
       titlePlaceholder: "Issue 标题",

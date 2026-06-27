@@ -259,7 +259,6 @@ function StatusMenu({
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const currentStatus = selectedIssue?.status ?? "backlog";
-  const currentStatusIndex = ISSUE_STATUS_ORDER.indexOf(currentStatus);
 
   useEffect(() => {
     if (!isStatusMenuOpen) {
@@ -296,19 +295,17 @@ function StatusMenu({
         <div className="issue-dialog__status-popup" role="menu">
           {ISSUE_STATUS_ORDER.map((status) => {
             const isCurrent = status === currentStatus;
-            const isDisabled =
-              ISSUE_STATUS_ORDER.indexOf(status) <= currentStatusIndex;
 
             return (
               <button
                 key={status}
                 className="issue-dialog__status-option"
-                disabled={isSaving || isDisabled}
+                disabled={isSaving || isCurrent}
                 role="menuitem"
                 type="button"
                 onClick={() => {
                   setIsStatusMenuOpen(false);
-                  if (!isDisabled) {
+                  if (!isCurrent) {
                     onAdvanceStatus(status);
                   }
                 }}
