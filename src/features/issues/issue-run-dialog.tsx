@@ -40,7 +40,10 @@ const RECENT_WORKSPACE_SELECTION_STORAGE_KEY =
   "redwhisk.issue-run.recent-workspace-selection";
 
 interface IssueRunDialogProps {
-  issue: Pick<IssueRecord, "id" | "title" | "description" | "attachments">;
+  issue: Pick<
+    IssueRecord,
+    "id" | "title" | "description" | "attachments" | "labels"
+  >;
   projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   worktreeSetupCommand?: string;
@@ -142,6 +145,7 @@ export function IssueRunDialog({
         setSelectedWorkflowSkill(
           initialProfile
             ? resolveInitialWorkflowSkill({
+                issue,
                 profile: initialProfile,
                 projectId,
               })
@@ -379,6 +383,7 @@ export function IssueRunDialog({
                   setSelectedWorkflowSkill(
                     nextProfile
                       ? resolveInitialWorkflowSkill({
+                          issue,
                           profile: nextProfile,
                           projectId,
                         })
@@ -611,15 +616,22 @@ export function IssueRunDialog({
 }
 
 function resolveInitialWorkflowSkill({
+  issue,
   profile,
   projectId,
 }: {
+  issue: Pick<IssueRecord, "labels">;
   profile: Pick<AgentProfileRecord, "defaultSkill" | "id">;
   projectId: number;
 }): string | null {
   const configuredSkills = parseDefaultSkills(profile.defaultSkill);
   if (configuredSkills.length === 0) {
     return null;
+  }
+
+  const labelWorkflowSkill = resolveLabelWorkflowSkill(issue.labels ?? []);
+  if (labelWorkflowSkill !== null) {
+    return labelWorkflowSkill;
   }
 
   const recentWorkflowSkill = readRecentWorkflowSkill({
@@ -637,6 +649,20 @@ function resolveInitialWorkflowSkill({
   return configuredSkills.includes(recentWorkflowSkill)
     ? recentWorkflowSkill
     : null;
+}
+
+function resolveLabelWorkflowSkill(
+  labels: NonNullable<IssueRecord["labels"]>,
+): string | null {
+  if (labels.length === 0) {
+    return null;
+  }
+
+  const configuredLabel = labels.find(
+    (label) => (label.workflowSkill ?? "").trim().length > 0,
+  );
+
+  return configuredLabel?.workflowSkill?.trim() ?? "";
 }
 
 function readRecentWorkflowSkill({

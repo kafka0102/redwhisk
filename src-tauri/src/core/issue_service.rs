@@ -2666,6 +2666,7 @@ fn to_issue_label_record(label: ProjectLabelRow) -> IssueLabelRecord {
         scope: label.scope,
         project_id: label.project_id,
         color: label.color,
+        workflow_skill: label.workflow_skill,
     }
 }
 

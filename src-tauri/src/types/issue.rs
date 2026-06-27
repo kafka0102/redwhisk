@@ -47,6 +47,7 @@ pub struct IssueLabelRecord {
     pub scope: ProjectLabelScope,
     pub project_id: Option<i64>,
     pub color: String,
+    pub workflow_skill: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

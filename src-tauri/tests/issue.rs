@@ -3938,12 +3938,13 @@ fn create_issue_persists_label_ids_and_hydrates_labels() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project(&database.connection, "label-repo");
-    let project_label_id = insert_project_label(
+    let project_label_id = insert_project_label_with_workflow_skill(
         &database.connection,
         "ops",
         "project",
         Some(project_id),
         "#112233",
+        Some("hotfix-skill"),
     );
     let global_label_id =
         insert_project_label(&database.connection, "release", "global", None, "#445566");
@@ -3979,9 +3980,14 @@ fn create_issue_persists_label_ids_and_hydrates_labels() {
     assert_eq!(issue.labels[0].id, project_label_id);
     assert_eq!(issue.labels[0].name, "ops");
     assert_eq!(issue.labels[0].color, "#112233");
+    assert_eq!(
+        issue.labels[0].workflow_skill.as_deref(),
+        Some("hotfix-skill")
+    );
     assert_eq!(issue.labels[1].id, global_label_id);
     assert_eq!(issue.labels[1].name, "release");
     assert_eq!(issue.labels[1].color, "#445566");
+    assert_eq!(issue.labels[1].workflow_skill, None);
 }
 
 #[test]
@@ -4502,11 +4508,22 @@ fn insert_project_label(
     project_id: Option<i64>,
     color: &str,
 ) -> i64 {
+    insert_project_label_with_workflow_skill(connection, name, scope, project_id, color, None)
+}
+
+fn insert_project_label_with_workflow_skill(
+    connection: &rusqlite::Connection,
+    name: &str,
+    scope: &str,
+    project_id: Option<i64>,
+    color: &str,
+    workflow_skill: Option<&str>,
+) -> i64 {
     connection
         .execute(
-            "INSERT INTO project_labels (name, scope, project_id, color, del)
-             VALUES (?1, ?2, ?3, ?4, 0)",
-            rusqlite::params![name, scope, project_id, color],
+            "INSERT INTO project_labels (name, scope, project_id, color, workflow_skill, del)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+            rusqlite::params![name, scope, project_id, color, workflow_skill],
         )
         .expect("insert project label");
     connection.last_insert_rowid()

@@ -74,7 +74,7 @@ export function IssuesActivity({
   );
   const [runDialogIssue, setRunDialogIssue] = useState<Pick<
     IssueRecord,
-    "id" | "title" | "description" | "attachments"
+    "id" | "title" | "description" | "attachments" | "labels"
   > | null>(null);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [attachmentPreview, setAttachmentPreview] =
@@ -437,6 +437,7 @@ export function IssuesActivity({
       | "title"
       | "description"
       | "attachments"
+      | "labels"
       | "status"
       | "linkedSessionId"
     >,
