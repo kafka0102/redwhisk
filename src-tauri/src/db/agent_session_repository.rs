@@ -10,6 +10,7 @@ use crate::types::project::ProjectCompletionPolicy;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentSessionListRow {
     pub session_id: i64,
+    pub project_id: i64,
     pub issue_id: Option<i64>,
     pub issue_title: Option<String>,
     pub issue_status: Option<IssueStatus>,
@@ -71,6 +72,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         let mut statement = self.connection.prepare(
             "SELECT
                 agent_sessions.id,
+                agent_sessions.project_id,
                 agent_sessions.issue_id,
                 issues.title,
                 issues.status,
@@ -525,28 +527,29 @@ fn agent_session_list_row_from_row(
 ) -> rusqlite::Result<AgentSessionListRow> {
     Ok(AgentSessionListRow {
         session_id: row.get(0)?,
-        issue_id: row.get(1)?,
-        issue_title: row.get(2)?,
+        project_id: row.get(1)?,
+        issue_id: row.get(2)?,
+        issue_title: row.get(3)?,
         issue_status: row
-            .get::<_, Option<String>>(3)?
+            .get::<_, Option<String>>(4)?
             .map(|value| issue_status_from_str(&value))
             .transpose()?,
-        agent_profile_id: row.get(4)?,
-        title: row.get(5)?,
-        agent_type: agent_type_from_str(&row.get::<_, String>(6)?)?,
-        status: agent_session_status_from_str(&row.get::<_, String>(7)?)?,
-        attention: agent_session_attention_from_str(&row.get::<_, String>(8)?)?,
-        workspace_mode: workspace_mode_from_str(&row.get::<_, String>(9)?)?,
-        working_dir: row.get(10)?,
-        workspace_path: row.get(11)?,
-        origin_branch: row.get(12)?,
-        worktree_owner: worktree_owner_from_str(&row.get::<_, String>(13)?)?,
-        log_path: row.get(14)?,
-        latest_output: row.get(15)?,
-        list_inserted_at: row.get(16)?,
-        last_active_at: row.get(17)?,
-        started_at: row.get(18)?,
-        closed_at: row.get(19)?,
+        agent_profile_id: row.get(5)?,
+        title: row.get(6)?,
+        agent_type: agent_type_from_str(&row.get::<_, String>(7)?)?,
+        status: agent_session_status_from_str(&row.get::<_, String>(8)?)?,
+        attention: agent_session_attention_from_str(&row.get::<_, String>(9)?)?,
+        workspace_mode: workspace_mode_from_str(&row.get::<_, String>(10)?)?,
+        working_dir: row.get(11)?,
+        workspace_path: row.get(12)?,
+        origin_branch: row.get(13)?,
+        worktree_owner: worktree_owner_from_str(&row.get::<_, String>(14)?)?,
+        log_path: row.get(15)?,
+        latest_output: row.get(16)?,
+        list_inserted_at: row.get(17)?,
+        last_active_at: row.get(18)?,
+        started_at: row.get(19)?,
+        closed_at: row.get(20)?,
     })
 }
 

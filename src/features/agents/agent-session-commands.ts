@@ -15,6 +15,7 @@ export type WorkspaceMode = "current_branch" | "worktree";
 
 export interface AgentSessionListItem {
   sessionId: number;
+  projectId?: number;
   issueId: number | null;
   issueTitle: string | null;
   issueStatus?: IssueStatus | null;

@@ -1,10 +1,8 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listen } from "@tauri-apps/api/event";
 
 import { AppShell } from "./app-shell";
-import { openSessionMonitorWindow } from "../features/agents/session-notifications/session-monitor-commands";
 import {
   closeProjectTerminal,
   createProjectTerminal,
@@ -20,30 +18,6 @@ const mockAppWindow = {
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => mockAppWindow,
-}));
-
-const tauriEventMocks = vi.hoisted(() => ({
-  listeners: [] as Array<{
-    eventName: string;
-    callback: (event: {
-      payload: { projectId: number; sessionId: number };
-    }) => void;
-  }>,
-  unlisten: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(
-    (
-      eventName: string,
-      callback: (event: {
-        payload: { projectId: number; sessionId: number };
-      }) => void,
-    ) => {
-      tauriEventMocks.listeners.push({ eventName, callback });
-      return Promise.resolve(tauriEventMocks.unlisten);
-    },
-  ),
 }));
 
 vi.mock("../features/project/project-switcher", () => ({
@@ -80,16 +54,6 @@ vi.mock(
   }),
 );
 
-vi.mock(
-  "../features/agents/session-notifications/session-monitor-commands",
-  () => ({
-    closeSessionMonitorWindow: vi.fn(),
-    OPEN_AGENT_SESSION_EVENT: "open-agent-session",
-    openMonitoredAgentSession: vi.fn(),
-    openSessionMonitorWindow: vi.fn(),
-  }),
-);
-
 vi.mock("../features/settings/project-settings-activity", () => ({
   ProjectSettingsActivity: ({ activeMenu }: { activeMenu?: string }) => (
     <div>project settings activity {activeMenu}</div>
@@ -123,18 +87,9 @@ vi.mock("../features/terminals/project-terminal-commands", () => ({
 const createProjectTerminalMock = vi.mocked(createProjectTerminal);
 const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
 const listProjectTerminalsMock = vi.mocked(listProjectTerminals);
-const listenMock = vi.mocked(listen);
-const openSessionMonitorWindowMock = vi.mocked(openSessionMonitorWindow);
 
 describe("AppShell terminals activity persistence", () => {
   beforeEach(() => {
-    tauriEventMocks.listeners.length = 0;
-    tauriEventMocks.unlisten.mockReset();
-    listenMock.mockClear();
-    openSessionMonitorWindowMock.mockReset();
-    openSessionMonitorWindowMock.mockResolvedValue({
-      windowLabel: "session-monitor-main",
-    });
     createProjectTerminalMock.mockReset();
     closeProjectTerminalMock.mockReset();
     listProjectTerminalsMock.mockReset();
@@ -275,7 +230,7 @@ describe("AppShell terminals activity persistence", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("opens a native desktop monitor window for the current project", async () => {
+  it("opens the selected agent session from a desktop monitor request", async () => {
     render(
       <AppShell
         onCreateProject={() => {}}
@@ -292,48 +247,18 @@ describe("AppShell terminals activity persistence", () => {
           status: "available",
         }}
         projects={[]}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(openSessionMonitorWindowMock).toHaveBeenCalledWith({
-        ownerWindowLabel: "main",
-        projectId: 1,
-      });
-    });
-  });
-
-  it("opens the selected agent session from the desktop monitor event", async () => {
-    render(
-      <AppShell
-        onCreateProject={() => {}}
-        onProjectUpdated={() => {}}
-        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
-        project={{
-          id: 1,
-          name: "RedWhisk",
-          path: "/tmp/redwhisk",
-          completionPolicy: "agent_auto_commit",
-          worktreeLocation: "repo_sibling",
-          worktreeSetupCommand: "",
-          recentOpenedAt: "2026-06-15T00:00:00.000Z",
-          status: "available",
+        openAgentSessionRequest={{
+          projectId: 1,
+          requestId: 1,
+          sessionId: 7,
         }}
-        projects={[]}
       />,
     );
 
     await waitFor(() => {
-      expect(tauriEventMocks.listeners).toHaveLength(1);
+      expect(screen.getByText("agents activity 7")).toBeInTheDocument();
     });
 
-    await act(async () => {
-      tauriEventMocks.listeners[0].callback({
-        payload: { projectId: 1, sessionId: 7 },
-      });
-    });
-
-    expect(await screen.findByText("agents activity 7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
       "aria-pressed",
       "true",

@@ -1066,6 +1066,7 @@ impl<'connection> AgentSessionService<'connection> {
 
                 AgentSessionListItem {
                     session_id: row.session_id,
+                    project_id: row.project_id,
                     issue_id: row.issue_id,
                     issue_title: row.issue_title,
                     issue_status: row.issue_status,
@@ -2128,6 +2129,49 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .list_agent_sessions(project_id)
+    }
+
+    pub fn list_monitored_agent_sessions_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
+    ) -> Result<AgentSessionListResponse, CommandError> {
+        let database = DatabaseConfig::new(data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        let service = AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        );
+        let projects = service
+            .project_repository
+            .list_recent()
+            .map_err(agent_session_database_error)?;
+        let mut sessions = Vec::new();
+
+        for project in projects {
+            service.reconcile_unrecoverable_running_sessions(
+                project.id,
+                pty_sessions,
+                agent_registry,
+            )?;
+            sessions.extend(service.list_agent_sessions(project.id)?.sessions);
+        }
+
+        sessions.sort_by(|left, right| {
+            right
+                .last_active_at
+                .cmp(&left.last_active_at)
+                .then_with(|| right.session_id.cmp(&left.session_id))
+        });
+
+        Ok(AgentSessionListResponse { sessions })
     }
 
     pub fn get_project_git_branches_in_data_dir(

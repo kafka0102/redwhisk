@@ -18,6 +18,7 @@ import {
   formatSessionMonitorUpdatedAt,
   selectSessionMonitorItems,
 } from "./session-monitor-rules";
+import { listMonitoredAgentSessions } from "./session-monitor-commands";
 
 const DEFAULT_MONITOR_REFRESH_INTERVAL_MS = 1_500;
 const MONITOR_CLOSE_DELAY_MS = 150;
@@ -28,8 +29,8 @@ const DESKTOP_MARGIN = 12;
 
 interface AgentSessionMonitorButtonProps {
   mode?: "in-app" | "desktop";
-  onViewSession: (sessionId: number) => void;
-  projectId: number;
+  onViewSession: (sessionId: number, projectId: number) => void;
+  projectId?: number;
   refreshIntervalMs?: number;
 }
 
@@ -62,7 +63,10 @@ export function AgentSessionMonitorButton({
       setErrorMessage(null);
 
       try {
-        const response = await listAgentSessions(projectId);
+        const response =
+          projectId == null
+            ? await listMonitoredAgentSessions()
+            : await listAgentSessions(projectId);
         setSessions(response.sessions);
       } catch (error) {
         setErrorMessage(toCommandError(error).message);
@@ -183,10 +187,11 @@ export function AgentSessionMonitorButton({
               locale={locale}
               messages={messages}
               onSelectSession={setSelectedSessionId}
-              onViewSession={(sessionId) => {
-                onViewSession(sessionId);
+              onViewSession={(sessionId, targetProjectId) => {
+                onViewSession(sessionId, targetProjectId);
                 closeMonitor();
               }}
+              projectId={projectId}
               selectedSessionId={selectedSessionId}
               sessions={visibleSessions}
             />
@@ -226,7 +231,8 @@ interface SessionMonitorRowsProps {
   locale: ReturnType<typeof useI18n>["locale"];
   messages: ReturnType<typeof useI18n>["messages"];
   onSelectSession: (sessionId: number) => void;
-  onViewSession: (sessionId: number) => void;
+  onViewSession: (sessionId: number, projectId: number) => void;
+  projectId?: number;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
 }
@@ -236,6 +242,7 @@ function SessionMonitorRows({
   messages,
   onSelectSession,
   onViewSession,
+  projectId,
   selectedSessionId,
   sessions,
 }: SessionMonitorRowsProps) {
@@ -256,6 +263,7 @@ function SessionMonitorRows({
       {sessions.map((session) => {
         const title = formatSessionTitle(session);
         const statusLabel = formatSessionMonitorStatusLabel(messages, session);
+        const targetProjectId = session.projectId ?? projectId;
         const updatedAt = formatSessionMonitorUpdatedAt(
           locale,
           session.lastActiveAt,
@@ -290,7 +298,12 @@ function SessionMonitorRows({
                 size="sm"
                 type="button"
                 variant="outline"
-                onClick={() => onViewSession(session.sessionId)}
+                disabled={targetProjectId == null}
+                onClick={() => {
+                  if (targetProjectId != null) {
+                    onViewSession(session.sessionId, targetProjectId);
+                  }
+                }}
               >
                 <ExternalLink aria-hidden="true" size={14} strokeWidth={1.8} />
                 {messages.agentsFeature.sessionMonitorView}

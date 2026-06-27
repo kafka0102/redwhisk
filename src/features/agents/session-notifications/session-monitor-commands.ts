@@ -1,10 +1,10 @@
+import type { AgentSessionListItem } from "../agent-session-commands";
 import { invokeCommand } from "../../../shared/commands/command-client";
 
 export const OPEN_AGENT_SESSION_EVENT = "open-agent-session";
 
 export interface OpenSessionMonitorWindowInput {
   ownerWindowLabel: string;
-  projectId: number;
 }
 
 export interface OpenSessionMonitorWindowResponse {
@@ -35,6 +35,10 @@ export interface OpenAgentSessionEventPayload {
   sessionId: number;
 }
 
+export interface MonitoredAgentSessionListResponse {
+  sessions: AgentSessionListItem[];
+}
+
 export function openSessionMonitorWindow(
   input: OpenSessionMonitorWindowInput,
 ): Promise<OpenSessionMonitorWindowResponse> {
@@ -59,5 +63,11 @@ export function openMonitoredAgentSession(
   return invokeCommand<OpenMonitoredAgentSessionResponse>(
     "open_monitored_agent_session",
     { input },
+  );
+}
+
+export function listMonitoredAgentSessions(): Promise<MonitoredAgentSessionListResponse> {
+  return invokeCommand<MonitoredAgentSessionListResponse>(
+    "list_monitored_agent_sessions",
   );
 }

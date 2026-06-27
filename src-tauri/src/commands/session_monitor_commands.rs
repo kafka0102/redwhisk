@@ -1,17 +1,20 @@
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, State};
 
+use crate::app_state::AppState;
+use crate::core::agent_session_service::AgentSessionService;
+use crate::types::agent_session::AgentSessionListResponse;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 pub const OPEN_AGENT_SESSION_EVENT: &str = "open-agent-session";
 const SESSION_MONITOR_HEIGHT: f64 = 44.0;
 const SESSION_MONITOR_WIDTH: f64 = 44.0;
+const SESSION_MONITOR_WINDOW_LABEL: &str = "session-monitor";
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenSessionMonitorWindowInput {
     pub owner_window_label: String,
-    pub project_id: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -59,7 +62,7 @@ pub async fn open_session_monitor_window(
     app: tauri::AppHandle,
     input: OpenSessionMonitorWindowInput,
 ) -> Result<OpenSessionMonitorWindowResponse, CommandError> {
-    let window_label = session_monitor_window_label(&input.owner_window_label);
+    let window_label = session_monitor_window_label();
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {
         existing_window.show().map_err(|error| {
@@ -72,9 +75,7 @@ pub async fn open_session_monitor_window(
     let monitor_window = tauri::WebviewWindowBuilder::new(
         &app,
         window_label.clone(),
-        tauri::WebviewUrl::App(
-            build_session_monitor_url(input.project_id, &input.owner_window_label).into(),
-        ),
+        tauri::WebviewUrl::App(build_session_monitor_url(&input.owner_window_label).into()),
     )
     .title("RedWhisk Session Monitor")
     .inner_size(SESSION_MONITOR_WIDTH, SESSION_MONITOR_HEIGHT)
@@ -98,9 +99,9 @@ pub async fn open_session_monitor_window(
 #[tauri::command]
 pub async fn close_session_monitor_window(
     app: tauri::AppHandle,
-    input: CloseSessionMonitorWindowInput,
+    _input: CloseSessionMonitorWindowInput,
 ) -> Result<CloseSessionMonitorWindowResponse, CommandError> {
-    let window_label = session_monitor_window_label(&input.owner_window_label);
+    let window_label = session_monitor_window_label();
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {
         existing_window.close().map_err(|error| {
@@ -109,6 +110,38 @@ pub async fn close_session_monitor_window(
     }
 
     Ok(CloseSessionMonitorWindowResponse { window_label })
+}
+
+#[tauri::command]
+pub fn list_monitored_agent_sessions(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AgentSessionListResponse, CommandError> {
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 查询失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+
+    {
+        let mut local_data = state.local_data.lock().map_err(|_| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 查询失败。",
+            )
+        })?;
+        local_data
+            .initialize(&data_dir)
+            .map_err(CommandError::from)?;
+    }
+
+    AgentSessionService::list_monitored_agent_sessions_in_data_dir(
+        data_dir,
+        &state.pty_sessions,
+        &state.agent_sessions,
+    )
 }
 
 #[tauri::command]
@@ -170,10 +203,8 @@ pub async fn open_monitored_agent_session(
     })
 }
 
-fn build_session_monitor_url(project_id: i64, owner_window_label: &str) -> String {
-    format!(
-        "index.html?surface=session-monitor&projectId={project_id}&ownerWindowLabel={owner_window_label}"
-    )
+fn build_session_monitor_url(owner_window_label: &str) -> String {
+    format!("index.html?surface=session-monitor&ownerWindowLabel={owner_window_label}")
 }
 
 fn monitored_agent_session_payload(
@@ -186,19 +217,8 @@ fn monitored_agent_session_payload(
     }
 }
 
-fn session_monitor_window_label(owner_window_label: &str) -> String {
-    let normalized_owner_label = owner_window_label
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
-
-    format!("session-monitor-{normalized_owner_label}")
+fn session_monitor_window_label() -> String {
+    SESSION_MONITOR_WINDOW_LABEL.to_string()
 }
 
 fn session_monitor_error(window_label: &str, message: &str, cause: String) -> CommandError {
@@ -216,22 +236,15 @@ mod tests {
     };
 
     #[test]
-    fn monitor_window_label_is_scoped_to_owner_window() {
-        assert_eq!(
-            session_monitor_window_label("project-42"),
-            "session-monitor-project-42"
-        );
-        assert_eq!(
-            session_monitor_window_label("project:42/main"),
-            "session-monitor-project-42-main"
-        );
+    fn monitor_window_label_is_global() {
+        assert_eq!(session_monitor_window_label(), "session-monitor");
     }
 
     #[test]
-    fn monitor_url_carries_project_and_owner_window() {
+    fn monitor_url_carries_owner_window() {
         assert_eq!(
-            build_session_monitor_url(7, "project-7"),
-            "index.html?surface=session-monitor&projectId=7&ownerWindowLabel=project-7"
+            build_session_monitor_url("project-7"),
+            "index.html?surface=session-monitor&ownerWindowLabel=project-7"
         );
     }
 

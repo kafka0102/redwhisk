@@ -13,9 +13,9 @@ vi.mock("./agent-session-monitor-button", () => ({
   AgentSessionMonitorButton: ({
     onViewSession,
   }: {
-    onViewSession: (sessionId: number) => void;
+    onViewSession: (sessionId: number, projectId: number) => void;
   }) => (
-    <button type="button" onClick={() => onViewSession(7)}>
+    <button type="button" onClick={() => onViewSession(7, 3)}>
       view monitored session
     </button>
   ),
@@ -56,7 +56,7 @@ describe("SessionMonitorSurface", () => {
   it("opens the monitored session through the native desktop command", async () => {
     const user = userEvent.setup();
 
-    render(<SessionMonitorSurface ownerWindowLabel="main" projectId={1} />);
+    render(<SessionMonitorSurface ownerWindowLabel="main" />);
 
     expect(document.body).toHaveClass("session-monitor-window");
 
@@ -66,7 +66,7 @@ describe("SessionMonitorSurface", () => {
 
     expect(openMonitoredAgentSessionMock).toHaveBeenCalledWith({
       ownerWindowLabel: "main",
-      projectId: 1,
+      projectId: 3,
       sessionId: 7,
     });
   });

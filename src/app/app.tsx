@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { AppShell } from "./app-shell";
 import { resolveAppSurface } from "./app-surface";
@@ -27,6 +29,11 @@ import {
   type ProjectListItem,
 } from "../features/project/project-commands";
 import { SessionMonitorSurface } from "../features/agents/session-notifications/session-monitor-surface";
+import {
+  OPEN_AGENT_SESSION_EVENT,
+  openSessionMonitorWindow,
+  type OpenAgentSessionEventPayload,
+} from "../features/agents/session-notifications/session-monitor-commands";
 import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
@@ -55,10 +62,7 @@ export function App() {
 
   if (appSurface.type === "session-monitor") {
     return (
-      <SessionMonitorSurface
-        ownerWindowLabel={appSurface.ownerWindowLabel}
-        projectId={appSurface.projectId}
-      />
+      <SessionMonitorSurface ownerWindowLabel={appSurface.ownerWindowLabel} />
     );
   }
 
@@ -78,8 +82,19 @@ function ProjectApp() {
     string | null
   >(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  const [openAgentSessionRequest, setOpenAgentSessionRequest] = useState<{
+    projectId: number;
+    requestId: number;
+    sessionId: number;
+  } | null>(null);
   const defaultLocale = getDefaultLocale();
   const defaultMessages = I18N_MESSAGES[defaultLocale];
+
+  useEffect(() => {
+    void openSessionMonitorWindow({
+      ownerWindowLabel: getCurrentWindow().label,
+    });
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -121,6 +136,71 @@ function ProjectApp() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+    let requestId = 0;
+
+    async function openProjectForAgentSession(
+      payload: OpenAgentSessionEventPayload,
+      nextRequestId: number,
+    ) {
+      setProjectOpenError(null);
+
+      try {
+        if (selectedProject?.id !== payload.projectId) {
+          const openedProject = await openProject({
+            projectId: payload.projectId,
+          });
+          const projectSummary = toProjectSummary(openedProject);
+
+          if (isDisposed) {
+            return;
+          }
+
+          setProjects((currentProjects) =>
+            mergeProject(currentProjects, projectSummary),
+          );
+          setSelectedProject(projectSummary);
+        }
+
+        if (!isDisposed) {
+          setOpenAgentSessionRequest({
+            projectId: payload.projectId,
+            requestId: nextRequestId,
+            sessionId: payload.sessionId,
+          });
+        }
+      } catch (error: unknown) {
+        if (!isDisposed) {
+          setProjectOpenError(toCommandError(error).message);
+        }
+      }
+    }
+
+    async function subscribeOpenAgentSession() {
+      unlisten = await listen<OpenAgentSessionEventPayload>(
+        OPEN_AGENT_SESSION_EVENT,
+        (event) => {
+          requestId += 1;
+          void openProjectForAgentSession(event.payload, requestId);
+        },
+      );
+
+      if (isDisposed) {
+        unlisten();
+        unlisten = null;
+      }
+    }
+
+    void subscribeOpenAgentSession();
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, [selectedProject?.id]);
 
   const startCreateProject = useCallback(
     async (openInNewWindow: boolean) => {
@@ -288,6 +368,7 @@ function ProjectApp() {
           project={selectedProject}
           projects={projects}
           onProjectsRefresh={refreshProjects}
+          openAgentSessionRequest={openAgentSessionRequest}
         />
         <Toaster />
         {createProjectDraft ? (

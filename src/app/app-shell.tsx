@@ -1,18 +1,11 @@
 import { Bot, CircleDot, Palette, Settings, Terminal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
-import {
-  closeSessionMonitorWindow,
-  OPEN_AGENT_SESSION_EVENT,
-  openSessionMonitorWindow,
-  type OpenAgentSessionEventPayload,
-} from "../features/agents/session-notifications/session-monitor-commands";
 import { useAgentSessionNotifications } from "../features/agents/session-notifications/use-agent-session-notifications";
 import type { SettingsMenu } from "../features/settings/project-settings-activity";
 import {
@@ -27,6 +20,11 @@ interface AppShellProps {
   project: ProjectSummary;
   projects: ProjectSummary[];
   onProjectsRefresh: () => Promise<void>;
+  openAgentSessionRequest?: {
+    projectId: number;
+    requestId: number;
+    sessionId: number;
+  } | null;
 }
 
 const ACTIVITIES: Array<{
@@ -44,6 +42,7 @@ export function AppShell({
   onCreateProject,
   onProjectUpdated,
   onProjectsRefresh,
+  openAgentSessionRequest,
   project,
   projects,
 }: AppShellProps) {
@@ -67,8 +66,6 @@ export function AppShell({
   const projectTerminalsState =
     projectTerminalsStateByProjectId[project.id] ??
     getDefaultProjectTerminalsActivityState();
-  const ownerWindowLabel = getCurrentWindow().label;
-
   const openAgentSession = useCallback((sessionId: number) => {
     setActiveAgentSessionId(sessionId);
     setRequestedIssueId(null);
@@ -77,45 +74,16 @@ export function AppShell({
   }, []);
 
   useEffect(() => {
-    void openSessionMonitorWindow({
-      ownerWindowLabel,
-      projectId: project.id,
-    });
-
-    return () => {
-      void closeSessionMonitorWindow({ ownerWindowLabel });
-    };
-  }, [ownerWindowLabel, project.id]);
-
-  useEffect(() => {
-    let isDisposed = false;
-    let unlisten: (() => void) | null = null;
-
-    async function subscribeOpenAgentSession() {
-      unlisten = await listen<OpenAgentSessionEventPayload>(
-        OPEN_AGENT_SESSION_EVENT,
-        (event) => {
-          if (event.payload.projectId !== project.id) {
-            return;
-          }
-
-          openAgentSession(event.payload.sessionId);
-        },
-      );
-
-      if (isDisposed) {
-        unlisten();
-        unlisten = null;
-      }
+    if (openAgentSessionRequest?.projectId !== project.id) {
+      return;
     }
 
-    void subscribeOpenAgentSession();
+    const timeoutId = window.setTimeout(() => {
+      openAgentSession(openAgentSessionRequest.sessionId);
+    }, 0);
 
-    return () => {
-      isDisposed = true;
-      unlisten?.();
-    };
-  }, [openAgentSession, project.id]);
+    return () => window.clearTimeout(timeoutId);
+  }, [openAgentSession, openAgentSessionRequest, project.id]);
 
   const handleProjectTerminalsStateChange = useCallback(
     (nextState: React.SetStateAction<ProjectTerminalsActivityState>) => {

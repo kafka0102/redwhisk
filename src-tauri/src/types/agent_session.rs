@@ -167,6 +167,7 @@ pub struct AgentSessionListResponse {
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionListItem {
     pub session_id: i64,
+    pub project_id: i64,
     pub issue_id: Option<i64>,
     pub issue_title: Option<String>,
     pub issue_status: Option<IssueStatus>,

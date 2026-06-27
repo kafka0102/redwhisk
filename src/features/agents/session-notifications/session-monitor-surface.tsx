@@ -6,12 +6,10 @@ import { openMonitoredAgentSession } from "./session-monitor-commands";
 
 interface SessionMonitorSurfaceProps {
   ownerWindowLabel: string;
-  projectId: number;
 }
 
 export function SessionMonitorSurface({
   ownerWindowLabel,
-  projectId,
 }: SessionMonitorSurfaceProps) {
   useEffect(() => {
     document.body.classList.add("session-monitor-window");
@@ -26,8 +24,7 @@ export function SessionMonitorSurface({
       <main className="session-monitor-surface">
         <AgentSessionMonitorButton
           mode="desktop"
-          projectId={projectId}
-          onViewSession={(sessionId) => {
+          onViewSession={(sessionId, projectId) => {
             void openMonitoredAgentSession({
               ownerWindowLabel,
               projectId,

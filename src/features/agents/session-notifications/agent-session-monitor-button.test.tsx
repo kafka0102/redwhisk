@@ -6,9 +6,14 @@ import { I18nProvider } from "../../../shared/i18n/i18n";
 import { listAgentSessions } from "../agent-session-commands";
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { AgentSessionMonitorButton } from "./agent-session-monitor-button";
+import { listMonitoredAgentSessions } from "./session-monitor-commands";
 
 vi.mock("../agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
+}));
+
+vi.mock("./session-monitor-commands", () => ({
+  listMonitoredAgentSessions: vi.fn(),
 }));
 
 const windowMocks = vi.hoisted(() => ({
@@ -43,6 +48,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const listMonitoredAgentSessionsMock = vi.mocked(listMonitoredAgentSessions);
 
 describe("AgentSessionMonitorButton", () => {
   beforeEach(() => {
@@ -52,6 +58,8 @@ describe("AgentSessionMonitorButton", () => {
     windowMocks.setSize.mockResolvedValue(undefined);
     listAgentSessionsMock.mockReset();
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
+    listMonitoredAgentSessionsMock.mockReset();
+    listMonitoredAgentSessionsMock.mockResolvedValue({ sessions: [] });
   });
 
   it("shows every running session on hover", async () => {
@@ -132,7 +140,24 @@ describe("AgentSessionMonitorButton", () => {
     );
     await user.click(screen.getByRole("button", { name: "View session" }));
 
-    expect(onViewSession).toHaveBeenCalledWith(7);
+    expect(onViewSession).toHaveBeenCalledWith(7, 1);
+  });
+
+  it("loads sessions globally in desktop mode without a current project", async () => {
+    const user = userEvent.setup();
+    listMonitoredAgentSessionsMock.mockResolvedValue({
+      sessions: [session({ projectId: 9, sessionId: 8, title: "Global run" })],
+    });
+    const onViewSession = vi.fn();
+
+    renderButton({ mode: "desktop", onViewSession, projectId: null });
+    await user.hover(screen.getByRole("button", { name: "Session monitor" }));
+    await user.click(await screen.findByRole("button", { name: /Global run/ }));
+    await user.click(screen.getByRole("button", { name: "View session" }));
+
+    expect(listMonitoredAgentSessionsMock).toHaveBeenCalled();
+    expect(listAgentSessionsMock).not.toHaveBeenCalled();
+    expect(onViewSession).toHaveBeenCalledWith(8, 9);
   });
 
   it("refreshes sessions while the monitor is open", async () => {
@@ -176,16 +201,18 @@ describe("AgentSessionMonitorButton", () => {
 function renderButton({
   mode,
   onViewSession = vi.fn(),
+  projectId = 1,
 }: {
   mode?: "in-app" | "desktop";
-  onViewSession?: (sessionId: number) => void;
+  onViewSession?: (sessionId: number, projectId: number) => void;
+  projectId?: number | null;
 } = {}) {
   return render(
     <I18nProvider>
       <AgentSessionMonitorButton
         mode={mode}
         onViewSession={onViewSession}
-        projectId={1}
+        projectId={projectId ?? undefined}
         refreshIntervalMs={10}
       />
     </I18nProvider>,

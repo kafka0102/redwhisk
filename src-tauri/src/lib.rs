@@ -104,6 +104,7 @@ pub fn run() {
             commands::session_monitor_commands::open_session_monitor_window,
             commands::session_monitor_commands::close_session_monitor_window,
             commands::session_monitor_commands::open_monitored_agent_session,
+            commands::session_monitor_commands::list_monitored_agent_sessions,
             commands::settings_commands::detect_codex_command,
             commands::settings_commands::test_agent_command,
             commands::settings_commands::list_agent_profiles,
