@@ -21,6 +21,7 @@ const AGENT_SESSION_TERMINAL_OUTPUT_EVENT: &str = "agent-session-terminal-output
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::new(LocalDataService::new()))
         .setup(|app| {
