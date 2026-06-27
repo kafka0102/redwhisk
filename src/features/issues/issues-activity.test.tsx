@@ -1839,6 +1839,92 @@ describe("IssuesActivity", () => {
     );
   });
 
+  it("defaults to no workflow skill when issue labels have no configured workflow skill", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "redwhisk.issue-run.recent-workflow-skill",
+      JSON.stringify({ "1:100": "skill-b" }),
+    );
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...existingIssue,
+          labels: [
+            { ...projectLabel, workflowSkill: null },
+            { ...globalLabel, workflowSkill: null },
+          ],
+        },
+      ],
+    });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          profiles: [
+            {
+              ...projectProfile,
+              defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+            },
+          ],
+        };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
+      "None",
+    );
+    expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
+      existingIssueRunPromptWithoutSkill,
+    );
+  });
+
+  it("defaults to the first workflow skill configured by issue labels", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "redwhisk.issue-run.recent-workflow-skill",
+      JSON.stringify({ "1:100": "skill-a" }),
+    );
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...existingIssue,
+          labels: [
+            { ...projectLabel, workflowSkill: null },
+            { ...globalLabel, workflowSkill: "skill-b" },
+          ],
+        },
+      ],
+    });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          profiles: [
+            {
+              ...projectProfile,
+              defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+            },
+          ],
+        };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
+      "skill-b",
+    );
+    expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
+      ["using skill skill-b for task:", "Existing description"].join("\n\n"),
+    );
+  });
+
   it("falls back to the first configured workflow skill when there is no recent selection", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });

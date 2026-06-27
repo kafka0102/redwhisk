@@ -13,6 +13,7 @@ export interface IssueLabelRecord {
   scope: IssueLabelScope;
   projectId: number | null;
   color: string;
+  workflowSkill: string | null;
 }
 
 export interface IssueAttachmentRecord {
