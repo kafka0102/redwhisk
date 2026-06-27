@@ -201,6 +201,38 @@ pub fn cleanup_worktree(
     Ok(())
 }
 
+pub fn restore_worktree_for_branch(
+    repo_path: impl AsRef<Path>,
+    workspace_path: impl AsRef<Path>,
+    workspace_branch: &str,
+) -> Result<(), GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let workspace_path = workspace_path.as_ref();
+    if workspace_path.is_dir() {
+        return Ok(());
+    }
+    if workspace_path.exists() {
+        return Err(GitWorktreeError::WorktreeRootInvalid(
+            workspace_path.to_string_lossy().to_string(),
+        ));
+    }
+    if let Some(parent) = workspace_path.parent() {
+        prepare_worktree_root(parent)?;
+    }
+
+    run_git(&repo_path, &["worktree", "prune"])?;
+    run_git(
+        &repo_path,
+        &[
+            "worktree",
+            "add",
+            workspace_path.to_string_lossy().as_ref(),
+            workspace_branch,
+        ],
+    )?;
+    Ok(())
+}
+
 fn list_worktree_branches(
     repo_path: &Path,
     current_branch: &str,
@@ -386,6 +418,28 @@ mod tests {
             Err(GitWorktreeError::GitCommandFailed { .. })
         ));
         assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn restores_missing_worktree_from_existing_branch() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+        git(&repo_dir, &["branch", "issue-16"]);
+
+        restore_worktree_for_branch(&repo_dir, &worktree_path, "issue-16")
+            .expect("restore worktree");
+
+        assert!(worktree_path.is_dir());
+        assert_eq!(
+            current_branch(&worktree_path).expect("current branch"),
+            "issue-16"
+        );
     }
 
     fn create_repo(repo_dir: &Path) {

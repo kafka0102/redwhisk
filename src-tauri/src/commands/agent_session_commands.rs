@@ -604,12 +604,8 @@ pub fn list_agent_models(
         } else {
             session.command_snapshot.as_str()
         };
-        let cwd = session
-            .workspace_path
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or(session.working_dir.as_str());
-        list_models_with_command(command, Some(cwd)).map_err(|error| {
+        let cwd = service.resolve_session_cwd_for_model_list(&session)?;
+        list_models_with_command(command, Some(cwd.as_str())).map_err(|error| {
             crate::core::agent_session_service::agent_session_error_to_command_error(error.into())
         })?
     };
