@@ -357,7 +357,10 @@ export function IssuesActivity({
         const createdIssue = await createIssue({
           projectId: requestProjectId,
           title: form.title,
-          description: buildIssueDescription(form.description),
+          description: buildIssueDescription(
+            form.description,
+            form.attachments,
+          ),
           attachments: serializeAttachments(form.attachments),
           labelIds: form.labelIds,
         });
@@ -374,7 +377,10 @@ export function IssuesActivity({
           projectId: requestProjectId,
           issueId: selectedIssue.id,
           title: form.title,
-          description: buildIssueDescription(form.description),
+          description: buildIssueDescription(
+            form.description,
+            form.attachments,
+          ),
           attachments: serializeAttachments(form.attachments),
           labelIds: form.labelIds,
         });
@@ -1316,8 +1322,32 @@ function markdownToExcerpt(markdown: string): string {
     .trim();
 }
 
-function buildIssueDescription(description: string): string {
-  return description.trimEnd();
+function buildIssueDescription(
+  description: string,
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
+): string {
+  const trimmedDescription = description.trimEnd();
+  const attachmentTokens = attachments.map(formatAttachmentDescriptionToken);
+
+  if (attachmentTokens.length === 0) {
+    return trimmedDescription;
+  }
+
+  if (trimmedDescription.length === 0) {
+    return attachmentTokens.join("\n");
+  }
+
+  return `${trimmedDescription}\n\n${attachmentTokens.join("\n")}`;
+}
+
+function formatAttachmentDescriptionToken(
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+): string {
+  if ("id" in attachment) {
+    return `{{issue-attachment:${attachment.id}}}`;
+  }
+
+  return `{{issue-attachment-temp:${attachment.token}}}`;
 }
 
 function serializeAttachments(
