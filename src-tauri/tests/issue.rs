@@ -1122,6 +1122,7 @@ fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
                  workspace_branch = 'issue-manual-branch',
                  workspace_path = ?1,
                  worktree_root_path = ?2,
+                 worktree_owner = 'redwhisk',
                  completion_policy = 'manual'
              WHERE id = ?3",
             rusqlite::params![
@@ -2909,6 +2910,89 @@ fn complete_issue_flow_rejects_running_issue_before_review() {
 }
 
 #[test]
+fn complete_issue_flow_rejects_running_issue_even_when_session_is_inactive() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-running-inactive-session-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-running-inactive-session-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Running with inactive session".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "closed",
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions
+             SET working_dir = ?1,
+                 workspace_mode = 'current_branch',
+                 target_branch = 'main',
+                 workspace_branch = 'main',
+                 workspace_path = ?1,
+                 origin_branch = 'main',
+                 completion_policy = 'manual'
+             WHERE id = ?2",
+            rusqlite::params![repo_dir.to_string_lossy().to_string(), session_id],
+        )
+        .expect("update session workspace");
+
+    let error = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect_err("running issue should require review even with inactive session");
+
+    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    assert!(error.message.contains("待验收"));
+    let stored_issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue.id)
+        .expect("query issue")
+        .expect("issue exists");
+    assert_eq!(stored_issue.status, IssueStatus::Running);
+}
+
+#[test]
 fn complete_issue_flow_completes_review_issue_with_closed_linked_session() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-closed-session-repo");
@@ -3504,6 +3588,55 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
             .as_str(),
         "complete_clean"
     );
+
+    let (external_issue, external_session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "legacy external worktree flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("legacy-worktrees");
+    let workspace_path = worktree_root.join("legacy-external");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "legacy-external",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        external_session_id,
+        &workspace_path,
+        &worktree_root,
+        "legacy-external",
+        WorktreeOwner::External,
+        ProjectCompletionPolicy::Manual,
+    );
+    write_file(&workspace_path, "tracked.txt", "legacy external\n");
+    git(&workspace_path, &["commit", "-am", "legacy external"]);
+
+    let external_error = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: external_issue.id,
+        })
+        .expect_err("legacy entry should not auto-confirm external worktree");
+    assert_eq!(external_error.code, CommandErrorCode::IssueValidationFailed);
+    let external_flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(external_issue.id)
+        .expect("external flow")
+        .expect("external flow exists");
+    assert_eq!(
+        external_flow.phase,
+        IssueCompletionPhase::ConfirmingExternalWorktree
+    );
+    assert!(workspace_path.exists());
 
     let (detect_issue, detect_session_id) = create_review_issue_with_session(
         &database.connection,
