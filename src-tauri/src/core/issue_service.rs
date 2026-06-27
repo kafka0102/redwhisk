@@ -1096,6 +1096,28 @@ impl<'connection> IssueService<'connection> {
                 .workspace_path
                 .as_deref()
                 .is_some_and(|workspace_path| !Path::new(workspace_path).exists());
+        if workspace_missing && session.worktree_owner == WorktreeOwner::Redwhisk {
+            if let Err(error) =
+                redwhisk_missing_worktree_is_closed_out(&project.repo_path, &session)
+            {
+                let flow = self.upsert_completion_flow(
+                    issue.id,
+                    Some(session.id),
+                    IssueCompletionPhase::AgentMergeBlocked,
+                    input.ignore_dirty == Some(true),
+                    input.external_worktree_decision,
+                    &session,
+                    Some(&error),
+                )?;
+                return Ok(self.flow_result(
+                    CompleteIssueFlowAction::AgentMergeBlocked,
+                    issue,
+                    Some(flow),
+                    "Agent worktree 缺失且无法确认分支已合入，请手动处理。".to_string(),
+                    &session,
+                ));
+            }
+        }
         let current_branch = if workspace_missing {
             target_branch.clone().unwrap_or_default()
         } else {
@@ -2473,6 +2495,46 @@ fn rebase_fast_forward_and_cleanup(
     rebase_and_fast_forward(repo_path, workspace_path, target_branch, workspace_branch)?;
     cleanup_worktree(repo_path, workspace_path, workspace_branch)?;
     Ok(())
+}
+
+fn redwhisk_missing_worktree_is_closed_out(
+    repo_path: &str,
+    session: &AgentSessionRecord,
+) -> Result<(), String> {
+    let target_branch = session
+        .origin_branch
+        .as_deref()
+        .or(session.target_branch.as_deref())
+        .ok_or_else(|| "缺失 RedWhisk worktree 的目标分支元数据。".to_string())?;
+    let workspace_branch = session
+        .workspace_branch
+        .as_deref()
+        .ok_or_else(|| "缺失 RedWhisk worktree 的工作分支元数据。".to_string())?;
+    if !branch_exists(repo_path, workspace_branch)? {
+        return Ok(());
+    }
+    match is_branch_merged(repo_path, target_branch, workspace_branch) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(format!(
+            "RedWhisk worktree 路径缺失，但工作分支 {workspace_branch} 尚未合入 {target_branch}。"
+        )),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn branch_exists(repo_path: &str, branch: &str) -> Result<bool, String> {
+    let branch_ref = format!("refs/heads/{branch}");
+    let output = Command::new("git")
+        .args(["show-ref", "--verify", "--quiet", branch_ref.as_str()])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+    }
 }
 
 fn read_current_branch(repo_path: &str) -> Result<String, CommandError> {
