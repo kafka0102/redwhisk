@@ -38,8 +38,28 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(() => mockAppWindow),
 }));
 
+const tauriEventMocks = vi.hoisted(() => ({
+  listeners: [] as Array<{
+    eventName: string;
+    callback: (event: {
+      payload: { projectId: number; sessionId: number };
+    }) => void;
+  }>,
+  unlisten: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(() => Promise.resolve(vi.fn())),
+  listen: vi.fn(
+    (
+      eventName: string,
+      callback: (event: {
+        payload: { projectId: number; sessionId: number };
+      }) => void,
+    ) => {
+      tauriEventMocks.listeners.push({ eventName, callback });
+      return Promise.resolve(tauriEventMocks.unlisten);
+    },
+  ),
 }));
 
 vi.mock("../features/project/project-commands", () => ({
@@ -99,10 +119,21 @@ vi.mock("../features/issues/issue-description-editor", () => ({
   ),
 }));
 
+vi.mock("../features/agents/agents-activity", () => ({
+  AgentsActivity: ({
+    activeSessionId,
+  }: {
+    activeSessionId?: number | null;
+  }) => <div>agents activity {activeSessionId}</div>,
+}));
+
 const { open } = await import("@tauri-apps/plugin-dialog");
 const { getCurrentWindow } = await import("@tauri-apps/api/window");
+const { openSessionMonitorWindow } =
+  await import("../features/agents/session-notifications/session-monitor-commands");
 const openDialogMock = vi.mocked(open);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
+const openSessionMonitorWindowMock = vi.mocked(openSessionMonitorWindow);
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
@@ -121,6 +152,8 @@ describe("App project entry", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();
+    tauriEventMocks.listeners.length = 0;
+    tauriEventMocks.unlisten.mockReset();
     resetIssuePageStateCacheForTests();
     openDialogMock.mockReset();
     createProjectMock.mockReset();
@@ -134,6 +167,10 @@ describe("App project entry", () => {
     listProjectLabelsMock.mockReset();
     updateIssueMock.mockReset();
     getCurrentWindowMock.mockClear();
+    openSessionMonitorWindowMock.mockReset();
+    openSessionMonitorWindowMock.mockResolvedValue({
+      windowLabel: "session-monitor",
+    });
     mockAppWindow.isMaximized.mockReset();
     mockAppWindow.maximize.mockReset();
     mockAppWindow.unmaximize.mockReset();
@@ -247,6 +284,16 @@ describe("App project entry", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the global desktop session monitor on app start", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(openSessionMonitorWindowMock).toHaveBeenCalledWith({
+        ownerWindowLabel: "main",
+      });
+    });
+  });
+
   it("opens to Project Home without the Activity Bar", async () => {
     render(<App />);
 
@@ -330,6 +377,7 @@ describe("App project entry", () => {
     const header = document.querySelector(".project-home__window-header");
 
     expect(header).toHaveAttribute("data-tauri-drag-region");
+    getCurrentWindowMock.mockClear();
 
     await user.dblClick(header!);
 
@@ -349,6 +397,7 @@ describe("App project entry", () => {
     const header = document.querySelector(".project-home__window-header");
 
     expect(header).toHaveAttribute("data-tauri-drag-region");
+    getCurrentWindowMock.mockClear();
 
     await user.dblClick(header!);
 
@@ -382,6 +431,25 @@ describe("App project entry", () => {
     ).toHaveAttribute("data-tauri-drag-region");
     await waitFor(() =>
       expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
+    );
+  });
+
+  it("opens a monitored session from the desktop monitor while on Project Home", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(tauriEventMocks.listeners).toHaveLength(1);
+    });
+
+    tauriEventMocks.listeners[0].callback({
+      payload: { projectId: 1, sessionId: 77 },
+    });
+
+    expect(openProjectMock).toHaveBeenCalledWith({ projectId: 1 });
+    expect(await screen.findByText("agents activity 77")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
   });
 
