@@ -86,6 +86,7 @@ export function IssueRunDialog({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const profileSelectRef = useRef<HTMLButtonElement | null>(null);
+  const isStartingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -287,10 +288,11 @@ export function IssueRunDialog({
   }
 
   async function handleStart() {
-    if (!selectedProfile) {
+    if (isStartingRef.current || isStartDisabled || !selectedProfile) {
       return;
     }
 
+    isStartingRef.current = true;
     setIsStarting(true);
     setStatusMessage(null);
 
@@ -318,6 +320,7 @@ export function IssueRunDialog({
 
       setStatusMessage(commandError.message);
     } finally {
+      isStartingRef.current = false;
       setIsStarting(false);
     }
   }
@@ -599,7 +602,7 @@ export function IssueRunDialog({
             disabled={isStartDisabled}
             onClick={() => void handleStart()}
           >
-            {messages.issues.start}
+            {isStarting ? messages.issues.starting : messages.issues.start}
           </Button>
         </div>
       </div>

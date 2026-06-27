@@ -191,6 +191,7 @@ export interface I18nMessages {
     session: string;
     selectLabels: string;
     start: string;
+    starting: string;
     status: string;
     statusLabel: string;
     summaryClose: string;
@@ -199,6 +200,7 @@ export interface I18nMessages {
     confirmCompleteWhileRunning: string;
     confirmMoveBackToStatus: (statusLabel: string) => string;
     confirmReturnToBacklog: string;
+    confirmRunIssue: string;
     confirmTerminateAndReturnToBacklog: string;
     title: string;
     titleField: string;
@@ -593,6 +595,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       session: "Session",
       selectLabels: "Select labels",
       start: "Start",
+      starting: "Starting...",
       status: "Status",
       statusLabel: "Issue status",
       summaryClose: "Close issue summary",
@@ -604,6 +607,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
         `Move this issue back to ${statusLabel}?`,
       confirmReturnToBacklog:
         "Are you sure you want to return this issue to Backlog?",
+      confirmRunIssue: "确定要执行吗？",
       confirmTerminateAndReturnToBacklog:
         "This issue is still running. Stop it and return it to Backlog?",
       title: "Issues",
@@ -998,6 +1002,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       session: "会话",
       selectLabels: "选择标签",
       start: "开始",
+      starting: "启动中...",
       status: "状态",
       statusLabel: "Issue 状态",
       summaryClose: "关闭 Issue 总结",
@@ -1007,6 +1012,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       confirmMoveBackToStatus: (statusLabel) =>
         `确定要回退到 ${statusLabel} 阶段吗？`,
       confirmReturnToBacklog: "确定要退回至 Backlog 阶段吗？",
+      confirmRunIssue: "确定要执行吗？",
       confirmTerminateAndReturnToBacklog:
         "当前 Issue 正在执行，是否终止并退回至 Backlog？",
       title: "Issues",

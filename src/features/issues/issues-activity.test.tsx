@@ -25,6 +25,7 @@ import {
   updateIssue,
   type IssueAttachmentRecord,
   type IssueRecord,
+  type StartAgentSessionResult,
 } from "./issue-commands";
 import {
   injectAgentSessionPrompt,
@@ -548,8 +549,8 @@ describe("IssuesActivity", () => {
       within(page).queryByText(formatTestTimestamp(existingIssue.updatedAt)),
     ).not.toBeInTheDocument();
     expect(
-      within(page).queryByRole("button", { name: /Run/i }),
-    ).not.toBeInTheDocument();
+      within(page).getByRole("button", { name: "Run" }),
+    ).toBeInTheDocument();
   });
 
   it.each([
@@ -1887,6 +1888,38 @@ describe("IssuesActivity", () => {
     expect(updateIssueMock).not.toHaveBeenCalled();
   });
 
+  it("disables the run dialog submit button while starting the issue", async () => {
+    const user = userEvent.setup();
+    let resolveStart: (value: StartAgentSessionResult) => void = () => {};
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [] };
+    });
+    startAgentSessionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+    await user.click(startButton);
+    await user.click(startButton);
+
+    expect(startButton).toBeDisabled();
+    expect(startButton).toHaveTextContent("Starting...");
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+
+    resolveStart({ issueId: existingIssue.id, sessionId: 301 });
+  });
+
   it("refreshes issues and closes the run dialog when start reports an existing session", async () => {
     const user = userEvent.setup();
     const onOpenAgentsActivity = vi.fn();
@@ -1944,9 +1977,68 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
+    await user.click(within(dialog).getByRole("button", { name: "Run" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "确定要执行吗？" })).getByRole(
+        "button",
+        { name: "确认" },
+      ),
+    );
+
+    const runDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #20",
+    });
     expect(
-      within(dialog).queryByRole("button", { name: /Run/i }),
+      within(runDialog).getByText(
+        "No Agent Profile is available for the current agent type.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("confirms before running an issue from the edit page header", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [] };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+
+    const page = screen.getByRole("form", { name: "Edit Issue" });
+    const backButton = within(page).getByRole("button", { name: "Back" });
+    const runButton = within(page).getByRole("button", { name: "Run" });
+
+    expect(
+      Array.from(
+        backButton.parentElement?.querySelectorAll("button") ?? [],
+      ).slice(0, 2),
+    ).toEqual([backButton, runButton]);
+
+    await user.click(runButton);
+
+    const confirmation = screen.getByRole("dialog", { name: "确定要执行吗？" });
+    expect(
+      within(confirmation).getByText("确定要执行吗？"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Run Issue #20" }),
     ).not.toBeInTheDocument();
+
+    await user.click(
+      within(confirmation).getByRole("button", { name: "确认" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Run Issue #20" }),
+    ).toBeInTheDocument();
   });
 
   it("previews and downloads a draft attachment from the issue page", async () => {
