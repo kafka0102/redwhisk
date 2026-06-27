@@ -4,23 +4,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   advanceIssueStatus,
-  completeIssueManual,
+  completeIssueFlow,
   createIssue,
   deleteIssue,
-  detectAgentCommitCompletion,
   exportIssueAttachment,
   listIssues,
   markIssueReview,
-  prepareAgentCommitCompletion,
   previewIssueAttachment,
-  sendAgentCommitPrompt,
   updateIssue,
+  type CompleteIssueFlowResult,
+  type IssueCompletionExternalWorktreeDecision,
   type IssueStatus,
   type IssueAttachmentRecord,
   type IssueAttachmentPreviewRecord,
   type IssueRecord,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog";
+import { IssueCompletionExternalWorktreeDialog } from "./issue-completion-external-worktree-dialog";
 import {
   EMPTY_FORM,
   type AttachmentPreviewState,
@@ -90,6 +90,8 @@ export function IssuesActivity({
   );
   const [completionProgress, setCompletionProgress] =
     useState<CompletionProgressState | null>(null);
+  const [externalWorktreeDialog, setExternalWorktreeDialog] =
+    useState<ExternalWorktreeDialogState | null>(null);
   const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>(
     [],
   );
@@ -109,6 +111,9 @@ export function IssuesActivity({
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const externalWorktreeDecisionRef = useRef<
+    ((decision: IssueCompletionExternalWorktreeDecision) => void) | null
+  >(null);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => {
@@ -698,8 +703,7 @@ export function IssuesActivity({
         );
       } else if (
         targetStatus === "completed" &&
-        currentIssue.status === "review" &&
-        currentIssue.linkedSessionStatus === "running"
+        currentIssue.linkedSessionId != null
       ) {
         updatedIssue = await completeIssueWithCompletionChecks(
           requestProjectId,
@@ -747,104 +751,132 @@ export function IssuesActivity({
     requestProjectId: number,
     issueId: number,
   ): Promise<IssueRecord> {
-    try {
+    let ignoreDirty: boolean | null = null;
+    let externalWorktreeDecision: IssueCompletionExternalWorktreeDecision | null =
+      null;
+    let hasWaitedForAgentCommit = false;
+
+    while (true) {
       setCompletionProgress({
         title: getCompletionProgressTitle(locale),
-        steps: buildCompletionProgressSteps(locale, "checking_commit"),
+        steps: buildCompletionProgressSteps(
+          locale,
+          externalWorktreeDecision === "merge_and_delete"
+            ? "rebasing"
+            : "checking_commit",
+        ),
       });
-      await prepareAgentCommitCompletion({
+
+      const result = await completeIssueFlow({
         projectId: requestProjectId,
         issueId,
-      });
-    } catch (error) {
-      const commandError = toCommandError(error);
-      if (isManualCompletionPolicyError(commandError)) {
-        throw Object.assign(
-          new Error("当前项目中有未提交的代码，请提交后再标记完成。"),
-          { cause: error },
-        );
-      }
-
-      if (!isCleanGitStatusError(commandError)) {
-        throw error;
-      }
-
-      const cleanGitDetail = getCleanGitStatusDetail(commandError);
-      const isConfirmed = await confirm({
-        message: buildCompletionConfirmMessage(cleanGitDetail.targetBranch),
-      });
-      if (!isConfirmed) {
-        setCompletionProgress(null);
-        throw new CompletionCancelledError();
-      }
-
-      setCompletionProgress({
-        title: getCompletionProgressTitle(locale),
-        steps: buildCompletionProgressSteps(locale, "merging"),
+        ignoreDirty,
+        externalWorktreeDecision,
       });
 
-      try {
-        const issue = await completeIssueManual({
-          projectId: requestProjectId,
-          issueId,
-        });
+      if (result.action === "completed") {
         setCompletionProgress({
           title: getCompletionProgressTitle(locale),
           steps: buildCompletionProgressSteps(locale, "completed"),
         });
-        return issue;
-      } catch (completeError) {
-        const conflictDetail = getWorktreeMergeDetail(
-          toCommandError(completeError),
-        );
-        if (conflictDetail) {
-          setCompletionProgress(null);
-          throw new WorktreeMergeConflictError(conflictDetail);
-        }
-
-        throw completeError;
+        return result.issue;
       }
-    }
 
-    setCompletionProgress({
-      title: getCompletionProgressTitle(locale),
-      steps: buildCompletionProgressSteps(locale, "requesting_commit"),
-    });
-    await sendAgentCommitPrompt({
-      projectId: requestProjectId,
-      issueId,
-    });
-    setCompletionProgress({
-      title: getCompletionProgressTitle(locale),
-      steps: buildCompletionProgressSteps(locale, "waiting_commit"),
-    });
-    let result: Awaited<ReturnType<typeof detectAgentCommitCompletion>>;
-    try {
-      result = await detectAgentCommitCompletion({
-        projectId: requestProjectId,
-        issueId,
-      });
-    } catch (detectError) {
-      const conflictDetail = getWorktreeMergeDetail(
-        toCommandError(detectError),
-      );
-      if (conflictDetail) {
+      if (result.action === "manual_dirty_prompt") {
         setCompletionProgress(null);
-        throw new WorktreeMergeConflictError(conflictDetail);
+        const shouldIgnoreDirty = await confirm({
+          title: messages.issues.completionDirtyTitle,
+          message: messages.issues.completionDirtyMessage,
+          confirmLabel: messages.issues.completionIgnoreDirty,
+          cancelLabel: messages.issues.completionHandleManually,
+          confirmVariant: "default",
+        });
+        if (!shouldIgnoreDirty) {
+          throw new CompletionCancelledError();
+        }
+        ignoreDirty = true;
+        externalWorktreeDecision = null;
+        continue;
       }
 
-      throw detectError;
-    }
+      if (result.action === "waiting_agent_commit") {
+        if (hasWaitedForAgentCommit) {
+          throw new Error(
+            result.message || messages.issues.completionWaitingAgentCommit,
+          );
+        }
+        hasWaitedForAgentCommit = true;
+        setCompletionProgress({
+          title: getCompletionProgressTitle(locale),
+          steps: buildCompletionProgressSteps(locale, "waiting_commit"),
+        });
+        ignoreDirty = null;
+        externalWorktreeDecision = null;
+        continue;
+      }
 
-    if (result.outcome !== "completed") {
+      if (result.action === "confirm_external_worktree") {
+        setCompletionProgress(null);
+        const decision = await requestExternalWorktreeDecision(result);
+        if (decision === "cancel") {
+          await completeIssueFlow({
+            projectId: requestProjectId,
+            issueId,
+            externalWorktreeDecision: "cancel",
+          });
+          throw new CompletionCancelledError();
+        }
+        ignoreDirty = null;
+        externalWorktreeDecision = decision;
+        continue;
+      }
+
+      if (result.action === "agent_merge_blocked") {
+        setCompletionProgress(null);
+        throw new WorktreeMergeConflictError({
+          sessionId: result.sessionId,
+          targetBranch: result.targetBranch ?? undefined,
+          workspaceBranch: result.workspaceBranch ?? undefined,
+          workspacePath: result.workspacePath ?? undefined,
+        });
+      }
+
+      if (result.action === "no_commit_detected") {
+        throw new Error(
+          result.message || messages.issues.completionNoCommitDetected,
+        );
+      }
+
+      if (result.action === "git_operation_blocked") {
+        throw new Error(
+          result.message || messages.issues.completionGitOperationBlocked,
+        );
+      }
+
       throw new Error(result.message);
     }
+  }
 
-    setCompletionProgress({
-      title: getCompletionProgressTitle(locale),
-      steps: buildCompletionProgressSteps(locale, "completed"),
+  function requestExternalWorktreeDecision(
+    result: CompleteIssueFlowResult,
+  ): Promise<IssueCompletionExternalWorktreeDecision> {
+    return new Promise((resolve) => {
+      externalWorktreeDecisionRef.current = resolve;
+      setExternalWorktreeDialog({
+        issueId: result.issue.id,
+        targetBranch: result.targetBranch,
+        workspaceBranch: result.workspaceBranch,
+        workspacePath: result.workspacePath,
+      });
     });
-    return result.issue;
+  }
+
+  function resolveExternalWorktreeDecision(
+    decision: IssueCompletionExternalWorktreeDecision,
+  ) {
+    externalWorktreeDecisionRef.current?.(decision);
+    externalWorktreeDecisionRef.current = null;
+    setExternalWorktreeDialog(null);
   }
 
   async function handOffWorktreeMergeConflict(
@@ -1046,6 +1078,20 @@ export function IssuesActivity({
       {completionProgress ? (
         <IssueCompletionProgressDialog progress={completionProgress} />
       ) : null}
+      {externalWorktreeDialog ? (
+        <IssueCompletionExternalWorktreeDialog
+          title={messages.issues.completionExternalWorktreeTitle}
+          message={messages.issues.completionExternalWorktreeMessage(
+            externalWorktreeDialog.workspaceBranch ??
+              externalWorktreeDialog.targetBranch ??
+              "",
+          )}
+          mergeAndDeleteLabel={messages.issues.completionMergeAndDelete}
+          skipLabel={messages.issues.completionSkipMerge}
+          cancelLabel={messages.issues.completionCancel}
+          onDecision={resolveExternalWorktreeDecision}
+        />
+      ) : null}
       {confirmationDialog}
     </main>
   );
@@ -1053,10 +1099,10 @@ export function IssuesActivity({
 
 type CompletionProgressStepId =
   | "checking_commit"
-  | "requesting_commit"
   | "waiting_commit"
   | "checking_worktree"
-  | "merging"
+  | "rebasing"
+  | "applying"
   | "cleaning"
   | "completed";
 
@@ -1069,6 +1115,13 @@ interface CompletionProgressStep {
 interface CompletionProgressState {
   title: string;
   steps: CompletionProgressStep[];
+}
+
+interface ExternalWorktreeDialogState {
+  issueId: number;
+  targetBranch?: string | null;
+  workspaceBranch?: string | null;
+  workspacePath?: string | null;
 }
 
 class CompletionCancelledError extends Error {
@@ -1090,104 +1143,6 @@ interface WorktreeMergeDetail {
   workspacePath?: string;
 }
 
-function isManualCompletionPolicyError(error: {
-  details?: unknown[];
-}): boolean {
-  return hasDetailValue(
-    error,
-    "CompletionPolicy",
-    "completionPolicy",
-    "manual",
-  );
-}
-
-function isCleanGitStatusError(error: { details?: unknown[] }): boolean {
-  return hasDetailValue(error, "GitStatus", "isClean", true);
-}
-
-function getCleanGitStatusDetail(error: { details?: unknown[] }): {
-  targetBranch?: string;
-} {
-  const detail = (error.details ?? []).find((item) => {
-    return (
-      !!item &&
-      typeof item === "object" &&
-      (item as Record<string, unknown>)["@type"] === "GitStatus" &&
-      (item as Record<string, unknown>).isClean === true
-    );
-  });
-
-  if (!detail || typeof detail !== "object") {
-    return {};
-  }
-
-  const values = detail as Record<string, unknown>;
-  return {
-    targetBranch:
-      typeof values.targetBranch === "string" ? values.targetBranch : undefined,
-  };
-}
-
-function hasDetailValue(
-  error: { details?: unknown[] },
-  type: string,
-  key: string,
-  expectedValue: unknown,
-): boolean {
-  return (error.details ?? []).some((detail) => {
-    if (!detail || typeof detail !== "object") {
-      return false;
-    }
-
-    const values = detail as Record<string, unknown>;
-    return values["@type"] === type && values[key] === expectedValue;
-  });
-}
-
-function buildCompletionConfirmMessage(targetBranch?: string): string {
-  if (!targetBranch) {
-    return "即将完成当前 issue，并在需要时把临时分支合入记录的目标分支。确认继续吗？";
-  }
-
-  if (targetBranch === "main" || targetBranch === "master") {
-    return `即将完成当前 issue，并把临时分支合入高风险目标分支 ${targetBranch}。确认继续吗？`;
-  }
-
-  return `即将完成当前 issue，并把临时分支合入目标分支 ${targetBranch}。确认继续吗？`;
-}
-
-function getWorktreeMergeDetail(error: {
-  details?: unknown[];
-}): WorktreeMergeDetail | null {
-  const detail = (error.details ?? []).find((item) => {
-    return (
-      !!item &&
-      typeof item === "object" &&
-      (item as Record<string, unknown>)["@type"] === "WorktreeMerge"
-    );
-  });
-
-  if (!detail || typeof detail !== "object") {
-    return null;
-  }
-
-  const values = detail as Record<string, unknown>;
-  return {
-    sessionId:
-      typeof values.sessionId === "number" ? values.sessionId : undefined,
-    targetBranch:
-      typeof values.targetBranch === "string" ? values.targetBranch : undefined,
-    workspaceBranch:
-      typeof values.workspaceBranch === "string"
-        ? values.workspaceBranch
-        : undefined,
-    workspacePath:
-      typeof values.workspacePath === "string"
-        ? values.workspacePath
-        : undefined,
-  };
-}
-
 function getCompletionProgressTitle(locale: string): string {
   return locale === "zh" ? "完成 issue" : "Complete issue";
 }
@@ -1200,28 +1155,28 @@ function buildCompletionProgressSteps(
     locale === "zh"
       ? {
           checking_commit: "检查未提交改动",
-          requesting_commit: "请求 Agent 提交相关代码",
           waiting_commit: "等待并检测新 commit",
           checking_worktree: "检查 worktree 是否存在",
-          merging: "合并临时分支到目标分支",
+          rebasing: "将工作分支 rebase 到目标分支",
+          applying: "快进应用到目标分支",
           cleaning: "清理 worktree 与临时分支",
           completed: "完成",
         }
       : {
           checking_commit: "Check uncommitted changes",
-          requesting_commit: "Ask agent to commit related code",
           waiting_commit: "Wait for and detect a new commit",
           checking_worktree: "Check whether the worktree still exists",
-          merging: "Merge temporary branch into target branch",
+          rebasing: "Rebase the workspace branch onto target",
+          applying: "Fast-forward the target branch",
           cleaning: "Clean up worktree and temporary branch",
           completed: "Done",
         };
   const ids: CompletionProgressStepId[] = [
     "checking_commit",
-    "requesting_commit",
     "waiting_commit",
     "checking_worktree",
-    "merging",
+    "rebasing",
+    "applying",
     "cleaning",
     "completed",
   ];

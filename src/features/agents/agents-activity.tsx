@@ -21,13 +21,11 @@ import {
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
 import {
-  completeIssueClean,
-  completeIssueManual,
-  detectAgentCommitCompletion,
+  completeIssueFlow,
   markIssueReview,
   prepareAgentCommitCompletion,
-  sendAgentCommitPrompt,
   type AgentCommitCompletionPreview,
+  type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
@@ -485,6 +483,49 @@ export function AgentsActivity({
     await markLinkedIssueReview(linkedIssue);
   }
 
+  function applyCompletedIssueToSessions(
+    completedIssue: IssueRecord,
+    targetSessionId: number,
+  ) {
+    completedIssueIdsRef.current.add(completedIssue.id);
+    closedSessionIdsRef.current.add(targetSessionId);
+    setSessions((currentSessions) =>
+      currentSessions.map((session) =>
+        session.issueId === completedIssue.id
+          ? {
+              ...session,
+              status:
+                session.sessionId === targetSessionId
+                  ? ("closed" as const)
+                  : session.status,
+              issueStatus: completedIssue.status,
+              lastActiveAt: Math.max(
+                session.lastActiveAt,
+                completedIssue.updatedAt,
+              ),
+              closedAt:
+                session.sessionId === targetSessionId
+                  ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
+                  : session.closedAt,
+              canCompleteClean: false,
+              canCompleteAgentCommit: false,
+            }
+          : session,
+      ),
+    );
+  }
+
+  async function completeLinkedIssueViaFlow(issueId: number) {
+    const result = await completeIssueFlow({
+      projectId,
+      issueId,
+    });
+    if (result.action !== "completed") {
+      throw new Error(result.message);
+    }
+    return result.issue;
+  }
+
   async function completeLinkedIssueManual(
     issue: NonNullable<typeof linkedIssue>,
     session: AgentSessionListItem,
@@ -498,36 +539,10 @@ export function AgentsActivity({
     let completedSessionId: number | null = null;
 
     try {
-      const completedIssue = await completeIssueManual({
-        projectId,
-        issueId: issue.issueId,
-      });
+      const completedIssue = await completeLinkedIssueViaFlow(issue.issueId);
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
-      completedIssueIdsRef.current.add(completedIssue.id);
-      closedSessionIdsRef.current.add(session.sessionId);
-      setSessions((currentSessions) =>
-        currentSessions.map((session) =>
-          session.issueId === completedIssue.id
-            ? {
-                ...session,
-                status:
-                  session.sessionId === targetSessionId
-                    ? ("closed" as const)
-                    : session.status,
-                issueStatus: completedIssue.status,
-                lastActiveAt: Math.max(
-                  session.lastActiveAt,
-                  completedIssue.updatedAt,
-                ),
-                closedAt:
-                  session.sessionId === targetSessionId
-                    ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
-                    : session.closedAt,
-              }
-            : session,
-        ),
-      );
+      applyCompletedIssueToSessions(completedIssue, targetSessionId);
     } catch (error) {
       setCompleteManualErrorMessage(toCommandError(error).message);
       try {
@@ -567,36 +582,10 @@ export function AgentsActivity({
     let completedSessionId: number | null = null;
 
     try {
-      const completedIssue = await completeIssueClean({
-        projectId,
-        issueId: issue.issueId,
-      });
+      const completedIssue = await completeLinkedIssueViaFlow(issue.issueId);
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
-      completedIssueIdsRef.current.add(completedIssue.id);
-      closedSessionIdsRef.current.add(session.sessionId);
-      setSessions((currentSessions) =>
-        currentSessions.map((session) =>
-          session.issueId === completedIssue.id
-            ? {
-                ...session,
-                status:
-                  session.sessionId === targetSessionId
-                    ? ("closed" as const)
-                    : session.status,
-                issueStatus: completedIssue.status,
-                lastActiveAt: Math.max(
-                  session.lastActiveAt,
-                  completedIssue.updatedAt,
-                ),
-                closedAt:
-                  session.sessionId === targetSessionId
-                    ? Math.max(session.closedAt ?? 0, completedIssue.updatedAt)
-                    : session.closedAt,
-              }
-            : session,
-        ),
-      );
+      applyCompletedIssueToSessions(completedIssue, targetSessionId);
     } catch (error) {
       setCompleteCleanErrorMessage(toCommandError(error).message);
       try {
@@ -720,52 +709,28 @@ export function AgentsActivity({
     setIsSendingAgentCommitPrompt(true);
 
     try {
-      await sendAgentCommitPrompt({
+      let completionResult = await completeIssueFlow({
         projectId,
         issueId: linkedIssue.issueId,
       });
       setIsDetectingAgentCommitCompletion(true);
-      const detectionResult = await detectAgentCommitCompletion({
-        projectId,
-        issueId: linkedIssue.issueId,
-      });
-      if (detectionResult.outcome === "completed") {
-        const completedIssue = detectionResult.issue;
-        completedIssueIdsRef.current.add(completedIssue.id);
-        closedSessionIdsRef.current.add(selectedSession.sessionId);
-        setSessions((currentSessions) =>
-          currentSessions.map((session) =>
-            session.issueId === completedIssue.id
-              ? {
-                  ...session,
-                  status:
-                    session.sessionId === selectedSession.sessionId
-                      ? ("closed" as const)
-                      : session.status,
-                  issueStatus: completedIssue.status,
-                  lastActiveAt: Math.max(
-                    session.lastActiveAt,
-                    completedIssue.updatedAt,
-                  ),
-                  closedAt:
-                    session.sessionId === selectedSession.sessionId
-                      ? Math.max(
-                          session.closedAt ?? 0,
-                          completedIssue.updatedAt,
-                        )
-                      : session.closedAt,
-                  canCompleteClean: false,
-                  canCompleteAgentCommit: false,
-                }
-              : session,
-          ),
+      if (completionResult.action === "waiting_agent_commit") {
+        completionResult = await completeIssueFlow({
+          projectId,
+          issueId: linkedIssue.issueId,
+        });
+      }
+      if (completionResult.action === "completed") {
+        applyCompletedIssueToSessions(
+          completionResult.issue,
+          selectedSession.sessionId,
         );
         setAgentCommitPreview(null);
         const response = await listAgentSessions(projectId);
         setSessions(applySessionListOverlays(response.sessions));
       } else {
         setAgentCommitPreview(null);
-        setCompleteAgentCommitErrorMessage(detectionResult.message);
+        setCompleteAgentCommitErrorMessage(completionResult.message);
       }
     } catch (error) {
       setCompleteAgentCommitErrorMessage(toCommandError(error).message);

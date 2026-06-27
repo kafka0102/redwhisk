@@ -214,6 +214,19 @@ export interface I18nMessages {
     dialogStatus: string;
     agentProfile: string;
     agentAutoCommit: string;
+    completionDirtyTitle: string;
+    completionDirtyMessage: string;
+    completionIgnoreDirty: string;
+    completionHandleManually: string;
+    completionExternalWorktreeTitle: string;
+    completionExternalWorktreeMessage: (branch: string) => string;
+    completionMergeAndDelete: string;
+    completionSkipMerge: string;
+    completionCancel: string;
+    completionWaitingAgentCommit: string;
+    completionNoCommitDetected: string;
+    completionGitOperationBlocked: string;
+    completionAgentMergeBlocked: string;
   };
   issueSummary: {
     closedAt: string;
@@ -622,6 +635,23 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       dialogStatus: "Dialog status",
       agentProfile: "Agent profile",
       agentAutoCommit: "Agent auto commit",
+      completionDirtyTitle: "Uncommitted changes",
+      completionDirtyMessage:
+        "This session has uncommitted local changes. Ignore them and continue completing the Issue?",
+      completionIgnoreDirty: "Ignore and continue",
+      completionHandleManually: "Handle manually",
+      completionExternalWorktreeTitle: "External worktree",
+      completionExternalWorktreeMessage: (branch) =>
+        `This session is on external worktree branch ${branch}. Merge it and delete the worktree?`,
+      completionMergeAndDelete: "Merge and delete",
+      completionSkipMerge: "Complete without merge",
+      completionCancel: "Cancel",
+      completionWaitingAgentCommit: "Waiting for Agent commit.",
+      completionNoCommitDetected: "No new commit was detected.",
+      completionGitOperationBlocked:
+        "A Git operation is in progress. Resolve it before completing.",
+      completionAgentMergeBlocked:
+        "Worktree merge is blocked. Handing it back to the Agent.",
     },
     issueSummary: {
       closedAt: "Closed",
@@ -1027,6 +1057,21 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       dialogStatus: "弹窗状态",
       agentProfile: "Agent 配置",
       agentAutoCommit: "Agent 自动提交",
+      completionDirtyTitle: "存在未提交改动",
+      completionDirtyMessage:
+        "当前会话存在本地未提交改动。是否忽略这些改动并继续完成 Issue？",
+      completionIgnoreDirty: "忽略并继续",
+      completionHandleManually: "手动处理",
+      completionExternalWorktreeTitle: "外部 worktree",
+      completionExternalWorktreeMessage: (branch) =>
+        `当前会话位于外部 worktree 分支 ${branch}。是否合入并删除该 worktree？`,
+      completionMergeAndDelete: "合入并删除",
+      completionSkipMerge: "不合入直接完成",
+      completionCancel: "取消",
+      completionWaitingAgentCommit: "正在等待 Agent 提交。",
+      completionNoCommitDetected: "未检测到新的提交。",
+      completionGitOperationBlocked: "当前 Git 正在执行操作，请处理后再完成。",
+      completionAgentMergeBlocked: "worktree 合入被阻塞，正在交回 Agent 处理。",
     },
     issueSummary: {
       closedAt: "结束时间",

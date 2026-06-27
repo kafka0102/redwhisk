@@ -21,6 +21,7 @@ import {
   startStructuredAgentSession,
 } from "./agent-session-commands";
 import {
+  completeIssueFlow,
   completeIssueClean,
   completeIssueManual,
   detectAgentCommitCompletion,
@@ -130,6 +131,7 @@ vi.mock("../settings/settings-commands", () => ({
 }));
 
 vi.mock("../issues/issue-commands", () => ({
+  completeIssueFlow: vi.fn(),
   completeIssueManual: vi.fn(),
   completeIssueClean: vi.fn(),
   detectAgentCommitCompletion: vi.fn(),
@@ -163,6 +165,7 @@ const deleteAgentSessionMock = vi.mocked(deleteAgentSession);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
+const completeIssueFlowMock = vi.mocked(completeIssueFlow);
 const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
@@ -184,6 +187,30 @@ const createTemporaryProjectTerminalMock = vi.mocked(
 );
 const toastSuccessMock = vi.mocked(toast.success);
 const toastErrorMock = vi.mocked(toast.error);
+
+function completedFlowResult(issueId: number, projectId = 1) {
+  return {
+    action: "completed" as const,
+    issue: {
+      id: issueId,
+      projectId,
+      title: "Review issue",
+      description: "",
+      status: "completed" as const,
+      linkedSessionId: 502,
+      linkedSessionStatus: "closed" as const,
+      linkedSessionAttention: "none" as const,
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_639_000_000,
+    },
+    flow: null,
+    message: "Issue completed",
+    targetBranch: null,
+    workspaceBranch: null,
+    workspacePath: null,
+    sessionId: 502,
+  };
+}
 
 async function findSessionList() {
   return screen.findByRole("list", { name: "Agent sessions" });
@@ -293,6 +320,7 @@ describe("AgentsActivity", () => {
     setAgentSessionAttentionMock.mockReset();
     startStructuredAgentSessionMock.mockReset();
     listIssuesMock.mockReset();
+    completeIssueFlowMock.mockReset();
     completeIssueManualMock.mockReset();
     completeIssueCleanMock.mockReset();
     detectAgentCommitCompletionMock.mockReset();
@@ -308,6 +336,9 @@ describe("AgentsActivity", () => {
     createTemporaryProjectTerminalMock.mockReset();
     openPathMock.mockReset();
     toastSuccessMock.mockReset();
+    completeIssueFlowMock.mockImplementation(async (input) =>
+      completedFlowResult(input.issueId, input.projectId),
+    );
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
       attention: "requested",
@@ -3041,7 +3072,7 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(dialog).getByRole("button", { name: "标记完成" }));
 
-    expect(completeIssueManualMock).toHaveBeenCalledWith({
+    expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 22,
     });
@@ -3059,22 +3090,30 @@ describe("AgentsActivity", () => {
 
   it("keeps the review session active when agent commit detection does not complete", async () => {
     const user = userEvent.setup();
-    detectAgentCommitCompletionMock.mockResolvedValueOnce({
-      outcome: "no_commit_detected",
+    completeIssueFlowMock.mockReset();
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "waiting_agent_commit",
+      issue: completedFlowResult(22).issue,
+      flow: null,
+      message: "正在等待 Agent 提交。",
+      targetBranch: null,
+      workspaceBranch: null,
+      workspacePath: null,
+      sessionId: 502,
+    });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "no_commit_detected",
       issue: {
-        id: 22,
-        projectId: 1,
-        title: "Review issue",
-        description: "Review description",
+        ...completedFlowResult(22).issue,
         status: "review",
-        linkedSessionId: 502,
         linkedSessionStatus: "running",
-        linkedSessionAttention: "none",
-        linkedSessionLogPath: "/tmp/session.log",
-        createdAt: 1_780_632_000_000,
-        updatedAt: 1_780_639_000_000,
       },
+      flow: null,
       message: "尚未检测到新的 commit，Issue 保持待验收。",
+      targetBranch: null,
+      workspaceBranch: null,
+      workspacePath: null,
+      sessionId: 502,
     });
     listAgentSessionsMock
       .mockResolvedValueOnce({
@@ -3130,11 +3169,7 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
 
-    expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 22,
-    });
-    expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
+    expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 22,
     });
@@ -3153,23 +3188,31 @@ describe("AgentsActivity", () => {
 
   it("keeps the review session active when agent commit is blocked by git operation", async () => {
     const user = userEvent.setup();
-    detectAgentCommitCompletionMock.mockResolvedValueOnce({
-      outcome: "git_operation_blocked",
+    completeIssueFlowMock.mockReset();
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "waiting_agent_commit",
+      issue: completedFlowResult(22).issue,
+      flow: null,
+      message: "正在等待 Agent 提交。",
+      targetBranch: null,
+      workspaceBranch: null,
+      workspacePath: null,
+      sessionId: 502,
+    });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "git_operation_blocked",
       issue: {
-        id: 22,
-        projectId: 1,
-        title: "Review issue",
-        description: "Review description",
+        ...completedFlowResult(22).issue,
         status: "review",
-        linkedSessionId: 502,
         linkedSessionStatus: "running",
-        linkedSessionAttention: "none",
-        linkedSessionLogPath: "/tmp/session.log",
-        createdAt: 1_780_632_000_000,
-        updatedAt: 1_780_639_000_000,
       },
+      flow: null,
       message:
         "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+      targetBranch: null,
+      workspaceBranch: null,
+      workspacePath: null,
+      sessionId: 502,
     });
     listAgentSessionsMock
       .mockResolvedValueOnce({
@@ -3242,9 +3285,19 @@ describe("AgentsActivity", () => {
 
   it("shows explicit blocker message when clean completion is rejected", async () => {
     const user = userEvent.setup();
-    completeIssueCleanMock.mockRejectedValueOnce({
-      code: "ISSUE_VALIDATION_FAILED",
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "git_operation_blocked",
+      issue: {
+        ...completedFlowResult(22).issue,
+        status: "review",
+        linkedSessionStatus: "running",
+      },
+      flow: null,
       message: "当前 Git 正在进行中的操作阻止直接完成。",
+      targetBranch: null,
+      workspaceBranch: null,
+      workspacePath: null,
+      sessionId: 502,
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
@@ -3340,13 +3393,7 @@ describe("AgentsActivity", () => {
     await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
 
     await waitFor(() =>
-      expect(sendAgentCommitPromptMock).toHaveBeenCalledWith({
-        projectId: 1,
-        issueId: 22,
-      }),
-    );
-    await waitFor(() =>
-      expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
+      expect(completeIssueFlowMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: 22,
       }),
@@ -3409,7 +3456,7 @@ describe("AgentsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Mark done" }));
 
-    expect(completeIssueManualMock).toHaveBeenCalledWith({
+    expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 22,
     });
@@ -3527,17 +3574,15 @@ describe("AgentsActivity", () => {
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
     });
-    completeIssueManualMock.mockResolvedValueOnce({
-      id: 21,
-      projectId: 1,
-      title: "Review candidate",
-      description: "",
-      status: "completed",
-      linkedSessionId: 302,
-      linkedSessionStatus: "closed",
-      linkedSessionAttention: "none",
-      createdAt: 1_780_637_000_000,
-      updatedAt: 1_780_638_002_000,
+    completeIssueFlowMock.mockResolvedValueOnce({
+      ...completedFlowResult(21),
+      issue: {
+        ...completedFlowResult(21).issue,
+        title: "Review candidate",
+        linkedSessionId: 302,
+        updatedAt: 1_780_638_002_000,
+      },
+      sessionId: 302,
     });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
@@ -3551,7 +3596,7 @@ describe("AgentsActivity", () => {
       projectId: 1,
       issueId: 21,
     });
-    expect(completeIssueManualMock).toHaveBeenCalledWith({
+    expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 21,
     });
