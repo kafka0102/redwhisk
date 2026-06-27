@@ -68,6 +68,7 @@ pub fn run() {
             commands::issue_commands::advance_issue_status,
             commands::issue_commands::complete_issue_manual,
             commands::issue_commands::complete_issue_clean,
+            commands::issue_commands::complete_issue_flow,
             commands::issue_commands::prepare_agent_commit_completion,
             commands::issue_commands::send_agent_commit_prompt,
             commands::issue_commands::detect_agent_commit_completion,

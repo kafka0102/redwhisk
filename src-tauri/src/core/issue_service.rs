@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
@@ -13,6 +14,9 @@ use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::event_repository::EventRepository;
 use crate::db::issue_attachment_repository::IssueAttachmentRepository;
+use crate::db::issue_completion_flow_repository::{
+    IssueCompletionFlowRecordInput, IssueCompletionFlowRepository,
+};
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_label_repository::{ProjectLabelRepository, ProjectLabelRow};
@@ -21,10 +25,12 @@ use crate::git::operation_state::GitOperationState;
 use crate::git::status::{
     detect_commit_result, read_git_snapshot, GitCommitDetectionResult, GitSnapshot,
 };
-use crate::git::worktree::{cleanup_worktree, is_branch_merged, merge_branch_into_target};
+use crate::git::worktree::{
+    cleanup_worktree, is_branch_merged, merge_branch_into_target, rebase_and_fast_forward,
+};
 use crate::types::agent_session::{
     AgentSessionPromptKind, AgentSessionRecord, AgentSessionStatus, InjectAgentSessionPromptInput,
-    InjectAgentSessionPromptResult, WorkspaceMode,
+    InjectAgentSessionPromptResult, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::completion_attempt::{
     CompletionAttemptOption, CompletionAttemptRecord, CompletionAttemptResult,
@@ -42,6 +48,10 @@ use crate::types::issue::{
     UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
+use crate::types::issue_completion::{
+    CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult,
+    IssueCompletionExternalWorktreeDecision, IssueCompletionFlowRecord, IssueCompletionPhase,
+};
 use crate::types::project::ProjectCompletionPolicy;
 use crate::types::session_event::SessionEventType;
 
@@ -490,133 +500,25 @@ impl<'connection> IssueService<'connection> {
         &self,
         input: CompleteIssueManualInput,
     ) -> Result<IssueRecord, CommandError> {
-        self.ensure_project_exists(input.project_id)?;
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(issue_database_error)?;
-        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
-            .map_err(issue_database_error)?
-            .filter(|issue| issue.project_id == input.project_id)
-            .ok_or_else(|| issue_not_found(input.issue_id))?;
-
-        if issue.status != IssueStatus::Review {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以手动完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            ));
+        let result = self.complete_issue_flow_with_option(
+            CompleteIssueFlowInput {
+                project_id: input.project_id,
+                issue_id: input.issue_id,
+                ignore_dirty: Some(true),
+                external_worktree_decision: Some(
+                    IssueCompletionExternalWorktreeDecision::MergeAndDelete,
+                ),
+            },
+            self.data_dir.clone(),
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+            Some(CompletionAttemptOption::CompleteManual),
+        )?;
+        if result.action == CompleteIssueFlowAction::Completed {
+            Ok(result.issue)
+        } else {
+            Err(legacy_completion_flow_action_error(result.action))
         }
-
-        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
-            )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
-        })?;
-        let session = AgentSessionRepository::new(self.issue_repository.connection())
-            .find_by_id(linked_session_id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
-                )
-                .with_detail(
-                    ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
-                )
-            })?;
-        let project = self.require_project(input.project_id)?;
-
-        if session.workspace_mode == WorkspaceMode::Worktree {
-            finalize_worktree_completion(&project.repo_path, &session)
-                .map_err(|error| issue_worktree_merge_error(error, &session))?;
-        }
-
-        let completed_issue = IssueRepository::complete_review_issue_manually_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
-            linked_session_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以手动完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            )
-        })?;
-
-        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
-            &transaction,
-            linked_session_id,
-            AgentSessionStatus::Closed,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
-            )
-        })?;
-
-        let issue_action_payload = json!({
-            "fromStatus": "review",
-            "toStatus": "completed",
-            "linkedSessionId": linked_session_id,
-            "option": "complete_manual",
-        })
-        .to_string();
-        EventRepository::insert_issue_action_in_transaction(
-            &transaction,
-            completed_issue.id,
-            IssueActionType::IssueCompleted,
-            &issue_action_payload,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?;
-
-        let session_event_payload = json!({
-            "sessionId": closed_session.id,
-            "issueId": closed_session.issue_id,
-            "status": "closed",
-            "reason": "manual_completion",
-            "logPath": closed_session.log_path,
-        })
-        .to_string();
-        EventRepository::insert_session_event_in_transaction(
-            &transaction,
-            closed_session.id,
-            SessionEventType::SessionClosed,
-            &session_event_payload,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?;
-
-        transaction.commit().map_err(issue_database_error)?;
-
-        Ok(completed_issue)
     }
 
     pub fn delete_issue(&self, input: DeleteIssueInput) -> Result<DeleteIssueResult, CommandError> {
@@ -715,179 +617,25 @@ impl<'connection> IssueService<'connection> {
         &self,
         input: CompleteIssueCleanInput,
     ) -> Result<IssueRecord, CommandError> {
-        let project = self
-            .project_repository
-            .find_by_id(input.project_id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
-                    .with_detail(
-                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
-                    )
-            })?;
-
-        if project.completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
-            let completion_policy = match project.completion_policy {
-                ProjectCompletionPolicy::Manual => "manual",
-                ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
-            };
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "当前项目中有未提交的代码，请提交后再标记完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("CompletionPolicy")
-                    .with_value("projectId", input.project_id)
-                    .with_value("completionPolicy", completion_policy),
-            ));
-        }
-
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(issue_database_error)?;
-        let context = self.load_review_completion_context_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
+        let result = self.complete_issue_flow_with_option(
+            CompleteIssueFlowInput {
+                project_id: input.project_id,
+                issue_id: input.issue_id,
+                ignore_dirty: None,
+                external_worktree_decision: Some(
+                    IssueCompletionExternalWorktreeDecision::MergeAndDelete,
+                ),
+            },
+            self.data_dir.clone(),
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+            Some(CompletionAttemptOption::CompleteClean),
         )?;
-        let _session = AgentSessionRepository::new(self.issue_repository.connection())
-            .find_by_id(context.linked_session_id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
-                )
-                .with_detail(
-                    ErrorDetail::new("AgentSession")
-                        .with_value("sessionId", context.linked_session_id),
-                )
-            })?;
-        let snapshot = read_git_snapshot(&project.repo_path).map_err(issue_git_error)?;
-        if snapshot.operation_state != GitOperationState::None {
-            record_blocked_completion_attempt(
-                &transaction,
-                context.issue.id,
-                context.linked_session_id,
-                CompletionAttemptOption::CompleteClean,
-                &snapshot.head,
-                format_git_operation_state(snapshot.operation_state),
-                snapshot.operation_state,
-                "当前 Git 正在进行中的操作阻止直接完成。",
-            )
-            .map_err(issue_database_error)?;
-            transaction.commit().map_err(issue_database_error)?;
-
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "当前 Git 正在进行中的操作阻止直接完成。",
-            )
-            .with_detail(ErrorDetail::new("GitOperation").with_value(
-                "state",
-                format_git_operation_state(snapshot.operation_state),
-            )));
+        if result.action == CompleteIssueFlowAction::Completed {
+            Ok(result.issue)
+        } else {
+            Err(legacy_completion_flow_action_error(result.action))
         }
-        if !snapshot.is_clean {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "当前仓库存在未提交改动，不能直接完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("GitStatus")
-                    .with_value("head", snapshot.head.clone())
-                    .with_value("isClean", false),
-            ));
-        }
-
-        let completed_issue = IssueRepository::complete_review_issue_cleanly_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
-            context.linked_session_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以直接完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&context.issue.status)),
-            )
-        })?;
-
-        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
-            &transaction,
-            context.linked_session_id,
-            AgentSessionStatus::Closed,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", context.linked_session_id),
-            )
-        })?;
-
-        let issue_action_payload = json!({
-            "fromStatus": "review",
-            "toStatus": "completed",
-            "linkedSessionId": context.linked_session_id,
-            "option": "complete_clean",
-        })
-        .to_string();
-        EventRepository::insert_issue_action_in_transaction(
-            &transaction,
-            completed_issue.id,
-            IssueActionType::IssueCompleted,
-            &issue_action_payload,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?;
-
-        let session_event_payload = json!({
-            "sessionId": closed_session.id,
-            "issueId": closed_session.issue_id,
-            "status": "closed",
-            "reason": "clean_completion",
-            "logPath": closed_session.log_path,
-        })
-        .to_string();
-        EventRepository::insert_session_event_in_transaction(
-            &transaction,
-            closed_session.id,
-            SessionEventType::SessionClosed,
-            &session_event_payload,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?;
-
-        CompletionAttemptRepository::insert_in_transaction(
-            &transaction,
-            completed_issue.id,
-            closed_session.id,
-            CompletionAttemptOption::CompleteClean,
-            &snapshot.head,
-            &snapshot.head,
-            None,
-            None,
-            "[]",
-            CompletionAttemptResult::Completed,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?;
-
-        transaction.commit().map_err(issue_database_error)?;
-
-        Ok(completed_issue)
     }
 
     pub fn prepare_agent_commit_completion(
@@ -1030,89 +778,201 @@ impl<'connection> IssueService<'connection> {
         })
     }
 
-    pub fn detect_agent_commit_completion(
+    pub fn complete_issue_flow(
         &self,
-        input: DetectAgentCommitCompletionInput,
-    ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
-        let project = self
-            .project_repository
-            .find_by_id(input.project_id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
-                    .with_detail(
-                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
-                    )
-            })?;
+        input: CompleteIssueFlowInput,
+        data_dir: impl AsRef<Path>,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
+    ) -> Result<CompleteIssueFlowResult, CommandError> {
+        self.complete_issue_flow_with_option(input, data_dir, pty_sessions, agent_registry, None)
+    }
 
-        if project.completion_policy != ProjectCompletionPolicy::AgentAutoCommit {
+    fn complete_issue_flow_with_option(
+        &self,
+        input: CompleteIssueFlowInput,
+        data_dir: impl AsRef<Path>,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
+        forced_option: Option<CompletionAttemptOption>,
+    ) -> Result<CompleteIssueFlowResult, CommandError> {
+        let project = self.require_project(input.project_id)?;
+        let issue = self
+            .issue_repository
+            .find_by_id(input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+        if issue.status == IssueStatus::Completed {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前项目中有未提交的代码，请提交后再标记完成。",
+                "已完成 Issue 不能重复完成。",
+            )
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", issue.id)
+                    .with_value("status", issue_status_to_str(&issue.status)),
             ));
         }
 
+        let session = AgentSessionRepository::new(self.issue_repository.connection())
+            .find_by_issue_id(issue.id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "Issue 完成必须存在关联 Agent Session。",
+                )
+                .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
+            })?;
+        if session.project_id != input.project_id {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "关联 Agent Session 不属于当前 Project。",
+            )
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
+        }
+
+        let effective_policy = session
+            .completion_policy
+            .unwrap_or(project.completion_policy);
+        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
+        let snapshot = read_git_snapshot(&detection_repo_path).map_err(issue_git_error)?;
+        let option = forced_option.unwrap_or(match effective_policy {
+            ProjectCompletionPolicy::Manual => CompletionAttemptOption::CompleteManual,
+            ProjectCompletionPolicy::AgentAutoCommit => CompletionAttemptOption::AgentAutoCommit,
+        });
+
+        if option == CompletionAttemptOption::AgentAutoCommit {
+            if let Some(result) = self.resume_pending_agent_commit_if_available(
+                &input, &issue, &session, &snapshot, option,
+            )? {
+                return Ok(result);
+            }
+        }
+
+        if snapshot.operation_state != GitOperationState::None {
+            let transaction = self
+                .issue_repository
+                .connection()
+                .unchecked_transaction()
+                .map_err(issue_database_error)?;
+            record_blocked_completion_attempt(
+                &transaction,
+                issue.id,
+                session.id,
+                option,
+                &snapshot.head,
+                format_git_operation_state(snapshot.operation_state),
+                snapshot.operation_state,
+                "当前 Git 正在进行中的操作阻止 Issue 完成。",
+            )
+            .map_err(issue_database_error)?;
+            transaction.commit().map_err(issue_database_error)?;
+
+            return Ok(self.flow_result(
+                CompleteIssueFlowAction::GitOperationBlocked,
+                issue,
+                None,
+                "当前 Git 正在进行中的操作阻止 Issue 完成。".to_string(),
+                &session,
+            ));
+        }
+
+        if !snapshot.is_clean {
+            match option {
+                CompletionAttemptOption::CompleteClean => {
+                    return Ok(self.flow_result(
+                        CompleteIssueFlowAction::ManualDirtyPrompt,
+                        issue,
+                        None,
+                        "当前仓库存在未提交改动，不能直接完成。".to_string(),
+                        &session,
+                    ));
+                }
+                CompletionAttemptOption::CompleteManual if input.ignore_dirty != Some(true) => {
+                    let flow = self.upsert_completion_flow(
+                        issue.id,
+                        Some(session.id),
+                        IssueCompletionPhase::ManualDirtyBlocked,
+                        false,
+                        input.external_worktree_decision,
+                        &session,
+                        None,
+                    )?;
+                    return Ok(self.flow_result(
+                        CompleteIssueFlowAction::ManualDirtyPrompt,
+                        issue,
+                        Some(flow),
+                        "当前工作区存在未提交改动，请确认是否继续完成。".to_string(),
+                        &session,
+                    ));
+                }
+                CompletionAttemptOption::AgentAutoCommit => {
+                    self.send_agent_commit_prompt(
+                        SendAgentCommitPromptInput {
+                            project_id: input.project_id,
+                            issue_id: input.issue_id,
+                        },
+                        data_dir,
+                        pty_sessions,
+                        agent_registry,
+                    )?;
+                    let flow = self.upsert_completion_flow(
+                        issue.id,
+                        Some(session.id),
+                        IssueCompletionPhase::WaitingAgentCommit,
+                        false,
+                        input.external_worktree_decision,
+                        &session,
+                        None,
+                    )?;
+                    let current_issue = self
+                        .issue_repository
+                        .find_by_id(issue.id)
+                        .map_err(issue_database_error)?
+                        .ok_or_else(|| issue_not_found(issue.id))?;
+                    return Ok(self.flow_result(
+                        CompleteIssueFlowAction::WaitingAgentCommit,
+                        current_issue,
+                        Some(flow),
+                        "已发送 Agent Commit prompt，等待新的 commit。".to_string(),
+                        &session,
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        self.complete_clean_or_accepted_flow(input, issue, session, snapshot, option, None)
+    }
+
+    fn resume_pending_agent_commit_if_available(
+        &self,
+        input: &CompleteIssueFlowInput,
+        issue: &IssueRecord,
+        session: &AgentSessionRecord,
+        snapshot: &GitSnapshot,
+        fallback_option: CompletionAttemptOption,
+    ) -> Result<Option<CompleteIssueFlowResult>, CommandError> {
         let transaction = self
             .issue_repository
             .connection()
             .unchecked_transaction()
             .map_err(issue_database_error)?;
-        let issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
-            .map_err(issue_database_error)?
-            .filter(|issue| issue.project_id == input.project_id)
-            .ok_or_else(|| issue_not_found(input.issue_id))?;
-
-        if issue.status != IssueStatus::Review {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以检测 Agent Commit 完成结果。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            ));
-        }
-
-        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以检测 Agent Commit 完成结果。",
-            )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
-        })?;
-
         let attempt =
             CompletionAttemptRepository::find_latest_pending_agent_commit_attempt_in_transaction(
                 &transaction,
                 issue.id,
-                linked_session_id,
+                session.id,
             )
-            .map_err(issue_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "当前 Issue 没有可检测的 Agent Commit 尝试。",
-                )
-                .with_detail(ErrorDetail::new("CompletionAttempt").with_value("issueId", issue.id))
-            })?;
+            .map_err(issue_database_error)?;
+        transaction.commit().map_err(issue_database_error)?;
 
-        let session = AgentSessionRepository::new(self.issue_repository.connection())
-            .find_by_id(linked_session_id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以检测 Agent Commit 完成结果。",
-                )
-                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id))
-            })?;
+        let Some(attempt) = attempt else {
+            return Ok(None);
+        };
+
         let before_snapshot = GitSnapshot {
             head: attempt.head_before.clone(),
             status_porcelain: String::new(),
@@ -1120,136 +980,294 @@ impl<'connection> IssueService<'connection> {
             operation_state: GitOperationState::None,
             is_clean: false,
         };
-        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
-        let after_snapshot = read_git_snapshot(&detection_repo_path).map_err(issue_git_error)?;
-        let detection =
-            detect_commit_result(&detection_repo_path, &before_snapshot, &after_snapshot)
-                .map_err(issue_git_error)?;
-
-        let commit_hash = match detection {
-            GitCommitDetectionResult::NewCommit { commit_hash } => commit_hash,
+        let project = self.require_project(input.project_id)?;
+        let detection_repo_path = completion_detection_repo_path(&project.repo_path, session);
+        let detection = detect_commit_result(&detection_repo_path, &before_snapshot, snapshot)
+            .map_err(issue_git_error)?;
+        match detection {
+            GitCommitDetectionResult::NewCommit { commit_hash } => self
+                .complete_clean_or_accepted_flow(
+                    input.clone(),
+                    issue.clone(),
+                    session.clone(),
+                    snapshot.clone(),
+                    fallback_option,
+                    Some((attempt.id, commit_hash)),
+                )
+                .map(Some),
             GitCommitDetectionResult::NoCommitDetected => {
+                let transaction = self
+                    .issue_repository
+                    .connection()
+                    .unchecked_transaction()
+                    .map_err(issue_database_error)?;
                 CompletionAttemptRepository::update_result_in_transaction(
                     &transaction,
                     attempt.id,
-                    &after_snapshot.head,
+                    &snapshot.head,
                     None,
                     None,
                     CompletionAttemptResult::NoCommitDetected,
                 )
-                .map_err(issue_database_error)?
-                .ok_or_else(|| {
-                    CommandError::new(
-                        CommandErrorCode::IssuePersistenceFailed,
-                        "CompletionAttempt 更新失败。",
-                    )
-                    .with_detail(
-                        ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt.id),
-                    )
-                })?;
-
-                let current_issue =
-                    IssueRepository::find_by_id_in_transaction(&transaction, issue.id)
-                        .map_err(issue_database_error)?
-                        .ok_or_else(|| issue_not_found(issue.id))?;
+                .map_err(issue_database_error)?;
                 transaction.commit().map_err(issue_database_error)?;
 
-                return Ok(DetectAgentCommitCompletionResult {
-                    outcome: DetectAgentCommitCompletionOutcome::NoCommitDetected,
-                    issue: current_issue,
-                    message: "尚未检测到新的 commit，Issue 保持待验收。".to_string(),
-                });
-            }
-            GitCommitDetectionResult::HeadMovedWithoutNewCommit { head } => {
-                return Err(CommandError::new(
-                    CommandErrorCode::IssueValidationFailed,
-                    "检测到 HEAD 变化，但不是新的前进式 commit。",
-                )
-                .with_detail(ErrorDetail::new("GitStatus").with_value("head", head)));
+                Ok(Some(self.flow_result(
+                    CompleteIssueFlowAction::NoCommitDetected,
+                    issue.clone(),
+                    None,
+                    "尚未检测到新的 commit，Issue 保持待验收。".to_string(),
+                    session,
+                )))
             }
             GitCommitDetectionResult::OperationInProgress { operation_state } => {
+                let transaction = self
+                    .issue_repository
+                    .connection()
+                    .unchecked_transaction()
+                    .map_err(issue_database_error)?;
                 CompletionAttemptRepository::update_result_in_transaction(
                     &transaction,
                     attempt.id,
-                    &after_snapshot.head,
+                    &snapshot.head,
                     None,
                     Some(format_git_operation_state(operation_state)),
                     CompletionAttemptResult::GitOperationBlocked,
                 )
-                .map_err(issue_database_error)?
-                .ok_or_else(|| {
-                    CommandError::new(
-                        CommandErrorCode::IssuePersistenceFailed,
-                        "CompletionAttempt 更新失败。",
-                    )
-                    .with_detail(
-                        ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt.id),
-                    )
-                })?;
-
-                let current_issue =
-                    IssueRepository::find_by_id_in_transaction(&transaction, issue.id)
-                        .map_err(issue_database_error)?
-                        .ok_or_else(|| issue_not_found(issue.id))?;
+                .map_err(issue_database_error)?;
                 transaction.commit().map_err(issue_database_error)?;
 
-                return Ok(DetectAgentCommitCompletionResult {
-                    outcome: DetectAgentCommitCompletionOutcome::GitOperationBlocked,
-                    issue: current_issue,
-                    message:
+                Ok(Some(
+                    self.flow_result(
+                        CompleteIssueFlowAction::GitOperationBlocked,
+                        issue.clone(),
+                        None,
                         "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。"
                             .to_string(),
-                });
+                        session,
+                    ),
+                ))
             }
+            GitCommitDetectionResult::HeadMovedWithoutNewCommit { head } => Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "检测到 HEAD 变化，但不是新的前进式 commit。",
+            )
+            .with_detail(ErrorDetail::new("GitStatus").with_value("head", head))),
+        }
+    }
+
+    fn complete_clean_or_accepted_flow(
+        &self,
+        input: CompleteIssueFlowInput,
+        issue: IssueRecord,
+        session: AgentSessionRecord,
+        snapshot: GitSnapshot,
+        option: CompletionAttemptOption,
+        pending_commit: Option<(i64, String)>,
+    ) -> Result<CompleteIssueFlowResult, CommandError> {
+        let project = self.require_project(input.project_id)?;
+        let target_branch = session
+            .origin_branch
+            .clone()
+            .or_else(|| session.target_branch.clone());
+        let workspace_missing = session.workspace_mode == WorkspaceMode::Worktree
+            && session
+                .workspace_path
+                .as_deref()
+                .is_some_and(|workspace_path| !Path::new(workspace_path).exists());
+        let current_branch = if workspace_missing {
+            target_branch.clone().unwrap_or_default()
+        } else {
+            read_current_branch(&session.working_dir)?
         };
 
-        if session.workspace_mode == WorkspaceMode::Worktree {
-            finalize_worktree_completion(&project.repo_path, &session)
-                .map_err(|error| issue_worktree_merge_error(error, &session))?;
+        if session.workspace_mode == WorkspaceMode::Worktree
+            && !workspace_missing
+            && target_branch.as_deref() != Some(current_branch.as_str())
+        {
+            match session.worktree_owner {
+                WorktreeOwner::Redwhisk => {
+                    if let Err(error) =
+                        rebase_fast_forward_and_cleanup(&project.repo_path, &session)
+                    {
+                        let flow = self.upsert_completion_flow(
+                            issue.id,
+                            Some(session.id),
+                            IssueCompletionPhase::AgentMergeBlocked,
+                            input.ignore_dirty == Some(true),
+                            input.external_worktree_decision,
+                            &session,
+                            Some(&error.to_string()),
+                        )?;
+                        return Ok(self.flow_result(
+                            CompleteIssueFlowAction::AgentMergeBlocked,
+                            issue,
+                            Some(flow),
+                            "Agent worktree 合并被阻止，请手动处理冲突。".to_string(),
+                            &session,
+                        ));
+                    }
+                }
+                WorktreeOwner::External => match input.external_worktree_decision {
+                    None => {
+                        let flow = self.upsert_completion_flow(
+                            issue.id,
+                            Some(session.id),
+                            IssueCompletionPhase::ConfirmingExternalWorktree,
+                            input.ignore_dirty == Some(true),
+                            None,
+                            &session,
+                            None,
+                        )?;
+                        return Ok(self.flow_result(
+                            CompleteIssueFlowAction::ConfirmExternalWorktree,
+                            issue,
+                            Some(flow),
+                            "当前使用外部 worktree，请确认是否合并并清理。".to_string(),
+                            &session,
+                        ));
+                    }
+                    Some(IssueCompletionExternalWorktreeDecision::Cancel) => {
+                        let flow = self.upsert_completion_flow(
+                            issue.id,
+                            Some(session.id),
+                            IssueCompletionPhase::ConfirmingExternalWorktree,
+                            input.ignore_dirty == Some(true),
+                            input.external_worktree_decision,
+                            &session,
+                            Some("completion_paused"),
+                        )?;
+                        return Ok(self.flow_result(
+                            CompleteIssueFlowAction::ConfirmExternalWorktree,
+                            issue,
+                            Some(flow),
+                            "完成已暂停，Issue 保持待验收。".to_string(),
+                            &session,
+                        ));
+                    }
+                    Some(IssueCompletionExternalWorktreeDecision::Skip) => {}
+                    Some(IssueCompletionExternalWorktreeDecision::MergeAndDelete) => {
+                        if let Err(error) =
+                            rebase_fast_forward_and_cleanup(&project.repo_path, &session)
+                        {
+                            let flow = self.upsert_completion_flow(
+                                issue.id,
+                                Some(session.id),
+                                IssueCompletionPhase::AgentMergeBlocked,
+                                input.ignore_dirty == Some(true),
+                                input.external_worktree_decision,
+                                &session,
+                                Some(&error.to_string()),
+                            )?;
+                            return Ok(self.flow_result(
+                                CompleteIssueFlowAction::AgentMergeBlocked,
+                                issue,
+                                Some(flow),
+                                "Agent worktree 合并被阻止，请手动处理冲突。".to_string(),
+                                &session,
+                            ));
+                        }
+                    }
+                },
+            }
         }
 
-        let completed_issue = IssueRepository::complete_review_issue_cleanly_in_transaction(
-            &transaction,
-            input.project_id,
-            input.issue_id,
-            linked_session_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", input.issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            )
-        })?;
+        let commit_hash = pending_commit.as_ref().map(|(_, hash)| hash.clone());
+        let attempt_id = pending_commit.map(|(attempt_id, _)| attempt_id);
+        let issue = self.complete_issue_flow_transaction(
+            &issue,
+            &session,
+            &snapshot,
+            option,
+            attempt_id,
+            commit_hash.as_deref(),
+            input.ignore_dirty == Some(true),
+        )?;
 
-        let closed_session = AgentSessionRepository::mark_terminated_in_transaction(
-            &transaction,
-            linked_session_id,
-            AgentSessionStatus::Closed,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以完成。",
+        Ok(self.flow_result(
+            CompleteIssueFlowAction::Completed,
+            issue,
+            None,
+            "Issue 已完成。".to_string(),
+            &session,
+        ))
+    }
+
+    fn complete_issue_flow_transaction(
+        &self,
+        issue: &IssueRecord,
+        session: &AgentSessionRecord,
+        snapshot: &GitSnapshot,
+        option: CompletionAttemptOption,
+        attempt_id: Option<i64>,
+        commit_hash: Option<&str>,
+        ignore_dirty: bool,
+    ) -> Result<IssueRecord, CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+
+        let completed_issue = if issue.status == IssueStatus::Review
+            && session.status == AgentSessionStatus::Running
+            && session.closed_at.is_none()
+        {
+            IssueRepository::complete_review_issue_manually_in_transaction(
+                &transaction,
+                issue.project_id,
+                issue.id,
+                session.id,
             )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
+            .map_err(issue_database_error)?
+            .ok_or_else(|| issue_not_found(issue.id))?
+        } else {
+            IssueRepository::update_status_in_transaction(
+                &transaction,
+                issue.project_id,
+                issue.id,
+                IssueStatus::Completed,
             )
-        })?;
+            .map_err(issue_database_error)?
+            .ok_or_else(|| issue_not_found(issue.id))?
+        };
+
+        if session.status != AgentSessionStatus::Closed {
+            if let Some(closed_session) = AgentSessionRepository::mark_terminated_in_transaction(
+                &transaction,
+                session.id,
+                AgentSessionStatus::Closed,
+                completed_issue.updated_at,
+            )
+            .map_err(issue_database_error)?
+            {
+                let session_event_payload = json!({
+                    "sessionId": closed_session.id,
+                    "issueId": closed_session.issue_id,
+                    "status": "closed",
+                    "reason": completion_session_close_reason(option),
+                    "commitHash": commit_hash,
+                    "logPath": closed_session.log_path,
+                })
+                .to_string();
+                EventRepository::insert_session_event_in_transaction(
+                    &transaction,
+                    closed_session.id,
+                    SessionEventType::SessionClosed,
+                    &session_event_payload,
+                    completed_issue.updated_at,
+                )
+                .map_err(issue_database_error)?;
+            }
+        }
 
         let issue_action_payload = json!({
-            "fromStatus": "review",
+            "fromStatus": issue_status_to_str(&issue.status),
             "toStatus": "completed",
-            "linkedSessionId": linked_session_id,
-            "option": "agent_auto_commit",
+            "linkedSessionId": session.id,
+            "option": option.as_str(),
             "commitHash": commit_hash,
+            "ignoreDirty": ignore_dirty,
         })
         .to_string();
         EventRepository::insert_issue_action_in_transaction(
@@ -1261,47 +1279,152 @@ impl<'connection> IssueService<'connection> {
         )
         .map_err(issue_database_error)?;
 
-        let session_event_payload = json!({
-            "sessionId": closed_session.id,
-            "issueId": closed_session.issue_id,
-            "status": "closed",
-            "reason": "agent_commit_completion",
-            "commitHash": commit_hash,
-            "logPath": closed_session.log_path,
-        })
-        .to_string();
-        EventRepository::insert_session_event_in_transaction(
-            &transaction,
-            closed_session.id,
-            SessionEventType::SessionClosed,
-            &session_event_payload,
-            completed_issue.updated_at,
-        )
-        .map_err(issue_database_error)?;
-
-        CompletionAttemptRepository::update_result_in_transaction(
-            &transaction,
-            attempt.id,
-            &after_snapshot.head,
-            Some(&commit_hash),
-            None,
-            CompletionAttemptResult::Completed,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssuePersistenceFailed,
-                "CompletionAttempt 更新失败。",
+        let changed_files_json =
+            serde_json::to_string(&snapshot.changed_files).map_err(|error| {
+                CommandError::new(
+                    CommandErrorCode::IssuePersistenceFailed,
+                    "CompletionAttempt 保存失败。",
+                )
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            })?;
+        if let Some(attempt_id) = attempt_id {
+            CompletionAttemptRepository::update_result_in_transaction(
+                &transaction,
+                attempt_id,
+                &snapshot.head,
+                commit_hash,
+                None,
+                CompletionAttemptResult::Completed,
             )
-            .with_detail(ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt.id))
-        })?;
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssuePersistenceFailed,
+                    "CompletionAttempt 更新失败。",
+                )
+                .with_detail(
+                    ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt_id),
+                )
+            })?;
+        } else {
+            CompletionAttemptRepository::insert_in_transaction(
+                &transaction,
+                completed_issue.id,
+                session.id,
+                option,
+                &snapshot.head,
+                &snapshot.head,
+                commit_hash,
+                None,
+                &changed_files_json,
+                CompletionAttemptResult::Completed,
+                completed_issue.updated_at,
+            )
+            .map_err(issue_database_error)?;
+        }
 
+        IssueCompletionFlowRepository::clear_in_transaction(&transaction, issue.id)
+            .map_err(issue_database_error)?;
         transaction.commit().map_err(issue_database_error)?;
 
+        self.hydrate_issue(completed_issue)
+    }
+
+    fn upsert_completion_flow(
+        &self,
+        issue_id: i64,
+        session_id: Option<i64>,
+        phase: IssueCompletionPhase,
+        ignore_dirty: bool,
+        external_worktree_decision: Option<IssueCompletionExternalWorktreeDecision>,
+        session: &AgentSessionRecord,
+        failure_reason: Option<&str>,
+    ) -> Result<IssueCompletionFlowRecord, CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+        let flow = IssueCompletionFlowRepository::upsert_in_transaction(
+            &transaction,
+            IssueCompletionFlowRecordInput {
+                issue_id,
+                session_id,
+                phase,
+                ignore_dirty,
+                external_worktree_decision,
+                base_branch: session.origin_branch.as_deref(),
+                workspace_branch: session.workspace_branch.as_deref(),
+                workspace_path: session.workspace_path.as_deref(),
+                failure_reason,
+                updated_at: current_epoch_millis_for_db().map_err(issue_database_error)?,
+            },
+        )
+        .map_err(issue_database_error)?;
+        transaction.commit().map_err(issue_database_error)?;
+        Ok(flow)
+    }
+
+    fn flow_result(
+        &self,
+        action: CompleteIssueFlowAction,
+        issue: IssueRecord,
+        flow: Option<IssueCompletionFlowRecord>,
+        message: String,
+        session: &AgentSessionRecord,
+    ) -> CompleteIssueFlowResult {
+        CompleteIssueFlowResult {
+            action,
+            issue,
+            flow,
+            message,
+            target_branch: session
+                .origin_branch
+                .clone()
+                .or_else(|| session.target_branch.clone()),
+            workspace_branch: session.workspace_branch.clone(),
+            workspace_path: session.workspace_path.clone(),
+            session_id: Some(session.id),
+        }
+    }
+
+    pub fn detect_agent_commit_completion(
+        &self,
+        input: DetectAgentCommitCompletionInput,
+    ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
+        let result = self.complete_issue_flow_with_option(
+            CompleteIssueFlowInput {
+                project_id: input.project_id,
+                issue_id: input.issue_id,
+                ignore_dirty: None,
+                external_worktree_decision: None,
+            },
+            self.data_dir.clone(),
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+            Some(CompletionAttemptOption::AgentAutoCommit),
+        )?;
+
+        let outcome = match result.action {
+            CompleteIssueFlowAction::Completed => DetectAgentCommitCompletionOutcome::Completed,
+            CompleteIssueFlowAction::NoCommitDetected => {
+                DetectAgentCommitCompletionOutcome::NoCommitDetected
+            }
+            CompleteIssueFlowAction::GitOperationBlocked => {
+                DetectAgentCommitCompletionOutcome::GitOperationBlocked
+            }
+            _ => return Err(legacy_completion_flow_action_error(result.action)),
+        };
+
         Ok(DetectAgentCommitCompletionResult {
-            outcome: DetectAgentCommitCompletionOutcome::Completed,
-            issue: completed_issue,
-            message: "已检测到新的 commit，Issue 已完成。".to_string(),
+            outcome,
+            issue: result.issue,
+            message: match result.action {
+                CompleteIssueFlowAction::Completed => {
+                    "已检测到新的 commit，Issue 已完成。".to_string()
+                }
+                _ => result.message,
+            },
         })
     }
 
@@ -1416,6 +1539,23 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).send_agent_commit_prompt(
+            input,
+            data_dir,
+            pty_sessions,
+            agent_registry,
+        )
+    }
+
+    pub fn complete_issue_flow_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: CompleteIssueFlowInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
+    ) -> Result<CompleteIssueFlowResult, CommandError> {
+        let database = open_issue_database(&data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).complete_issue_flow(
             input,
             data_dir,
             pty_sessions,
@@ -1834,6 +1974,13 @@ impl<'connection> IssueService<'connection> {
                 }
             }
             IssueStatus::Completed => {
+                if issue.linked_session_id.is_some() {
+                    return Err(CommandError::new(
+                        CommandErrorCode::IssueValidationFailed,
+                        "Issue 完成必须通过 complete_issue_flow 执行。",
+                    )
+                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
+                }
                 let linked_session_id =
                     IssueRepository::find_running_linked_session_id_in_transaction(
                         &transaction,
@@ -2042,9 +2189,10 @@ impl<'connection> IssueService<'connection> {
         )
         .map_err(issue_database_error)?;
 
-        let backlog_issue = IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| issue_not_found(input.issue_id))?;
+        let backlog_issue =
+            IssueRepository::find_by_id_in_transaction(&transaction, input.issue_id)
+                .map_err(issue_database_error)?
+                .ok_or_else(|| issue_not_found(input.issue_id))?;
 
         transaction.commit().map_err(issue_database_error)?;
         self.hydrate_issue(backlog_issue)
@@ -2278,6 +2426,75 @@ fn finalize_worktree_completion(
     cleanup_worktree(repo_path, workspace_path, workspace_branch)
         .map_err(map_worktree_git_error)?;
     Ok(())
+}
+
+fn rebase_fast_forward_and_cleanup(
+    repo_path: &str,
+    session: &AgentSessionRecord,
+) -> Result<(), crate::git::worktree::GitWorktreeError> {
+    let Some(target_branch) = session
+        .origin_branch
+        .as_deref()
+        .or(session.target_branch.as_deref())
+    else {
+        return Ok(());
+    };
+    let Some(workspace_branch) = session.workspace_branch.as_deref() else {
+        return Ok(());
+    };
+    let Some(workspace_path) = session.workspace_path.as_deref() else {
+        return Ok(());
+    };
+    if !Path::new(workspace_path).exists() {
+        return Ok(());
+    }
+
+    rebase_and_fast_forward(repo_path, workspace_path, target_branch, workspace_branch)?;
+    cleanup_worktree(repo_path, workspace_path, workspace_branch)?;
+    Ok(())
+}
+
+fn read_current_branch(repo_path: &str) -> Result<String, CommandError> {
+    let output = Command::new("git")
+        .args(["branch", "--show-current"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 Project 的 Git 状态不可用。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+    if !output.status.success() {
+        return Err(CommandError::new(
+            CommandErrorCode::IssueValidationFailed,
+            "当前 Project 的 Git 状态不可用。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value(
+            "message",
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn completion_session_close_reason(option: CompletionAttemptOption) -> &'static str {
+    match option {
+        CompletionAttemptOption::CompleteManual => "manual_completion",
+        CompletionAttemptOption::CompleteClean => "clean_completion",
+        CompletionAttemptOption::AgentAutoCommit => "agent_commit_completion",
+    }
+}
+
+fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> CommandError {
+    let message = match action {
+        CompleteIssueFlowAction::ManualDirtyPrompt => "当前仓库存在未提交改动，不能直接完成。",
+        CompleteIssueFlowAction::GitOperationBlocked => "当前 Git 正在进行中的操作阻止直接完成。",
+        _ => "Issue 完成必须通过 complete_issue_flow 继续处理。",
+    };
+    CommandError::new(CommandErrorCode::IssueValidationFailed, message)
+        .with_detail(ErrorDetail::new("CompletionFlow").with_value("action", format!("{action:?}")))
 }
 
 fn map_worktree_git_error(

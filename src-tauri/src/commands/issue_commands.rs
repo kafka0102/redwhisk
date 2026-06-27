@@ -14,6 +14,7 @@ use crate::types::issue::{
     PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
     UpdateIssueInput,
 };
+use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 
 #[tauri::command]
 pub fn list_issues(
@@ -106,8 +107,11 @@ pub fn complete_issue_manual(
     input: CompleteIssueManualInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let issue =
-        AgentSessionService::complete_issue_manual_in_data_dir(data_dir, input, &state.pty_sessions)?;
+    let issue = AgentSessionService::complete_issue_manual_in_data_dir(
+        data_dir,
+        input,
+        &state.pty_sessions,
+    )?;
     shutdown_closed_issue_session(&state, &issue);
     Ok(issue)
 }
@@ -119,10 +123,32 @@ pub fn complete_issue_clean(
     input: CompleteIssueCleanInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let issue =
-        AgentSessionService::complete_issue_clean_in_data_dir(data_dir, input, &state.pty_sessions)?;
+    let issue = AgentSessionService::complete_issue_clean_in_data_dir(
+        data_dir,
+        input,
+        &state.pty_sessions,
+    )?;
     shutdown_closed_issue_session(&state, &issue);
     Ok(issue)
+}
+
+#[tauri::command]
+pub fn complete_issue_flow(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: CompleteIssueFlowInput,
+) -> Result<CompleteIssueFlowResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let result = IssueService::complete_issue_flow_in_data_dir(
+        data_dir,
+        input,
+        &state.pty_sessions,
+        &state.agent_sessions,
+    )?;
+    if result.action == crate::types::issue_completion::CompleteIssueFlowAction::Completed {
+        shutdown_closed_issue_session(&state, &result.issue);
+    }
+    Ok(result)
 }
 
 #[tauri::command]
