@@ -69,7 +69,7 @@ impl<'connection> CompletionAttemptRepository<'connection> {
                  WHERE issue_id = ?1
                    AND session_id = ?2
                    AND option = 'agent_auto_commit'
-                   AND result = 'prompt_sent'
+                   AND result IN ('prompt_sent', 'no_commit_detected')
                  ORDER BY created_at DESC, id DESC
                  LIMIT 1",
                 params![issue_id, session_id],

@@ -1623,6 +1623,14 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
         })
         .expect("completion attempt count");
     assert_eq!(attempt_count, 0);
+
+    let flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .expect("flow exists");
+    assert_eq!(flow.phase, IssueCompletionPhase::ManualDirtyBlocked);
+    assert_eq!(flow.session_id, Some(session_id));
+    assert!(!flow.ignore_dirty);
 }
 
 #[test]
@@ -2322,6 +2330,119 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
     assert_eq!(attempts[0].result.as_str(), "no_commit_detected");
     assert_eq!(attempts[0].commit_hash, None);
     assert_eq!(attempts[0].head_before, attempts[0].head_after);
+}
+
+#[test]
+fn detect_agent_commit_completion_resumes_after_no_commit_and_records_commit_hash() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir
+        .path()
+        .join("detect-agent-commit-resume-after-no-commit-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty change\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "detect-agent-commit-resume-after-no-commit-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Review issue".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'review' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set review");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
+    register_test_pty_session(&pty_sessions, session_id, &repo_dir, temp_dir.path());
+
+    service
+        .send_agent_commit_prompt(
+            SendAgentCommitPromptInput {
+                project_id,
+                issue_id: issue.id,
+            },
+            temp_dir.path(),
+            &pty_sessions,
+            &AgentSessionRegistry::new(),
+        )
+        .expect("send prompt");
+
+    let first_result = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect without commit");
+    assert_eq!(
+        first_result.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::NoCommitDetected
+    );
+
+    let attempts_after_no_commit = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts after no commit");
+    assert_eq!(attempts_after_no_commit.len(), 1);
+    let pending_attempt_id = attempts_after_no_commit[0].id;
+    let original_head = attempts_after_no_commit[0].head_before.clone();
+    assert_eq!(
+        attempts_after_no_commit[0].result.as_str(),
+        "no_commit_detected"
+    );
+
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "agent completion after retry"]);
+    let new_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+
+    let completed_result = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect completion after retry");
+
+    assert_eq!(
+        completed_result.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
+    );
+    assert_eq!(completed_result.issue.status, IssueStatus::Completed);
+
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].id, pending_attempt_id);
+    assert_eq!(attempts[0].result.as_str(), "completed");
+    assert_eq!(attempts[0].head_before, original_head);
+    assert_eq!(attempts[0].head_after, new_head);
+    assert_eq!(attempts[0].commit_hash.as_deref(), Some(new_head.as_str()));
 }
 
 #[test]
