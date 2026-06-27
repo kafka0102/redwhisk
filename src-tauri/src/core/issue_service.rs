@@ -505,9 +505,7 @@ impl<'connection> IssueService<'connection> {
                 project_id: input.project_id,
                 issue_id: input.issue_id,
                 ignore_dirty: Some(true),
-                external_worktree_decision: Some(
-                    IssueCompletionExternalWorktreeDecision::MergeAndDelete,
-                ),
+                external_worktree_decision: None,
             },
             self.data_dir.clone(),
             &PtySessionManager::new(),
@@ -622,9 +620,7 @@ impl<'connection> IssueService<'connection> {
                 project_id: input.project_id,
                 issue_id: input.issue_id,
                 ignore_dirty: None,
-                external_worktree_decision: Some(
-                    IssueCompletionExternalWorktreeDecision::MergeAndDelete,
-                ),
+                external_worktree_decision: None,
             },
             self.data_dir.clone(),
             &PtySessionManager::new(),
@@ -832,7 +828,7 @@ impl<'connection> IssueService<'connection> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        if session.status == AgentSessionStatus::Running && issue.status != IssueStatus::Review {
+        if issue.status == IssueStatus::Running {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "运行中的 Issue 必须先进入待验收后才能完成。",
