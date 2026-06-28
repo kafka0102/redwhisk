@@ -1,6 +1,12 @@
-import { GitBranch, X } from "lucide-react";
+import { GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
 import type { ReactNode } from "react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../components/ui";
 import { SessionDiffViewer } from "./session-diff-viewer";
 import { SessionFileViewer } from "./session-file-viewer";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -8,14 +14,25 @@ import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
+  SessionWorkspaceToolTabKind,
 } from "./session-workspace-types";
+
+export interface SessionWorkspaceToolTab {
+  id: SessionWorkspaceToolTabKind;
+  content: ReactNode;
+  kind: "terminal" | "browser";
+  label: string;
+}
 
 interface SessionWorkspaceTabsProps {
   activeTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
   sessionContent: ReactNode;
+  toolTabs: SessionWorkspaceToolTab[];
   onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
+  onCreateBrowserTab: () => void;
+  onCreateTerminalTab: () => void;
   onSelectTab: (tab: SessionWorkspaceTabKind) => void;
 }
 
@@ -24,11 +41,16 @@ export function SessionWorkspaceTabs({
   changeTab,
   fileTab,
   sessionContent,
+  toolTabs,
   onCloseTab,
+  onCreateBrowserTab,
+  onCreateTerminalTab,
   onSelectTab,
 }: SessionWorkspaceTabsProps) {
   const { messages } = useI18n();
-  const selectedTab = getSelectedTab(activeTab, fileTab, changeTab);
+  const selectedTab = getSelectedTab(activeTab, fileTab, changeTab, toolTabs);
+  const selectedToolTab =
+    toolTabs.find((tab) => tab.id === selectedTab) ?? null;
 
   return (
     <div className="session-workspace-tabs">
@@ -42,6 +64,45 @@ export function SessionWorkspaceTabs({
         >
           {messages.agentsFeature.sessionTab}
         </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={messages.agentsFeature.addSessionTool}
+            className="session-workspace-tabs__add"
+          >
+            <Plus aria-hidden="true" size={14} strokeWidth={2} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="session-workspace-tabs__menu"
+          >
+            <DropdownMenuItem onClick={onCreateTerminalTab}>
+              <Terminal aria-hidden="true" size={14} strokeWidth={1.8} />
+              {messages.agentsFeature.terminalTool}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCreateBrowserTab}>
+              <Globe aria-hidden="true" size={14} strokeWidth={1.8} />
+              {messages.agentsFeature.browserTool}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {toolTabs.map((tab) => (
+          <ClosableWorkspaceTab
+            key={tab.id}
+            closeLabel={messages.agentsFeature.closeTab(tab.label)}
+            icon={
+              tab.kind === "terminal" ? (
+                <Terminal aria-hidden="true" size={14} strokeWidth={1.8} />
+              ) : (
+                <Globe aria-hidden="true" size={14} strokeWidth={1.8} />
+              )
+            }
+            label={tab.label}
+            selected={selectedTab === tab.id}
+            tab={tab.id}
+            onCloseTab={onCloseTab}
+            onSelectTab={onSelectTab}
+          />
+        ))}
         {fileTab ? (
           <ClosableWorkspaceTab
             closeLabel={messages.agentsFeature.closeTab(fileTab.fileName)}
@@ -69,6 +130,8 @@ export function SessionWorkspaceTabs({
           <SessionFileViewer tab={fileTab} />
         ) : selectedTab === "changes" && changeTab ? (
           <SessionDiffViewer tab={changeTab} />
+        ) : selectedToolTab ? (
+          selectedToolTab.content
         ) : (
           sessionContent
         )}
@@ -124,6 +187,7 @@ function getSelectedTab(
   activeTab: SessionWorkspaceTabKind,
   fileTab: SessionWorkspaceFileTab | null,
   changeTab: SessionWorkspaceChangeTab | null,
+  toolTabs: SessionWorkspaceToolTab[],
 ): SessionWorkspaceTabKind {
   if (activeTab === "file" && fileTab) {
     return "file";
@@ -131,6 +195,10 @@ function getSelectedTab(
 
   if (activeTab === "changes" && changeTab) {
     return "changes";
+  }
+
+  if (toolTabs.some((tab) => tab.id === activeTab)) {
+    return activeTab;
   }
 
   return "session";

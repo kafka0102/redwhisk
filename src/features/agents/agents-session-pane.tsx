@@ -1,15 +1,12 @@
-import { ChevronDown, PanelRightOpen, Terminal } from "lucide-react";
-
-import type {
-  CSSProperties,
-  MouseEvent as ReactMouseEvent,
-  ReactNode,
-} from "react";
+import { ChevronDown, PanelRightOpen } from "lucide-react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
 import { formatSessionTitle } from "./agent-session-formatters";
-import { SessionWorkspaceTabs } from "./session-workspace-tabs";
+import {
+  SessionWorkspaceTabs,
+  type SessionWorkspaceToolTab,
+} from "./session-workspace-tabs";
 import { useI18n } from "../../shared/i18n/i18n";
 import type {
   SessionWorkspaceChangeTab,
@@ -47,16 +44,14 @@ interface AgentsSessionPaneProps {
   fileTab: SessionWorkspaceFileTab | null;
   isDeletingSession: boolean;
   isSidePanelOpen: boolean;
-  isTerminalPanelActive: boolean;
-  terminalPanel: ReactNode;
-  terminalPanelHeight: number;
+  toolTabs: SessionWorkspaceToolTab[];
   onAcknowledgeSessionAttention: (sessionId: number) => void;
   onCloseWorkspaceTab: (
     tab: Exclude<SessionWorkspaceTabKind, "session">,
   ) => void;
+  onCreateBrowserTab: () => void;
+  onCreateTerminalTab: () => void;
   onDeleteSession: () => void;
-  onOpenTerminalPanel: () => void;
-  onTerminalPanelSplitterMouseDown: (event: ReactMouseEvent) => void;
   onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
   onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
@@ -85,14 +80,12 @@ export function AgentsSessionPane({
   fileTab,
   isDeletingSession,
   isSidePanelOpen,
-  isTerminalPanelActive,
-  terminalPanel,
-  terminalPanelHeight,
+  toolTabs,
   onAcknowledgeSessionAttention,
   onCloseWorkspaceTab,
+  onCreateBrowserTab,
+  onCreateTerminalTab,
   onDeleteSession,
-  onOpenTerminalPanel,
-  onTerminalPanelSplitterMouseDown,
   onSelectWorkspaceTab,
   onToggleSidePanel,
   onToggleTransitionMenu,
@@ -182,17 +175,6 @@ export function AgentsSessionPane({
             ) : null}
             {canRenderSessionActions ? (
               <button
-                aria-label={messages.agentsFeature.openTerminal}
-                aria-pressed={isTerminalPanelActive}
-                className="agents-session-toolbar__icon-action"
-                type="button"
-                onClick={onOpenTerminalPanel}
-              >
-                <Terminal aria-hidden="true" size={16} strokeWidth={1.8} />
-              </button>
-            ) : null}
-            {canRenderSessionActions ? (
-              <button
                 aria-label={messages.agentsFeature.openSessionSidePanel}
                 aria-pressed={isSidePanelOpen}
                 className="agents-session-toolbar__icon-action"
@@ -242,16 +224,7 @@ export function AgentsSessionPane({
         ) : null}
       </div>
       {selectedSession ? (
-        <div
-          className={`agents-session-main-stack${
-            terminalPanel ? " agents-session-main-stack--with-terminal" : ""
-          }`}
-          style={
-            {
-              "--session-terminal-panel-height": `${terminalPanelHeight}px`,
-            } as CSSProperties
-          }
-        >
+        <div className="agents-session-main-stack">
           <SessionWorkspaceTabs
             activeTab={activeWorkspaceTab}
             changeTab={changeTab}
@@ -277,21 +250,11 @@ export function AgentsSessionPane({
               </div>
             }
             onCloseTab={onCloseWorkspaceTab}
+            onCreateBrowserTab={onCreateBrowserTab}
+            onCreateTerminalTab={onCreateTerminalTab}
             onSelectTab={onSelectWorkspaceTab}
+            toolTabs={toolTabs}
           />
-          {terminalPanel ? (
-            <>
-              <div
-                aria-label={messages.agentsFeature.sessionTerminals}
-                aria-orientation="horizontal"
-                className="session-inline-terminal-splitter"
-                role="separator"
-                tabIndex={0}
-                onMouseDown={onTerminalPanelSplitterMouseDown}
-              />
-              {terminalPanel}
-            </>
-          ) : null}
         </div>
       ) : null}
     </div>
