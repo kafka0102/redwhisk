@@ -848,12 +848,27 @@ impl<'connection> IssueService<'connection> {
         let effective_policy = session
             .completion_policy
             .unwrap_or(project.completion_policy);
-        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
-        let snapshot = read_git_snapshot(&detection_repo_path).map_err(issue_git_error)?;
         let option = forced_option.unwrap_or(match effective_policy {
             ProjectCompletionPolicy::Manual => CompletionAttemptOption::CompleteManual,
             ProjectCompletionPolicy::AgentAutoCommit => CompletionAttemptOption::AgentAutoCommit,
         });
+        if issue.status == IssueStatus::Review && is_session_closed_out(&session) {
+            let snapshot = closed_session_completion_snapshot();
+            let completed_issue = self.complete_issue_flow_transaction(
+                &issue, &session, &snapshot, option, None, None, false,
+            )?;
+
+            return Ok(self.flow_result(
+                CompleteIssueFlowAction::Completed,
+                completed_issue,
+                None,
+                "Issue 已完成。".to_string(),
+                &session,
+            ));
+        }
+
+        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
+        let snapshot = read_git_snapshot(&detection_repo_path).map_err(issue_git_error)?;
 
         if option == CompletionAttemptOption::AgentAutoCommit {
             if let Some(result) = self.resume_pending_agent_commit_if_available(
@@ -2595,6 +2610,20 @@ fn completion_detection_repo_path(project_repo_path: &str, session: &AgentSessio
     session.working_dir.clone()
 }
 
+fn is_session_closed_out(session: &AgentSessionRecord) -> bool {
+    session.status != AgentSessionStatus::Running || session.closed_at.is_some()
+}
+
+fn closed_session_completion_snapshot() -> GitSnapshot {
+    GitSnapshot {
+        head: String::new(),
+        status_porcelain: String::new(),
+        changed_files: Vec::new(),
+        operation_state: GitOperationState::None,
+        is_clean: true,
+    }
+}
+
 fn issue_status_to_str(status: &IssueStatus) -> &'static str {
     match status {
         IssueStatus::Backlog => "backlog",
@@ -3108,4 +3137,137 @@ fn read_previewable_text_file(path: &str) -> Result<String, CommandError> {
 fn issue_io_error(error: std::io::Error) -> CommandError {
     CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IssueService;
+    use crate::agent::pty_session_manager::PtySessionManager;
+    use crate::agent::session_registry::AgentSessionRegistry;
+    use crate::db::issue_repository::IssueRepository;
+    use crate::db::migrations::MigrationRunner;
+    use crate::db::project_repository::ProjectRepository;
+    use crate::types::issue::IssueStatus;
+    use crate::types::issue_completion::{CompleteIssueFlowAction, CompleteIssueFlowInput};
+    use rusqlite::{params, Connection};
+    use std::fs;
+    use std::path::Path;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    #[test]
+    fn complete_issue_flow_completes_review_issue_with_closed_session_without_agent_commit_check() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        fs::write(repo_dir.join("dirty.txt"), "dirty\n").expect("write dirty file");
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    external_worktree_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        assert_eq!(result.issue.status, IssueStatus::Completed);
+
+        let (option, completion_result): (String, String) = connection
+            .query_row(
+                "SELECT option, result FROM completion_attempts WHERE issue_id = 16",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("completion attempt");
+        assert_eq!(option, "agent_auto_commit");
+        assert_eq!(completion_result, "completed");
+    }
+
+    fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at, completion_policy)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1, 'agent_auto_commit')",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'Issue 16', '', 'review', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   status, attention, working_dir, command_snapshot, prompt_snapshot,
+                   workspace_mode, target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, completion_policy, log_path,
+                   list_inserted_at, last_active_at, started_at, closed_at, del
+                 ) VALUES (
+                   30, 1, 16, NULL, 101, 'thread-16',
+                   'stopped', 'none', ?1, 'codex', '',
+                   'current_branch', NULL, NULL, NULL,
+                   NULL, 'external', 'agent_auto_commit', ?2,
+                   1, 2, 1, 2, 0
+                 )",
+                params![
+                    repo_dir.to_string_lossy().to_string(),
+                    repo_dir.join("session.log").to_string_lossy().to_string(),
+                ],
+            )
+            .expect("insert session");
+
+        connection
+    }
+
+    fn create_git_repo(repo_dir: &Path) {
+        fs::create_dir_all(repo_dir).expect("create repo dir");
+        git(repo_dir, &["init"]);
+        git(repo_dir, &["config", "user.email", "redwhisk@example.test"]);
+        git(repo_dir, &["config", "user.name", "RedWhisk Test"]);
+        fs::write(repo_dir.join("base.txt"), "base\n").expect("write base file");
+        git(repo_dir, &["add", "base.txt"]);
+        git(repo_dir, &["commit", "-m", "initial"]);
+    }
+
+    fn git(repo_dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
