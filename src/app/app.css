@@ -4168,6 +4168,8 @@ button:focus-visible {
 
 .issue-dialog__status-menu {
   position: relative;
+  isolation: isolate;
+  z-index: 50;
   width: fit-content;
 }
 
@@ -4195,15 +4197,16 @@ button:focus-visible {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 20;
+  z-index: 50;
   display: grid;
   gap: 2px;
   min-width: 148px;
   padding: 6px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-dialog);
-  background: var(--color-surface-elevated);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 12px 28px var(--color-popover-shadow);
 }
 
 .issue-dialog__status-option {
