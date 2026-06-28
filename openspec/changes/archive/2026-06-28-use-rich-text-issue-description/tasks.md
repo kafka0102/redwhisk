@@ -13,4 +13,4 @@
 
 - [x] 3.1 运行 `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`。
 - [x] 3.2 运行 `openspec validate use-rich-text-issue-description --strict`。
-- [ ] 3.3 完成 OpenSpec 快速路径归档与提交。
+- [x] 3.3 完成 OpenSpec 快速路径归档与提交。
