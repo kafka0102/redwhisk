@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useRef } from "react";
 
 import {
   RichTextEditor,
@@ -52,6 +53,9 @@ export function IssueDescriptionEditor({
   onRemoveAttachment,
 }: IssueDescriptionEditorProps) {
   const { messages } = useI18n();
+  const uploadedAttachmentsRef = useRef(
+    new Map<string, IssueAttachmentRecord | IssueAttachmentDraft>(),
+  );
   const attachmentByToken = new Map(
     attachments.map((attachment) => [
       getRichTextAttachmentToken(attachment),
@@ -61,11 +65,21 @@ export function IssueDescriptionEditor({
 
   async function handleUploadAttachment(): Promise<RichTextAttachment | null> {
     const attachment = await onSelectAttachment?.();
-    return attachment ? toRichTextAttachment(attachment) : null;
+    if (!attachment) {
+      return null;
+    }
+
+    const richTextAttachment = toRichTextAttachment(attachment);
+    uploadedAttachmentsRef.current.set(richTextAttachment.token, attachment);
+    return richTextAttachment;
   }
 
   function resolveAttachment(attachment: RichTextAttachment) {
-    return attachmentByToken.get(attachment.token) ?? null;
+    return (
+      attachmentByToken.get(attachment.token) ??
+      uploadedAttachmentsRef.current.get(attachment.token) ??
+      null
+    );
   }
 
   return (
@@ -91,6 +105,7 @@ export function IssueDescriptionEditor({
       onRemoveAttachment={(attachment) => {
         const issueAttachment = resolveAttachment(attachment);
         if (issueAttachment) {
+          uploadedAttachmentsRef.current.delete(attachment.token);
           onRemoveAttachment?.(issueAttachment);
         }
       }}
