@@ -31,8 +31,40 @@ export interface WorkspaceChangedFile {
   metadataSignature: string;
 }
 
+export type WorkspaceCommitStatus =
+  | "A"
+  | "M"
+  | "D"
+  | "R"
+  | "C"
+  | "T"
+  | "U"
+  | "X";
+
+export interface WorkspaceCommitChangedFile {
+  filePath: string;
+  oldPath?: string | null;
+  fileName: string;
+  kind: WorkspaceChangeKind;
+  status: WorkspaceCommitStatus;
+}
+
+export interface WorkspaceCommitRecord {
+  hash: string;
+  shortHash: string;
+  message: string;
+  authorName: string;
+  committedAt: number;
+  files: WorkspaceCommitChangedFile[];
+}
+
 export interface ProjectWorktreeChangesResponse {
   files: WorkspaceChangedFile[];
+  signature: string;
+}
+
+export interface ProjectWorktreeCommitHistoryResponse {
+  commits: WorkspaceCommitRecord[];
   signature: string;
 }
 
@@ -86,6 +118,15 @@ export function getProjectWorktreeFileTree(
 ): Promise<ProjectWorktreeFileTreeResponse> {
   return invokeCommand<ProjectWorktreeFileTreeResponse>(
     "get_project_worktree_file_tree",
+    { input },
+  );
+}
+
+export function getProjectWorktreeCommitHistory(
+  input: ProjectWorkspaceInput,
+): Promise<ProjectWorktreeCommitHistoryResponse> {
+  return invokeCommand<ProjectWorktreeCommitHistoryResponse>(
+    "get_project_worktree_commit_history",
     { input },
   );
 }

@@ -2,6 +2,7 @@ import { SessionChangesPanel } from "./session-changes-panel";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
 import { useI18n } from "../../shared/i18n/i18n";
 import type {
+  WorkspaceCommitRecord,
   WorkspaceChangedFile,
   WorkspaceFileTreeNode,
 } from "./session-workspace-commands";
@@ -11,13 +12,17 @@ interface SessionSidePanelProps {
   activeTab: SessionSidePanelTab;
   changes: WorkspaceChangedFile[];
   changesErrorMessage: string | null;
+  commitHistory: WorkspaceCommitRecord[];
+  commitHistoryErrorMessage: string | null;
   fileTree: WorkspaceFileTreeNode[];
   fileTreeErrorMessage: string | null;
   isChangesLoading: boolean;
+  isCommitHistoryLoading: boolean;
   isFileTreeLoading: boolean;
   onActiveTabChange: (tab: SessionSidePanelTab) => void;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  onRefreshCommitHistory: () => void;
   onRefreshChanges: () => void;
 }
 
@@ -25,13 +30,17 @@ export function SessionSidePanel({
   activeTab,
   changes,
   changesErrorMessage,
+  commitHistory,
+  commitHistoryErrorMessage,
   fileTree,
   fileTreeErrorMessage,
   isChangesLoading,
+  isCommitHistoryLoading,
   isFileTreeLoading,
   onActiveTabChange,
   onOpenChangedFile,
   onOpenFile,
+  onRefreshCommitHistory,
   onRefreshChanges,
 }: SessionSidePanelProps) {
   const { messages } = useI18n();
@@ -64,9 +73,13 @@ export function SessionSidePanel({
         {activeTab === "changes" ? (
           <SessionChangesPanel
             changes={changes}
+            commitHistory={commitHistory}
+            commitHistoryErrorMessage={commitHistoryErrorMessage}
             errorMessage={changesErrorMessage}
+            isCommitHistoryLoading={isCommitHistoryLoading}
             isLoading={isChangesLoading}
             onOpenChangedFile={onOpenChangedFile}
+            onRefreshCommitHistory={onRefreshCommitHistory}
             onRefreshChanges={onRefreshChanges}
           />
         ) : (

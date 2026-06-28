@@ -5,7 +5,8 @@ use crate::core::session_workspace_service::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
-    ProjectWorktreeFileTreeResponse, WorkspaceDiffContent, WorkspaceFileContent,
+    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceDiffContent,
+    WorkspaceFileContent,
 };
 
 #[tauri::command]
@@ -24,6 +25,15 @@ pub fn get_project_worktree_file_tree(
     input: ProjectWorkspaceInput,
 ) -> Result<ProjectWorktreeFileTreeResponse, CommandError> {
     with_session_workspace_service(app, state, |service| service.get_file_tree(input))
+}
+
+#[tauri::command]
+pub fn get_project_worktree_commit_history(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
+    with_session_workspace_service(app, state, |service| service.get_commit_history(input))
 }
 
 #[tauri::command]

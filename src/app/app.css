@@ -3494,6 +3494,7 @@ button:focus-visible {
 }
 
 .session-changes-panel__list,
+.session-commit-timeline,
 .session-file-tree {
   min-width: 0;
   min-height: 0;
@@ -3591,6 +3592,163 @@ button:focus-visible {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-commit-timeline {
+  margin: 0;
+  padding: 8px 0 18px;
+  list-style: none;
+}
+
+.session-commit-timeline__item {
+  position: relative;
+  min-width: 0;
+  padding-left: 30px;
+}
+
+.session-commit-timeline__rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 15px;
+  width: 1px;
+  background: #5fa8ff;
+}
+
+.session-commit-timeline__dot {
+  position: absolute;
+  top: 11px;
+  left: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5fa8ff;
+}
+
+.session-commit-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 31px;
+  padding: 0 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.session-commit-row:hover,
+.session-commit-row:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.session-commit-row__content {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-commit-row__message {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-row__author {
+  flex: 0 0 auto;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.session-commit-files {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0 0 6px;
+  list-style: none;
+}
+
+.session-commit-file {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 12px 0 0;
+  color: var(--color-text);
+}
+
+.session-commit-file:hover {
+  background: var(--color-surface-muted);
+}
+
+.session-commit-file__icon {
+  color: #4a9eff;
+}
+
+.session-commit-file__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-commit-file__name {
+  flex: 0 0 auto;
+  max-width: 42%;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-file__path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-file__status {
+  justify-self: end;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.session-commit-file__status--modified {
+  color: #b98b2f;
+}
+
+.session-commit-file__status--added,
+.session-commit-file__status--renamed,
+.session-commit-file__status--copied {
+  color: #16803a;
+}
+
+.session-commit-file__status--deleted {
+  color: #c01818;
+}
+
+.session-commit-file__status--type-changed,
+.session-commit-file__status--unmerged,
+.session-commit-file__status--unknown {
+  color: var(--color-text-muted);
 }
 
 .session-side-panel__empty {

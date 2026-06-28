@@ -3,9 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
   getProjectWorktreeChanges,
+  getProjectWorktreeCommitHistory,
   getProjectWorktreeFileTree,
   readProjectWorktreeDiff,
   readProjectWorktreeFile,
+  type WorkspaceCommitRecord,
   type WorkspaceChangedFile,
   type WorkspaceFileTreeNode,
 } from "./session-workspace-commands";
@@ -31,12 +33,17 @@ interface SessionWorkspaceCache {
   changes: WorkspaceChangedFile[];
   changesErrorMessage: string | null;
   changesRequestSequence: number;
+  commitHistory: WorkspaceCommitRecord[];
+  commitHistoryErrorMessage: string | null;
+  commitHistoryRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
   fileTree: WorkspaceFileTreeNode[];
   fileTreeErrorMessage: string | null;
   fileTreeRequestSequence: number;
   isChangesLoading: boolean;
+  isCommitHistoryLoading: boolean;
   isFileTreeLoading: boolean;
+  lastCommitHistorySignature: string | null;
   lastChangesSignature: string | null;
   lastFileTreeSignature: string | null;
   sidePanelTab: SessionSidePanelTab;
@@ -48,12 +55,17 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   changes: [],
   changesErrorMessage: null,
   changesRequestSequence: 0,
+  commitHistory: [],
+  commitHistoryErrorMessage: null,
+  commitHistoryRequestSequence: 0,
   fileTab: null,
   fileTree: [],
   fileTreeErrorMessage: null,
   fileTreeRequestSequence: 0,
   isChangesLoading: false,
+  isCommitHistoryLoading: false,
   isFileTreeLoading: false,
+  lastCommitHistorySignature: null,
   lastChangesSignature: null,
   lastFileTreeSignature: null,
   sidePanelTab: "changes",
@@ -175,6 +187,53 @@ export function useSessionWorkspaceCache({
               ...cache,
               isFileTreeLoading: false,
               fileTreeErrorMessage: toCommandError(error).message,
+            }
+          : cache,
+      );
+    }
+  }, [projectId, sessionId, updateCurrentCache]);
+
+  const refreshCommitHistory = useCallback(async () => {
+    if (sessionId == null) {
+      return;
+    }
+
+    let requestSequence = 0;
+    updateCurrentCache((cache) => ({
+      ...cache,
+      commitHistoryRequestSequence: (requestSequence =
+        cache.commitHistoryRequestSequence + 1),
+      isCommitHistoryLoading: true,
+      commitHistoryErrorMessage: null,
+    }));
+
+    try {
+      const response = await getProjectWorktreeCommitHistory({
+        projectId,
+        sessionId,
+      });
+
+      updateCurrentCache((cache) =>
+        cache.commitHistoryRequestSequence === requestSequence
+          ? {
+              ...cache,
+              commitHistory:
+                cache.lastCommitHistorySignature === response.signature
+                  ? cache.commitHistory
+                  : response.commits,
+              isCommitHistoryLoading: false,
+              commitHistoryErrorMessage: null,
+              lastCommitHistorySignature: response.signature,
+            }
+          : cache,
+      );
+    } catch (error) {
+      updateCurrentCache((cache) =>
+        cache.commitHistoryRequestSequence === requestSequence
+          ? {
+              ...cache,
+              isCommitHistoryLoading: false,
+              commitHistoryErrorMessage: toCommandError(error).message,
             }
           : cache,
       );
@@ -369,13 +428,17 @@ export function useSessionWorkspaceCache({
     changes: currentCache.changes,
     changesErrorMessage: currentCache.changesErrorMessage,
     closeWorkspaceTab,
+    commitHistory: currentCache.commitHistory,
+    commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,
     fileTreeErrorMessage: currentCache.fileTreeErrorMessage,
     isChangesLoading: currentCache.isChangesLoading,
+    isCommitHistoryLoading: currentCache.isCommitHistoryLoading,
     isFileTreeLoading: currentCache.isFileTreeLoading,
     openChange,
     openFile,
+    refreshCommitHistory,
     refreshChanges,
     selectWorkspaceTab,
     setSidePanelTab,

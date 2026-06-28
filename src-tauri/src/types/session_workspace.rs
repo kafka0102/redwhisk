@@ -50,6 +50,34 @@ pub struct ProjectWorktreeChangesResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceCommitChangedFile {
+    pub file_path: String,
+    pub old_path: Option<String>,
+    pub file_name: String,
+    pub kind: WorkspaceChangeKind,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceCommitRecord {
+    pub hash: String,
+    pub short_hash: String,
+    pub message: String,
+    pub author_name: String,
+    pub committed_at: i64,
+    pub files: Vec<WorkspaceCommitChangedFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectWorktreeCommitHistoryResponse {
+    pub commits: Vec<WorkspaceCommitRecord>,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceFileTreeNodeKind {
     Directory,

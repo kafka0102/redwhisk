@@ -367,6 +367,8 @@ export interface I18nMessages {
     committed: string;
     loadingChanges: string;
     noUncommittedChanges: string;
+    noCommittedChanges: string;
+    committedTimeline: string;
     committedChangesNotImplemented: string;
     loadingFileTree: string;
     noFiles: string;
@@ -841,6 +843,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       committed: "Committed",
       loadingChanges: "Loading changes...",
       noUncommittedChanges: "No uncommitted changes.",
+      noCommittedChanges: "This branch has no new commits.",
+      committedTimeline: "Committed changes timeline",
       committedChangesNotImplemented:
         "Committed changes are not implemented yet.",
       loadingFileTree: "Loading file tree...",
@@ -1302,6 +1306,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       committed: "已提交",
       loadingChanges: "正在加载变更...",
       noUncommittedChanges: "暂无未提交变更。",
+      noCommittedChanges: "该分支没有新的提交记录。",
+      committedTimeline: "已提交变更时间轴",
       committedChangesNotImplemented: "已提交变更暂未实现。",
       loadingFileTree: "正在加载文件树...",
       noFiles: "暂无文件。",

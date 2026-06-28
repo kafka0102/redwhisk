@@ -1314,8 +1314,13 @@ export function AgentsActivity({
               activeTab={workspaceCache.sidePanelTab}
               changes={workspaceCache.changes}
               changesErrorMessage={workspaceCache.changesErrorMessage}
+              commitHistory={workspaceCache.commitHistory}
+              commitHistoryErrorMessage={
+                workspaceCache.commitHistoryErrorMessage
+              }
               fileTree={workspaceCache.fileTree}
               fileTreeErrorMessage={workspaceCache.fileTreeErrorMessage}
+              isCommitHistoryLoading={workspaceCache.isCommitHistoryLoading}
               isChangesLoading={workspaceCache.isChangesLoading}
               isFileTreeLoading={workspaceCache.isFileTreeLoading}
               onActiveTabChange={workspaceCache.setSidePanelTab}
@@ -1324,6 +1329,9 @@ export function AgentsActivity({
               }}
               onOpenFile={(file) => {
                 void workspaceCache.openFile(file);
+              }}
+              onRefreshCommitHistory={() => {
+                void workspaceCache.refreshCommitHistory();
               }}
               onRefreshChanges={() => {
                 void workspaceCache.refreshChanges();

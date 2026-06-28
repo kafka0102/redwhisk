@@ -11,8 +11,9 @@ use crate::db::project_repository::ProjectRepository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
-    ProjectWorktreeFileTreeResponse, WorkspaceChangeKind, WorkspaceChangedFile,
-    WorkspaceDiffContent, WorkspaceFileContent, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
+    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceChangeKind,
+    WorkspaceChangedFile, WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceDiffContent,
+    WorkspaceFileContent, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
@@ -26,6 +27,8 @@ const IGNORED_DIRS: &[&str] = &[
     ".turbo",
     ".vite",
 ];
+const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
+const BASE_BRANCH_CANDIDATES: &[&str] = &["origin/main", "main", "origin/master", "master"];
 
 pub struct SessionWorkspaceService<'connection> {
     project_repository: ProjectRepository<'connection>,
@@ -57,6 +60,14 @@ impl<'connection> SessionWorkspaceService<'connection> {
     ) -> Result<ProjectWorktreeFileTreeResponse, CommandError> {
         let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
         read_workspace_file_tree(&root)
+    }
+
+    pub fn get_commit_history(
+        &self,
+        input: ProjectWorkspaceInput,
+    ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
+        let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
+        read_workspace_commit_history(&root)
     }
 
     pub fn read_file(
@@ -218,6 +229,151 @@ fn read_workspace_changes(root: &Path) -> Result<ProjectWorktreeChangesResponse,
     let signature = hash_string(&format!("{files:?}"));
 
     Ok(ProjectWorktreeChangesResponse { files, signature })
+}
+
+fn read_workspace_commit_history(
+    root: &Path,
+) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
+    let branch_name = current_branch_name(root)?;
+    let revision_range = match branch_name.as_deref() {
+        Some(branch) if PRIMARY_BRANCHES.contains(&branch) => None,
+        Some(branch) => find_branch_base(root, branch)?.map(|base| format!("{base}..HEAD")),
+        None => None,
+    };
+
+    let mut args = vec![
+        "log".to_string(),
+        "--date-order".to_string(),
+        "--format=%H%x00%h%x00%an%x00%ct%x00%s%x00".to_string(),
+    ];
+    if let Some(range) = revision_range {
+        args.push(range);
+    }
+
+    let output = run_git_owned(root, &args)?;
+    let mut commits = Vec::new();
+    for record in output.lines().filter(|record| !record.is_empty()) {
+        let mut parts = record.split('\0');
+        let hash = parts.next().unwrap_or_default();
+        let short_hash = parts.next().unwrap_or_default();
+        let author_name = parts.next().unwrap_or_default();
+        let committed_at_seconds = parts.next().unwrap_or_default().parse::<i64>().unwrap_or(0);
+        let message = parts.next().unwrap_or_default();
+        if hash.is_empty() {
+            continue;
+        }
+
+        commits.push(WorkspaceCommitRecord {
+            hash: hash.to_string(),
+            short_hash: short_hash.to_string(),
+            message: message.to_string(),
+            author_name: author_name.to_string(),
+            committed_at: committed_at_seconds.saturating_mul(1_000),
+            files: read_commit_changed_files(root, hash)?,
+        });
+    }
+
+    let signature = hash_string(&format!("{commits:?}"));
+    Ok(ProjectWorktreeCommitHistoryResponse { commits, signature })
+}
+
+fn current_branch_name(root: &Path) -> Result<Option<String>, CommandError> {
+    let branch = run_git(root, &["branch", "--show-current"])?;
+    let branch = branch.trim();
+    if branch.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(branch.to_string()))
+    }
+}
+
+fn find_branch_base(root: &Path, current_branch: &str) -> Result<Option<String>, CommandError> {
+    for candidate in BASE_BRANCH_CANDIDATES {
+        if *candidate == current_branch {
+            continue;
+        }
+        if run_git(
+            root,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("{candidate}^{{commit}}"),
+            ],
+        )
+        .is_err()
+        {
+            continue;
+        }
+
+        if let Ok(base) = run_git(root, &["merge-base", "HEAD", candidate]) {
+            let base = base.trim();
+            if !base.is_empty() {
+                return Ok(Some(base.to_string()));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn read_commit_changed_files(
+    root: &Path,
+    commit_hash: &str,
+) -> Result<Vec<WorkspaceCommitChangedFile>, CommandError> {
+    let output = run_git(
+        root,
+        &[
+            "diff-tree",
+            "--root",
+            "--no-commit-id",
+            "--name-status",
+            "-r",
+            "-M",
+            "-C",
+            commit_hash,
+        ],
+    )?;
+    let mut files = Vec::new();
+
+    for line in output.lines().filter(|line| !line.is_empty()) {
+        if let Some(file) = parse_commit_changed_file(line) {
+            files.push(file);
+        }
+    }
+
+    Ok(files)
+}
+
+fn parse_commit_changed_file(line: &str) -> Option<WorkspaceCommitChangedFile> {
+    let mut parts = line.split('\t');
+    let raw_status = parts.next()?;
+    let status = raw_status.chars().next()?.to_string();
+    let (old_path, file_path) = if matches!(status.as_str(), "R" | "C") {
+        let old_path = parts.next()?.to_string();
+        let file_path = parts.next()?.to_string();
+        (Some(old_path), file_path)
+    } else {
+        (None, parts.next()?.to_string())
+    };
+
+    Some(WorkspaceCommitChangedFile {
+        file_name: file_name_from_path(&file_path),
+        file_path,
+        old_path,
+        kind: change_kind_from_commit_status(&status),
+        status,
+    })
+}
+
+fn change_kind_from_commit_status(status: &str) -> WorkspaceChangeKind {
+    match status {
+        "A" => WorkspaceChangeKind::Added,
+        "D" => WorkspaceChangeKind::Deleted,
+        "R" => WorkspaceChangeKind::Renamed,
+        "C" => WorkspaceChangeKind::Copied,
+        _ => WorkspaceChangeKind::Modified,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -588,6 +744,11 @@ fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
     })
 }
 
+fn run_git_owned(root: &Path, args: &[String]) -> Result<String, CommandError> {
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_git(root, &args)
+}
+
 fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
     let output = Command::new("git")
         .args(args)
@@ -799,6 +960,32 @@ mod tests {
         assert!(!diff.is_binary);
         assert!(diff.original_content.is_empty());
         assert!(diff.modified_content.is_empty());
+    }
+
+    #[test]
+    fn commit_history_lists_only_commits_after_branch_base() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("base.txt"), "base\n").expect("write base");
+        git(root, &["add", "base.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        git(root, &["branch", "-M", "main"]);
+        git(root, &["checkout", "-b", "feature"]);
+        fs::write(root.join("feature.txt"), "one\n").expect("write feature");
+        git(root, &["add", "feature.txt"]);
+        git(root, &["commit", "-m", "feature one"]);
+        fs::write(root.join("feature.txt"), "one\ntwo\n").expect("modify feature");
+        git(root, &["add", "feature.txt"]);
+        git(root, &["commit", "-m", "feature two"]);
+
+        let history = read_workspace_commit_history(root).expect("read commit history");
+
+        assert_eq!(history.commits.len(), 2);
+        assert_eq!(history.commits[0].message, "feature two");
+        assert_eq!(history.commits[1].message, "feature one");
+        assert_eq!(history.commits[1].files[0].status, "A");
+        assert_eq!(history.commits[1].files[0].file_path, "feature.txt");
     }
 
     fn init_git_repo(root: &Path) {
