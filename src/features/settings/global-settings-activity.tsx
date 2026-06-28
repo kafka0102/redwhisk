@@ -31,8 +31,7 @@ const SETTINGS_MENU_MAX_WIDTH = 420;
 const THEME_OPTIONS: ThemePreference[] = ["light", "dark", "system"];
 
 export function GlobalSettingsActivity() {
-  const { locale, messages, setLocale, setThemePreference, themePreference } =
-    useI18n();
+  const { messages, setThemePreference, themePreference } = useI18n();
   const [isSessionMonitorEnabled, setIsSessionMonitorEnabled] = useState(
     getInitialSessionMonitorEnabled,
   );
@@ -176,28 +175,6 @@ export function GlobalSettingsActivity() {
                 <CardContent className="grid gap-[26px] p-7">
                   <section className="grid min-w-0 gap-3.5">
                     <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
-                      {messages.globalSettings.language}
-                    </h4>
-                    <div className="flex flex-wrap gap-3">
-                      <OptionButton
-                        pressed={locale === "en"}
-                        onClick={() => setLocale("en")}
-                        className="min-w-[132px]"
-                      >
-                        {messages.globalSettings.english}
-                      </OptionButton>
-                      <OptionButton
-                        pressed={locale === "zh"}
-                        onClick={() => setLocale("zh")}
-                        className="min-w-[132px]"
-                      >
-                        {messages.globalSettings.chinese}
-                      </OptionButton>
-                    </div>
-                  </section>
-
-                  <section className="grid min-w-0 gap-3.5">
-                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
                       {messages.globalSettings.theme}
                     </h4>
                     <div className="grid min-w-0 grid-cols-3 gap-4">
@@ -263,34 +240,6 @@ function SettingsMenuItem({
       <Icon aria-hidden="true" size={15} strokeWidth={1.9} />
       <span>{label}</span>
     </button>
-  );
-}
-
-function OptionButton({
-  pressed,
-  onClick,
-  className,
-  children,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Button
-      variant="outline"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "h-12 min-h-12 px-[18px] text-base font-medium",
-        pressed &&
-          "border-ring bg-background font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--ring)]",
-        className,
-      )}
-    >
-      {children}
-    </Button>
   );
 }
 

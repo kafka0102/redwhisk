@@ -276,7 +276,7 @@ describe("App project entry", () => {
     expect(initializeLocalDataMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(listProjectsMock).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByRole("searchbox", { name: "Search projects" }),
+      await screen.findByRole("searchbox", { name: "搜索项目" }),
     ).toBeInTheDocument();
   });
 
@@ -299,14 +299,14 @@ describe("App project entry", () => {
     expect(openSessionMonitorWindowMock).not.toHaveBeenCalled();
   });
 
-  it("opens to Project Home without the Activity Bar", async () => {
+  it("opens to Project Home without the 活动栏", async () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("searchbox", { name: "Search projects" }),
+      await screen.findByRole("searchbox", { name: "搜索项目" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "New Project" }),
+      screen.getByRole("button", { name: "新建项目" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Projects" }),
@@ -315,15 +315,15 @@ describe("App project entry", () => {
       screen.queryByText(/Local Git repositories available/i),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Activity Bar" }),
+      screen.queryByRole("navigation", { name: "活动栏" }),
     ).not.toBeInTheDocument();
 
-    const projectList = screen.getByRole("list", { name: "Local projects" });
+    const projectList = screen.getByRole("list", { name: "本地项目" });
     const projectRows = within(projectList).getAllByRole("listitem");
     expect(projectRows).toHaveLength(2);
     expect(
       within(projectRows[0]).getByRole("button", {
-        name: "Open project RedWhisk",
+        name: "打开项目 RedWhisk",
       }),
     ).toBeInTheDocument();
   });
@@ -334,31 +334,28 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Open project Local Agents Lab" }),
+      screen.getByRole("button", { name: "打开项目 Local Agents Lab" }),
     ).toBeInTheDocument();
 
-    await user.type(
-      screen.getByRole("searchbox", { name: "Search projects" }),
-      "red",
-    );
+    await user.type(screen.getByRole("searchbox", { name: "搜索项目" }), "red");
 
     expect(
-      screen.getByRole("button", { name: "Open project RedWhisk" }),
+      screen.getByRole("button", { name: "打开项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Open project Local Agents Lab" }),
+      screen.queryByRole("button", { name: "打开项目 Local Agents Lab" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Clear search" }));
+    await user.click(screen.getByRole("button", { name: "清空搜索" }));
 
     expect(
-      screen.getByRole("button", { name: "Open project RedWhisk" }),
+      screen.getByRole("button", { name: "打开项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Open project Local Agents Lab" }),
+      screen.getByRole("button", { name: "打开项目 Local Agents Lab" }),
     ).toBeInTheDocument();
   });
 
@@ -378,7 +375,7 @@ describe("App project entry", () => {
 
     render(<App />);
 
-    await screen.findByRole("searchbox", { name: "Search projects" });
+    await screen.findByRole("searchbox", { name: "搜索项目" });
     const header = document.querySelector(".project-home__window-header");
 
     expect(header).toHaveAttribute("data-tauri-drag-region");
@@ -398,7 +395,7 @@ describe("App project entry", () => {
 
     render(<App />);
 
-    await screen.findByRole("searchbox", { name: "Search projects" });
+    await screen.findByRole("searchbox", { name: "搜索项目" });
     const header = document.querySelector(".project-home__window-header");
 
     expect(header).toHaveAttribute("data-tauri-drag-region");
@@ -418,7 +415,7 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("button", { name: "Current project RedWhisk" }),
+      await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
     expect(
@@ -426,12 +423,12 @@ describe("App project entry", () => {
     ).not.toBeInTheDocument();
     expect(
       screen
-        .getByRole("button", { name: "Current project RedWhisk" })
+        .getByRole("button", { name: "当前项目 RedWhisk" })
         .closest(".workbench__header")?.parentElement,
     ).toHaveClass("workbench");
     expect(
       screen
-        .getByRole("button", { name: "Current project RedWhisk" })
+        .getByRole("button", { name: "当前项目 RedWhisk" })
         .closest(".workbench__header"),
     ).toHaveAttribute("data-tauri-drag-region");
     await waitFor(() =>
@@ -465,7 +462,7 @@ describe("App project entry", () => {
     render(<App />);
 
     const switcher = await screen.findByRole("button", {
-      name: "Current project RedWhisk",
+      name: "当前项目 RedWhisk",
     });
     const header = switcher.closest(".workbench__header");
 
@@ -488,7 +485,7 @@ describe("App project entry", () => {
     render(<App />);
 
     const switcher = await screen.findByRole("button", {
-      name: "Current project RedWhisk",
+      name: "当前项目 RedWhisk",
     });
     const header = switcher.closest(".workbench__header");
 
@@ -510,7 +507,7 @@ describe("App project entry", () => {
     render(<App />);
 
     const switcher = await screen.findByRole("button", {
-      name: "Current project RedWhisk",
+      name: "当前项目 RedWhisk",
     });
     getCurrentWindowMock.mockClear();
 
@@ -518,29 +515,26 @@ describe("App project entry", () => {
 
     expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
     expect(mockAppWindow.maximize).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("menu", { name: "Project Switcher" }),
-    ).toBeVisible();
+    expect(screen.getByRole("menu", { name: "项目切换器" })).toBeVisible();
   });
 
-  it("uses English as the default UI language in a project workbench", async () => {
+  it("uses Chinese as the fixed default UI language in a project workbench", async () => {
     window.history.replaceState(null, "", "/?projectId=1");
+    window.localStorage.setItem("redwhisk.locale", "en");
 
     render(<App />);
 
     expect(
-      await screen.findByRole("navigation", { name: "Activity Bar" }),
+      await screen.findByRole("navigation", { name: "活动栏" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Issues" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "终端" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Terminals" }),
+      screen.getByRole("button", { name: "项目设置" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Project Settings" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Global Settings" }),
+      screen.getByRole("button", { name: "全局设置" }),
     ).toBeInTheDocument();
   });
 
@@ -550,13 +544,13 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("status", { name: "Project open status" }),
+      await screen.findByRole("status", { name: "打开项目状态" }),
     ).toHaveTextContent("Project 路径不存在或不可访问。");
     expect(
-      screen.queryByRole("status", { name: "Local data status" }),
+      screen.queryByRole("status", { name: "本地数据状态" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Activity Bar" }),
+      screen.queryByRole("navigation", { name: "活动栏" }),
     ).not.toBeInTheDocument();
   });
 
@@ -565,37 +559,30 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
 
     expect(openProjectMock).toHaveBeenCalledWith({ projectId: 1 });
     const activityBar = screen.getByRole("navigation", {
-      name: "Activity Bar",
+      name: "活动栏",
     });
     const activityButtons = within(activityBar).getAllByRole("button");
 
     expect(
       activityButtons.map((button) => button.getAttribute("aria-label")),
-    ).toEqual([
-      "Issues",
-      "Agents",
-      "Terminals",
-      "Project Settings",
-      "Design System",
-      "Global Settings",
-    ]);
+    ).toEqual(["Issues", "Agents", "终端", "项目设置", "设计系统", "全局设置"]);
     expect(
       within(activityBar).getByRole("button", { name: "Issues" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      within(activityBar).getByRole("button", { name: "Project Settings" }),
+      within(activityBar).getByRole("button", { name: "项目设置" }),
     ).toHaveAttribute("aria-pressed", "false");
     expect(
-      within(activityBar).getByRole("button", { name: "Global Settings" }),
+      within(activityBar).getByRole("button", { name: "全局设置" }),
     ).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
+      screen.getByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("PROJECT")).not.toBeInTheDocument();
     expect(
@@ -619,17 +606,19 @@ describe("App project entry", () => {
       await screen.findByRole("button", { name: "Issues" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Agents" }));
-    await user.click(screen.getByRole("button", { name: "Global Settings" }));
+    await user.click(screen.getByRole("button", { name: "全局设置" }));
 
     expect(
-      screen.getByRole("heading", { name: "Preferences" }),
+      screen.getByRole("heading", { name: "偏好设置" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Global Settings" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.getByRole("button", { name: "Project Settings" }),
-    ).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "全局设置" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "项目设置" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
     await user.click(screen.getByRole("button", { name: "Issues" }));
     expect(screen.getByRole("button", { name: "Issues" })).toHaveAttribute(
@@ -643,15 +632,15 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(await screen.findByRole("button", { name: "New Issue" }));
-    expect(screen.getByPlaceholderText("Issue title")).toBeInTheDocument();
-    expect(screen.getByLabelText("Description")).toBeInTheDocument();
-    expect(screen.getByLabelText("Add label")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Title"), "draft local issue");
-    await user.type(screen.getByLabelText("Description"), "small task shape");
-    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+    await user.click(await screen.findByRole("button", { name: "新建 Issue" }));
+    expect(screen.getByPlaceholderText("Issue 标题")).toBeInTheDocument();
+    expect(screen.getByLabelText("描述")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("标题"), "draft local issue");
+    await user.type(screen.getByLabelText("描述"), "small task shape");
+    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -664,7 +653,7 @@ describe("App project entry", () => {
       await screen.findByRole("button", { name: "draft local issue" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.queryByRole("dialog", { name: "New Issue" }),
+      screen.queryByRole("dialog", { name: "新建 Issue" }),
     ).not.toBeInTheDocument();
   });
 
@@ -684,20 +673,17 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.clear(screen.getByLabelText("Title"));
-    await user.type(screen.getByLabelText("Title"), "Updated issue");
-    await user.clear(screen.getByLabelText("Description"));
-    await user.type(
-      screen.getByLabelText("Description"),
-      "Updated description",
-    );
-    expect(screen.getByLabelText("Add label")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.clear(screen.getByLabelText("标题"));
+    await user.type(screen.getByLabelText("标题"), "Updated issue");
+    await user.clear(screen.getByLabelText("描述"));
+    await user.type(screen.getByLabelText("描述"), "Updated description");
+    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -708,7 +694,7 @@ describe("App project entry", () => {
       labelIds: [],
     });
     expect(
-      screen.queryByRole("dialog", { name: "Issue Detail" }),
+      screen.queryByRole("dialog", { name: "Issue 详情" }),
     ).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Updated issue" }),
@@ -721,12 +707,12 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("searchbox", { name: "Search projects" }),
-    ).toHaveAttribute("placeholder", "searching projects");
+      await screen.findByRole("searchbox", { name: "搜索项目" }),
+    ).toHaveAttribute("placeholder", "搜索项目");
     expect(
-      screen.getByRole("button", { name: "New Project" }),
+      screen.getByRole("button", { name: "新建项目" }),
     ).toBeInTheDocument();
-    const projectList = screen.getByRole("list", { name: "Local projects" });
+    const projectList = screen.getByRole("list", { name: "本地项目" });
     expect(within(projectList).queryAllByRole("listitem")).toHaveLength(0);
     expect(
       screen.queryByRole("heading", { name: "Projects" }),
@@ -737,13 +723,13 @@ describe("App project entry", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows missing project path errors without opening the Activity Bar", async () => {
+  it("shows missing project path errors without opening the 活动栏", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Open project Local Agents Lab",
+        name: "打开项目 Local Agents Lab",
       }),
     );
 
@@ -751,12 +737,12 @@ describe("App project entry", () => {
       projectId: 2,
     });
     expect(
-      await screen.findByRole("status", { name: "Project open status" }),
+      await screen.findByRole("status", { name: "打开项目状态" }),
     ).toHaveTextContent("Project 路径不存在或不可访问。");
     expect(
-      screen.queryByRole("navigation", { name: "Activity Bar" }),
+      screen.queryByRole("navigation", { name: "活动栏" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/path unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText("路径不可用")).toBeInTheDocument();
   });
 
   it("creates a project from the toolbar and opens Issues", async () => {
@@ -773,45 +759,40 @@ describe("App project entry", () => {
 
     render(<App />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "New Project" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "新建项目" }));
 
     expect(openDialogMock).toHaveBeenCalledWith({
       directory: true,
       multiple: false,
-      title: "Select Git Repository",
+      title: "选择 Git 仓库",
     });
     expect(validateProjectRepoPathMock).toHaveBeenCalledWith({
       repoPath: "/Users/kafka0102/workspace/new-repo",
     });
     expect(
-      await screen.findByRole("dialog", { name: "New Project" }),
+      await screen.findByRole("dialog", { name: "新建项目" }),
     ).toBeInTheDocument();
-    const projectDialog = screen.getByRole("dialog", { name: "New Project" });
-    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
+    const projectDialog = screen.getByRole("dialog", { name: "新建项目" });
+    expect(within(projectDialog).getByLabelText("项目名称")).toHaveValue(
       "new-repo",
     );
-    expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
+    expect(within(projectDialog).getByLabelText("仓库路径")).toHaveValue(
       "/Users/kafka0102/workspace/new-repo",
     );
     expect(
-      within(projectDialog).getByLabelText("Git completion strategy"),
-    ).toHaveTextContent("Auto Commit");
+      within(projectDialog).getByLabelText("Git 完成策略"),
+    ).toHaveTextContent("自动提交");
     expect(
-      within(projectDialog).getByLabelText("Worktree path"),
+      within(projectDialog).getByLabelText("工作树路径"),
     ).toHaveTextContent("~/workspace/new-repo.worktrees");
     expect(
-      within(projectDialog).getByLabelText("Worktree setup after creation"),
+      within(projectDialog).getByLabelText("创建工作树后的初始化命令"),
     ).toHaveValue("");
     expect(
-      within(projectDialog).getByLabelText("Worktree setup after creation"),
-    ).toHaveAttribute(
-      "placeholder",
-      "Enter initialization steps to run after creating the worktree",
-    );
+      within(projectDialog).getByLabelText("创建工作树后的初始化命令"),
+    ).toHaveAttribute("placeholder", "请输入创建工作树后的初始化命令");
     await user.click(
-      within(projectDialog).getByRole("button", { name: "Create Project" }),
+      within(projectDialog).getByRole("button", { name: "创建项目" }),
     );
     expect(createProjectMock).toHaveBeenCalledWith({
       name: "new-repo",
@@ -824,11 +805,11 @@ describe("App project entry", () => {
       await screen.findByRole("heading", { name: "Issues" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Current project new-repo" }),
+      screen.getByRole("button", { name: "当前项目 new-repo" }),
     ).toBeInTheDocument();
   });
 
-  it("shows project creation failure without opening the Activity Bar", async () => {
+  it("shows project creation failure without opening the 活动栏", async () => {
     const user = userEvent.setup();
     openDialogMock.mockResolvedValue("/Users/kafka0102/workspace/plain-dir");
     validateProjectRepoPathMock.mockRejectedValue({
@@ -844,40 +825,36 @@ describe("App project entry", () => {
 
     render(<App />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "New Project" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "新建项目" }));
 
     expect(
-      await screen.findByRole("status", { name: "Project creation status" }),
+      await screen.findByRole("status", { name: "创建项目状态" }),
     ).toHaveTextContent("所选目录不是 Git Repository。");
     expect(
-      screen.queryByRole("dialog", { name: "New Project" }),
+      screen.queryByRole("dialog", { name: "新建项目" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Activity Bar" }),
+      screen.queryByRole("navigation", { name: "活动栏" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("searchbox", { name: "Search projects" }),
+      screen.getByRole("searchbox", { name: "搜索项目" }),
     ).toBeInTheDocument();
   });
 
-  it("shows dialog failures without opening the Activity Bar", async () => {
+  it("shows dialog failures without opening the 活动栏", async () => {
     const user = userEvent.setup();
     openDialogMock.mockRejectedValue(new Error("dialog unavailable"));
 
     render(<App />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "New Project" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "新建项目" }));
 
     expect(
-      await screen.findByRole("status", { name: "Project creation status" }),
+      await screen.findByRole("status", { name: "创建项目状态" }),
     ).toHaveTextContent("dialog unavailable");
     expect(createProjectMock).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("navigation", { name: "Activity Bar" }),
+      screen.queryByRole("navigation", { name: "活动栏" }),
     ).not.toBeInTheDocument();
   });
 
@@ -893,16 +870,14 @@ describe("App project entry", () => {
 
     render(<App />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "New Project" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Creating Project" }));
+    await user.click(await screen.findByRole("button", { name: "新建项目" }));
+    await user.click(screen.getByRole("button", { name: "创建项目中" }));
 
     expect(openDialogMock).toHaveBeenCalledTimes(1);
 
     resolveDialog(null);
     expect(
-      await screen.findByRole("button", { name: "New Project" }),
+      await screen.findByRole("button", { name: "新建项目" }),
     ).toBeEnabled();
   });
 
@@ -916,24 +891,22 @@ describe("App project entry", () => {
 
     render(<App />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "New Project" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "新建项目" }));
     const projectDialog = await screen.findByRole("dialog", {
-      name: "New Project",
+      name: "新建项目",
     });
     await user.click(
-      within(projectDialog).getByRole("button", { name: "Create Project" }),
+      within(projectDialog).getByRole("button", { name: "创建项目" }),
     );
 
     expect(
-      await screen.findByRole("status", { name: "Project creation status" }),
+      await screen.findByRole("status", { name: "创建项目状态" }),
     ).toHaveTextContent("Project 保存失败。");
     expect(
-      screen.getByRole("dialog", { name: "New Project" }),
+      screen.getByRole("dialog", { name: "新建项目" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Activity Bar" }),
+      screen.queryByRole("navigation", { name: "活动栏" }),
     ).not.toBeInTheDocument();
   });
 
@@ -946,10 +919,10 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("status", { name: "Local data status" }),
+      await screen.findByRole("status", { name: "本地数据状态" }),
     ).toHaveTextContent("本地数据初始化失败。");
     expect(
-      screen.getByRole("searchbox", { name: "Search projects" }),
+      screen.getByRole("searchbox", { name: "搜索项目" }),
     ).toBeInTheDocument();
   });
 
@@ -958,22 +931,18 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
-    );
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
 
-    const switcher = screen.getByRole("menu", { name: "Project Switcher" });
+    const switcher = screen.getByRole("menu", { name: "项目切换器" });
     expect(
       within(switcher).getByRole("menuitem", { name: /RedWhisk/ }),
     ).toHaveTextContent("/Users/kafka0102/workspace/kafka/redwhisk");
-    expect(
-      within(switcher).getByLabelText("Current project"),
-    ).toBeInTheDocument();
+    expect(within(switcher).getByLabelText("当前项目")).toBeInTheDocument();
     expect(
       within(switcher).getByRole("menuitem", { name: /Local Agents Lab/ }),
-    ).toHaveTextContent("path unavailable");
+    ).toHaveTextContent("路径不可用");
   });
 
   it("selects another project from the switcher by opening a new window only", async () => {
@@ -1003,21 +972,19 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
-    );
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
     await user.click(screen.getByRole("menuitem", { name: /Other Project/ }));
 
     expect(openProjectWindowMock).toHaveBeenCalledWith({
       projectId: 3,
     });
     expect(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
+      screen.getByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("menu", { name: "Project Switcher" }),
+      screen.queryByRole("menu", { name: "项目切换器" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1040,33 +1007,31 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
-    );
-    await user.click(screen.getByRole("menuitem", { name: "Create Project" }));
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
+    await user.click(screen.getByRole("menuitem", { name: "创建项目" }));
 
     expect(openDialogMock).toHaveBeenCalledWith({
       directory: true,
       multiple: false,
-      title: "Select Git Repository",
+      title: "选择 Git 仓库",
     });
     expect(validateProjectRepoPathMock).toHaveBeenCalledWith({
       repoPath: "/Users/kafka0102/workspace/new-repo",
     });
     const projectDialog = await screen.findByRole("dialog", {
-      name: "New Project",
+      name: "新建项目",
     });
-    expect(within(projectDialog).getByLabelText("Project Name")).toHaveValue(
+    expect(within(projectDialog).getByLabelText("项目名称")).toHaveValue(
       "new-repo",
     );
-    expect(within(projectDialog).getByLabelText("Repository path")).toHaveValue(
+    expect(within(projectDialog).getByLabelText("仓库路径")).toHaveValue(
       "/Users/kafka0102/workspace/new-repo",
     );
 
     await user.click(
-      within(projectDialog).getByRole("button", { name: "Create Project" }),
+      within(projectDialog).getByRole("button", { name: "创建项目" }),
     );
 
     expect(createProjectMock).toHaveBeenCalledWith({
@@ -1080,10 +1045,10 @@ describe("App project entry", () => {
       projectId: 4,
     });
     expect(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
+      screen.getByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("dialog", { name: "New Project" }),
+      screen.queryByRole("dialog", { name: "新建项目" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1092,19 +1057,17 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
-    );
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
     await user.click(screen.getByRole("menuitem", { name: /RedWhisk/ }));
 
     expect(openProjectWindowMock).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("menu", { name: "Project Switcher" }),
+      screen.queryByRole("menu", { name: "项目切换器" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
+      screen.getByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
   });
 
@@ -1113,20 +1076,18 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
-    );
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
 
     expect(
-      screen.getByRole("menu", { name: "Project Switcher" }),
+      screen.getByRole("menu", { name: "项目切换器" }),
     ).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
 
     expect(
-      screen.queryByRole("menu", { name: "Project Switcher" }),
+      screen.queryByRole("menu", { name: "项目切换器" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1135,20 +1096,18 @@ describe("App project entry", () => {
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Open project RedWhisk" }),
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(
-      screen.getByRole("button", { name: "Current project RedWhisk" }),
-    );
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
 
     expect(
-      screen.getByRole("menu", { name: "Project Switcher" }),
+      screen.getByRole("menu", { name: "项目切换器" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("heading", { name: "Issues" }));
 
     expect(
-      screen.queryByRole("menu", { name: "Project Switcher" }),
+      screen.queryByRole("menu", { name: "项目切换器" }),
     ).not.toBeInTheDocument();
   });
 });

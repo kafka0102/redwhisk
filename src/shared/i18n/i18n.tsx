@@ -9,7 +9,6 @@ import {
 
 import {
   I18N_MESSAGES,
-  LOCALE_STORAGE_KEY,
   THEME_STORAGE_KEY,
   getInitialLocale,
   getInitialThemePreference,
@@ -42,14 +41,25 @@ const DEFAULT_I18N_CONTEXT: I18nContextValue = {
   themePreference: "light",
 };
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+export function I18nProvider({
+  children,
+  fixedLocale,
+  initialLocale,
+}: {
+  children: ReactNode;
+  fixedLocale?: Locale;
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(
+    fixedLocale ?? initialLocale ?? "en",
+  );
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(
     getInitialThemePreference,
   );
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(
     getSystemTheme,
   );
+  const activeLocale = fixedLocale ?? locale;
   const theme = themePreference === "system" ? systemTheme : themePreference;
 
   useEffect(() => {
@@ -75,15 +85,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<I18nContextValue>(
     () => ({
-      locale,
-      messages: I18N_MESSAGES[locale],
-      setLocale(nextLocale) {
-        setLocaleState(nextLocale);
-        try {
-          window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
-        } catch {
-          // Ignore persistence failures; runtime state still updates.
-        }
+      locale: activeLocale,
+      messages: I18N_MESSAGES[activeLocale],
+      setLocale() {
+        setLocaleState(fixedLocale ?? getInitialLocale());
       },
       setThemePreference(nextThemePreference) {
         if (nextThemePreference === "system") {
@@ -99,7 +104,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       theme,
       themePreference,
     }),
-    [locale, theme, themePreference],
+    [activeLocale, fixedLocale, theme, themePreference],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
