@@ -34,10 +34,12 @@ export interface I18nMessages {
     issueMarkedDone: string;
   };
   richText: {
+    attachFile: string;
     bold: string;
     heading: string;
     headingOne: string;
     headingTwo: string;
+    image: string;
     normalText: string;
     orderedList: string;
     unorderedList: string;
@@ -178,6 +180,7 @@ export interface I18nMessages {
     detailFallbackTitle: string;
     detailRegionLabel: string;
     detailTitle: (issueId: number) => string;
+    imageFilterName: string;
     done: string;
     edit: string;
     editLabels: string;
@@ -488,10 +491,12 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       issueMarkedDone: "该 issue 已标记完成",
     },
     richText: {
+      attachFile: "Attach file",
       bold: "Bold",
       heading: "Text style",
       headingOne: "Heading 1",
       headingTwo: "Heading 2",
+      image: "Insert image",
       normalText: "Normal text",
       orderedList: "Ordered list",
       unorderedList: "Unordered list",
@@ -642,6 +647,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       editLabels: "Edit labels",
       emptyLane: "no issues",
       finalPrompt: "Final prompt",
+      imageFilterName: "Images",
       inProgress: "In Progress",
       issueSummary: "Issue Summary",
       issueSummaryStatus: "Summary status",
@@ -955,10 +961,12 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       issueMarkedDone: "该 issue 已标记完成",
     },
     richText: {
+      attachFile: "添加附件",
       bold: "加粗",
       heading: "文本样式",
       headingOne: "一级标题",
       headingTwo: "二级标题",
+      image: "插入图片",
       normalText: "正文",
       orderedList: "有序列表",
       unorderedList: "无序列表",
@@ -1107,6 +1115,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       editLabels: "编辑标签",
       emptyLane: "暂无 Issue",
       finalPrompt: "最终提示词",
+      imageFilterName: "图片",
       inProgress: "进行中",
       issueSummary: "Issue 总结",
       issueSummaryStatus: "总结状态",

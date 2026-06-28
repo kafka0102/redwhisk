@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Bold, List, ListOrdered, Paperclip } from "lucide-react";
+import {
+  Bold,
+  Image as ImageIcon,
+  List,
+  ListOrdered,
+  Paperclip,
+} from "lucide-react";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
 
@@ -60,9 +66,10 @@ export interface RichTextAttachment {
 }
 
 export interface RichTextEditorLabels {
-  attachment: string;
+  attachFile: string;
   bold: string;
   heading: string;
+  image: string;
   normalText: string;
   headingOne: string;
   headingTwo: string;
@@ -84,6 +91,7 @@ interface RichTextEditorProps {
   onPreviewAttachment?: (attachment: RichTextAttachment) => void;
   onRemoveAttachment?: (attachment: RichTextAttachment) => void;
   onUploadAttachment?: () => Promise<RichTextAttachment | null>;
+  onUploadImage?: () => Promise<RichTextAttachment | null>;
 }
 
 interface DeltaOperation {
@@ -104,6 +112,7 @@ export function RichTextEditor({
   onPreviewAttachment,
   onRemoveAttachment,
   onUploadAttachment,
+  onUploadImage,
   placeholder,
   value,
 }: RichTextEditorProps) {
@@ -120,6 +129,7 @@ export function RichTextEditor({
     onPreviewAttachment,
     onRemoveAttachment,
     onUploadAttachment,
+    onUploadImage,
   });
   const localizedAttachments = useMemo(
     () =>
@@ -146,6 +156,7 @@ export function RichTextEditor({
       onPreviewAttachment,
       onRemoveAttachment,
       onUploadAttachment,
+      onUploadImage,
     };
   }, [
     labels,
@@ -155,12 +166,55 @@ export function RichTextEditor({
     onPreviewAttachment,
     onRemoveAttachment,
     onUploadAttachment,
+    onUploadImage,
   ]);
 
   useEffect(() => {
     const containerElement = containerRef.current;
     const editorHostElement = editorHostRef.current;
     const toolbarElement = toolbarRef.current;
+
+    async function uploadImageAtSelection() {
+      const quill = quillRef.current;
+      const uploadImage = handlersRef.current.onUploadImage;
+      if (!quill || !uploadImage) {
+        return;
+      }
+
+      const attachment = await uploadImage();
+      if (!attachment) {
+        return;
+      }
+      const currentLabels = labelsRef.current;
+      const localizedAttachment = {
+        ...attachment,
+        previewLabel: currentLabels.previewAttachment(attachment.displayName),
+        downloadLabel: currentLabels.downloadAttachment(attachment.displayName),
+        removeLabel: currentLabels.removeAttachment(attachment.displayName),
+      };
+      if (
+        !attachmentsRef.current.some(
+          (item) => item.token === localizedAttachment.token,
+        )
+      ) {
+        attachmentsRef.current = [
+          ...attachmentsRef.current,
+          localizedAttachment,
+        ];
+      }
+
+      const insertIndex = quill.getSelection(true)?.index ?? quill.getLength();
+      if (localizedAttachment.imageSrc) {
+        quill.insertEmbed(
+          insertIndex,
+          "image",
+          localizedAttachment.imageSrc,
+          "user",
+        );
+        quill.insertText(insertIndex + 1, "\n", "user");
+        quill.setSelection(insertIndex + 2, 0, "user");
+      }
+    }
 
     async function uploadAttachmentAtSelection() {
       const quill = quillRef.current;
@@ -191,27 +245,13 @@ export function RichTextEditor({
         ];
       }
 
-      const selection = quill.getSelection(true);
-      const insertIndex = selection?.index ?? quill.getLength();
-      if (
-        localizedAttachment.kind === "image" &&
-        localizedAttachment.imageSrc
-      ) {
-        quill.insertEmbed(
-          insertIndex,
-          "image",
-          localizedAttachment.imageSrc,
-          "user",
-        );
-        quill.insertText(insertIndex + 1, "\n", "user");
-        quill.setSelection(insertIndex + 2, 0, "user");
-      } else {
-        handlersRef.current.onChange(
-          normalizeMarkdown(
-            deltaToMarkdown(getQuillOperations(quill), attachmentsRef.current),
-          ),
-        );
-      }
+      // 非图片附件不插入编辑器正文，仅在底部卡片区展示；其 token 由
+      // mergeMarkdownAttachments 追加到 markdown 末尾（满足 Rust 硬约束）。
+      handlersRef.current.onChange(
+        normalizeMarkdown(
+          deltaToMarkdown(getQuillOperations(quill), attachmentsRef.current),
+        ),
+      );
     }
 
     if (!editorHostElement || !toolbarElement || quillRef.current) {
@@ -226,6 +266,9 @@ export function RichTextEditor({
           handlers: {
             attachment: () => {
               void uploadAttachmentAtSelection();
+            },
+            image: () => {
+              void uploadImageAtSelection();
             },
           },
         },
@@ -324,9 +367,14 @@ export function RichTextEditor({
         >
           <ListOrdered aria-hidden="true" size={15} strokeWidth={2} />
         </button>
+        {onUploadImage ? (
+          <button aria-label={labels.image} className="ql-image" type="button">
+            <ImageIcon aria-hidden="true" size={15} strokeWidth={2} />
+          </button>
+        ) : null}
         {onUploadAttachment ? (
           <button
-            aria-label={labels.attachment}
+            aria-label={labels.attachFile}
             className="ql-attachment"
             type="button"
           >
@@ -406,9 +454,24 @@ function markdownToDelta(
     attachments.map((attachment) => [attachment.markdownToken, attachment]),
   );
   const lines = normalizeLineEndings(markdown).split("\n");
+  const imageLinePattern = /^!\[([^\]]*)\]\(([^)]+)\)$/;
 
   for (const line of lines) {
-    const attachment = attachmentsByToken.get(line.trim());
+    const trimmedLine = line.trim();
+    // 优先识别 Markdown 图片占位符 ![alt](token)：若 URL 是某个图片附件的
+    // markdownToken，则还原为图片 embed；否则按普通文本行处理。
+    const imageMatch = imageLinePattern.exec(trimmedLine);
+    if (imageMatch) {
+      const imageAttachment = attachmentsByToken.get(imageMatch[2]);
+      if (imageAttachment && imageAttachment.kind === "image") {
+        pushAttachmentDelta(ops, imageAttachment);
+        ops.push({ insert: "\n" });
+        usedTokens.add(imageAttachment.markdownToken);
+        continue;
+      }
+    }
+
+    const attachment = attachmentsByToken.get(trimmedLine);
     if (attachment) {
       pushAttachmentDelta(ops, attachment);
       ops.push({ insert: "\n" });
@@ -444,7 +507,8 @@ function pushAttachmentDelta(
     return;
   }
 
-  operations.push({ insert: attachment.markdownToken });
+  // 非图片附件不进入编辑器正文（仅在底部卡片区展示）。这里不 push 任何
+  // 文本 token，避免 token 字符串泄漏成可见正文。
 }
 
 function deltaToMarkdown(
@@ -462,7 +526,15 @@ function deltaToMarkdown(
         lines.push(currentLine);
         currentLine = "";
       }
-      lines.push(attachment.markdownToken);
+      // 图片附件序列化为 Markdown 图片语法，URL 用其 markdownToken 占位
+      // （draft 为 {{issue-attachment-temp:token}}，保存后由 Rust 重写为
+      // {{issue-attachment:id}}）。非图片附件理论上不会出现在正文 ops 中
+      // （pushAttachmentDelta 不再写入），这里兜底按裸 token 行处理。
+      if (attachment.kind === "image" && attachment.imageSrc) {
+        lines.push(`![${attachment.displayName}](${attachment.markdownToken})`);
+      } else {
+        lines.push(attachment.markdownToken);
+      }
       orderedIndex = 1;
       continue;
     }
@@ -564,19 +636,28 @@ function mergeMarkdownAttachments(
   attachments: RichTextAttachment[],
 ): string {
   const normalizedMarkdown = normalizeMarkdown(markdown);
-  const missingTokens = attachments
-    .map((attachment) => attachment.markdownToken)
-    .filter((token) => !normalizedMarkdown.includes(token));
+  const missingAttachments = attachments.filter(
+    (attachment) => !normalizedMarkdown.includes(attachment.markdownToken),
+  );
 
-  if (missingTokens.length === 0) {
+  if (missingAttachments.length === 0) {
     return normalizedMarkdown;
   }
 
+  // 图片附件缺失时以 Markdown 图片占位符 ![displayName](token) 形式补回
+  // （保证 Rust 硬约束：token 必须出现在 description 中）；非图片附件以
+  // 裸 token 行补回（编辑器正文不显示，仅由底部卡片区承载）。
+  const missingLines = missingAttachments.map((attachment) =>
+    attachment.kind === "image" && attachment.imageSrc
+      ? `![${attachment.displayName}](${attachment.markdownToken})`
+      : attachment.markdownToken,
+  );
+
   if (normalizedMarkdown.length === 0) {
-    return missingTokens.join("\n");
+    return missingLines.join("\n");
   }
 
-  return `${normalizedMarkdown}\n\n${missingTokens.join("\n")}`;
+  return `${normalizedMarkdown}\n\n${missingLines.join("\n")}`;
 }
 
 function getQuillOperations(quill: Quill): DeltaOperation[] {

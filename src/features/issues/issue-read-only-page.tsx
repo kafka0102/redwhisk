@@ -1,5 +1,9 @@
 import { Check, ChevronDown, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -154,8 +158,70 @@ function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
     <article className="issue-dialog__editor issue-dialog__editor--readonly issue-page__main">
       <h1 className="issue-detail__title">{form.title}</h1>
       <div className="issue-detail__divider" aria-hidden="true" />
-      <div className="issue-detail__description">{form.description}</div>
+      <div className="issue-detail__description">
+        <IssueDescriptionMarkdown
+          description={form.description}
+          attachments={form.attachments}
+        />
+      </div>
     </article>
+  );
+}
+
+// 渲染 Issue 描述为 Markdown，并把图片占位符 ![alt]({{issue-attachment:id}})
+// 解析为真实 asset:// URL（由附件记录的 absolutePath 经 convertFileSrc 转换）。
+// 非 token URL 的普通图片按原样渲染；无法解析的 token URL 降级为 alt 文本。
+function IssueDescriptionMarkdown({
+  description,
+  attachments,
+}: {
+  description: string;
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
+}) {
+  const attachmentByToken = useMemo(() => {
+    const map = new Map<string, IssueAttachmentRecord | IssueAttachmentDraft>();
+    for (const attachment of attachments) {
+      const token =
+        "id" in attachment
+          ? `{{issue-attachment:${attachment.id}}}`
+          : `{{issue-attachment-temp:${attachment.token}}}`;
+      map.set(token, attachment);
+    }
+    return map;
+  }, [attachments]);
+
+  const components: Components = useMemo(
+    () => ({
+      img({ src, alt }) {
+        const token = typeof src === "string" ? src : "";
+        const attachment = attachmentByToken.get(token);
+        if (
+          attachment &&
+          attachment.kind === "image" &&
+          "absolutePath" in attachment &&
+          attachment.absolutePath
+        ) {
+          return (
+            <img
+              alt={alt ?? attachment.displayName}
+              src={convertFileSrc(attachment.absolutePath)}
+            />
+          );
+        }
+        // 非 token URL 的普通图片按原样渲染；无法解析的 token 降级为 alt 文本。
+        if (token.startsWith("{{issue-attachment")) {
+          return <span>{alt ?? ""}</span>;
+        }
+        return <img alt={alt ?? ""} src={src} />;
+      },
+    }),
+    [attachmentByToken],
+  );
+
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {description}
+    </ReactMarkdown>
   );
 }
 

@@ -111,6 +111,52 @@ describe("buildRunPromptPreview", () => {
     ).toContain(".redwhisk/issues/1/attachments/12-tsconfig.json");
   });
 
+  it("strips both bare token lines and image placeholder lines from the description", () => {
+    const preview = buildRunPromptPreview({
+      issue: {
+        title: "With image",
+        description:
+          "See screenshot.\n\n![screenshot.png]({{issue-attachment:13}})\n\n{{issue-attachment:12}}",
+        attachments: [
+          {
+            id: 12,
+            issueId: 1,
+            displayName: "tsconfig.json",
+            relativePath: ".redwhisk/issues/1/attachments/12-tsconfig.json",
+            absolutePath: "/tmp/12-tsconfig.json",
+            mimeType: "application/json",
+            fileSize: 128,
+            kind: "text",
+            isPreviewable: true,
+            createdAt: 1,
+          },
+          {
+            id: 13,
+            issueId: 1,
+            displayName: "screenshot.png",
+            relativePath: ".redwhisk/issues/1/attachments/13-screenshot.png",
+            absolutePath: "/tmp/13-screenshot.png",
+            mimeType: "image/png",
+            fileSize: 256,
+            kind: "image",
+            isPreviewable: true,
+            createdAt: 2,
+          },
+        ],
+      },
+      profile: {
+        defaultSkill: "",
+        promptTemplate: "",
+      },
+    });
+
+    expect(preview.finalPrompt).toContain("See screenshot.");
+    // 图片占位符行与裸 token 行都不应出现在最终提示词中。
+    expect(preview.finalPrompt).not.toContain("{{issue-attachment:13}}");
+    expect(preview.finalPrompt).not.toContain("{{issue-attachment:12}}");
+    expect(preview.finalPrompt).not.toContain("![screenshot.png]");
+  });
+
   it("uses a Chinese skill instruction when the issue title or description contains Chinese", () => {
     const preview = buildRunPromptPreview({
       issue: {
