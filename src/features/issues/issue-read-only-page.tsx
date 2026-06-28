@@ -1,4 +1,14 @@
-import { Check, ChevronDown, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Download,
+  Ellipsis,
+  Eye,
+  FileText,
+  MessageSquare,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import remarkGfm from "remark-gfm";
@@ -6,7 +16,14 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfirmContent } from "@/components/ui/confirm-dialog";
+import { Dialog } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import type {
   IssueAttachmentRecord,
@@ -15,7 +32,6 @@ import type {
   IssueStatus,
 } from "./issue-commands";
 import type { IssueFormState } from "./issue-activity-types";
-import { IssueAttachmentList } from "./issue-attachment-list";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -37,6 +53,7 @@ interface IssueReadOnlyPageProps {
   ) => void;
   onAdvanceStatus: (targetStatus: IssueStatus) => void;
   onDeleteIssue: () => void;
+  onEditIssue: () => void;
   onOpenLinkedSession: () => void;
   onOpenSummary: () => void;
 }
@@ -54,14 +71,17 @@ export function IssueReadOnlyPage({
   onDownloadAttachment,
   onAdvanceStatus,
   onDeleteIssue,
+  onEditIssue,
   onOpenLinkedSession,
   onOpenSummary,
 }: IssueReadOnlyPageProps) {
   const { messages } = useI18n();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const labels = selectedIssue?.labels ?? [];
   const title = selectedIssue
     ? messages.issues.detailTitle(selectedIssue.id)
     : messages.issues.detailFallbackTitle;
+  const rawDescription = selectedIssue?.description ?? form.description;
 
   return (
     <section
@@ -88,82 +108,98 @@ export function IssueReadOnlyPage({
               selectedIssue={selectedIssue}
               onAdvanceStatus={onAdvanceStatus}
             />
-            <ConfirmDialog
-              confirmLabel={messages.issues.deleteReadonly}
-              message={messages.issues.deleteConfirmMessage}
-              title={messages.issues.deleteConfirmTitleReadonly}
-              onConfirm={onDeleteIssue}
-            >
-              <Button
-                className="issues-button issue-page__delete-button"
-                disabled={isSaving}
-                type="button"
-                variant="destructive"
-              >
-                <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
-                {messages.issues.deleteReadonly}
-              </Button>
-            </ConfirmDialog>
+            <IssueMoreMenu
+              canOpenAgentsActivity={canOpenAgentsActivity}
+              canViewSummary={canViewSummary}
+              hasLinkedSession={hasLinkedSession}
+              isSaving={isSaving}
+              onDeleteIssue={() => setIsDeleteDialogOpen(true)}
+              onEditIssue={onEditIssue}
+              onOpenLinkedSession={onOpenLinkedSession}
+              onOpenSummary={onOpenSummary}
+            />
           </>
         }
       />
 
       <div className="issue-page__body issue-page__body--readonly-fullscreen">
-        <IssueReadOnlyDetails form={form} />
-        <aside
-          className="issue-page__side"
-          aria-label={messages.issues.actionsLabel}
-        >
-          <IssueActionsAside
-            selectedIssue={selectedIssue}
-            hasLinkedSession={hasLinkedSession}
-            canViewSummary={canViewSummary}
-            isSaving={isSaving}
-            canOpenAgentsActivity={canOpenAgentsActivity}
-            messages={messages}
-            onOpenLinkedSession={onOpenLinkedSession}
-            onOpenSummary={onOpenSummary}
+        <div className="issue-page__content-shell">
+          <IssueReadOnlyDetails
+            attachments={form.attachments}
+            description={rawDescription}
+            labels={labels}
+            title={form.title}
+            onDownloadAttachment={onDownloadAttachment}
+            onPreviewAttachment={onPreviewAttachment}
           />
-          <div className="issue-page__divider" aria-hidden="true" />
-          <IssueReadOnlyLabels labels={labels} messages={messages} />
-          {form.attachments.length > 0 ? (
-            <>
-              <div className="issue-page__divider" aria-hidden="true" />
-              <section className="issue-dialog__panel">
-                <h4>{messages.issues.attachments}</h4>
-                <IssueAttachmentList
-                  attachments={form.attachments}
-                  onDownloadAttachment={onDownloadAttachment}
-                  onPreviewAttachment={onPreviewAttachment}
-                />
-              </section>
-            </>
-          ) : null}
-        </aside>
+        </div>
       </div>
 
       <p
-        className="issue-dialog__status issue-page__status"
+        className="issue-dialog__status issue-page__status issue-page__status--fullscreen"
         role="status"
         aria-label={messages.issues.statusLabel}
       >
         {errorMessage}
       </p>
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(nextOpen) => setIsDeleteDialogOpen(nextOpen)}
+      >
+        <ConfirmContent
+          cancelLabel={messages.issues.completionCancel}
+          confirmLabel={messages.issues.deleteReadonly}
+          confirmVariant="destructive"
+          message={messages.issues.deleteConfirmMessage}
+          title={messages.issues.deleteConfirmTitleReadonly}
+          onCancel={() => setIsDeleteDialogOpen(false)}
+          onConfirm={() => {
+            setIsDeleteDialogOpen(false);
+            onDeleteIssue();
+          }}
+        />
+      </Dialog>
     </section>
   );
 }
 
-function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
+function IssueReadOnlyDetails({
+  attachments,
+  description,
+  labels,
+  title,
+  onDownloadAttachment,
+  onPreviewAttachment,
+}: {
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
+  description: string;
+  labels: IssueLabelRecord[];
+  title: string;
+  onPreviewAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+  onDownloadAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+}) {
   return (
-    <article className="issue-dialog__editor issue-dialog__editor--readonly issue-page__main">
-      <h1 className="issue-detail__title">{form.title}</h1>
+    <article className="issue-dialog__editor issue-dialog__editor--readonly issue-page__main issue-page__main--fullscreen issue-page__main--readonly">
+      <h1 className="issue-detail__title">{title}</h1>
       <div className="issue-detail__divider" aria-hidden="true" />
       <div className="issue-detail__description">
         <IssueDescriptionMarkdown
-          description={form.description}
-          attachments={form.attachments}
+          description={description}
+          attachments={attachments}
+          onDownloadAttachment={onDownloadAttachment}
+          onPreviewAttachment={onPreviewAttachment}
         />
       </div>
+      {labels.length > 0 ? (
+        <>
+          <div className="issue-detail__divider" aria-hidden="true" />
+          <IssueReadOnlyLabels labels={labels} />
+        </>
+      ) : null}
     </article>
   );
 }
@@ -174,26 +210,38 @@ function IssueReadOnlyDetails({ form }: { form: IssueFormState }) {
 function IssueDescriptionMarkdown({
   description,
   attachments,
+  onDownloadAttachment,
+  onPreviewAttachment,
 }: {
   description: string;
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
+  onPreviewAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+  onDownloadAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
 }) {
+  const { messages } = useI18n();
   const attachmentByToken = useMemo(() => {
     const map = new Map<string, IssueAttachmentRecord | IssueAttachmentDraft>();
     for (const attachment of attachments) {
-      const token =
-        "id" in attachment
-          ? `{{issue-attachment:${attachment.id}}}`
-          : `{{issue-attachment-temp:${attachment.token}}}`;
-      map.set(token, attachment);
+      map.set(getAttachmentMarkdownToken(attachment), attachment);
     }
     return map;
   }, [attachments]);
+  const descriptionSegments = useMemo(
+    () => buildDescriptionSegments(description, attachments, attachmentByToken),
+    [attachmentByToken, attachments, description],
+  );
 
   const components: Components = useMemo(
     () => ({
       img({ src, alt }) {
         const token = typeof src === "string" ? src : "";
+        if (token.length === 0) {
+          return <span>{alt ?? ""}</span>;
+        }
         const attachment = attachmentByToken.get(token);
         if (
           attachment &&
@@ -219,97 +267,246 @@ function IssueDescriptionMarkdown({
   );
 
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-      {description}
-    </ReactMarkdown>
-  );
-}
-
-function IssueReadOnlyLabels({
-  labels,
-  messages,
-}: {
-  labels: IssueLabelRecord[];
-  messages: ReturnType<typeof useI18n>["messages"];
-}) {
-  return (
-    <section className="issue-dialog__panel">
-      <h4>{messages.issues.labels}</h4>
-      {labels.length > 0 ? (
-        <div className="issue-label-picker__selected">
-          {labels.map((label) => (
-            <span
-              key={label.id}
-              className="issue-label-chip"
-              style={{ backgroundColor: label.color }}
-            >
-              <span>{label.name}</span>
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p>{messages.issues.noLabels}</p>
+    <>
+      {descriptionSegments.map((segment, index) =>
+        segment.type === "markdown" ? (
+          <ReactMarkdown
+            key={`markdown-${index}`}
+            remarkPlugins={[remarkGfm]}
+            components={components}
+          >
+            {segment.content}
+          </ReactMarkdown>
+        ) : (
+          <IssueDescriptionAttachment
+            key={`attachment-${segment.token}-${index}`}
+            attachment={segment.attachment}
+            messages={messages}
+            onDownloadAttachment={onDownloadAttachment}
+            onPreviewAttachment={onPreviewAttachment}
+          />
+        ),
       )}
-    </section>
+    </>
   );
 }
 
-function IssueActionsAside({
-  selectedIssue,
+function IssueReadOnlyLabels({ labels }: { labels: IssueLabelRecord[] }) {
+  return (
+    <div className="issue-label-picker__selected issue-detail__labels">
+      {labels.map((label) => (
+        <span
+          key={label.id}
+          className="issue-label-chip"
+          style={{ backgroundColor: label.color }}
+        >
+          <span>{label.name}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function IssueMoreMenu({
   hasLinkedSession,
   canViewSummary,
   isSaving,
   canOpenAgentsActivity,
-  messages,
+  onDeleteIssue,
+  onEditIssue,
   onOpenLinkedSession,
   onOpenSummary,
 }: {
-  selectedIssue: IssueRecord | null;
   hasLinkedSession: boolean;
   canViewSummary: boolean;
   isSaving: boolean;
   canOpenAgentsActivity: boolean;
-  messages: ReturnType<typeof useI18n>["messages"];
+  onDeleteIssue: () => void;
+  onEditIssue: () => void;
   onOpenLinkedSession: () => void;
   onOpenSummary: () => void;
 }) {
+  const { messages } = useI18n();
+
   return (
-    <section className="issue-dialog__panel issue-dialog__panel--stack">
-      <div className="issue-dialog__meta-row">
-        <span className="issue-dialog__meta-label">
-          {messages.issues.session}
-        </span>
-        {hasLinkedSession && selectedIssue?.linkedSessionId != null ? (
-          <button
-            aria-label={messages.issues.openLinkedSession(
-              selectedIssue.linkedSessionId,
-            )}
-            className="issue-dialog__session-link"
-            type="button"
-            disabled={isSaving || !canOpenAgentsActivity}
-            onClick={onOpenLinkedSession}
-          >
-            {`#${selectedIssue.linkedSessionId}`}
-          </button>
-        ) : (
-          <span className="issue-dialog__meta-value">
-            {messages.issues.noSessionLinked}
-          </span>
-        )}
-      </div>
-      {canViewSummary ? (
-        <Button
-          className="issues-button"
-          disabled={isSaving}
-          type="button"
-          variant="outline"
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={messages.issues.moreActions}
+        className="issues-button issue-page__more-button"
+        disabled={isSaving}
+      >
+        <Ellipsis aria-hidden="true" size={16} strokeWidth={2} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="issue-page__more-menu">
+        <DropdownMenuItem disabled={isSaving} onClick={onEditIssue}>
+          <Pencil aria-hidden="true" size={14} strokeWidth={1.8} />
+          {messages.issues.edit}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={isSaving || !hasLinkedSession || !canOpenAgentsActivity}
+          onClick={onOpenLinkedSession}
+        >
+          <MessageSquare aria-hidden="true" size={14} strokeWidth={1.8} />
+          {messages.issues.viewSession}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={isSaving || !canViewSummary}
           onClick={onOpenSummary}
         >
+          <FileText aria-hidden="true" size={14} strokeWidth={1.8} />
           {messages.issues.viewSummary}
-        </Button>
-      ) : null}
-    </section>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={isSaving}
+          variant="destructive"
+          onClick={onDeleteIssue}
+        >
+          <Trash2 aria-hidden="true" size={14} strokeWidth={1.8} />
+          {messages.issues.deleteReadonly}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
+}
+
+type DescriptionSegment =
+  | {
+      type: "markdown";
+      content: string;
+    }
+  | {
+      type: "attachment";
+      attachment: IssueAttachmentRecord | IssueAttachmentDraft;
+      token: string;
+    };
+
+function buildDescriptionSegments(
+  description: string,
+  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
+  attachmentByToken: Map<string, IssueAttachmentRecord | IssueAttachmentDraft>,
+): DescriptionSegment[] {
+  const segments: DescriptionSegment[] = [];
+  const markdownLines: string[] = [];
+  const renderedTokens = new Set<string>();
+
+  function flushMarkdownLines() {
+    const content = markdownLines.join("\n").trimEnd();
+    if (content.length > 0) {
+      segments.push({ type: "markdown", content });
+    }
+    markdownLines.length = 0;
+  }
+
+  for (const line of description.replace(/\r\n/g, "\n").split("\n")) {
+    const token =
+      getStandaloneAttachmentToken(line) ?? getImageAttachmentToken(line);
+    const attachment = token ? attachmentByToken.get(token) : null;
+    if (token && attachment) {
+      flushMarkdownLines();
+      segments.push({ type: "attachment", attachment, token });
+      renderedTokens.add(token);
+      continue;
+    }
+
+    markdownLines.push(line);
+  }
+
+  flushMarkdownLines();
+
+  for (const attachment of attachments) {
+    const token = getAttachmentMarkdownToken(attachment);
+    if (renderedTokens.has(token) || description.includes(token)) {
+      continue;
+    }
+    if (attachment.kind !== "image") {
+      segments.push({ type: "attachment", attachment, token });
+    }
+  }
+
+  return segments;
+}
+
+function IssueDescriptionAttachment({
+  attachment,
+  messages,
+  onDownloadAttachment,
+  onPreviewAttachment,
+}: {
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft;
+  messages: ReturnType<typeof useI18n>["messages"];
+  onPreviewAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+  onDownloadAttachment: (
+    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+  ) => void;
+}) {
+  const absolutePath =
+    "absolutePath" in attachment ? attachment.absolutePath : null;
+
+  if (attachment.kind === "image" && absolutePath) {
+    return (
+      <img
+        alt={attachment.displayName}
+        className="issue-description-attachment__image"
+        src={convertFileSrc(absolutePath)}
+      />
+    );
+  }
+
+  return (
+    <div className="issue-description-attachment">
+      <FileText aria-hidden="true" size={16} strokeWidth={1.8} />
+      <span className="issue-description-attachment__name">
+        {attachment.displayName}
+      </span>
+      <div className="issue-description-attachment__actions">
+        {attachment.isPreviewable ? (
+          <button
+            aria-label={messages.issues.previewAttachment(
+              attachment.displayName,
+            )}
+            className="issue-attachment-card__action"
+            type="button"
+            onClick={() => onPreviewAttachment(attachment)}
+          >
+            <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
+          </button>
+        ) : null}
+        <button
+          aria-label={messages.issues.downloadAttachment(
+            attachment.displayName,
+          )}
+          className="issue-attachment-card__action"
+          type="button"
+          onClick={() => onDownloadAttachment(attachment)}
+        >
+          <Download aria-hidden="true" size={14} strokeWidth={1.9} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getStandaloneAttachmentToken(line: string): string | null {
+  const match = /^\s*(\{\{issue-attachment(?:-temp)?:[^}]+\}\})\s*$/.exec(line);
+  return match?.[1] ?? null;
+}
+
+function getImageAttachmentToken(line: string): string | null {
+  const match =
+    /^\s*!\[[^\]]*]\((\{\{issue-attachment(?:-temp)?:[^}]+}})\)\s*$/.exec(line);
+  return match?.[1] ?? null;
+}
+
+function getAttachmentMarkdownToken(
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+): string {
+  if ("id" in attachment) {
+    return `{{issue-attachment:${attachment.id}}}`;
+  }
+
+  return `{{issue-attachment-temp:${attachment.token}}}`;
 }
 
 function StatusMenu({

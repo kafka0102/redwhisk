@@ -1437,10 +1437,90 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Completed issue" }),
     );
-    await user.click(screen.getByRole("button", { name: "View Summary" }));
+    await openIssueMoreMenu(user);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "View Summary" }),
+    );
 
     const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
     expect(dialog).toHaveFocus();
+  });
+
+  it("renders read-only description image and file attachment tokens inline", async () => {
+    const user = userEvent.setup();
+    const imageAttachment: IssueAttachmentRecord = {
+      id: 501,
+      issueId: completedIssue.id,
+      displayName: "screenshot.png",
+      relativePath: "issue-23/screenshot.png",
+      absolutePath: "/tmp/redwhisk/screenshot.png",
+      mimeType: "image/png",
+      fileSize: 1024,
+      kind: "image",
+      isPreviewable: true,
+      createdAt: 1_780_632_000_000,
+    };
+    const textAttachment: IssueAttachmentRecord = {
+      id: 502,
+      issueId: completedIssue.id,
+      displayName: "notes.md",
+      relativePath: "issue-23/notes.md",
+      absolutePath: "/tmp/redwhisk/notes.md",
+      mimeType: "text/markdown",
+      fileSize: 512,
+      kind: "text",
+      isPreviewable: true,
+      createdAt: 1_780_632_000_000,
+    };
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...completedIssue,
+          description: [
+            "Completed description",
+            "",
+            "![screenshot.png]({{issue-attachment:501}})",
+            "",
+            "{{issue-attachment:502}}",
+          ].join("\n"),
+          attachments: [imageAttachment, textAttachment],
+        },
+      ],
+    });
+    previewIssueAttachmentMock.mockResolvedValue({
+      attachmentId: textAttachment.id,
+      displayName: textAttachment.displayName,
+      kind: "text",
+      textContent: "preview body",
+      absolutePath: null,
+    });
+    saveDialogMock.mockResolvedValue("/tmp/exported-notes.md");
+    exportIssueAttachmentMock.mockResolvedValue(undefined);
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Completed issue" }),
+    );
+
+    expect(await screen.findByAltText("screenshot.png")).toHaveAttribute(
+      "src",
+      "asset:///tmp/redwhisk/screenshot.png",
+    );
+    expect(screen.getByText("notes.md")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Preview notes.md" }));
+    expect(previewIssueAttachmentMock).toHaveBeenCalledWith({
+      projectId: 1,
+      attachmentId: textAttachment.id,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Download notes.md" }));
+    expect(exportIssueAttachmentMock).toHaveBeenCalledWith({
+      projectId: 1,
+      attachmentId: textAttachment.id,
+      targetPath: "/tmp/exported-notes.md",
+    });
   });
 
   it("submits the generated prompt snapshot when starting", async () => {
@@ -2400,8 +2480,9 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await openIssueMoreMenu(user, dialog);
     await user.click(
-      within(dialog).getByRole("button", { name: "Open linked session #401" }),
+      await screen.findByRole("menuitem", { name: "View Session" }),
     );
 
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
@@ -2469,8 +2550,9 @@ describe("IssuesActivity", () => {
         externalWorktreeDecision: null,
       }),
     );
+    await openIssueMoreMenu(user);
     expect(
-      screen.getByRole("button", { name: "View Summary" }),
+      await screen.findByRole("menuitem", { name: "View Summary" }),
     ).toBeInTheDocument();
   });
 
@@ -2639,8 +2721,9 @@ describe("IssuesActivity", () => {
 
     await waitFor(() => expect(completeIssueFlowMock).toHaveBeenCalledTimes(2));
     expect(completeIssueManualMock).not.toHaveBeenCalled();
+    await openIssueMoreMenu(user);
     expect(
-      await screen.findByRole("button", { name: "View Summary" }),
+      await screen.findByRole("menuitem", { name: "View Summary" }),
     ).toBeInTheDocument();
   });
 
@@ -2735,8 +2818,9 @@ describe("IssuesActivity", () => {
         externalWorktreeDecision: null,
       }),
     );
+    await openIssueMoreMenu(user);
     expect(
-      await screen.findByRole("button", { name: "View Summary" }),
+      await screen.findByRole("menuitem", { name: "View Summary" }),
     ).toBeInTheDocument();
   });
 
@@ -2848,7 +2932,7 @@ describe("IssuesActivity", () => {
       }),
     );
     expect(
-      screen.queryByRole("button", { name: "View Summary" }),
+      screen.queryByRole("menuitem", { name: "View Summary" }),
     ).not.toBeInTheDocument();
 
     completeIssueFlowMock.mockResolvedValueOnce({
@@ -2999,7 +3083,8 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await openIssueMoreMenu(user, dialog);
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     expect(
       screen.getByRole("dialog", {
@@ -3096,14 +3181,15 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await openIssueMoreMenu(user, dialog);
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     expect(
       screen.getByRole("dialog", {
         name: "Delete issue",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", {
@@ -3117,7 +3203,7 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows summary action and inline linked session entry for completed issues", async () => {
+  it("shows summary and linked session actions in the issue more menu", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
     getIssueSummaryMock.mockResolvedValue({
@@ -3156,10 +3242,14 @@ describe("IssuesActivity", () => {
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "View Summary" }),
+      within(dialog).queryByRole("button", { name: "View Summary" }),
+    ).not.toBeInTheDocument();
+    await openIssueMoreMenu(user, dialog);
+    expect(
+      await screen.findByRole("menuitem", { name: "View Summary" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "Open linked session #401" }),
+      await screen.findByRole("menuitem", { name: "View Session" }),
     ).toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Open Log" }),
@@ -3189,8 +3279,9 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Open Session" }),
     ).not.toBeInTheDocument();
+    await openIssueMoreMenu(user, dialog);
     expect(
-      within(dialog).getByRole("button", { name: "Open linked session #402" }),
+      await screen.findByRole("menuitem", { name: "View Session" }),
     ).toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Open Log" }),
@@ -3230,8 +3321,9 @@ describe("IssuesActivity", () => {
     );
 
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await openIssueMoreMenu(user, dialog);
     await user.click(
-      within(dialog).getByRole("button", { name: "View Summary" }),
+      await screen.findByRole("menuitem", { name: "View Summary" }),
     );
 
     const summary = await screen.findByRole("dialog", {
@@ -3274,6 +3366,16 @@ async function openExistingIssueRunDialog(
     dialog: screen.getByRole("dialog", { name: "Run Issue #20" }),
     runButton,
   };
+}
+
+async function openIssueMoreMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement = document.body,
+) {
+  await user.click(
+    within(container).getByRole("button", { name: "More issue actions" }),
+  );
+  return screen.findByRole("menu");
 }
 
 function formatTestTimestamp(epochMilliseconds: number): string {

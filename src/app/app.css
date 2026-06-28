@@ -4056,7 +4056,9 @@ button:focus-visible {
 }
 
 .issue-page__body--readonly-fullscreen {
+  display: block;
   padding: 22px 10% 18px;
+  overflow: auto;
 }
 
 .issue-page__content-shell {
@@ -4074,6 +4076,22 @@ button:focus-visible {
   display: grid;
   gap: 16px;
   min-height: 0;
+}
+
+.issue-page__main--readonly {
+  align-content: start;
+}
+
+.issue-page__more-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.issue-page__more-menu {
+  min-width: 168px;
 }
 
 .issue-page__side {
@@ -4297,6 +4315,51 @@ button:focus-visible {
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.issue-detail__description img,
+.issue-description-attachment__image {
+  display: block;
+  width: min(100%, 720px);
+  max-height: 58vh;
+  object-fit: contain;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.issue-description-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 720px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.issue-description-attachment__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-description-attachment__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.issue-detail__labels {
+  align-items: center;
 }
 
 .issue-dialog__panel {

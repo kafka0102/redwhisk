@@ -195,6 +195,7 @@ export interface I18nMessages {
     labelsLoading: string;
     loadingIssues: string;
     loadingSummary: string;
+    moreActions: string;
     newIssue: string;
     noDiagnostics: string;
     noLabels: string;
@@ -227,6 +228,7 @@ export interface I18nMessages {
     title: string;
     titleField: string;
     titlePlaceholder: string;
+    viewSession: string;
     viewSummary: string;
     workflowSkill: string;
     developmentMode: string;
@@ -659,6 +661,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       labelsLoading: "Loading labels...",
       loadingIssues: "Loading issues...",
       loadingSummary: "Loading summary...",
+      moreActions: "More issue actions",
       newIssue: "New Issue",
       noDiagnostics: "No diagnostics.",
       noLabels: "No labels.",
@@ -695,6 +698,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       title: "Issues",
       titleField: "Title",
       titlePlaceholder: "Issue title",
+      viewSession: "View Session",
       viewSummary: "View Summary",
       workflowSkill: "Workflow skill",
       developmentMode: "Development mode",
@@ -1129,6 +1133,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       labelsLoading: "正在加载标签...",
       loadingIssues: "正在加载 Issues...",
       loadingSummary: "正在加载总结...",
+      moreActions: "更多 Issue 操作",
       newIssue: "新建 Issue",
       noDiagnostics: "暂无诊断信息。",
       noLabels: "暂无标签。",
@@ -1163,6 +1168,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       title: "Issues",
       titleField: "标题",
       titlePlaceholder: "Issue 标题",
+      viewSession: "查看会话",
       viewSummary: "查看总结",
       workflowSkill: "工作流技能",
       developmentMode: "开发模式",

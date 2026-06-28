@@ -73,6 +73,7 @@ export function IssuesActivity({
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(
     cachedPageState?.dialogMode ?? null,
   );
+  const [isReadOnlyEditRequested, setIsReadOnlyEditRequested] = useState(false);
   const [runDialogIssue, setRunDialogIssue] = useState<Pick<
     IssueRecord,
     "id" | "title" | "description" | "attachments" | "labels"
@@ -145,6 +146,7 @@ export function IssuesActivity({
       setIssues([]);
       setSelectedIssueId(cachedState?.selectedIssueId ?? null);
       setDialogMode(cachedState?.dialogMode ?? null);
+      setIsReadOnlyEditRequested(false);
       setRunDialogIssue(null);
       setForm(cachedState?.form ?? EMPTY_FORM);
       previousSelectedIssueIdRef.current =
@@ -303,6 +305,7 @@ export function IssuesActivity({
   function openCreateDialog(trigger: HTMLElement | null) {
     setErrorMessage(null);
     setDialogErrorMessage(null);
+    setIsReadOnlyEditRequested(false);
     previousSelectedIssueIdRef.current = selectedIssueId;
     dialogTriggerRef.current = trigger;
     setDialogMode("create");
@@ -312,10 +315,23 @@ export function IssuesActivity({
   function openIssueDialog(issue: IssueRecord, trigger: HTMLElement | null) {
     setErrorMessage(null);
     setDialogErrorMessage(null);
+    setIsReadOnlyEditRequested(false);
     setSelectedIssueId(issue.id);
     dialogTriggerRef.current = trigger;
     setDialogMode("edit");
     setForm(issueToForm(issue));
+  }
+
+  function editSelectedIssue() {
+    if (!selectedIssue || isSaving) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setDialogErrorMessage(null);
+    setIsReadOnlyEditRequested(true);
+    setDialogMode("edit");
+    setForm(issueToForm(selectedIssue));
   }
 
   function closeDialog() {
@@ -342,6 +358,7 @@ export function IssuesActivity({
     }
 
     setDialogMode(null);
+    setIsReadOnlyEditRequested(false);
     setForm(EMPTY_FORM);
     setIsSaving(false);
     restoreDialogTriggerFocus(previousSelectedIssue);
@@ -376,6 +393,7 @@ export function IssuesActivity({
         setIssues((currentIssues) => mergeIssue(currentIssues, createdIssue));
         setSelectedIssueId(createdIssue.id);
         setDialogMode(null);
+        setIsReadOnlyEditRequested(false);
         setForm(EMPTY_FORM);
         restoreDialogTriggerFocus(createdIssue);
       } else if (selectedIssue) {
@@ -396,6 +414,7 @@ export function IssuesActivity({
         setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
         setSelectedIssueId(updatedIssue.id);
         setDialogMode(null);
+        setIsReadOnlyEditRequested(false);
         setForm(EMPTY_FORM);
         restoreDialogTriggerFocus(updatedIssue);
       }
@@ -477,6 +496,7 @@ export function IssuesActivity({
     setDialogErrorMessage(null);
     setRunDialogIssue(null);
     setDialogMode(null);
+    setIsReadOnlyEditRequested(false);
     setForm(EMPTY_FORM);
     onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
   }
@@ -543,7 +563,9 @@ export function IssuesActivity({
     dialogMode === "edit" && selectedIssue?.status === "completed";
   const canOpenLinkedSession =
     hasLinkedSession && Boolean(onOpenAgentsActivity);
-  const isEditablePageOpen = Boolean(dialogMode && isBacklogDialog);
+  const isEditablePageOpen = Boolean(
+    dialogMode && (isBacklogDialog || isReadOnlyEditRequested),
+  );
 
   async function handleSelectAttachment(
     filter?: "image" | "file",
@@ -934,6 +956,7 @@ export function IssuesActivity({
 
     setDialogErrorMessage(null);
     setDialogMode(null);
+    setIsReadOnlyEditRequested(false);
     setForm(EMPTY_FORM);
     onOpenAgentsActivity?.(sessionId);
   }
@@ -964,6 +987,7 @@ export function IssuesActivity({
       setIssues(remainingIssues);
       setSelectedIssueId(remainingIssues[0]?.id ?? null);
       setDialogMode(null);
+      setIsReadOnlyEditRequested(false);
       setRunDialogIssue(null);
       setSummaryIssueId(null);
       setAttachmentPreview(null);
@@ -1019,7 +1043,7 @@ export function IssuesActivity({
         </>
       ) : null}
 
-      {dialogMode && isBacklogDialog ? (
+      {dialogMode && isEditablePageOpen ? (
         <IssueEditablePage
           mode={dialogMode}
           form={form}
@@ -1053,7 +1077,7 @@ export function IssuesActivity({
         />
       ) : null}
 
-      {dialogMode && !isBacklogDialog ? (
+      {dialogMode && !isEditablePageOpen ? (
         <IssueReadOnlyPage
           form={form}
           selectedIssue={selectedIssue}
@@ -1073,6 +1097,7 @@ export function IssuesActivity({
             void handleAdvanceStatus(targetStatus)
           }
           onDeleteIssue={() => void handleDeleteIssue()}
+          onEditIssue={editSelectedIssue}
           onOpenLinkedSession={openLinkedSession}
           onOpenSummary={handleOpenSummary}
         />
