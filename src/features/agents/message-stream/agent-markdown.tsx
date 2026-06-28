@@ -16,6 +16,16 @@ const components: Components = {
       </a>
     );
   },
+  ol({ children, start }) {
+    return (
+      <ol className="agents-message__ordered-list" start={start}>
+        {children}
+      </ol>
+    );
+  },
+  ul({ children }) {
+    return <ul className="agents-message__unordered-list">{children}</ul>;
+  },
   code(props) {
     // react-markdown v10 把 inline/block 都走 code；通过 className 区分行内。
     const { className, children } = props;
