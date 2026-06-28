@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { AppShell } from "./app-shell";
 import { resolveAppSurface } from "./app-surface";
@@ -31,10 +30,8 @@ import {
 import { SessionMonitorSurface } from "../features/agents/session-notifications/session-monitor-surface";
 import {
   OPEN_AGENT_SESSION_EVENT,
-  openSessionMonitorWindow,
   type OpenAgentSessionEventPayload,
 } from "../features/agents/session-notifications/session-monitor-commands";
-import { getInitialSessionMonitorEnabled } from "../features/agents/session-notifications/session-monitor-preferences";
 import { toCommandError } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
@@ -90,16 +87,6 @@ function ProjectApp() {
   } | null>(null);
   const defaultLocale = getDefaultLocale();
   const defaultMessages = I18N_MESSAGES[defaultLocale];
-
-  useEffect(() => {
-    if (!getInitialSessionMonitorEnabled()) {
-      return;
-    }
-
-    void openSessionMonitorWindow({
-      ownerWindowLabel: getCurrentWindow().label,
-    });
-  }, []);
 
   useEffect(() => {
     let isMounted = true;

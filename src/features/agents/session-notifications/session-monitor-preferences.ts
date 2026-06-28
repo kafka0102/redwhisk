@@ -2,14 +2,7 @@ export const SESSION_MONITOR_ENABLED_STORAGE_KEY =
   "redwhisk.sessionMonitor.enabled";
 
 export function getInitialSessionMonitorEnabled(): boolean {
-  try {
-    const storedValue = window.localStorage.getItem(
-      SESSION_MONITOR_ENABLED_STORAGE_KEY,
-    );
-    return storedValue === null ? true : storedValue === "true";
-  } catch {
-    return true;
-  }
+  return false;
 }
 
 export function setSessionMonitorEnabledPreference(isEnabled: boolean): void {

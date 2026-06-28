@@ -280,18 +280,8 @@ describe("App project entry", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the global desktop session monitor on app start", async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(openSessionMonitorWindowMock).toHaveBeenCalledWith({
-        ownerWindowLabel: "main",
-      });
-    });
-  });
-
-  it("does not open the global desktop session monitor when the preference is disabled", async () => {
-    window.localStorage.setItem("redwhisk.sessionMonitor.enabled", "false");
+  it("does not open the global desktop session monitor on app start", async () => {
+    window.localStorage.setItem("redwhisk.sessionMonitor.enabled", "true");
 
     render(<App />);
 
