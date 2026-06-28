@@ -245,6 +245,36 @@ describe("messageStreamReducer", () => {
       expect(state.entries[0].id).toBe("a1");
       expect(state.entries[1].id).toBe("a2");
     });
+
+    it("EVENT_BATCH 按顺序折叠同一帧内的 assistant_message", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "EVENT_BATCH",
+        events: [
+          timelineEvent({
+            type: "assistant_message",
+            text: "你",
+            messageId: "a1",
+          }),
+          timelineEvent({
+            type: "assistant_message",
+            text: "你好",
+            messageId: "a1",
+          }),
+          timelineEvent({
+            type: "assistant_message",
+            text: "你好！",
+            messageId: "a1",
+          }),
+        ],
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "assistant_message",
+        text: "你好！",
+        messageId: "a1",
+      });
+    });
   });
 
   describe("user_message 去重", () => {

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter};
 
@@ -20,12 +20,19 @@ use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvel
 
 /// 结构化 Agent 事件流的 Tauri event 名。
 pub const AGENT_SESSION_STREAM_EVENT: &str = "agent-session-stream-event";
+const LATEST_OUTPUT_UPDATE_INTERVAL: Duration = Duration::from_millis(750);
 
 /// 单个 session 的游标状态。
 #[derive(Debug, Clone)]
 struct SessionCursor {
     seq: u64,
     epoch: String,
+}
+
+#[derive(Debug, Clone)]
+struct SessionPersistenceState {
+    log_path: Option<String>,
+    last_latest_output_write_at: Option<SystemTime>,
 }
 
 /// 跨 session 共享的事件广播器。
@@ -38,6 +45,7 @@ struct SessionCursor {
 pub struct AgentEventBroadcaster {
     app_handle: std::sync::Arc<OnceLock<AppHandle>>,
     cursors: std::sync::Arc<Mutex<HashMap<i64, SessionCursor>>>,
+    persistence: std::sync::Arc<Mutex<HashMap<i64, SessionPersistenceState>>>,
     log_write_lock: std::sync::Arc<Mutex<()>>,
 }
 
@@ -67,12 +75,24 @@ impl AgentEventBroadcaster {
         if let Ok(mut cursors) = self.cursors.lock() {
             cursors.insert(session_id, SessionCursor { seq: 0, epoch });
         }
+        if let Ok(mut persistence) = self.persistence.lock() {
+            persistence.insert(
+                session_id,
+                SessionPersistenceState {
+                    log_path: None,
+                    last_latest_output_write_at: None,
+                },
+            );
+        }
     }
 
     /// 注销 session，清理游标。
     pub fn unregister_session(&self, session_id: i64) {
         if let Ok(mut cursors) = self.cursors.lock() {
             cursors.remove(&session_id);
+        }
+        if let Ok(mut persistence) = self.persistence.lock() {
+            persistence.remove(&session_id);
         }
     }
 
@@ -116,6 +136,31 @@ impl AgentEventBroadcaster {
         let Some(app_handle) = self.app_handle.get() else {
             return;
         };
+        let latest_output = latest_output_from_stream_event(&envelope.event);
+        let should_update_latest_output = latest_output
+            .as_ref()
+            .map(|_| self.should_update_latest_output(envelope.session_id, &envelope.event))
+            .unwrap_or(false);
+        let Some(log_path) = self.resolve_log_path(envelope.session_id, app_handle) else {
+            return;
+        };
+
+        let Ok(_write_guard) = self.log_write_lock.lock() else {
+            return;
+        };
+
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) {
+            if let Ok(line) = serde_json::to_string(envelope) {
+                let _ = writeln!(file, "{line}");
+            }
+        }
+
+        if !should_update_latest_output {
+            return;
+        }
+        let Some(latest_output) = latest_output else {
+            return;
+        };
         let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
             return;
         };
@@ -123,32 +168,68 @@ impl AgentEventBroadcaster {
             return;
         };
         let repository = AgentSessionRepository::new(&database.connection);
-        let Ok(Some(session)) = repository.find_by_id(envelope.session_id) else {
-            return;
-        };
-        if session.log_path.is_empty() {
-            return;
-        }
+        let updated_at = current_epoch_millis();
+        let _ = repository.update_latest_output(envelope.session_id, &latest_output, updated_at);
+    }
 
-        let Ok(_write_guard) = self.log_write_lock.lock() else {
-            return;
-        };
-
-        if let Ok(mut file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&session.log_path)
-        {
-            if let Ok(line) = serde_json::to_string(envelope) {
-                let _ = writeln!(file, "{line}");
+    fn resolve_log_path(&self, session_id: i64, app_handle: &AppHandle) -> Option<String> {
+        if let Ok(persistence) = self.persistence.lock() {
+            if let Some(state) = persistence.get(&session_id) {
+                if let Some(log_path) = &state.log_path {
+                    return Some(log_path.clone());
+                }
             }
         }
 
-        let Some(latest_output) = latest_output_from_stream_event(&envelope.event) else {
-            return;
+        let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
+            return None;
         };
-        let updated_at = current_epoch_millis();
-        let _ = repository.update_latest_output(envelope.session_id, &latest_output, updated_at);
+        let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
+            return None;
+        };
+        let repository = AgentSessionRepository::new(&database.connection);
+        let Ok(Some(session)) = repository.find_by_id(session_id) else {
+            return None;
+        };
+        if session.log_path.is_empty() {
+            return None;
+        }
+        if let Ok(mut persistence) = self.persistence.lock() {
+            persistence
+                .entry(session_id)
+                .or_insert(SessionPersistenceState {
+                    log_path: None,
+                    last_latest_output_write_at: None,
+                })
+                .log_path = Some(session.log_path.clone());
+        }
+        Some(session.log_path)
+    }
+
+    fn should_update_latest_output(&self, session_id: i64, event: &AgentStreamEvent) -> bool {
+        let now = SystemTime::now();
+        let is_important = !matches!(event, AgentStreamEvent::Timeline { .. });
+        let Ok(mut persistence) = self.persistence.lock() else {
+            return true;
+        };
+        let state = persistence
+            .entry(session_id)
+            .or_insert(SessionPersistenceState {
+                log_path: None,
+                last_latest_output_write_at: None,
+            });
+        let should_update = is_important
+            || match state.last_latest_output_write_at {
+                Some(last_write) => now
+                    .duration_since(last_write)
+                    .map(|elapsed| elapsed >= LATEST_OUTPUT_UPDATE_INTERVAL)
+                    .unwrap_or(true),
+                None => true,
+            };
+        if should_update {
+            state.last_latest_output_write_at = Some(now);
+        }
+        should_update
     }
 }
 
@@ -243,5 +324,27 @@ mod tests {
     #[test]
     fn event_name_is_kebab_case() {
         assert_eq!(AGENT_SESSION_STREAM_EVENT, "agent-session-stream-event");
+    }
+
+    #[test]
+    fn latest_output_updates_are_throttled_for_timeline_events() {
+        let broadcaster = AgentEventBroadcaster::new();
+        let event = AgentStreamEvent::Timeline {
+            item: crate::types::agent_session_stream::AgentTimelineItem::AssistantMessage {
+                text: "hello".into(),
+                message_id: Some("a1".into()),
+            },
+            turn_id: None,
+            seq: 0,
+            timestamp: 0,
+        };
+
+        assert!(broadcaster.should_update_latest_output(7, &event));
+        assert!(!broadcaster.should_update_latest_output(7, &event));
+
+        let important = AgentStreamEvent::ModelChanged {
+            model_id: "gpt-5".into(),
+        };
+        assert!(broadcaster.should_update_latest_output(7, &important));
     }
 }

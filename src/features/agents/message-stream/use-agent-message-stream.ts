@@ -9,6 +9,7 @@
 import { useEffect, useReducer } from "react";
 import type { Dispatch } from "react";
 
+import type { AgentStreamEvent } from "../agent-stream-types";
 import { readAgentTimeline } from "../agent-session-commands";
 import { subscribeAgentSessionStream } from "./agent-stream-events";
 import {
@@ -48,6 +49,49 @@ export function useAgentMessageStream({
   useEffect(() => {
     let isDisposed = false;
     let unlisten: (() => void) | null = null;
+    let pendingEvents: AgentStreamEvent[] = [];
+    let flushHandle: ReturnType<typeof setTimeout> | number | null = null;
+    let flushHandleKind: "animation-frame" | "timeout" | null = null;
+
+    const scheduleFlush = () => {
+      if (flushHandle !== null) {
+        return;
+      }
+      const flush = () => {
+        flushHandle = null;
+        if (isDisposed || pendingEvents.length === 0) {
+          pendingEvents = [];
+          return;
+        }
+        const events = pendingEvents;
+        pendingEvents = [];
+        dispatch({ type: "EVENT_BATCH", events });
+      };
+      if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
+        flushHandle = window.requestAnimationFrame(flush);
+        flushHandleKind = "animation-frame";
+      } else {
+        flushHandle = globalThis.setTimeout(flush, 16);
+        flushHandleKind = "timeout";
+      }
+    };
+
+    const cancelFlush = () => {
+      if (flushHandle === null) {
+        return;
+      }
+      if (
+        flushHandleKind === "animation-frame" &&
+        typeof window !== "undefined" &&
+        "cancelAnimationFrame" in window
+      ) {
+        window.cancelAnimationFrame(flushHandle as number);
+      } else {
+        globalThis.clearTimeout(flushHandle);
+      }
+      flushHandle = null;
+      flushHandleKind = null;
+    };
 
     // 切换 session：先重置，避免上一个 session 的残留。
     dispatch({ type: "RESET" });
@@ -80,7 +124,12 @@ export function useAgentMessageStream({
           ) {
             return;
           }
-          dispatch({ type: "EVENT", event: envelope.event });
+          if (envelope.event.type !== "timeline") {
+            dispatch({ type: "EVENT", event: envelope.event });
+            return;
+          }
+          pendingEvents.push(envelope.event);
+          scheduleFlush();
         });
         if (isDisposed) {
           unlisten();
@@ -95,6 +144,8 @@ export function useAgentMessageStream({
 
     return () => {
       isDisposed = true;
+      cancelFlush();
+      pendingEvents = [];
       unlisten?.();
     };
   }, [projectId, sessionId]);

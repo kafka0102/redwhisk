@@ -75,6 +75,12 @@ export function messageStreamReducer(
     case "EVENT":
       return applyEvent(state, action.event);
 
+    case "EVENT_BATCH":
+      return action.events.reduce(
+        (currentState, event) => applyEvent(currentState, event),
+        state,
+      );
+
     case "OPTIMISTIC_USER_MESSAGE": {
       // 乐观插入用户消息：发送成功后立即展示，不等后端 timeline 回显。
       // 后端回显到达后通过文本匹配替换该乐观条目，避免重复展示。

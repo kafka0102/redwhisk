@@ -1,6 +1,6 @@
 import { render, waitFor } from "@testing-library/react";
 import { act } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
 import { useAgentMessageStream } from "./use-agent-message-stream";
@@ -33,6 +33,23 @@ vi.mock("../agent-session-commands", () => ({
 
 const { readAgentTimeline } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+
+let originalRequestAnimationFrame: typeof window.requestAnimationFrame;
+let originalCancelAnimationFrame: typeof window.cancelAnimationFrame;
+
+beforeEach(() => {
+  originalRequestAnimationFrame = window.requestAnimationFrame;
+  originalCancelAnimationFrame = window.cancelAnimationFrame;
+  window.requestAnimationFrame = (callback) =>
+    window.setTimeout(() => callback(performance.now()), 16);
+  window.cancelAnimationFrame = (handle) => window.clearTimeout(handle);
+});
+
+afterEach(() => {
+  window.requestAnimationFrame = originalRequestAnimationFrame;
+  window.cancelAnimationFrame = originalCancelAnimationFrame;
+  vi.useRealTimers();
+});
 
 interface ProbeProps {
   projectId: number;
@@ -80,6 +97,12 @@ async function renderProbe(props: ProbeProps) {
 }
 
 describe("useAgentMessageStream", () => {
+  function dispatchFrame() {
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+  }
+
   it("readAgentTimeline 完成后用历史 timeline 种子 state", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
@@ -136,6 +159,7 @@ describe("useAgentMessageStream", () => {
   });
 
   it("事件流到达后 dispatch 到 state", async () => {
+    vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({ items: [] });
     mocks.listeners.length = 0;
@@ -158,7 +182,70 @@ describe("useAgentMessageStream", () => {
       });
     });
 
+    dispatchFrame();
     expect(getState()!.turnStatus).toBe("running");
+    vi.useRealTimers();
+  });
+
+  it("同一帧内的事件流批量 dispatch 到 state", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({ items: [] });
+    mocks.listeners.length = 0;
+
+    const { getState, result } = await renderProbe({
+      projectId: 1,
+      sessionId: 120,
+      onState: () => {},
+    });
+
+    act(() => {
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 120,
+          seq: 1,
+          epoch: "epoch-1",
+          event: {
+            type: "timeline",
+            item: { type: "assistant_message", text: "你", messageId: "a1" },
+            seq: 1,
+            timestamp: 0,
+          },
+        },
+      });
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 120,
+          seq: 2,
+          epoch: "epoch-1",
+          event: {
+            type: "timeline",
+            item: {
+              type: "assistant_message",
+              text: "你好",
+              messageId: "a1",
+            },
+            seq: 2,
+            timestamp: 0,
+          },
+        },
+      });
+    });
+
+    expect(getState()!.entries).toHaveLength(0);
+
+    dispatchFrame();
+
+    expect(getState()!.entries).toHaveLength(1);
+    expect(getState()!.entries[0].item).toEqual({
+      type: "assistant_message",
+      text: "你好",
+      messageId: "a1",
+    });
+
+    result.unmount();
   });
 
   it("忽略其它 projectId/sessionId 的事件", async () => {

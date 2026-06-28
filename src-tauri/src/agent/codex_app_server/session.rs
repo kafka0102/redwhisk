@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
@@ -33,6 +33,8 @@ use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentPermissionAction, AgentPermissionRequest, AgentStreamEvent,
     AgentTimelineItem, AgentUsage, PermissionBehavior, PermissionKind, ToolCallStatus,
 };
+
+const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(80);
 
 /// codex mode 预设（approvalPolicy + sandbox）。
 ///
@@ -124,8 +126,16 @@ struct SessionState {
     effort: Option<String>,
     /// 增量累积的 assistant 文本：item_id → 已累积文本。
     agent_message_buffer: HashMap<String, String>,
+    /// assistant 文本上次广播时间：item_id → flush 时间。
+    agent_message_last_flush_at: HashMap<String, Instant>,
+    /// assistant 文本上次广播字节长度：item_id → 已广播长度。
+    agent_message_flushed_len: HashMap<String, usize>,
     /// 增量累积的 reasoning 文本：item_id → 已累积文本。
     reasoning_buffer: HashMap<String, String>,
+    /// reasoning 文本上次广播时间：item_id → flush 时间。
+    reasoning_last_flush_at: HashMap<String, Instant>,
+    /// reasoning 文本上次广播字节长度：item_id → 已广播长度。
+    reasoning_flushed_len: HashMap<String, usize>,
     /// 挂起的权限请求：request_id → 决策 oneshot sender。
     pending_permissions: HashMap<String, PendingPermission>,
     /// 最新一次 token 用量，供前端 context meter 复用。
@@ -183,7 +193,11 @@ impl CodexSessionHandle {
             model: config.model.clone(),
             effort: config.effort.clone(),
             agent_message_buffer: HashMap::new(),
+            agent_message_last_flush_at: HashMap::new(),
+            agent_message_flushed_len: HashMap::new(),
             reasoning_buffer: HashMap::new(),
+            reasoning_last_flush_at: HashMap::new(),
+            reasoning_flushed_len: HashMap::new(),
             pending_permissions: HashMap::new(),
             latest_usage: None,
         }));
@@ -608,19 +622,21 @@ fn build_events(
             status,
             error_message,
         } => {
+            let mut events = flush_all_pending_deltas(state);
             let usage = state.lock().ok().and_then(|mut state| {
                 state.current_turn_id = None;
                 state.latest_usage.clone()
             });
             if status == "failed" || status == "aborted" {
-                vec![AgentStreamEvent::TurnFailed {
+                events.push(AgentStreamEvent::TurnFailed {
                     turn_id,
                     error: error_message.unwrap_or_else(|| status.clone()),
                     code: Some(status),
-                }]
+                });
             } else {
-                vec![AgentStreamEvent::TurnCompleted { turn_id, usage }]
+                events.push(AgentStreamEvent::TurnCompleted { turn_id, usage });
             }
+            events
         }
         CodexNotification::TokenUsageUpdated { token_usage } => {
             let usage = extract_usage(&token_usage);
@@ -651,9 +667,7 @@ fn build_events(
             delta,
             thread_id: _,
         } => {
-            // 首版策略：每次 delta 累积后广播一条带最新完整文本的 timeline。
-            // 后续可改为 48ms 合并，但首版优先正确性。
-            let text = {
+            {
                 let mut state = match state.lock() {
                     Ok(state) => state,
                     Err(_) => return Vec::new(),
@@ -663,38 +677,23 @@ fn build_events(
                     .entry(item_id.clone())
                     .or_default();
                 buffer.push_str(&delta);
-                buffer.clone()
-            };
-            vec![AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::AssistantMessage {
-                    text,
-                    message_id: Some(item_id),
-                },
-                turn_id: None,
-                seq: next_seq(),
-                timestamp: now_ms(),
-            }]
+            }
+            flush_agent_message_delta(state, &item_id, false)
         }
         CodexNotification::ReasoningDelta {
             item_id,
             delta,
             thread_id: _,
         } => {
-            let text = {
+            {
                 let mut state = match state.lock() {
                     Ok(state) => state,
                     Err(_) => return Vec::new(),
                 };
                 let buffer = state.reasoning_buffer.entry(item_id.clone()).or_default();
                 buffer.push_str(&delta);
-                buffer.clone()
-            };
-            vec![AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::Reasoning { text },
-                turn_id: None,
-                seq: next_seq(),
-                timestamp: now_ms(),
-            }]
+            }
+            flush_reasoning_delta(state, &item_id, false)
         }
         CodexNotification::ItemStarted { item, thread_id: _ } => {
             build_item_event(state, &item, true)
@@ -744,13 +743,31 @@ fn build_item_event(
             }
         }
     } else {
+        let mut events = Vec::new();
         // item/completed 后清掉对应增量缓冲（如果存在）。
         if let Some(item_id) = item.get("id").and_then(Value::as_str) {
+            events.extend(flush_agent_message_delta(state, item_id, true));
+            events.extend(flush_reasoning_delta(state, item_id, true));
             if let Ok(mut state) = state.lock() {
                 state.agent_message_buffer.remove(item_id);
+                state.agent_message_last_flush_at.remove(item_id);
+                state.agent_message_flushed_len.remove(item_id);
                 state.reasoning_buffer.remove(item_id);
+                state.reasoning_last_flush_at.remove(item_id);
+                state.reasoning_flushed_len.remove(item_id);
             }
         }
+        let turn_id = state
+            .lock()
+            .ok()
+            .and_then(|state| state.current_turn_id.clone());
+        events.push(AgentStreamEvent::Timeline {
+            item: timeline_item,
+            turn_id,
+            seq: next_seq(),
+            timestamp: now_ms(),
+        });
+        return events;
     }
 
     let turn_id = state
@@ -764,6 +781,129 @@ fn build_item_event(
         seq: next_seq(),
         timestamp: now_ms(),
     }]
+}
+
+fn flush_agent_message_delta(
+    state: &Arc<Mutex<SessionState>>,
+    item_id: &str,
+    force: bool,
+) -> Vec<AgentStreamEvent> {
+    let now = Instant::now();
+    let (text, turn_id) = {
+        let mut state = match state.lock() {
+            Ok(state) => state,
+            Err(_) => return Vec::new(),
+        };
+        let Some(text) = state.agent_message_buffer.get(item_id).cloned() else {
+            return Vec::new();
+        };
+        if text.is_empty() {
+            return Vec::new();
+        }
+        let flushed_len = state
+            .agent_message_flushed_len
+            .get(item_id)
+            .copied()
+            .unwrap_or(0);
+        if text.len() == flushed_len {
+            return Vec::new();
+        }
+        let should_flush = force
+            || match state.agent_message_last_flush_at.get(item_id) {
+                Some(last_flush) => now.duration_since(*last_flush) >= DELTA_FLUSH_INTERVAL,
+                None => true,
+            };
+        if !should_flush {
+            return Vec::new();
+        }
+        state
+            .agent_message_last_flush_at
+            .insert(item_id.to_string(), now);
+        state
+            .agent_message_flushed_len
+            .insert(item_id.to_string(), text.len());
+        (text, state.current_turn_id.clone())
+    };
+    vec![AgentStreamEvent::Timeline {
+        item: AgentTimelineItem::AssistantMessage {
+            text,
+            message_id: Some(item_id.to_string()),
+        },
+        turn_id,
+        seq: next_seq(),
+        timestamp: now_ms(),
+    }]
+}
+
+fn flush_reasoning_delta(
+    state: &Arc<Mutex<SessionState>>,
+    item_id: &str,
+    force: bool,
+) -> Vec<AgentStreamEvent> {
+    let now = Instant::now();
+    let (text, turn_id) = {
+        let mut state = match state.lock() {
+            Ok(state) => state,
+            Err(_) => return Vec::new(),
+        };
+        let Some(text) = state.reasoning_buffer.get(item_id).cloned() else {
+            return Vec::new();
+        };
+        if text.is_empty() {
+            return Vec::new();
+        }
+        let flushed_len = state
+            .reasoning_flushed_len
+            .get(item_id)
+            .copied()
+            .unwrap_or(0);
+        if text.len() == flushed_len {
+            return Vec::new();
+        }
+        let should_flush = force
+            || match state.reasoning_last_flush_at.get(item_id) {
+                Some(last_flush) => now.duration_since(*last_flush) >= DELTA_FLUSH_INTERVAL,
+                None => true,
+            };
+        if !should_flush {
+            return Vec::new();
+        }
+        state
+            .reasoning_last_flush_at
+            .insert(item_id.to_string(), now);
+        state
+            .reasoning_flushed_len
+            .insert(item_id.to_string(), text.len());
+        (text, state.current_turn_id.clone())
+    };
+    vec![AgentStreamEvent::Timeline {
+        item: AgentTimelineItem::Reasoning { text },
+        turn_id,
+        seq: next_seq(),
+        timestamp: now_ms(),
+    }]
+}
+
+fn flush_all_pending_deltas(state: &Arc<Mutex<SessionState>>) -> Vec<AgentStreamEvent> {
+    let (agent_message_ids, reasoning_ids) = match state.lock() {
+        Ok(state) => (
+            state
+                .agent_message_buffer
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            state.reasoning_buffer.keys().cloned().collect::<Vec<_>>(),
+        ),
+        Err(_) => return Vec::new(),
+    };
+    let mut events = Vec::new();
+    for item_id in agent_message_ids {
+        events.extend(flush_agent_message_delta(state, &item_id, true));
+    }
+    for item_id in reasoning_ids {
+        events.extend(flush_reasoning_delta(state, &item_id, true));
+    }
+    events
 }
 
 /// 注册 codex server→client 审批 request handler。
@@ -1102,7 +1242,7 @@ mod tests {
     }
 
     #[test]
-    fn build_events_agent_message_delta_accumulates() {
+    fn build_events_agent_message_delta_throttles_and_flushes_final_text() {
         let state = Arc::new(Mutex::new(empty_state()));
         let events1 = build_events(
             &state,
@@ -1121,8 +1261,11 @@ mod tests {
             },
         );
         assert_eq!(events1.len(), 1);
-        assert_eq!(events2.len(), 1);
-        match &events2[0] {
+        assert_eq!(events2.len(), 0);
+
+        let events3 = flush_agent_message_delta(&state, "i1", true);
+        assert_eq!(events3.len(), 1);
+        match &events3[0] {
             AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::AssistantMessage { text, .. },
                 ..
@@ -1133,6 +1276,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn build_events_turn_completed_flushes_pending_reasoning_before_completion() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        let events1 = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "先分析".into(),
+                thread_id: None,
+            },
+        );
+        let events2 = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "再总结".into(),
+                thread_id: None,
+            },
+        );
+        assert_eq!(events1.len(), 1);
+        assert_eq!(events2.len(), 0);
+
+        let events3 = build_events(
+            &state,
+            CodexNotification::TurnCompleted {
+                turn_id: Some("t1".into()),
+                thread_id: Some("thr_1".into()),
+                status: "completed".into(),
+                error_message: None,
+            },
+        );
+
+        assert_eq!(events3.len(), 2);
+        match &events3[0] {
+            AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::Reasoning { text },
+                ..
+            } => {
+                assert_eq!(text, "先分析再总结");
+            }
+            other => panic!("期望 Reasoning timeline，实际 {other:?}"),
+        }
+        assert!(matches!(
+            events3[1],
+            AgentStreamEvent::TurnCompleted {
+                turn_id: Some(_),
+                ..
+            }
+        ));
+    }
+
     fn empty_state() -> SessionState {
         SessionState {
             thread_id: None,
@@ -1141,7 +1335,11 @@ mod tests {
             model: None,
             effort: None,
             agent_message_buffer: HashMap::new(),
+            agent_message_last_flush_at: HashMap::new(),
+            agent_message_flushed_len: HashMap::new(),
             reasoning_buffer: HashMap::new(),
+            reasoning_last_flush_at: HashMap::new(),
+            reasoning_flushed_len: HashMap::new(),
             pending_permissions: HashMap::new(),
             latest_usage: None,
         }

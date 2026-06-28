@@ -35,6 +35,13 @@ Agents Activity SHALL render the selected Session header as a compact, full-widt
 - **THEN** the Session workspace opens an inline terminal panel below the Session main content
 - **AND** the terminal icon button indicates the selected state with a subtle light background or inset treatment
 
+#### Scenario: Session stream handles high-frequency assistant output
+
+- **WHEN** a running Agent Session emits many assistant or reasoning deltas within a short time window
+- **THEN** the app batches those deltas before rendering the message stream
+- **AND** the final assistant or reasoning text is still rendered when the item or turn completes
+- **AND** stream persistence avoids per-delta database session lookups and per-delta latest-output writes
+
 ### Requirement: Session workspace tabs
 
 Agents Activity SHALL provide a tabbed left workspace where `Session` is fixed and file-oriented tabs are replaceable by type.
@@ -215,4 +222,3 @@ Agents Activity SHALL provide a Session-scoped inline terminal panel below the S
 - **WHEN** the user opens inline terminals for Session A and then switches to Session B
 - **THEN** the inline terminal panel state is scoped to the selected Session
 - **AND** new terminals for Session B start in Session B's actual working directory
-
