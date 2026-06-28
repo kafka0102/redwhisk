@@ -622,6 +622,7 @@ export function AgentsActivity({
 
   async function prepareLinkedIssueAgentCommit(
     issue: NonNullable<typeof linkedIssue>,
+    session: AgentSessionListItem,
   ) {
     setIsTransitionMenuOpen(false);
     setCompleteAgentCommitErrorMessage(null);
@@ -634,7 +635,12 @@ export function AgentsActivity({
       });
       setAgentCommitPreview(preview);
     } catch (error) {
-      setCompleteAgentCommitErrorMessage(toCommandError(error).message);
+      const commandError = toCommandError(error);
+      if (isCleanWorktreeAgentCommitPreviewError(commandError)) {
+        await completeLinkedIssueClean(issue, session);
+      } else {
+        setCompleteAgentCommitErrorMessage(commandError.message);
+      }
     } finally {
       setIsPreparingAgentCommit(false);
     }
@@ -673,7 +679,7 @@ export function AgentsActivity({
     }
 
     if (nextSession.canCompleteAgentCommit) {
-      await prepareLinkedIssueAgentCommit(linkedIssue);
+      await prepareLinkedIssueAgentCommit(linkedIssue, nextSession);
     }
   }
 
@@ -1387,6 +1393,19 @@ export function AgentsActivity({
       ) : null}
       {confirmationDialog}
     </main>
+  );
+}
+
+function isCleanWorktreeAgentCommitPreviewError(error: {
+  code: string;
+  message: string;
+  details?: Array<Record<string, unknown>>;
+}) {
+  return (
+    error.code === "ISSUE_VALIDATION_FAILED" &&
+    error.details?.some(
+      (detail) => detail["@type"] === "GitStatus" && detail.isClean === true,
+    ) === true
   );
 }
 

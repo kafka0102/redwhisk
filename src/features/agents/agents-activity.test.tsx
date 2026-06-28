@@ -3016,6 +3016,86 @@ describe("AgentsActivity", () => {
     expect(completeIssueCleanMock).not.toHaveBeenCalled();
   });
 
+  it("completes an agent auto commit review session when the preview finds a clean worktree", async () => {
+    const user = userEvent.setup();
+    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "当前仓库无未提交改动，请直接使用 Complete。",
+      details: [
+        {
+          "@type": "GitStatus",
+          head: "4157f0c",
+          isClean: true,
+        },
+      ],
+    });
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "review",
+            canCompleteClean: false,
+            canCompleteAgentCommit: true,
+            title: null,
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_637_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 502,
+            issueId: 22,
+            issueTitle: "Review issue",
+            issueStatus: "completed",
+            canCompleteClean: false,
+            canCompleteAgentCommit: false,
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_639_000_000,
+            startedAt: 1_780_637_000_000,
+            closedAt: 1_780_639_000_000,
+          },
+        ],
+      });
+
+    render(
+      <AgentsActivity
+        activeSessionId={502}
+        projectCompletionPolicy="agent_auto_commit"
+        projectId={1}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+
+    expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 22,
+    });
+    expect(completeIssueFlowMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 22,
+    });
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByText("当前仓库无未提交改动，请直接使用 Complete。"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark done" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("marks a dirty review session done directly from completion confirmation", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock
