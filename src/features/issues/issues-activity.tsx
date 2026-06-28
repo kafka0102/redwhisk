@@ -544,15 +544,15 @@ export function IssuesActivity({
     hasLinkedSession && Boolean(onOpenAgentsActivity);
   const isEditablePageOpen = Boolean(dialogMode && isBacklogDialog);
 
-  async function handleSelectAttachment() {
+  async function handleSelectAttachment(): Promise<IssueAttachmentDraft | null> {
     const selectedPath = await open({
       directory: false,
       multiple: false,
-      title: "Select attachment",
+      title: messages.issues.addAttachment,
     });
 
     if (typeof selectedPath !== "string") {
-      return;
+      return null;
     }
 
     const attachment = buildDraftAttachment(selectedPath);
@@ -560,6 +560,7 @@ export function IssuesActivity({
       ...currentForm,
       attachments: [...currentForm.attachments, attachment],
     }));
+    return attachment;
   }
 
   function handleRemoveAttachment(
@@ -1008,7 +1009,7 @@ export function IssuesActivity({
           onCancel={closeDialog}
           onSubmit={handleSubmit}
           onFormChange={setForm}
-          onSelectAttachment={() => void handleSelectAttachment()}
+          onSelectAttachment={handleSelectAttachment}
           onPreviewAttachment={(attachment) =>
             void handlePreviewAttachment(attachment)
           }
@@ -1305,7 +1306,9 @@ function buildIssueDescription(
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
 ): string {
   const trimmedDescription = description.trimEnd();
-  const attachmentTokens = attachments.map(formatAttachmentDescriptionToken);
+  const attachmentTokens = attachments
+    .map(formatAttachmentDescriptionToken)
+    .filter((token) => !trimmedDescription.includes(token));
 
   if (attachmentTokens.length === 0) {
     return trimmedDescription;

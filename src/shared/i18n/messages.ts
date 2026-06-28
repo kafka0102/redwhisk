@@ -32,6 +32,15 @@ export interface I18nMessages {
   toast: {
     deleteSuccess: string;
   };
+  richText: {
+    bold: string;
+    heading: string;
+    headingOne: string;
+    headingTwo: string;
+    normalText: string;
+    orderedList: string;
+    unorderedList: string;
+  };
   agentNotifications: {
     needsInputTitle: (projectName: string) => string;
     permissionFallbackBody: string;
@@ -188,6 +197,7 @@ export interface I18nMessages {
     noSessionLinked: string;
     openLinkedSession: (sessionId: number) => string;
     openStatusOptions: string;
+    previewAttachment: (displayName: string) => string;
     prompt: string;
     review: string;
     run: string;
@@ -195,6 +205,8 @@ export interface I18nMessages {
     runStatus: string;
     save: string;
     session: string;
+    downloadAttachment: (displayName: string) => string;
+    removeAttachment: (displayName: string) => string;
     selectLabels: string;
     start: string;
     starting: string;
@@ -462,6 +474,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     toast: {
       deleteSuccess: "Deleted successfully",
     },
+    richText: {
+      bold: "Bold",
+      heading: "Text style",
+      headingOne: "Heading 1",
+      headingTwo: "Heading 2",
+      normalText: "Normal text",
+      orderedList: "Ordered list",
+      unorderedList: "Unordered list",
+    },
     agentNotifications: {
       needsInputTitle: (projectName) => `${projectName} needs your input`,
       permissionFallbackBody: "Agent is waiting for approval or input.",
@@ -623,6 +644,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       noSessionLinked: "No session linked.",
       openLinkedSession: (sessionId) => `Open linked session #${sessionId}`,
       openStatusOptions: "Open status options",
+      previewAttachment: (displayName) => `Preview ${displayName}`,
       prompt: "Prompt",
       review: "Review",
       run: "Run",
@@ -630,6 +652,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       runStatus: "Run status",
       save: "Save",
       session: "Session",
+      downloadAttachment: (displayName) => `Download ${displayName}`,
+      removeAttachment: (displayName) => `Remove ${displayName}`,
       selectLabels: "Select labels",
       start: "Start",
       starting: "Starting...",
@@ -905,6 +929,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     toast: {
       deleteSuccess: "删除成功",
     },
+    richText: {
+      bold: "加粗",
+      heading: "文本样式",
+      headingOne: "一级标题",
+      headingTwo: "二级标题",
+      normalText: "正文",
+      orderedList: "有序列表",
+      unorderedList: "无序列表",
+    },
     agentNotifications: {
       needsInputTitle: (projectName) => `${projectName} 需要你的输入`,
       permissionFallbackBody: "Agent 正在等待审批或输入。",
@@ -1064,6 +1097,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       noSessionLinked: "暂无关联会话。",
       openLinkedSession: (sessionId) => `打开关联会话 #${sessionId}`,
       openStatusOptions: "打开状态选项",
+      previewAttachment: (displayName) => `查看 ${displayName}`,
       prompt: "提示词",
       review: "待验收",
       run: "运行",
@@ -1071,6 +1105,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       runStatus: "运行状态",
       save: "保存",
       session: "会话",
+      downloadAttachment: (displayName) => `下载 ${displayName}`,
+      removeAttachment: (displayName) => `删除 ${displayName}`,
       selectLabels: "选择标签",
       start: "开始",
       starting: "启动中...",

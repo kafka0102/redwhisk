@@ -1,7 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
@@ -96,13 +95,11 @@ vi.mock("../features/settings/settings-commands", () => ({
 vi.mock("../features/issues/issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     ariaLabel,
-    footer,
     onChange,
     placeholder,
     value,
   }: {
     ariaLabel: string;
-    footer?: ReactNode;
     onChange: (value: string) => void;
     placeholder: string;
     value: string;
@@ -114,7 +111,6 @@ vi.mock("../features/issues/issue-description-editor", () => ({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {footer}
     </div>
   ),
 }));

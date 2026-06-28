@@ -2,7 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
@@ -88,11 +88,11 @@ vi.mock("./issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     attachments = [],
     ariaLabel,
-    footer,
     onChange,
     onDownloadAttachment,
     onPreviewAttachment,
     onRemoveAttachment,
+    onSelectAttachment,
     placeholder,
     value,
   }: {
@@ -107,11 +107,11 @@ vi.mock("./issue-description-editor", () => ({
         }
     >;
     ariaLabel: string;
-    footer?: ReactNode;
     onChange: (value: string) => void;
     onDownloadAttachment?: (attachment: unknown) => void;
     onPreviewAttachment?: (attachment: unknown) => void;
     onRemoveAttachment?: (attachment: unknown) => void;
+    onSelectAttachment?: () => Promise<unknown>;
     placeholder: string;
     value: string;
   }) => (
@@ -122,7 +122,13 @@ vi.mock("./issue-description-editor", () => ({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {footer}
+      <button
+        aria-label="Attach file"
+        type="button"
+        onClick={() => void onSelectAttachment?.()}
+      >
+        Attach file
+      </button>
       {attachments.map((attachment) => (
         <div key={"id" in attachment ? attachment.id : attachment.token}>
           <span>{attachment.displayName}</span>
