@@ -3,6 +3,43 @@ import { Bold, List, ListOrdered, Paperclip } from "lucide-react";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
 
+// Quill 内置 image blot 的 sanitize 只允许 http/https/data 协议，会把
+// `asset://localhost/...`（Tauri 在 macOS/Linux 上 convertFileSrc 的产物）
+// 清洗成 `//:0`，导致插入的图片渲染成破损图。这里覆盖 sanitize，把 Tauri 的
+// asset 协议加入白名单，使编辑器内图片能正常显示。
+interface ImageBlotConstructor {
+  new (...args: unknown[]): ImageBlotInstance;
+  blotName: string;
+  tagName: string | string[];
+  create(value?: unknown): Node;
+  sanitize(url: string): string;
+}
+
+interface ImageBlotInstance {
+  domNode: HTMLElement;
+}
+
+const NativeImageBlot = Quill.import(
+  "formats/image",
+) as unknown as ImageBlotConstructor;
+
+class AssetImageBlot extends NativeImageBlot {
+  static sanitize(url: string): string {
+    return isAllowedProtocol(url, ["http", "https", "data", "asset"])
+      ? url
+      : "//:0";
+  }
+}
+
+Quill.register("formats/image", AssetImageBlot, true);
+
+function isAllowedProtocol(url: string, allowed: string[]): boolean {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  const protocol = anchor.href.slice(0, anchor.href.indexOf(":"));
+  return allowed.includes(protocol);
+}
+
 export type RichTextAttachmentKind =
   | "image"
   | "pdf"
