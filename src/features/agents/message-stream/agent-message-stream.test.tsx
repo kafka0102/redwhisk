@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -145,12 +145,47 @@ describe("AgentMessageStream", () => {
     await waitFor(() => {
       expect(screen.getByText("Shell")).toBeInTheDocument();
     });
-    expect(screen.getAllByText(/ls -la/)).toHaveLength(2);
+    expect(screen.getAllByText(/ls -la/)).toHaveLength(1);
     expect(screen.queryByText("完成")).not.toBeInTheDocument();
     expect(screen.queryByText("Shell details")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Shell"));
+
+    expect(screen.getAllByText(/ls -la/)).toHaveLength(2);
     const output = screen.getByText("file.txt");
     const details = output.closest("details") as HTMLDetailsElement | null;
-    expect(details?.open).toBe(false);
+    expect(details?.open).toBe(true);
+    expect(screen.getByText("exit 0")).toBeInTheDocument();
+  });
+
+  it("展开工具行前不挂载大块输出内容", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "c1",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "cat large.log",
+            output: "大量输出内容",
+            exitCode: 0,
+          },
+          status: "completed",
+        },
+      ],
+    });
+    render(<AgentMessageStream projectId={1} sessionId={13} />);
+    await waitFor(() => {
+      expect(screen.getByText("Shell")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("大量输出内容")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Shell"));
+
+    expect(screen.getByText("大量输出内容")).toBeInTheDocument();
     expect(screen.getByText("exit 0")).toBeInTheDocument();
   });
 
@@ -207,12 +242,16 @@ describe("AgentMessageStream", () => {
     expect(
       screen.queryByText("Search details and 1 result"),
     ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Claude 最新模型")).toHaveLength(1);
+
+    fireEvent.click(screen.getByText("Search"));
+
     const queryTexts = screen.getAllByText("Claude 最新模型");
     expect(queryTexts).toHaveLength(2);
-    const details = queryTexts[0]?.closest(
+    const details = queryTexts[1]?.closest(
       "details",
     ) as HTMLDetailsElement | null;
-    expect(details?.open).toBe(false);
+    expect(details?.open).toBe(true);
     expect(screen.getByText("Mode")).toBeInTheDocument();
     expect(screen.getByText("content")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute(
