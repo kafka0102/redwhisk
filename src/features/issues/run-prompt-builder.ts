@@ -34,9 +34,13 @@ export function buildRunPromptPreview(
   const issueDescription = stripAttachmentTokens(
     input.issue.description,
   ).trim();
+  // 附件实际存储在 ~/.redwhisk/issues/{id}/attachments/ 下（data_dir），不在项目
+  // 工作区内；relativePath 形如 ".redwhisk/issues/{id}/..." 是相对于项目根的路径，
+  // agent 在项目 cwd 下根本读不到该文件。这里必须用 absolutePath，agent 才能真正
+  // 读取附件（图片、文档等）。
   const attachmentPaths =
     input.issue.attachments
-      ?.map((attachment) => attachment.relativePath.trim())
+      ?.map((attachment) => attachment.absolutePath.trim())
       .filter((path) => path.length > 0) ?? [];
   const configuredSkills = parseDefaultSkills(input.profile.defaultSkill);
   const selectedWorkflowSkill = input.selectedWorkflowSkill ?? null;

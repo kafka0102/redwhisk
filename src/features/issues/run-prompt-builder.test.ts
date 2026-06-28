@@ -99,16 +99,12 @@ describe("buildRunPromptPreview", () => {
     });
 
     expect(preview.finalPrompt).toContain("Read the config.");
-    expect(preview.finalPrompt).toContain(
-      ".redwhisk/issues/1/attachments/12-tsconfig.json",
-    );
-    expect(preview.finalPrompt).toContain(
-      ".redwhisk/issues/1/attachments/13-screenshot.png",
-    );
+    expect(preview.finalPrompt).toContain("/tmp/12-tsconfig.json");
+    expect(preview.finalPrompt).toContain("/tmp/13-screenshot.png");
     expect(
       preview.sources.find((source) => source.id === "issue-attachments")
         ?.content,
-    ).toContain(".redwhisk/issues/1/attachments/12-tsconfig.json");
+    ).toContain("/tmp/12-tsconfig.json");
   });
 
   it("strips both bare token lines and image placeholder lines from the description", () => {
