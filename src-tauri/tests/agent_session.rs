@@ -185,7 +185,7 @@ fn issue_completion_flow_repository_upserts_finds_and_clears_by_issue_id() {
         None,
     );
 
-    let mut transaction = database
+    let transaction = database
         .connection
         .unchecked_transaction()
         .expect("transaction");
