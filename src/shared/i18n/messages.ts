@@ -1382,12 +1382,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
 };
 
 export function getInitialLocale(): Locale {
-  try {
-    const storedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    return storedLocale === "zh" || storedLocale === "en" ? storedLocale : "en";
-  } catch {
-    return "en";
-  }
+  return "zh";
 }
 
 export function getInitialThemePreference(): ThemePreference {

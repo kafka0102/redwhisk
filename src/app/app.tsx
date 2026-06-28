@@ -331,7 +331,7 @@ function ProjectApp() {
     );
 
     return (
-      <I18nProvider>
+      <I18nProvider fixedLocale={defaultLocale}>
         {statusMessages.length > 0 ? (
           <div className="local-data-status-stack">
             {statusMessages.map((status) => (
@@ -365,7 +365,7 @@ function ProjectApp() {
   }
 
   return (
-    <I18nProvider>
+    <I18nProvider fixedLocale={defaultLocale}>
       <>
         <AppShell
           onCreateProject={handleCreateProjectFromSwitcher}
@@ -599,10 +599,5 @@ function CreateProjectDialog({
 }
 
 function getDefaultLocale(): Locale {
-  try {
-    const storedLocale = window.localStorage.getItem("redwhisk.locale");
-    return storedLocale === "zh" || storedLocale === "en" ? storedLocale : "en";
-  } catch {
-    return "en";
-  }
+  return "zh";
 }

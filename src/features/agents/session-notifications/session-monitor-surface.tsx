@@ -20,7 +20,7 @@ export function SessionMonitorSurface({
   }, []);
 
   return (
-    <I18nProvider>
+    <I18nProvider fixedLocale="zh">
       <main className="session-monitor-surface">
         <AgentSessionMonitorButton
           mode="desktop"

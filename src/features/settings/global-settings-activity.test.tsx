@@ -23,7 +23,7 @@ const openSessionMonitorWindowMock = vi.mocked(openSessionMonitorWindow);
 
 function renderGlobalSettings() {
   return render(
-    <I18nProvider>
+    <I18nProvider fixedLocale="zh">
       <GlobalSettingsActivity />
     </I18nProvider>,
   );
@@ -44,50 +44,59 @@ describe("GlobalSettingsActivity", () => {
     });
   });
 
-  it("renders Preferences with English language and Light theme by default", () => {
+  it("renders Preferences in Chinese with Light theme by default", () => {
     renderGlobalSettings();
 
     expect(
-      screen.getByRole("navigation", { name: "Global Settings menu" }),
+      screen.getByRole("navigation", { name: "全局设置菜单" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Preferences" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "偏好设置" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     expect(
-      screen.getByRole("heading", { name: "Preferences" }),
+      screen.getByRole("heading", { name: "偏好设置" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute(
+    expect(screen.queryByRole("button", { name: "English" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "中文" })).toBeNull();
+    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "跟随系统" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
     expect(
       screen.getByRole("switch", {
-        name: "Enable notification floating window",
+        name: "启用通知浮窗",
       }),
     ).toHaveAttribute("aria-checked", "true");
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("ignores the stored English locale preference", () => {
+    window.localStorage.setItem("redwhisk.locale", "en");
+
+    renderGlobalSettings();
+
+    expect(
+      screen.getByRole("heading", { name: "偏好设置" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Preferences" })).toBeNull();
   });
 
   it("persists Dark theme and applies it to the document root", async () => {
     const user = userEvent.setup();
     renderGlobalSettings();
 
-    await user.click(screen.getByRole("button", { name: "Dark" }));
+    await user.click(screen.getByRole("button", { name: "深色" }));
 
-    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -100,9 +109,9 @@ describe("GlobalSettingsActivity", () => {
     const user = userEvent.setup();
     renderGlobalSettings();
 
-    await user.click(screen.getByRole("button", { name: "System" }));
+    await user.click(screen.getByRole("button", { name: "跟随系统" }));
 
-    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "跟随系统" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -110,25 +119,11 @@ describe("GlobalSettingsActivity", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
   });
 
-  it("switches Preferences labels to Chinese immediately", async () => {
-    const user = userEvent.setup();
-    renderGlobalSettings();
-
-    await user.click(screen.getByRole("button", { name: "Chinese" }));
-
-    expect(
-      screen.getByRole("heading", { name: "偏好设置" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("语言")).toBeInTheDocument();
-    expect(screen.getByText("主题")).toBeInTheDocument();
-    expect(window.localStorage.getItem("redwhisk.locale")).toBe("zh");
-  });
-
   it("uses the shared sidebar width by default", () => {
     renderGlobalSettings();
 
     const splitter = screen.getByRole("separator", {
-      name: "Resize settings menu",
+      name: "调整设置菜单宽度",
     });
 
     expect(splitter).toHaveAttribute("aria-valuemin", "180");
@@ -142,7 +137,7 @@ describe("GlobalSettingsActivity", () => {
 
     await user.click(
       screen.getByRole("switch", {
-        name: "Enable notification floating window",
+        name: "启用通知浮窗",
       }),
     );
 
@@ -162,7 +157,7 @@ describe("GlobalSettingsActivity", () => {
 
     await user.click(
       screen.getByRole("switch", {
-        name: "Enable notification floating window",
+        name: "启用通知浮窗",
       }),
     );
 
