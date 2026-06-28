@@ -42,7 +42,18 @@ vi.mock("quill", () => {
       quillInstances.push(this);
     }
 
-    static import = vi.fn();
+    static import = vi.fn((name: string) => {
+      if (name === "formats/image") {
+        return class FakeImageBlot {
+          static blotName = "image";
+          static tagName = "IMG";
+          static sanitize(url: string) {
+            return url;
+          }
+        };
+      }
+      return undefined;
+    });
     static register = vi.fn();
   }
 
