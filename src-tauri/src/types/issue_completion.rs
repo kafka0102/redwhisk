@@ -92,6 +92,7 @@ pub struct CompleteIssueFlowResult {
     pub issue: IssueRecord,
     pub flow: Option<IssueCompletionFlowRecord>,
     pub message: String,
+    pub merge_block_reason: Option<String>,
     pub target_branch: Option<String>,
     pub workspace_branch: Option<String>,
     pub workspace_path: Option<String>,

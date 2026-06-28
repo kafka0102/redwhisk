@@ -27,8 +27,29 @@ pub enum GitWorktreeError {
     GitCommandFailed { command: String, message: String },
     #[error("git command output for {command} was not utf8: {message}")]
     GitOutputInvalid { command: String, message: String },
+    #[error("{role} worktree has uncommitted changes at {path}: {files}")]
+    DirtyWorktree {
+        role: GitWorktreeDirtyRole,
+        path: String,
+        files: String,
+    },
     #[error("worktree root path could not be prepared: {0}")]
     WorktreeRootInvalid(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitWorktreeDirtyRole {
+    Target,
+    Workspace,
+}
+
+impl std::fmt::Display for GitWorktreeDirtyRole {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Target => formatter.write_str("target"),
+            Self::Workspace => formatter.write_str("workspace"),
+        }
+    }
 }
 
 pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo, GitWorktreeError> {
@@ -160,8 +181,13 @@ pub fn rebase_and_fast_forward(
     target_branch: &str,
     workspace_branch: &str,
 ) -> Result<(), GitWorktreeError> {
-    rebase_branch_onto(worktree_path, workspace_branch, target_branch)?;
-    fast_forward_branch(repo_path, target_branch, workspace_branch)
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let worktree_path = ensure_repo_dir(worktree_path.as_ref())?;
+    ensure_clean_worktree(&repo_path, GitWorktreeDirtyRole::Target)?;
+    ensure_clean_worktree(&worktree_path, GitWorktreeDirtyRole::Workspace)?;
+    rebase_branch_onto(&worktree_path, workspace_branch, target_branch)?;
+    ensure_clean_worktree(&repo_path, GitWorktreeDirtyRole::Target)?;
+    fast_forward_branch(&repo_path, target_branch, workspace_branch)
 }
 
 pub fn merge_branch_into_target(
@@ -283,6 +309,33 @@ fn prepare_worktree_root(path: &Path) -> Result<PathBuf, GitWorktreeError> {
     fs::create_dir_all(path)
         .map_err(|_| GitWorktreeError::WorktreeRootInvalid(path.to_string_lossy().to_string()))?;
     Ok(path.to_path_buf())
+}
+
+fn ensure_clean_worktree(
+    repo_path: &Path,
+    role: GitWorktreeDirtyRole,
+) -> Result<(), GitWorktreeError> {
+    let output = run_git(repo_path, &["status", "--porcelain"])?;
+    let files = output
+        .lines()
+        .map(format_status_line_path)
+        .filter(|path| !path.is_empty())
+        .take(10)
+        .collect::<Vec<_>>();
+
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    Err(GitWorktreeError::DirtyWorktree {
+        role,
+        path: repo_path.to_string_lossy().to_string(),
+        files: files.join(", "),
+    })
+}
+
+fn format_status_line_path(line: &str) -> String {
+    line.get(3..).unwrap_or(line).trim().to_string()
 }
 
 fn unique_worktree_path(root: &Path, issue_id: i64) -> PathBuf {

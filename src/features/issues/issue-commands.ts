@@ -238,6 +238,7 @@ export interface CompleteIssueFlowResult {
   issue: IssueRecord;
   flow?: IssueCompletionFlowRecord | null;
   message: string;
+  mergeBlockReason?: string | null;
   targetBranch?: string | null;
   workspaceBranch?: string | null;
   workspacePath?: string | null;
