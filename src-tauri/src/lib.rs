@@ -99,6 +99,7 @@ pub fn run() {
             commands::agent_session_commands::save_agent_attachment,
             commands::agent_session_commands::read_agent_timeline,
             commands::session_workspace_commands::get_project_worktree_changes,
+            commands::session_workspace_commands::get_project_worktree_commit_history,
             commands::session_workspace_commands::get_project_worktree_file_tree,
             commands::session_workspace_commands::read_project_worktree_file,
             commands::session_workspace_commands::read_project_worktree_diff,

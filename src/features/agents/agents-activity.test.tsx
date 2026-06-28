@@ -41,9 +41,12 @@ import appCss from "../../app/app.css?raw";
 import tokensCss from "../../shared/styles/tokens.css?raw";
 import {
   getProjectWorktreeChanges,
+  getProjectWorktreeCommitHistory,
   getProjectWorktreeFileTree,
   readProjectWorktreeDiff,
   readProjectWorktreeFile,
+  type WorkspaceCommitChangedFile,
+  type WorkspaceCommitRecord,
   type WorkspaceChangedFile,
   type WorkspaceChangeKind,
   type WorkspaceFileTreeNode,
@@ -121,6 +124,7 @@ vi.mock("./agent-session-commands", () => ({
 
 vi.mock("./session-workspace-commands", () => ({
   getProjectWorktreeChanges: vi.fn(),
+  getProjectWorktreeCommitHistory: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
   readProjectWorktreeDiff: vi.fn(),
   readProjectWorktreeFile: vi.fn(),
@@ -178,6 +182,9 @@ const sendAgentCommitPromptMock = vi.mocked(sendAgentCommitPrompt);
 const updateIssueMock = vi.mocked(updateIssue);
 const openPathMock = vi.mocked(openPath);
 const getProjectWorktreeChangesMock = vi.mocked(getProjectWorktreeChanges);
+const getProjectWorktreeCommitHistoryMock = vi.mocked(
+  getProjectWorktreeCommitHistory,
+);
 const getProjectWorktreeFileTreeMock = vi.mocked(getProjectWorktreeFileTree);
 const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
 const readProjectWorktreeFileMock = vi.mocked(readProjectWorktreeFile);
@@ -282,6 +289,35 @@ function changedFile(
   };
 }
 
+function committedFile(
+  filePath: string,
+  status: WorkspaceCommitChangedFile["status"],
+  oldPath: string | null = null,
+): WorkspaceCommitChangedFile {
+  return {
+    filePath,
+    oldPath,
+    fileName: getLastPathSegment(filePath),
+    kind: status === "A" ? "added" : status === "R" ? "renamed" : "modified",
+    status,
+  };
+}
+
+function commitRecord(
+  hash: string,
+  message: string,
+  files: WorkspaceCommitChangedFile[],
+): WorkspaceCommitRecord {
+  return {
+    hash,
+    shortHash: hash.slice(0, 7),
+    message,
+    authorName: "yujianjia",
+    committedAt: 1_780_638_000_000,
+    files,
+  };
+}
+
 function fileNode(path: string): WorkspaceFileTreeNode {
   return {
     id: path,
@@ -337,6 +373,7 @@ describe("AgentsActivity", () => {
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockReset();
     getProjectWorktreeFileTreeMock.mockReset();
     readProjectWorktreeDiffMock.mockReset();
     readProjectWorktreeFileMock.mockReset();
@@ -491,6 +528,10 @@ describe("AgentsActivity", () => {
         changedFile("src/app/app.css", "modified"),
         changedFile("src/features/agents/agents-activity.test.tsx", "modified"),
       ],
+    });
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "default-commits",
+      commits: [],
     });
     getProjectWorktreeFileTreeMock.mockResolvedValue({
       signature: "default-tree",
@@ -743,6 +784,69 @@ describe("AgentsActivity", () => {
       await screen.findByRole("button", { name: /two.ts/ }),
     ).toBeInTheDocument();
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads committed branch history and expands changed files", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commit-history",
+      commits: [
+        commitRecord("abcdef1234567890", "fix(web): 补齐列表标题宽度限制", [
+          committedFile(
+            "apps/web/src/pages/event/index/index.module.scss",
+            "M",
+          ),
+          committedFile("apps/web/src/pages/event/index/index.tsx", "R"),
+          committedFile("apps/web/src/pages/problem/index/index.tsx", "A"),
+        ]),
+      ],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    const panel = await screen.findByRole("complementary", {
+      name: "Session side panel",
+    });
+
+    await user.click(
+      within(panel).getByRole("button", { name: "Uncommitted" }),
+    );
+    await user.click(
+      within(panel).getByRole("menuitem", { name: "Committed" }),
+    );
+
+    const commitButton = await within(panel).findByRole("button", {
+      name: /fix\(web\): 补齐列表标题宽度限制/,
+    });
+    expect(commitButton).toBeInTheDocument();
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 301,
+    });
+
+    await user.click(commitButton);
+
+    const eventFile = within(panel).getByRole("listitem", {
+      name: /index\.module\.scss apps\/web\/src\/pages\/event\/index M/,
+    });
+    expect(
+      within(eventFile).getByText("index.module.scss"),
+    ).toBeInTheDocument();
+    expect(
+      within(eventFile).getByText("apps/web/src/pages/event/index"),
+    ).toBeInTheDocument();
+    expect(within(eventFile).getByText("M")).toHaveClass(
+      "session-commit-file__status--modified",
+    );
+    expect(within(panel).getByText("R")).toHaveClass(
+      "session-commit-file__status--renamed",
+    );
+    expect(within(panel).getByText("A")).toHaveClass(
+      "session-commit-file__status--added",
+    );
   });
 
   it("refreshes the file tree while the files tab is active", async () => {
