@@ -5742,6 +5742,90 @@ details[open] > summary .agents-message__summary-chevron {
 
 .agents-message__output--diff {
   color: var(--color-text-muted);
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+}
+
+.agents-message__diff-code {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.agents-message__diff-line {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  min-height: 17px;
+  padding: 0 8px;
+}
+
+.agents-message__diff-line--add {
+  background: rgba(36, 148, 71, 0.12);
+}
+
+.agents-message__diff-line--delete {
+  background: rgba(180, 35, 24, 0.1);
+}
+
+.agents-message__diff-line--hunk {
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+}
+
+.agents-message__diff-line--meta {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__diff-prefix {
+  color: var(--color-text-subtle);
+  user-select: none;
+}
+
+.agents-message__diff-line--add .agents-message__diff-prefix {
+  color: var(--color-lane-review-marker);
+}
+
+.agents-message__diff-line--delete .agents-message__diff-prefix {
+  color: var(--color-danger);
+}
+
+.agents-message__diff-content {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agents-message__syntax--comment {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__syntax--decorator,
+.agents-message__syntax--keyword {
+  color: #7c4dff;
+}
+
+.agents-message__syntax--function {
+  color: #0b6fcb;
+}
+
+.agents-message__syntax--literal,
+.agents-message__syntax--number {
+  color: #9a5b00;
+}
+
+.agents-message__syntax--property,
+.agents-message__syntax--type,
+.agents-message__syntax--variable {
+  color: #9950b8;
+}
+
+.agents-message__syntax--string {
+  color: #237a3b;
+}
+
+.agents-message__syntax--operator {
+  color: var(--color-text-subtle);
 }
 
 .agents-message__exit-code {

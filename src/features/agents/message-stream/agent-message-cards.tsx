@@ -28,6 +28,7 @@ import type {
   ToolCallStatus,
 } from "../agent-stream-types";
 import { AgentMarkdown } from "./agent-markdown";
+import { HighlightedDiffBlock } from "./highlighted-diff-block";
 import type { MessageStreamEntry } from "./message-stream-types";
 
 interface AgentMessageCardsProps {
@@ -322,9 +323,7 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
-              <pre className="agents-message__output agents-message__output--diff">
-                {detail.diff}
-              </pre>
+              <HighlightedDiffBlock diff={detail.diff} path={detail.path} />
             </div>
           ) : null}
         </div>
