@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Read-only issue detail actions
 The read-only Issue detail page SHALL expose low-risk primary actions in the header and move secondary or destructive actions into a more menu.
