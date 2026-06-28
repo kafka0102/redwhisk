@@ -1731,18 +1731,24 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
-.rich-text-editor__attachment-embed {
-  margin: 8px 0;
-}
-
-.rich-text-editor__attachment-image {
+.rich-text-editor__surface .ql-editor img {
   display: block;
   max-width: 100%;
   max-height: 260px;
-  margin-bottom: 6px;
+  margin: 8px 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   object-fit: contain;
+}
+
+.rich-text-editor__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 128px;
+  padding: 8px;
+  overflow: auto;
+  border-top: 1px solid var(--color-border);
 }
 
 .rich-text-editor__attachment-card {
