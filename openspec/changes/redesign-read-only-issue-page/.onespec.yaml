@@ -1,0 +1,22 @@
+version: 1
+change: redesign-read-only-issue-page
+phase: review
+ambiguity: unknown
+complexity: unknown
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/redesign-read-only-issue-page/.onespec.yaml
+handoff_purpose: review
+handoff_summary: review handoff from 4 file(s); primary artifact: openspec/changes/redesign-read-only-issue-page/proposal.md
+handoff_hash: b41f7684e217019cc765a743f9b2bda623565d5cf3a782cd0a4ab40a8c1dc89f
+touched_files_b64: b3BlbnNwZWMvY2hhbmdlcy9yZWRlc2lnbi1yZWFkLW9ubHktaXNzdWUtcGFnZS9wcm9wb3NhbC5tZApvcGVuc3BlYy9jaGFuZ2VzL3JlZGVzaWduLXJlYWQtb25seS1pc3N1ZS1wYWdlL3NwZWNzL2lzc3Vlcy11aS9zcGVjLm1kCg==
+review_result: pending
+archive: pending
+created_at: 2026-06-28
+updated_at: 2026-06-28T15:33:00Z
