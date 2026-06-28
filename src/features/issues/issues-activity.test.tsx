@@ -2828,6 +2828,7 @@ describe("IssuesActivity", () => {
       issue: reviewWithSession,
       flow: null,
       message: "Agent worktree 合并被阻止，请手动处理冲突。",
+      mergeBlockReason: "merge_conflict",
       targetBranch: "dev",
       workspaceBranch: "issue-506",
       workspacePath: "/tmp/worktrees/issue-506",
@@ -2864,6 +2865,48 @@ describe("IssuesActivity", () => {
     expect(
       screen.queryByRole("dialog", { name: "Complete issue" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the specific worktree merge blocker instead of handing non-conflicts to the agent", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 516,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "agent_merge_blocked",
+      issue: reviewWithSession,
+      flow: null,
+      message:
+        "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先在目标分支工作区提交、暂存或丢弃这些改动：base.txt。",
+      mergeBlockReason: "target_worktree_dirty",
+      targetBranch: "dev",
+      workspaceBranch: "issue-516",
+      workspacePath: "/tmp/worktrees/issue-516",
+      sessionId: 516,
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    expect(
+      await screen.findByText(/目标分支工作区存在未提交改动/),
+    ).toBeInTheDocument();
+    expect(injectAgentSessionPromptMock).not.toHaveBeenCalled();
+    expect(onOpenAgentsActivity).not.toHaveBeenCalled();
   });
 
   it("soft deletes an issue after confirmation and removes it from the list", async () => {

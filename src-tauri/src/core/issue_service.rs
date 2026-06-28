@@ -25,7 +25,10 @@ use crate::git::operation_state::GitOperationState;
 use crate::git::status::{
     detect_commit_result, read_git_snapshot, GitCommitDetectionResult, GitSnapshot,
 };
-use crate::git::worktree::{cleanup_worktree, is_branch_merged, rebase_and_fast_forward};
+use crate::git::worktree::{
+    cleanup_worktree, is_branch_merged, rebase_and_fast_forward, GitWorktreeDirtyRole,
+    GitWorktreeError,
+};
 use crate::types::agent_session::{
     AgentSessionPromptKind, AgentSessionRecord, AgentSessionStatus, InjectAgentSessionPromptInput,
     InjectAgentSessionPromptResult, WorkspaceMode, WorktreeOwner,
@@ -1148,6 +1151,7 @@ impl<'connection> IssueService<'connection> {
                     if let Err(error) =
                         rebase_fast_forward_and_cleanup(&project.repo_path, &session)
                     {
+                        let merge_block = describe_worktree_merge_block(&error);
                         let flow = self.upsert_completion_flow(
                             issue.id,
                             Some(session.id),
@@ -1157,11 +1161,12 @@ impl<'connection> IssueService<'connection> {
                             &session,
                             Some(&error.to_string()),
                         )?;
-                        return Ok(self.flow_result(
+                        return Ok(self.flow_result_with_merge_block(
                             CompleteIssueFlowAction::AgentMergeBlocked,
                             issue,
                             Some(flow),
-                            "Agent worktree 合并被阻止，请手动处理冲突。".to_string(),
+                            merge_block.message,
+                            Some(merge_block.reason),
                             &session,
                         ));
                     }
@@ -1208,6 +1213,7 @@ impl<'connection> IssueService<'connection> {
                         if let Err(error) =
                             rebase_fast_forward_and_cleanup(&project.repo_path, &session)
                         {
+                            let merge_block = describe_worktree_merge_block(&error);
                             let flow = self.upsert_completion_flow(
                                 issue.id,
                                 Some(session.id),
@@ -1217,11 +1223,12 @@ impl<'connection> IssueService<'connection> {
                                 &session,
                                 Some(&error.to_string()),
                             )?;
-                            return Ok(self.flow_result(
+                            return Ok(self.flow_result_with_merge_block(
                                 CompleteIssueFlowAction::AgentMergeBlocked,
                                 issue,
                                 Some(flow),
-                                "Agent worktree 合并被阻止，请手动处理冲突。".to_string(),
+                                merge_block.message,
+                                Some(merge_block.reason),
                                 &session,
                             ));
                         }
@@ -1431,11 +1438,24 @@ impl<'connection> IssueService<'connection> {
         message: String,
         session: &AgentSessionRecord,
     ) -> CompleteIssueFlowResult {
+        self.flow_result_with_merge_block(action, issue, flow, message, None, session)
+    }
+
+    fn flow_result_with_merge_block(
+        &self,
+        action: CompleteIssueFlowAction,
+        issue: IssueRecord,
+        flow: Option<IssueCompletionFlowRecord>,
+        message: String,
+        merge_block_reason: Option<String>,
+        session: &AgentSessionRecord,
+    ) -> CompleteIssueFlowResult {
         CompleteIssueFlowResult {
             action,
             issue,
             flow,
             message,
+            merge_block_reason,
             target_branch: session
                 .origin_branch
                 .clone()
@@ -2447,6 +2467,50 @@ fn rebase_fast_forward_and_cleanup(
     Ok(())
 }
 
+struct WorktreeMergeBlockDescription {
+    reason: String,
+    message: String,
+}
+
+fn describe_worktree_merge_block(error: &GitWorktreeError) -> WorktreeMergeBlockDescription {
+    match error {
+        GitWorktreeError::DirtyWorktree { role, path, files } => match role {
+            GitWorktreeDirtyRole::Target => WorktreeMergeBlockDescription {
+                reason: "target_worktree_dirty".to_string(),
+                message: format!(
+                    "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先在目标分支工作区提交、暂存或丢弃这些改动：{files}。工作区：{path}"
+                ),
+            },
+            GitWorktreeDirtyRole::Workspace => WorktreeMergeBlockDescription {
+                reason: "workspace_worktree_dirty".to_string(),
+                message: format!(
+                    "Agent worktree 存在未提交改动，无法自动合入目标分支。请先提交或处理这些改动：{files}。工作区：{path}"
+                ),
+            },
+        },
+        GitWorktreeError::GitCommandFailed { command, message }
+            if is_likely_merge_conflict(command, message) =>
+        {
+            WorktreeMergeBlockDescription {
+                reason: "merge_conflict".to_string(),
+                message: "Agent worktree 合并发生冲突，请手动处理冲突。".to_string(),
+            }
+        }
+        _ => WorktreeMergeBlockDescription {
+            reason: "git_command_failed".to_string(),
+            message: format!("Agent worktree 合入失败：{error}"),
+        },
+    }
+}
+
+fn is_likely_merge_conflict(command: &str, message: &str) -> bool {
+    (command.contains(" rebase ") || command.contains(" merge "))
+        && (message.contains("CONFLICT")
+            || message.contains("could not apply")
+            || message.contains("Automatic merge failed")
+            || message.contains("fix conflicts"))
+}
+
 fn redwhisk_missing_worktree_is_closed_out(
     repo_path: &str,
     session: &AgentSessionRecord,
@@ -3196,6 +3260,76 @@ mod tests {
         assert_eq!(completion_result, "completed");
     }
 
+    #[test]
+    fn complete_issue_flow_reports_dirty_target_worktree_when_worktree_merge_is_blocked() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        let target_branch = git_output(&repo_dir, &["branch", "--show-current"]);
+
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                &target_branch,
+            ],
+        );
+        fs::write(worktree_path.join("base.txt"), "issue change\n").expect("write worktree change");
+        git(&worktree_path, &["add", "base.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+        fs::write(repo_dir.join("base.txt"), "local base change\n")
+            .expect("write dirty target change");
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET working_dir = ?1,
+                     status = 'running',
+                     workspace_mode = 'worktree',
+                     target_branch = ?2,
+                     workspace_branch = 'issue-16',
+                     workspace_path = ?1,
+                     origin_branch = ?2,
+                     worktree_owner = 'redwhisk',
+                     closed_at = NULL
+                 WHERE id = 30",
+                params![worktree_path.to_string_lossy().to_string(), target_branch,],
+            )
+            .expect("update session worktree metadata");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    external_worktree_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue flow");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::AgentMergeBlocked);
+        assert_eq!(
+            result.merge_block_reason.as_deref(),
+            Some("target_worktree_dirty")
+        );
+        assert!(result.message.contains("目标分支工作区存在未提交改动"));
+        assert!(result.message.contains("工作区："));
+    }
+
     fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
         let connection = Connection::open_in_memory().expect("open database");
         MigrationRunner::default()
@@ -3269,5 +3403,23 @@ mod tests {
             args.join(" "),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    fn git_output(repo_dir: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("git stdout utf8")
+            .trim()
+            .to_string()
     }
 }

@@ -841,11 +841,15 @@ export function IssuesActivity({
 
       if (result.action === "agent_merge_blocked") {
         setCompletionProgress(null);
+        if (result.mergeBlockReason !== "merge_conflict") {
+          throw new Error(result.message);
+        }
         throw new WorktreeMergeConflictError({
           sessionId: result.sessionId,
           targetBranch: result.targetBranch ?? undefined,
           workspaceBranch: result.workspaceBranch ?? undefined,
           workspacePath: result.workspacePath ?? undefined,
+          message: result.message,
         });
       }
 
@@ -1149,6 +1153,7 @@ interface WorktreeMergeDetail {
   targetBranch?: string;
   workspaceBranch?: string;
   workspacePath?: string;
+  message?: string;
 }
 
 function getCompletionProgressTitle(locale: string): string {
@@ -1212,7 +1217,7 @@ function buildWorktreeMergeConflictPrompt(
 
   if (locale === "zh") {
     return [
-      "代码合并存在冲突，需要你接管处理。",
+      detail.message || "代码合并存在冲突，需要你接管处理。",
       `请解决临时分支 ${workspaceBranch} 合并到最初记录的目标分支 ${targetBranch} 时产生的冲突。`,
       `相关 worktree：${workspacePath}`,
       "解决冲突后，请完成合并并确保代码最终合入目标分支。",
@@ -1220,7 +1225,7 @@ function buildWorktreeMergeConflictPrompt(
   }
 
   return [
-    "A merge conflict was detected and needs your help.",
+    detail.message || "A merge conflict was detected and needs your help.",
     `Please resolve the conflicts from merging ${workspaceBranch} into the originally recorded target branch ${targetBranch}.`,
     `Related worktree: ${workspacePath}`,
     "After resolving conflicts, complete the merge and make sure the code lands on the target branch.",
