@@ -192,5 +192,9 @@ async function deliverSessionStatusNotification({
     return;
   }
 
+  if (session.status === "closed" && (await transport.isWindowFocused())) {
+    return;
+  }
+
   await deliverNotification(intent, transport);
 }

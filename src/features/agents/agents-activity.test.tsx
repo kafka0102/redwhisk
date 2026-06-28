@@ -3094,6 +3094,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("该 issue 已标记完成");
   });
 
   it("marks a dirty review session done directly from completion confirmation", async () => {

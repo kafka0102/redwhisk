@@ -234,6 +234,41 @@ describe("useAgentSessionNotifications", () => {
     );
   });
 
+  it("does not show the long completion summary as an in-app notification when focused", async () => {
+    const transport = createTransport({ isWindowFocused: true });
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [session({ sessionId: 8, status: "running" })],
+      })
+      .mockResolvedValue({
+        sessions: [session({ sessionId: 8, status: "closed" })],
+      });
+    readAgentTimelineMock.mockResolvedValue({
+      effort: null,
+      items: [
+        { type: "user_message", text: "Mark the issue done." },
+        {
+          type: "assistant_message",
+          text: "Summary: finished with status completed and lots of detail.",
+        },
+      ],
+    });
+
+    await renderProbe({ pollIntervalMs: 10, transport });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    expect(readAgentTimelineMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 8,
+    });
+    expect(transport.showInAppNotification).not.toHaveBeenCalled();
+    expect(transport.sendSystemNotification).not.toHaveBeenCalled();
+    expect(transport.requestAttention).not.toHaveBeenCalled();
+  });
+
   it("sends an urgent notification when a running session crashes", async () => {
     const transport = createTransport({ isWindowFocused: false });
     listAgentSessionsMock
