@@ -25,9 +25,7 @@ use crate::git::operation_state::GitOperationState;
 use crate::git::status::{
     detect_commit_result, read_git_snapshot, GitCommitDetectionResult, GitSnapshot,
 };
-use crate::git::worktree::{
-    cleanup_worktree, is_branch_merged, merge_branch_into_target, rebase_and_fast_forward,
-};
+use crate::git::worktree::{cleanup_worktree, is_branch_merged, rebase_and_fast_forward};
 use crate::types::agent_session::{
     AgentSessionPromptKind, AgentSessionRecord, AgentSessionStatus, InjectAgentSessionPromptInput,
     InjectAgentSessionPromptResult, WorkspaceMode, WorktreeOwner,
@@ -60,11 +58,6 @@ pub struct IssueService<'connection> {
     issue_attachment_repository: IssueAttachmentRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
     data_dir: PathBuf,
-}
-
-struct ReviewCompletionContext {
-    issue: IssueRecord,
-    linked_session_id: i64,
 }
 
 struct AgentCommitContext {
@@ -2373,49 +2366,6 @@ impl<'connection> IssueService<'connection> {
 
         Ok(completed_issue)
     }
-
-    fn load_review_completion_context_in_transaction(
-        &self,
-        transaction: &rusqlite::Transaction<'_>,
-        project_id: i64,
-        issue_id: i64,
-    ) -> Result<ReviewCompletionContext, CommandError> {
-        let issue = IssueRepository::find_by_id_in_transaction(transaction, issue_id)
-            .map_err(issue_database_error)?
-            .filter(|issue| issue.project_id == project_id)
-            .ok_or_else(|| issue_not_found(issue_id))?;
-
-        if issue.status != IssueStatus::Review {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有待验收 Issue 可以直接完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", issue_id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            ));
-        }
-
-        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
-            transaction,
-            project_id,
-            issue_id,
-        )
-        .map_err(issue_database_error)?
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以直接完成。",
-            )
-            .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", issue_id))
-        })?;
-
-        Ok(ReviewCompletionContext {
-            issue,
-            linked_session_id,
-        })
-    }
 }
 
 fn infer_data_dir_from_connection(connection: &rusqlite::Connection) -> PathBuf {
@@ -2440,35 +2390,6 @@ fn open_issue_database(
         })?;
 
     Ok(database)
-}
-
-fn finalize_worktree_completion(
-    repo_path: &str,
-    session: &AgentSessionRecord,
-) -> Result<(), crate::git::status::GitStatusError> {
-    let Some(target_branch) = session.target_branch.as_deref() else {
-        return Ok(());
-    };
-    let Some(workspace_branch) = session.workspace_branch.as_deref() else {
-        return Ok(());
-    };
-    let Some(workspace_path) = session.workspace_path.as_deref() else {
-        return Ok(());
-    };
-    if !Path::new(workspace_path).exists() {
-        return Ok(());
-    }
-
-    if !is_branch_merged(repo_path, target_branch, workspace_branch)
-        .map_err(map_worktree_git_error)?
-    {
-        merge_branch_into_target(repo_path, target_branch, workspace_branch)
-            .map_err(map_worktree_git_error)?;
-    }
-
-    cleanup_worktree(repo_path, workspace_path, workspace_branch)
-        .map_err(map_worktree_git_error)?;
-    Ok(())
 }
 
 fn rebase_fast_forward_and_cleanup(
@@ -2578,47 +2499,6 @@ fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> Comma
     };
     CommandError::new(CommandErrorCode::IssueValidationFailed, message)
         .with_detail(ErrorDetail::new("CompletionFlow").with_value("action", format!("{action:?}")))
-}
-
-fn map_worktree_git_error(
-    error: crate::git::worktree::GitWorktreeError,
-) -> crate::git::status::GitStatusError {
-    match error {
-        crate::git::worktree::GitWorktreeError::InvalidRepoPath(path) => {
-            crate::git::status::GitStatusError::InvalidRepoPath(path)
-        }
-        crate::git::worktree::GitWorktreeError::GitCommandFailed { command, message } => {
-            crate::git::status::GitStatusError::GitCommandFailed { command, message }
-        }
-        crate::git::worktree::GitWorktreeError::GitOutputInvalid { command, message } => {
-            crate::git::status::GitStatusError::GitOutputInvalid { command, message }
-        }
-        crate::git::worktree::GitWorktreeError::WorktreeRootInvalid(path) => {
-            crate::git::status::GitStatusError::InvalidRepoPath(path)
-        }
-    }
-}
-
-fn issue_worktree_merge_error(
-    error: crate::git::status::GitStatusError,
-    session: &AgentSessionRecord,
-) -> CommandError {
-    issue_git_error(error).with_detail(
-        ErrorDetail::new("WorktreeMerge")
-            .with_value("sessionId", session.id)
-            .with_value(
-                "targetBranch",
-                session.target_branch.as_deref().unwrap_or(""),
-            )
-            .with_value(
-                "workspaceBranch",
-                session.workspace_branch.as_deref().unwrap_or(""),
-            )
-            .with_value(
-                "workspacePath",
-                session.workspace_path.as_deref().unwrap_or(""),
-            ),
-    )
 }
 
 fn validate_title(title: &str) -> Result<String, CommandError> {
