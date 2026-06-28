@@ -545,11 +545,25 @@ export function IssuesActivity({
     hasLinkedSession && Boolean(onOpenAgentsActivity);
   const isEditablePageOpen = Boolean(dialogMode && isBacklogDialog);
 
-  async function handleSelectAttachment(): Promise<IssueAttachmentDraft | null> {
+  async function handleSelectAttachment(
+    filter?: "image" | "file",
+  ): Promise<IssueAttachmentDraft | null> {
     const selectedPath = await open({
       directory: false,
       multiple: false,
-      title: messages.issues.addAttachment,
+      title:
+        filter === "image"
+          ? messages.richText.image
+          : messages.issues.addAttachment,
+      filters:
+        filter === "image"
+          ? [
+              {
+                name: messages.issues.imageFilterName,
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
+              },
+            ]
+          : undefined,
     });
 
     if (typeof selectedPath !== "string") {
@@ -1317,22 +1331,27 @@ function buildIssueDescription(
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
 ): string {
   const trimmedDescription = description.trimEnd();
-  const attachmentTokens = attachments
-    .map(formatAttachmentDescriptionToken)
-    .filter((token) => !trimmedDescription.includes(token));
+  // 以裸 token 子串去重：图片附件在描述中以 ![alt](token) 形式存在时也命中，
+  // 避免因 alt 文本不同而重复追加同一 token。
+  const missingTokens = attachments
+    .filter(
+      (attachment) =>
+        !trimmedDescription.includes(getAttachmentRawToken(attachment)),
+    )
+    .map(formatAttachmentDescriptionToken);
 
-  if (attachmentTokens.length === 0) {
+  if (missingTokens.length === 0) {
     return trimmedDescription;
   }
 
   if (trimmedDescription.length === 0) {
-    return attachmentTokens.join("\n");
+    return missingTokens.join("\n");
   }
 
-  return `${trimmedDescription}\n\n${attachmentTokens.join("\n")}`;
+  return `${trimmedDescription}\n\n${missingTokens.join("\n")}`;
 }
 
-function formatAttachmentDescriptionToken(
+function getAttachmentRawToken(
   attachment: IssueAttachmentRecord | IssueAttachmentDraft,
 ): string {
   if ("id" in attachment) {
@@ -1340,6 +1359,24 @@ function formatAttachmentDescriptionToken(
   }
 
   return `{{issue-attachment-temp:${attachment.token}}}`;
+}
+
+function formatAttachmentDescriptionToken(
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+): string {
+  const token =
+    "id" in attachment
+      ? `{{issue-attachment:${attachment.id}}}`
+      : `{{issue-attachment-temp:${attachment.token}}}`;
+
+  // 图片附件以 Markdown 图片语法承载 token（URL 即 token 占位符），编辑器与
+  // 只读页据此内联渲染；非图片附件以裸 token 行承载（编辑器正文不显示，
+  // 仅由底部卡片区展示）。两种形态都包含 token 子串，满足 Rust 硬约束。
+  if (attachment.kind === "image") {
+    return `![${attachment.displayName}](${token})`;
+  }
+
+  return token;
 }
 
 function serializeAttachments(

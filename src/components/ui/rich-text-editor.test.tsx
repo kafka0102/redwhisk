@@ -11,6 +11,7 @@ import {
 const quillInstances = vi.hoisted(() => {
   const instances: Array<{
     getContents: ReturnType<typeof vi.fn>;
+    insertEmbed: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
     on: ReturnType<typeof vi.fn>;
     root: HTMLElement;
@@ -61,9 +62,10 @@ vi.mock("quill", () => {
 });
 
 const labels: RichTextEditorLabels = {
-  attachment: "Add attachment",
+  attachFile: "Add attachment",
   bold: "Bold",
   heading: "Heading",
+  image: "Insert image",
   normalText: "Normal text",
   headingOne: "Heading 1",
   headingTwo: "Heading 2",
@@ -145,5 +147,56 @@ describe("RichTextEditor", () => {
     expect(handleRemoveAttachment).toHaveBeenCalledWith(
       expect.objectContaining({ token: "image-1" }),
     );
+  });
+
+  it("embeds images inline and keeps non-image attachments out of the editor body", async () => {
+    const imageAttachment: RichTextAttachment = {
+      token: "img-1",
+      displayName: "pic.png",
+      kind: "image",
+      markdownToken: "{{issue-attachment-temp:img-1}}",
+      isPreviewable: true,
+      imageSrc: "asset://pic.png",
+    };
+    const fileAttachment: RichTextAttachment = {
+      token: "doc-1",
+      displayName: "notes.md",
+      kind: "text",
+      markdownToken: "{{issue-attachment-temp:doc-1}}",
+      isPreviewable: true,
+      imageSrc: null,
+    };
+
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        attachments={[imageAttachment, fileAttachment]}
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(quillInstances[0]?.setContents).toHaveBeenCalled(),
+    );
+    const setContentsCalls = quillInstances[0].setContents.mock.calls;
+    const setContentsPayload =
+      setContentsCalls[setContentsCalls.length - 1]?.[0];
+
+    // 图片附件应作为 image embed 进入编辑器正文。
+    expect(setContentsPayload).toContainEqual({
+      insert: { image: "asset://pic.png" },
+      attributes: { alt: "pic.png" },
+    });
+    // 非图片附件的 token 不应作为可见文本进入编辑器正文。
+    expect(JSON.stringify(setContentsPayload)).not.toContain(
+      "{{issue-attachment-temp:doc-1}}",
+    );
+
+    // 底部卡片区应同时承载图片与文件附件。
+    expect(screen.getByText("pic.png")).toBeInTheDocument();
+    expect(screen.getByText("notes.md")).toBeInTheDocument();
   });
 });

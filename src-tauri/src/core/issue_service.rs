@@ -3006,6 +3006,14 @@ fn save_issue_attachment_draft_in_data_dir(
     })
 }
 
+// 将 description 中的临时附件标记 `{{issue-attachment-temp:token}}` 重写为持久化
+// 标记 `{{issue-attachment:id}}`。
+//
+// 该替换对两种形态都生效，因为 `contains`/`replace` 都按子串匹配：
+// 1. 裸标记行：单独成行的 `{{issue-attachment-temp:token}}`；
+// 2. 图片占位符：Markdown 图片语法 `![alt]({{issue-attachment-temp:token}})`，
+//    其 URL 部分即该 token 子串，替换后得到 `![alt]({{issue-attachment:id}})`。
+// 每个临时 token 都必须在 description 中出现（无论哪种形态），否则视为缺失附件标记。
 fn rewrite_attachment_tokens(
     description: &str,
     attachments: &[NewAttachmentPersistence],
@@ -3421,5 +3429,48 @@ mod tests {
             .expect("git stdout utf8")
             .trim()
             .to_string()
+    }
+
+    #[test]
+    fn rewrite_attachment_tokens_handles_bare_and_image_placeholder_tokens() {
+        use super::{rewrite_attachment_tokens, NewAttachmentPersistence};
+
+        let attachments = vec![
+            NewAttachmentPersistence {
+                temp_token: "draft-img-1".to_string(),
+                attachment_id: 101,
+            },
+            NewAttachmentPersistence {
+                temp_token: "draft-file-1".to_string(),
+                attachment_id: 102,
+            },
+        ];
+
+        // 描述同时包含图片占位符（Markdown 图片语法中以 token 作 URL）与裸 token 行。
+        let description = "See screenshot.\n\n![pic.png]({{issue-attachment-temp:draft-img-1}})\n\n{{issue-attachment-temp:draft-file-1}}";
+
+        let rewritten = rewrite_attachment_tokens(description, &attachments)
+            .expect("rewrite tokens");
+
+        // 图片占位符内的 token 被替换为持久化标记，仍是合法 Markdown 图片语法。
+        assert!(rewritten.contains("![pic.png]({{issue-attachment:101}})"));
+        // 裸 token 行被替换为持久化标记。
+        assert!(rewritten.contains("{{issue-attachment:102}}"));
+        // 临时标记不应残留。
+        assert!(!rewritten.contains("issue-attachment-temp"));
+    }
+
+    #[test]
+    fn rewrite_attachment_tokens_errors_when_image_token_missing() {
+        use super::{rewrite_attachment_tokens, NewAttachmentPersistence};
+
+        let attachments = vec![NewAttachmentPersistence {
+            temp_token: "draft-img-1".to_string(),
+            attachment_id: 101,
+        }];
+
+        // 描述中缺失该 token（无论哪种形态）应报错，满足 Rust 硬约束。
+        let result = rewrite_attachment_tokens("No token here.", &attachments);
+        assert!(result.is_err());
     }
 }

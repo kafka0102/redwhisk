@@ -29,7 +29,9 @@ interface IssueDescriptionEditorProps {
   placeholder: string;
   ariaLabel: string;
   attachments?: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
-  onSelectAttachment?: () => Promise<IssueAttachmentDraft | null>;
+  onSelectAttachment?: (
+    filter?: "image" | "file",
+  ) => Promise<IssueAttachmentDraft | null>;
   onPreviewAttachment?: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -63,8 +65,10 @@ export function IssueDescriptionEditor({
     ]),
   );
 
-  async function handleUploadAttachment(): Promise<RichTextAttachment | null> {
-    const attachment = await onSelectAttachment?.();
+  async function handleUploadAttachment(
+    filter?: "image" | "file",
+  ): Promise<RichTextAttachment | null> {
+    const attachment = await onSelectAttachment?.(filter);
     if (!attachment) {
       return null;
     }
@@ -110,7 +114,10 @@ export function IssueDescriptionEditor({
         }
       }}
       onUploadAttachment={
-        onSelectAttachment ? handleUploadAttachment : undefined
+        onSelectAttachment ? () => handleUploadAttachment("file") : undefined
+      }
+      onUploadImage={
+        onSelectAttachment ? () => handleUploadAttachment("image") : undefined
       }
     />
   );
@@ -157,9 +164,10 @@ function getAttachmentMarkdownToken(
 
 function toRichTextLabels(messages: I18nMessages): RichTextEditorLabels {
   return {
-    attachment: messages.issues.addAttachment,
+    attachFile: messages.richText.attachFile,
     bold: messages.richText.bold,
     heading: messages.richText.heading,
+    image: messages.richText.image,
     headingOne: messages.richText.headingOne,
     headingTwo: messages.richText.headingTwo,
     normalText: messages.richText.normalText,

@@ -123,9 +123,16 @@ export function buildRunPromptPreview(
 }
 
 function stripAttachmentTokens(description: string): string {
-  return description.replace(
-    /^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm,
-    "",
+  return (
+    description
+      // 剥离裸 token 行：单独成行的 {{issue-attachment...}}
+      .replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "")
+      // 剥离图片占位符行：![alt]({{issue-attachment...}})（agent 不需要在描述文本里
+      // 看到图片占位符，附件路径仍由 attachmentPaths 单独注入）
+      .replace(
+        /^\s*!\[[^\]]*\]\(\{\{issue-attachment(?:-temp)?:[^}]+\}\}\)\s*$/gm,
+        "",
+      )
   );
 }
 

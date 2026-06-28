@@ -8,9 +8,10 @@ import {
 } from "./rich-text-editor";
 
 const labels: RichTextEditorLabels = {
-  attachment: "Add attachment",
+  attachFile: "Add attachment",
   bold: "Bold",
   heading: "Heading",
+  image: "Insert image",
   normalText: "Normal text",
   headingOne: "Heading 1",
   headingTwo: "Heading 2",
@@ -38,7 +39,7 @@ describe("RichTextEditor image embed", () => {
       isPreviewable: true,
       imageSrc,
     };
-    const onUploadAttachment = vi.fn().mockResolvedValue(imageAttachment);
+    const onUploadImage = vi.fn().mockResolvedValue(imageAttachment);
 
     const { container } = render(
       <RichTextEditor
@@ -47,7 +48,7 @@ describe("RichTextEditor image embed", () => {
         placeholder="Describe"
         value=""
         onChange={vi.fn()}
-        onUploadAttachment={onUploadAttachment}
+        onUploadImage={onUploadImage}
       />,
     );
 
@@ -56,8 +57,8 @@ describe("RichTextEditor image embed", () => {
     });
 
     await act(async () => {
-      screen.getByRole("button", { name: "Add attachment" }).click();
-      await vi.waitFor(() => expect(onUploadAttachment).toHaveBeenCalled());
+      screen.getByRole("button", { name: "Insert image" }).click();
+      await vi.waitFor(() => expect(onUploadImage).toHaveBeenCalled());
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
