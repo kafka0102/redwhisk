@@ -1,16 +1,12 @@
-import { useEffect, useRef } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+
 import {
-  Download,
-  Eye,
-  File,
-  FileImage,
-  FileText,
-  FileType2,
-  Trash2,
-} from "lucide-react";
-import { Markdown } from "@tiptap/markdown";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+  RichTextEditor,
+  type RichTextAttachment,
+  type RichTextEditorLabels,
+} from "@/components/ui/rich-text-editor";
+import { useI18n } from "../../shared/i18n/i18n";
+import type { I18nMessages } from "../../shared/i18n/messages";
 
 import type { IssueAttachmentRecord } from "./issue-commands";
 
@@ -32,6 +28,7 @@ interface IssueDescriptionEditorProps {
   placeholder: string;
   ariaLabel: string;
   attachments?: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
+  onSelectAttachment?: () => Promise<IssueAttachmentDraft | null>;
   onPreviewAttachment?: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -43,137 +40,87 @@ interface IssueDescriptionEditorProps {
   ) => void;
 }
 
-function normalizeMarkdown(markdown: string): string {
-  return markdown.trimEnd();
-}
-
 export function IssueDescriptionEditor({
   value,
   onChange,
   placeholder,
   ariaLabel,
   attachments = [],
+  onSelectAttachment,
   onPreviewAttachment,
   onDownloadAttachment,
   onRemoveAttachment,
 }: IssueDescriptionEditorProps) {
-  const onChangeRef = useRef(onChange);
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
+  const { messages } = useI18n();
+  const attachmentByToken = new Map(
+    attachments.map((attachment) => [
+      getRichTextAttachmentToken(attachment),
+      attachment,
+    ]),
+  );
 
-  const editor = useEditor({
-    immediatelyRender: false,
-    content: value,
-    contentType: "markdown",
-    extensions: [
-      StarterKit.configure({
-        blockquote: false,
-        codeBlock: false,
-        horizontalRule: false,
-      }),
-      Markdown,
-    ],
-    editorProps: {
-      attributes: {
-        "aria-label": ariaLabel,
-        "aria-multiline": "true",
-        autocapitalize: "none",
-        autocorrect: "off",
-        class: "issue-description-editor__content",
-        role: "textbox",
-        spellcheck: "false",
-      },
-    },
-    onUpdate: ({ editor: currentEditor }) => {
-      onChangeRef.current(normalizeMarkdown(currentEditor.getMarkdown()));
-    },
-  });
+  async function handleUploadAttachment(): Promise<RichTextAttachment | null> {
+    const attachment = await onSelectAttachment?.();
+    return attachment ? toRichTextAttachment(attachment) : null;
+  }
 
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) {
-      return;
-    }
-
-    const currentValue = normalizeMarkdown(editor.getMarkdown());
-    const nextValue = normalizeMarkdown(value);
-
-    if (currentValue === nextValue) {
-      return;
-    }
-
-    editor.commands.setContent(nextValue, {
-      contentType: "markdown",
-      emitUpdate: false,
-    });
-  }, [editor, value]);
+  function resolveAttachment(attachment: RichTextAttachment) {
+    return attachmentByToken.get(attachment.token) ?? null;
+  }
 
   return (
-    <div
-      className="issue-description-editor"
-      data-empty={normalizeMarkdown(value).length === 0 ? "true" : undefined}
-    >
-      <span className="issue-description-editor__placeholder">
-        {placeholder}
-      </span>
-      <div className="issue-description-editor__surface">
-        <EditorContent editor={editor} />
-      </div>
-      {attachments.length > 0 ? (
-        <div className="issue-description-editor__attachments">
-          {attachments.map((attachment) => (
-            <div
-              key={getAttachmentKey(attachment)}
-              className="issue-attachment-card"
-            >
-              <div className="issue-attachment-card__main">
-                <span
-                  className="issue-attachment-card__icon"
-                  aria-hidden="true"
-                >
-                  <AttachmentKindIcon kind={attachment.kind} />
-                </span>
-                <span className="issue-attachment-card__name">
-                  {attachment.displayName}
-                </span>
-              </div>
-              <div className="issue-attachment-card__actions">
-                {attachment.isPreviewable ? (
-                  <button
-                    aria-label={`查看 ${attachment.displayName}`}
-                    className="issue-attachment-card__action"
-                    type="button"
-                    onClick={() => onPreviewAttachment?.(attachment)}
-                  >
-                    <Eye aria-hidden="true" size={15} strokeWidth={1.9} />
-                  </button>
-                ) : null}
-                <button
-                  aria-label={`下载 ${attachment.displayName}`}
-                  className="issue-attachment-card__action"
-                  type="button"
-                  onClick={() => onDownloadAttachment?.(attachment)}
-                >
-                  <Download aria-hidden="true" size={15} strokeWidth={1.9} />
-                </button>
-                <button
-                  aria-label={`删除 ${attachment.displayName}`}
-                  className="issue-attachment-card__action"
-                  type="button"
-                  onClick={() => onRemoveAttachment?.(attachment)}
-                >
-                  <Trash2 aria-hidden="true" size={15} strokeWidth={1.9} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <RichTextEditor
+      ariaLabel={ariaLabel}
+      attachments={attachments.map(toRichTextAttachment)}
+      labels={toRichTextLabels(messages)}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      onDownloadAttachment={(attachment) => {
+        const issueAttachment = resolveAttachment(attachment);
+        if (issueAttachment) {
+          onDownloadAttachment?.(issueAttachment);
+        }
+      }}
+      onPreviewAttachment={(attachment) => {
+        const issueAttachment = resolveAttachment(attachment);
+        if (issueAttachment) {
+          onPreviewAttachment?.(issueAttachment);
+        }
+      }}
+      onRemoveAttachment={(attachment) => {
+        const issueAttachment = resolveAttachment(attachment);
+        if (issueAttachment) {
+          onRemoveAttachment?.(issueAttachment);
+        }
+      }}
+      onUploadAttachment={
+        onSelectAttachment ? handleUploadAttachment : undefined
+      }
+    />
   );
 }
 
-function getAttachmentKey(
+function toRichTextAttachment(
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+): RichTextAttachment {
+  const absolutePath =
+    "absolutePath" in attachment ? attachment.absolutePath : undefined;
+
+  return {
+    token: getRichTextAttachmentToken(attachment),
+    displayName: attachment.displayName,
+    kind: attachment.kind,
+    markdownToken: getAttachmentMarkdownToken(attachment),
+    isPreviewable: attachment.isPreviewable,
+    imageSrc:
+      attachment.kind === "image" && absolutePath
+        ? convertFileSrc(absolutePath)
+        : null,
+  };
+}
+
+function getRichTextAttachmentToken(
   attachment: IssueAttachmentRecord | IssueAttachmentDraft,
 ): string {
   if ("id" in attachment) {
@@ -183,21 +130,31 @@ function getAttachmentKey(
   return `draft-${attachment.token}`;
 }
 
-function AttachmentKindIcon({
-  kind,
-}: {
-  kind: IssueAttachmentRecord["kind"] | IssueAttachmentDraft["kind"];
-}) {
-  switch (kind) {
-    case "image":
-      return <FileImage size={20} strokeWidth={1.8} />;
-    case "pdf":
-      return <FileType2 size={20} strokeWidth={1.8} />;
-    case "word":
-      return <FileText size={20} strokeWidth={1.8} />;
-    case "text":
-      return <FileText size={20} strokeWidth={1.8} />;
-    default:
-      return <File size={20} strokeWidth={1.8} />;
+function getAttachmentMarkdownToken(
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
+): string {
+  if ("id" in attachment) {
+    return `{{issue-attachment:${attachment.id}}}`;
   }
+
+  return `{{issue-attachment-temp:${attachment.token}}}`;
+}
+
+function toRichTextLabels(messages: I18nMessages): RichTextEditorLabels {
+  return {
+    attachment: messages.issues.addAttachment,
+    bold: messages.richText.bold,
+    heading: messages.richText.heading,
+    headingOne: messages.richText.headingOne,
+    headingTwo: messages.richText.headingTwo,
+    normalText: messages.richText.normalText,
+    orderedList: messages.richText.orderedList,
+    unorderedList: messages.richText.unorderedList,
+    previewAttachment: (displayName) =>
+      messages.issues.previewAttachment(displayName),
+    downloadAttachment: (displayName) =>
+      messages.issues.downloadAttachment(displayName),
+    removeAttachment: (displayName) =>
+      messages.issues.removeAttachment(displayName),
+  };
 }

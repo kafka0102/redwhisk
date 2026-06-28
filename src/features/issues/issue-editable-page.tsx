@@ -1,4 +1,4 @@
-import { Check, Paperclip, Tag } from "lucide-react";
+import { Check, Tag } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -42,7 +42,7 @@ interface IssueEditablePageProps {
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (form: IssueFormState) => void;
-  onSelectAttachment: () => void;
+  onSelectAttachment: () => Promise<IssueAttachmentDraft | null>;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -147,7 +147,6 @@ export function IssueEditablePage({
               availableLabels={availableLabels}
               form={form}
               isLoadingLabels={isLoadingLabels}
-              isSaving={isSaving}
               labelsErrorMessage={labelsErrorMessage}
               titleInputRef={titleInputRef}
               onFormChange={onFormChange}
@@ -212,7 +211,6 @@ function IssueEditableFields({
   availableLabels,
   form,
   isLoadingLabels,
-  isSaving,
   labelsErrorMessage,
   titleInputRef,
   onFormChange,
@@ -225,12 +223,11 @@ function IssueEditableFields({
   availableLabels: IssueLabelRecord[];
   form: IssueFormState;
   isLoadingLabels: boolean;
-  isSaving: boolean;
   labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
   onFormChange: (form: IssueFormState) => void;
   onOpenProjectLabelsSettings: () => void;
-  onSelectAttachment: () => void;
+  onSelectAttachment: () => Promise<IssueAttachmentDraft | null>;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
@@ -269,6 +266,7 @@ function IssueEditableFields({
           placeholder={messages.issues.describeTask}
           value={form.description}
           attachments={form.attachments}
+          onSelectAttachment={onSelectAttachment}
           onDownloadAttachment={onDownloadAttachment}
           onChange={(description) =>
             onFormChange({
@@ -281,17 +279,6 @@ function IssueEditableFields({
         />
         <div className="issue-editor-toolbar-shell">
           <div className="issue-editor-toolbar">
-            <Button
-              aria-label={messages.issues.addAttachment}
-              className="issue-editor-toolbar__icon-button"
-              disabled={isSaving}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-              onClick={onSelectAttachment}
-            >
-              <Paperclip aria-hidden="true" size={16} strokeWidth={1.9} />
-            </Button>
             <IssueLabelsPicker
               availableLabels={availableLabels}
               isLoading={isLoadingLabels}
