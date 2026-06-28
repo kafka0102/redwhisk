@@ -46,4 +46,5 @@ export type MessageStreamAction =
   | { type: "HYDRATE"; items: AgentTimelineItem[]; effort?: string | null }
   | { type: "HYDRATE_FAILED"; error: string }
   | { type: "EVENT"; event: AgentStreamEvent }
+  | { type: "EVENT_BATCH"; events: AgentStreamEvent[] }
   | { type: "OPTIMISTIC_USER_MESSAGE"; text: string };
