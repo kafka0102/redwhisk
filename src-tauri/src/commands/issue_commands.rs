@@ -11,8 +11,8 @@ use crate::types::issue::{
     DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
     ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse,
     IssueRecord, IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
-    UpdateIssueInput,
+    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
+    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 
@@ -70,6 +70,16 @@ pub fn export_issue_attachment(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     IssueService::export_issue_attachment_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn save_issue_attachment_draft(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SaveIssueAttachmentDraftInput,
+) -> Result<SaveIssueAttachmentDraftResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    IssueService::save_issue_attachment_draft_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]

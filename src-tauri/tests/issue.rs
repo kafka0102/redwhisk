@@ -24,7 +24,7 @@ use redwhisk_lib::types::issue::{
     DeleteIssueInput, DetectAgentCommitCompletionInput, ExportIssueAttachmentInput,
     GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind, IssueRecord, IssueStatus,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
-    SendAgentCommitPromptInput, UpdateIssueInput,
+    SaveIssueAttachmentDraftInput, SendAgentCommitPromptInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::issue_completion::{
@@ -447,6 +447,31 @@ fn update_issue_rejects_missing_issue() {
         .expect_err("missing issue should fail");
 
     assert_eq!(error.code, CommandErrorCode::IssueNotFound);
+}
+
+#[test]
+fn saves_issue_attachment_draft_under_redwhisk_data_dir() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let data_dir = temp_dir.path().join(".redwhisk");
+    let source_path = temp_dir.path().join("screen shot.png");
+    fs::write(&source_path, "image-bytes").expect("write draft image");
+
+    let draft = IssueService::save_issue_attachment_draft_in_data_dir(
+        &data_dir,
+        SaveIssueAttachmentDraftInput {
+            source_path: source_path.to_string_lossy().to_string(),
+            display_name: "screen shot.png".to_string(),
+        },
+    )
+    .expect("saved draft attachment");
+
+    assert_eq!(draft.display_name, "screen shot.png");
+    assert_eq!(draft.kind, IssueAttachmentKind::Image);
+    assert!(draft.is_previewable);
+    let draft_path = Path::new(&draft.path);
+    assert!(draft_path.starts_with(data_dir.join("issue-attachment-drafts")));
+    assert!(draft_path.exists());
+    assert_eq!(fs::read(draft_path).expect("read draft"), b"image-bytes");
 }
 
 #[test]

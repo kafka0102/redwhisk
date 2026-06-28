@@ -271,6 +271,22 @@ pub struct ExportIssueAttachmentInput {
     pub target_path: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveIssueAttachmentDraftInput {
+    pub source_path: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveIssueAttachmentDraftResult {
+    pub path: String,
+    pub display_name: String,
+    pub kind: IssueAttachmentKind,
+    pub is_previewable: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssueAttachmentPreview {

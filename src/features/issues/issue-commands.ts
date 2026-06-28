@@ -153,6 +153,18 @@ export interface ExportIssueAttachmentInput {
   targetPath: string;
 }
 
+export interface SaveIssueAttachmentDraftInput {
+  sourcePath: string;
+  displayName: string;
+}
+
+export interface SaveIssueAttachmentDraftResult {
+  path: string;
+  displayName: string;
+  kind: IssueAttachmentKind;
+  isPreviewable: boolean;
+}
+
 export interface AgentCommitChangedFileSummary {
   status: string;
   path: string;
@@ -389,6 +401,15 @@ export function exportIssueAttachment(
   return invokeCommand("export_issue_attachment", {
     input,
   });
+}
+
+export function saveIssueAttachmentDraft(
+  input: SaveIssueAttachmentDraftInput,
+): Promise<SaveIssueAttachmentDraftResult> {
+  return invokeCommand<SaveIssueAttachmentDraftResult>(
+    "save_issue_attachment_draft",
+    { input },
+  );
 }
 
 export function startAgentSession(
