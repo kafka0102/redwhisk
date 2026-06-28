@@ -5299,6 +5299,14 @@ button:focus-visible {
   padding-left: 20px;
 }
 
+.agents-message__ordered-list {
+  list-style-type: decimal;
+}
+
+.agents-message__unordered-list {
+  list-style-type: disc;
+}
+
 .agents-message__markdown h1,
 .agents-message__markdown h2,
 .agents-message__markdown h3 {
