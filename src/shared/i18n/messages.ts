@@ -31,6 +31,7 @@ export interface I18nMessages {
   };
   toast: {
     deleteSuccess: string;
+    issueMarkedDone: string;
   };
   richText: {
     bold: string;
@@ -473,6 +474,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     toast: {
       deleteSuccess: "Deleted successfully",
+      issueMarkedDone: "该 issue 已标记完成",
     },
     richText: {
       bold: "Bold",
@@ -928,6 +930,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     toast: {
       deleteSuccess: "删除成功",
+      issueMarkedDone: "该 issue 已标记完成",
     },
     richText: {
       bold: "加粗",

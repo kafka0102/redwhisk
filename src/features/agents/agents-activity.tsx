@@ -515,6 +515,10 @@ export function AgentsActivity({
     );
   }
 
+  function showIssueMarkedDoneToast() {
+    toast.success(messages.toast.issueMarkedDone);
+  }
+
   async function completeLinkedIssueViaFlow(
     issueId: number,
     options: { ignoreDirty?: boolean } = {},
@@ -551,6 +555,7 @@ export function AgentsActivity({
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
+      showIssueMarkedDoneToast();
     } catch (error) {
       setCompleteManualErrorMessage(toCommandError(error).message);
       try {
@@ -594,6 +599,7 @@ export function AgentsActivity({
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
+      showIssueMarkedDoneToast();
     } catch (error) {
       setCompleteCleanErrorMessage(toCommandError(error).message);
       try {
@@ -741,6 +747,7 @@ export function AgentsActivity({
           completionResult.issue,
           selectedSession.sessionId,
         );
+        showIssueMarkedDoneToast();
         setAgentCommitPreview(null);
         const response = await listAgentSessions(projectId);
         setSessions(applySessionListOverlays(response.sessions));
