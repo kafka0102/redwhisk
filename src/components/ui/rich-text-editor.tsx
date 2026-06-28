@@ -58,74 +58,6 @@ interface QuillLine {
   domNode?: Node;
 }
 
-interface EmbedBlotInstance {
-  domNode: Node;
-}
-
-interface EmbedBlotConstructor {
-  new (...args: unknown[]): EmbedBlotInstance;
-  blotName: string;
-  tagName: string;
-  className: string;
-  create(value?: unknown): Node;
-  value(node: Node): unknown;
-}
-
-const ATTACHMENT_BLOT_NAME = "rwAttachment";
-
-let isAttachmentBlotRegistered = false;
-
-function ensureAttachmentBlotRegistered() {
-  if (isAttachmentBlotRegistered) {
-    return;
-  }
-
-  const BlockEmbed = Quill.import("blots/block/embed") as EmbedBlotConstructor;
-
-  class RichTextAttachmentBlot extends BlockEmbed {
-    static blotName = ATTACHMENT_BLOT_NAME;
-    static tagName = "div";
-    static className = "rich-text-editor__attachment-embed";
-
-    static create(value?: unknown): Node {
-      const node = super.create(value) as HTMLElement;
-      const attachment = toAttachmentValue(value);
-      node.dataset.attachmentToken = attachment.token;
-      node.dataset.attachmentMarkdownToken = attachment.markdownToken;
-      node.dataset.attachmentDisplayName = attachment.displayName;
-      node.dataset.attachmentKind = attachment.kind;
-      node.dataset.attachmentPreviewable = attachment.isPreviewable
-        ? "true"
-        : "false";
-      if (attachment.imageSrc) {
-        node.dataset.attachmentImageSrc = attachment.imageSrc;
-      }
-      if (attachment.previewLabel) {
-        node.dataset.attachmentPreviewLabel = attachment.previewLabel;
-      }
-      if (attachment.downloadLabel) {
-        node.dataset.attachmentDownloadLabel = attachment.downloadLabel;
-      }
-      if (attachment.removeLabel) {
-        node.dataset.attachmentRemoveLabel = attachment.removeLabel;
-      }
-      renderAttachmentEmbed(node, attachment);
-      return node;
-    }
-
-    static value(node: Node): RichTextAttachment {
-      return toAttachmentValue((node as HTMLElement).dataset);
-    }
-  }
-
-  Quill.register(
-    `formats/${ATTACHMENT_BLOT_NAME}`,
-    RichTextAttachmentBlot,
-    true,
-  );
-  isAttachmentBlotRegistered = true;
-}
-
 export function RichTextEditor({
   ariaLabel,
   attachments = [],
@@ -211,45 +143,43 @@ export function RichTextEditor({
         downloadLabel: currentLabels.downloadAttachment(attachment.displayName),
         removeLabel: currentLabels.removeAttachment(attachment.displayName),
       };
+      if (
+        !attachmentsRef.current.some(
+          (item) => item.token === localizedAttachment.token,
+        )
+      ) {
+        attachmentsRef.current = [
+          ...attachmentsRef.current,
+          localizedAttachment,
+        ];
+      }
 
       const selection = quill.getSelection(true);
       const insertIndex = selection?.index ?? quill.getLength();
-      quill.insertEmbed(
-        insertIndex,
-        ATTACHMENT_BLOT_NAME,
-        localizedAttachment,
-        "user",
-      );
-      quill.insertText(insertIndex + 1, "\n", "user");
-      quill.setSelection(insertIndex + 2, 0, "user");
-    }
-
-    function findAttachmentByToken(token: string): RichTextAttachment | null {
-      const attachment = attachmentsRef.current.find(
-        (item) => item.token === token,
-      );
-      if (attachment) {
-        return attachment;
+      if (
+        localizedAttachment.kind === "image" &&
+        localizedAttachment.imageSrc
+      ) {
+        quill.insertEmbed(
+          insertIndex,
+          "image",
+          localizedAttachment.imageSrc,
+          "user",
+        );
+        quill.insertText(insertIndex + 1, "\n", "user");
+        quill.setSelection(insertIndex + 2, 0, "user");
+      } else {
+        handlersRef.current.onChange(
+          normalizeMarkdown(
+            deltaToMarkdown(getQuillOperations(quill), attachmentsRef.current),
+          ),
+        );
       }
-
-      const operations = quillRef.current
-        ? getQuillOperations(quillRef.current)
-        : [];
-      for (const operation of operations) {
-        const embeddedAttachment = getAttachmentInsert(operation);
-        if (embeddedAttachment?.token === token) {
-          return embeddedAttachment;
-        }
-      }
-
-      return null;
     }
 
     if (!editorHostElement || !toolbarElement || quillRef.current) {
       return;
     }
-
-    ensureAttachmentBlotRegistered();
 
     const quill = new Quill(editorHostElement, {
       bounds: containerElement ?? undefined,
@@ -287,51 +217,16 @@ export function RichTextEditor({
       }
 
       handlersRef.current.onChange(
-        normalizeMarkdown(deltaToMarkdown(getQuillOperations(quill))),
+        normalizeMarkdown(
+          deltaToMarkdown(getQuillOperations(quill), attachmentsRef.current),
+        ),
       );
-    };
-
-    const handleAttachmentAction = (event: MouseEvent) => {
-      const actionElement = (event.target as Element | null)?.closest(
-        "[data-rich-text-attachment-action]",
-      );
-      if (!(actionElement instanceof HTMLElement)) {
-        return;
-      }
-
-      const embedElement = actionElement.closest(
-        "[data-attachment-token]",
-      ) as HTMLElement | null;
-      const token = embedElement?.dataset.attachmentToken;
-      if (!token) {
-        return;
-      }
-
-      const attachment = findAttachmentByToken(token);
-      if (!attachment) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const action = actionElement.dataset.richTextAttachmentAction;
-      if (action === "preview") {
-        handlersRef.current.onPreviewAttachment?.(attachment);
-      } else if (action === "download") {
-        handlersRef.current.onDownloadAttachment?.(attachment);
-      } else if (action === "remove") {
-        deleteAttachmentFromEditor(quill, attachment.token);
-        handlersRef.current.onRemoveAttachment?.(attachment);
-      }
     };
 
     quill.on("text-change", handleTextChange);
-    containerElement?.addEventListener("click", handleAttachmentAction);
 
     return () => {
       quill.off("text-change", handleTextChange);
-      containerElement?.removeEventListener("click", handleAttachmentAction);
       quillRef.current = null;
     };
   }, [ariaLabel, placeholder]);
@@ -343,7 +238,7 @@ export function RichTextEditor({
     }
 
     const currentMarkdown = normalizeMarkdown(
-      deltaToMarkdown(getQuillOperations(quill)),
+      deltaToMarkdown(getQuillOperations(quill), attachmentsRef.current),
     );
     const nextMarkdown = normalizeMarkdown(editorMarkdown);
     if (currentMarkdown === nextMarkdown) {
@@ -403,95 +298,65 @@ export function RichTextEditor({
         ) : null}
       </div>
       <div className="rich-text-editor__surface" ref={editorHostRef} />
+      {localizedAttachments.length > 0 ? (
+        <div className="rich-text-editor__attachments">
+          {localizedAttachments.map((attachment) => (
+            <div
+              className="rich-text-editor__attachment-card"
+              key={attachment.token}
+            >
+              <div className="rich-text-editor__attachment-main">
+                <span
+                  aria-hidden="true"
+                  className="rich-text-editor__attachment-icon"
+                  data-kind={attachment.kind}
+                >
+                  {getAttachmentIconText(attachment.kind)}
+                </span>
+                <span className="rich-text-editor__attachment-name">
+                  {attachment.displayName}
+                </span>
+              </div>
+              <div className="rich-text-editor__attachment-actions">
+                {attachment.isPreviewable ? (
+                  <button
+                    aria-label={attachment.previewLabel}
+                    className="rich-text-editor__attachment-action"
+                    type="button"
+                    onClick={() => onPreviewAttachment?.(attachment)}
+                  >
+                    View
+                  </button>
+                ) : null}
+                <button
+                  aria-label={attachment.downloadLabel}
+                  className="rich-text-editor__attachment-action"
+                  type="button"
+                  onClick={() => onDownloadAttachment?.(attachment)}
+                >
+                  Down
+                </button>
+                <button
+                  aria-label={attachment.removeLabel}
+                  className="rich-text-editor__attachment-action"
+                  type="button"
+                  onClick={() => {
+                    const quill = quillRef.current;
+                    if (quill) {
+                      deleteAttachmentFromEditor(quill, attachment);
+                    }
+                    onRemoveAttachment?.(attachment);
+                  }}
+                >
+                  Del
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
-}
-
-function toAttachmentValue(value: unknown): RichTextAttachment {
-  if (isRichTextAttachment(value)) {
-    return value;
-  }
-
-  const dataset = value as DOMStringMap;
-  return {
-    token: dataset.attachmentToken ?? "",
-    displayName: dataset.attachmentDisplayName ?? "",
-    kind: toAttachmentKind(dataset.attachmentKind),
-    markdownToken: dataset.attachmentMarkdownToken ?? "",
-    isPreviewable: dataset.attachmentPreviewable === "true",
-    imageSrc: dataset.attachmentImageSrc ?? null,
-    previewLabel: dataset.attachmentPreviewLabel ?? undefined,
-    downloadLabel: dataset.attachmentDownloadLabel ?? undefined,
-    removeLabel: dataset.attachmentRemoveLabel ?? undefined,
-  };
-}
-
-function renderAttachmentEmbed(
-  node: HTMLElement,
-  attachment: RichTextAttachment,
-) {
-  node.setAttribute("contenteditable", "false");
-  node.innerHTML = "";
-
-  if (attachment.kind === "image" && attachment.imageSrc) {
-    const image = document.createElement("img");
-    image.className = "rich-text-editor__attachment-image";
-    image.alt = attachment.displayName;
-    image.src = attachment.imageSrc;
-    node.appendChild(image);
-  }
-
-  const card = document.createElement("div");
-  card.className =
-    attachment.kind === "image" && attachment.imageSrc
-      ? "rich-text-editor__attachment-card rich-text-editor__attachment-card--image"
-      : "rich-text-editor__attachment-card";
-
-  const main = document.createElement("div");
-  main.className = "rich-text-editor__attachment-main";
-
-  const icon = document.createElement("span");
-  icon.className = "rich-text-editor__attachment-icon";
-  icon.dataset.kind = attachment.kind;
-  icon.textContent = getAttachmentIconText(attachment.kind);
-  icon.setAttribute("aria-hidden", "true");
-
-  const name = document.createElement("span");
-  name.className = "rich-text-editor__attachment-name";
-  name.textContent = attachment.displayName;
-
-  main.append(icon, name);
-
-  const actions = document.createElement("div");
-  actions.className = "rich-text-editor__attachment-actions";
-
-  if (attachment.isPreviewable) {
-    actions.appendChild(
-      createAttachmentAction(
-        "preview",
-        attachment.previewLabel ?? attachment.displayName,
-        "View",
-      ),
-    );
-  }
-
-  actions.appendChild(
-    createAttachmentAction(
-      "download",
-      attachment.downloadLabel ?? attachment.displayName,
-      "Down",
-    ),
-  );
-  actions.appendChild(
-    createAttachmentAction(
-      "remove",
-      attachment.removeLabel ?? attachment.displayName,
-      "Del",
-    ),
-  );
-
-  card.append(main, actions);
-  node.appendChild(card);
 }
 
 function markdownToDelta(
@@ -508,7 +373,7 @@ function markdownToDelta(
   for (const line of lines) {
     const attachment = attachmentsByToken.get(line.trim());
     if (attachment) {
-      ops.push({ insert: { [ATTACHMENT_BLOT_NAME]: attachment } });
+      pushAttachmentDelta(ops, attachment);
       ops.push({ insert: "\n" });
       usedTokens.add(attachment.markdownToken);
       continue;
@@ -523,20 +388,38 @@ function markdownToDelta(
     if (usedTokens.has(attachment.markdownToken)) {
       continue;
     }
-    ops.push({ insert: { [ATTACHMENT_BLOT_NAME]: attachment } });
+    pushAttachmentDelta(ops, attachment);
     ops.push({ insert: "\n" });
   }
 
   return { ops: ops.length > 0 ? ops : [{ insert: "\n" }] };
 }
 
-function deltaToMarkdown(operations: DeltaOperation[]): string {
+function pushAttachmentDelta(
+  operations: DeltaOperation[],
+  attachment: RichTextAttachment,
+) {
+  if (attachment.kind === "image" && attachment.imageSrc) {
+    operations.push({
+      insert: { image: attachment.imageSrc },
+      attributes: { alt: attachment.displayName },
+    });
+    return;
+  }
+
+  operations.push({ insert: attachment.markdownToken });
+}
+
+function deltaToMarkdown(
+  operations: DeltaOperation[],
+  attachments: RichTextAttachment[],
+): string {
   const lines: string[] = [];
   let currentLine = "";
   let orderedIndex = 1;
 
   for (const operation of operations) {
-    const attachment = getAttachmentInsert(operation);
+    const attachment = getAttachmentInsert(operation, attachments);
     if (attachment) {
       if (currentLine.length > 0) {
         lines.push(currentLine);
@@ -618,13 +501,16 @@ function applyMarkdownShortcuts(quill: Quill) {
   quill.setSelection(startIndex + innerText.length, 0, "api");
 }
 
-function deleteAttachmentFromEditor(quill: Quill, token: string) {
+function deleteAttachmentFromEditor(
+  quill: Quill,
+  targetAttachment: RichTextAttachment,
+) {
   let index = 0;
   for (const operation of getQuillOperations(quill)) {
-    const attachment = getAttachmentInsert(operation);
+    const attachment = getAttachmentInsert(operation, [targetAttachment]);
     const length =
       typeof operation.insert === "string" ? operation.insert.length : 1;
-    if (attachment?.token === token) {
+    if (attachment?.token === targetAttachment.token) {
       quill.deleteText(index, length, "user");
       const nextCharacter = quill.getText(index, 1);
       if (nextCharacter === "\n") {
@@ -663,14 +549,26 @@ function getQuillOperations(quill: Quill): DeltaOperation[] {
 
 function getAttachmentInsert(
   operation: DeltaOperation,
+  attachments: RichTextAttachment[],
 ): RichTextAttachment | null {
-  if (
+  if (typeof operation.insert === "string") {
+    return (
+      attachments.find(
+        (attachment) => attachment.markdownToken === operation.insert,
+      ) ?? null
+    );
+  }
+
+  const imageSrc =
     operation.insert &&
     typeof operation.insert === "object" &&
-    ATTACHMENT_BLOT_NAME in operation.insert
-  ) {
-    const value = operation.insert[ATTACHMENT_BLOT_NAME];
-    return isRichTextAttachment(value) ? value : null;
+    typeof operation.insert.image === "string"
+      ? operation.insert.image
+      : null;
+  if (imageSrc) {
+    return (
+      attachments.find((attachment) => attachment.imageSrc === imageSrc) ?? null
+    );
   }
 
   return null;
@@ -775,20 +673,6 @@ function getBlockShortcut(
   return null;
 }
 
-function createAttachmentAction(
-  action: "preview" | "download" | "remove",
-  ariaLabel: string,
-  label: string,
-): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "rich-text-editor__attachment-action";
-  button.dataset.richTextAttachmentAction = action;
-  button.setAttribute("aria-label", ariaLabel);
-  button.textContent = label;
-  return button;
-}
-
 function getAttachmentIconText(kind: RichTextAttachmentKind): string {
   switch (kind) {
     case "image":
@@ -802,35 +686,6 @@ function getAttachmentIconText(kind: RichTextAttachmentKind): string {
     default:
       return "FILE";
   }
-}
-
-function isRichTextAttachment(value: unknown): value is RichTextAttachment {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<RichTextAttachment>;
-  return (
-    typeof candidate.token === "string" &&
-    typeof candidate.displayName === "string" &&
-    typeof candidate.markdownToken === "string" &&
-    typeof candidate.kind === "string" &&
-    typeof candidate.isPreviewable === "boolean"
-  );
-}
-
-function toAttachmentKind(value: unknown): RichTextAttachmentKind {
-  if (
-    value === "image" ||
-    value === "pdf" ||
-    value === "word" ||
-    value === "text" ||
-    value === "generic"
-  ) {
-    return value;
-  }
-
-  return "generic";
 }
 
 function normalizeMarkdown(markdown: string): string {
