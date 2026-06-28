@@ -189,6 +189,56 @@ describe("AgentMessageStream", () => {
     expect(screen.getByText("exit 0")).toBeInTheDocument();
   });
 
+  it("按文件扩展名渲染 Edit diff 的语法高亮和新增删除背景", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "edit-1",
+          name: "edit",
+          detail: {
+            type: "edit",
+            path: "/tmp/component.tsx",
+            diff: [
+              "@@ -1,2 +1,2 @@",
+              '- const label = "Old";',
+              '+ const label = "New";',
+            ].join("\n"),
+          },
+          status: "completed",
+        },
+      ],
+    });
+    const { container } = render(
+      <AgentMessageStream projectId={1} sessionId={14} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Edit"));
+
+    const code = container.querySelector(".agents-message__diff-code");
+    expect(code).toHaveAttribute("data-language", "tsx");
+    expect(
+      container.querySelector(
+        '.agents-message__diff-line[data-line-kind="add"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '.agents-message__diff-line[data-line-kind="delete"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".agents-message__syntax--keyword"),
+    ).toHaveTextContent("const");
+    expect(
+      container.querySelector(".agents-message__syntax--string"),
+    ).toHaveTextContent('"Old"');
+  });
+
   it("隐藏无输出的 shell 详情折叠区", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
