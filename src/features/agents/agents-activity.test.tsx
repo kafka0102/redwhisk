@@ -313,6 +313,14 @@ async function flushMicrotasks() {
   });
 }
 
+async function addSessionTool(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Add session tool" }));
+  await user.click(await screen.findByRole("menuitem", { name }));
+}
+
 describe("AgentsActivity", () => {
   beforeEach(() => {
     listAgentSessionsMock.mockReset();
@@ -1538,7 +1546,10 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Open terminal" }),
+      screen.queryByRole("button", { name: "Open terminal" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add session tool" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open session side panel" }),
@@ -4320,7 +4331,10 @@ describe("AgentsActivity", () => {
       await screen.findByRole("heading", { name: "#20 Existing issue" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Open terminal" }));
+    expect(
+      screen.queryByRole("button", { name: "Open terminal" }),
+    ).not.toBeInTheDocument();
+    await addSessionTool(user, "Terminal");
 
     await waitFor(() => {
       expect(createTemporaryProjectTerminalMock).toHaveBeenCalledWith({
@@ -4329,11 +4343,11 @@ describe("AgentsActivity", () => {
       });
     });
     expect(
-      screen.getByRole("region", { name: "Session terminals" }),
+      screen.getByRole("region", { name: "Session terminal" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: "issue-20-redwhisk" }),
-    ).toHaveAttribute("title", "/tmp/worktrees/issue-20-redwhisk");
+    ).toBeInTheDocument();
     expect(
       screen.getByTestId("inline-project-terminal:1:-11"),
     ).toBeInTheDocument();
@@ -4375,12 +4389,11 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Open terminal" }),
-    );
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await addSessionTool(user, "Terminal");
     await screen.findByTestId("inline-project-terminal:1:-11");
 
-    await user.click(screen.getByRole("button", { name: "New terminal" }));
+    await addSessionTool(user, "Terminal");
 
     await waitFor(() => {
       expect(createTemporaryProjectTerminalMock).toHaveBeenCalledTimes(2);
@@ -4390,7 +4403,7 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getAllByRole("button", { name: "Close terminal redwhisk" })[1],
+      screen.getAllByRole("button", { name: "Close redwhisk" })[1],
     );
     await waitFor(() => {
       expect(closeProjectTerminalMock).toHaveBeenCalledWith({
@@ -4398,13 +4411,12 @@ describe("AgentsActivity", () => {
         sessionId: -12,
       });
     });
+    await user.click(screen.getByRole("tab", { name: "redwhisk" }));
     expect(
       screen.getByTestId("inline-project-terminal:1:-11"),
     ).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "Close terminal redwhisk" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Close redwhisk" }));
 
     await waitFor(() => {
       expect(closeProjectTerminalMock).toHaveBeenCalledWith({
@@ -4414,12 +4426,62 @@ describe("AgentsActivity", () => {
     });
     await waitFor(() => {
       expect(
-        screen.queryByRole("region", { name: "Session terminals" }),
+        screen.queryByRole("region", { name: "Session terminal" }),
       ).not.toBeInTheDocument();
     });
   });
 
-  it("maximizes and restores the session main content from the terminal tab row", async () => {
+  it("limits session terminal tabs to ten", async () => {
+    const user = userEvent.setup();
+    createTemporaryProjectTerminalMock.mockImplementation(async () => {
+      const nextSessionId =
+        -10 - createTemporaryProjectTerminalMock.mock.calls.length;
+      return {
+        sessionId: nextSessionId,
+        name: `terminal-${Math.abs(nextSessionId)}`,
+        workingDir: "/tmp/redwhisk",
+        launchCommand: "/bin/zsh",
+      };
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          issueId: 20,
+          issueTitle: "Existing issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          workingDir: "/tmp/redwhisk",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    for (let index = 0; index < 10; index += 1) {
+      await addSessionTool(user, "Terminal");
+    }
+
+    await waitFor(() => {
+      expect(createTemporaryProjectTerminalMock).toHaveBeenCalledTimes(10);
+    });
+
+    await addSessionTool(user, "Terminal");
+
+    expect(createTemporaryProjectTerminalMock).toHaveBeenCalledTimes(10);
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Up to 10 terminals are supported.",
+    );
+  });
+
+  it("adds a browser tab and navigates from the address bar", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
@@ -4442,31 +4504,17 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Open terminal" }),
-    );
-    expect(
-      await screen.findByTestId("inline-project-terminal:1:-11"),
-    ).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await addSessionTool(user, "Browser");
 
-    await user.click(
-      screen.getByRole("button", { name: "Maximize session main content" }),
-    );
+    const addressInput = await screen.findByRole("textbox", {
+      name: "Browser address",
+    });
+    await user.type(addressInput, "example.com{Enter}");
 
     expect(
-      screen.queryByTestId("inline-project-terminal:1:-11"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Restore session terminal" }),
-    ).toHaveAttribute("aria-pressed", "true");
-
-    await user.click(
-      screen.getByRole("button", { name: "Restore session terminal" }),
-    );
-
-    expect(
-      screen.getByTestId("inline-project-terminal:1:-11"),
-    ).toBeInTheDocument();
+      screen.getByTitle("Browser page https://example.com"),
+    ).toHaveAttribute("src", "https://example.com");
   });
 
   it("omits completed issue summary actions from the session header", async () => {

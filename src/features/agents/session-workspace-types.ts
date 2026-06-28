@@ -22,5 +22,12 @@ export interface SessionWorkspaceChangeTab extends SessionWorkspaceFile {
   errorMessage: string | null;
 }
 
-export type SessionWorkspaceTabKind = "session" | "file" | "changes";
+export type SessionWorkspaceToolTabKind =
+  | `terminal:${number}`
+  | `browser:${number}`;
+export type SessionWorkspaceTabKind =
+  | "session"
+  | "file"
+  | "changes"
+  | SessionWorkspaceToolTabKind;
 export type SessionSidePanelTab = "changes" | "files";
