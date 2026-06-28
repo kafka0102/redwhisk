@@ -44,13 +44,13 @@ import {
 } from "./agents-session-pane";
 import { getSessionIssueGroup } from "./agent-session-formatters";
 import { SessionSidePanel } from "./session-side-panel";
-import { SessionInlineTerminalPanel } from "./session-inline-terminal-panel";
 import {
-  clampSessionTerminalPanelHeight,
   createDefaultSessionInlineTerminalPanelState,
-  DEFAULT_SESSION_TERMINAL_PANEL_HEIGHT,
   type SessionInlineTerminalPanelState,
 } from "./session-inline-terminal-panel-state";
+import { SessionBrowserTab } from "./session-browser-tab";
+import { SessionTerminalTab } from "./session-terminal-tab";
+import type { SessionWorkspaceToolTabKind } from "./session-workspace-types";
 import { useSessionWorkspaceCache } from "./use-session-workspace-cache";
 import {
   closeProjectTerminal,
@@ -65,6 +65,11 @@ const AGENTS_SIDEBAR_MAX_WIDTH = 450;
 const SESSION_SIDE_PANEL_DEFAULT_WIDTH = 300;
 const SESSION_SIDE_PANEL_MIN_WIDTH = 240;
 const SESSION_SIDE_PANEL_MAX_WIDTH = 560;
+const MAX_SESSION_TERMINAL_TABS = 10;
+
+interface SessionBrowserToolTab {
+  id: number;
+}
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
@@ -128,6 +133,9 @@ export function AgentsActivity({
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
   const [terminalPanelStateBySessionId, setTerminalPanelStateBySessionId] =
     useState<Record<number, SessionInlineTerminalPanelState>>({});
+  const [browserTabsBySessionId, setBrowserTabsBySessionId] = useState<
+    Record<number, SessionBrowserToolTab[]>
+  >({});
   const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
@@ -144,11 +152,7 @@ export function AgentsActivity({
     startWidth: number;
     startX: number;
   } | null>(null);
-  const terminalPanelDragStateRef = useRef<{
-    sessionId: number;
-    startHeight: number;
-    startY: number;
-  } | null>(null);
+  const nextBrowserTabIdRef = useRef(1);
   const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
   const completedIssueIdsRef = useRef<Set<number>>(new Set());
@@ -333,26 +337,58 @@ export function AgentsActivity({
     currentSessionId == null
       ? null
       : (terminalPanelStateBySessionId[currentSessionId] ?? null);
-  const isTerminalPanelVisible =
-    selectedTerminalPanelState != null &&
-    (selectedTerminalPanelState.terminals.length > 0 ||
-      selectedTerminalPanelState.isCreating ||
-      selectedTerminalPanelState.errorMessage != null);
+  const selectedBrowserTabs = useMemo(
+    () =>
+      currentSessionId == null
+        ? []
+        : (browserTabsBySessionId[currentSessionId] ?? []),
+    [browserTabsBySessionId, currentSessionId],
+  );
+  const sessionToolTabs = useMemo(
+    () => [
+      ...(selectedTerminalPanelState?.terminals ?? []).map((terminal) => ({
+        id: `terminal:${terminal.terminalSessionId}` as const,
+        kind: "terminal" as const,
+        label: terminal.name,
+        content: (
+          <SessionTerminalTab
+            projectId={projectId}
+            sessionId={terminal.terminalSessionId}
+          />
+        ),
+      })),
+      ...selectedBrowserTabs.map((tab, index) => ({
+        id: `browser:${tab.id}` as const,
+        kind: "browser" as const,
+        label:
+          index === 0
+            ? messages.agentsFeature.browserTool
+            : messages.agentsFeature.browserToolWithIndex(index + 1),
+        content: <SessionBrowserTab />,
+      })),
+    ],
+    [
+      messages.agentsFeature,
+      projectId,
+      selectedBrowserTabs,
+      selectedTerminalPanelState?.terminals,
+    ],
+  );
   const transitionButtonLabel =
     sessionTransitionPhase === "running"
       ? messages.agentsFeature.markReview
       : sessionTransitionPhase === "review"
         ? messages.agentsFeature.markDone
         : null;
-  const transitionMenuOptions =
+  const transitionMenuOptions: Array<{
+    action: SessionIssueTransition;
+    label: string;
+  }> =
     sessionTransitionPhase === "running"
-      ? ([
+      ? [
           { action: "review", label: messages.agentsFeature.review },
           { action: "done", label: messages.agentsFeature.done },
-        ] satisfies Array<{
-          action: SessionIssueTransition;
-          label: string;
-        }>)
+        ]
       : [];
   const canRenderTransitionButton = transitionButtonLabel !== null;
   const canRenderTransitionMenu = transitionMenuOptions.length > 0;
@@ -783,28 +819,11 @@ export function AgentsActivity({
         );
         setSessionSidePanelWidth(nextWidth);
       }
-
-      const terminalPanelDragState = terminalPanelDragStateRef.current;
-      if (terminalPanelDragState) {
-        const deltaY = event.clientY - terminalPanelDragState.startY;
-        const nextHeight = clampSessionTerminalPanelHeight(
-          terminalPanelDragState.startHeight - deltaY,
-        );
-        setTerminalPanelStateBySessionId((currentStateBySessionId) => ({
-          ...currentStateBySessionId,
-          [terminalPanelDragState.sessionId]: {
-            ...(currentStateBySessionId[terminalPanelDragState.sessionId] ??
-              createDefaultSessionInlineTerminalPanelState()),
-            height: nextHeight,
-          },
-        }));
-      }
     }
 
     function handleMouseUp() {
       dragStateRef.current = null;
       sidePanelDragStateRef.current = null;
-      terminalPanelDragStateRef.current = null;
       window.document.body.style.cursor = "";
       window.document.body.style.userSelect = "";
     }
@@ -850,6 +869,11 @@ export function AgentsActivity({
       return;
     }
 
+    if ((currentState?.terminals.length ?? 0) >= MAX_SESSION_TERMINAL_TABS) {
+      toast.error(messages.agentsFeature.sessionTerminalLimit);
+      return;
+    }
+
     setTerminalPanelState(agentSessionId, (panelState) => ({
       ...panelState,
       errorMessage: null,
@@ -877,7 +901,9 @@ export function AgentsActivity({
           },
         ],
       }));
+      workspaceCache.selectWorkspaceTab(`terminal:${terminal.sessionId}`);
     } catch (error) {
+      toast.error(toCommandError(error).message);
       setTerminalPanelState(agentSessionId, (panelState) => ({
         ...panelState,
         errorMessage: toCommandError(error).message,
@@ -891,16 +917,26 @@ export function AgentsActivity({
       return;
     }
 
-    const panelState = terminalPanelStateBySessionId[selectedSession.sessionId];
-    if (panelState?.terminals.length) {
-      setTerminalPanelState(selectedSession.sessionId, (currentState) => ({
-        ...currentState,
-        isMaximized: false,
-      }));
+    void createInlineTerminal(selectedSession.sessionId);
+  }
+
+  function handleCreateBrowserTab() {
+    if (!selectedSession) {
       return;
     }
 
-    void createInlineTerminal(selectedSession.sessionId);
+    const browserTab: SessionBrowserToolTab = {
+      id: nextBrowserTabIdRef.current,
+    };
+    nextBrowserTabIdRef.current += 1;
+    setBrowserTabsBySessionId((currentTabsBySessionId) => ({
+      ...currentTabsBySessionId,
+      [selectedSession.sessionId]: [
+        ...(currentTabsBySessionId[selectedSession.sessionId] ?? []),
+        browserTab,
+      ],
+    }));
+    workspaceCache.selectWorkspaceTab(`browser:${browserTab.id}`);
   }
 
   async function handleDeleteSession() {
@@ -923,6 +959,10 @@ export function AgentsActivity({
     try {
       await deleteAgentSession({ projectId, sessionId: deletedSessionId });
       setTerminalPanelStateBySessionId(
+        ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
+          remainingState,
+      );
+      setBrowserTabsBySessionId(
         ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
           remainingState,
       );
@@ -1006,41 +1046,42 @@ export function AgentsActivity({
     }
   }
 
-  function handleSelectInlineTerminal(terminalSessionId: number) {
-    if (!selectedSession) {
+  function handleCloseWorkspaceTab(
+    tab: Exclude<SessionWorkspaceToolTabKind | "file" | "changes", "session">,
+  ) {
+    if (isTerminalToolTab(tab)) {
+      void handleCloseInlineTerminal(Number(tab.slice("terminal:".length)));
       return;
     }
 
-    setTerminalPanelState(selectedSession.sessionId, (panelState) => ({
-      ...panelState,
-      activeTerminalSessionId: terminalSessionId,
-    }));
-  }
+    if (isBrowserToolTab(tab)) {
+      const browserTabId = Number(tab.slice("browser:".length));
+      if (!selectedSession) {
+        return;
+      }
 
-  function handleToggleTerminalPanelMaximized() {
-    if (!selectedSession) {
+      setBrowserTabsBySessionId((currentTabsBySessionId) => {
+        const remainingTabs = (
+          currentTabsBySessionId[selectedSession.sessionId] ?? []
+        ).filter((browserTab) => browserTab.id !== browserTabId);
+        if (remainingTabs.length === 0) {
+          const { [selectedSession.sessionId]: _removed, ...remaining } =
+            currentTabsBySessionId;
+          return remaining;
+        }
+
+        return {
+          ...currentTabsBySessionId,
+          [selectedSession.sessionId]: remainingTabs,
+        };
+      });
+      if (workspaceCache.activeWorkspaceTab === tab) {
+        workspaceCache.selectWorkspaceTab("session");
+      }
       return;
     }
 
-    setTerminalPanelState(selectedSession.sessionId, (panelState) => ({
-      ...panelState,
-      isMaximized: !panelState.isMaximized,
-    }));
-  }
-
-  function handleTerminalPanelSplitterMouseDown(event: ReactMouseEvent) {
-    if (event.button !== 0 || !selectedSession || !selectedTerminalPanelState) {
-      return;
-    }
-
-    event.preventDefault();
-    terminalPanelDragStateRef.current = {
-      sessionId: selectedSession.sessionId,
-      startHeight: selectedTerminalPanelState.height,
-      startY: event.clientY,
-    };
-    window.document.body.style.cursor = "row-resize";
-    window.document.body.style.userSelect = "none";
+    workspaceCache.closeWorkspaceTab(tab);
   }
 
   function handleSidePanelSplitterMouseDown(event: ReactMouseEvent) {
@@ -1194,22 +1235,19 @@ export function AgentsActivity({
           fileTab={workspaceCache.fileTab}
           isDeletingSession={isDeletingSession}
           isSidePanelOpen={isSessionSidePanelOpen}
-          isTerminalPanelActive={isTerminalPanelVisible}
           linkedIssue={linkedIssue}
           manualErrorMessage={completeManualErrorMessage}
           markReviewErrorMessage={markReviewErrorMessage}
           onAcknowledgeSessionAttention={(sessionId) => {
             void acknowledgeSessionAttention(sessionId);
           }}
-          onCloseWorkspaceTab={workspaceCache.closeWorkspaceTab}
+          onCloseWorkspaceTab={handleCloseWorkspaceTab}
+          onCreateBrowserTab={handleCreateBrowserTab}
+          onCreateTerminalTab={handleOpenTerminalPanel}
           onDeleteSession={() => {
             void handleDeleteSession();
           }}
-          onOpenTerminalPanel={handleOpenTerminalPanel}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTab}
-          onTerminalPanelSplitterMouseDown={
-            handleTerminalPanelSplitterMouseDown
-          }
           onToggleSidePanel={() =>
             setIsSessionSidePanelOpen(
               (currentIsSessionSidePanelOpen) => !currentIsSessionSidePanelOpen,
@@ -1225,29 +1263,7 @@ export function AgentsActivity({
           }}
           projectId={projectId}
           selectedSession={selectedSession}
-          terminalPanel={
-            selectedSession && selectedTerminalPanelState ? (
-              <SessionInlineTerminalPanel
-                agentSessionId={selectedSession.sessionId}
-                projectId={projectId}
-                state={selectedTerminalPanelState}
-                onCloseTerminal={(terminalSessionId) => {
-                  void handleCloseInlineTerminal(terminalSessionId);
-                }}
-                onCreateTerminal={(agentSessionId) => {
-                  void createInlineTerminal(agentSessionId);
-                }}
-                onSelectTerminal={handleSelectInlineTerminal}
-                onToggleMaximized={handleToggleTerminalPanelMaximized}
-              />
-            ) : null
-          }
-          terminalPanelHeight={
-            selectedTerminalPanelState?.isMaximized
-              ? 0
-              : (selectedTerminalPanelState?.height ??
-                DEFAULT_SESSION_TERMINAL_PANEL_HEIGHT)
-          }
+          toolTabs={sessionToolTabs}
           transitionButtonLabel={transitionButtonLabel}
           transitionMenuOptions={transitionMenuOptions}
           transitionPhase={sessionTransitionPhase}
@@ -1472,4 +1488,16 @@ function getSessionTransitionPhase(
     default:
       return null;
   }
+}
+
+function isTerminalToolTab(
+  tab: Exclude<SessionWorkspaceToolTabKind | "file" | "changes", "session">,
+): tab is `terminal:${number}` {
+  return tab.startsWith("terminal:");
+}
+
+function isBrowserToolTab(
+  tab: Exclude<SessionWorkspaceToolTabKind | "file" | "changes", "session">,
+): tab is `browser:${number}` {
+  return tab.startsWith("browser:");
 }

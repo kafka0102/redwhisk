@@ -379,6 +379,17 @@ export interface I18nMessages {
     diffView: (fileName: string) => string;
     closeTab: (label: string) => string;
     sessionTab: string;
+    addSessionTool: string;
+    terminalTool: string;
+    browserTool: string;
+    browserToolWithIndex: (index: number) => string;
+    browserTab: string;
+    browserAddress: string;
+    browserAddressPlaceholder: string;
+    browserEmpty: string;
+    browserFrameTitle: (url: string) => string;
+    sessionTerminal: string;
+    sessionTerminalLimit: string;
     query: string;
     mode: string;
     noSearchMatches: string;
@@ -840,6 +851,17 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       diffView: (fileName) => `${fileName} diff`,
       closeTab: (label) => `Close ${label}`,
       sessionTab: "Session",
+      addSessionTool: "Add session tool",
+      terminalTool: "Terminal",
+      browserTool: "Browser",
+      browserToolWithIndex: (index) => `Browser ${index}`,
+      browserTab: "Session browser",
+      browserAddress: "Browser address",
+      browserAddressPlaceholder: "Enter address and press Enter",
+      browserEmpty: "Enter an address to open a page.",
+      browserFrameTitle: (url) => `Browser page ${url}`,
+      sessionTerminal: "Session terminal",
+      sessionTerminalLimit: "Up to 10 terminals are supported.",
       query: "Query",
       mode: "Mode",
       noSearchMatches: "No matches returned",
@@ -1286,6 +1308,17 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       diffView: (fileName) => `${fileName} 差异`,
       closeTab: (label) => `关闭 ${label}`,
       sessionTab: "会话",
+      addSessionTool: "添加会话工具",
+      terminalTool: "终端",
+      browserTool: "浏览器",
+      browserToolWithIndex: (index) => `浏览器 ${index}`,
+      browserTab: "会话浏览器",
+      browserAddress: "浏览器地址",
+      browserAddressPlaceholder: "输入地址并按 Enter",
+      browserEmpty: "输入地址后打开页面。",
+      browserFrameTitle: (url) => `浏览器页面 ${url}`,
+      sessionTerminal: "会话终端",
+      sessionTerminalLimit: "最多支持 10 个终端。",
       query: "查询",
       mode: "模式",
       noSearchMatches: "没有返回匹配项",
