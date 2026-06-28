@@ -42,8 +42,8 @@ use crate::types::issue::{
     IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord,
     IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo,
     IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    PreviewIssueAttachmentInput, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
-    UpdateIssueInput,
+    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
+    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::issue_completion::{
@@ -383,6 +383,13 @@ impl<'connection> IssueService<'connection> {
         }
         fs::copy(&source.absolute_path, &target_path).map_err(issue_io_error)?;
         Ok(())
+    }
+
+    pub fn save_issue_attachment_draft(
+        &self,
+        input: SaveIssueAttachmentDraftInput,
+    ) -> Result<SaveIssueAttachmentDraftResult, CommandError> {
+        save_issue_attachment_draft_in_data_dir(&self.data_dir, input)
     }
 
     pub fn mark_issue_review(
@@ -1512,6 +1519,13 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).export_issue_attachment(input)
+    }
+
+    pub fn save_issue_attachment_draft_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SaveIssueAttachmentDraftInput,
+    ) -> Result<SaveIssueAttachmentDraftResult, CommandError> {
+        save_issue_attachment_draft_in_data_dir(data_dir.as_ref(), input)
     }
 
     pub fn mark_issue_review_in_data_dir(
@@ -2859,6 +2873,44 @@ fn persist_new_attachments(
     }
 
     Ok((persisted, created_files))
+}
+
+fn save_issue_attachment_draft_in_data_dir(
+    data_dir: &Path,
+    input: SaveIssueAttachmentDraftInput,
+) -> Result<SaveIssueAttachmentDraftResult, CommandError> {
+    let source = PathBuf::from(&input.source_path);
+    let metadata = fs::metadata(&source).map_err(issue_io_error)?;
+    if !metadata.is_file() {
+        return Err(CommandError::new(
+            CommandErrorCode::IssueValidationFailed,
+            "附件源文件不存在。",
+        ));
+    }
+
+    let display_name = input.display_name.trim();
+    let display_name = if display_name.is_empty() {
+        infer_display_name(&source)
+    } else {
+        display_name.to_string()
+    };
+    let stored_name = format!(
+        "{}-{}",
+        current_epoch_millis()?,
+        sanitize_attachment_file_name(&display_name)
+    );
+    let draft_dir = data_dir.join("issue-attachment-drafts");
+    fs::create_dir_all(&draft_dir).map_err(issue_io_error)?;
+    let destination = draft_dir.join(stored_name);
+    fs::copy(&source, &destination).map_err(issue_io_error)?;
+
+    let analysis = analyze_attachment(&display_name, None);
+    Ok(SaveIssueAttachmentDraftResult {
+        path: destination.to_string_lossy().to_string(),
+        display_name,
+        kind: analysis.kind,
+        is_previewable: analysis.is_previewable,
+    })
 }
 
 fn rewrite_attachment_tokens(

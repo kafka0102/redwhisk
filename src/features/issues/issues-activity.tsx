@@ -11,6 +11,7 @@ import {
   listIssues,
   markIssueReview,
   previewIssueAttachment,
+  saveIssueAttachmentDraft,
   updateIssue,
   type CompleteIssueFlowResult,
   type IssueCompletionExternalWorktreeDecision,
@@ -555,12 +556,17 @@ export function IssuesActivity({
       return null;
     }
 
-    const attachment = buildDraftAttachment(selectedPath);
-    setForm((currentForm) => ({
-      ...currentForm,
-      attachments: [...currentForm.attachments, attachment],
-    }));
-    return attachment;
+    try {
+      const attachment = await buildDraftAttachment(selectedPath);
+      setForm((currentForm) => ({
+        ...currentForm,
+        attachments: [...currentForm.attachments, attachment],
+      }));
+      return attachment;
+    } catch (error) {
+      setDialogErrorMessage(toCommandError(error).message);
+      return null;
+    }
   }
 
   function handleRemoveAttachment(
@@ -1388,58 +1394,22 @@ function parseIssueDescription(
   };
 }
 
-function buildDraftAttachment(sourcePath: string): IssueAttachmentDraft {
+async function buildDraftAttachment(
+  sourcePath: string,
+): Promise<IssueAttachmentDraft> {
   const displayName = sourcePath.split(/[\\/]/).pop() ?? sourcePath;
-  const extension = displayName.split(".").pop()?.toLowerCase() ?? "";
-  const kind = attachmentKindFromExtension(extension);
+  const draft = await saveIssueAttachmentDraft({
+    sourcePath,
+    displayName,
+  });
   return {
     token: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    displayName,
-    sourcePath,
-    kind,
-    isPreviewable: isPreviewableAttachmentKind(kind),
-    absolutePath: sourcePath,
+    displayName: draft.displayName,
+    sourcePath: draft.path,
+    kind: draft.kind,
+    isPreviewable: draft.isPreviewable,
+    absolutePath: draft.path,
   };
-}
-
-function attachmentKindFromExtension(
-  extension: string,
-): IssueAttachmentDraft["kind"] {
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) {
-    return "image";
-  }
-  if (extension === "pdf") {
-    return "pdf";
-  }
-  if (["doc", "docx"].includes(extension)) {
-    return "word";
-  }
-  if (
-    [
-      "md",
-      "json",
-      "txt",
-      "yaml",
-      "yml",
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "css",
-      "html",
-      "xml",
-      "csv",
-    ].includes(extension)
-  ) {
-    return "text";
-  }
-  return "generic";
-}
-
-function isPreviewableAttachmentKind(
-  kind: IssueAttachmentDraft["kind"],
-): boolean {
-  return kind === "image" || kind === "text";
 }
 
 function canRunIssueFor(

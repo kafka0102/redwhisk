@@ -64,6 +64,7 @@ pub fn run() {
             commands::issue_commands::update_issue,
             commands::issue_commands::preview_issue_attachment,
             commands::issue_commands::export_issue_attachment,
+            commands::issue_commands::save_issue_attachment_draft,
             commands::issue_commands::mark_issue_review,
             commands::issue_commands::advance_issue_status,
             commands::issue_commands::complete_issue_manual,

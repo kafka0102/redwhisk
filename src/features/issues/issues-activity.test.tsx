@@ -21,6 +21,7 @@ import {
   markIssueReview,
   prepareAgentCommitCompletion,
   previewIssueAttachment,
+  saveIssueAttachmentDraft,
   sendAgentCommitPrompt,
   startAgentSession,
   updateIssue,
@@ -54,6 +55,7 @@ vi.mock("./issue-commands", () => ({
   markIssueReview: vi.fn(),
   prepareAgentCommitCompletion: vi.fn(),
   previewIssueAttachment: vi.fn(),
+  saveIssueAttachmentDraft: vi.fn(),
   sendAgentCommitPrompt: vi.fn(),
   startAgentSession: vi.fn(),
   updateIssue: vi.fn(),
@@ -178,6 +180,7 @@ const prepareAgentCommitCompletionMock = vi.mocked(
   prepareAgentCommitCompletion,
 );
 const previewIssueAttachmentMock = vi.mocked(previewIssueAttachment);
+const saveIssueAttachmentDraftMock = vi.mocked(saveIssueAttachmentDraft);
 const sendAgentCommitPromptMock = vi.mocked(sendAgentCommitPrompt);
 const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
@@ -379,6 +382,7 @@ describe("IssuesActivity", () => {
     markIssueReviewMock.mockReset();
     prepareAgentCommitCompletionMock.mockReset();
     previewIssueAttachmentMock.mockReset();
+    saveIssueAttachmentDraftMock.mockReset();
     sendAgentCommitPromptMock.mockReset();
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
@@ -397,6 +401,12 @@ describe("IssuesActivity", () => {
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
     convertFileSrcMock.mockImplementation((path) => `asset://${path}`);
+    saveIssueAttachmentDraftMock.mockImplementation(async (input) => ({
+      path: `/Users/yujianjia/.redwhisk/issue-attachment-drafts/${input.displayName}`,
+      displayName: input.displayName,
+      kind: input.displayName.endsWith(".png") ? "image" : "text",
+      isPreviewable: true,
+    }));
     resetIssuePageStateCacheForTests();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     listProjectLabelsMock.mockImplementation(async ({ scope }) => {
@@ -788,6 +798,10 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("button", { name: "Attach file" }));
 
     expect(openDialogMock).toHaveBeenCalled();
+    expect(saveIssueAttachmentDraftMock).toHaveBeenCalledWith({
+      sourcePath: "/tmp/tsconfig.json",
+      displayName: "tsconfig.json",
+    });
     expect(screen.getByText("tsconfig.json")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
@@ -799,7 +813,8 @@ describe("IssuesActivity", () => {
         attachments: [
           expect.objectContaining({
             displayName: "tsconfig.json",
-            sourcePath: "/tmp/tsconfig.json",
+            sourcePath:
+              "/Users/yujianjia/.redwhisk/issue-attachment-drafts/tsconfig.json",
           }),
         ],
         labelIds: [],
@@ -807,6 +822,52 @@ describe("IssuesActivity", () => {
     );
     expect(createIssueMock.mock.calls[0]?.[0].description).toMatch(
       /^Read the config\.\n\n\{\{issue-attachment-temp:draft-[^}]+\}\}$/,
+    );
+  });
+
+  it("stores draft image attachments under the RedWhisk data directory before editor preview", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    openDialogMock.mockResolvedValue("/Users/alice/Desktop/screenshot.png");
+    saveIssueAttachmentDraftMock.mockResolvedValue({
+      path: "/Users/yujianjia/.redwhisk/issue-attachment-drafts/screenshot.png",
+      displayName: "screenshot.png",
+      kind: "image",
+      isPreviewable: true,
+    });
+    createIssueMock.mockResolvedValue({
+      id: 25,
+      projectId: 1,
+      title: "",
+      description: "",
+      status: "backlog",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_632_000_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.type(screen.getByLabelText("Title"), "image draft");
+    await user.click(screen.getByRole("button", { name: "Attach file" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    expect(saveIssueAttachmentDraftMock).toHaveBeenCalledWith({
+      sourcePath: "/Users/alice/Desktop/screenshot.png",
+      displayName: "screenshot.png",
+    });
+    expect(createIssueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({
+            displayName: "screenshot.png",
+            sourcePath:
+              "/Users/yujianjia/.redwhisk/issue-attachment-drafts/screenshot.png",
+          }),
+        ],
+      }),
     );
   });
 
@@ -2193,7 +2254,8 @@ describe("IssuesActivity", () => {
     );
     expect(previewIssueAttachmentMock).toHaveBeenCalledWith({
       projectId: 1,
-      sourcePath: "/tmp/tsconfig.json",
+      sourcePath:
+        "/Users/yujianjia/.redwhisk/issue-attachment-drafts/tsconfig.json",
       displayName: "tsconfig.json",
     });
     expect(
@@ -2207,7 +2269,8 @@ describe("IssuesActivity", () => {
     expect(saveDialogMock).toHaveBeenCalled();
     expect(exportIssueAttachmentMock).toHaveBeenCalledWith({
       projectId: 1,
-      sourcePath: "/tmp/tsconfig.json",
+      sourcePath:
+        "/Users/yujianjia/.redwhisk/issue-attachment-drafts/tsconfig.json",
       displayName: "tsconfig.json",
       targetPath: "/tmp/exported-tsconfig.json",
     });
