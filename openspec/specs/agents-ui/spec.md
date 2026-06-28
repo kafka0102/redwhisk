@@ -21,19 +21,13 @@ Agents Activity SHALL render the selected Session header as a compact, full-widt
 - **THEN** the previous `Open Issue` button is not shown
 - **AND** the status transition dropdown remains available when the Session can transition
 - **AND** the transition dropdown button uses a white background
-- **AND** terminal and right-split icon buttons are shown to the right of the transition control
+- **AND** the right-split icon button is shown to the right of the transition control
 
 #### Scenario: Opening the side panel
 
 - **WHEN** the user clicks the right-split icon button
 - **THEN** the right Session side panel opens
 - **AND** the right-split icon button indicates the selected state with a subtle light background or inset treatment
-
-#### Scenario: Opening the inline terminal panel
-
-- **WHEN** the user clicks the terminal icon button in the Session header
-- **THEN** the Session workspace opens an inline terminal panel below the Session main content
-- **AND** the terminal icon button indicates the selected state with a subtle light background or inset treatment
 
 #### Scenario: Session stream handles high-frequency assistant output
 
@@ -182,43 +176,56 @@ Workspace file and diff commands SHALL only read files inside the selected proje
 - **THEN** the command fails with a structured command error
 - **AND** no file content outside the project repository is returned
 
-### Requirement: Session inline terminal panel
+### Requirement: Session 主窗口提供工具 Tab 入口
 
-Agents Activity SHALL provide a Session-scoped inline terminal panel below the Session main content.
+Agents Activity 的 Session 主窗口 SHALL 将 Session 内容作为首个 Tab，并 SHALL 在该 Tab 后提供一个 `+` 菜单入口用于新增工具 Tab。
 
-#### Scenario: Opening the first terminal
+#### Scenario: 展示工具新增菜单
 
-- **WHEN** the user clicks the Session header terminal icon and no inline terminal is open
-- **THEN** Agents Activity starts one temporary terminal for the selected Agent Session
-- **AND** the panel appears below the Session main content with default height `200px`
-- **AND** the terminal tab name is the final path segment of the terminal working directory
-- **AND** the terminal process working directory is the selected Agent Session's actual working directory
+- **GIVEN** 用户正在查看一个 Agent Session
+- **WHEN** 用户点击 Session 主窗口 Tab 栏中的 `+`
+- **THEN** 系统展示包含“终端”和“浏览器”的菜单
+- **AND** 每个菜单项都带有默认图标
 
-#### Scenario: Managing terminal tabs
+### Requirement: 终端作为 Session 工具 Tab 管理
 
-- **WHEN** at least one inline terminal is open
-- **THEN** the terminal tab row shows one tab per terminal
-- **AND** a plus icon button is available next to the tabs
-- **AND** clicking the plus icon starts another temporary terminal for the same selected Agent Session
-- **AND** each tab can be closed
-- **AND** closing the active tab selects another remaining tab when one exists
-- **AND** closing the last tab hides the inline terminal panel
+系统 SHALL 允许用户从 `+` 菜单新增终端 Tab，并 SHALL 在 Session Tab 内容区内渲染终端，而不是在页面底部渲染终端面板。
 
-#### Scenario: Resizing terminal panel
+#### Scenario: 新增终端 Tab
 
-- **WHEN** the inline terminal panel is visible and not maximized
-- **THEN** a horizontal splitter separates Session main content from the terminal panel
-- **AND** dragging the splitter up or down changes the terminal panel height
-- **AND** the panel remains within usable minimum and maximum heights
+- **GIVEN** 用户正在查看一个 Agent Session
+- **WHEN** 用户从 `+` 菜单选择“终端”
+- **THEN** 系统新增一个可切换的终端 Tab
+- **AND** 终端内容显示在当前 Session 主窗口的 Tab 内容区内
 
-#### Scenario: Maximizing Session main content
+#### Scenario: 关闭终端 Tab
 
-- **WHEN** the user clicks the maximize button at the far right of the terminal tab row
-- **THEN** Agents Activity hides the inline terminal panel and lets the Session main content use the available height
-- **AND** clicking the button again restores the previous inline terminal panel
+- **GIVEN** 用户已打开一个或多个终端 Tab
+- **WHEN** 用户点击某个终端 Tab 的关闭按钮
+- **THEN** 系统关闭该终端 Tab
+- **AND** 其他 Session 内容或工具 Tab 保持可用
 
-#### Scenario: Switching Session
+#### Scenario: 限制终端 Tab 数量
 
-- **WHEN** the user opens inline terminals for Session A and then switches to Session B
-- **THEN** the inline terminal panel state is scoped to the selected Session
-- **AND** new terminals for Session B start in Session B's actual working directory
+- **GIVEN** 用户已经打开 10 个终端 Tab
+- **WHEN** 用户再次从 `+` 菜单选择“终端”
+- **THEN** 系统不新增终端 Tab
+- **AND** 系统显示不支持继续添加终端的提示
+
+### Requirement: 浏览器作为 Session 工具 Tab 管理
+
+系统 SHALL 允许用户从 `+` 菜单新增浏览器 Tab，并 SHALL 在浏览器 Tab 内显示地址输入框和嵌入式浏览区域。
+
+#### Scenario: 新增浏览器 Tab
+
+- **GIVEN** 用户正在查看一个 Agent Session
+- **WHEN** 用户从 `+` 菜单选择“浏览器”
+- **THEN** 系统新增一个浏览器 Tab
+- **AND** 浏览器 Tab 显示地址输入框和嵌入式浏览区域
+
+#### Scenario: 地址栏访问或刷新页面
+
+- **GIVEN** 用户已打开浏览器 Tab
+- **WHEN** 用户在地址栏输入地址并按 Enter
+- **THEN** 嵌入式浏览区域访问该地址
+- **AND** 如果地址与当前地址相同，系统重新加载当前页面
