@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
   type RefObject,
+  type SetStateAction,
 } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ interface IssueEditablePageProps {
   selectedIssue: IssueRecord | null;
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onFormChange: (form: IssueFormState) => void;
+  onFormChange: (form: SetStateAction<IssueFormState>) => void;
   onSelectAttachment: () => Promise<IssueAttachmentDraft | null>;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
@@ -225,7 +226,7 @@ function IssueEditableFields({
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
-  onFormChange: (form: IssueFormState) => void;
+  onFormChange: (form: SetStateAction<IssueFormState>) => void;
   onOpenProjectLabelsSettings: () => void;
   onSelectAttachment: () => Promise<IssueAttachmentDraft | null>;
   onPreviewAttachment: (
@@ -253,10 +254,10 @@ function IssueEditableFields({
           spellCheck={false}
           value={form.title}
           onChange={(event) =>
-            onFormChange({
-              ...form,
+            onFormChange((current) => ({
+              ...current,
               title: event.target.value,
-            })
+            }))
           }
         />
       </div>
@@ -269,10 +270,10 @@ function IssueEditableFields({
           onSelectAttachment={onSelectAttachment}
           onDownloadAttachment={onDownloadAttachment}
           onChange={(description) =>
-            onFormChange({
-              ...form,
+            onFormChange((current) => ({
+              ...current,
               description,
-            })
+            }))
           }
           onPreviewAttachment={onPreviewAttachment}
           onRemoveAttachment={onRemoveAttachment}
@@ -285,10 +286,10 @@ function IssueEditableFields({
               labelIds={form.labelIds}
               labelsErrorMessage={labelsErrorMessage}
               onChange={(labelIds) =>
-                onFormChange({
-                  ...form,
+                onFormChange((current) => ({
+                  ...current,
                   labelIds,
-                })
+                }))
               }
               onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
             />

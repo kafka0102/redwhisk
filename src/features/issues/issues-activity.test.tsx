@@ -113,7 +113,7 @@ vi.mock("./issue-description-editor", () => ({
     onDownloadAttachment?: (attachment: unknown) => void;
     onPreviewAttachment?: (attachment: unknown) => void;
     onRemoveAttachment?: (attachment: unknown) => void;
-    onSelectAttachment?: () => Promise<unknown>;
+    onSelectAttachment?: (filter?: "image" | "file") => Promise<unknown>;
     placeholder: string;
     value: string;
   }) => (
@@ -130,6 +130,29 @@ vi.mock("./issue-description-editor", () => ({
         onClick={() => void onSelectAttachment?.()}
       >
         Attach file
+      </button>
+      <button
+        aria-label="Upload image"
+        type="button"
+        onClick={async () => {
+          const attachment = (await onSelectAttachment?.("image")) as
+            | {
+                token: string;
+                displayName: string;
+              }
+            | null
+            | undefined;
+          if (!attachment) {
+            return;
+          }
+          // 模拟真实 RichTextEditor 在 insertEmbed 图片后触发的 text-change：
+          // 同步把图片占位符 markdown 写回 description，与 attachments 追加并发，
+          // 用以回归验证 setForm 竞态不会丢失刚追加的附件。
+          const markdown = `![${attachment.displayName}]({{issue-attachment-temp:${attachment.token}}})`;
+          onChange(markdown);
+        }}
+      >
+        Upload image
       </button>
       {attachments.map((attachment) => (
         <div key={"id" in attachment ? attachment.id : attachment.token}>
@@ -868,6 +891,59 @@ describe("IssuesActivity", () => {
           }),
         ],
       }),
+    );
+  });
+
+  it("preserves an image attachment when the editor rewrites description synchronously after upload", async () => {
+    // 回归测试：真实 RichTextEditor 在 insertEmbed 图片后会同步触发 text-change，
+    // 进而调用 description 的 onChange。若该 onChange 用闭包陈旧的 form 快照覆盖，
+    // 会把刚由 handleSelectAttachment 追加的图片附件丢掉，导致保存时 attachments 为空、
+    // 后端不重写 token、不建附件记录。这里用 mock 编辑器复现该并发场景。
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    openDialogMock.mockResolvedValue("/Users/alice/Desktop/screenshot.png");
+    saveIssueAttachmentDraftMock.mockResolvedValue({
+      path: "/Users/yujianjia/.redwhisk/issue-attachment-drafts/screenshot.png",
+      displayName: "screenshot.png",
+      kind: "image",
+      isPreviewable: true,
+    });
+    createIssueMock.mockResolvedValue({
+      id: 26,
+      projectId: 1,
+      title: "image race",
+      description: "",
+      status: "backlog",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_632_000_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.type(screen.getByLabelText("Title"), "image race");
+    // 点击 Upload image：mock 编辑器会先 onSelectAttachment("image") 追加附件，
+    // 再同步 onChange 写入图片占位符 markdown，模拟真实 insertEmbed → text-change。
+    await user.click(screen.getByRole("button", { name: "Upload image" }));
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    expect(createIssueMock).toHaveBeenCalledTimes(1);
+    const createCall = createIssueMock.mock.calls[0]?.[0];
+    // 附件必须仍存在于提交载荷中（未被 description onChange 覆盖丢失）
+    expect(createCall.attachments).toHaveLength(1);
+    expect(createCall.attachments?.[0]).toEqual(
+      expect.objectContaining({
+        displayName: "screenshot.png",
+        sourcePath:
+          "/Users/yujianjia/.redwhisk/issue-attachment-drafts/screenshot.png",
+        tempToken: expect.stringMatching(/^draft-/),
+      }),
+    );
+    // description 应含图片占位符 markdown（temp token 待后端重写）
+    expect(createCall.description).toMatch(
+      /^!\[screenshot\.png\]\(\{\{issue-attachment-temp:draft-[^}]+\}\}\)$/,
     );
   });
 
