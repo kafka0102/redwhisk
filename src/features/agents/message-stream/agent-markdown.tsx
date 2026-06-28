@@ -7,6 +7,7 @@
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
+import { memo } from "react";
 
 const components: Components = {
   a({ href, children }) {
@@ -46,7 +47,9 @@ interface AgentMarkdownProps {
   children: string;
 }
 
-export function AgentMarkdown({ children }: AgentMarkdownProps) {
+export const AgentMarkdown = memo(function AgentMarkdown({
+  children,
+}: AgentMarkdownProps) {
   return (
     <div className="agents-message__markdown">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
@@ -54,4 +57,4 @@ export function AgentMarkdown({ children }: AgentMarkdownProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});

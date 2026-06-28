@@ -5232,6 +5232,8 @@ button:focus-visible {
   min-width: 0;
   width: min(880px, 100%);
   margin: 0 auto;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
 }
 
 .agents-message__entry--user {

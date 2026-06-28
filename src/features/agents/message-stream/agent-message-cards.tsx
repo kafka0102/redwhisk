@@ -18,6 +18,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import { memo, useState } from "react";
 
 import { Badge } from "@/components/ui";
 import { useI18n } from "../../../shared/i18n/i18n";
@@ -43,7 +44,11 @@ export function AgentMessageCards({ entries }: AgentMessageCardsProps) {
   );
 }
 
-function MessageCard({ entry }: { entry: MessageStreamEntry }) {
+const MessageCard = memo(function MessageCard({
+  entry,
+}: {
+  entry: MessageStreamEntry;
+}) {
   const { messages } = useI18n();
   const item = entry.item;
   switch (item.type) {
@@ -69,7 +74,7 @@ function MessageCard({ entry }: { entry: MessageStreamEntry }) {
     default:
       return null;
   }
-}
+});
 
 function UserMessageCard({
   item,
@@ -130,6 +135,7 @@ function ToolCallCard({
 }: {
   item: Extract<AgentTimelineItem, { type: "tool_call" }>;
 }) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const presentation = buildToolCallPresentation(item.name, item.detail);
   const hasExpandableDetail = hasToolCallDetail(item.detail);
   return (
@@ -140,8 +146,14 @@ function ToolCallCard({
         }`}
       >
         {hasExpandableDetail ? (
-          <details className="agents-message__tool-details">
-            <summary className="agents-message__tool-header">
+          <details className="agents-message__tool-details" open={isDetailOpen}>
+            <summary
+              className="agents-message__tool-header"
+              onClick={(event) => {
+                event.preventDefault();
+                setIsDetailOpen((current) => !current);
+              }}
+            >
               <ToolCallHeader
                 detail={item.detail}
                 presentation={presentation}
@@ -149,7 +161,7 @@ function ToolCallCard({
                 isExpandable
               />
             </summary>
-            <ToolCallDetail detail={item.detail} />
+            {isDetailOpen ? <ToolCallDetail detail={item.detail} /> : null}
           </details>
         ) : (
           <>
