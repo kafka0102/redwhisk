@@ -2,7 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{Manager, State};
+use serde::Serialize;
+use tauri::{Emitter, Manager, State};
 
 use crate::agent::codex_app_server::session::list_models_with_command;
 use crate::agent::codex_config;
@@ -27,6 +28,16 @@ use crate::types::agent_session::{
     WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
+
+const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionListChangedPayload {
+    project_id: i64,
+    session_id: Option<i64>,
+    reason: &'static str,
+}
 
 #[tauri::command]
 pub fn list_agent_sessions(
@@ -54,12 +65,14 @@ pub fn list_agent_sessions(
             .map_err(CommandError::from)?;
     }
 
-    AgentSessionService::list_agent_sessions_in_data_dir(
+    let result = AgentSessionService::list_agent_sessions_in_data_dir(
         data_dir,
         project_id,
         &state.pty_sessions,
         &state.agent_sessions,
-    )
+    )?;
+    shutdown_runtime_sessions(&state, &result.pruned_runtime_session_ids);
+    Ok(result.response)
 }
 
 #[tauri::command]
@@ -376,6 +389,33 @@ fn build_agent_session_service(connection: &rusqlite::Connection) -> AgentSessio
     )
 }
 
+fn shutdown_runtime_sessions(state: &State<'_, AppState>, session_ids: &[i64]) {
+    for session_id in session_ids {
+        if state.pty_sessions.contains(*session_id) {
+            let _ = state.pty_sessions.kill(*session_id);
+        }
+        if let Some(handle) = state.agent_sessions.unregister(*session_id) {
+            handle.shutdown();
+        }
+    }
+}
+
+fn emit_agent_session_list_changed(
+    app: &tauri::AppHandle,
+    project_id: i64,
+    session_id: Option<i64>,
+    reason: &'static str,
+) {
+    let _ = app.emit(
+        AGENT_SESSION_LIST_CHANGED_EVENT,
+        AgentSessionListChangedPayload {
+            project_id,
+            session_id,
+            reason,
+        },
+    );
+}
+
 #[tauri::command]
 pub fn start_structured_agent_session(
     app: tauri::AppHandle,
@@ -402,12 +442,15 @@ pub fn start_structured_agent_session(
             .map_err(CommandError::from)?;
     }
 
-    AgentSessionService::start_structured_agent_session_in_data_dir(
+    let project_id = input.project_id;
+    let result = AgentSessionService::start_structured_agent_session_in_data_dir(
         data_dir,
         input,
         &state.agent_sessions,
         &state.agent_event_broadcaster,
-    )
+    )?;
+    emit_agent_session_list_changed(&app, project_id, Some(result.session_id), "session_started");
+    Ok(result)
 }
 
 #[tauri::command]
@@ -436,12 +479,15 @@ pub fn resume_structured_agent_session(
             .map_err(CommandError::from)?;
     }
 
-    AgentSessionService::resume_structured_agent_session_in_data_dir(
+    let project_id = input.project_id;
+    let result = AgentSessionService::resume_structured_agent_session_in_data_dir(
         data_dir,
         input,
         &state.agent_sessions,
         &state.agent_event_broadcaster,
-    )
+    )?;
+    emit_agent_session_list_changed(&app, project_id, Some(result.session_id), "session_resumed");
+    Ok(result)
 }
 
 #[tauri::command]
@@ -457,6 +503,12 @@ pub fn delete_agent_session(
     if let Some(handle) = state.agent_sessions.unregister(input.session_id) {
         handle.shutdown();
     }
+    emit_agent_session_list_changed(
+        &app,
+        input.project_id,
+        Some(input.session_id),
+        "session_deleted",
+    );
 
     Ok(result)
 }

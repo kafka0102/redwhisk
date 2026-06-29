@@ -162,6 +162,43 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    pub fn list_runtime_cleanup_candidates(
+        &self,
+        project_id: i64,
+        session_ids: &[i64],
+    ) -> rusqlite::Result<Vec<i64>> {
+        let mut cleanup_ids = Vec::new();
+        let mut statement = self
+            .connection
+            .prepare("SELECT project_id, status, del FROM agent_sessions WHERE id = ?1")?;
+
+        for session_id in session_ids {
+            let row = statement
+                .query_row(params![session_id], |row| {
+                    let row_project_id: i64 = row.get(0)?;
+                    let status: String = row.get(1)?;
+                    let del: i64 = row.get(2)?;
+                    Ok((row_project_id, status, del))
+                })
+                .optional()?;
+
+            match row {
+                Some((row_project_id, status, del))
+                    if row_project_id == project_id
+                        && (del != 0
+                            || status
+                                != agent_session_status_to_str(&AgentSessionStatus::Running)) =>
+                {
+                    cleanup_ids.push(*session_id);
+                }
+                None => cleanup_ids.push(*session_id),
+                _ => {}
+            }
+        }
+
+        Ok(cleanup_ids)
+    }
+
     pub fn list_running_by_project_id(
         &self,
         project_id: i64,

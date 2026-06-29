@@ -93,6 +93,11 @@ struct SessionLaunchContext {
     worktree_setup_command: Option<String>,
 }
 
+pub struct AgentSessionRuntimeListResult {
+    pub response: AgentSessionListResponse,
+    pub pruned_runtime_session_ids: Vec<i64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 struct StructuredTimelineHistory {
     items: Vec<AgentTimelineItem>,
@@ -1096,6 +1101,17 @@ impl<'connection> AgentSessionService<'connection> {
             .collect();
 
         Ok(AgentSessionListResponse { sessions })
+    }
+
+    pub fn runtime_session_ids_to_cleanup(
+        &self,
+        project_id: i64,
+        registered_session_ids: &[i64],
+    ) -> Result<Vec<i64>, CommandError> {
+        self.ensure_project_exists(project_id)?;
+        self.agent_session_repository
+            .list_runtime_cleanup_candidates(project_id, registered_session_ids)
+            .map_err(agent_session_database_error)
     }
 
     pub fn get_project_git_branches(
@@ -2102,7 +2118,7 @@ impl AgentSessionService<'_> {
         project_id: i64,
         pty_sessions: &PtySessionManager,
         agent_registry: &AgentSessionRegistry,
-    ) -> Result<AgentSessionListResponse, CommandError> {
+    ) -> Result<AgentSessionRuntimeListResult, CommandError> {
         let database = DatabaseConfig::new(data_dir)
             .open()
             .map_err(CommandError::from)?;
@@ -2110,25 +2126,37 @@ impl AgentSessionService<'_> {
             .run(&database.connection)
             .map_err(agent_session_database_error)?;
 
-        AgentSessionService::new(
+        let service = AgentSessionService::new(
             IssueRepository::new(&database.connection),
             ProjectRepository::new(&database.connection),
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
-        )
-        .reconcile_unrecoverable_running_sessions(
+        );
+        service.reconcile_unrecoverable_running_sessions(
             project_id,
             pty_sessions,
             agent_registry,
         )?;
 
-        AgentSessionService::new(
+        let response = AgentSessionService::new(
             IssueRepository::new(&database.connection),
             ProjectRepository::new(&database.connection),
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
         )
-        .list_agent_sessions(project_id)
+        .list_agent_sessions(project_id)?;
+        let pruned_runtime_session_ids = AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .runtime_session_ids_to_cleanup(project_id, &agent_registry.session_ids())?;
+
+        Ok(AgentSessionRuntimeListResult {
+            response,
+            pruned_runtime_session_ids,
+        })
     }
 
     pub fn list_monitored_agent_sessions_in_data_dir(

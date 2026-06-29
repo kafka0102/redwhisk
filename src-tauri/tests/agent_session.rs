@@ -2274,6 +2274,38 @@ fn list_agent_sessions_prunes_broken_structured_standalone_sessions() {
 }
 
 #[test]
+fn list_agent_sessions_runtime_result_reports_pruned_session_ids() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "standalone-runtime-prune-project");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let broken_session_id = insert_standalone_agent_session_row(
+        &database.connection,
+        project_id,
+        profile_id,
+        AgentSessionStatus::Stopped,
+        AgentSessionAttention::None,
+        1_780_628_440_000,
+        Some(1_780_628_441_000),
+        "/tmp/structured-project-1-pid-456-1780628440000.jsonl",
+    );
+
+    let agent_registry = AgentSessionRegistry::new();
+    agent_registry.register(broken_session_id, Arc::new(NoopStructuredHandle));
+
+    let result = AgentSessionService::list_agent_sessions_in_data_dir(
+        temp_dir.path(),
+        project_id,
+        &PtySessionManager::new(),
+        &agent_registry,
+    )
+    .expect("list sessions should succeed");
+
+    assert!(result.response.sessions.is_empty());
+    assert_eq!(result.pruned_runtime_session_ids, vec![broken_session_id]);
+}
+
+#[test]
 fn set_session_attention_clears_requested_attention_and_records_manual_clear_event() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

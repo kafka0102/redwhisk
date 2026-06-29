@@ -5805,6 +5805,13 @@ details[open] > summary .agents-message__summary-chevron {
   word-break: break-word;
 }
 
+.agents-message__truncated {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .agents-message__command--details,
 .agents-message__path--details {
   margin-top: 6px;
