@@ -727,16 +727,27 @@ pub fn save_agent_attachment(
 }
 
 #[tauri::command]
-pub fn read_agent_timeline(
+pub async fn read_agent_timeline(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: ReadAgentTimelineInput,
 ) -> Result<ReadAgentTimelineResult, CommandError> {
-    let database = open_agent_session_database(&app)?;
-    let service = build_agent_session_service(&database.connection);
-    service.read_agent_timeline(
-        input.project_id,
-        input.session_id,
-        state.agent_sessions.get(input.session_id),
-    )
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = open_agent_session_database(&app)?;
+        let service = build_agent_session_service(&database.connection);
+        service.read_agent_timeline(
+            input.project_id,
+            input.session_id,
+            agent_sessions.get(input.session_id),
+        )
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 历史读取失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
