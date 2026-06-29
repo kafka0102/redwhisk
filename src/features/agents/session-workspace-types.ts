@@ -1,4 +1,5 @@
 import type {
+  WorkspaceCommitChangedFile,
   WorkspaceChangedFile,
   WorkspaceDiffContent,
   WorkspaceFileContent,
@@ -16,7 +17,8 @@ export interface SessionWorkspaceFileTab extends SessionWorkspaceFile {
 }
 
 export interface SessionWorkspaceChangeTab extends SessionWorkspaceFile {
-  change: WorkspaceChangedFile;
+  change: WorkspaceChangedFile | WorkspaceCommitChangedFile;
+  commitHash?: string | null;
   diff: WorkspaceDiffContent | null;
   isLoading: boolean;
   errorMessage: string | null;

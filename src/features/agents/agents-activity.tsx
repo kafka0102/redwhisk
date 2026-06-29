@@ -1396,6 +1396,9 @@ export function AgentsActivity({
               onOpenChangedFile={(file) => {
                 void workspaceCache.openChange(file);
               }}
+              onOpenCommittedChangedFile={(commitHash, file) => {
+                void workspaceCache.openCommittedChange(commitHash, file);
+              }}
               onOpenFile={(file) => {
                 void workspaceCache.openFile(file);
               }}

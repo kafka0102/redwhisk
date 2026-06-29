@@ -25,6 +25,7 @@ pub struct ProjectWorkspacePathInput {
     pub project_id: i64,
     pub session_id: Option<i64>,
     pub file_path: String,
+    pub commit_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

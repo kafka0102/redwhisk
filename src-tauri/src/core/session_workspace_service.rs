@@ -28,7 +28,16 @@ const IGNORED_DIRS: &[&str] = &[
     ".vite",
 ];
 const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
-const BASE_BRANCH_CANDIDATES: &[&str] = &["origin/main", "main", "origin/master", "master"];
+const BASE_BRANCH_CANDIDATES: &[&str] = &[
+    "origin/devlop",
+    "devlop",
+    "origin/develop",
+    "develop",
+    "origin/main",
+    "main",
+    "origin/master",
+    "master",
+];
 
 pub struct SessionWorkspaceService<'connection> {
     project_repository: ProjectRepository<'connection>,
@@ -83,7 +92,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
         input: ProjectWorkspacePathInput,
     ) -> Result<WorkspaceDiffContent, CommandError> {
         let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
-        read_workspace_diff(&root, &input.file_path)
+        if let Some(commit_hash) = input.commit_hash {
+            read_workspace_commit_diff(&root, &commit_hash, &input.file_path)
+        } else {
+            read_workspace_diff(&root, &input.file_path)
+        }
     }
 
     fn resolve_workspace_root(
@@ -133,21 +146,7 @@ pub fn resolve_workspace_relative_path(
         )
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
-    let relative_path = Path::new(file_path);
-    if file_path.is_empty()
-        || relative_path.is_absolute()
-        || relative_path.components().any(|component| {
-            matches!(
-                component,
-                Component::ParentDir | Component::Prefix(_) | Component::RootDir
-            )
-        })
-    {
-        return Err(workspace_validation_error(
-            "路径必须是仓库内相对路径。",
-            file_path,
-        ));
-    }
+    let relative_path = validate_workspace_relative_path(file_path)?;
 
     let joined_path = root.join(relative_path);
     let parent = joined_path.parent().unwrap_or(root);
@@ -175,6 +174,26 @@ pub fn resolve_workspace_relative_path(
     }
 
     Ok(joined_path)
+}
+
+fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandError> {
+    let relative_path = Path::new(file_path);
+    if file_path.is_empty()
+        || relative_path.is_absolute()
+        || relative_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir
+            )
+        })
+    {
+        return Err(workspace_validation_error(
+            "路径必须是仓库内相对路径。",
+            file_path,
+        ));
+    }
+
+    Ok(relative_path)
 }
 
 fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
@@ -288,6 +307,18 @@ fn current_branch_name(root: &Path) -> Result<Option<String>, CommandError> {
 }
 
 fn find_branch_base(root: &Path, current_branch: &str) -> Result<Option<String>, CommandError> {
+    if let Ok(upstream) = run_git(root, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
+        let upstream = upstream.trim();
+        if !upstream.is_empty() {
+            if let Ok(base) = run_git(root, &["merge-base", "HEAD", upstream]) {
+                let base = base.trim();
+                if !base.is_empty() {
+                    return Ok(Some(base.to_string()));
+                }
+            }
+        }
+    }
+
     for candidate in BASE_BRANCH_CANDIDATES {
         if *candidate == current_branch {
             continue;
@@ -666,6 +697,111 @@ fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffCont
     })
 }
 
+fn read_workspace_commit_diff(
+    root: &Path,
+    commit_hash: &str,
+    file_path: &str,
+) -> Result<WorkspaceDiffContent, CommandError> {
+    let commit_hash = resolve_commit_hash(root, commit_hash)?;
+    let change = read_commit_changed_files(root, &commit_hash)?
+        .into_iter()
+        .find(|file| file.file_path == file_path)
+        .ok_or_else(|| workspace_validation_error("文件不属于该提交。", file_path))?;
+    validate_workspace_relative_path(&change.file_path)?;
+    if let Some(old_path) = &change.old_path {
+        validate_workspace_relative_path(old_path)?;
+    }
+
+    let parent_ref = format!("{commit_hash}^");
+    let has_parent = run_git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{parent_ref}{{commit}}"),
+        ],
+    )
+    .is_ok();
+
+    let original_content = match change.kind {
+        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => String::new(),
+        _ if !has_parent => String::new(),
+        _ => {
+            let original_path = change.old_path.as_deref().unwrap_or(&change.file_path);
+            match read_git_file(root, &parent_ref, original_path)? {
+                HeadFileRead::Content(content) => content,
+                HeadFileRead::Binary => {
+                    return Ok(WorkspaceDiffContent {
+                        file_path: change.file_path,
+                        old_path: change.old_path,
+                        kind: WorkspaceChangeKind::Binary,
+                        language: language_from_path(file_path),
+                        original_content: String::new(),
+                        modified_content: String::new(),
+                        is_binary: true,
+                        is_too_large: false,
+                    });
+                }
+                HeadFileRead::TooLarge => {
+                    return Ok(WorkspaceDiffContent {
+                        file_path: change.file_path,
+                        old_path: change.old_path,
+                        kind: change.kind,
+                        language: language_from_path(file_path),
+                        original_content: String::new(),
+                        modified_content: String::new(),
+                        is_binary: false,
+                        is_too_large: true,
+                    });
+                }
+            }
+        }
+    };
+
+    let modified_content = match change.kind {
+        WorkspaceChangeKind::Deleted => String::new(),
+        _ => match read_git_file(root, &commit_hash, &change.file_path)? {
+            HeadFileRead::Content(content) => content,
+            HeadFileRead::Binary => {
+                return Ok(WorkspaceDiffContent {
+                    file_path: change.file_path,
+                    old_path: change.old_path,
+                    kind: WorkspaceChangeKind::Binary,
+                    language: language_from_path(file_path),
+                    original_content: String::new(),
+                    modified_content: String::new(),
+                    is_binary: true,
+                    is_too_large: false,
+                });
+            }
+            HeadFileRead::TooLarge => {
+                return Ok(WorkspaceDiffContent {
+                    file_path: change.file_path,
+                    old_path: change.old_path,
+                    kind: change.kind,
+                    language: language_from_path(file_path),
+                    original_content: String::new(),
+                    modified_content: String::new(),
+                    is_binary: false,
+                    is_too_large: true,
+                });
+            }
+        },
+    };
+
+    Ok(WorkspaceDiffContent {
+        file_path: change.file_path,
+        old_path: change.old_path,
+        kind: change.kind,
+        language: language_from_path(file_path),
+        original_content,
+        modified_content,
+        is_binary: false,
+        is_too_large: false,
+    })
+}
+
 struct WorkspaceFile {
     absolute_path: PathBuf,
     metadata: fs::Metadata,
@@ -697,7 +833,12 @@ enum HeadFileRead {
 }
 
 fn read_head_file(root: &Path, path: &str) -> Result<HeadFileRead, CommandError> {
-    let object_spec = format!("HEAD:{path}");
+    read_git_file(root, "HEAD", path)
+}
+
+fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead, CommandError> {
+    validate_workspace_relative_path(path)?;
+    let object_spec = format!("{treeish}:{path}");
     let size_output = match run_git(root, &["cat-file", "-s", &object_spec]) {
         Ok(output) => output,
         Err(_) => return Ok(HeadFileRead::Content(String::new())),
@@ -727,6 +868,37 @@ fn read_head_file(root: &Path, path: &str) -> Result<HeadFileRead, CommandError>
             )
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })
+}
+
+fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, CommandError> {
+    let commit_hash = commit_hash.trim();
+    if commit_hash.is_empty()
+        || commit_hash.len() > 64
+        || !commit_hash
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(workspace_validation_error(
+            "提交哈希格式无效。",
+            commit_hash,
+        ));
+    }
+
+    let output = run_git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{commit_hash}^{{commit}}"),
+        ],
+    )?;
+    let resolved_hash = output.trim();
+    if resolved_hash.is_empty() {
+        return Err(workspace_validation_error("提交不存在。", commit_hash));
+    }
+
+    Ok(resolved_hash.to_string())
 }
 
 fn is_binary_bytes(bytes: &[u8]) -> bool {
@@ -986,6 +1158,49 @@ mod tests {
         assert_eq!(history.commits[1].message, "feature one");
         assert_eq!(history.commits[1].files[0].status, "A");
         assert_eq!(history.commits[1].files[0].file_path, "feature.txt");
+    }
+
+    #[test]
+    fn commit_history_uses_current_branch_upstream_as_base() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("base.txt"), "base\n").expect("write base");
+        git(root, &["add", "base.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        git(root, &["branch", "-M", "base-for-session"]);
+        git(root, &["checkout", "-b", "session-worktree"]);
+        git(root, &["branch", "--set-upstream-to=base-for-session"]);
+        fs::write(root.join("session.txt"), "session\n").expect("write session");
+        git(root, &["add", "session.txt"]);
+        git(root, &["commit", "-m", "session change"]);
+
+        let history = read_workspace_commit_history(root).expect("read commit history");
+
+        assert_eq!(history.commits.len(), 1);
+        assert_eq!(history.commits[0].message, "session change");
+    }
+
+    #[test]
+    fn committed_diff_reads_parent_and_commit_content() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("story.ts"), "const title = 'old';\n").expect("write base");
+        git(root, &["add", "story.ts"]);
+        git(root, &["commit", "-m", "base"]);
+        fs::write(root.join("story.ts"), "const title = 'new';\n").expect("modify file");
+        git(root, &["add", "story.ts"]);
+        git(root, &["commit", "-m", "update story"]);
+        let commit_hash = run_git(root, &["rev-parse", "HEAD"]).expect("read head");
+
+        let diff =
+            read_workspace_commit_diff(root, commit_hash.trim(), "story.ts").expect("read diff");
+
+        assert_eq!(diff.file_path, "story.ts");
+        assert_eq!(diff.kind, WorkspaceChangeKind::Modified);
+        assert_eq!(diff.original_content, "const title = 'old';\n");
+        assert_eq!(diff.modified_content, "const title = 'new';\n");
     }
 
     fn init_git_repo(root: &Path) {

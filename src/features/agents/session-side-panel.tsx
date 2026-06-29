@@ -2,6 +2,7 @@ import { SessionChangesPanel } from "./session-changes-panel";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
 import { useI18n } from "../../shared/i18n/i18n";
 import type {
+  WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
   WorkspaceChangedFile,
   WorkspaceFileTreeNode,
@@ -21,6 +22,10 @@ interface SessionSidePanelProps {
   isFileTreeLoading: boolean;
   onActiveTabChange: (tab: SessionSidePanelTab) => void;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
+  onOpenCommittedChangedFile: (
+    commitHash: string,
+    file: WorkspaceCommitChangedFile,
+  ) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onRefreshCommitHistory: () => void;
   onRefreshChanges: () => void;
@@ -39,6 +44,7 @@ export function SessionSidePanel({
   isFileTreeLoading,
   onActiveTabChange,
   onOpenChangedFile,
+  onOpenCommittedChangedFile,
   onOpenFile,
   onRefreshCommitHistory,
   onRefreshChanges,
@@ -79,6 +85,7 @@ export function SessionSidePanel({
             isCommitHistoryLoading={isCommitHistoryLoading}
             isLoading={isChangesLoading}
             onOpenChangedFile={onOpenChangedFile}
+            onOpenCommittedChangedFile={onOpenCommittedChangedFile}
             onRefreshCommitHistory={onRefreshCommitHistory}
             onRefreshChanges={onRefreshChanges}
           />
