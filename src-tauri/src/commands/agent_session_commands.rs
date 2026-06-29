@@ -25,7 +25,7 @@ use crate::types::agent_session::{
     SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
     StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
     StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
-    WriteAgentSessionTerminalInput,
+    UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -510,6 +510,20 @@ pub fn delete_agent_session(
         "session_deleted",
     );
 
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn update_agent_session_title(
+    app: tauri::AppHandle,
+    input: UpdateAgentSessionTitleInput,
+) -> Result<UpdateAgentSessionTitleResult, CommandError> {
+    let database = open_agent_session_database(&app)?;
+    let service = build_agent_session_service(&database.connection);
+    let project_id = input.project_id;
+    let session_id = input.session_id;
+    let result = service.update_standalone_session_title(input)?;
+    emit_agent_session_list_changed(&app, project_id, Some(session_id), "session_updated");
     Ok(result)
 }
 

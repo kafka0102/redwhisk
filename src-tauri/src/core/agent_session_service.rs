@@ -46,8 +46,8 @@ use crate::types::agent_session::{
     ResumeStructuredAgentSessionResult, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
     StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
-    StartStructuredAgentSessionInput, StartStructuredAgentSessionResult, WorkspaceMode,
-    WorktreeOwner, WriteAgentSessionTerminalInput,
+    StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
+    UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner, WriteAgentSessionTerminalInput,
 };
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
@@ -1518,6 +1518,43 @@ impl<'connection> AgentSessionService<'connection> {
         }
 
         Ok(crate::types::agent_session::DeleteAgentSessionResult { session_id })
+    }
+
+    pub fn update_standalone_session_title(
+        &self,
+        input: UpdateAgentSessionTitleInput,
+    ) -> Result<crate::types::agent_session::UpdateAgentSessionTitleResult, CommandError> {
+        let session = self.find_project_session(input.project_id, input.session_id)?;
+        if session.issue_id.is_some() {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "关联 Issue 的 Agent Session 不能从 Sessions 视图修改标题。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
+            ));
+        }
+
+        let title = validate_session_title(&input.title)?;
+        let updated_at = current_epoch_millis()?;
+        let updated = self
+            .agent_session_repository
+            .update_title(input.session_id, &title, updated_at)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionPersistenceFailed,
+                    "Agent Session 标题更新失败。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
+                )
+            })?;
+
+        Ok(crate::types::agent_session::UpdateAgentSessionTitleResult {
+            session_id: updated.id,
+            title: updated.title.unwrap_or(title),
+        })
     }
 
     pub fn read_agent_timeline(
@@ -3917,7 +3954,7 @@ mod tests {
     use crate::types::agent_profile::{AgentScope, AgentType};
     use crate::types::agent_session::{
         AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
-        AgentSessionStatus, WorkspaceMode, WorktreeOwner,
+        AgentSessionStatus, UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
     };
     use crate::types::agent_session_stream::{
         AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
@@ -4818,6 +4855,71 @@ mod tests {
         assert!(result.is_err());
         let response = service.list_agent_sessions(1).expect("list sessions");
         assert!(session_ids(&response.sessions).contains(&306));
+    }
+
+    #[test]
+    fn update_standalone_session_title_persists_title() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            307,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let result = service
+            .update_standalone_session_title(UpdateAgentSessionTitleInput {
+                project_id: 1,
+                session_id: 307,
+                title: " Renamed Session ".to_string(),
+            })
+            .expect("update standalone session title");
+
+        assert_eq!(result.session_id, 307);
+        assert_eq!(result.title, "Renamed Session");
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 307)
+            .expect("renamed session");
+        assert_eq!(session.title.as_deref(), Some("Renamed Session"));
+    }
+
+    #[test]
+    fn update_standalone_session_title_rejects_linked_issue_session() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            308,
+            Some(28),
+            Some("Linked issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+
+        let service = test_agent_session_service(&database);
+        let result = service.update_standalone_session_title(UpdateAgentSessionTitleInput {
+            project_id: 1,
+            session_id: 308,
+            title: "Renamed Session".to_string(),
+        });
+
+        assert!(result.is_err());
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 308)
+            .expect("linked session");
+        assert_eq!(session.title, None);
     }
 
     #[test]

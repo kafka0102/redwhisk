@@ -479,6 +479,26 @@ impl<'connection> AgentSessionRepository<'connection> {
         self.find_by_id(session_id)
     }
 
+    pub fn update_title(
+        &self,
+        session_id: i64,
+        title: &str,
+        updated_at: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = self.connection.execute(
+            "UPDATE agent_sessions
+             SET title = ?1, last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?3 AND del = 0",
+            params![title, updated_at, session_id],
+        )?;
+
+        if changed == 0 {
+            return self.find_by_id(session_id);
+        }
+
+        self.find_by_id(session_id)
+    }
+
     pub fn update_latest_output(
         &self,
         session_id: i64,

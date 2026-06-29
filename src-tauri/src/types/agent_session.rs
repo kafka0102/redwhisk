@@ -78,6 +78,21 @@ pub struct DeleteAgentSessionResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateAgentSessionTitleInput {
+    pub project_id: i64,
+    pub session_id: i64,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAgentSessionTitleResult {
+    pub session_id: i64,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadAgentSessionTerminalInput {
     pub project_id: i64,
     pub session_id: i64,

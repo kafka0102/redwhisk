@@ -124,6 +124,17 @@ export interface DeleteAgentSessionResult {
   sessionId: number;
 }
 
+export interface UpdateAgentSessionTitleInput {
+  projectId: number;
+  sessionId: number;
+  title: string;
+}
+
+export interface UpdateAgentSessionTitleResult {
+  sessionId: number;
+  title: string;
+}
+
 export function listAgentSessions(
   projectId: number,
 ): Promise<AgentSessionListResponse> {
@@ -197,6 +208,17 @@ export function deleteAgentSession(
   return invokeCommand<DeleteAgentSessionResult>("delete_agent_session", {
     input,
   });
+}
+
+export function updateAgentSessionTitle(
+  input: UpdateAgentSessionTitleInput,
+): Promise<UpdateAgentSessionTitleResult> {
+  return invokeCommand<UpdateAgentSessionTitleResult>(
+    "update_agent_session_title",
+    {
+      input,
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
