@@ -4213,7 +4213,7 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize session side panel" }),
-    ).toHaveAttribute("aria-valuenow", "300");
+    ).toHaveAttribute("aria-valuenow", "400");
     expect(
       screen.getByLabelText("Agent session message stream"),
     ).toBeInTheDocument();
@@ -4253,15 +4253,15 @@ describe("AgentsActivity", () => {
       name: "Resize session side panel",
     });
 
-    expect(activity).toHaveStyle({ "--session-side-panel-width": "300px" });
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "400px" });
     separator.focus();
     await user.keyboard("{ArrowLeft}");
-    expect(separator).toHaveAttribute("aria-valuenow", "316");
-    expect(activity).toHaveStyle({ "--session-side-panel-width": "316px" });
+    expect(separator).toHaveAttribute("aria-valuenow", "416");
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "416px" });
 
     await user.keyboard("{ArrowRight}");
-    expect(separator).toHaveAttribute("aria-valuenow", "300");
-    expect(activity).toHaveStyle({ "--session-side-panel-width": "300px" });
+    expect(separator).toHaveAttribute("aria-valuenow", "400");
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "400px" });
   });
 
   it("resizes the session side panel when dragging the separator", async () => {
@@ -4301,8 +4301,8 @@ describe("AgentsActivity", () => {
     fireEvent.mouseDown(separator, { button: 0, clientX: 800 });
     fireEvent.mouseMove(window, { clientX: 760 });
 
-    expect(separator).toHaveAttribute("aria-valuenow", "340");
-    expect(activity).toHaveStyle({ "--session-side-panel-width": "340px" });
+    expect(separator).toHaveAttribute("aria-valuenow", "440");
+    expect(activity).toHaveStyle({ "--session-side-panel-width": "440px" });
 
     fireEvent.mouseUp(window);
   });
