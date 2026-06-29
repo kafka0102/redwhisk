@@ -1702,6 +1702,11 @@ button:focus-visible {
   line-height: 1.45;
 }
 
+.rich-text-editor__surface
+  .ql-editor.rich-text-editor__input-pending.ql-blank::before {
+  opacity: 0;
+}
+
 .rich-text-editor__surface .ql-editor h1,
 .rich-text-editor__surface .ql-editor h2 {
   margin: 0 0 8px;
@@ -1723,6 +1728,36 @@ button:focus-visible {
 .rich-text-editor__surface .ql-editor ol,
 .rich-text-editor__surface .ql-editor ul {
   margin: 0 0 8px;
+}
+
+.rich-text-editor__surface .ql-editor code {
+  padding: 1px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 12px;
+}
+
+.rich-text-editor__surface .ql-editor .ql-code-block-container {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+}
+
+.rich-text-editor__surface .ql-editor .ql-code-block {
+  color: var(--color-text);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .rich-text-editor__surface .ql-editor p:last-child,

@@ -39,6 +39,9 @@ export interface I18nMessages {
   richText: {
     attachFile: string;
     bold: string;
+    clearFormatting: string;
+    codeBlock: string;
+    codeQuote: string;
     heading: string;
     headingOne: string;
     headingTwo: string;
@@ -522,6 +525,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     richText: {
       attachFile: "Attach file",
       bold: "Bold",
+      clearFormatting: "Clear formatting",
+      codeBlock: "Code block",
+      codeQuote: "Inline code",
       heading: "Text style",
       headingOne: "Heading 1",
       headingTwo: "Heading 2",
@@ -1016,6 +1022,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     richText: {
       attachFile: "添加附件",
       bold: "加粗",
+      clearFormatting: "清除格式",
+      codeBlock: "代码块",
+      codeQuote: "代码引用",
       heading: "文本样式",
       headingOne: "一级标题",
       headingTwo: "二级标题",

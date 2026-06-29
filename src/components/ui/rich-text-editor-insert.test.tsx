@@ -10,6 +10,9 @@ import {
 const labels: RichTextEditorLabels = {
   attachFile: "Add attachment",
   bold: "Bold",
+  clearFormatting: "Clear formatting",
+  codeBlock: "Code block",
+  codeQuote: "Inline code",
   heading: "Heading",
   image: "Insert image",
   normalText: "Normal text",
