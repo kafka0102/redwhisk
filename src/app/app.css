@@ -2805,7 +2805,7 @@ button:focus-visible {
 .agents-workspace--with-side-panel {
   grid-template-columns: minmax(0, 1fr) 8px var(
       --session-side-panel-width,
-      300px
+      400px
     );
 }
 
