@@ -1,6 +1,13 @@
 export { Button } from "./button";
 export { buttonVariants } from "./button-variants";
 export {
+  AlertDialog,
+  type AlertDialogOptions,
+  type AlertDialogProps,
+  type AlertDialogType,
+} from "./alert-dialog";
+export { useAlertDialog } from "./use-alert-dialog";
+export {
   ConfirmDialog,
   type ConfirmDialogOptions,
   type ConfirmDialogProps,

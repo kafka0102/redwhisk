@@ -31,6 +31,7 @@ import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { AgentsSessionList } from "./agents-session-list";
 import {
   listAgentProfiles,
@@ -88,11 +89,15 @@ export function AgentsActivity({
   const { messages } = useI18n();
   const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
   const { confirm, confirmationDialog } = useConfirmDialog();
+  const { alertDialog, showAlert } = useAlertDialog();
+  const showCommandErrorAlert = useCallback(
+    (error: unknown) => {
+      showAlert({ message: toCommandError(error).message, type: "error" });
+    },
+    [showAlert],
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [attentionErrorMessage, setAttentionErrorMessage] = useState<
-    string | null
-  >(null);
   const [isUpdatingAttention, setIsUpdatingAttention] = useState(false);
   const [isMarkingReview, setIsMarkingReview] = useState(false);
   const [isCompletingManual, setIsCompletingManual] = useState(false);
@@ -104,20 +109,6 @@ export function AgentsActivity({
     isDetectingAgentCommitCompletion,
     setIsDetectingAgentCommitCompletion,
   ] = useState(false);
-  const [markReviewErrorMessage, setMarkReviewErrorMessage] = useState<
-    string | null
-  >(null);
-  const [completeManualErrorMessage, setCompleteManualErrorMessage] = useState<
-    string | null
-  >(null);
-  const [completeCleanErrorMessage, setCompleteCleanErrorMessage] = useState<
-    string | null
-  >(null);
-  const [completeAgentCommitErrorMessage, setCompleteAgentCommitErrorMessage] =
-    useState<string | null>(null);
-  const [deleteSessionErrorMessage, setDeleteSessionErrorMessage] = useState<
-    string | null
-  >(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
@@ -448,7 +439,6 @@ export function AgentsActivity({
         return;
       }
 
-      setAttentionErrorMessage(null);
       setIsUpdatingAttention(true);
 
       try {
@@ -461,7 +451,7 @@ export function AgentsActivity({
         const nextSessions = applySessionListOverlays(response.sessions);
         setSessions(nextSessions);
       } catch (error) {
-        setAttentionErrorMessage(toCommandError(error).message);
+        showCommandErrorAlert(error);
       } finally {
         setIsUpdatingAttention(false);
       }
@@ -479,10 +469,6 @@ export function AgentsActivity({
 
   async function markLinkedIssueReview(issue: NonNullable<typeof linkedIssue>) {
     setIsTransitionMenuOpen(false);
-    setCompleteManualErrorMessage(null);
-    setCompleteCleanErrorMessage(null);
-    setCompleteAgentCommitErrorMessage(null);
-    setMarkReviewErrorMessage(null);
     setIsMarkingReview(true);
 
     let reviewedIssueId: number | null = null;
@@ -509,7 +495,7 @@ export function AgentsActivity({
         ),
       );
     } catch (error) {
-      setMarkReviewErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
       try {
         await refreshSessions();
       } catch {
@@ -528,7 +514,7 @@ export function AgentsActivity({
     try {
       return await refreshSessions();
     } catch (error) {
-      setMarkReviewErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
       return null;
     } finally {
       setIsMarkingReview(false);
@@ -601,7 +587,6 @@ export function AgentsActivity({
   ) {
     const targetSessionId = session.sessionId;
     setIsTransitionMenuOpen(false);
-    setCompleteManualErrorMessage(null);
     setIsCompletingManual(true);
 
     let completedIssueId: number | null = null;
@@ -617,7 +602,7 @@ export function AgentsActivity({
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
       showIssueMarkedDoneToast();
     } catch (error) {
-      setCompleteManualErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
       try {
         await refreshSessions();
       } catch {
@@ -636,7 +621,7 @@ export function AgentsActivity({
     try {
       await refreshSessions();
     } catch (error) {
-      setCompleteManualErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
     } finally {
       setIsCompletingManual(false);
     }
@@ -648,7 +633,6 @@ export function AgentsActivity({
   ) {
     const targetSessionId = session.sessionId;
     setIsTransitionMenuOpen(false);
-    setCompleteCleanErrorMessage(null);
     setIsCompletingClean(true);
 
     let completedIssueId: number | null = null;
@@ -661,7 +645,7 @@ export function AgentsActivity({
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
       showIssueMarkedDoneToast();
     } catch (error) {
-      setCompleteCleanErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
       try {
         await refreshSessions();
       } catch {
@@ -680,7 +664,7 @@ export function AgentsActivity({
     try {
       await refreshSessions();
     } catch (error) {
-      setCompleteCleanErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
     } finally {
       setIsCompletingClean(false);
     }
@@ -691,7 +675,6 @@ export function AgentsActivity({
     session: AgentSessionListItem,
   ) {
     setIsTransitionMenuOpen(false);
-    setCompleteAgentCommitErrorMessage(null);
     setIsPreparingAgentCommit(true);
 
     try {
@@ -705,7 +688,7 @@ export function AgentsActivity({
       if (isCleanWorktreeAgentCommitPreviewError(commandError)) {
         await completeLinkedIssueClean(issue, session);
       } else {
-        setCompleteAgentCommitErrorMessage(commandError.message);
+        showAlert({ message: commandError.message, type: "error" });
       }
     } finally {
       setIsPreparingAgentCommit(false);
@@ -775,7 +758,6 @@ export function AgentsActivity({
         (session) => session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
 
-    setCompleteAgentCommitErrorMessage(null);
     await completeLinkedIssueManual(linkedIssue, currentSession, {
       ignoreDirty: true,
     });
@@ -787,7 +769,6 @@ export function AgentsActivity({
       return;
     }
 
-    setCompleteAgentCommitErrorMessage(null);
     setIsSendingAgentCommitPrompt(true);
 
     try {
@@ -813,10 +794,10 @@ export function AgentsActivity({
         setSessions(applySessionListOverlays(response.sessions));
       } else {
         setAgentCommitPreview(null);
-        setCompleteAgentCommitErrorMessage(completionResult.message);
+        showAlert({ message: completionResult.message, type: "error" });
       }
     } catch (error) {
-      setCompleteAgentCommitErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
     } finally {
       setIsDetectingAgentCommitCompletion(false);
       setIsSendingAgentCommitPrompt(false);
@@ -977,7 +958,6 @@ export function AgentsActivity({
 
     const deletedSessionId = selectedSession.sessionId;
     setIsTransitionMenuOpen(false);
-    setDeleteSessionErrorMessage(null);
     setIsDeletingSession(true);
 
     try {
@@ -1006,7 +986,7 @@ export function AgentsActivity({
       }
       toast.success(messages.toast.deleteSuccess);
     } catch (error) {
-      setDeleteSessionErrorMessage(toCommandError(error).message);
+      showCommandErrorAlert(error);
       try {
         await refreshSessions();
       } catch {
@@ -1246,12 +1226,8 @@ export function AgentsActivity({
         aria-label={messages.agentsFeature.sessionWorkspace}
       >
         <AgentsSessionPane
-          agentCommitErrorMessage={completeAgentCommitErrorMessage}
-          attentionErrorMessage={attentionErrorMessage}
           canRenderTransitionButton={canRenderTransitionButton}
           canRenderTransitionMenu={canRenderTransitionMenu}
-          cleanErrorMessage={completeCleanErrorMessage}
-          deleteSessionErrorMessage={deleteSessionErrorMessage}
           isTransitionMenuOpen={isTransitionMenuOpen}
           isTransitionPending={isTransitionPending}
           activeWorkspaceTab={workspaceCache.activeWorkspaceTab}
@@ -1260,8 +1236,6 @@ export function AgentsActivity({
           isDeletingSession={isDeletingSession}
           isSidePanelOpen={isSessionSidePanelOpen}
           linkedIssue={linkedIssue}
-          manualErrorMessage={completeManualErrorMessage}
-          markReviewErrorMessage={markReviewErrorMessage}
           onAcknowledgeSessionAttention={(sessionId) => {
             void acknowledgeSessionAttention(sessionId);
           }}
@@ -1446,6 +1420,7 @@ export function AgentsActivity({
           </div>
         </div>
       ) : null}
+      {alertDialog}
       {confirmationDialog}
     </main>
   );

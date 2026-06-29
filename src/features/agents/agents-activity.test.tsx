@@ -2681,6 +2681,45 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows mark review command failures in alert dialog", async () => {
+    const user = userEvent.setup();
+    const errorMessage = "只有运行中的 Issue 可以标记待验收。";
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Review candidate",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+    markIssueReviewMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: errorMessage,
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Mark review" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: errorMessage }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector(".agents-session-status-stack"),
+    ).not.toBeInTheDocument();
+  });
+
   it("hides mark review after command success when refreshing sessions fails", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock
@@ -3414,10 +3453,13 @@ describe("AgentsActivity", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("button", { name: "Mark done" }),
+      screen.getByRole("dialog", {
+        name: "尚未检测到新的 commit，Issue 保持待验收。",
+      }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "OK" }));
     expect(
-      screen.getByText("尚未检测到新的 commit，Issue 保持待验收。"),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
   });
 
@@ -3509,12 +3551,13 @@ describe("AgentsActivity", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("button", { name: "Mark done" }),
+      screen.getByRole("dialog", {
+        name: "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
+      }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "OK" }));
     expect(
-      screen.getByText(
-        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。",
-      ),
+      screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
   });
 
@@ -3564,8 +3607,11 @@ describe("AgentsActivity", () => {
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
 
     expect(
-      await screen.findByText("当前 Git 正在进行中的操作阻止直接完成。"),
+      await screen.findByRole("dialog", {
+        name: "当前 Git 正在进行中的操作阻止直接完成。",
+      }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "OK" }));
     expect(
       screen.getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();

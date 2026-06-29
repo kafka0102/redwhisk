@@ -34,6 +34,7 @@ import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
+import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { issuePageStateCache } from "./issues-activity-cache";
@@ -117,6 +118,11 @@ export function IssuesActivity({
     ((decision: IssueCompletionExternalWorktreeDecision) => void) | null
   >(null);
   const { confirm, confirmationDialog } = useConfirmDialog();
+  const { alertDialog, showAlert } = useAlertDialog();
+
+  const showCommandErrorAlert = (error: unknown) => {
+    showAlert({ message: toCommandError(error).message, type: "error" });
+  };
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -785,7 +791,7 @@ export function IssuesActivity({
           );
         } else {
           setCompletionProgress(null);
-          setDialogErrorMessage(toCommandError(error).message);
+          showCommandErrorAlert(error);
         }
       }
     } finally {
@@ -1000,7 +1006,11 @@ export function IssuesActivity({
       toast.success(messages.toast.deleteSuccess);
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
-        setDialogErrorMessage(toCommandError(error).message);
+        if (isEditablePageOpen) {
+          setDialogErrorMessage(toCommandError(error).message);
+        } else {
+          showCommandErrorAlert(error);
+        }
       }
     } finally {
       if (activeProjectIdRef.current === requestProjectId) {
@@ -1147,6 +1157,7 @@ export function IssuesActivity({
           onDecision={resolveExternalWorktreeDecision}
         />
       ) : null}
+      {alertDialog}
       {confirmationDialog}
     </main>
   );
