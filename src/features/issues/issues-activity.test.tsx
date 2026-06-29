@@ -2708,6 +2708,39 @@ describe("IssuesActivity", () => {
     );
   });
 
+  it("shows read-only status transition command failures in alert dialog", async () => {
+    const user = userEvent.setup();
+    const reviewWithClosedSession: IssueRecord = {
+      ...reviewIssue,
+      linkedSessionId: 601,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+    };
+    const errorMessage = "只有运行中的 Issue 可以标记待验收。";
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithClosedSession] });
+    advanceIssueStatusMock.mockRejectedValueOnce({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: errorMessage,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "In Progress" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: errorMessage }),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".issues-status")).not.toBeInTheDocument();
+  });
+
   it("asks to terminate the running session before returning an issue to backlog", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [attentionIssue] });

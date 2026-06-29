@@ -2,13 +2,14 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 
+import { AlertDialog } from "./alert-dialog";
 import { Button } from "./button";
 import { ConfirmDialog } from "./confirm-dialog";
 import { Input } from "./input";
 import { Textarea } from "./textarea";
 
 describe("desktop ui primitives", () => {
-  it("renders the shadcn button primitive", () => {
+  it("renders shadcn button primitive", () => {
     render(<Button>Run</Button>);
 
     const button = screen.getByRole("button", { name: "Run" });
@@ -17,7 +18,7 @@ describe("desktop ui primitives", () => {
     expect(button.className).toContain("bg-primary");
   });
 
-  it("renders the shadcn input primitive", () => {
+  it("renders shadcn input primitive", () => {
     render(<Input aria-label="Command" />);
 
     const input = screen.getByRole("textbox", { name: "Command" });
@@ -28,7 +29,7 @@ describe("desktop ui primitives", () => {
     expect(input).toHaveAttribute("spellcheck", "false");
   });
 
-  it("renders the shadcn textarea primitive without automatic capitalization", () => {
+  it("renders shadcn textarea primitive without automatic capitalization", () => {
     render(<Textarea aria-label="Prompt" />);
 
     const textarea = screen.getByRole("textbox", { name: "Prompt" });
@@ -38,7 +39,7 @@ describe("desktop ui primitives", () => {
     expect(textarea).toHaveAttribute("spellcheck", "false");
   });
 
-  it("confirms a destructive action with a message-only dialog", async () => {
+  it("confirms destructive action message-only dialog", async () => {
     const user = userEvent.setup();
     const handleConfirm = vi.fn();
 
@@ -64,5 +65,24 @@ describe("desktop ui primitives", () => {
     await user.click(screen.getByRole("button", { name: "删除" }));
 
     expect(handleConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders success alert dialog with status icon and acknowledgement action", () => {
+    render(
+      <AlertDialog
+        acknowledgeLabel="知道了"
+        message="操作已完成"
+        open
+        type="success"
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "操作已完成" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "知道了" })).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="alert-dialog-icon"]'),
+    ).toHaveAttribute("data-type", "success");
   });
 });

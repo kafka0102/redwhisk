@@ -212,6 +212,9 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Dialog 打开后焦点进入 Dialog，关闭后回到触发控件；`Esc` 关闭最上层 Dialog/Inspector。
 - `Enter` 在 Dialog 中提交主动作；在 composer 中提交消息，`Shift+Enter` 换行；在 project terminal 的 xterm 中原样传给终端。
 - `prefers-reduced-motion: reduce` 下必须禁用或显著收敛非必要动画。
+- 执行类前端操作调用后端 command 失败时，应统一使用 `src/components/ui/alert-dialog.tsx` 的 `AlertDialog` 或 `src/components/ui/use-alert-dialog.tsx` 的 `useAlertDialog` 展示错误信息。典型场景包括状态切换、标记完成、删除、启动/停止、确认/审批等由按钮或菜单触发的业务动作；错误类型使用 `error`，头部显示红色错误图标、错误文本，底部使用主色调“知道了”确认按钮。
+- 表单类操作保留表单内原有错误展示方式，包括创建/编辑表单提交、字段校验、附件选择、表单内加载失败等需要与具体输入区域关联的错误，不应强制改为全局 AlertDialog。
+- 原先渲染在页面或窗口下方的红色执行类错误信息（例如 `issues-status`、`agents-session-status-stack` 这类操作失败提示）新增或修改时应迁移为 AlertDialog；页面上方的非表单执行类错误可按上下文酌情迁移，加载态或诊断态错误不属于强制迁移范围。
 
 禁止：
 

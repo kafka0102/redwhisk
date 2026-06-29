@@ -28,17 +28,11 @@ interface TransitionMenuOption {
 }
 
 interface AgentsSessionPaneProps {
-  agentCommitErrorMessage: string | null;
-  attentionErrorMessage: string | null;
   canRenderTransitionButton: boolean;
   canRenderTransitionMenu: boolean;
-  cleanErrorMessage: string | null;
-  deleteSessionErrorMessage: string | null;
   isTransitionMenuOpen: boolean;
   isTransitionPending: boolean;
   linkedIssue: LinkedSessionIssue | null;
-  manualErrorMessage: string | null;
-  markReviewErrorMessage: string | null;
   activeWorkspaceTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
@@ -64,17 +58,11 @@ interface AgentsSessionPaneProps {
 }
 
 export function AgentsSessionPane({
-  agentCommitErrorMessage,
-  attentionErrorMessage,
   canRenderTransitionButton,
   canRenderTransitionMenu,
-  cleanErrorMessage,
-  deleteSessionErrorMessage,
   isTransitionMenuOpen,
   isTransitionPending,
   linkedIssue,
-  manualErrorMessage,
-  markReviewErrorMessage,
   activeWorkspaceTab,
   changeTab,
   fileTab,
@@ -191,38 +179,6 @@ export function AgentsSessionPane({
           </div>
         </div>
       ) : null}
-      <div className="agents-session-status-stack">
-        {markReviewErrorMessage ? (
-          <p className="issues-status" role="status">
-            {markReviewErrorMessage}
-          </p>
-        ) : null}
-        {manualErrorMessage ? (
-          <p className="issues-status" role="status">
-            {manualErrorMessage}
-          </p>
-        ) : null}
-        {cleanErrorMessage ? (
-          <p className="issues-status" role="status">
-            {cleanErrorMessage}
-          </p>
-        ) : null}
-        {agentCommitErrorMessage ? (
-          <p className="issues-status" role="status">
-            {agentCommitErrorMessage}
-          </p>
-        ) : null}
-        {deleteSessionErrorMessage ? (
-          <p className="issues-status" role="status">
-            {deleteSessionErrorMessage}
-          </p>
-        ) : null}
-        {attentionErrorMessage ? (
-          <p className="issues-status" role="status">
-            {attentionErrorMessage}
-          </p>
-        ) : null}
-      </div>
       {selectedSession ? (
         <div className="agents-session-main-stack">
           <SessionWorkspaceTabs

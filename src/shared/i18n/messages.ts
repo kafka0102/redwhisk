@@ -29,6 +29,9 @@ export interface I18nMessages {
     system: string;
     theme: string;
   };
+  alertDialog: {
+    acknowledge: string;
+  };
   toast: {
     deleteSuccess: string;
     issueMarkedDone: string;
@@ -497,6 +500,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       settingsMenu: "Global Settings menu",
       system: "System",
       theme: "Theme",
+    },
+    alertDialog: {
+      acknowledge: "OK",
     },
     toast: {
       deleteSuccess: "Deleted successfully",
@@ -977,6 +983,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       settingsMenu: "全局设置菜单",
       system: "跟随系统",
       theme: "主题",
+    },
+    alertDialog: {
+      acknowledge: "知道了",
     },
     toast: {
       deleteSuccess: "删除成功",
