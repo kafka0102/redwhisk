@@ -1,6 +1,6 @@
 // AgentComposer 组件测试。
 //
-// 覆盖：空态渲染、输入后发送按钮启用、Enter 发送、Shift+Enter 不发送、
+// 覆盖：空态渲染、输入后发送按钮启用、Enter 不发送、Shift+Enter 不发送、
 // running 状态显示取消按钮、用量条渲染、附件 chip 渲染与移除、
 // 模型 Select 选项渲染、错误内联显示。
 //
@@ -154,20 +154,14 @@ describe("AgentComposer", () => {
     expect(textarea).toHaveValue("");
   });
 
-  it("Enter 发送消息", async () => {
+  it("Enter 不发送消息，插入换行", async () => {
     const user = userEvent.setup();
     await renderComposer();
     const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "你好");
     await user.type(textarea, "{Enter}");
-    await waitFor(() => {
-      expect(sendAgentMessageMock).toHaveBeenCalledWith({
-        projectId: 1,
-        sessionId: 10,
-        message: "你好",
-        attachments: [],
-      });
-    });
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(textarea).toHaveValue("你好\n");
   });
 
   it("Shift+Enter 不发送，插入换行", async () => {

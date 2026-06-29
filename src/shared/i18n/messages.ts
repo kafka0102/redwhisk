@@ -822,8 +822,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sendMessage: "Send message",
       messageInput: "Message input",
       messageInputForm: "Message input",
-      messagePlaceholder:
-        "Type a message. Enter to send, Shift+Enter for a new line",
+      messagePlaceholder: "Type a message. Click send button to send",
       contextUsed: (percent) => `${percent}% used`,
       modelLoadFailed: (message) => `Model load failed: ${message}`,
       messageStream: "Agent session message stream",
@@ -1293,7 +1292,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sendMessage: "发送消息",
       messageInput: "消息输入",
       messageInputForm: "消息表单",
-      messagePlaceholder: "输入消息，按 Enter 发送，按 Shift+Enter 换行",
+      messagePlaceholder: "输入消息，点击发送按钮发送",
       contextUsed: (percent) => `已使用 ${percent}%`,
       modelLoadFailed: (message) => `模型加载失败：${message}`,
       messageStream: "Agent 会话消息流",

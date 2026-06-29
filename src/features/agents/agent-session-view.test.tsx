@@ -126,8 +126,9 @@ describe("AgentSessionView", () => {
 
     await user.type(
       screen.getByRole("textbox", { name: "Message input" }),
-      "测试消息{Enter}",
+      "测试消息",
     );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(sendAgentMessageMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -334,8 +335,9 @@ describe("AgentSessionView", () => {
 
     await user.type(
       await screen.findByRole("textbox", { name: "Message input" }),
-      "失败{Enter}",
+      "失败",
     );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(await screen.findByText("A session failed")).toBeInTheDocument();
 
@@ -372,8 +374,9 @@ describe("AgentSessionView", () => {
 
     await user.type(
       await screen.findByRole("textbox", { name: "Message input" }),
-      "继续处理{Enter}",
+      "继续处理",
     );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
 
     await waitFor(() => {
       expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
