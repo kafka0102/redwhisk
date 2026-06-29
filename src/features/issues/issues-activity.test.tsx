@@ -430,6 +430,14 @@ describe("IssuesActivity", () => {
       kind: input.displayName.endsWith(".png") ? "image" : "text",
       isPreviewable: true,
     }));
+    updateIssueMock.mockImplementation(async (input) => ({
+      ...existingIssue,
+      id: input.issueId,
+      projectId: input.projectId,
+      title: input.title,
+      description: input.description,
+      updatedAt: 1_780_640_000_000,
+    }));
     resetIssuePageStateCacheForTests();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
     listProjectLabelsMock.mockImplementation(async ({ scope }) => {
@@ -1985,6 +1993,72 @@ describe("IssuesActivity", () => {
     expect(
       screen.getByRole("region", { name: "Issues kanban" }),
     ).toBeInTheDocument();
+  });
+
+  it("saves edited issue content before running from edit page", async () => {
+    const user = userEvent.setup();
+    const updatedIssue: IssueRecord = {
+      ...existingIssue,
+      title: "Updated issue",
+      description: "Updated description",
+      updatedAt: 1_780_640_000_000,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    updateIssueMock.mockResolvedValue(updatedIssue);
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    const editPage = screen.getByRole("form", { name: "Edit Issue" });
+    await user.clear(within(editPage).getByLabelText("Title"));
+    await user.type(within(editPage).getByLabelText("Title"), "Updated issue");
+    await user.clear(within(editPage).getByLabelText("Description"));
+    await user.type(
+      within(editPage).getByLabelText("Description"),
+      "Updated description",
+    );
+
+    await user.click(within(editPage).getByRole("button", { name: "Run" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "确定要执行吗？" })).getByRole(
+        "button",
+        { name: "确认" },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(updateIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: existingIssue.id,
+        title: "Updated issue",
+        description: "Updated description",
+        attachments: [],
+        labelIds: [],
+      }),
+    );
+    const runDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #20",
+    });
+    expect(within(runDialog).getByLabelText("Final prompt")).toHaveValue(
+      ["using skill bmad-dev-story for task:", "Updated description"].join(
+        "\n\n",
+      ),
+    );
+
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
   });
 
   it("falls back to the refreshed linked session when start succeeds without a session id", async () => {

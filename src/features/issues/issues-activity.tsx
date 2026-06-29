@@ -403,17 +403,10 @@ export function IssuesActivity({
         setForm(EMPTY_FORM);
         restoreDialogTriggerFocus(createdIssue);
       } else if (selectedIssue) {
-        const updatedIssue = await updateIssue({
-          projectId: requestProjectId,
-          issueId: selectedIssue.id,
-          title: form.title,
-          description: buildIssueDescription(
-            form.description,
-            form.attachments,
-          ),
-          attachments: serializeAttachments(form.attachments),
-          labelIds: form.labelIds,
-        });
+        const updatedIssue = await saveSelectedIssueDraft(
+          requestProjectId,
+          selectedIssue.id,
+        );
         if (activeProjectIdRef.current !== requestProjectId) {
           return;
         }
@@ -437,6 +430,20 @@ export function IssuesActivity({
         setIsSaving(false);
       }
     }
+  }
+
+  function saveSelectedIssueDraft(
+    requestProjectId: number,
+    issueId: number,
+  ): Promise<IssueRecord> {
+    return updateIssue({
+      projectId: requestProjectId,
+      issueId,
+      title: form.title,
+      description: buildIssueDescription(form.description, form.attachments),
+      attachments: serializeAttachments(form.attachments),
+      labelIds: form.labelIds,
+    });
   }
 
   function restoreDialogTriggerFocus(fallbackIssue: IssueRecord | null) {
@@ -478,7 +485,7 @@ export function IssuesActivity({
   }
 
   async function confirmRunIssueFromEditPage(trigger: HTMLElement | null) {
-    if (!selectedIssue || !canRunIssueFor(selectedIssue)) {
+    if (!selectedIssue || !canRunIssueFor(selectedIssue) || isSaving) {
       return;
     }
 
@@ -491,7 +498,32 @@ export function IssuesActivity({
       return;
     }
 
-    openRunDialog(issueToRun, trigger);
+    setDialogErrorMessage(null);
+    setIsSaving(true);
+    const requestProjectId = projectId;
+
+    try {
+      const updatedIssue = await saveSelectedIssueDraft(
+        requestProjectId,
+        issueToRun.id,
+      );
+      if (activeProjectIdRef.current !== requestProjectId) {
+        return;
+      }
+
+      setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
+      setSelectedIssueId(updatedIssue.id);
+      setForm(issueToForm(updatedIssue));
+      openRunDialog(updatedIssue, trigger);
+    } catch (error) {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setDialogErrorMessage(toCommandError(error).message);
+      }
+    } finally {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setIsSaving(false);
+      }
+    }
   }
 
   function openLinkedSession() {
