@@ -7,6 +7,7 @@ import {
   getProjectWorktreeFileTree,
   readProjectWorktreeDiff,
   readProjectWorktreeFile,
+  type WorkspaceCommitChangedFile,
   type WorkspaceCommitRecord,
   type WorkspaceChangedFile,
   type WorkspaceFileTreeNode,
@@ -288,8 +289,10 @@ export function useSessionWorkspaceCache({
           fileName: change.fileName,
           filePath: change.filePath,
           change,
+          commitHash: null,
           diff:
-            cache.changeTab?.filePath === change.filePath
+            cache.changeTab?.filePath === change.filePath &&
+            cache.changeTab.commitHash == null
               ? cache.changeTab.diff
               : null,
           errorMessage: null,
@@ -307,7 +310,8 @@ export function useSessionWorkspaceCache({
         updateCurrentCache((cache) => ({
           ...cache,
           changeTab:
-            cache.changeTab?.filePath === change.filePath
+            cache.changeTab?.filePath === change.filePath &&
+            cache.changeTab.commitHash == null
               ? {
                   ...cache.changeTab,
                   diff,
@@ -320,7 +324,71 @@ export function useSessionWorkspaceCache({
         updateCurrentCache((cache) => ({
           ...cache,
           changeTab:
-            cache.changeTab?.filePath === change.filePath
+            cache.changeTab?.filePath === change.filePath &&
+            cache.changeTab.commitHash == null
+              ? {
+                  ...cache.changeTab,
+                  errorMessage: toCommandError(error).message,
+                  isLoading: false,
+                }
+              : cache.changeTab,
+        }));
+      }
+    },
+    [projectId, sessionId, updateCurrentCache],
+  );
+
+  const openCommittedChange = useCallback(
+    async (commitHash: string, change: WorkspaceCommitChangedFile) => {
+      if (sessionId == null) {
+        return;
+      }
+
+      updateCurrentCache((cache) => ({
+        ...cache,
+        activeWorkspaceTab: "changes",
+        changeTab: {
+          fileName: change.fileName,
+          filePath: change.filePath,
+          change,
+          commitHash,
+          diff:
+            cache.changeTab?.filePath === change.filePath &&
+            cache.changeTab.commitHash === commitHash
+              ? cache.changeTab.diff
+              : null,
+          errorMessage: null,
+          isLoading: true,
+        },
+      }));
+
+      try {
+        const diff = await readProjectWorktreeDiff({
+          projectId,
+          sessionId,
+          filePath: change.filePath,
+          commitHash,
+        });
+
+        updateCurrentCache((cache) => ({
+          ...cache,
+          changeTab:
+            cache.changeTab?.filePath === change.filePath &&
+            cache.changeTab.commitHash === commitHash
+              ? {
+                  ...cache.changeTab,
+                  diff,
+                  errorMessage: null,
+                  isLoading: false,
+                }
+              : cache.changeTab,
+        }));
+      } catch (error) {
+        updateCurrentCache((cache) => ({
+          ...cache,
+          changeTab:
+            cache.changeTab?.filePath === change.filePath &&
+            cache.changeTab.commitHash === commitHash
               ? {
                   ...cache.changeTab,
                   errorMessage: toCommandError(error).message,
@@ -437,6 +505,7 @@ export function useSessionWorkspaceCache({
     isCommitHistoryLoading: currentCache.isCommitHistoryLoading,
     isFileTreeLoading: currentCache.isFileTreeLoading,
     openChange,
+    openCommittedChange,
     openFile,
     refreshCommitHistory,
     refreshChanges,

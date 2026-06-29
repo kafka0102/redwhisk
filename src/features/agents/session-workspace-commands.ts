@@ -16,6 +16,7 @@ export interface ProjectWorkspaceInput {
 
 export interface ProjectWorkspacePathInput extends ProjectWorkspaceInput {
   filePath: string;
+  commitHash?: string | null;
 }
 
 export interface WorkspaceChangedFile {

@@ -7,7 +7,6 @@ import {
   FilePlus,
   FileX,
   Files,
-  GitCommitHorizontal,
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -31,6 +30,10 @@ interface SessionChangesPanelProps {
   isCommitHistoryLoading: boolean;
   isLoading: boolean;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
+  onOpenCommittedChangedFile: (
+    commitHash: string,
+    file: WorkspaceCommitChangedFile,
+  ) => void;
   onRefreshCommitHistory: () => void;
   onRefreshChanges: () => void;
 }
@@ -43,6 +46,7 @@ export function SessionChangesPanel({
   isCommitHistoryLoading,
   isLoading,
   onOpenChangedFile,
+  onOpenCommittedChangedFile,
   onRefreshCommitHistory,
   onRefreshChanges,
 }: SessionChangesPanelProps) {
@@ -170,6 +174,7 @@ export function SessionChangesPanel({
           errorMessage={commitHistoryErrorMessage}
           expandedCommitHashes={expandedCommitHashes}
           isLoading={isCommitHistoryLoading}
+          onOpenCommittedChangedFile={onOpenCommittedChangedFile}
           onToggleCommit={(hash) => {
             setExpandedCommitHashes((current) => {
               const next = new Set(current);
@@ -192,6 +197,10 @@ interface CommittedChangesTimelineProps {
   errorMessage: string | null;
   expandedCommitHashes: Set<string>;
   isLoading: boolean;
+  onOpenCommittedChangedFile: (
+    commitHash: string,
+    file: WorkspaceCommitChangedFile,
+  ) => void;
   onToggleCommit: (hash: string) => void;
 }
 
@@ -200,6 +209,7 @@ function CommittedChangesTimeline({
   errorMessage,
   expandedCommitHashes,
   isLoading,
+  onOpenCommittedChangedFile,
   onToggleCommit,
 }: CommittedChangesTimelineProps) {
   const { messages } = useI18n();
@@ -236,11 +246,6 @@ function CommittedChangesTimeline({
               type="button"
               onClick={() => onToggleCommit(commit.hash)}
             >
-              <GitCommitHorizontal
-                aria-hidden="true"
-                size={14}
-                strokeWidth={1.8}
-              />
               <span className="session-commit-row__content">
                 <span className="session-commit-row__message">
                   {commit.message || commit.shortHash}
@@ -254,8 +259,10 @@ function CommittedChangesTimeline({
               <ul className="session-commit-files">
                 {commit.files.map((file) => (
                   <CommittedFileRow
+                    commitHash={commit.hash}
                     file={file}
                     key={`${commit.hash}:${file.status}:${file.filePath}:${file.oldPath ?? ""}`}
+                    onOpenCommittedChangedFile={onOpenCommittedChangedFile}
                   />
                 ))}
               </ul>
@@ -268,28 +275,41 @@ function CommittedChangesTimeline({
 }
 
 interface CommittedFileRowProps {
+  commitHash: string;
   file: WorkspaceCommitChangedFile;
+  onOpenCommittedChangedFile: (
+    commitHash: string,
+    file: WorkspaceCommitChangedFile,
+  ) => void;
 }
 
-function CommittedFileRow({ file }: CommittedFileRowProps) {
+function CommittedFileRow({
+  commitHash,
+  file,
+  onOpenCommittedChangedFile,
+}: CommittedFileRowProps) {
   const parentPath = getParentPath(file.filePath);
   return (
-    <li
-      aria-label={`${file.fileName} ${parentPath} ${file.status}`}
-      className="session-commit-file"
-    >
-      {renderCommitFileIcon(file.status)}
-      <span className="session-commit-file__identity">
-        <span className="session-commit-file__name">{file.fileName}</span>
-        {parentPath ? (
-          <span className="session-commit-file__path">{parentPath}</span>
-        ) : null}
-      </span>
-      <span
-        className={`session-commit-file__status ${getCommitStatusClassName(file.status)}`}
+    <li>
+      <button
+        aria-label={`${file.fileName} ${parentPath} ${file.status}`}
+        className="session-commit-file"
+        type="button"
+        onClick={() => onOpenCommittedChangedFile(commitHash, file)}
       >
-        {file.status}
-      </span>
+        {renderCommitFileIcon(file.status)}
+        <span className="session-commit-file__identity">
+          <span className="session-commit-file__name">{file.fileName}</span>
+          {parentPath ? (
+            <span className="session-commit-file__path">{parentPath}</span>
+          ) : null}
+        </span>
+        <span
+          className={`session-commit-file__status ${getCommitStatusClassName(file.status)}`}
+        >
+          {file.status}
+        </span>
+      </button>
     </li>
   );
 }

@@ -881,7 +881,7 @@ describe("AgentsActivity", () => {
 
     await user.click(commitButton);
 
-    const eventFile = within(panel).getByRole("listitem", {
+    const eventFile = within(panel).getByRole("button", {
       name: /index\.module\.scss apps\/web\/src\/pages\/event\/index M/,
     });
     expect(
@@ -899,6 +899,16 @@ describe("AgentsActivity", () => {
     expect(within(panel).getByText("A")).toHaveClass(
       "session-commit-file__status--added",
     );
+
+    await user.click(eventFile);
+
+    expect(readProjectWorktreeDiffMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 301,
+      filePath: "apps/web/src/pages/event/index/index.module.scss",
+      commitHash: "abcdef1234567890",
+    });
+    expect(await screen.findByTestId("monaco-diff")).toBeInTheDocument();
   });
 
   it("refreshes the file tree while the files tab is active", async () => {
