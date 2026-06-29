@@ -422,7 +422,7 @@ impl<'connection> IssueService<'connection> {
             ));
         }
 
-        let linked_session_id = IssueRepository::find_running_linked_session_id_in_transaction(
+        let linked_session_id = IssueRepository::find_linked_session_id_in_transaction(
             &transaction,
             input.project_id,
             input.issue_id,
@@ -431,7 +431,7 @@ impl<'connection> IssueService<'connection> {
         .ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的 Issue 可以标记待验收。",
+                "只有存在关联 Agent Session 的 Issue 可以标记待验收。",
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
         })?;
@@ -1989,13 +1989,12 @@ impl<'connection> IssueService<'connection> {
                 None,
             )?,
             IssueStatus::Review => {
-                let linked_session_id =
-                    IssueRepository::find_running_linked_session_id_in_transaction(
-                        &transaction,
-                        input.project_id,
-                        input.issue_id,
-                    )
-                    .map_err(issue_database_error)?;
+                let linked_session_id = IssueRepository::find_linked_session_id_in_transaction(
+                    &transaction,
+                    input.project_id,
+                    input.issue_id,
+                )
+                .map_err(issue_database_error)?;
 
                 if issue.status == IssueStatus::Running {
                     if let Some(linked_session_id) = linked_session_id {
@@ -2066,13 +2065,12 @@ impl<'connection> IssueService<'connection> {
                     )
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
                 }
-                let linked_session_id =
-                    IssueRepository::find_running_linked_session_id_in_transaction(
-                        &transaction,
-                        input.project_id,
-                        input.issue_id,
-                    )
-                    .map_err(issue_database_error)?;
+                let linked_session_id = IssueRepository::find_linked_session_id_in_transaction(
+                    &transaction,
+                    input.project_id,
+                    input.issue_id,
+                )
+                .map_err(issue_database_error)?;
 
                 match (issue.status.clone(), linked_session_id) {
                     (IssueStatus::Running, Some(linked_session_id)) => {
@@ -2309,7 +2307,7 @@ impl<'connection> IssueService<'connection> {
         .ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "只有存在运行中关联 Agent Session 的待验收 Issue 可以手动完成。",
+                "只有存在关联 Agent Session 的待验收 Issue 可以手动完成。",
             )
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
@@ -3449,8 +3447,8 @@ mod tests {
         // 描述同时包含图片占位符（Markdown 图片语法中以 token 作 URL）与裸 token 行。
         let description = "See screenshot.\n\n![pic.png]({{issue-attachment-temp:draft-img-1}})\n\n{{issue-attachment-temp:draft-file-1}}";
 
-        let rewritten = rewrite_attachment_tokens(description, &attachments)
-            .expect("rewrite tokens");
+        let rewritten =
+            rewrite_attachment_tokens(description, &attachments).expect("rewrite tokens");
 
         // 图片占位符内的 token 被替换为持久化标记，仍是合法 Markdown 图片语法。
         assert!(rewritten.contains("![pic.png]({{issue-attachment:101}})"));
