@@ -840,6 +840,70 @@ fn mark_issue_review_updates_running_issue_and_records_action_without_closing_se
 }
 
 #[test]
+fn mark_issue_review_allows_closed_linked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "review-closed-session-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Ready after restart".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "closed",
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET closed_at = 1780628600000 WHERE id = ?1",
+            [session_id],
+        )
+        .expect("set closed_at");
+
+    let reviewed = service
+        .mark_issue_review(MarkIssueReviewInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("mark review");
+
+    assert_eq!(reviewed.status, IssueStatus::Review);
+    let session_status: String = database
+        .connection
+        .query_row(
+            "SELECT status FROM agent_sessions WHERE id = ?1",
+            [session_id],
+            |row| row.get(0),
+        )
+        .expect("session status");
+    assert_eq!(session_status, "closed");
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions[0].action_type, IssueActionType::IssueReviewMarked);
+}
+
+#[test]
 fn mark_issue_review_rejects_non_running_issue_without_action() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -894,7 +958,7 @@ fn mark_issue_review_rejects_non_running_issue_without_action() {
 }
 
 #[test]
-fn mark_issue_review_rejects_issue_without_running_linked_session() {
+fn mark_issue_review_rejects_issue_without_linked_session() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project(&database.connection, "review-session-repo");
@@ -1562,6 +1626,58 @@ fn complete_issue_clean_closes_running_session_and_records_audit() {
     assert_eq!(attempt.2, head);
     assert_eq!(attempt.3, head);
     assert_eq!(attempt.4, "completed");
+}
+
+#[test]
+fn complete_issue_clean_allows_closed_linked_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("clean-closed-session-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "clean-closed-session-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::AgentAutoCommit,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "Complete after restart",
+        "closed",
+    );
+
+    let completed = service
+        .complete_issue_clean(CompleteIssueCleanInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete clean");
+
+    assert_eq!(completed.status, IssueStatus::Completed);
+    assert_eq!(completed.linked_session_id, Some(session_id));
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    assert_eq!(actions[0].action_type, IssueActionType::IssueCompleted);
+    let action_payload: serde_json::Value =
+        serde_json::from_str(&actions[0].payload_json).expect("payload json");
+    assert_eq!(action_payload["linkedSessionId"], session_id);
+    assert_eq!(action_payload["option"], "complete_clean");
 }
 
 #[test]

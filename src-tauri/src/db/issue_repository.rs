@@ -196,7 +196,7 @@ impl<'connection> IssueRepository<'connection> {
         find_by_id_on_connection(transaction, id)
     }
 
-    pub fn find_running_linked_session_id_in_transaction(
+    pub fn find_linked_session_id_in_transaction(
         transaction: &Transaction<'_>,
         project_id: i64,
         issue_id: i64,
@@ -208,11 +208,10 @@ impl<'connection> IssueRepository<'connection> {
                  INNER JOIN issues ON issues.id = agent_sessions.issue_id
                  WHERE issues.id = ?1
                    AND issues.project_id = ?2
-                   AND issues.del = 0
-                   AND agent_sessions.project_id = ?2
-                   AND agent_sessions.del = 0
-                   AND agent_sessions.status = 'running'
-                 LIMIT 1",
+            AND issues.del = 0
+            AND agent_sessions.project_id = ?2
+            AND agent_sessions.del = 0
+            LIMIT 1",
                 params![issue_id, project_id],
                 |row| row.get(0),
             )
@@ -260,15 +259,14 @@ impl<'connection> IssueRepository<'connection> {
                AND project_id = ?2
                AND del = 0
                AND status = 'running'
-               AND EXISTS (
-                 SELECT 1
-                 FROM agent_sessions
-                 WHERE agent_sessions.id = ?3
-                   AND agent_sessions.issue_id = issues.id
-                   AND agent_sessions.project_id = ?2
-                   AND agent_sessions.del = 0
-                   AND agent_sessions.status = 'running'
-               )",
+            AND EXISTS (
+                SELECT 1
+                FROM agent_sessions
+                WHERE agent_sessions.id = ?3
+                AND agent_sessions.issue_id = issues.id
+                AND agent_sessions.project_id = ?2
+                AND agent_sessions.del = 0
+            )",
             params![issue_id, project_id, linked_session_id],
         )?;
 
@@ -296,16 +294,14 @@ impl<'connection> IssueRepository<'connection> {
                AND project_id = ?2
                AND del = 0
                AND status = 'review'
-               AND EXISTS (
-                 SELECT 1
-                 FROM agent_sessions
-                 WHERE agent_sessions.id = ?3
-                   AND agent_sessions.issue_id = issues.id
-                   AND agent_sessions.project_id = ?2
-                   AND agent_sessions.del = 0
-                   AND agent_sessions.status = 'running'
-                   AND agent_sessions.closed_at IS NULL
-               )",
+            AND EXISTS (
+                SELECT 1
+                FROM agent_sessions
+                WHERE agent_sessions.id = ?3
+                AND agent_sessions.issue_id = issues.id
+                AND agent_sessions.project_id = ?2
+                AND agent_sessions.del = 0
+            )",
             params![issue_id, project_id, linked_session_id],
         )?;
 
