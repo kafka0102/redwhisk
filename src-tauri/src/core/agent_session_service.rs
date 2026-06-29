@@ -1527,6 +1527,14 @@ impl<'connection> AgentSessionService<'connection> {
         handle: Option<Arc<dyn AgentSessionHandle>>,
     ) -> Result<ReadAgentTimelineResult, CommandError> {
         let session = self.find_project_session(project_id, session_id)?;
+        let history = read_timeline_from_session_log(&session)?;
+
+        if !history.items.is_empty() || history.effort.is_some() {
+            return Ok(ReadAgentTimelineResult {
+                items: history.items,
+                effort: history.effort,
+            });
+        }
 
         if let Some(handle) = handle {
             match handle.read_timeline() {
@@ -1550,7 +1558,6 @@ impl<'connection> AgentSessionService<'connection> {
             }
         }
 
-        let history = read_timeline_from_session_log(&session)?;
         Ok(ReadAgentTimelineResult {
             items: history.items,
             effort: history.effort,
@@ -3213,7 +3220,9 @@ fn read_structured_timeline_log(
             return Ok(None);
         };
         saw_structured_line = true;
-        history.items.extend(line_history.items);
+        for item in line_history.items {
+            push_compacted_timeline_item(&mut history.items, item);
+        }
         if line_history.effort.is_some() {
             history.effort = line_history.effort;
         }
@@ -3243,6 +3252,78 @@ fn structured_history_from_log_line(line: &str) -> Option<StructuredTimelineHist
     }
 
     saw_value.then_some(history)
+}
+
+fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentTimelineItem) {
+    match &item {
+        AgentTimelineItem::AssistantMessage {
+            message_id: Some(message_id),
+            ..
+        } => {
+            if let Some(index) = items.iter().rposition(|existing| {
+                matches!(
+                    existing,
+                    AgentTimelineItem::AssistantMessage {
+                        message_id: Some(existing_id),
+                        ..
+                    } if existing_id == message_id
+                )
+            }) {
+                items[index] = item;
+                return;
+            }
+        }
+        AgentTimelineItem::UserMessage {
+            message_id: Some(message_id),
+            ..
+        } => {
+            if let Some(index) = items.iter().rposition(|existing| {
+                matches!(
+                    existing,
+                    AgentTimelineItem::UserMessage {
+                        message_id: Some(existing_id),
+                        ..
+                    } if existing_id == message_id
+                )
+            }) {
+                items[index] = item;
+                return;
+            }
+        }
+        AgentTimelineItem::Reasoning { .. } => {
+            if matches!(items.last(), Some(AgentTimelineItem::Reasoning { .. })) {
+                if let Some(last) = items.last_mut() {
+                    *last = item;
+                    return;
+                }
+            }
+        }
+        AgentTimelineItem::ToolCall { call_id, .. } => {
+            if let Some(index) = items.iter().rposition(|existing| {
+                matches!(
+                    existing,
+                    AgentTimelineItem::ToolCall {
+                        call_id: existing_id,
+                        ..
+                    } if existing_id == call_id
+                )
+            }) {
+                items[index] = item;
+                return;
+            }
+        }
+        AgentTimelineItem::Todo { .. } => {
+            if matches!(items.last(), Some(AgentTimelineItem::Todo { .. })) {
+                if let Some(last) = items.last_mut() {
+                    *last = item;
+                    return;
+                }
+            }
+        }
+        _ => {}
+    }
+
+    items.push(item);
 }
 
 fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
@@ -3840,6 +3921,7 @@ mod tests {
     };
     use crate::types::agent_session_stream::{
         AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+        ToolCallDetail, ToolCallStatus,
     };
     use crate::types::project::ProjectCompletionPolicy;
     use crate::types::session_event::SessionEventType;
@@ -4060,6 +4142,149 @@ mod tests {
     }
 
     #[test]
+    fn read_timeline_from_structured_log_compacts_incremental_items() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("structured.jsonl");
+        let events = [
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 1,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::AssistantMessage {
+                        text: "你".to_string(),
+                        message_id: Some("msg-1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 1,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 2,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::AssistantMessage {
+                        text: "你好".to_string(),
+                        message_id: Some("msg-1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 2,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 3,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning {
+                        text: "分析一步".to_string(),
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 3,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 4,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning {
+                        text: "分析完成".to_string(),
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 4,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 5,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall {
+                        call_id: "call-1".to_string(),
+                        name: "shell".to_string(),
+                        detail: ToolCallDetail::Shell {
+                            command: "pnpm test".to_string(),
+                            output: None,
+                            exit_code: None,
+                        },
+                        status: ToolCallStatus::Running,
+                        error: None,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 5,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 6,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall {
+                        call_id: "call-1".to_string(),
+                        name: "shell".to_string(),
+                        detail: ToolCallDetail::Shell {
+                            command: "pnpm test".to_string(),
+                            output: Some("ok".to_string()),
+                            exit_code: Some(0),
+                        },
+                        status: ToolCallStatus::Completed,
+                        error: None,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 6,
+                },
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log_path, format!("{lines}\n")).expect("write structured log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let history = read_timeline_from_session_log(&session).expect("read timeline");
+
+        assert_eq!(
+            history.items,
+            vec![
+                AgentTimelineItem::AssistantMessage {
+                    text: "你好".to_string(),
+                    message_id: Some("msg-1".to_string()),
+                },
+                AgentTimelineItem::Reasoning {
+                    text: "分析完成".to_string(),
+                },
+                AgentTimelineItem::ToolCall {
+                    call_id: "call-1".to_string(),
+                    name: "shell".to_string(),
+                    detail: ToolCallDetail::Shell {
+                        command: "pnpm test".to_string(),
+                        output: Some("ok".to_string()),
+                        exit_code: Some(0),
+                    },
+                    status: ToolCallStatus::Completed,
+                    error: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn read_timeline_from_legacy_structured_log_does_not_render_json() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let log_path = temp_dir.path().join("legacy-structured.jsonl");
@@ -4149,6 +4374,70 @@ mod tests {
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("最终输出")
+        );
+    }
+
+    #[test]
+    fn read_agent_timeline_prefers_persisted_log_over_running_handle() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("structured.jsonl");
+        let event = AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 401,
+            seq: 1,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage {
+                    text: "本地历史".to_string(),
+                    message_id: Some("msg-local".to_string()),
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 1,
+            },
+        };
+        fs::write(
+            &log_path,
+            format!(
+                "{}\n",
+                serde_json::to_string(&event).expect("serialize event")
+            ),
+        )
+        .expect("write structured log");
+
+        let database = setup_session_list_database();
+        let started_at = current_millis();
+        insert_session_list_row(
+            &database,
+            401,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            started_at,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = 401",
+                params![log_path.to_string_lossy().to_string()],
+            )
+            .expect("update log path");
+
+        let service = test_agent_session_service(&database);
+        let handle: Arc<dyn AgentSessionHandle> = Arc::new(TimelineProtocolErrorHandle {
+            message: "handle should not be read".to_string(),
+        });
+        let result = service
+            .read_agent_timeline(1, 401, Some(handle))
+            .expect("read persisted timeline");
+
+        assert_eq!(
+            result.items,
+            vec![AgentTimelineItem::AssistantMessage {
+                text: "本地历史".to_string(),
+                message_id: Some("msg-local".to_string()),
+            }]
         );
     }
 
