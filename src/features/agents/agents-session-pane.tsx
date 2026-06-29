@@ -326,6 +326,7 @@ export function AgentsSessionPane({
             activeTab={activeWorkspaceTab}
             changeTab={changeTab}
             fileTab={fileTab}
+            sessionAgentType={selectedSession.agentType}
             sessionContent={
               <div
                 className="agents-terminal-host"
