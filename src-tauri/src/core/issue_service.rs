@@ -831,23 +831,6 @@ impl<'connection> IssueService<'connection> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        if issue.status == IssueStatus::Running {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "运行中的 Issue 必须先进入待验收后才能完成。",
-            )
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("issueId", issue.id)
-                    .with_value("status", issue_status_to_str(&issue.status)),
-            )
-            .with_detail(
-                ErrorDetail::new("AgentSession")
-                    .with_value("sessionId", session.id)
-                    .with_value("status", "running"),
-            ));
-        }
-
         let effective_policy = session
             .completion_policy
             .unwrap_or(project.completion_policy);
@@ -871,7 +854,29 @@ impl<'connection> IssueService<'connection> {
         }
 
         let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
-        let snapshot = read_git_snapshot(&detection_repo_path).map_err(issue_git_error)?;
+        let snapshot = match read_git_snapshot(&detection_repo_path) {
+            Ok(snapshot) => snapshot,
+            Err(_) => {
+                let snapshot = closed_session_completion_snapshot();
+                let completed_issue = self.complete_issue_flow_transaction(
+                    &issue,
+                    &session,
+                    &snapshot,
+                    option,
+                    None,
+                    None,
+                    input.ignore_dirty == Some(true),
+                )?;
+
+                return Ok(self.flow_result(
+                    CompleteIssueFlowAction::Completed,
+                    completed_issue,
+                    None,
+                    "Issue 已完成。".to_string(),
+                    &session,
+                ));
+            }
+        };
 
         if option == CompletionAttemptOption::AgentAutoCommit {
             if let Some(result) = self.resume_pending_agent_commit_if_available(
