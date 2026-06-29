@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef } from "react";
 import {
   Bold,
+  Code,
+  Paintbrush,
   Image as ImageIcon,
   List,
   ListOrdered,
   Paperclip,
+  SquareCode,
 } from "lucide-react";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
@@ -68,6 +71,9 @@ export interface RichTextAttachment {
 export interface RichTextEditorLabels {
   attachFile: string;
   bold: string;
+  clearFormatting: string;
+  codeBlock: string;
+  codeQuote: string;
   heading: string;
   image: string;
   normalText: string;
@@ -283,6 +289,47 @@ export function RichTextEditor({
     quill.root.setAttribute("autocorrect", "off");
     quill.root.setAttribute("spellcheck", "false");
 
+    let isComposing = false;
+    const hidePlaceholderForInput = () => {
+      quill.root.classList.add("rich-text-editor__input-pending");
+    };
+    const restorePlaceholderAfterInput = () => {
+      if (!isComposing) {
+        quill.root.classList.remove("rich-text-editor__input-pending");
+      }
+    };
+    const schedulePlaceholderRestore = () => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(restorePlaceholderAfterInput);
+      } else {
+        window.setTimeout(restorePlaceholderAfterInput, 0);
+      }
+    };
+    const handleCompositionStart = () => {
+      isComposing = true;
+      hidePlaceholderForInput();
+    };
+    const handleCompositionEnd = () => {
+      isComposing = false;
+      schedulePlaceholderRestore();
+    };
+    const handleBeforeInput = () => {
+      hidePlaceholderForInput();
+    };
+    const handleInput = () => {
+      schedulePlaceholderRestore();
+    };
+    const handleBlur = () => {
+      isComposing = false;
+      restorePlaceholderAfterInput();
+    };
+
+    quill.root.addEventListener("compositionstart", handleCompositionStart);
+    quill.root.addEventListener("compositionend", handleCompositionEnd);
+    quill.root.addEventListener("beforeinput", handleBeforeInput);
+    quill.root.addEventListener("input", handleInput);
+    quill.root.addEventListener("blur", handleBlur);
+
     const handleTextChange = (
       _delta: unknown,
       _oldDelta: unknown,
@@ -307,6 +354,14 @@ export function RichTextEditor({
 
     return () => {
       quill.off("text-change", handleTextChange);
+      quill.root.removeEventListener(
+        "compositionstart",
+        handleCompositionStart,
+      );
+      quill.root.removeEventListener("compositionend", handleCompositionEnd);
+      quill.root.removeEventListener("beforeinput", handleBeforeInput);
+      quill.root.removeEventListener("input", handleInput);
+      quill.root.removeEventListener("blur", handleBlur);
       quillRef.current = null;
     };
   }, [ariaLabel, placeholder]);
@@ -351,6 +406,16 @@ export function RichTextEditor({
         <button aria-label={labels.bold} className="ql-bold" type="button">
           <Bold aria-hidden="true" size={15} strokeWidth={2} />
         </button>
+        <button aria-label={labels.codeQuote} className="ql-code" type="button">
+          <Code aria-hidden="true" size={15} strokeWidth={2} />
+        </button>
+        <button
+          aria-label={labels.codeBlock}
+          className="ql-code-block"
+          type="button"
+        >
+          <SquareCode aria-hidden="true" size={15} strokeWidth={2} />
+        </button>
         <button
           aria-label={labels.unorderedList}
           className="ql-list"
@@ -381,6 +446,13 @@ export function RichTextEditor({
             <Paperclip aria-hidden="true" size={15} strokeWidth={2} />
           </button>
         ) : null}
+        <button
+          aria-label={labels.clearFormatting}
+          className="ql-clean"
+          type="button"
+        >
+          <Paintbrush aria-hidden="true" size={15} strokeWidth={2} />
+        </button>
       </div>
       <div className="rich-text-editor__surface" ref={editorHostRef} />
       {localizedAttachments.length > 0 ? (
@@ -455,9 +527,21 @@ function markdownToDelta(
   );
   const lines = normalizeLineEndings(markdown).split("\n");
   const imageLinePattern = /^!\[([^\]]*)\]\(([^)]+)\)$/;
+  let isReadingCodeBlock = false;
 
   for (const line of lines) {
     const trimmedLine = line.trim();
+    if (trimmedLine.startsWith("```")) {
+      isReadingCodeBlock = !isReadingCodeBlock;
+      continue;
+    }
+
+    if (isReadingCodeBlock) {
+      ops.push({ insert: line });
+      ops.push({ insert: "\n", attributes: { "code-block": true } });
+      continue;
+    }
+
     // 优先识别 Markdown 图片占位符 ![alt](token)：若 URL 是某个图片附件的
     // markdownToken，则还原为图片 embed；否则按普通文本行处理。
     const imageMatch = imageLinePattern.exec(trimmedLine);
@@ -480,7 +564,7 @@ function markdownToDelta(
     }
 
     const parsedLine = parseMarkdownLine(line);
-    ops.push(...parseBoldInline(parsedLine.text));
+    ops.push(...parseInlineMarkdown(parsedLine.text));
     ops.push({ insert: "\n", attributes: parsedLine.attributes });
   }
 
@@ -518,14 +602,47 @@ function deltaToMarkdown(
   const lines: string[] = [];
   let currentLine = "";
   let orderedIndex = 1;
+  let isWritingCodeBlock = false;
+
+  const finishCodeBlock = () => {
+    if (isWritingCodeBlock) {
+      lines.push("```");
+      isWritingCodeBlock = false;
+    }
+  };
+
+  const pushLine = (
+    line: string,
+    attributes: Record<string, unknown> | undefined,
+  ) => {
+    if (isCodeBlockAttributes(attributes)) {
+      if (!isWritingCodeBlock) {
+        lines.push("```");
+        isWritingCodeBlock = true;
+      }
+      lines.push(line);
+      orderedIndex = 1;
+      return;
+    }
+
+    finishCodeBlock();
+    const formattedLine = formatBlockMarkdown(line, attributes, orderedIndex);
+    if (attributes?.list === "ordered" && line.length > 0) {
+      orderedIndex += 1;
+    } else if (attributes?.list !== "ordered") {
+      orderedIndex = 1;
+    }
+    lines.push(formattedLine);
+  };
 
   for (const operation of operations) {
     const attachment = getAttachmentInsert(operation, attachments);
     if (attachment) {
       if (currentLine.length > 0) {
-        lines.push(currentLine);
+        pushLine(currentLine, undefined);
         currentLine = "";
       }
+      finishCodeBlock();
       // 图片附件序列化为 Markdown 图片语法，URL 用其 markdownToken 占位
       // （draft 为 {{issue-attachment-temp:token}}，保存后由 Rust 重写为
       // {{issue-attachment:id}}）。非图片附件理论上不会出现在正文 ops 中
@@ -547,28 +664,16 @@ function deltaToMarkdown(
     segments.forEach((segment, index) => {
       currentLine += formatInlineMarkdown(segment, operation.attributes);
       if (index < segments.length - 1) {
-        const formattedLine = formatBlockMarkdown(
-          currentLine,
-          operation.attributes,
-          orderedIndex,
-        );
-        if (
-          operation.attributes?.list === "ordered" &&
-          currentLine.length > 0
-        ) {
-          orderedIndex += 1;
-        } else if (operation.attributes?.list !== "ordered") {
-          orderedIndex = 1;
-        }
-        lines.push(formattedLine);
+        pushLine(currentLine, operation.attributes);
         currentLine = "";
       }
     });
   }
 
   if (currentLine.length > 0) {
-    lines.push(currentLine);
+    pushLine(currentLine, undefined);
   }
+  finishCodeBlock();
 
   return normalizeMarkdown(lines.join("\n"));
 }
@@ -717,17 +822,21 @@ function parseMarkdownLine(line: string): {
   return { text: line };
 }
 
-function parseBoldInline(text: string): DeltaOperation[] {
+function parseInlineMarkdown(text: string): DeltaOperation[] {
   const operations: DeltaOperation[] = [];
-  const boldPattern = /\*\*([^*\n]+)\*\*/g;
+  const inlinePattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = boldPattern.exec(text)) !== null) {
+  while ((match = inlinePattern.exec(text)) !== null) {
     if (match.index > cursor) {
       operations.push({ insert: text.slice(cursor, match.index) });
     }
-    operations.push({ insert: match[1], attributes: { bold: true } });
+    if (match[1] !== undefined) {
+      operations.push({ insert: match[1], attributes: { code: true } });
+    } else {
+      operations.push({ insert: match[2], attributes: { bold: true } });
+    }
     cursor = match.index + match[0].length;
   }
 
@@ -746,7 +855,14 @@ function formatInlineMarkdown(
     return "";
   }
 
-  return attributes?.bold === true ? `**${text}**` : text;
+  let formattedText = text;
+  if (attributes?.code === true) {
+    formattedText = `\`${formattedText}\``;
+  }
+  if (attributes?.bold === true) {
+    formattedText = `**${formattedText}**`;
+  }
+  return formattedText;
 }
 
 function formatBlockMarkdown(
@@ -770,6 +886,15 @@ function formatBlockMarkdown(
     return `${orderedIndex}. ${line}`;
   }
   return line;
+}
+
+function isCodeBlockAttributes(
+  attributes: Record<string, unknown> | undefined,
+): boolean {
+  return (
+    attributes?.["code-block"] !== undefined &&
+    attributes["code-block"] !== false
+  );
 }
 
 function getBlockShortcut(

@@ -64,6 +64,9 @@ vi.mock("quill", () => {
 const labels: RichTextEditorLabels = {
   attachFile: "Add attachment",
   bold: "Bold",
+  clearFormatting: "Clear formatting",
+  codeBlock: "Code block",
+  codeQuote: "Inline code",
   heading: "Heading",
   image: "Insert image",
   normalText: "Normal text",
@@ -79,6 +82,99 @@ const labels: RichTextEditorLabels = {
 describe("RichTextEditor", () => {
   beforeEach(() => {
     quillInstances.length = 0;
+  });
+
+  it("renders formatting controls for code and cleanup actions", () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Inline code" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Code block" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Clear formatting" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the placeholder while IME composition is active", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    const editorRoot = quillInstances[0].root;
+    editorRoot.dispatchEvent(new CompositionEvent("compositionstart"));
+
+    expect(editorRoot).toHaveClass("rich-text-editor__input-pending");
+
+    editorRoot.dispatchEvent(new CompositionEvent("compositionend"));
+
+    await waitFor(() =>
+      expect(editorRoot).not.toHaveClass("rich-text-editor__input-pending"),
+    );
+  });
+
+  it("round-trips inline code and fenced code blocks as markdown", async () => {
+    const handleChange = vi.fn();
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value={"Use `pnpm test`\n```\nconst x = 1;\n```"}
+        onChange={handleChange}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(quillInstances[0]?.setContents).toHaveBeenCalled(),
+    );
+    const setContentsCalls = quillInstances[0].setContents.mock.calls;
+    const setContentsPayload =
+      setContentsCalls[setContentsCalls.length - 1]?.[0];
+    expect(setContentsPayload).toContainEqual({
+      insert: "pnpm test",
+      attributes: { code: true },
+    });
+    expect(setContentsPayload).toContainEqual({ insert: "const x = 1;" });
+    expect(setContentsPayload).toContainEqual({
+      insert: "\n",
+      attributes: { "code-block": true },
+    });
+
+    quillInstances[0].getContents.mockReturnValue({
+      ops: [
+        { insert: "Use " },
+        { insert: "pnpm test", attributes: { code: true } },
+        { insert: "\n" },
+        { insert: "const x = 1;" },
+        { insert: "\n", attributes: { "code-block": true } },
+      ],
+    });
+    const textChangeHandler = quillInstances[0].on.mock.calls.find(
+      ([eventName]) => eventName === "text-change",
+    )?.[1];
+    textChangeHandler?.({}, {}, "user");
+
+    expect(handleChange).toHaveBeenLastCalledWith(
+      "Use `pnpm test`\n```\nconst x = 1;\n```",
+    );
   });
 
   it("uses Quill image embeds and React attachment actions", async () => {
