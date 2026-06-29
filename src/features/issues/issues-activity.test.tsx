@@ -1835,6 +1835,59 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).toHaveBeenCalledTimes(2);
   });
 
+  it("disables start action shows non-dismissible worktree progress while starting", async () => {
+    const user = userEvent.setup();
+    const pendingStart = createDeferred<StartAgentSessionResult>();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockReturnValue(pendingStart.promise);
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+    await user.click(startButton);
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(startButton).toBeDisabled());
+    await user.click(startButton);
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+
+    const progressDialog = screen.getByRole("dialog", {
+      name: "Worktree setup progress",
+    });
+    expect(
+      within(progressDialog).getByText("Creating worktree issue-20"),
+    ).toBeInTheDocument();
+    expect(
+      within(progressDialog).getByText("Running setup command: pnpm install"),
+    ).toBeInTheDocument();
+    expect(
+      within(progressDialog).getByText("Completed worktree creation."),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Close run dialog" }),
+    ).toBeDisabled();
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByRole("dialog", { name: "Worktree setup progress" }),
+    ).toBeInTheDocument();
+
+    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Run Issue #20" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
   it("closes the run dialog and refreshes issues when start succeeds", async () => {
     const user = userEvent.setup();
     const onOpenAgentsActivity = vi.fn();
@@ -1874,6 +1927,64 @@ describe("IssuesActivity", () => {
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
+  });
+
+  it("returns issue edit page to kanban before opening started session", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock
+      .mockResolvedValueOnce({ issues: [existingIssue] })
+      .mockResolvedValueOnce({
+        issues: [
+          {
+            ...existingIssue,
+            status: "running" as const,
+            linkedSessionId: 301,
+            linkedSessionStatus: "running" as const,
+          },
+        ],
+      });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    expect(
+      screen.getByRole("form", { name: "Edit Issue" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "确定要执行吗？" })).getByRole(
+        "button",
+        { name: "确认" },
+      ),
+    );
+    await user.click(
+      within(
+        await screen.findByRole("dialog", { name: "Run Issue #20" }),
+      ).getByRole("button", { name: "Start" }),
+    );
+
+    await waitFor(() => expect(onOpenAgentsActivity).toHaveBeenCalledWith(301));
+    expect(
+      screen.queryByRole("form", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Issues kanban" }),
+    ).toBeInTheDocument();
   });
 
   it("falls back to the refreshed linked session when start succeeds without a session id", async () => {
@@ -3351,6 +3462,17 @@ function renderIssuesActivity(
       />
     </I18nProvider>,
   );
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
 }
 
 async function openExistingIssueRunDialog(

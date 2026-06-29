@@ -522,6 +522,10 @@ export function IssuesActivity({
     sessionId?: number | null;
   }) {
     setRunDialogIssue(null);
+    setDialogErrorMessage(null);
+    setDialogMode(null);
+    setIsReadOnlyEditRequested(false);
+    setForm(EMPTY_FORM);
     let resolvedSessionId = result.sessionId ?? null;
 
     try {

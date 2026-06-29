@@ -4017,6 +4017,12 @@ button:focus-visible {
   background: var(--color-overlay);
 }
 
+.issue-dialog-overlay--nested {
+  position: absolute;
+  z-index: 2;
+  padding: 18px;
+}
+
 .issue-page {
   position: relative;
   z-index: 2;
