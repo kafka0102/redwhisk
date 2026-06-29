@@ -1145,6 +1145,119 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
 }
 
 #[test]
+fn complete_issue_manual_allows_running_issue_without_review_gate() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("complete-running-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "complete-running-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Running to complete".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'running' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set running");
+    let profile_id = insert_agent_profile(&database.connection);
+    let session_id = insert_agent_session_for_issue(
+        &database.connection,
+        project_id,
+        issue.id,
+        profile_id,
+        "running",
+    );
+
+    let completed = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete running issue manually");
+
+    assert_eq!(completed.id, issue.id);
+    assert_eq!(completed.status, IssueStatus::Completed);
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+
+    let actions = EventRepository::new(&database.connection)
+        .list_issue_actions(issue.id)
+        .expect("issue actions");
+    let completed_action = actions
+        .iter()
+        .find(|action| action.action_type == IssueActionType::IssueCompleted)
+        .expect("completed action");
+    let action_payload: serde_json::Value =
+        serde_json::from_str(&completed_action.payload_json).expect("payload json");
+    assert_eq!(action_payload["fromStatus"], "running");
+    assert_eq!(action_payload["toStatus"], "completed");
+}
+
+#[test]
+fn complete_issue_manual_finishes_when_project_git_status_is_unavailable() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("deleted-project-worktree-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "deleted-project-worktree-repo",
+        &repo_dir,
+        ProjectCompletionPolicy::Manual,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "deleted project worktree issue",
+        "running",
+    );
+    fs::remove_dir_all(&repo_dir).expect("delete project worktree");
+
+    let completed = service
+        .complete_issue_manual(CompleteIssueManualInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("complete when git status is unavailable");
+
+    assert_eq!(completed.id, issue.id);
+    assert_eq!(completed.status, IssueStatus::Completed);
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+}
+
+#[test]
 fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("manual-complete-worktree-repo");
@@ -1247,7 +1360,7 @@ fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
 }
 
 #[test]
-fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
+fn complete_issue_manual_rejects_issue_without_session_without_partial_write() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project(&database.connection, "complete-invalid-state-repo");
@@ -1258,55 +1371,30 @@ fn complete_issue_manual_rejects_non_review_issue_without_partial_write() {
     let issue = service
         .create_issue(CreateIssueInput {
             project_id,
-            title: "Still running".to_string(),
+            title: "No linked session".to_string(),
             description: "".to_string(),
             attachments: Vec::new(),
             label_ids: Vec::new(),
         })
         .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'running' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set running");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
 
     let error = service
         .complete_issue_manual(CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
         })
-        .expect_err("non-review issue should be rejected");
+        .expect_err("issue without session should be rejected");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
     let stored_issue = IssueRepository::new(&database.connection)
         .find_by_id(issue.id)
         .expect("query issue")
         .expect("issue exists");
-    assert_eq!(stored_issue.status, IssueStatus::Running);
-    let stored_session = AgentSessionRepository::new(&database.connection)
-        .find_by_id(session_id)
-        .expect("query session")
-        .expect("session exists");
-    assert_eq!(stored_session.status, AgentSessionStatus::Running);
-    assert_eq!(stored_session.closed_at, None);
+    assert_eq!(stored_issue.status, IssueStatus::Backlog);
     let actions = EventRepository::new(&database.connection)
         .list_issue_actions(issue.id)
         .expect("issue actions");
     assert_eq!(actions.len(), 1);
-    let events = EventRepository::new(&database.connection)
-        .list_session_events(session_id)
-        .expect("session events");
-    assert!(events.is_empty());
 }
 
 #[test]
@@ -2961,7 +3049,7 @@ fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_mi
 }
 
 #[test]
-fn complete_issue_flow_rejects_running_issue_before_review() {
+fn complete_issue_flow_allows_running_issue_before_review() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-running-before-review-repo");
     init_repo(&repo_dir);
@@ -3020,7 +3108,7 @@ fn complete_issue_flow_rejects_running_issue_before_review() {
         )
         .expect("update session workspace");
 
-    let error = service
+    let result = service
         .complete_issue_flow(
             CompleteIssueFlowInput {
                 project_id,
@@ -3032,26 +3120,25 @@ fn complete_issue_flow_rejects_running_issue_before_review() {
             &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
-        .expect_err("running issue should require review first");
+        .expect("running issue should complete");
 
-    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
-    assert!(error.message.contains("待验收"));
-
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
     let stored_issue = IssueRepository::new(&database.connection)
         .find_by_id(issue.id)
         .expect("query issue")
         .expect("issue exists");
-    assert_eq!(stored_issue.status, IssueStatus::Running);
+    assert_eq!(stored_issue.status, IssueStatus::Completed);
     let stored_session = AgentSessionRepository::new(&database.connection)
         .find_by_id(session_id)
         .expect("query session")
         .expect("session exists");
-    assert_eq!(stored_session.status, AgentSessionStatus::Running);
-    assert_eq!(stored_session.closed_at, None);
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
+    assert_eq!(stored_session.closed_at, Some(result.issue.updated_at));
 }
 
 #[test]
-fn complete_issue_flow_rejects_running_issue_even_when_session_is_inactive() {
+fn complete_issue_flow_allows_running_issue_even_when_session_is_inactive() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-running-inactive-session-repo");
     init_repo(&repo_dir);
@@ -3110,7 +3197,7 @@ fn complete_issue_flow_rejects_running_issue_even_when_session_is_inactive() {
         )
         .expect("update session workspace");
 
-    let error = service
+    let result = service
         .complete_issue_flow(
             CompleteIssueFlowInput {
                 project_id,
@@ -3122,15 +3209,20 @@ fn complete_issue_flow_rejects_running_issue_even_when_session_is_inactive() {
             &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
-        .expect_err("running issue should require review even with inactive session");
+        .expect("running issue should complete with inactive session");
 
-    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
-    assert!(error.message.contains("待验收"));
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
     let stored_issue = IssueRepository::new(&database.connection)
         .find_by_id(issue.id)
         .expect("query issue")
         .expect("issue exists");
-    assert_eq!(stored_issue.status, IssueStatus::Running);
+    assert_eq!(stored_issue.status, IssueStatus::Completed);
+    let stored_session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("query session")
+        .expect("session exists");
+    assert_eq!(stored_session.status, AgentSessionStatus::Closed);
 }
 
 #[test]
