@@ -20,7 +20,16 @@ use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvel
 
 /// 结构化 Agent 事件流的 Tauri event 名。
 pub const AGENT_SESSION_STREAM_EVENT: &str = "agent-session-stream-event";
+pub const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
 const LATEST_OUTPUT_UPDATE_INTERVAL: Duration = Duration::from_millis(750);
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionListChangedPayload {
+    project_id: i64,
+    session_id: Option<i64>,
+    reason: &'static str,
+}
 
 /// 单个 session 的游标状态。
 #[derive(Debug, Clone)]
@@ -114,9 +123,20 @@ impl AgentEventBroadcaster {
             epoch,
             event,
         };
-        self.persist_stream_event(&envelope);
+        let should_refresh_list = self.persist_stream_event(&envelope)
+            || should_refresh_session_list_for_stream_event(&envelope.event);
         // 广播失败只忽略：前端可经 read_agent_timeline 补历史，不应阻塞 Agent 执行。
         let _ = app_handle.emit(AGENT_SESSION_STREAM_EVENT, envelope);
+        if should_refresh_list {
+            let _ = app_handle.emit(
+                AGENT_SESSION_LIST_CHANGED_EVENT,
+                AgentSessionListChangedPayload {
+                    project_id,
+                    session_id: Some(session_id),
+                    reason: "session_stream_updated",
+                },
+            );
+        }
     }
 
     fn advance_cursor(&self, session_id: i64) -> (u64, String) {
@@ -132,9 +152,9 @@ impl AgentEventBroadcaster {
         (cursor.seq, cursor.epoch.clone())
     }
 
-    fn persist_stream_event(&self, envelope: &AgentStreamEventEnvelope) {
+    fn persist_stream_event(&self, envelope: &AgentStreamEventEnvelope) -> bool {
         let Some(app_handle) = self.app_handle.get() else {
-            return;
+            return false;
         };
         let latest_output = latest_output_from_stream_event(&envelope.event);
         let should_update_latest_output = latest_output
@@ -142,11 +162,11 @@ impl AgentEventBroadcaster {
             .map(|_| self.should_update_latest_output(envelope.session_id, &envelope.event))
             .unwrap_or(false);
         let Some(log_path) = self.resolve_log_path(envelope.session_id, app_handle) else {
-            return;
+            return false;
         };
 
         let Ok(_write_guard) = self.log_write_lock.lock() else {
-            return;
+            return false;
         };
 
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) {
@@ -156,20 +176,21 @@ impl AgentEventBroadcaster {
         }
 
         if !should_update_latest_output {
-            return;
+            return false;
         }
         let Some(latest_output) = latest_output else {
-            return;
+            return false;
         };
         let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
-            return;
+            return false;
         };
         let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
-            return;
+            return false;
         };
         let repository = AgentSessionRepository::new(&database.connection);
         let updated_at = current_epoch_millis();
         let _ = repository.update_latest_output(envelope.session_id, &latest_output, updated_at);
+        true
     }
 
     fn resolve_log_path(&self, session_id: i64, app_handle: &AppHandle) -> Option<String> {
@@ -247,6 +268,10 @@ fn latest_output_from_stream_event(event: &AgentStreamEvent) -> Option<String> {
         _ => None,
     }?;
     truncate_latest_output(text)
+}
+
+fn should_refresh_session_list_for_stream_event(event: &AgentStreamEvent) -> bool {
+    !matches!(event, AgentStreamEvent::Timeline { .. })
 }
 
 fn latest_output_from_timeline_item(

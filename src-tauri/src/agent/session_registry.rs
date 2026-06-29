@@ -73,6 +73,15 @@ impl AgentSessionRegistry {
             .map(|sessions| sessions.contains_key(&session_id))
             .unwrap_or(false)
     }
+
+    /// 返回当前注册表中的 session id 快照，供命令层清理已不可见的运行时句柄。
+    pub fn session_ids(&self) -> Vec<i64> {
+        self.store
+            .sessions
+            .lock()
+            .map(|sessions| sessions.keys().copied().collect())
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]

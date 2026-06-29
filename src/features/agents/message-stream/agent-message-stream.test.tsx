@@ -189,6 +189,40 @@ describe("AgentMessageStream", () => {
     expect(screen.getByText("exit 0")).toBeInTheDocument();
   });
 
+  it("展开工具行时截断过长输出内容", async () => {
+    const longOutput = `${"a".repeat(20_000)}TAIL`;
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "c-long",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "cat huge.log",
+            output: longOutput,
+            exitCode: 0,
+          },
+          status: "completed",
+        },
+      ],
+    });
+
+    render(<AgentMessageStream projectId={1} sessionId={11} />);
+    await waitFor(() => {
+      expect(screen.getByText("Shell")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Shell"));
+
+    expect(screen.getByText(/^a+$/)).toHaveTextContent("a".repeat(20_000));
+    expect(screen.queryByText(/TAIL/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Output truncated to 20000 of 20004 characters."),
+    ).toBeInTheDocument();
+  });
+
   it("按文件扩展名渲染 Edit diff 的语法高亮和新增删除背景", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({

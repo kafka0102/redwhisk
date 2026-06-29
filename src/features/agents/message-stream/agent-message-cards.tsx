@@ -35,6 +35,8 @@ interface AgentMessageCardsProps {
   entries: MessageStreamEntry[];
 }
 
+const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
+
 export function AgentMessageCards({ entries }: AgentMessageCardsProps) {
   return (
     <>
@@ -282,7 +284,8 @@ function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
 function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
   const { messages } = useI18n();
   switch (detail.type) {
-    case "shell":
+    case "shell": {
+      const shellOutput = truncateToolDetailText(detail.output);
       return (
         <div className="agents-message__tool-body">
           {detail.output || detail.exitCode != null ? (
@@ -295,52 +298,95 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
               <code className="agents-message__command agents-message__command--details">
                 {detail.command}
               </code>
-              {detail.output ? (
-                <pre className="agents-message__output">{detail.output}</pre>
+              {shellOutput ? (
+                <>
+                  <pre className="agents-message__output">
+                    {shellOutput.text}
+                  </pre>
+                  {shellOutput.isTruncated ? (
+                    <p className="agents-message__truncated" role="status">
+                      {messages.agentsFeature.toolOutputTruncated(
+                        shellOutput.visibleCharacters,
+                        shellOutput.totalCharacters,
+                      )}
+                    </p>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}
         </div>
       );
-    case "read":
+    }
+    case "read": {
+      const readContent = truncateToolDetailText(detail.content);
       return (
         <div className="agents-message__tool-body">
-          {detail.content ? (
+          {readContent ? (
             <div className="agents-message__tool-output">
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
-              <pre className="agents-message__output">{detail.content}</pre>
+              <pre className="agents-message__output">{readContent.text}</pre>
+              {readContent.isTruncated ? (
+                <p className="agents-message__truncated" role="status">
+                  {messages.agentsFeature.toolOutputTruncated(
+                    readContent.visibleCharacters,
+                    readContent.totalCharacters,
+                  )}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
       );
-    case "edit":
+    }
+    case "edit": {
+      const editDiff = truncateToolDetailText(detail.diff);
       return (
         <div className="agents-message__tool-body">
-          {detail.diff ? (
+          {editDiff ? (
             <div className="agents-message__tool-output">
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
-              <HighlightedDiffBlock diff={detail.diff} path={detail.path} />
+              <HighlightedDiffBlock diff={editDiff.text} path={detail.path} />
+              {editDiff.isTruncated ? (
+                <p className="agents-message__truncated" role="status">
+                  {messages.agentsFeature.toolOutputTruncated(
+                    editDiff.visibleCharacters,
+                    editDiff.totalCharacters,
+                  )}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
       );
-    case "write":
+    }
+    case "write": {
+      const writeContent = truncateToolDetailText(detail.content);
       return (
         <div className="agents-message__tool-body">
-          {detail.content ? (
+          {writeContent ? (
             <div className="agents-message__tool-output">
               <code className="agents-message__path agents-message__path--details">
                 {detail.path}
               </code>
-              <pre className="agents-message__output">{detail.content}</pre>
+              <pre className="agents-message__output">{writeContent.text}</pre>
+              {writeContent.isTruncated ? (
+                <p className="agents-message__truncated" role="status">
+                  {messages.agentsFeature.toolOutputTruncated(
+                    writeContent.visibleCharacters,
+                    writeContent.totalCharacters,
+                  )}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
       );
+    }
     case "search":
       return (
         <div className="agents-message__tool-body">
@@ -434,6 +480,31 @@ function hasToolCallDetail(detail: ToolCallDetail): boolean {
     default:
       return false;
   }
+}
+
+function truncateToolDetailText(text: string | null | undefined): {
+  text: string;
+  isTruncated: boolean;
+  visibleCharacters: number;
+  totalCharacters: number;
+} | null {
+  if (!text) {
+    return null;
+  }
+  if (text.length <= MAX_TOOL_DETAIL_TEXT_LENGTH) {
+    return {
+      text,
+      isTruncated: false,
+      visibleCharacters: text.length,
+      totalCharacters: text.length,
+    };
+  }
+  return {
+    text: text.slice(0, MAX_TOOL_DETAIL_TEXT_LENGTH),
+    isTruncated: true,
+    visibleCharacters: MAX_TOOL_DETAIL_TEXT_LENGTH,
+    totalCharacters: text.length,
+  };
 }
 
 function SearchMatch({ match }: { match: string }) {

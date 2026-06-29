@@ -420,6 +420,10 @@ export interface I18nMessages {
     toolRunning: string;
     toolFailed: string;
     toolCanceled: string;
+    toolOutputTruncated: (
+      visibleCharacters: number,
+      totalCharacters: number,
+    ) => string;
     exitCode: (exitCode: number) => string;
     changedFiles: string;
     changedFilesCount: (count: number) => string;
@@ -903,6 +907,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       toolRunning: "Running",
       toolFailed: "Failed",
       toolCanceled: "Canceled",
+      toolOutputTruncated: (visibleCharacters, totalCharacters) =>
+        `Output truncated to ${visibleCharacters} of ${totalCharacters} characters.`,
       exitCode: (exitCode) => `exit ${exitCode}`,
       changedFiles: "Changed files",
       changedFilesCount: (count) => `Changed files: ${count}`,
@@ -1372,6 +1378,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       toolRunning: "运行中",
       toolFailed: "失败",
       toolCanceled: "已取消",
+      toolOutputTruncated: (visibleCharacters, totalCharacters) =>
+        `输出已截断，仅显示 ${visibleCharacters} / ${totalCharacters} 个字符。`,
       exitCode: (exitCode) => `退出码 ${exitCode}`,
       changedFiles: "变更文件",
       changedFilesCount: (count) => `变更文件：${count}`,

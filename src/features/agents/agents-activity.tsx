@@ -42,6 +42,7 @@ import {
   type LinkedSessionIssue,
   type SessionIssueTransition,
 } from "./agents-session-pane";
+import { subscribeAgentSessionListChanged } from "./agent-session-events";
 import { getSessionIssueGroup } from "./agent-session-formatters";
 import { SessionSidePanel } from "./session-side-panel";
 import {
@@ -58,7 +59,7 @@ import {
 } from "../terminals/project-terminal-commands";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 
-const SESSION_LIST_POLL_INTERVAL_MS = 1_500;
+const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 120;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MIN_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MAX_WIDTH = 450;
@@ -185,6 +186,8 @@ export function AgentsActivity({
 
   useEffect(() => {
     let isMounted = true;
+    let unlisten: (() => void) | null = null;
+    let refreshTimer: number | null = null;
 
     async function loadSessions(showLoading: boolean) {
       if (showLoading) {
@@ -212,15 +215,36 @@ export function AgentsActivity({
       }
     }
 
+    function scheduleEventRefresh() {
+      if (refreshTimer !== null) {
+        return;
+      }
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void loadSessions(false);
+      }, SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS);
+    }
+
     void loadSessions(true);
-    const intervalId = window.setInterval(
-      () => void loadSessions(false),
-      SESSION_LIST_POLL_INTERVAL_MS,
-    );
+    void subscribeAgentSessionListChanged((event) => {
+      if (event.projectId !== projectId) {
+        return;
+      }
+      scheduleEventRefresh();
+    }).then((nextUnlisten) => {
+      if (!isMounted) {
+        nextUnlisten();
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
 
     return () => {
       isMounted = false;
-      window.clearInterval(intervalId);
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
+      unlisten?.();
     };
   }, [applySessionListOverlays, projectId]);
 
@@ -489,7 +513,7 @@ export function AgentsActivity({
       try {
         await refreshSessions();
       } catch {
-        // Keep the command failure visible; polling can retry the refresh.
+        // Keep the command failure visible; future session events can retry refresh.
       }
     } finally {
       if (reviewedIssueId == null) {
@@ -597,7 +621,7 @@ export function AgentsActivity({
       try {
         await refreshSessions();
       } catch {
-        // Keep the command failure visible; polling can retry the refresh.
+        // Keep the command failure visible; future session events can retry refresh.
       }
     } finally {
       if (completedIssueId == null) {
@@ -641,7 +665,7 @@ export function AgentsActivity({
       try {
         await refreshSessions();
       } catch {
-        // Keep the command failure visible; polling can retry the refresh.
+        // Keep the command failure visible; future session events can retry refresh.
       }
     } finally {
       if (completedIssueId == null) {
@@ -986,7 +1010,7 @@ export function AgentsActivity({
       try {
         await refreshSessions();
       } catch {
-        // Keep the command failure visible; polling can retry the refresh.
+        // Keep the command failure visible; future session events can retry refresh.
       }
     } finally {
       setIsDeletingSession(false);

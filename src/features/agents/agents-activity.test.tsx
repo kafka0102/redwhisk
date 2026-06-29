@@ -10,6 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openPath } from "@tauri-apps/plugin-opener";
+import type { AgentSessionListChangedEvent } from "./agent-session-events";
 
 import claudeLogoSrc from "../../assets/images/claude.svg";
 import codexLogoSrc from "../../assets/images/codex.svg";
@@ -54,6 +55,26 @@ import {
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: vi.fn(),
+}));
+
+const eventMocks = vi.hoisted(() => ({
+  listeners: [] as Array<{
+    eventName: string;
+    callback: (event: { payload: AgentSessionListChangedEvent }) => void;
+  }>,
+  unlisten: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (
+      eventName: string,
+      callback: (event: { payload: AgentSessionListChangedEvent }) => void,
+    ) => {
+      eventMocks.listeners.push({ eventName, callback });
+      return Promise.resolve(eventMocks.unlisten);
+    },
+  ),
 }));
 
 // mock AgentSessionView 为占位组件，避免在 agents-activity 测试中深渲染
@@ -349,6 +370,27 @@ async function flushMicrotasks() {
   });
 }
 
+async function emitSessionListChanged(
+  projectId: number,
+  sessionId: number | null = null,
+) {
+  await act(async () => {
+    eventMocks.listeners
+      .filter((listener) => listener.eventName === "agent-session-list-changed")
+      .forEach((listener) => {
+        listener.callback({
+          payload: {
+            projectId,
+            sessionId,
+            reason: "session_updated",
+          },
+        });
+      });
+    await vi.advanceTimersByTimeAsync(120);
+    await Promise.resolve();
+  });
+}
+
 async function addSessionTool(
   user: ReturnType<typeof userEvent.setup>,
   name: string,
@@ -359,6 +401,8 @@ async function addSessionTool(
 
 describe("AgentsActivity", () => {
   beforeEach(() => {
+    eventMocks.listeners = [];
+    eventMocks.unlisten.mockReset();
     listAgentSessionsMock.mockReset();
     deleteAgentSessionMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
@@ -2426,9 +2470,7 @@ describe("AgentsActivity", () => {
       within(initialRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_500);
-    });
+    await emitSessionListChanged(1, 302);
 
     const refreshedRow = within(sessionList).getByRole("button", {
       name: /^Polling issue/i,
@@ -2552,9 +2594,7 @@ describe("AgentsActivity", () => {
       within(sessionRow).getByLabelText("Session is running"),
     ).toBeInTheDocument();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_500);
-    });
+    await emitSessionListChanged(1, 302);
 
     expect(
       within(sessionRow).getByLabelText("Session status: Running"),
@@ -2693,15 +2733,15 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps mark review hidden when an older polling response returns running after command success", async () => {
+  it("keeps mark review hidden when an older event refresh returns running after command success", async () => {
     vi.useFakeTimers();
-    let resolvePollingResponse:
+    let resolveEventRefreshResponse:
       | ((response: Awaited<ReturnType<typeof listAgentSessions>>) => void)
       | null = null;
-    const pollingResponse = new Promise<
+    const eventRefreshResponse = new Promise<
       Awaited<ReturnType<typeof listAgentSessions>>
     >((resolve) => {
-      resolvePollingResponse = resolve;
+      resolveEventRefreshResponse = resolve;
     });
     listAgentSessionsMock
       .mockResolvedValueOnce({
@@ -2721,7 +2761,7 @@ describe("AgentsActivity", () => {
           },
         ],
       })
-      .mockReturnValueOnce(pollingResponse)
+      .mockReturnValueOnce(eventRefreshResponse)
       .mockRejectedValueOnce(new Error("refresh failed"));
     markIssueReviewMock.mockResolvedValue({
       id: 21,
@@ -2744,9 +2784,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("button", { name: "Mark review" }),
     ).toBeInTheDocument();
-    await act(async () => {
-      vi.advanceTimersByTime(1_500);
-    });
+    await emitSessionListChanged(1, 302);
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Mark review" }));
@@ -2760,7 +2798,7 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
 
     await act(async () => {
-      resolvePollingResponse?.({
+      resolveEventRefreshResponse?.({
         sessions: [
           {
             sessionId: 302,
