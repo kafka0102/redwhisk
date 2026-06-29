@@ -61,7 +61,7 @@ import {
 } from "../terminals/project-terminal-commands";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 
-const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 120;
+const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MIN_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const AGENTS_SIDEBAR_MAX_WIDTH = 450;
@@ -181,8 +181,17 @@ export function AgentsActivity({
     let isMounted = true;
     let unlisten: (() => void) | null = null;
     let refreshTimer: number | null = null;
+    let isRefreshInFlight = false;
+    let hasPendingRefresh = false;
 
     async function loadSessions(showLoading: boolean) {
+      if (!showLoading && isRefreshInFlight) {
+        hasPendingRefresh = true;
+        return;
+      }
+      if (!showLoading) {
+        isRefreshInFlight = true;
+      }
       if (showLoading) {
         setIsLoading(true);
       }
@@ -202,6 +211,13 @@ export function AgentsActivity({
 
         setErrorMessage(toCommandError(error).message);
       } finally {
+        if (!showLoading) {
+          isRefreshInFlight = false;
+          if (hasPendingRefresh && isMounted) {
+            hasPendingRefresh = false;
+            scheduleEventRefresh();
+          }
+        }
         if (isMounted && showLoading) {
           setIsLoading(false);
         }

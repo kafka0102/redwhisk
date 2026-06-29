@@ -19,6 +19,7 @@ pub struct AgentSessionListRow {
     pub agent_type: AgentType,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
+    pub is_turn_running: bool,
     pub workspace_mode: WorkspaceMode,
     pub working_dir: String,
     pub workspace_path: Option<String>,
@@ -81,6 +82,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_profiles.agent_type,
                 agent_sessions.status,
                 agent_sessions.attention,
+                agent_sessions.is_turn_running,
                 agent_sessions.workspace_mode,
                 agent_sessions.working_dir,
                 agent_sessions.workspace_path,
@@ -373,8 +375,9 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         let changed = transaction.execute(
             "UPDATE agent_sessions
-             SET status = ?1,
-                 last_active_at = MAX(last_active_at + 1, ?2),
+            SET status = ?1,
+                is_turn_running = 0,
+                last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
              WHERE id = ?3 AND closed_at IS NULL AND del = 0",
             params![
@@ -399,8 +402,9 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<bool> {
         let changed = transaction.execute(
             "UPDATE agent_sessions
-             SET status = ?1,
-                 last_active_at = MAX(last_active_at + 1, ?2),
+            SET status = ?1,
+                is_turn_running = 0,
+                last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
              WHERE id = ?3 AND closed_at IS NULL AND del = 0",
             params![
@@ -420,8 +424,8 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         let changed = transaction.execute(
             "UPDATE agent_sessions
-             SET status = 'running',
-                 attention = 'none',
+            SET status = 'running',
+                attention = 'none',
                  last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = NULL
              WHERE id = ?1 AND del = 0",
@@ -514,6 +518,21 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    pub fn update_turn_running(
+        &self,
+        session_id: i64,
+        is_turn_running: bool,
+        updated_at: i64,
+    ) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET is_turn_running = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?3 AND status = 'running' AND del = 0",
+            params![if is_turn_running { 1 } else { 0 }, updated_at, session_id],
+        )
+    }
+
     pub fn soft_delete_in_transaction(
         transaction: &Transaction<'_>,
         session_id: i64,
@@ -596,17 +615,18 @@ fn agent_session_list_row_from_row(
         agent_type: agent_type_from_str(&row.get::<_, String>(7)?)?,
         status: agent_session_status_from_str(&row.get::<_, String>(8)?)?,
         attention: agent_session_attention_from_str(&row.get::<_, String>(9)?)?,
-        workspace_mode: workspace_mode_from_str(&row.get::<_, String>(10)?)?,
-        working_dir: row.get(11)?,
-        workspace_path: row.get(12)?,
-        origin_branch: row.get(13)?,
-        worktree_owner: worktree_owner_from_str(&row.get::<_, String>(14)?)?,
-        log_path: row.get(15)?,
-        latest_output: row.get(16)?,
-        list_inserted_at: row.get(17)?,
-        last_active_at: row.get(18)?,
-        started_at: row.get(19)?,
-        closed_at: row.get(20)?,
+        is_turn_running: row.get::<_, i64>(10)? != 0,
+        workspace_mode: workspace_mode_from_str(&row.get::<_, String>(11)?)?,
+        working_dir: row.get(12)?,
+        workspace_path: row.get(13)?,
+        origin_branch: row.get(14)?,
+        worktree_owner: worktree_owner_from_str(&row.get::<_, String>(15)?)?,
+        log_path: row.get(16)?,
+        latest_output: row.get(17)?,
+        list_inserted_at: row.get(18)?,
+        last_active_at: row.get(19)?,
+        started_at: row.get(20)?,
+        closed_at: row.get(21)?,
     })
 }
 

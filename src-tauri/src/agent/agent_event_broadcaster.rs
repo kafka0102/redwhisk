@@ -161,6 +161,7 @@ impl AgentEventBroadcaster {
             .as_ref()
             .map(|_| self.should_update_latest_output(envelope.session_id, &envelope.event))
             .unwrap_or(false);
+        let turn_running = turn_running_from_stream_event(&envelope.event);
         let Some(log_path) = self.resolve_log_path(envelope.session_id, app_handle) else {
             return false;
         };
@@ -175,12 +176,9 @@ impl AgentEventBroadcaster {
             }
         }
 
-        if !should_update_latest_output {
+        if !should_update_latest_output && turn_running.is_none() {
             return false;
         }
-        let Some(latest_output) = latest_output else {
-            return false;
-        };
         let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
             return false;
         };
@@ -189,7 +187,16 @@ impl AgentEventBroadcaster {
         };
         let repository = AgentSessionRepository::new(&database.connection);
         let updated_at = current_epoch_millis();
-        let _ = repository.update_latest_output(envelope.session_id, &latest_output, updated_at);
+        if should_update_latest_output {
+            if let Some(latest_output) = latest_output.as_deref() {
+                let _ =
+                    repository.update_latest_output(envelope.session_id, latest_output, updated_at);
+            }
+        }
+        if let Some(is_turn_running) = turn_running {
+            let _ =
+                repository.update_turn_running(envelope.session_id, is_turn_running, updated_at);
+        }
         true
     }
 
@@ -272,6 +279,16 @@ fn latest_output_from_stream_event(event: &AgentStreamEvent) -> Option<String> {
 
 fn should_refresh_session_list_for_stream_event(event: &AgentStreamEvent) -> bool {
     !matches!(event, AgentStreamEvent::Timeline { .. })
+}
+
+fn turn_running_from_stream_event(event: &AgentStreamEvent) -> Option<bool> {
+    match event {
+        AgentStreamEvent::TurnStarted { .. } => Some(true),
+        AgentStreamEvent::TurnCompleted { .. }
+        | AgentStreamEvent::TurnFailed { .. }
+        | AgentStreamEvent::TurnCanceled { .. } => Some(false),
+        _ => None,
+    }
 }
 
 fn latest_output_from_timeline_item(
@@ -371,5 +388,41 @@ mod tests {
             model_id: "gpt-5".into(),
         };
         assert!(broadcaster.should_update_latest_output(7, &important));
+    }
+
+    #[test]
+    fn turn_running_state_is_derived_from_turn_events() {
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnStarted { turn_id: None }),
+            Some(true)
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnCompleted {
+                turn_id: None,
+                usage: None,
+            }),
+            Some(false)
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnFailed {
+                turn_id: None,
+                error: "failed".to_string(),
+                code: None,
+            }),
+            Some(false)
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnCanceled {
+                turn_id: None,
+                reason: "canceled".to_string(),
+            }),
+            Some(false)
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::ModelChanged {
+                model_id: "gpt-5".to_string(),
+            }),
+            None
+        );
     }
 }

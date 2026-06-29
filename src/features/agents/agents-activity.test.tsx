@@ -389,7 +389,7 @@ async function emitSessionListChanged(
           },
         });
       });
-    await vi.advanceTimersByTimeAsync(120);
+    await vi.advanceTimersByTimeAsync(500);
     await Promise.resolve();
   });
 }
