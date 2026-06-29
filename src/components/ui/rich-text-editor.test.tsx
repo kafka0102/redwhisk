@@ -22,8 +22,9 @@ const quillInstances = vi.hoisted(() => {
 
 vi.mock("quill", () => {
   class FakeQuill {
+    contents = { ops: [] };
     root = document.createElement("div");
-    getContents = vi.fn(() => ({ ops: [] }));
+    getContents = vi.fn(() => this.contents);
     getLength = vi.fn(() => 1);
     getLine = vi.fn(() => [{ domNode: document.createElement("p") }, 0]);
     getSelection = vi.fn(() => ({ index: 0, length: 0 }));
@@ -35,7 +36,9 @@ vi.mock("quill", () => {
     formatText = vi.fn();
     off = vi.fn();
     on = vi.fn();
-    setContents = vi.fn();
+    setContents = vi.fn((ops: []) => {
+      this.contents = { ops };
+    });
     setSelection = vi.fn();
 
     constructor(host: HTMLElement) {
@@ -198,5 +201,49 @@ describe("RichTextEditor", () => {
     // 底部卡片区应同时承载图片与文件附件。
     expect(screen.getByText("pic.png")).toBeInTheDocument();
     expect(screen.getByText("notes.md")).toBeInTheDocument();
+  });
+
+  it("does not reset editor contents when only hidden file attachment tokens are missing", async () => {
+    const fileAttachment: RichTextAttachment = {
+      token: "doc-1",
+      displayName: "notes.md",
+      kind: "text",
+      markdownToken: "{{issue-attachment-temp:doc-1}}",
+      isPreviewable: true,
+      imageSrc: null,
+    };
+    const handleChange = vi.fn();
+
+    const { rerender } = render(
+      <RichTextEditor
+        ariaLabel="Description"
+        attachments={[fileAttachment]}
+        labels={labels}
+        placeholder="Describe"
+        value="Draft"
+        onChange={handleChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(quillInstances[0]?.setContents).toHaveBeenCalledTimes(1);
+    });
+
+    quillInstances[0].getContents.mockReturnValue({
+      ops: [{ insert: "Draft update" }, { insert: "\n" }],
+    });
+
+    rerender(
+      <RichTextEditor
+        ariaLabel="Description"
+        attachments={[fileAttachment]}
+        labels={labels}
+        placeholder="Describe"
+        value="Draft update"
+        onChange={handleChange}
+      />,
+    );
+
+    expect(quillInstances[0].setContents).toHaveBeenCalledTimes(1);
   });
 });
