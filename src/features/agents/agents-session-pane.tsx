@@ -1,8 +1,10 @@
-import { ChevronDown, PanelRightOpen } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, Ellipsis, PanelRightOpen, X } from "lucide-react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
 import { formatSessionTitle } from "./agent-session-formatters";
+import { Input } from "../../components/ui/input";
 import {
   SessionWorkspaceTabs,
   type SessionWorkspaceToolTab,
@@ -37,6 +39,7 @@ interface AgentsSessionPaneProps {
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
   isDeletingSession: boolean;
+  isRenamingSessionTitle: boolean;
   isSidePanelOpen: boolean;
   toolTabs: SessionWorkspaceToolTab[];
   onAcknowledgeSessionAttention: (sessionId: number) => void;
@@ -46,6 +49,7 @@ interface AgentsSessionPaneProps {
   onCreateBrowserTab: () => void;
   onCreateTerminalTab: () => void;
   onDeleteSession: () => void;
+  onRenameSessionTitle: (sessionId: number, title: string) => Promise<void>;
   onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
   onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
@@ -67,6 +71,7 @@ export function AgentsSessionPane({
   changeTab,
   fileTab,
   isDeletingSession,
+  isRenamingSessionTitle,
   isSidePanelOpen,
   toolTabs,
   onAcknowledgeSessionAttention,
@@ -74,6 +79,7 @@ export function AgentsSessionPane({
   onCreateBrowserTab,
   onCreateTerminalTab,
   onDeleteSession,
+  onRenameSessionTitle,
   onSelectWorkspaceTab,
   onToggleSidePanel,
   onToggleTransitionMenu,
@@ -86,15 +92,112 @@ export function AgentsSessionPane({
 }: AgentsSessionPaneProps) {
   const { messages } = useI18n();
   const canRenderSessionActions = selectedSession !== null;
-  const canRenderDeleteButton =
+  const canRenderStandaloneActions =
     selectedSession !== null && selectedSession.issueId === null;
+  const [sessionActionsMenuSessionId, setSessionActionsMenuSessionId] =
+    useState<number | null>(null);
+  const [editingTitleSessionId, setEditingTitleSessionId] = useState<
+    number | null
+  >(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const sessionActionsRef = useRef<HTMLDivElement | null>(null);
+  const isSessionActionsMenuOpen =
+    selectedSession !== null &&
+    sessionActionsMenuSessionId === selectedSession.sessionId;
+  const isEditingTitle =
+    selectedSession !== null &&
+    editingTitleSessionId === selectedSession.sessionId;
+
+  useEffect(() => {
+    if (!isSessionActionsMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (sessionActionsRef.current?.contains(target)) {
+        return;
+      }
+      setSessionActionsMenuSessionId(null);
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isSessionActionsMenuOpen]);
+
+  function beginTitleEdit() {
+    if (!selectedSession) {
+      return;
+    }
+    setDraftTitle(formatSessionTitle(selectedSession));
+    setEditingTitleSessionId(selectedSession.sessionId);
+    setSessionActionsMenuSessionId(null);
+  }
+
+  async function saveTitleEdit() {
+    if (!selectedSession) {
+      return;
+    }
+
+    try {
+      await onRenameSessionTitle(selectedSession.sessionId, draftTitle);
+      setEditingTitleSessionId(null);
+    } catch {
+      // The parent owns user-visible command errors.
+    }
+  }
 
   return (
     <div className="agents-terminal-pane">
       {selectedSession ? (
         <div className="agents-session-toolbar">
           <div className="agents-session-toolbar__copy">
-            {linkedIssue ? (
+            {isEditingTitle && selectedSession ? (
+              <div className="agents-session-toolbar__title-edit">
+                <Input
+                  aria-label={messages.agentsFeature.sessionTitleField}
+                  className="agents-session-toolbar__title-input"
+                  disabled={isRenamingSessionTitle}
+                  value={draftTitle}
+                  onChange={(event) => setDraftTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void saveTitleEdit();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setEditingTitleSessionId(null);
+                    }
+                  }}
+                />
+                <button
+                  aria-label={messages.agentsFeature.saveSessionTitle}
+                  className="agents-session-toolbar__icon-action"
+                  disabled={isRenamingSessionTitle}
+                  type="button"
+                  onClick={() => {
+                    void saveTitleEdit();
+                  }}
+                >
+                  <Check aria-hidden="true" size={15} strokeWidth={1.9} />
+                </button>
+                <button
+                  aria-label={messages.agentsFeature.cancelSessionTitleEdit}
+                  className="agents-session-toolbar__icon-action"
+                  disabled={isRenamingSessionTitle}
+                  type="button"
+                  onClick={() => setEditingTitleSessionId(null)}
+                >
+                  <X aria-hidden="true" size={15} strokeWidth={1.9} />
+                </button>
+              </div>
+            ) : linkedIssue ? (
               <h3 className="agents-session-toolbar__issue-heading">{`#${linkedIssue.issueId} ${linkedIssue.issueTitle}`}</h3>
             ) : (
               <h3>{formatSessionTitle(selectedSession)}</h3>
@@ -151,15 +254,53 @@ export function AgentsSessionPane({
                 ) : null}
               </div>
             ) : null}
-            {canRenderDeleteButton ? (
-              <button
-                className="agents-session-toolbar__action agents-session-toolbar__action--danger"
-                disabled={isDeletingSession}
-                type="button"
-                onClick={onDeleteSession}
+            {canRenderStandaloneActions ? (
+              <div
+                ref={sessionActionsRef}
+                className="agents-session-toolbar__split-menu"
               >
-                {messages.agentsFeature.deleteSession}
-              </button>
+                <button
+                  aria-expanded={isSessionActionsMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label={messages.agentsFeature.openSessionActions}
+                  className="agents-session-toolbar__icon-action"
+                  disabled={isDeletingSession || isRenamingSessionTitle}
+                  type="button"
+                  onClick={() => {
+                    setSessionActionsMenuSessionId((currentSessionId) =>
+                      currentSessionId === selectedSession.sessionId
+                        ? null
+                        : selectedSession.sessionId,
+                    );
+                  }}
+                >
+                  <Ellipsis aria-hidden="true" size={16} strokeWidth={1.9} />
+                </button>
+                {isSessionActionsMenuOpen ? (
+                  <div className="agents-session-toolbar__menu" role="menu">
+                    <button
+                      className="agents-session-toolbar__menu-item"
+                      role="menuitem"
+                      type="button"
+                      onClick={beginTitleEdit}
+                    >
+                      {messages.agentsFeature.renameSessionTitle}
+                    </button>
+                    <button
+                      className="agents-session-toolbar__menu-item agents-session-toolbar__menu-item--danger"
+                      disabled={isDeletingSession}
+                      role="menuitem"
+                      type="button"
+                      onClick={() => {
+                        setSessionActionsMenuSessionId(null);
+                        onDeleteSession();
+                      }}
+                    >
+                      {messages.agentsFeature.deleteSessionAction}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
             {canRenderSessionActions ? (
               <button

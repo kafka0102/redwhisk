@@ -289,6 +289,7 @@ export interface I18nMessages {
     completionConfirmation: string;
     confirmDeleteSession: string;
     deleteSession: string;
+    deleteSessionAction: string;
     done: string;
     gitSummary: string;
     inProgress: string;
@@ -307,6 +308,7 @@ export interface I18nMessages {
     noProfilesForAgentType: string;
     noReviewSessions: string;
     noSessions: string;
+    openSessionActions: string;
     openSessionSidePanel: string;
     openStatusOptions: string;
     openTerminal: string;
@@ -326,6 +328,10 @@ export interface I18nMessages {
     sessionTerminals: string;
     newInlineTerminal: string;
     sessionWorkspace: string;
+    sessionTitleField: string;
+    cancelSessionTitleEdit: string;
+    renameSessionTitle: string;
+    saveSessionTitle: string;
     start: string;
     starting: string;
     temporarySessionDefaultPrompt: string;
@@ -775,6 +781,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       completionConfirmation: "Completion Confirmation",
       confirmDeleteSession: "Delete this Session?",
       deleteSession: "Delete",
+      deleteSessionAction: "Delete session",
       done: "Done",
       gitSummary: "Git summary",
       inProgress: "In Progress",
@@ -794,6 +801,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
         "No Agent Profile is available for the current agent type.",
       noReviewSessions: "No review sessions.",
       noSessions: "No sessions.",
+      openSessionActions: "More session actions",
       openSessionSidePanel: "Open session side panel",
       openStatusOptions: "Open status options",
       openTerminal: "Open terminal",
@@ -813,6 +821,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sessionTerminals: "Session terminals",
       newInlineTerminal: "New terminal",
       sessionWorkspace: "Session workspace",
+      sessionTitleField: "Session title",
+      cancelSessionTitleEdit: "Cancel session title editing",
+      renameSessionTitle: "Rename session title",
+      saveSessionTitle: "Save session title",
       start: "Start",
       starting: "Starting...",
       temporarySessionDefaultPrompt:
@@ -1252,6 +1264,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       completionConfirmation: "完成确认",
       confirmDeleteSession: "确认删除该会话？",
       deleteSession: "删除",
+      deleteSessionAction: "删除会话",
       done: "已完成",
       gitSummary: "Git 摘要",
       inProgress: "进行中",
@@ -1270,6 +1283,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       noProfilesForAgentType: "未找到可用于当前 Agent 类型的 Agent 配置。",
       noReviewSessions: "暂无待验收的会话。",
       noSessions: "暂无会话。",
+      openSessionActions: "更多会话操作",
       openSessionSidePanel: "打开会话侧边栏",
       openStatusOptions: "打开状态选项",
       openTerminal: "打开终端",
@@ -1289,6 +1303,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sessionTerminals: "会话终端",
       newInlineTerminal: "新增终端",
       sessionWorkspace: "会话工作区",
+      sessionTitleField: "会话标题",
+      cancelSessionTitleEdit: "取消修改会话标题",
+      renameSessionTitle: "修改会话标题",
+      saveSessionTitle: "保存会话标题",
       start: "开始",
       starting: "启动中...",
       temporarySessionDefaultPrompt:

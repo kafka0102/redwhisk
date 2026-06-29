@@ -2898,6 +2898,20 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.agents-session-toolbar__title-edit {
+  display: grid;
+  grid-template-columns: minmax(160px, 320px) 28px 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.agents-session-toolbar__title-input {
+  height: 28px;
+  min-width: 0;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+
 .agents-session-toolbar__actions {
   display: flex;
   flex: 0 0 auto;
@@ -3007,6 +3021,10 @@ button:focus-visible {
 .agents-session-toolbar__menu-item:focus-visible {
   background: var(--color-surface-muted);
   outline: none;
+}
+
+.agents-session-toolbar__menu-item--danger {
+  color: var(--color-danger);
 }
 
 .agents-session-status-stack {

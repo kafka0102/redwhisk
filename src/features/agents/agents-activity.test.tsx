@@ -20,6 +20,7 @@ import {
   listAgentSessions,
   setAgentSessionAttention,
   startStructuredAgentSession,
+  updateAgentSessionTitle,
 } from "./agent-session-commands";
 import {
   completeIssueFlow,
@@ -140,6 +141,7 @@ vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
   setAgentSessionAttention: vi.fn(),
   startStructuredAgentSession: vi.fn(),
+  updateAgentSessionTitle: vi.fn(),
   sendAgentMessage: vi.fn(),
 }));
 
@@ -189,6 +191,7 @@ const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const deleteAgentSessionMock = vi.mocked(deleteAgentSession);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
+const updateAgentSessionTitleMock = vi.mocked(updateAgentSessionTitle);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const completeIssueFlowMock = vi.mocked(completeIssueFlow);
 const completeIssueCleanMock = vi.mocked(completeIssueClean);
@@ -407,6 +410,7 @@ describe("AgentsActivity", () => {
     deleteAgentSessionMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
     startStructuredAgentSessionMock.mockReset();
+    updateAgentSessionTitleMock.mockReset();
     listIssuesMock.mockReset();
     completeIssueFlowMock.mockReset();
     completeIssueManualMock.mockReset();
@@ -438,6 +442,10 @@ describe("AgentsActivity", () => {
     });
     deleteAgentSessionMock.mockResolvedValue({
       sessionId: 701,
+    });
+    updateAgentSessionTitleMock.mockResolvedValue({
+      sessionId: 701,
+      title: "Renamed Session",
     });
     openPathMock.mockResolvedValue();
     closeProjectTerminalMock.mockResolvedValue(undefined);
@@ -1692,7 +1700,12 @@ describe("AgentsActivity", () => {
         name: "Untitled Session",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "More session actions" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open terminal" }),
     ).not.toBeInTheDocument();
@@ -1738,8 +1751,14 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={701} projectId={1} />);
 
-    const deleteButton = await screen.findByRole("button", { name: "Delete" });
-    await user.click(deleteButton);
+    const actionsButton = await screen.findByRole("button", {
+      name: "More session actions",
+    });
+    await user.click(actionsButton);
+    const deleteMenuItem = await screen.findByRole("menuitem", {
+      name: "Delete session",
+    });
+    await user.click(deleteMenuItem);
     expect(
       screen.getByRole("dialog", { name: "Delete this Session?" }),
     ).toBeInTheDocument();
@@ -1747,7 +1766,10 @@ describe("AgentsActivity", () => {
 
     expect(deleteAgentSessionMock).not.toHaveBeenCalled();
 
-    await user.click(deleteButton);
+    await user.click(actionsButton);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Delete session" }),
+    );
     await user.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() =>
@@ -1761,6 +1783,119 @@ describe("AgentsActivity", () => {
       screen.queryByRole("tab", { name: "Session" }),
     ).not.toBeInTheDocument();
     expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
+  });
+
+  it("renames standalone session from header actions", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 701,
+            issueId: null,
+            issueTitle: null,
+            title: "Untitled Session",
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_500_000,
+            startedAt: 1_780_638_500_000,
+            closedAt: null,
+          },
+        ],
+      })
+      .mockResolvedValue({
+        sessions: [
+          {
+            sessionId: 701,
+            issueId: null,
+            issueTitle: null,
+            title: "Renamed Session",
+            agentType: "codex",
+            status: "running",
+            attention: "none",
+            lastActiveAt: 1_780_638_600_000,
+            startedAt: 1_780_638_500_000,
+            closedAt: null,
+          },
+        ],
+      });
+
+    render(<AgentsActivity activeSessionId={701} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "More session actions" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Rename session title" }),
+    );
+
+    const titleInput = screen.getByRole("textbox", {
+      name: "Session title",
+    });
+    expect(titleInput).toHaveValue("Untitled Session");
+
+    await user.clear(titleInput);
+    await user.type(titleInput, "Renamed Session");
+    await user.click(
+      screen.getByRole("button", { name: "Save session title" }),
+    );
+
+    await waitFor(() =>
+      expect(updateAgentSessionTitleMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 701,
+        title: "Renamed Session",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "Renamed Session",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("cancels standalone session title editing without saving", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 701,
+          issueId: null,
+          issueTitle: null,
+          title: "Untitled Session",
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_500_000,
+          startedAt: 1_780_638_500_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={701} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "More session actions" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Rename session title" }),
+    );
+    await user.clear(screen.getByRole("textbox", { name: "Session title" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Session title" }),
+      "Draft title",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Cancel session title editing" }),
+    );
+
+    expect(updateAgentSessionTitleMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Untitled Session" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a factual message when no agent profiles are available", async () => {

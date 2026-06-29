@@ -13,6 +13,7 @@ import {
   listAgentSessions,
   setAgentSessionAttention,
   startStructuredAgentSession,
+  updateAgentSessionTitle,
   type StartStructuredAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
@@ -111,6 +112,7 @@ export function AgentsActivity({
   ] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
+  const [isRenamingSessionTitle, setIsRenamingSessionTitle] = useState(false);
   const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
   const [availableAgentProfiles, setAvailableAgentProfiles] = useState<
     AgentProfileRecord[]
@@ -997,6 +999,38 @@ export function AgentsActivity({
     }
   }
 
+  async function handleRenameSessionTitle(sessionId: number, title: string) {
+    if (!selectedSession || selectedSession.sessionId !== sessionId) {
+      return;
+    }
+
+    setIsRenamingSessionTitle(true);
+    try {
+      const result = await updateAgentSessionTitle({
+        projectId,
+        sessionId,
+        title,
+      });
+      setSessions((currentSessions) =>
+        currentSessions.map((session) =>
+          session.sessionId === result.sessionId
+            ? {
+                ...session,
+                title: result.title,
+                lastActiveAt: session.lastActiveAt + 1,
+              }
+            : session,
+        ),
+      );
+      await refreshSessions();
+    } catch (error) {
+      showCommandErrorAlert(error);
+      throw error;
+    } finally {
+      setIsRenamingSessionTitle(false);
+    }
+  }
+
   async function handleCloseInlineTerminal(terminalSessionId: number) {
     if (!selectedSession) {
       return;
@@ -1234,6 +1268,7 @@ export function AgentsActivity({
           changeTab={workspaceCache.changeTab}
           fileTab={workspaceCache.fileTab}
           isDeletingSession={isDeletingSession}
+          isRenamingSessionTitle={isRenamingSessionTitle}
           isSidePanelOpen={isSessionSidePanelOpen}
           linkedIssue={linkedIssue}
           onAcknowledgeSessionAttention={(sessionId) => {
@@ -1245,6 +1280,7 @@ export function AgentsActivity({
           onDeleteSession={() => {
             void handleDeleteSession();
           }}
+          onRenameSessionTitle={handleRenameSessionTitle}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTab}
           onToggleSidePanel={() =>
             setIsSessionSidePanelOpen(
