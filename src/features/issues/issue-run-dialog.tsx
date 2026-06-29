@@ -32,12 +32,17 @@ import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 import { parseDefaultSkills } from "../settings/agent-profile-skills";
+import {
+  IssueRunWorktreeProgressDialog,
+  type WorktreeStartProgressStepId,
+} from "./issue-run-worktree-progress-dialog";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
 const RECENT_WORKFLOW_SKILL_STORAGE_KEY =
   "redwhisk.issue-run.recent-workflow-skill";
 const RECENT_WORKSPACE_SELECTION_STORAGE_KEY =
   "redwhisk.issue-run.recent-workspace-selection";
+const WORKTREE_PROGRESS_COMPLETION_DELAY_MS = 300;
 
 interface IssueRunDialogProps {
   issue: Pick<
@@ -85,6 +90,8 @@ export function IssueRunDialog({
   const [isLoadingBranches, setIsLoadingBranches] = useState(true);
   const [hasLoadedRunContext, setHasLoadedRunContext] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [worktreeProgressStep, setWorktreeProgressStep] =
+    useState<WorktreeStartProgressStepId | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -262,6 +269,9 @@ export function IssueRunDialog({
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
+      if (isStarting) {
+        return;
+      }
       onClose();
       return;
     }
@@ -298,6 +308,7 @@ export function IssueRunDialog({
 
     isStartingRef.current = true;
     setIsStarting(true);
+    setWorktreeProgressStep(workspaceMode === "worktree" ? "creating" : null);
     setStatusMessage(null);
 
     try {
@@ -311,6 +322,10 @@ export function IssueRunDialog({
         targetBranch: effectiveTargetBranch,
         worktreeSetupCommand: effectiveSetupCommand,
       });
+      if (workspaceMode === "worktree") {
+        setWorktreeProgressStep("completed");
+        await delay(WORKTREE_PROGRESS_COMPLETION_DELAY_MS);
+      }
       await onStarted(result);
     } catch (error) {
       const commandError = toCommandError(error);
@@ -326,6 +341,7 @@ export function IssueRunDialog({
     } finally {
       isStartingRef.current = false;
       setIsStarting(false);
+      setWorktreeProgressStep(null);
     }
   }
 
@@ -333,7 +349,7 @@ export function IssueRunDialog({
     <div
       className="issue-dialog-overlay"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (!isStarting && event.target === event.currentTarget) {
           onClose();
         }
       }}
@@ -352,6 +368,7 @@ export function IssueRunDialog({
             ref={closeButtonRef}
             aria-label={messages.issues.runDialogClose}
             className="issue-dialog__close"
+            disabled={isStarting}
             type="button"
             onClick={onClose}
           >
@@ -610,9 +627,21 @@ export function IssueRunDialog({
             {isStarting ? messages.issues.starting : messages.issues.start}
           </Button>
         </div>
+        {isStarting && workspaceMode === "worktree" ? (
+          <IssueRunWorktreeProgressDialog
+            activeStep={worktreeProgressStep ?? "creating"}
+            issueId={issue.id}
+            messages={messages.issues}
+            setupCommand={effectiveSetupCommand}
+          />
+        ) : null}
       </div>
     </div>
   );
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function resolveInitialWorkflowSkill({
