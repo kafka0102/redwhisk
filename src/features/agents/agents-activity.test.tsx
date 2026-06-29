@@ -3325,16 +3325,16 @@ describe("AgentsActivity", () => {
       within(dialog).queryByText("Completion prompt"),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "提交代码" }),
+      within(dialog).getByRole("button", { name: "Submit code" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "标记完成" }),
+      within(dialog).getByRole("button", { name: "Mark done" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "取消" }),
+      within(dialog).getByRole("button", { name: "Cancel" }),
     ).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Completion Confirmation" }),
@@ -3478,7 +3478,7 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "标记完成" }));
+    await user.click(within(dialog).getByRole("button", { name: "Mark done" }));
 
     expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -3576,7 +3576,9 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Submit code" }),
+    );
 
     expect(completeIssueFlowMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -3678,7 +3680,9 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Submit code" }),
+    );
 
     await waitFor(() =>
       expect(
@@ -3752,6 +3756,58 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows dismissible loading dialog while completing linked issue", async () => {
+    const user = userEvent.setup();
+    const completion =
+      deferred<Awaited<ReturnType<typeof completeIssueFlow>>>();
+    completeIssueFlowMock.mockReturnValueOnce(completion.promise);
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Review issue",
+          issueStatus: "review",
+          canCompleteClean: false,
+          canCompleteAgentCommit: false,
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Submitting..." }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Close completion progress" }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Submitting..." }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      completion.reject(new Error("completion failed"));
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "completion failed" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Submitting..." }),
+    ).not.toBeInTheDocument();
+  });
+
   it("detects agent commit completion after sending prompt and hides completion actions", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock
@@ -3806,7 +3862,9 @@ describe("AgentsActivity", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Completion Confirmation",
     });
-    await user.click(within(dialog).getByRole("button", { name: "提交代码" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Submit code" }),
+    );
 
     await waitFor(() =>
       expect(completeIssueFlowMock).toHaveBeenCalledWith({
