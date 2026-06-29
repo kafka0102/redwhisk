@@ -6,6 +6,7 @@ export {
   type AlertDialogProps,
   type AlertDialogType,
 } from "./alert-dialog";
+export { LoadingDialog, type LoadingDialogProps } from "./loading-dialog";
 export { useAlertDialog } from "./use-alert-dialog";
 export {
   ConfirmDialog,

@@ -285,8 +285,13 @@ export interface I18nMessages {
     agentSessions: string;
     agentsStatus: string;
     closeCompletionConfirmation: string;
+    closeCompletionLoading: string;
     closeIssueDetails: string;
+    completionCancel: string;
     completionConfirmation: string;
+    completionMarkDone: string;
+    completionSubmitCode: string;
+    completionSubmitting: string;
     confirmDeleteSession: string;
     deleteSession: string;
     deleteSessionAction: string;
@@ -777,8 +782,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       agentSessions: "Agent sessions",
       agentsStatus: "Agents status",
       closeCompletionConfirmation: "Close completion confirmation",
+      closeCompletionLoading: "Close completion progress",
       closeIssueDetails: "Close issue details",
+      completionCancel: "Cancel",
       completionConfirmation: "Completion Confirmation",
+      completionMarkDone: "Mark done",
+      completionSubmitCode: "Submit code",
+      completionSubmitting: "Submitting...",
       confirmDeleteSession: "Delete this Session?",
       deleteSession: "Delete",
       deleteSessionAction: "Delete session",
@@ -1260,8 +1270,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       agentSessions: "Agent 会话",
       agentsStatus: "Agents 状态",
       closeCompletionConfirmation: "关闭完成确认",
+      closeCompletionLoading: "关闭提交进度",
       closeIssueDetails: "关闭 Issue 详情",
+      completionCancel: "取消",
       completionConfirmation: "完成确认",
+      completionMarkDone: "标记完成",
+      completionSubmitCode: "提交代码",
+      completionSubmitting: "正在提交....",
       confirmDeleteSession: "确认删除该会话？",
       deleteSession: "删除",
       deleteSessionAction: "删除会话",

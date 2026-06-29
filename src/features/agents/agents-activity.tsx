@@ -32,6 +32,7 @@ import { toCommandError } from "../../shared/commands/command-error";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { AgentsSessionList } from "./agents-session-list";
 import {
@@ -109,6 +110,10 @@ export function AgentsActivity({
   const [
     isDetectingAgentCommitCompletion,
     setIsDetectingAgentCommitCompletion,
+  ] = useState(false);
+  const [
+    isCompletionLoadingDialogDismissed,
+    setIsCompletionLoadingDialogDismissed,
   ] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
@@ -437,6 +442,20 @@ export function AgentsActivity({
     isCompletingManual ||
     isSendingAgentCommitPrompt ||
     isDetectingAgentCommitCompletion;
+  const isCompletionCheckPending =
+    isCompletingManual ||
+    isCompletingClean ||
+    isPreparingAgentCommit ||
+    isSendingAgentCommitPrompt ||
+    isDetectingAgentCommitCompletion;
+  const isCompletionLoadingDialogOpen =
+    isCompletionCheckPending && !isCompletionLoadingDialogDismissed;
+
+  useEffect(() => {
+    if (!isCompletionCheckPending) {
+      setIsCompletionLoadingDialogDismissed(false);
+    }
+  }, [isCompletionCheckPending]);
   const refreshSessions = useCallback(async () => {
     const response = await listAgentSessions(projectId);
     const nextSessions = applySessionListOverlays(response.sessions);
@@ -1450,7 +1469,7 @@ export function AgentsActivity({
                 type="button"
                 onClick={() => void handleConfirmAgentCommit()}
               >
-                提交代码
+                {messages.agentsFeature.completionSubmitCode}
               </button>
               <button
                 className="issues-button"
@@ -1458,7 +1477,7 @@ export function AgentsActivity({
                 type="button"
                 onClick={() => void handleCompleteAgentCommitPreviewManually()}
               >
-                标记完成
+                {messages.agentsFeature.completionMarkDone}
               </button>
               <button
                 className="issues-button"
@@ -1466,12 +1485,22 @@ export function AgentsActivity({
                 type="button"
                 onClick={handleCloseAgentCommitPreview}
               >
-                取消
+                {messages.agentsFeature.completionCancel}
               </button>
             </div>
           </div>
         </div>
       ) : null}
+      <LoadingDialog
+        closeLabel={messages.agentsFeature.closeCompletionLoading}
+        message={messages.agentsFeature.completionSubmitting}
+        open={isCompletionLoadingDialogOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setIsCompletionLoadingDialogDismissed(true);
+          }
+        }}
+      />
       {alertDialog}
       {confirmationDialog}
     </main>
