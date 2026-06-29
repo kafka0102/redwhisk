@@ -10,6 +10,8 @@ import {
 import { SessionDiffViewer } from "./session-diff-viewer";
 import { SessionFileViewer } from "./session-file-viewer";
 import { useI18n } from "../../shared/i18n/i18n";
+import type { AgentType } from "./agent-session-commands";
+import { getAgentLogoSrc } from "./agent-visuals";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
@@ -28,6 +30,7 @@ interface SessionWorkspaceTabsProps {
   activeTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
+  sessionAgentType: AgentType;
   sessionContent: ReactNode;
   toolTabs: SessionWorkspaceToolTab[];
   onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
@@ -40,6 +43,7 @@ export function SessionWorkspaceTabs({
   activeTab,
   changeTab,
   fileTab,
+  sessionAgentType,
   sessionContent,
   toolTabs,
   onCloseTab,
@@ -62,29 +66,14 @@ export function SessionWorkspaceTabs({
           type="button"
           onClick={() => onSelectTab("session")}
         >
+          <img
+            alt=""
+            aria-hidden="true"
+            className="session-workspace-tabs__agent-icon"
+            src={getAgentLogoSrc(sessionAgentType)}
+          />
           {messages.agentsFeature.sessionTab}
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label={messages.agentsFeature.addSessionTool}
-            className="session-workspace-tabs__add"
-          >
-            <Plus aria-hidden="true" size={14} strokeWidth={2} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="session-workspace-tabs__menu"
-          >
-            <DropdownMenuItem onClick={onCreateTerminalTab}>
-              <Terminal aria-hidden="true" size={14} strokeWidth={1.8} />
-              {messages.agentsFeature.terminalTool}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onCreateBrowserTab}>
-              <Globe aria-hidden="true" size={14} strokeWidth={1.8} />
-              {messages.agentsFeature.browserTool}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
         {toolTabs.map((tab) => (
           <ClosableWorkspaceTab
             key={tab.id}
@@ -124,6 +113,27 @@ export function SessionWorkspaceTabs({
             onSelectTab={onSelectTab}
           />
         ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={messages.agentsFeature.addSessionTool}
+            className="session-workspace-tabs__add"
+          >
+            <Plus aria-hidden="true" size={14} strokeWidth={2} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="session-workspace-tabs__menu"
+          >
+            <DropdownMenuItem onClick={onCreateTerminalTab}>
+              <Terminal aria-hidden="true" size={14} strokeWidth={1.8} />
+              {messages.agentsFeature.terminalTool}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCreateBrowserTab}>
+              <Globe aria-hidden="true" size={14} strokeWidth={1.8} />
+              {messages.agentsFeature.browserTool}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="session-workspace-tabs__content" role="tabpanel">
         {selectedTab === "file" && fileTab ? (
@@ -160,7 +170,11 @@ function ClosableWorkspaceTab({
   onSelectTab,
 }: ClosableWorkspaceTabProps) {
   return (
-    <span className="session-workspace-tabs__closable-tab">
+    <span
+      className={`session-workspace-tabs__closable-tab${
+        selected ? " session-workspace-tabs__closable-tab--selected" : ""
+      }`}
+    >
       <button
         aria-selected={selected}
         className="session-workspace-tabs__tab"
