@@ -635,29 +635,58 @@ function mergeMarkdownAttachments(
   markdown: string,
   attachments: RichTextAttachment[],
 ): string {
-  const normalizedMarkdown = normalizeMarkdown(markdown);
+  const visibleMarkdown = removeHiddenAttachmentTokenLines(
+    normalizeMarkdown(markdown),
+    attachments,
+  );
   const missingAttachments = attachments.filter(
-    (attachment) => !normalizedMarkdown.includes(attachment.markdownToken),
+    (attachment) =>
+      attachment.kind === "image" &&
+      attachment.imageSrc &&
+      !visibleMarkdown.includes(attachment.markdownToken),
   );
 
   if (missingAttachments.length === 0) {
-    return normalizedMarkdown;
+    return visibleMarkdown;
   }
 
-  // 图片附件缺失时以 Markdown 图片占位符 ![displayName](token) 形式补回
-  // （保证 Rust 硬约束：token 必须出现在 description 中）；非图片附件以
-  // 裸 token 行补回（编辑器正文不显示，仅由底部卡片区承载）。
-  const missingLines = missingAttachments.map((attachment) =>
-    attachment.kind === "image" && attachment.imageSrc
-      ? `![${attachment.displayName}](${attachment.markdownToken})`
-      : attachment.markdownToken,
+  // 只有图片附件需要进入 Quill 正文；非图片附件 token 是隐藏持久化数据，
+  // 由 issue 提交流程补齐，不能参与可见编辑器内容同步。
+  const missingLines = missingAttachments.map(
+    (attachment) => `![${attachment.displayName}](${attachment.markdownToken})`,
   );
 
-  if (normalizedMarkdown.length === 0) {
+  if (visibleMarkdown.length === 0) {
     return missingLines.join("\n");
   }
 
-  return `${normalizedMarkdown}\n\n${missingLines.join("\n")}`;
+  return `${visibleMarkdown}\n\n${missingLines.join("\n")}`;
+}
+
+function removeHiddenAttachmentTokenLines(
+  markdown: string,
+  attachments: RichTextAttachment[],
+): string {
+  const hiddenTokens = new Set(
+    attachments
+      .filter(
+        (attachment) =>
+          attachment.kind !== "image" || attachment.imageSrc == null,
+      )
+      .map((attachment) => attachment.markdownToken),
+  );
+
+  if (hiddenTokens.size === 0) {
+    return markdown;
+  }
+
+  return normalizeMarkdown(
+    markdown
+      .split("\n")
+      .filter((line) => !hiddenTokens.has(line.trim()))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n"),
+  );
 }
 
 function getQuillOperations(quill: Quill): DeltaOperation[] {
