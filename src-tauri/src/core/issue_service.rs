@@ -838,7 +838,7 @@ impl<'connection> IssueService<'connection> {
             ProjectCompletionPolicy::Manual => CompletionAttemptOption::CompleteManual,
             ProjectCompletionPolicy::AgentAutoCommit => CompletionAttemptOption::AgentAutoCommit,
         });
-        if issue.status == IssueStatus::Review && is_session_closed_out(&session) {
+        if (issue.status == IssueStatus::Review || issue.status == IssueStatus::Running) && is_session_closed_out(&session) {
             let snapshot = closed_session_completion_snapshot();
             let completed_issue = self.complete_issue_flow_transaction(
                 &issue, &session, &snapshot, option, None, None, false,
