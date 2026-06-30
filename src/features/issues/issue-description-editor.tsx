@@ -166,6 +166,9 @@ function toRichTextLabels(messages: I18nMessages): RichTextEditorLabels {
   return {
     attachFile: messages.richText.attachFile,
     bold: messages.richText.bold,
+    clearFormatting: messages.richText.clearFormatting,
+    codeBlock: messages.richText.codeBlock,
+    codeQuote: messages.richText.codeQuote,
     heading: messages.richText.heading,
     image: messages.richText.image,
     headingOne: messages.richText.headingOne,
