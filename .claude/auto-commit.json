@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "maxFiles": 30,
+  "useChineseDescription": true,
+  "excludePatterns": [
+    "node_modules/",
+    "dist/",
+    "build/",
+    ".git/",
+    ".DS_Store",
+    "*.log",
+    "tmp/",
+    "temp/",
+    ".claude/",
+    ".planning/"
+  ]
+}
