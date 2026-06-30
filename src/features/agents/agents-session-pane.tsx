@@ -335,6 +335,7 @@ export function AgentsSessionPane({
                 }
               >
                 <AgentSessionView
+                  key={selectedSession.sessionId}
                   projectId={projectId}
                   sessionId={selectedSession.sessionId}
                   agentType={selectedSession.agentType}

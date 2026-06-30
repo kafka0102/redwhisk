@@ -6,7 +6,8 @@
 // 沿用项目既有范式：`isDisposed` + `unlisten` 双标志，await 期间若已卸载则
 // 主动调用 unlisten 防泄漏（参考 `terminal-surface.tsx`、`agent-profile-form.tsx`）。
 //
-// 性能优化：使用 LRU 缓存最近访问的几个 session 的状态，避免每次切换都重新读取 timeline。
+// 性能优化：使用 LRU 缓存最近访问的几个 session 的状态；命中缓存时先提交轻量
+// loading 状态，下一帧再恢复大 timeline，避免切换 session 被大量历史 DOM 阻塞。
 
 import { useEffect, useReducer, useRef } from "react";
 import type { Dispatch } from "react";
@@ -42,17 +43,6 @@ const sessionStateCache = new Map<number, CachedSessionState>();
 
 export function clearAgentMessageStreamCacheForTest(): void {
   sessionStateCache.clear();
-}
-
-// 获取或创建 session 缓存状态
-function getCachedSessionState(sessionId: number): MessageStreamState {
-  const cached = sessionStateCache.get(sessionId);
-  if (cached) {
-    // 更新最后访问时间
-    cached.lastAccessTime = Date.now();
-    return cached.state;
-  }
-  return createInitialState();
 }
 
 // 更新 session 缓存
@@ -98,17 +88,21 @@ export function useAgentMessageStream({
   state: MessageStreamState;
   dispatch: Dispatch<MessageStreamAction>;
 } {
-  // 使用 reducer，但初始状态从缓存获取
+  // 初始状态保持轻量。缓存恢复在 effect 中延迟到下一帧，保证 session tab
+  // 的选中态可以先完成提交。
   const [state, dispatch] = useReducer(
     messageStreamReducer,
-    sessionId,
-    getCachedSessionState,
+    undefined,
+    createInitialState,
   );
   const stateSessionIdRef = useRef(sessionId);
 
   // 监听 state 变化，更新缓存
   useEffect(() => {
     if (stateSessionIdRef.current !== sessionId) {
+      return;
+    }
+    if (!state.isInitialized) {
       return;
     }
     updateCachedSessionState(sessionId, state);
@@ -118,8 +112,12 @@ export function useAgentMessageStream({
     let isDisposed = false;
     let unlisten: (() => void) | null = null;
     let pendingEvents: AgentStreamEvent[] = [];
+    let deferredEvents: AgentStreamEvent[] = [];
+    let isCacheRestored = false;
     let flushHandle: ReturnType<typeof setTimeout> | number | null = null;
     let flushHandleKind: "animation-frame" | "timeout" | null = null;
+    let restoreFrameHandle: number | null = null;
+    let restoreTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     const scheduleFlush = () => {
       if (flushHandle !== null) {
@@ -167,15 +165,55 @@ export function useAgentMessageStream({
 
     stateSessionIdRef.current = sessionId;
 
-    if (hasCachedInitialized && cachedState) {
-      dispatch({ type: "RESTORE", state: cachedState.state });
-    } else {
-      dispatch({ type: "RESET" });
-    }
+    dispatch({ type: "RESET" });
+
+    const dispatchStreamEvent = (event: AgentStreamEvent) => {
+      if (hasCachedInitialized && !isCacheRestored) {
+        deferredEvents.push(event);
+        return;
+      }
+      if (event.type !== "timeline") {
+        dispatch({ type: "EVENT", event });
+        return;
+      }
+      pendingEvents.push(event);
+      scheduleFlush();
+    };
+
+    const scheduleCacheRestore = (restore: () => void) => {
+      if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
+        restoreFrameHandle = window.requestAnimationFrame(() => {
+          restoreFrameHandle = null;
+          restoreTimeoutHandle = globalThis.setTimeout(() => {
+            restoreTimeoutHandle = null;
+            restore();
+          }, 0);
+        });
+        return;
+      }
+      restoreTimeoutHandle = globalThis.setTimeout(() => {
+        restoreTimeoutHandle = null;
+        restore();
+      }, 0);
+    };
 
     async function initialize() {
       // 如果已经有缓存的初始化状态，直接订阅事件，不需要重新读取 timeline
-      if (hasCachedInitialized) {
+      if (hasCachedInitialized && cachedState) {
+        scheduleCacheRestore(() => {
+          if (isDisposed) {
+            return;
+          }
+          isCacheRestored = true;
+          cachedState.lastAccessTime = Date.now();
+          dispatch({ type: "RESTORE", state: cachedState.state });
+          if (deferredEvents.length > 0) {
+            const events = deferredEvents;
+            deferredEvents = [];
+            dispatch({ type: "EVENT_BATCH", events });
+          }
+        });
+
         try {
           unlisten = await subscribeAgentSessionStream((envelope) => {
             if (
@@ -184,12 +222,7 @@ export function useAgentMessageStream({
             ) {
               return;
             }
-            if (envelope.event.type !== "timeline") {
-              dispatch({ type: "EVENT", event: envelope.event });
-              return;
-            }
-            pendingEvents.push(envelope.event);
-            scheduleFlush();
+            dispatchStreamEvent(envelope.event);
           });
           if (isDisposed) {
             unlisten?.();
@@ -229,12 +262,7 @@ export function useAgentMessageStream({
           ) {
             return;
           }
-          if (envelope.event.type !== "timeline") {
-            dispatch({ type: "EVENT", event: envelope.event });
-            return;
-          }
-          pendingEvents.push(envelope.event);
-          scheduleFlush();
+          dispatchStreamEvent(envelope.event);
         });
         if (isDisposed) {
           unlisten?.();
@@ -249,8 +277,15 @@ export function useAgentMessageStream({
 
     return () => {
       isDisposed = true;
+      if (restoreFrameHandle !== null) {
+        window.cancelAnimationFrame(restoreFrameHandle);
+      }
+      if (restoreTimeoutHandle !== null) {
+        globalThis.clearTimeout(restoreTimeoutHandle);
+      }
       cancelFlush();
       pendingEvents = [];
+      deferredEvents = [];
       unlisten?.();
     };
   }, [projectId, sessionId]);

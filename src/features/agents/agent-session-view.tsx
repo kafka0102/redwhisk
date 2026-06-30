@@ -75,7 +75,7 @@ export function AgentSessionView({
       className="agents-session-view"
       aria-label={messages.agentsFeature.structuredSessionView}
     >
-      {/* 消息流区域，缓存状态会直接显示，避免加载闪烁 */}
+      {/* 消息流区域先显示轻量加载态，再恢复缓存或历史 timeline。 */}
       <AgentMessageStreamView state={state} isTurnRunning={isTurnRunning} />
 
       <div className="agents-session-view__permissions">
