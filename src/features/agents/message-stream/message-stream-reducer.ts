@@ -52,6 +52,9 @@ export function messageStreamReducer(
     case "RESET":
       return createInitialState();
 
+    case "RESTORE":
+      return action.state;
+
     case "HYDRATE": {
       const entries = action.items.reduce<MessageStreamEntry[]>(
         (currentEntries, item) => applyTimelineItem(currentEntries, item),

@@ -78,7 +78,6 @@ export function AgentSessionView({
       {/* 消息流区域，缓存状态会直接显示，避免加载闪烁 */}
       <AgentMessageStreamView state={state} isTurnRunning={isTurnRunning} />
 
-
       <div className="agents-session-view__permissions">
         {state.pendingPermissions.map((request) => (
           <PermissionCard
@@ -91,7 +90,7 @@ export function AgentSessionView({
       </div>
       {readOnlyReason ? null : (
         <AgentComposer
-          // 移除 key={sessionId}，避免组件完全重新挂载
+          key={sessionId}
           projectId={projectId}
           sessionId={sessionId}
           capabilities={capabilities}

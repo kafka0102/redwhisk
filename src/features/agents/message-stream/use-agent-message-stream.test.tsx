@@ -3,7 +3,10 @@ import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
-import { useAgentMessageStream } from "./use-agent-message-stream";
+import {
+  clearAgentMessageStreamCacheForTest,
+  useAgentMessageStream,
+} from "./use-agent-message-stream";
 import type { MessageStreamState } from "./message-stream-types";
 
 // vi.hoisted 让 mock 工厂与测试体共享同一份可变 listeners。
@@ -48,6 +51,7 @@ beforeEach(() => {
 afterEach(() => {
   window.requestAnimationFrame = originalRequestAnimationFrame;
   window.cancelAnimationFrame = originalCancelAnimationFrame;
+  clearAgentMessageStreamCacheForTest();
   vi.useRealTimers();
 });
 
@@ -323,5 +327,36 @@ describe("useAgentMessageStream", () => {
     const state = getState()!;
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0].id).toBe("u2");
+  });
+
+  it("切回已缓存 session 时恢复对应 state", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [{ type: "user_message", text: "旧", messageId: "u1" }],
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [{ type: "user_message", text: "新", messageId: "u2" }],
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 17,
+      onState: () => {},
+    });
+    expect(getState()!.entries[0]?.id).toBe("u1");
+
+    rerenderWith({ projectId: 1, sessionId: 18 });
+    await waitFor(() => {
+      expect(getState()!.entries[0]?.id).toBe("u2");
+    });
+
+    readAgentTimelineMock.mockClear();
+    rerenderWith({ projectId: 1, sessionId: 17 });
+
+    await waitFor(() => {
+      expect(getState()!.entries[0]?.id).toBe("u1");
+    });
+    expect(readAgentTimelineMock).not.toHaveBeenCalled();
   });
 });

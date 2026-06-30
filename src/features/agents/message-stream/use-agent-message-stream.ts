@@ -8,7 +8,7 @@
 //
 // 性能优化：使用 LRU 缓存最近访问的几个 session 的状态，避免每次切换都重新读取 timeline。
 
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import type { Dispatch } from "react";
 
 import type { AgentStreamEvent } from "../agent-stream-types";
@@ -40,6 +40,10 @@ const MAX_CACHED_SESSIONS = 5;
 // 全局的 session 状态缓存
 const sessionStateCache = new Map<number, CachedSessionState>();
 
+export function clearAgentMessageStreamCacheForTest(): void {
+  sessionStateCache.clear();
+}
+
 // 获取或创建 session 缓存状态
 function getCachedSessionState(sessionId: number): MessageStreamState {
   const cached = sessionStateCache.get(sessionId);
@@ -52,9 +56,15 @@ function getCachedSessionState(sessionId: number): MessageStreamState {
 }
 
 // 更新 session 缓存
-function updateCachedSessionState(sessionId: number, state: MessageStreamState) {
+function updateCachedSessionState(
+  sessionId: number,
+  state: MessageStreamState,
+) {
   // LRU 清理：如果超过最大数量，删除最久未使用的
-  if (sessionStateCache.size >= MAX_CACHED_SESSIONS) {
+  if (
+    !sessionStateCache.has(sessionId) &&
+    sessionStateCache.size >= MAX_CACHED_SESSIONS
+  ) {
     let oldestSessionId: number | null = null;
     let oldestTime = Infinity;
     for (const [id, cached] of sessionStateCache.entries()) {
@@ -94,9 +104,13 @@ export function useAgentMessageStream({
     sessionId,
     getCachedSessionState,
   );
+  const stateSessionIdRef = useRef(sessionId);
 
   // 监听 state 变化，更新缓存
   useEffect(() => {
+    if (stateSessionIdRef.current !== sessionId) {
+      return;
+    }
     updateCachedSessionState(sessionId, state);
   }, [sessionId, state]);
 
@@ -151,8 +165,11 @@ export function useAgentMessageStream({
     const cachedState = sessionStateCache.get(sessionId);
     const hasCachedInitialized = cachedState?.state.isInitialized ?? false;
 
-    // 如果没有缓存的初始化状态，才需要重置并重新加载
-    if (!hasCachedInitialized) {
+    stateSessionIdRef.current = sessionId;
+
+    if (hasCachedInitialized && cachedState) {
+      dispatch({ type: "RESTORE", state: cachedState.state });
+    } else {
       dispatch({ type: "RESET" });
     }
 
