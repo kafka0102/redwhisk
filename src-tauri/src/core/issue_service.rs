@@ -839,33 +839,14 @@ impl<'connection> IssueService<'connection> {
             ProjectCompletionPolicy::AgentAutoCommit => CompletionAttemptOption::AgentAutoCommit,
         });
         if (issue.status == IssueStatus::Review || issue.status == IssueStatus::Running) && is_session_closed_out(&session) {
-            let snapshot = closed_session_completion_snapshot();
-            let completed_issue = self.complete_issue_flow_transaction(
-                &issue, &session, &snapshot, option, None, None, false,
-            )?;
-
-            return Ok(self.flow_result(
-                CompleteIssueFlowAction::Completed,
-                completed_issue,
-                None,
-                "Issue 已完成。".to_string(),
-                &session,
-            ));
-        }
-
-        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
-        let snapshot = match read_git_snapshot(&detection_repo_path) {
-            Ok(snapshot) => snapshot,
-            Err(_) => {
+            // 对于 worktree 模式，即使 session 已关闭，也需要走完整的完成流程来处理 worktree 合并和清理
+            if session.workspace_mode == WorkspaceMode::Worktree {
+                // 继续走下面的完整流程
+            } else {
+                // 非 worktree 模式可以走快速路径
                 let snapshot = closed_session_completion_snapshot();
                 let completed_issue = self.complete_issue_flow_transaction(
-                    &issue,
-                    &session,
-                    &snapshot,
-                    option,
-                    None,
-                    None,
-                    input.ignore_dirty == Some(true),
+                    &issue, &session, &snapshot, option, None, None, false,
                 )?;
 
                 return Ok(self.flow_result(
@@ -875,6 +856,37 @@ impl<'connection> IssueService<'connection> {
                     "Issue 已完成。".to_string(),
                     &session,
                 ));
+            }
+        }
+
+        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
+        let snapshot = match read_git_snapshot(&detection_repo_path) {
+            Ok(snapshot) => snapshot,
+            Err(_) => {
+                // 对于 worktree 模式，即使 git snapshot 读取失败也要继续走完整流程来处理 worktree 合并
+                if session.workspace_mode == WorkspaceMode::Worktree {
+                    closed_session_completion_snapshot()
+                } else {
+                    // 非 worktree 模式可以直接完成
+                    let snapshot = closed_session_completion_snapshot();
+                    let completed_issue = self.complete_issue_flow_transaction(
+                        &issue,
+                        &session,
+                        &snapshot,
+                        option,
+                        None,
+                        None,
+                        input.ignore_dirty == Some(true),
+                    )?;
+
+                    return Ok(self.flow_result(
+                        CompleteIssueFlowAction::Completed,
+                        completed_issue,
+                        None,
+                        "Issue 已完成。".to_string(),
+                        &session,
+                    ));
+                }
             }
         };
 
