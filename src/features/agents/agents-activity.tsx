@@ -237,8 +237,10 @@ export function AgentsActivity({
         }
         if (isMounted && showLoading) {
           setIsLoading(false);
-          // session列表加载完成后，立即加载agent类型等关键内容
-          setShouldLoadDeferredContent(true);
+          // session列表加载完成后，延迟加载非关键内容，确保UI先响应
+          window.requestIdleCallback(() => {
+            setShouldLoadDeferredContent(true);
+          });
         }
       }
     }
