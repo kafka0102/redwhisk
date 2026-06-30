@@ -386,7 +386,7 @@ impl CodexSessionHandle {
 
     /// 列出可用模型。
     pub fn list_models(&self) -> Result<Vec<AgentModel>, CodexAppServerError> {
-        Ok(map_model_entries(self.client.model_list()?))
+        Ok(default_codex_models())
     }
 
     /// 列出可用模式。
@@ -444,6 +444,21 @@ impl CodexSessionHandle {
             .ok()
             .and_then(|state| state.thread_id.clone())
     }
+}
+
+pub fn default_codex_models() -> Vec<AgentModel> {
+    vec![AgentModel {
+        model_id: "gpt-5".into(),
+        display_name: Some("GPT-5".into()),
+        is_default: Some(true),
+        default_reasoning_effort: Some("medium".into()),
+        supported_reasoning_efforts: vec![
+            "low".into(),
+            "medium".into(),
+            "high".into(),
+            "xhigh".into(),
+        ],
+    }]
 }
 
 pub fn list_models_with_command(
@@ -1392,6 +1407,25 @@ mod tests {
             json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf", "text_elements": [] })
         );
         assert_eq!(input.to_json(), Value::Array(blocks.to_vec()));
+    }
+
+    #[test]
+    fn default_codex_models_returns_static_gpt5_capabilities() {
+        assert_eq!(
+            default_codex_models(),
+            vec![AgentModel {
+                model_id: "gpt-5".into(),
+                display_name: Some("GPT-5".into()),
+                is_default: Some(true),
+                default_reasoning_effort: Some("medium".into()),
+                supported_reasoning_efforts: vec![
+                    "low".into(),
+                    "medium".into(),
+                    "high".into(),
+                    "xhigh".into(),
+                ],
+            }]
+        );
     }
 
     #[test]

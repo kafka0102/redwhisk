@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 
-use crate::agent::codex_app_server::session::list_models_with_command;
+use crate::agent::codex_app_server::session::default_codex_models;
 use crate::agent::codex_config;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::app_state::AppState;
@@ -654,28 +654,14 @@ pub fn set_agent_mode(
 #[tauri::command]
 pub fn list_agent_models(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     input: ListAgentModelsInput,
 ) -> Result<ListAgentModelsResult, CommandError> {
     let database = open_agent_session_database(&app)?;
     let service = build_agent_session_service(&database.connection);
-    let session = service.find_project_session_record(input.project_id, input.session_id)?;
-    let models = if let Some(handle) = state.agent_sessions.get(input.session_id) {
-        handle
-            .list_models()
-            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)?
-    } else {
-        let command = if session.command_snapshot.trim().is_empty() {
-            "codex"
-        } else {
-            session.command_snapshot.as_str()
-        };
-        let cwd = service.resolve_session_cwd_for_model_list(&session)?;
-        list_models_with_command(command, Some(cwd.as_str())).map_err(|error| {
-            crate::core::agent_session_service::agent_session_error_to_command_error(error.into())
-        })?
-    };
-    Ok(ListAgentModelsResult { models })
+    service.find_project_session_record(input.project_id, input.session_id)?;
+    Ok(ListAgentModelsResult {
+        models: default_codex_models(),
+    })
 }
 
 #[tauri::command]
