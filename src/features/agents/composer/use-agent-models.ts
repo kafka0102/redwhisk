@@ -86,7 +86,16 @@ export function useAgentModels({
         if (isDisposed) {
           return;
         }
-        setError(toCommandError(loadError).message);
+        // 对于新建的 session，模型列表可能暂时不可用，不要显示错误
+        const errorMessage = toCommandError(loadError).message;
+        // 如果是会话刚启动的暂时错误，不显示给用户
+        if (
+          !errorMessage.includes("not found") &&
+          !errorMessage.includes("no such") &&
+          !errorMessage.includes("invalid")
+        ) {
+          setError(errorMessage);
+        }
       } finally {
         if (!isDisposed) {
           setIsLoading(false);
