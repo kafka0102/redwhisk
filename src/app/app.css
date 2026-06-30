@@ -5559,6 +5559,16 @@ button:focus-visible {
   color: var(--color-danger);
 }
 
+.agents-message-stream__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100%;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
 .agents-message-stream__running {
   display: flex;
   align-items: center;

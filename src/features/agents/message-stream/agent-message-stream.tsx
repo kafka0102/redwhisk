@@ -90,6 +90,17 @@ export function AgentMessageStreamView({
         className="agents-message-stream__scroll"
         onScroll={handleScroll}
       >
+        {!isInitialized ? (
+          <div className="agents-message-stream__loading" role="status">
+            <LoaderCircle
+              aria-hidden="true"
+              size={15}
+              strokeWidth={2}
+              className="agents-message__spinner"
+            />
+            <span>{messages.settings.loading}</span>
+          </div>
+        ) : null}
         {isInitialized && entries.length === 0 && !lastError ? (
           <p className="agents-message-stream__empty">
             {messages.agentsFeature.emptyMessageStream}

@@ -104,6 +104,7 @@ describe("useAgentMessageStream", () => {
   function dispatchFrame() {
     act(() => {
       vi.advanceTimersByTime(16);
+      vi.advanceTimersByTime(1);
     });
   }
 
@@ -330,6 +331,7 @@ describe("useAgentMessageStream", () => {
   });
 
   it("切回已缓存 session 时恢复对应 state", async () => {
+    vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValueOnce({
       items: [{ type: "user_message", text: "旧", messageId: "u1" }],
@@ -347,16 +349,21 @@ describe("useAgentMessageStream", () => {
     expect(getState()!.entries[0]?.id).toBe("u1");
 
     rerenderWith({ projectId: 1, sessionId: 18 });
-    await waitFor(() => {
-      expect(getState()!.entries[0]?.id).toBe("u2");
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    expect(getState()!.entries[0]?.id).toBe("u2");
 
     readAgentTimelineMock.mockClear();
     rerenderWith({ projectId: 1, sessionId: 17 });
 
-    await waitFor(() => {
-      expect(getState()!.entries[0]?.id).toBe("u1");
-    });
+    expect(getState()!.isInitialized).toBe(false);
+    expect(getState()!.entries).toHaveLength(0);
     expect(readAgentTimelineMock).not.toHaveBeenCalled();
+
+    dispatchFrame();
+
+    expect(getState()!.entries[0]?.id).toBe("u1");
   });
 });
