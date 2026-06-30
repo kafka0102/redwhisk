@@ -1,9 +1,10 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "./agent-stream-types";
 import { AgentSessionView } from "./agent-session-view";
+import { clearAgentMessageStreamCacheForTest } from "./message-stream/use-agent-message-stream";
 
 // vi.hoisted 让 mock 工厂与测试体共享同一份可变 listeners，便于推送事件。
 const mocks = vi.hoisted(() => ({
@@ -88,6 +89,10 @@ function emitEvent(payload: AgentStreamEventEnvelope) {
     mocks.listeners[0]?.callback({ payload });
   });
 }
+
+afterEach(() => {
+  clearAgentMessageStreamCacheForTest();
+});
 
 describe("AgentSessionView", () => {
   it("渲染消息流历史与 composer 输入框", async () => {

@@ -43,6 +43,7 @@ export interface MessageStreamState {
 /** hook 内部 dispatch 的动作。 */
 export type MessageStreamAction =
   | { type: "RESET" }
+  | { type: "RESTORE"; state: MessageStreamState }
   | { type: "HYDRATE"; items: AgentTimelineItem[]; effort?: string | null }
   | { type: "HYDRATE_FAILED"; error: string }
   | { type: "EVENT"; event: AgentStreamEvent }

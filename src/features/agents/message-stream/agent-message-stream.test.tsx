@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AgentMessageStream,
   AgentMessageStreamView,
 } from "./agent-message-stream";
 import type { MessageStreamState } from "./message-stream-types";
+import { clearAgentMessageStreamCacheForTest } from "./use-agent-message-stream";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(vi.fn())),
@@ -42,6 +43,10 @@ function createMessageStreamState(
     ...overrides,
   };
 }
+
+afterEach(() => {
+  clearAgentMessageStreamCacheForTest();
+});
 
 describe("AgentMessageStream", () => {
   it("加载完成且无消息时显示空态文案", async () => {
