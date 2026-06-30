@@ -44,9 +44,28 @@
 }
 ```
 
-### 全局设置
+### 项目级别 Hook 配置
 
-全局 wrapper 脚本位于 `~/.claude/hooks/auto-commit-wrapper.js`，它会自动检测当前项目是否有 `.claude/auto-commit.js`，如果有就使用项目级别的配置。
+本项目使用 Claude Code 的正规项目级别 Hook 配置，通过 `.claude/settings.json` 实现：
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/auto-commit.js",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
 ### 禁用自动提交
 
@@ -54,3 +73,4 @@
 
 1. 修改配置文件设置 `"enabled": false`
 2. 或者临时重命名 `.claude/auto-commit.js`
+3. 或者注释掉 `.claude/settings.json` 中的 hooks 配置
