@@ -141,7 +141,8 @@ export function AgentsActivity({
     activeSessionId,
   );
   // 控制是否延迟加载非关键内容，避免首次加载阻塞
-  const [shouldLoadDeferredContent, setShouldLoadDeferredContent] = useState(false);
+  const [shouldLoadDeferredContent, setShouldLoadDeferredContent] =
+    useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
   const [sessionSidePanelWidth, setSessionSidePanelWidth] = useState(
@@ -163,7 +164,8 @@ export function AgentsActivity({
 
   // 只在需要时计算visibleSessions
   const visibleSessions = useMemo(
-    () => allSessions.filter((session) => getSessionIssueGroup(session) !== null),
+    () =>
+      allSessions.filter((session) => getSessionIssueGroup(session) !== null),
     [allSessions],
   );
 
@@ -239,7 +241,6 @@ export function AgentsActivity({
           window.requestIdleCallback(() => {
             setShouldLoadDeferredContent(true);
           });
-
         }
       }
     }
@@ -282,7 +283,6 @@ export function AgentsActivity({
     if (!shouldLoadDeferredContent) {
       return;
     }
-
 
     async function loadAgentTypes() {
       setIsLoadingAgentTypes(true);
@@ -358,13 +358,14 @@ export function AgentsActivity({
   }, [isNewSessionMenuOpen]);
 
   const currentSessionId = shouldLoadDeferredContent
-    ? (visibleSessions.some((session) => session.sessionId === selectedSessionId)
-      ? selectedSessionId
-      : null) ??
+    ? ((visibleSessions.some(
+        (session) => session.sessionId === selectedSessionId,
+      )
+        ? selectedSessionId
+        : null) ??
       visibleSessions[0]?.sessionId ??
-      null
-    : selectedSessionId ?? null;
-
+      null)
+    : (selectedSessionId ?? null);
 
   const selectedSession =
     visibleSessions.find((session) => session.sessionId === currentSessionId) ??
@@ -757,7 +758,8 @@ export function AgentsActivity({
 
     const currentSession =
       allSessions.find(
-        (session: AgentSessionListItem) => session.sessionId === selectedSession.sessionId,
+        (session: AgentSessionListItem) =>
+          session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
     let nextSession = currentSession;
 
@@ -813,7 +815,8 @@ export function AgentsActivity({
 
     const currentSession =
       allSessions.find(
-        (session: AgentSessionListItem) => session.sessionId === selectedSession.sessionId,
+        (session: AgentSessionListItem) =>
+          session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
 
     await completeLinkedIssueManual(linkedIssue, currentSession, {
@@ -1315,7 +1318,7 @@ export function AgentsActivity({
         }`}
         aria-label={messages.agentsFeature.sessionWorkspace}
       >
-        <AgentsSessionPane key={selectedSession?.sessionId}
+        <AgentsSessionPane
           canRenderTransitionButton={canRenderTransitionButton}
           canRenderTransitionMenu={canRenderTransitionMenu}
           isTransitionMenuOpen={isTransitionMenuOpen}
@@ -1353,6 +1356,7 @@ export function AgentsActivity({
           }}
           projectId={projectId}
           selectedSession={selectedSession}
+          sessions={visibleSessions}
           toolTabs={sessionToolTabs}
           transitionButtonLabel={transitionButtonLabel}
           transitionMenuOptions={transitionMenuOptions}

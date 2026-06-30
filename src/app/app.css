@@ -3214,6 +3214,20 @@ button:focus-visible {
   overflow: hidden;
 }
 
+/* 常驻渲染的 tab 内容容器：所有 pane 同时挂载，仅可见的那个撑满高度，
+   hidden 的通过 [hidden] 属性 display:none 不占空间。
+   用 grid 单行布局确保可见 pane 撑满父容器，避免多个常驻 pane 垂直堆叠。 */
+.session-workspace-tabs__pane {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.session-workspace-tabs__pane[hidden] {
+  display: none;
+}
+
 .session-terminal-tab {
   min-width: 0;
   min-height: 0;

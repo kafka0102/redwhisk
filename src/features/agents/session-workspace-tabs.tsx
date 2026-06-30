@@ -53,8 +53,6 @@ export function SessionWorkspaceTabs({
 }: SessionWorkspaceTabsProps) {
   const { messages } = useI18n();
   const selectedTab = getSelectedTab(activeTab, fileTab, changeTab, toolTabs);
-  const selectedToolTab =
-    toolTabs.find((tab) => tab.id === selectedTab) ?? null;
 
   return (
     <div className="session-workspace-tabs">
@@ -136,15 +134,43 @@ export function SessionWorkspaceTabs({
         </DropdownMenu>
       </div>
       <div className="session-workspace-tabs__content" role="tabpanel">
-        {selectedTab === "file" && fileTab ? (
-          <SessionFileViewer tab={fileTab} />
-        ) : selectedTab === "changes" && changeTab ? (
-          <SessionDiffViewer tab={changeTab} />
-        ) : selectedToolTab ? (
-          selectedToolTab.content
-        ) : (
-          sessionContent
-        )}
+        {/* 常驻渲染所有 tab 内容，用 hidden 属性切换显隐。
+            避免条件渲染导致切 tab 时 AgentSessionView / xterm / iframe 卸载重挂载，
+            这是切 tab 主线程卡顿的根因（违反 agent-development-rules.md L153/L225
+            「不得卸载结构化消息流」）。 */}
+        {sessionContent ? (
+          <div
+            className="session-workspace-tabs__pane"
+            hidden={selectedTab !== "session"}
+          >
+            {sessionContent}
+          </div>
+        ) : null}
+        {toolTabs.map((tab) => (
+          <div
+            key={tab.id}
+            className="session-workspace-tabs__pane"
+            hidden={selectedTab !== tab.id}
+          >
+            {tab.content}
+          </div>
+        ))}
+        {fileTab ? (
+          <div
+            className="session-workspace-tabs__pane"
+            hidden={selectedTab !== "file"}
+          >
+            <SessionFileViewer tab={fileTab} />
+          </div>
+        ) : null}
+        {changeTab ? (
+          <div
+            className="session-workspace-tabs__pane"
+            hidden={selectedTab !== "changes"}
+          >
+            <SessionDiffViewer tab={changeTab} />
+          </div>
+        ) : null}
       </div>
     </div>
   );
