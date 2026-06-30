@@ -189,6 +189,28 @@ impl<'connection> IssueRepository<'connection> {
             .optional()
     }
 
+    pub fn find_linked_session_id(
+        &self,
+        project_id: i64,
+        issue_id: i64,
+    ) -> rusqlite::Result<Option<i64>> {
+        self.connection
+            .query_row(
+                "SELECT agent_sessions.id
+                 FROM agent_sessions
+                 INNER JOIN issues ON issues.id = agent_sessions.issue_id
+                 WHERE issues.id = ?1
+                   AND issues.project_id = ?2
+                   AND issues.del = 0
+                   AND agent_sessions.project_id = ?2
+                   AND agent_sessions.del = 0
+                 LIMIT 1",
+                params![issue_id, project_id],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
     pub fn find_by_id_in_transaction(
         transaction: &Transaction<'_>,
         id: i64,

@@ -698,7 +698,7 @@ impl<'connection> IssueService<'connection> {
                     .ok_or_else(|| {
                         CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
-                        "只有存在运行中关联 Agent Session 的 Issue 可以发送 Agent Commit prompt。",
+                        "只有存在关联 Agent Session 的 Issue 可以发送 Agent Commit prompt。",
                     )
                     .with_detail(
                         ErrorDetail::new("AgentSession")
@@ -1859,12 +1859,12 @@ impl<'connection> IssueService<'connection> {
             .ok_or_else(|| issue_not_found(issue_id))?;
         let linked_session_id = self
             .issue_repository
-            .find_running_linked_session_id(project_id, issue_id)
+            .find_linked_session_id(project_id, issue_id)
             .map_err(issue_database_error)?
             .ok_or_else(|| {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
-                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
+                    "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
                 )
                 .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", issue_id))
             })?;
@@ -1874,7 +1874,7 @@ impl<'connection> IssueService<'connection> {
             .ok_or_else(|| {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
-                    "只有存在运行中关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
+                    "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
                 )
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
