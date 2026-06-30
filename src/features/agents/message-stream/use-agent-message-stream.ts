@@ -110,6 +110,11 @@ export function useAgentMessageStream({
 
   useEffect(() => {
     let isDisposed = false;
+    // 切换session时立刻重置状态，显示loading，避免旧内容停留
+    dispatch({ type: "RESET" });
+
+    // 切换session时立刻重置状态，显示loading，避免旧内容停留
+
     let unlisten: (() => void) | null = null;
     let pendingEvents: AgentStreamEvent[] = [];
     let deferredEvents: AgentStreamEvent[] = [];
@@ -165,7 +170,6 @@ export function useAgentMessageStream({
 
     stateSessionIdRef.current = sessionId;
 
-    dispatch({ type: "RESET" });
 
     const dispatchStreamEvent = (event: AgentStreamEvent) => {
       if (hasCachedInitialized && !isCacheRestored) {
