@@ -1315,7 +1315,7 @@ export function AgentsActivity({
         }`}
         aria-label={messages.agentsFeature.sessionWorkspace}
       >
-        <AgentsSessionPane
+        <AgentsSessionPane key={selectedSession?.sessionId}
           canRenderTransitionButton={canRenderTransitionButton}
           canRenderTransitionMenu={canRenderTransitionMenu}
           isTransitionMenuOpen={isTransitionMenuOpen}
