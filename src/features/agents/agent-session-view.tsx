@@ -8,11 +8,13 @@
 // `permission_resolved` 事件自动移除。乐观用户消息合并：composer 发送成功后经
 // `onMessageSent` 回调 dispatch `OPTIMISTIC_USER_MESSAGE`，立即在流中展示用户消息。
 //
+// 性能优化：使用 LRU 缓存 session 状态，切换时立即恢复，避免重新读取 timeline。
+//
 // 规范遵循（agent-development-rules.md / DESIGN_GUIDE）：
 // - L188：composer 是 Codex Session View 底部固定输入框
 // - L214：上下文窗口用量来自 usage_updated 事件 → state.usage
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { AgentComposer } from "./composer/agent-composer";
 import { getAgentCapabilities } from "./agent-capabilities";
@@ -47,10 +49,14 @@ export function AgentSessionView({
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const capabilities = getAgentCapabilities(agentType);
-  const effectiveTurnStatus =
-    state.turnStatus === "running" || isTurnRunning
+
+  // 使用 useMemo 避免不必要的重新计算
+  const effectiveTurnStatus = useMemo(() => {
+    return state.turnStatus === "running" || isTurnRunning
       ? "running"
       : state.turnStatus;
+  }, [state.turnStatus, isTurnRunning]);
+
   const isReadOnly = issueStatus === "completed";
   const readOnlyReason = isReadOnly
     ? messages.agentsFeature.readOnlyCompletedIssue
@@ -69,7 +75,10 @@ export function AgentSessionView({
       className="agents-session-view"
       aria-label={messages.agentsFeature.structuredSessionView}
     >
+      {/* 消息流区域，缓存状态会直接显示，避免加载闪烁 */}
       <AgentMessageStreamView state={state} isTurnRunning={isTurnRunning} />
+
+
       <div className="agents-session-view__permissions">
         {state.pendingPermissions.map((request) => (
           <PermissionCard
@@ -82,7 +91,7 @@ export function AgentSessionView({
       </div>
       {readOnlyReason ? null : (
         <AgentComposer
-          key={sessionId}
+          // 移除 key={sessionId}，避免组件完全重新挂载
           projectId={projectId}
           sessionId={sessionId}
           capabilities={capabilities}

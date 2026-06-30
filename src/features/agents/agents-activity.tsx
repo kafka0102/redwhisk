@@ -501,8 +501,10 @@ export function AgentsActivity({
 
   function handleSelectSession(sessionId: number) {
     setIsTransitionMenuOpen(false);
+    // 立即更新 selectedSessionId，确保 UI 立即响应
     setSelectedSessionId(sessionId);
     onSelectSession?.(sessionId);
+    // 异步处理 attention 确认，不阻塞 UI
     void acknowledgeSessionAttention(sessionId);
   }
 
