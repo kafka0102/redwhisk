@@ -140,6 +140,9 @@ export function AgentsActivity({
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
   );
+  // 控制是否延迟加载非关键内容，避免首次加载阻塞
+  const [shouldLoadDeferredContent, setShouldLoadDeferredContent] = useState(false);
+
   const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
   const [sessionSidePanelWidth, setSessionSidePanelWidth] = useState(
     SESSION_SIDE_PANEL_DEFAULT_WIDTH,
@@ -232,6 +235,11 @@ export function AgentsActivity({
         }
         if (isMounted && showLoading) {
           setIsLoading(false);
+          // session列表加载完成后，延迟加载非关键内容，确保UI先响应
+          window.requestIdleCallback(() => {
+            setShouldLoadDeferredContent(true);
+          });
+
         }
       }
     }
@@ -271,6 +279,10 @@ export function AgentsActivity({
 
   useEffect(() => {
     let isMounted = true;
+    if (!shouldLoadDeferredContent) {
+      return;
+    }
+
 
     async function loadAgentTypes() {
       setIsLoadingAgentTypes(true);
@@ -314,7 +326,7 @@ export function AgentsActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, shouldLoadDeferredContent]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -345,12 +357,14 @@ export function AgentsActivity({
     };
   }, [isNewSessionMenuOpen]);
 
-  const currentSessionId =
-    (visibleSessions.some((session) => session.sessionId === selectedSessionId)
+  const currentSessionId = shouldLoadDeferredContent
+    ? (visibleSessions.some((session) => session.sessionId === selectedSessionId)
       ? selectedSessionId
       : null) ??
-    visibleSessions[0]?.sessionId ??
-    null;
+      visibleSessions[0]?.sessionId ??
+      null
+    : selectedSessionId ?? null;
+
 
   const selectedSession =
     visibleSessions.find((session) => session.sessionId === currentSessionId) ??

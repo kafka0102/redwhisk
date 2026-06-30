@@ -200,19 +200,75 @@ export function useAgentMessageStream({
     async function initialize() {
       // 如果已经有缓存的初始化状态，直接订阅事件，不需要重新读取 timeline
       if (hasCachedInitialized && cachedState) {
+        // 分批次恢复缓存，避免一次性渲染大量DOM阻塞主线程
         scheduleCacheRestore(() => {
           if (isDisposed) {
             return;
           }
           isCacheRestored = true;
           cachedState.lastAccessTime = Date.now();
-          dispatch({ type: "RESTORE", state: cachedState.state });
-          if (deferredEvents.length > 0) {
-            const events = deferredEvents;
-            deferredEvents = [];
-            dispatch({ type: "EVENT_BATCH", events });
+          
+          const fullState = cachedState.state;
+          const allEntries = fullState.entries;
+          const BATCH_SIZE = 50; // 每次恢复50条
+          
+          if (allEntries.length <= BATCH_SIZE) {
+            // 条目不多，一次性恢复
+            dispatch({ type: "RESTORE", state: fullState });
+            if (deferredEvents.length > 0) {
+              const events = deferredEvents;
+              deferredEvents = [];
+              dispatch({ type: "EVENT_BATCH", events });
+            }
+            return;
           }
+          
+          // 先恢复最新的BATCH_SIZE条，让用户尽快看到内容
+          let currentEntries = allEntries.slice(-BATCH_SIZE);
+          dispatch({
+            type: "RESTORE",
+            state: {
+              ...fullState,
+              entries: currentEntries,
+            },
+          });
+          
+          let currentIndex = allEntries.length - BATCH_SIZE;
+          
+          // 逐步恢复历史消息，从旧到新
+          const restoreNextBatch = () => {
+            if (isDisposed || currentIndex <= 0) {
+              // 全部恢复完成，处理 deferred events
+              if (deferredEvents.length > 0) {
+                const events = deferredEvents;
+                deferredEvents = [];
+                dispatch({ type: "EVENT_BATCH", events });
+              }
+              return;
+            }
+            
+            const endIndex = currentIndex;
+            currentIndex = Math.max(0, currentIndex - BATCH_SIZE);
+            const batchEntries = allEntries.slice(currentIndex, endIndex);
+            
+            // 合并到现有 entries 前面
+            currentEntries = [...batchEntries, ...currentEntries];
+            dispatch({
+              type: "RESTORE",
+              state: {
+                ...fullState,
+                entries: currentEntries,
+              },
+            });
+            
+            // 下一帧继续恢复下一批
+            restoreFrameHandle = window.requestAnimationFrame(restoreNextBatch);
+          };
+          
+          // 延迟一帧再开始恢复历史
+          restoreFrameHandle = window.requestAnimationFrame(restoreNextBatch);
         });
+
 
         try {
           unlisten = await subscribeAgentSessionStream((envelope) => {
