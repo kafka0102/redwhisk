@@ -2889,6 +2889,20 @@ button:focus-visible {
   overflow: hidden;
 }
 
+/* 实例池中单个 session 的 workspace 宿主：包裹整个 `SessionWorkspaceTabs`
+   （tab 栏 + 内容），常驻挂载、用 hidden 切换显隐。用 grid 单行布局让内部的
+   `SessionWorkspaceTabs` 撑满宿主高度，复用 .agents-terminal-host 的暗色背景。 */
+.agents-terminal-host.session-workspace-host {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* 显式覆盖 [hidden]：display:grid 会压过 UA 的 [hidden]{display:none}，
+   需手动恢复，否则非当前 session 的 workspace 不会隐藏而互相堆叠。 */
+.agents-terminal-host.session-workspace-host[hidden] {
+  display: none;
+}
+
 .agents-session-main-stack {
   display: grid;
   grid-row: 3;
