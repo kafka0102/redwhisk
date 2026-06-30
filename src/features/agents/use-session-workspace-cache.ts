@@ -28,6 +28,18 @@ interface UseSessionWorkspaceCacheInput {
   isSidePanelOpen: boolean;
 }
 
+/**
+ * 单个 session 的 workspace tab 状态快照（只读）。
+ *
+ * 供实例池中非当前 session 的 `SessionWorkspacePane` 渲染自己冻结的 tab 选中态、
+ * file / change tab 内容。
+ */
+export interface SessionWorkspaceTabState {
+  activeWorkspaceTab: SessionWorkspaceTabKind;
+  fileTab: SessionWorkspaceFileTab | null;
+  changeTab: SessionWorkspaceChangeTab | null;
+}
+
 interface SessionWorkspaceCache {
   activeWorkspaceTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
@@ -87,17 +99,58 @@ export function useSessionWorkspaceCache({
       ? defaultWorkspaceCache()
       : getSessionCache(cacheBySessionRef.current, sessionId);
 
+  // 按指定 sessionId 更新其 workspace cache。
+  //
+  // 与 `updateCurrentCache` 的区别：它不依赖当前 `sessionId` 闭包，可被实例池中
+  // 非当前 session 的 `SessionWorkspacePane` 用来操作自己的 tab 状态（切换/关闭
+  // terminal、browser 等）。由于 sessionId 来自外部参数且通过 ref 写入 Map，
+  // 该回调身份稳定（空依赖），不会因 currentSessionId 切换而变化。
+  const updateSessionCache = useCallback(
+    (
+      targetSessionId: number,
+      updater: (cache: SessionWorkspaceCache) => SessionWorkspaceCache,
+    ) => {
+      const cache = getSessionCache(cacheBySessionRef.current, targetSessionId);
+      cacheBySessionRef.current.set(targetSessionId, updater(cache));
+      setCacheVersion((currentVersion) => currentVersion + 1);
+    },
+    [],
+  );
+
   const updateCurrentCache = useCallback(
     (updater: (cache: SessionWorkspaceCache) => SessionWorkspaceCache) => {
       if (sessionId == null) {
         return;
       }
-
-      const cache = getSessionCache(cacheBySessionRef.current, sessionId);
-      cacheBySessionRef.current.set(sessionId, updater(cache));
-      setCacheVersion((currentVersion) => currentVersion + 1);
+      updateSessionCache(sessionId, updater);
     },
-    [sessionId],
+    [sessionId, updateSessionCache],
+  );
+
+  // 读取任意 sessionId 的 workspace tab 状态（只读快照）。
+  //
+  // 供实例池中非当前 session 的 `SessionWorkspacePane` 读取自己冻结的 tab 状态
+  // （activeWorkspaceTab / fileTab / changeTab）。非当前 session 的 tab 状态在
+  // 切走后不再变化，仅在「切换 session」触发 `AgentsActivity` 重渲染时被重新读取，
+  // 因此无需额外的订阅机制即可拿到最新值。
+  const getWorkspaceTabState = useCallback(
+    (targetSessionId: number): SessionWorkspaceTabState => {
+      const cache = cacheBySessionRef.current.get(targetSessionId);
+      if (!cache) {
+        const fallback = defaultWorkspaceCache();
+        return {
+          activeWorkspaceTab: fallback.activeWorkspaceTab,
+          fileTab: fallback.fileTab,
+          changeTab: fallback.changeTab,
+        };
+      }
+      return {
+        activeWorkspaceTab: cache.activeWorkspaceTab,
+        fileTab: cache.fileTab,
+        changeTab: cache.changeTab,
+      };
+    },
+    [],
   );
 
   const refreshChanges = useCallback(async () => {
@@ -248,16 +301,38 @@ export function useSessionWorkspaceCache({
     [updateCurrentCache],
   );
 
-  const selectWorkspaceTab = useCallback(
-    (tab: SessionWorkspaceTabKind) => {
-      updateCurrentCache((cache) => ({ ...cache, activeWorkspaceTab: tab }));
+  // 切换任意 sessionId 的 activeWorkspaceTab。供实例池中非当前 session 的
+  // `SessionWorkspacePane` 操作自己 tab 选中态（虽然 hidden 时无法交互，但保持
+  // 回调身份稳定，避免触发 memo 化的 pane 不必要重渲染）。
+  const selectWorkspaceTabForSession = useCallback(
+    (targetSessionId: number, tab: SessionWorkspaceTabKind) => {
+      updateSessionCache(targetSessionId, (cache) => ({
+        ...cache,
+        activeWorkspaceTab: tab,
+      }));
     },
-    [updateCurrentCache],
+    [updateSessionCache],
   );
 
-  const closeWorkspaceTab = useCallback(
-    (tab: Exclude<SessionWorkspaceTabKind, "session">) => {
-      updateCurrentCache((cache) => {
+  const selectWorkspaceTab = useCallback(
+    (tab: SessionWorkspaceTabKind) => {
+      if (sessionId == null) {
+        return;
+      }
+      selectWorkspaceTabForSession(sessionId, tab);
+    },
+    [sessionId, selectWorkspaceTabForSession],
+  );
+
+  // 关闭任意 sessionId 的指定 workspace tab（file / changes）。terminal / browser
+  // tab 的关闭由 `AgentsActivity` 通过 `terminalPanelStateBySessionId` /
+  // `browserTabsBySessionId` 自行管理，不走此路径。
+  const closeWorkspaceTabForSession = useCallback(
+    (
+      targetSessionId: number,
+      tab: Exclude<SessionWorkspaceTabKind, "session">,
+    ) => {
+      updateSessionCache(targetSessionId, (cache) => {
         const nextCache = {
           ...cache,
           changeTab: tab === "changes" ? null : cache.changeTab,
@@ -273,7 +348,17 @@ export function useSessionWorkspaceCache({
         };
       });
     },
-    [updateCurrentCache],
+    [updateSessionCache],
+  );
+
+  const closeWorkspaceTab = useCallback(
+    (tab: Exclude<SessionWorkspaceTabKind, "session">) => {
+      if (sessionId == null) {
+        return;
+      }
+      closeWorkspaceTabForSession(sessionId, tab);
+    },
+    [sessionId, closeWorkspaceTabForSession],
   );
 
   const openChange = useCallback(
@@ -496,11 +581,13 @@ export function useSessionWorkspaceCache({
     changes: currentCache.changes,
     changesErrorMessage: currentCache.changesErrorMessage,
     closeWorkspaceTab,
+    closeWorkspaceTabForSession,
     commitHistory: currentCache.commitHistory,
     commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,
     fileTreeErrorMessage: currentCache.fileTreeErrorMessage,
+    getWorkspaceTabState,
     isChangesLoading: currentCache.isChangesLoading,
     isCommitHistoryLoading: currentCache.isCommitHistoryLoading,
     isFileTreeLoading: currentCache.isFileTreeLoading,
@@ -510,6 +597,7 @@ export function useSessionWorkspaceCache({
     refreshCommitHistory,
     refreshChanges,
     selectWorkspaceTab,
+    selectWorkspaceTabForSession,
     setSidePanelTab,
     sidePanelTab: currentCache.sidePanelTab,
   };

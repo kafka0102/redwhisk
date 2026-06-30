@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Ellipsis, PanelRightOpen, X } from "lucide-react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
@@ -9,17 +9,12 @@ import {
   SessionWorkspaceTabs,
   type SessionWorkspaceToolTab,
 } from "./session-workspace-tabs";
-import { useSessionPaneCache } from "./use-session-pane-cache";
 import { useI18n } from "../../shared/i18n/i18n";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
 } from "./session-workspace-types";
-
-// 实例池上限：与 use-agent-message-stream.ts 的 MAX_CACHED_SESSIONS 对齐，
-// 保证常驻 AgentSessionView 实例数量与消息流 state 缓存淘汰粒度一致。
-const MAX_CACHED_SESSION_VIEWS = 5;
 
 export interface LinkedSessionIssue {
   issueId: number;
@@ -34,36 +29,61 @@ interface TransitionMenuOption {
   label: string;
 }
 
+/**
+ * 单个已缓存 session 的 workspace 渲染数据。
+ *
+ * 由 `AgentsActivity` 为实例池中每个 cached sessionId 构造：包含该 session 的
+ * tab 选中态、file/change tab 内容、terminal/browser tool tabs，以及操作该
+ * session tab 所需的回调。`SessionWorkspacePane` 用 memo 消费此结构——只要
+ * sessionId 相同且各字段引用稳定，切 session 时不会重渲染、不重挂载。
+ */
+export interface SessionWorkspaceEntry {
+  sessionId: number;
+  agentType: AgentSessionListItem["agentType"];
+  sessionStatus: AgentSessionListItem["status"];
+  issueStatus: NonNullable<AgentSessionListItem["issueStatus"]> | null;
+  isTurnRunning: boolean;
+  activeWorkspaceTab: SessionWorkspaceTabKind;
+  changeTab: SessionWorkspaceChangeTab | null;
+  fileTab: SessionWorkspaceFileTab | null;
+  toolTabs: SessionWorkspaceToolTab[];
+}
+
 interface AgentsSessionPaneProps {
   canRenderTransitionButton: boolean;
   canRenderTransitionMenu: boolean;
   isTransitionMenuOpen: boolean;
   isTransitionPending: boolean;
   linkedIssue: LinkedSessionIssue | null;
-  activeWorkspaceTab: SessionWorkspaceTabKind;
-  changeTab: SessionWorkspaceChangeTab | null;
-  fileTab: SessionWorkspaceFileTab | null;
   isDeletingSession: boolean;
   isRenamingSessionTitle: boolean;
   isSidePanelOpen: boolean;
-  toolTabs: SessionWorkspaceToolTab[];
   onAcknowledgeSessionAttention: (sessionId: number) => void;
   onCloseWorkspaceTab: (
+    sessionId: number,
     tab: Exclude<SessionWorkspaceTabKind, "session">,
   ) => void;
-  onCreateBrowserTab: () => void;
-  onCreateTerminalTab: () => void;
+  onCreateBrowserTab: (sessionId: number) => void;
+  onCreateTerminalTab: (sessionId: number) => void;
   onDeleteSession: () => void;
   onRenameSessionTitle: (sessionId: number, title: string) => Promise<void>;
-  onSelectWorkspaceTab: (tab: SessionWorkspaceTabKind) => void;
+  onSelectWorkspaceTab: (
+    sessionId: number,
+    tab: SessionWorkspaceTabKind,
+  ) => void;
   onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
   onTransitionAction: (action: SessionIssueTransition) => void;
   projectId: number;
   selectedSession: AgentSessionListItem | null;
-  // 当前可见的 session 列表，用于实例池中查找每个已缓存 sessionId 对应的最新数据
-  //（agentType/status/issueStatus 等会随 session 列表刷新变化）。
-  sessions: AgentSessionListItem[];
+  // 实例池中所有已缓存 session 的 id 列表（LRU 顺序，末尾为最近访问）。
+  // 由 AgentsActivity 的 useSessionPaneCache 产出并下发，保证两者共用同一份缓存
+  // 状态（避免在 AgentsActivity 构造 workspace 数据与 AgentsSessionPane 渲染实例
+  // 之间出现缓存不一致）。
+  cachedSessionIds: number[];
+  // 实例池中所有已缓存 session 的 workspace 渲染数据（含当前 session）。
+  // 顺序与 cachedSessionIds 对齐；非当前 session 用 hidden 切换显隐。
+  sessionWorkspaces: SessionWorkspaceEntry[];
   transitionButtonLabel: string | null;
   transitionMenuOptions: TransitionMenuOption[];
   transitionPhase: "running" | "review" | "completed" | null;
@@ -75,13 +95,9 @@ export function AgentsSessionPane({
   isTransitionMenuOpen,
   isTransitionPending,
   linkedIssue,
-  activeWorkspaceTab,
-  changeTab,
-  fileTab,
   isDeletingSession,
   isRenamingSessionTitle,
   isSidePanelOpen,
-  toolTabs,
   onAcknowledgeSessionAttention,
   onCloseWorkspaceTab,
   onCreateBrowserTab,
@@ -94,7 +110,8 @@ export function AgentsSessionPane({
   onTransitionAction,
   projectId,
   selectedSession,
-  sessions,
+  cachedSessionIds,
+  sessionWorkspaces,
   transitionButtonLabel,
   transitionMenuOptions,
   transitionPhase,
@@ -117,30 +134,10 @@ export function AgentsSessionPane({
     selectedSession !== null &&
     editingTitleSessionId === selectedSession.sessionId;
 
-  // AgentSessionView 实例池：按 sessionId 缓存已挂载的消息流实例，切 session 时
-  // 复用实例（不重挂载、不重建消息流 DOM），仅用 hidden 切换显隐。这是切 session
-  // 主线程卡顿的根因修复——重挂载会同步重建整棵消息流 DOM（react-markdown 解析 +
-  // diff 逐行 tokenize），React 无法先画 loading。
+  // 当前选中 session 的 id。实例池（cachedSessionIds / sessionWorkspaces）由
+  // AgentsActivity 的 useSessionPaneCache 产出并下发，此处仅用于判断哪个 cached
+  // session 是当前可见的（hidden 切换）。
   const currentSessionId = selectedSession?.sessionId ?? null;
-  const { cachedSessionIds, remove: removeCachedSession } = useSessionPaneCache(
-    {
-      currentSessionId,
-      maxCached: MAX_CACHED_SESSION_VIEWS,
-    },
-  );
-
-  // 当缓存的某个 sessionId 已不在可见 session 列表中（被删除或不再可见）时，
-  // 从实例池移除，避免渲染指向已失效数据的实例。
-  useEffect(() => {
-    const visibleSessionIds = new Set(
-      sessions.map((session) => session.sessionId),
-    );
-    for (const cachedSessionId of cachedSessionIds) {
-      if (!visibleSessionIds.has(cachedSessionId)) {
-        removeCachedSession(cachedSessionId);
-      }
-    }
-  }, [cachedSessionIds, sessions, removeCachedSession]);
 
   useEffect(() => {
     if (!isSessionActionsMenuOpen) {
@@ -356,56 +353,112 @@ export function AgentsSessionPane({
       ) : null}
       {selectedSession ? (
         <div className="agents-session-main-stack">
-          <SessionWorkspaceTabs
-            activeTab={activeWorkspaceTab}
-            changeTab={changeTab}
-            fileTab={fileTab}
-            sessionAgentType={selectedSession.agentType}
-            sessionContent={
-              // 实例池：常驻渲染所有已缓存的 AgentSessionView，非当前选中的用
-              // hidden 切换。切 session 时复用已挂载实例，不重挂载、不重建消息流 DOM。
-              <>
-                {cachedSessionIds.map((cachedSessionId) => {
-                  const session = sessions.find(
-                    (item) => item.sessionId === cachedSessionId,
-                  );
-                  // 列表里找不到时（刷新间隙），跳过该实例的渲染；useEffect 会清理。
-                  if (!session) {
-                    return null;
-                  }
-                  const isCurrent = session.sessionId === currentSessionId;
-                  return (
-                    <div
-                      key={session.sessionId}
-                      className="agents-terminal-host"
-                      hidden={!isCurrent}
-                      onMouseDown={() =>
-                        onAcknowledgeSessionAttention(session.sessionId)
-                      }
-                    >
-                      <AgentSessionView
-                        projectId={projectId}
-                        sessionId={session.sessionId}
-                        agentType={session.agentType}
-                        sessionStatus={session.status}
-                        issueStatus={session.issueStatus ?? null}
-                        isTurnRunning={
-                          session.status === "running" && session.isTurnRunning
-                        }
-                      />
-                    </div>
-                  );
-                })}
-              </>
+          {/*
+           * 实例池：常驻渲染所有已缓存 session 的整个 workspace（含
+           * `SessionWorkspaceTabs` 的 tab 栏 + AgentSessionView + terminal/browser
+           * tool tabs），非当前选中的用 hidden 切换。切 session 时复用已挂载实例，
+           * 不重挂载、不重建消息流 DOM、不重建 terminal xterm，避免：
+           * 1) 消息流刷新回到顶部（重挂载导致 useAgentMessageStream RESET + 重新
+           *    readAgentTimeline）；
+           * 2) terminal 内容刷新 / 部分丢失（重挂载导致 xterm 重建 + restoreTerminal
+           *    重新拉 snapshot）。
+           * 见 agent-development-rules.md L153/L225「不得卸载结构化消息流」。
+           */}
+          {cachedSessionIds.map((cachedSessionId) => {
+            const workspace = sessionWorkspaces.find(
+              (item) => item.sessionId === cachedSessionId,
+            );
+            // 列表里找不到时（刷新间隙），跳过该实例的渲染；useEffect 会清理。
+            if (!workspace) {
+              return null;
             }
-            onCloseTab={onCloseWorkspaceTab}
-            onCreateBrowserTab={onCreateBrowserTab}
-            onCreateTerminalTab={onCreateTerminalTab}
-            onSelectTab={onSelectWorkspaceTab}
-            toolTabs={toolTabs}
-          />
+            const isCurrent = workspace.sessionId === currentSessionId;
+            return (
+              <SessionWorkspacePane
+                key={workspace.sessionId}
+                isCurrent={isCurrent}
+                onCloseWorkspaceTab={onCloseWorkspaceTab}
+                onCreateBrowserTab={onCreateBrowserTab}
+                onCreateTerminalTab={onCreateTerminalTab}
+                onSelectWorkspaceTab={onSelectWorkspaceTab}
+                onAcknowledgeSessionAttention={onAcknowledgeSessionAttention}
+                projectId={projectId}
+                workspace={workspace}
+              />
+            );
+          })}
         </div>
       ) : null}
     </div>
   );
 }
+
+interface SessionWorkspacePaneProps {
+  isCurrent: boolean;
+  onCloseWorkspaceTab: (
+    sessionId: number,
+    tab: Exclude<SessionWorkspaceTabKind, "session">,
+  ) => void;
+  onCreateBrowserTab: (sessionId: number) => void;
+  onCreateTerminalTab: (sessionId: number) => void;
+  onSelectWorkspaceTab: (
+    sessionId: number,
+    tab: SessionWorkspaceTabKind,
+  ) => void;
+  onAcknowledgeSessionAttention: (sessionId: number) => void;
+  projectId: number;
+  workspace: SessionWorkspaceEntry;
+}
+
+/**
+ * 单个 session 的 workspace 面板：渲染 `SessionWorkspaceTabs`（tab 栏 +
+ * AgentSessionView + terminal/browser tool tabs）。
+ *
+ * 用 `memo` 包裹，props 引用稳定时切 session 不重渲染——配合 `agents-session-main-stack`
+ * 中的 `hidden` 切换，实现整个 workspace（含消息流 + 终端）的实例池化，避免切
+ * session 时重挂载。
+ *
+ * 注意：tab 栏虽在 hidden 时不可交互，但仍保留 DOM。`onSelectWorkspaceTab` 等
+ * 回调接收 `sessionId` 参数，确保即便用户通过键盘等途径触发也作用于本 session，
+ * 而非当前选中 session。
+ */
+const SessionWorkspacePane = memo(function SessionWorkspacePane({
+  isCurrent,
+  onCloseWorkspaceTab,
+  onCreateBrowserTab,
+  onCreateTerminalTab,
+  onSelectWorkspaceTab,
+  onAcknowledgeSessionAttention,
+  projectId,
+  workspace,
+}: SessionWorkspacePaneProps) {
+  return (
+    <div
+      className="agents-terminal-host session-workspace-host"
+      hidden={!isCurrent}
+      onMouseDown={() => onAcknowledgeSessionAttention(workspace.sessionId)}
+    >
+      <SessionWorkspaceTabs
+        activeTab={workspace.activeWorkspaceTab}
+        changeTab={workspace.changeTab}
+        fileTab={workspace.fileTab}
+        sessionAgentType={workspace.agentType}
+        sessionContent={
+          <AgentSessionView
+            projectId={projectId}
+            sessionId={workspace.sessionId}
+            agentType={workspace.agentType}
+            sessionStatus={workspace.sessionStatus}
+            issueStatus={workspace.issueStatus}
+            isTurnRunning={workspace.isTurnRunning}
+          />
+        }
+        onCloseTab={(tab) => onCloseWorkspaceTab(workspace.sessionId, tab)}
+        onCreateBrowserTab={() => onCreateBrowserTab(workspace.sessionId)}
+        onCreateTerminalTab={() => onCreateTerminalTab(workspace.sessionId)}
+        onSelectTab={(tab) => onSelectWorkspaceTab(workspace.sessionId, tab)}
+        toolTabs={workspace.toolTabs}
+      />
+    </div>
+  );
+});

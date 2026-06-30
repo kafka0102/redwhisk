@@ -4903,6 +4903,42 @@ describe("AgentsActivity", () => {
     });
   });
 
+  it("keeps the inline terminal mounted when switching sessions and back", async () => {
+    const user = userEvent.setup();
+    createTemporaryProjectTerminalMock.mockResolvedValue({
+      sessionId: -11,
+      name: "redwhisk",
+      workingDir: "/tmp/redwhisk",
+      launchCommand: "/bin/zsh",
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        runningSession(301, "Existing issue"),
+        runningSession(302, "Other issue"),
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+    await addSessionTool(user, "Terminal");
+    const terminalBefore = await screen.findByTestId(
+      "inline-project-terminal:1:-11",
+    );
+
+    // 切到另一个 session 再切回：实例池模式下 terminal 的 DOM 节点应保持同一引用
+    // （未重挂载），避免 xterm 重建导致终端内容刷新 / 丢失。
+    await user.click(screen.getByRole("button", { name: /Other issue/ }));
+    await screen.findByRole("heading", { name: "#21 Other issue" });
+    await user.click(screen.getByRole("button", { name: /Existing issue/ }));
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+
+    const terminalAfter = screen.getByTestId("inline-project-terminal:1:-11");
+    expect(terminalAfter).toBe(terminalBefore);
+    // 切换过程中不应再次创建 terminal（实例复用，不重挂载）。
+    expect(createTemporaryProjectTerminalMock).toHaveBeenCalledTimes(1);
+  });
+
   it("limits session terminal tabs to ten", async () => {
     const user = userEvent.setup();
     createTemporaryProjectTerminalMock.mockImplementation(async () => {
