@@ -2,12 +2,23 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "*",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
             "command": "node .claude/auto-commit.js",
             "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/auto-commit.js",
+            "timeout": 30
           }
         ]
       }

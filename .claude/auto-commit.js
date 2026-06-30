@@ -1,363 +1,383 @@
 #!/usr/bin/env node
-// auto-commit-hook-version: 2.0.0
-// 智能自动提交 Hook - 遵循项目 Git 工作流规范
-//
-// 工作原理:
-// 1. 跟踪 Agent 的工具使用模式
-// 2. 检测任务完成信号（连续非写操作 + 时间间隔）
-// 3. 遵循项目 CLAUDE.md 中的 Git Commit Rule
-// 4. 只提交与当前任务直接相关的文件
-// 5. 自动生成符合规范的 commit message
+// auto-commit-hook-version: 3.0.0
+// Claude Code Hook：PostToolUse 记录写入文件，Stop 在主任务完成后提交改动。
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { execSync } = require('child_process');
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 
-// 配置参数
-const TASK_COMPLETE_SILENCE_MS = 8000; // 8秒无操作视为任务完成
-const STATE_FILE = path.join(os.tmpdir(), 'claude-auto-commit-state-v2.json');
-const MAX_FILES_PER_COMMIT = 30;
+const STATE_FILE = path.join(
+  os.tmpdir(),
+  "redwhisk-claude-auto-commit-state-v3.json",
+);
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
-// 工具分类
-const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'DeleteFile']);
-const READ_TOOLS = new Set(['Read', 'Glob', 'Grep']);
-const TASK_END_TOOLS = new Set(['SendMessage', 'TaskUpdate']); // 任务结束信号
+const DEFAULT_CONFIG = {
+  enabled: true,
+  maxFiles: 80,
+  commitDirtyFallback: true,
+  useChineseDescription: true,
+  excludePatterns: [
+    "node_modules/",
+    "dist/",
+    "build/",
+    ".git/",
+    ".DS_Store",
+    "*.log",
+    "tmp/",
+    "temp/",
+  ],
+};
 
-let input = '';
-const stdinTimeout = setTimeout(() => process.exit(0), 10000);
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => input += chunk);
-process.stdin.on('end', () => {
-  clearTimeout(stdinTimeout);
+main().catch(() => process.exit(0));
+
+async function main() {
+  const input = await readStdin();
+  if (!input.trim()) {
+    return;
+  }
+
+  let data;
   try {
-    const data = JSON.parse(input);
-    handleHook(data);
-  } catch (e) {
-    process.exit(0);
+    data = JSON.parse(input);
+  } catch {
+    return;
   }
-});
 
-function handleHook(data) {
-  const sessionId = data.session_id;
-  const toolName = data.tool_name;
   const cwd = data.cwd || process.cwd();
-  const hookEventName = data.hook_event_name;
-
-  // 只在 PostToolUse 事件处理
-  if (hookEventName !== 'PostToolUse') {
+  const repoRoot = getRepoRoot(cwd);
+  if (!repoRoot) {
     return;
   }
 
-  // 检查是否是 git 仓库
-  if (!isGitRepo(cwd)) {
+  const stateKey = `${repoRoot}:${data.session_id || "unknown-session"}`;
+  const state = loadState(stateKey);
+
+  if (data.hook_event_name === "PostToolUse") {
+    recordWriteFiles(data, cwd, repoRoot, state);
+    saveState(stateKey, state);
     return;
   }
 
-  // 加载或初始化状态
-  const state = loadState(sessionId);
+  if (data.hook_event_name === "Stop") {
+    await commitOnStop(repoRoot, stateKey, state);
+  }
+}
 
-  // 更新工具使用记录
-  state.toolHistory = state.toolHistory || [];
-  state.toolHistory.push({
-    tool: toolName,
-    timestamp: Date.now()
+function readStdin() {
+  return new Promise((resolve) => {
+    let input = "";
+    const timer = setTimeout(() => resolve(input), 5000);
+
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      input += chunk;
+    });
+    process.stdin.on("end", () => {
+      clearTimeout(timer);
+      resolve(input);
+    });
+    process.stdin.on("error", () => {
+      clearTimeout(timer);
+      resolve(input);
+    });
+  });
+}
+
+function runGit(repoRoot, args, options = {}) {
+  const result = spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: options.stdio || ["ignore", "pipe", "pipe"],
   });
 
-  // 只保留最近的工具记录
-  if (state.toolHistory.length > 20) {
-    state.toolHistory = state.toolHistory.slice(-20);
+  if (result.status !== 0 && !options.allowFailure) {
+    throw new Error(result.stderr || `git ${args.join(" ")} failed`);
   }
 
-  // 如果是写操作，标记有未提交改动
-  if (WRITE_TOOLS.has(toolName)) {
-    state.hasUncommittedChanges = true;
-    state.lastWriteTime = Date.now();
-  }
-
-  // 检查是否满足自动提交条件
-  if (shouldAutoCommit(state, toolName)) {
-    performAutoCommit(cwd, state, data);
-  }
-
-  // 保存状态
-  saveState(sessionId, state);
+  return result;
 }
 
-function isGitRepo(cwd) {
+function getRepoRoot(cwd) {
   try {
-    execSync('git rev-parse --git-dir', { cwd, stdio: 'ignore' });
-    return true;
-  } catch (e) {
-    return false;
+    const result = runGit(cwd, ["rev-parse", "--show-toplevel"]);
+    return result.stdout.trim();
+  } catch {
+    return null;
   }
 }
 
-function loadState(sessionId) {
+function loadState(stateKey) {
   try {
-    if (fs.existsSync(STATE_FILE)) {
-      const allStates = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      return allStates[sessionId] || {
-        toolHistory: [],
-        hasUncommittedChanges: false,
-        lastWriteTime: 0,
-        lastCommitHash: null
-      };
+    if (!fs.existsSync(STATE_FILE)) {
+      return createEmptyState();
     }
-  } catch (e) {
-    // 忽略错误
+
+    const allStates = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    return allStates[stateKey] || createEmptyState();
+  } catch {
+    return createEmptyState();
   }
-  return {
-    toolHistory: [],
-    hasUncommittedChanges: false,
-    lastWriteTime: 0,
-    lastCommitHash: null
-  };
 }
 
-function saveState(sessionId, state) {
+function saveState(stateKey, state) {
   try {
     let allStates = {};
     if (fs.existsSync(STATE_FILE)) {
-      allStates = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      allStates = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
     }
-    allStates[sessionId] = state;
+
+    allStates[stateKey] = state;
     fs.writeFileSync(STATE_FILE, JSON.stringify(allStates, null, 2));
-  } catch (e) {
-    // 忽略错误
+  } catch {
+    // Hook 不能因为状态文件失败影响 Claude Code 主流程。
   }
 }
 
-function shouldAutoCommit(state, currentTool) {
-  // 如果没有未提交的改动，不提交
-  if (!state.hasUncommittedChanges) {
-    return false;
-  }
-
-  const now = Date.now();
-  const timeSinceLastWrite = now - state.lastWriteTime;
-
-  // 条件1: 距离上次写操作足够长时间
-  const hasEnoughSilence = timeSinceLastWrite >= TASK_COMPLETE_SILENCE_MS;
-
-  // 条件2: 最近的工具是非写操作（表示 Agent 在总结/完成任务）
-  const recentTools = state.toolHistory.slice(-3).map(t => t.tool);
-  const isInReadPhase = recentTools.every(t => !WRITE_TOOLS.has(t));
-
-  // 条件3: 有任务结束信号工具
-  const hasTaskEndSignal = recentTools.some(t => TASK_END_TOOLS.has(t));
-
-  return hasEnoughSilence && isInReadPhase;
-}
-
-function getGitStatus(cwd) {
+function clearState(stateKey) {
   try {
-    const output = execSync('git status --porcelain', { cwd, encoding: 'utf8' });
-    const lines = output.trim().split('\n').filter(Boolean);
-
-    const result = {
-      modified: [],      // 已修改但未暂存
-      untracked: [],     // 未跟踪
-      staged: [],        // 已暂存
-      deleted: []        // 已删除
-    };
-
-    for (const line of lines) {
-      const status = line.substring(0, 2);
-      const file = line.substring(3);
-
-      if (status === '??') {
-        result.untracked.push(file);
-      } else if (status === ' D' || status === 'D ') {
-        result.deleted.push(file);
-      } else if (status[0] !== ' ') {
-        result.staged.push(file);
-      } else {
-        result.modified.push(file);
-      }
-    }
-
-    return result;
-  } catch (e) {
-    return { modified: [], untracked: [], staged: [], deleted: [] };
-  }
-}
-
-function performAutoCommit(cwd, state, data) {
-  try {
-    // 获取 git 状态
-    const gitStatus = getGitStatus(cwd);
-
-    // 收集所有待提交的文件
-    const allChangedFiles = [
-      ...gitStatus.modified,
-      ...gitStatus.untracked,
-      ...gitStatus.deleted
-    ];
-
-    if (allChangedFiles.length === 0) {
-      state.hasUncommittedChanges = false;
+    if (!fs.existsSync(STATE_FILE)) {
       return;
     }
 
-    // 加载项目配置
-    const projectConfig = loadProjectConfig(cwd);
-
-    // 过滤文件（排除不需要提交的）
-    const filesToCommit = filterFiles(allChangedFiles, projectConfig);
-
-    if (filesToCommit.length === 0) {
-      state.hasUncommittedChanges = false;
-      return;
-    }
-
-    // 生成 commit message
-    const commitMessage = generateCommitMessage(filesToCommit, projectConfig);
-
-    // 执行 git add
-    for (const file of filesToCommit) {
-      try {
-        execSync(`git add "${file}"`, { cwd, stdio: 'ignore' });
-      } catch (e) {
-        // 单个文件失败不影响其他文件
-      }
-    }
-
-    // 执行 git commit
-    execSync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd, stdio: 'ignore' });
-
-    // 获取新的 commit hash
-    const commitHash = execSync('git rev-parse HEAD', { cwd, encoding: 'utf8' }).trim();
-
-    // 更新状态
-    state.hasUncommittedChanges = false;
-    state.lastCommitHash = commitHash;
-    state.lastCommitTime = Date.now();
-
-    // 返回成功信息给 Agent
-    const output = {
-      hookSpecificOutput: {
-        additionalContext: `✅ 自动提交成功！\n\nCommit: ${commitHash}\nMessage: ${commitMessage}\n\n已提交 ${filesToCommit.length} 个文件：\n${filesToCommit.slice(0, 10).map(f => '  - ' + f).join('\n')}${filesToCommit.length > 10 ? `\n  ... 还有 ${filesToCommit.length - 10} 个文件` : ''}`
-      }
-    };
-    process.stdout.write(JSON.stringify(output));
-  } catch (e) {
-    // 提交失败，重置状态避免重复尝试
-    state.hasUncommittedChanges = false;
+    const allStates = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    delete allStates[stateKey];
+    fs.writeFileSync(STATE_FILE, JSON.stringify(allStates, null, 2));
+  } catch {
+    // 忽略清理失败。
   }
 }
 
-function loadProjectConfig(cwd) {
-  // 尝试读取项目配置文件
+function createEmptyState() {
+  return {
+    files: [],
+    lastWriteAt: null,
+  };
+}
+
+function recordWriteFiles(data, cwd, repoRoot, state) {
+  if (!WRITE_TOOLS.has(data.tool_name)) {
+    return;
+  }
+
+  const files = extractToolFiles(data.tool_name, data.tool_input || {});
+  const currentFiles = new Set(state.files || []);
+
+  for (const file of files) {
+    const repoRelativePath = toRepoRelativePath(file, cwd, repoRoot);
+    if (repoRelativePath) {
+      currentFiles.add(repoRelativePath);
+    }
+  }
+
+  state.files = Array.from(currentFiles).sort();
+  state.lastWriteAt = new Date().toISOString();
+}
+
+function extractToolFiles(toolName, toolInput) {
+  if (toolName === "NotebookEdit") {
+    return [toolInput.notebook_path].filter(Boolean);
+  }
+
+  return [toolInput.file_path].filter(Boolean);
+}
+
+function toRepoRelativePath(filePath, cwd, repoRoot) {
+  const absolutePath = path.isAbsolute(filePath)
+    ? path.normalize(filePath)
+    : path.resolve(cwd, filePath);
+  const relativePath = path.relative(repoRoot, absolutePath);
+
+  if (
+    !relativePath ||
+    relativePath.startsWith("..") ||
+    path.isAbsolute(relativePath)
+  ) {
+    return null;
+  }
+
+  return normalizeGitPath(relativePath);
+}
+
+async function commitOnStop(repoRoot, stateKey, state) {
+  const config = loadProjectConfig(repoRoot);
+  if (!config.enabled) {
+    return;
+  }
+
+  const statusEntries = getGitStatus(repoRoot);
+  if (statusEntries.length === 0) {
+    clearState(stateKey);
+    return;
+  }
+
+  const dirtyFiles = new Set(statusEntries.map((entry) => entry.path));
+  const recordedDirtyFiles = (state.files || []).filter((file) =>
+    dirtyFiles.has(file),
+  );
+  const candidateFiles =
+    recordedDirtyFiles.length > 0 || !config.commitDirtyFallback
+      ? recordedDirtyFiles
+      : Array.from(dirtyFiles);
+
+  const filesToCommit = filterFiles(candidateFiles, config);
+  if (filesToCommit.length === 0) {
+    return;
+  }
+
+  if (config.maxFiles > 0 && filesToCommit.length > config.maxFiles) {
+    writeHookLog(
+      repoRoot,
+      `Skip auto commit: ${filesToCommit.length} files exceed maxFiles=${config.maxFiles}.`,
+    );
+    return;
+  }
+
+  runGit(repoRoot, ["add", "--", ...filesToCommit]);
+
+  const diffResult = runGit(
+    repoRoot,
+    ["diff", "--cached", "--quiet", "--", ...filesToCommit],
+    {
+      allowFailure: true,
+    },
+  );
+  if (diffResult.status === 0) {
+    return;
+  }
+
+  const commitMessage = generateCommitMessage(filesToCommit, config);
+  runGit(repoRoot, ["commit", "-m", commitMessage, "--", ...filesToCommit], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+
+  const commitHash = runGit(repoRoot, [
+    "rev-parse",
+    "--short",
+    "HEAD",
+  ]).stdout.trim();
+  writeHookLog(`Auto commit ${commitHash}: ${commitMessage}`);
+  clearState(stateKey);
+}
+
+function loadProjectConfig(repoRoot) {
   const configPaths = [
-    path.join(cwd, '.claude', 'auto-commit.json'),
-    path.join(cwd, '.auto-commit.json')
+    path.join(repoRoot, ".claude", "auto-commit.json"),
+    path.join(repoRoot, ".auto-commit.json"),
   ];
 
   for (const configPath of configPaths) {
-    if (fs.existsSync(configPath)) {
-      try {
-        return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      } catch (e) {
-        continue;
+    try {
+      if (fs.existsSync(configPath)) {
+        return {
+          ...DEFAULT_CONFIG,
+          ...JSON.parse(fs.readFileSync(configPath, "utf8")),
+        };
       }
+    } catch {
+      // 配置损坏时回退默认值，避免 Hook 直接失效。
     }
   }
 
-  // 默认配置（遵循 RedWhisk 项目规范）
-  return {
-    maxFiles: MAX_FILES_PER_COMMIT,
-    excludePatterns: [
-      'node_modules/',
-      'dist/',
-      'build/',
-      '.git/',
-      '.DS_Store',
-      '*.log',
-      'tmp/',
-      'temp/'
-    ],
-    // 按照 Git 工作流规范，使用中文描述
-    useChineseDescription: true
-  };
+  return DEFAULT_CONFIG;
+}
+
+function getGitStatus(repoRoot) {
+  const output = runGit(repoRoot, ["status", "--porcelain=v1", "-z"]).stdout;
+  if (!output) {
+    return [];
+  }
+
+  const parts = output.split("\0").filter(Boolean);
+  const entries = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const item = parts[index];
+    const status = item.slice(0, 2);
+    const filePath = normalizeGitPath(item.slice(3));
+
+    if (status[0] === "R" || status[0] === "C") {
+      entries.push({ status, path: filePath });
+      index += 1;
+    } else {
+      entries.push({ status, path: filePath });
+    }
+  }
+
+  return entries;
 }
 
 function filterFiles(files, config) {
-  const excludePatterns = config.excludePatterns || [];
-  const maxFiles = config.maxFiles || MAX_FILES_PER_COMMIT;
+  const seen = new Set();
+  const result = [];
 
-  return files.filter(file => {
-    for (const pattern of excludePatterns) {
-      if (file.includes(pattern)) {
-        return false;
-      }
+  for (const file of files) {
+    const normalizedFile = normalizeGitPath(file);
+    if (
+      seen.has(normalizedFile) ||
+      isExcluded(normalizedFile, config.excludePatterns || [])
+    ) {
+      continue;
     }
-    return true;
-  }).slice(0, maxFiles);
+
+    seen.add(normalizedFile);
+    result.push(normalizedFile);
+  }
+
+  return result.sort();
+}
+
+function isExcluded(file, excludePatterns) {
+  return excludePatterns.some((pattern) => matchesPattern(file, pattern));
+}
+
+function matchesPattern(file, pattern) {
+  const normalizedPattern = normalizeGitPath(pattern);
+
+  if (normalizedPattern.endsWith("/")) {
+    return file.startsWith(normalizedPattern);
+  }
+
+  if (normalizedPattern.startsWith("*.")) {
+    return file.endsWith(normalizedPattern.slice(1));
+  }
+
+  return file === normalizedPattern || file.startsWith(`${normalizedPattern}/`);
 }
 
 function generateCommitMessage(files, config) {
-  // 分析文件类型
-  const stats = {
-    hasTs: false,
-    hasTsx: false,
-    hasJs: false,
-    hasJsx: false,
-    hasDocs: false,
-    hasTests: false,
-    hasConfig: false,
-    hasStyles: false
-  };
-
-  for (const file of files) {
-    if (file.endsWith('.ts')) stats.hasTs = true;
-    else if (file.endsWith('.tsx')) stats.hasTsx = true;
-    else if (file.endsWith('.js')) stats.hasJs = true;
-    else if (file.endsWith('.jsx')) stats.hasJsx = true;
-    else if (file.endsWith('.md') || file.includes('docs/')) stats.hasDocs = true;
-    else if (file.includes('test') || file.includes('spec')) stats.hasTests = true;
-    else if (file.endsWith('.json') || file.endsWith('.config.')) stats.hasConfig = true;
-    else if (file.endsWith('.css') || file.endsWith('.scss') || file.endsWith('.less')) stats.hasStyles = true;
+  if (config.commitMessage) {
+    return config.commitMessage;
   }
 
-  // 确定 commit type
-  let type = 'chore';
-  let description = '自动提交代码改动';
-
-  if (stats.hasTests) {
-    type = 'test';
-    description = '更新测试文件';
-  } else if (stats.hasDocs) {
-    type = 'docs';
-    description = '更新文档';
-  } else if (stats.hasTs || stats.hasTsx || stats.hasJs || stats.hasJsx) {
-    // 进一步区分是 fix、feat 还是 refactor
-    const hasFeatureFiles = files.some(f =>
-      f.includes('feature') || f.includes('component') || f.includes('page')
-    );
-    if (hasFeatureFiles) {
-      type = 'feat';
-      description = '实现新功能或更新组件';
-    } else {
-      type = 'fix';
-      description = '修复问题或优化代码';
-    }
-  } else if (stats.hasStyles) {
-    type = 'style';
-    description = '更新样式文件';
-  } else if (stats.hasConfig) {
-    type = 'chore';
-    description = '更新配置文件';
+  if (!config.useChineseDescription) {
+    return "chore: auto commit Claude task changes";
   }
 
-  // 如果文件数量少，可以更具体
-  if (files.length === 1) {
-    const fileName = path.basename(files[0]);
-    description = `更新 ${fileName}`;
-  } else if (files.length <= 3) {
-    const names = files.slice(0, 2).map(f => path.basename(f));
-    description = `更新 ${names.join('、')} 等 ${files.length} 个文件`;
+  if (
+    files.every((file) => file.startsWith(".claude/") || file === "CLAUDE.md")
+  ) {
+    return "chore: 调整 Claude 自动提交配置";
   }
 
-  return `${type}: ${description}`;
+  if (files.every((file) => file.endsWith(".md"))) {
+    return "docs: 自动提交任务文档改动";
+  }
+
+  return "chore: 自动提交 Claude 任务改动";
+}
+
+function writeHookLog(message) {
+  try {
+    const logPath = path.join(os.tmpdir(), "redwhisk-claude-auto-commit.log");
+    const line = `${new Date().toISOString()} ${message}\n`;
+    fs.appendFileSync(logPath, line);
+  } catch {
+    // 日志失败不影响主流程。
+  }
+}
+
+function normalizeGitPath(filePath) {
+  return filePath.replaceAll(path.sep, "/");
 }
