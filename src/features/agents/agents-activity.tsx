@@ -135,7 +135,8 @@ export function AgentsActivity({
   const [browserTabsBySessionId, setBrowserTabsBySessionId] = useState<
     Record<number, SessionBrowserToolTab[]>
   >({});
-  const [sessions, setSessions] = useState<AgentSessionListItem[]>([]);
+  // 分离allSessions和visibleSessions，优化性能
+  const [allSessions, setAllSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     activeSessionId,
   );
@@ -156,6 +157,12 @@ export function AgentsActivity({
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
   const completedIssueIdsRef = useRef<Set<number>>(new Set());
   const closedSessionIdsRef = useRef<Set<number>>(new Set());
+
+  // 只在需要时计算visibleSessions
+  const visibleSessions = useMemo(
+    () => allSessions.filter((session) => getSessionIssueGroup(session) !== null),
+    [allSessions],
+  );
 
   const applySessionListOverlays = useCallback(
     (nextSessions: AgentSessionListItem[]) => {
@@ -208,7 +215,7 @@ export function AgentsActivity({
           return;
         }
 
-        setSessions(applySessionListOverlays(response.sessions));
+        setAllSessions(applySessionListOverlays(response.sessions));
       } catch (error) {
         if (!isMounted) {
           return;
@@ -338,11 +345,6 @@ export function AgentsActivity({
     };
   }, [isNewSessionMenuOpen]);
 
-  const visibleSessions = useMemo(
-    () => sessions.filter((session) => getSessionIssueGroup(session) !== null),
-    [sessions],
-  );
-
   const currentSessionId =
     (visibleSessions.some((session) => session.sessionId === selectedSessionId)
       ? selectedSessionId
@@ -459,12 +461,12 @@ export function AgentsActivity({
   const refreshSessions = useCallback(async () => {
     const response = await listAgentSessions(projectId);
     const nextSessions = applySessionListOverlays(response.sessions);
-    setSessions(nextSessions);
+    setAllSessions(nextSessions);
     return nextSessions;
   }, [applySessionListOverlays, projectId]);
 
   async function acknowledgeSessionAttention(sessionId: number) {
-    const targetSession = sessions.find(
+    const targetSession = allSessions.find(
       (session) => session.sessionId === sessionId,
     );
     if (targetSession == null || targetSession.status !== "running") {
@@ -486,7 +488,7 @@ export function AgentsActivity({
         });
         const response = await listAgentSessions(projectId);
         const nextSessions = applySessionListOverlays(response.sessions);
-        setSessions(nextSessions);
+        setAllSessions(nextSessions);
       } catch (error) {
         showCommandErrorAlert(error);
       } finally {
@@ -517,7 +519,7 @@ export function AgentsActivity({
       });
       reviewedIssueId = reviewedIssue.id;
       reviewedIssueIdsRef.current.add(reviewedIssue.id);
-      setSessions((currentSessions) =>
+      setAllSessions((currentSessions) =>
         currentSessions.map((session) =>
           session.issueId === reviewedIssue.id
             ? {
@@ -572,7 +574,7 @@ export function AgentsActivity({
   ) {
     completedIssueIdsRef.current.add(completedIssue.id);
     closedSessionIdsRef.current.add(targetSessionId);
-    setSessions((currentSessions) =>
+    setAllSessions((currentSessions) =>
       currentSessions.map((session) =>
         session.issueId === completedIssue.id
           ? {
@@ -738,12 +740,15 @@ export function AgentsActivity({
     }
 
     const currentSession =
-      sessions.find(
-        (session) => session.sessionId === selectedSession.sessionId,
+      allSessions.find(
+        (session: AgentSessionListItem) => session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
     let nextSession = currentSession;
 
-    if (currentSession.issueStatus === "running") {
+    // 如果 session 已关闭，直接完成，不需要先标记为 review
+    const isSessionClosed = currentSession.status === "closed";
+
+    if (currentSession.issueStatus === "running" && !isSessionClosed) {
       const refreshedSessions = await markLinkedIssueReview(linkedIssue);
       if (!refreshedSessions) {
         return;
@@ -754,7 +759,7 @@ export function AgentsActivity({
       ) ?? { ...currentSession, issueStatus: "review" as const };
     }
 
-    if (projectCompletionPolicy === "manual") {
+    if (projectCompletionPolicy === "manual" || isSessionClosed) {
       await completeLinkedIssueManual(linkedIssue, nextSession);
       return;
     }
@@ -791,8 +796,8 @@ export function AgentsActivity({
     }
 
     const currentSession =
-      sessions.find(
-        (session) => session.sessionId === selectedSession.sessionId,
+      allSessions.find(
+        (session: AgentSessionListItem) => session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
 
     await completeLinkedIssueManual(linkedIssue, currentSession, {
@@ -828,7 +833,7 @@ export function AgentsActivity({
         showIssueMarkedDoneToast();
         setAgentCommitPreview(null);
         const response = await listAgentSessions(projectId);
-        setSessions(applySessionListOverlays(response.sessions));
+        setAllSessions(applySessionListOverlays(response.sessions));
       } else {
         setAgentCommitPreview(null);
         showAlert({ message: completionResult.message, type: "error" });
@@ -1007,7 +1012,7 @@ export function AgentsActivity({
         ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
           remainingState,
       );
-      setSessions((currentSessions) =>
+      setAllSessions((currentSessions) =>
         currentSessions.filter(
           (session) => session.sessionId !== deletedSessionId,
         ),
@@ -1046,7 +1051,7 @@ export function AgentsActivity({
         sessionId,
         title,
       });
-      setSessions((currentSessions) =>
+      setAllSessions((currentSessions) =>
         currentSessions.map((session) =>
           session.sessionId === result.sessionId
             ? {
@@ -1175,7 +1180,7 @@ export function AgentsActivity({
     result: StartStructuredAgentSessionResult,
   ) {
     const response = await listAgentSessions(projectId);
-    setSessions(applySessionListOverlays(response.sessions));
+    setAllSessions(applySessionListOverlays(response.sessions));
     setIsSessionSidePanelOpen(false);
     setSelectedSessionId(result.sessionId);
     onSelectSession?.(result.sessionId);

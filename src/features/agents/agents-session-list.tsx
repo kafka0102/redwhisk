@@ -1,5 +1,5 @@
 import { LoaderCircle, Plus } from "lucide-react";
-import type { RefObject } from "react";
+import { memo, useMemo, type RefObject } from "react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
 import type { AgentType } from "../settings/settings-commands";
@@ -141,78 +141,120 @@ interface SessionRowsProps {
   sessions: AgentSessionListItem[];
 }
 
+interface SessionRowProps {
+  session: AgentSessionListItem;
+  messages: ReturnType<typeof useI18n>["messages"];
+  onSelect: (sessionId: number) => void;
+  selectedSessionId: number | null;
+}
+
+const SessionRow = memo(function SessionRow({
+  session,
+  messages,
+  onSelect,
+  selectedSessionId,
+}: SessionRowProps) {
+  const outputLine = formatSessionOutputLine(session.latestOutput);
+  const statusTone = getSessionStatusTone(session);
+  const statusLabel = formatSessionStatusLabel(messages, session);
+  const agentLabel = formatAgentTypeLabel(session.agentType);
+
+  return (
+    <div role="listitem">
+      <button
+        aria-pressed={selectedSessionId === session.sessionId}
+        className="agents-session-row"
+        type="button"
+        onClick={() => onSelect(session.sessionId)}
+      >
+        <span className="agents-session-row__header">
+          {shouldShowRunningSpinner(session) ? (
+            <LoaderCircle
+              aria-label={messages.agentsFeature.sessionRunning}
+              className="agents-session-row__running-icon"
+              size={12}
+              strokeWidth={2}
+            />
+          ) : null}
+          <span className="agents-session-row__title">
+            {formatSessionTitle(session)}
+          </span>
+        </span>
+        <span className="agents-session-row__output">
+          <span
+            aria-label={messages.agentsFeature.sessionStatus(
+              statusLabel,
+            )}
+            className={buildSessionStatusDotClassName(statusTone)}
+          />
+          <span className="agents-session-row__latest-output">
+            {outputLine}
+          </span>
+        </span>
+        <span className="agents-session-row__agent">
+          <img
+            alt={`Agent 类型：${agentLabel}`}
+            className="agents-session-row__agent-logo"
+            src={getAgentLogoSrc(session.agentType)}
+          />
+          {shouldShowSessionRowStatus(session) ? (
+            <span className="agents-session-row__meta-status">
+              {statusLabel}
+            </span>
+          ) : null}
+          <span className="sr-only">{`，${statusLabel}`}</span>
+        </span>
+      </button>
+    </div>
+  );
+});
+
 function SessionRows({
   messages,
   onSelect,
   selectedSessionId,
   sessions,
 }: SessionRowsProps) {
+  // 限制同时渲染的session数量，优化性能
+  const displaySessions = useMemo(() => {
+    if (sessions.length <= 20) {
+      return sessions;
+    }
+    // 优先显示运行中的session和有attention请求的session
+    const prioritySessions = sessions.filter(
+      (s) => s.status === "running" || s.attention === "requested",
+    );
+    const otherSessions = sessions.filter(
+      (s) => s.status !== "running" && s.attention !== "requested",
+    );
+    return [...prioritySessions, ...otherSessions].slice(0, 20);
+  }, [sessions]);
+
   return (
     <div
       aria-label={messages.agentsFeature.agentSessions}
       className="agents-session-list"
       role="list"
     >
-      {sessions.length === 0 ? (
+      {displaySessions.length === 0 ? (
         <p className="agents-session-list__empty">
           {messages.agentsFeature.noSessions}
         </p>
       ) : (
-        sessions.map((session) => {
-          const outputLine = formatSessionOutputLine(session.latestOutput);
-          const statusTone = getSessionStatusTone(session);
-          const statusLabel = formatSessionStatusLabel(messages, session);
-          const agentLabel = formatAgentTypeLabel(session.agentType);
-
-          return (
-            <div key={session.sessionId} role="listitem">
-              <button
-                aria-pressed={selectedSessionId === session.sessionId}
-                className="agents-session-row"
-                type="button"
-                onClick={() => onSelect(session.sessionId)}
-              >
-                <span className="agents-session-row__header">
-                  {shouldShowRunningSpinner(session) ? (
-                    <LoaderCircle
-                      aria-label={messages.agentsFeature.sessionRunning}
-                      className="agents-session-row__running-icon"
-                      size={12}
-                      strokeWidth={2}
-                    />
-                  ) : null}
-                  <span className="agents-session-row__title">
-                    {formatSessionTitle(session)}
-                  </span>
-                </span>
-                <span className="agents-session-row__output">
-                  <span
-                    aria-label={messages.agentsFeature.sessionStatus(
-                      statusLabel,
-                    )}
-                    className={buildSessionStatusDotClassName(statusTone)}
-                  />
-                  <span className="agents-session-row__latest-output">
-                    {outputLine}
-                  </span>
-                </span>
-                <span className="agents-session-row__agent">
-                  <img
-                    alt={`Agent 类型：${agentLabel}`}
-                    className="agents-session-row__agent-logo"
-                    src={getAgentLogoSrc(session.agentType)}
-                  />
-                  {shouldShowSessionRowStatus(session) ? (
-                    <span className="agents-session-row__meta-status">
-                      {statusLabel}
-                    </span>
-                  ) : null}
-                  <span className="sr-only">{`，${statusLabel}`}</span>
-                </span>
-              </button>
-            </div>
-          );
-        })
+        displaySessions.map((session) => (
+          <SessionRow
+            key={session.sessionId}
+            session={session}
+            messages={messages}
+            onSelect={onSelect}
+            selectedSessionId={selectedSessionId}
+          />
+        ))
+      )}
+      {sessions.length > 20 && (
+        <p className="agents-session-list__more">
+          还有 {sessions.length - 20} 个会话
+        </p>
       )}
     </div>
   );
