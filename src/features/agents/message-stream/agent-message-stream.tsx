@@ -10,7 +10,7 @@
 //   统一订阅后下传，避免双订阅。
 
 import { LoaderCircle } from "lucide-react";
-import { useEffect, useRef, type UIEvent } from "react";
+import { memo, useEffect, useRef, type UIEvent } from "react";
 
 import type { AgentTimelineItem } from "../agent-stream-types";
 import { useI18n } from "../../../shared/i18n/i18n";
@@ -48,8 +48,11 @@ interface AgentMessageStreamViewProps {
  *
  * 供 `AgentSessionView` 等父组件统一调 `useAgentMessageStream` 后下传，
  * 避免消息流与 composer 各自订阅形成双数据源。
+ *
+ * memo 化：实例池模式下 state 引用稳定（reducer 不 dispatch 时不变），
+ * 父组件因 sessions 列表刷新重渲染时跳过本子树。
  */
-export function AgentMessageStreamView({
+export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   state,
   isTurnRunning = false,
 }: AgentMessageStreamViewProps) {
@@ -132,7 +135,7 @@ export function AgentMessageStreamView({
       </div>
     </div>
   );
-}
+});
 
 /** 生成最后一条 entry 的内容签名，用于驱动自动滚动 effect 依赖。 */
 function signatureOf(entry: MessageStreamEntry): string {
