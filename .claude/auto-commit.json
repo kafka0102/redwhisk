@@ -1,6 +1,7 @@
 {
   "enabled": true,
-  "maxFiles": 30,
+  "maxFiles": 80,
+  "commitDirtyFallback": true,
   "useChineseDescription": true,
   "excludePatterns": [
     "node_modules/",
@@ -10,8 +11,6 @@
     ".DS_Store",
     "*.log",
     "tmp/",
-    "temp/",
-    ".claude/",
-    ".planning/"
+    "temp/"
   ]
 }

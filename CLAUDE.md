@@ -34,12 +34,12 @@ Agent 在执行任何任务前，**必须**先确认本次任务涉及哪些规�
 
 ## Git Commit Rule
 
-- Git 自动提交已通过 Hook 机制实现，Agent 完成任务后会自动检测并提交改动。
+- Git 自动提交已通过 Claude Code Hook 机制实现：`PostToolUse` 记录写入文件，`Stop` 在主响应完成后执行提交。
 - 自动提交会遵循项目的 [Git 工作流规范](./docs/standards/git-workflow.md)。
 - 自动提交只包含与当前任务直接相关的文件，不会混入无关改动。
 - 对代码改动，Agent 仍需完成必要的验证（lint、typecheck、test 等）后再结束任务。
 - 若因环境、耗时或外部依赖限制无法运行某项验证，必须在最终说明中明确写出”未运行什么、为什么没运行、风险在哪”。
-- Hook 配置位于 `.claude/auto-commit.json`，可根据需要调整。
+- Hook 行为配置位于 `.claude/auto-commit.json`，Hook 事件配置位于 `.claude/settings.json`。
 
 ## Language Rule
 
