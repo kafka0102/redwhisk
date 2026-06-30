@@ -14,7 +14,7 @@
 // - L188：composer 是 Codex Session View 底部固定输入框
 // - L214：上下文窗口用量来自 usage_updated 事件 → state.usage
 
-import { useCallback, useMemo } from "react";
+import { useCallback, memo, useMemo } from "react";
 
 import { AgentComposer } from "./composer/agent-composer";
 import { getAgentCapabilities } from "./agent-capabilities";
@@ -38,7 +38,11 @@ interface AgentSessionViewProps {
   isTurnRunning?: boolean;
 }
 
-export function AgentSessionView({
+// memo 化：props 均为 primitive（projectId/sessionId/agentType/sessionStatus/
+// issueStatus/isTurnRunning）。实例池模式下 sessions 列表刷新会传入新 session
+// 对象引用，但字段值不变时 memo 浅比较可跳过重渲染，避免常驻实例全量重跑
+// 消息流 reconciliation（这是切回大 session 极慢的根因）。
+export const AgentSessionView = memo(function AgentSessionView({
   projectId,
   sessionId,
   agentType,
@@ -110,4 +114,4 @@ export function AgentSessionView({
       )}
     </div>
   );
-}
+});

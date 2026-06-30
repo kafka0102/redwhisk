@@ -37,7 +37,11 @@ interface AgentMessageCardsProps {
 
 const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
 
-export function AgentMessageCards({ entries }: AgentMessageCardsProps) {
+// memo 化：entries 引用不变时跳过整棵卡片树的 map + reconciliation。
+// 实例池模式下 sessions 列表刷新不再触发未变 session 的卡片重渲染。
+export const AgentMessageCards = memo(function AgentMessageCards({
+  entries,
+}: AgentMessageCardsProps) {
   return (
     <>
       {entries.map((entry) => (
@@ -45,7 +49,7 @@ export function AgentMessageCards({ entries }: AgentMessageCardsProps) {
       ))}
     </>
   );
-}
+});
 
 const MessageCard = memo(function MessageCard({
   entry,
