@@ -11,11 +11,29 @@
 -- agent 关联整列删除；workflow_skill 语义从"agent default_skill 中的名"
 -- 改为"saved_agent_skills.name"，旧值不可直接映射，置 NULL 由用户重选。
 UPDATE project_labels SET workflow_skill = NULL WHERE workflow_skill IS NOT NULL;
-ALTER TABLE project_labels DROP COLUMN agent_profile_id;
+-- SQLite 不允许 DROP COLUMN 被 FOREIGN KEY 引用的列，走表重建。
+CREATE TABLE project_labels_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('global', 'project')),
+  project_id INTEGER,
+  color TEXT NOT NULL,
+  workflow_skill TEXT,
+  del INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+INSERT INTO project_labels_new (id, name, scope, project_id, color, workflow_skill, del, created_at, updated_at)
+SELECT id, name, scope, project_id, color, workflow_skill, del, created_at, updated_at FROM project_labels;
+DROP TABLE project_labels;
+ALTER TABLE project_labels_new RENAME TO project_labels;
 ```
 
 - 不删 `agent_profiles.default_skill`（Non-goals）。
-- `agent_profile_id` 是 FK，DROP COLUMN 前无需单独处理外键（SQLite 允许直接 drop）。
+- `agent_profile_id` 是 FK（`REFERENCES agent_profiles(id)`），SQLite 不允许 `ALTER TABLE DROP COLUMN` 删除被 FK 引用的列，故采用 SQLite 官方推荐的表重建流程（CREATE new → INSERT copy → DROP old → RENAME）。
+- 0023 未在 `project_labels` 上建任何索引，无其他表 FK 引用 `project_labels`，故 `DROP TABLE` 无副作用。
+- 迁移在 `BEGIN IMMEDIATE` 事务内执行，重建原子可回滚。
 
 ## 2. 后端类型与仓储
 
