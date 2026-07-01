@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -12,12 +12,12 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import { toCommandError } from "../../shared/commands/command-error";
 import {
+  listSavedAgentSkills,
   saveProjectLabel,
-  type AgentProfileRecord,
   type ProjectLabelRecord,
   type ProjectLabelScope,
+  type SavedAgentSkillRecord,
 } from "./settings-commands";
-import { parseDefaultSkills } from "./agent-profile-skills";
 
 const PRESET_COLORS = [
   "#E11D48",
@@ -37,7 +37,6 @@ interface ProjectLabelFormProps {
   mode: "create" | "edit";
   onCancel: () => void;
   onSaved: (label: ProjectLabelRecord) => void;
-  profiles: AgentProfileRecord[];
   projectId: number;
 }
 
@@ -46,7 +45,6 @@ export function ProjectLabelForm({
   mode,
   onCancel,
   onSaved,
-  profiles,
   projectId,
 }: ProjectLabelFormProps) {
   const { messages } = useI18n();
@@ -55,39 +53,41 @@ export function ProjectLabelForm({
     label?.scope ?? "global",
   );
   const [color, setColor] = useState(label?.color ?? PRESET_COLORS[0]);
-  const [agentProfileId, setAgentProfileId] = useState<string>(
-    label?.agentProfileId ? String(label.agentProfileId) : "none",
-  );
   const [workflowSkill, setWorkflowSkill] = useState(
     label?.workflowSkill ?? "",
   );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [savedSkills, setSavedSkills] = useState<SavedAgentSkillRecord[]>([]);
 
-  const selectableProfiles = useMemo(() => {
-    return profiles.filter((profile) => {
-      if (scope === "global") {
-        return profile.scope === "global";
-      }
-      return profile.scope === "global" || profile.projectId === projectId;
+  useEffect(() => {
+    let mounted = true;
+    void Promise.all([
+      listSavedAgentSkills({ scope: "project", projectId }),
+      listSavedAgentSkills({ scope: "global", projectId: null }),
+    ])
+      .then(([projectRes, globalRes]) => {
+        if (!mounted) return;
+        setSavedSkills([...projectRes.skills, ...globalRes.skills]);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSavedSkills([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [projectId]);
+
+  const workflowSkillOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return savedSkills.filter((skill) => {
+      if (seen.has(skill.name)) return false;
+      seen.add(skill.name);
+      return true;
     });
-  }, [profiles, projectId, scope]);
-
-  const selectedProfile =
-    selectableProfiles.find(
-      (profile) => String(profile.id) === agentProfileId,
-    ) ?? null;
-  const hasSelectedAgent = selectedProfile !== null;
-  const availableWorkflowSkills = useMemo(
-    () =>
-      selectedProfile ? parseDefaultSkills(selectedProfile.defaultSkill) : [],
-    [selectedProfile],
-  );
-  const hasWorkflowSkills = availableWorkflowSkills.length > 0;
-  const selectedWorkflowSkill = availableWorkflowSkills.includes(workflowSkill)
-    ? workflowSkill
-    : "";
+  }, [savedSkills]);
 
   function validateName(nextName: string) {
     const trimmed = nextName.trim();
@@ -118,13 +118,7 @@ export function ProjectLabelForm({
         scope,
         projectId: scope === "project" ? projectId : null,
         color,
-        agentProfileId: selectedProfile?.id ?? null,
-        workflowSkill:
-          hasSelectedAgent &&
-          hasWorkflowSkills &&
-          selectedWorkflowSkill.trim().length > 0
-            ? selectedWorkflowSkill
-            : null,
+        workflowSkill: workflowSkill.trim().length > 0 ? workflowSkill : null,
       });
       onSaved(saved);
     } catch (error: unknown) {
@@ -208,26 +202,7 @@ export function ProjectLabelForm({
               ]}
               value={scope}
               onValueChange={(value) => {
-                const nextScope = value as ProjectLabelScope;
-                setScope(nextScope);
-                if (
-                  agentProfileId !== "none" &&
-                  !profiles.some((profile) => {
-                    if (String(profile.id) !== agentProfileId) {
-                      return false;
-                    }
-                    if (nextScope === "global") {
-                      return profile.scope === "global";
-                    }
-                    return (
-                      profile.scope === "global" ||
-                      profile.projectId === projectId
-                    );
-                  })
-                ) {
-                  setAgentProfileId("none");
-                  setWorkflowSkill("");
-                }
+                setScope(value as ProjectLabelScope);
               }}
             >
               <SelectTrigger
@@ -282,80 +257,39 @@ export function ProjectLabelForm({
 
           <div className="grid gap-1.5">
             <Label
-              htmlFor="label-agent"
+              htmlFor="label-workflow-skill"
               className="text-xs text-muted-foreground"
             >
-              {messages.settings.agent}
+              {messages.settings.workflowSkillSingle}
             </Label>
             <Select
               items={[
-                { value: "none", label: messages.settings.none },
-                ...selectableProfiles.map((profile) => ({
-                  value: String(profile.id),
-                  label: profile.name,
+                { value: "", label: messages.settings.none },
+                ...workflowSkillOptions.map((skill) => ({
+                  value: skill.name,
+                  label: skill.name,
                 })),
               ]}
-              value={agentProfileId}
-              onValueChange={(value) => {
-                setAgentProfileId(value as string);
-                setWorkflowSkill("");
-              }}
+              value={workflowSkill}
+              onValueChange={(value) => setWorkflowSkill(value as string)}
             >
               <SelectTrigger
-                id="label-agent"
-                aria-label={messages.settings.agent}
+                id="label-workflow-skill"
+                aria-label={messages.settings.workflowSkillSingle}
                 className="w-full"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">{messages.settings.none}</SelectItem>
-                {selectableProfiles.map((profile) => (
-                  <SelectItem key={profile.id} value={String(profile.id)}>
-                    {profile.name}
+                <SelectItem value="">{messages.settings.none}</SelectItem>
+                {workflowSkillOptions.map((skill) => (
+                  <SelectItem key={skill.name} value={skill.name}>
+                    {skill.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
-          {hasSelectedAgent && hasWorkflowSkills ? (
-            <div className="grid gap-1.5">
-              <Label
-                htmlFor="label-workflow-skill"
-                className="text-xs text-muted-foreground"
-              >
-                {messages.settings.workflowSkillSingle}
-              </Label>
-              <Select
-                items={[
-                  { value: "", label: messages.settings.none },
-                  ...availableWorkflowSkills.map((skillName) => ({
-                    value: skillName,
-                    label: skillName,
-                  })),
-                ]}
-                value={selectedWorkflowSkill}
-                onValueChange={(value) => setWorkflowSkill(value as string)}
-              >
-                <SelectTrigger
-                  id="label-workflow-skill"
-                  aria-label={messages.settings.workflowSkillSingle}
-                  className="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">{messages.settings.none}</SelectItem>
-                  {availableWorkflowSkills.map((skillName) => (
-                    <SelectItem key={skillName} value={skillName}>
-                      {skillName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
         </div>
 
         {statusMessage ? (
