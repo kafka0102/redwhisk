@@ -180,12 +180,6 @@ where
         }
 
         self.ensure_label_name_unique(&name, &input.scope, project_id, input.id)?;
-        self.validate_label_agent_assignment(
-            &input.scope,
-            project_id,
-            input.agent_profile_id,
-            workflow_skill.as_deref(),
-        )?;
 
         let row = self
             .project_label_repository
@@ -195,7 +189,6 @@ where
                 &input.scope,
                 project_id,
                 &color,
-                input.agent_profile_id,
                 workflow_skill.as_deref(),
             )
             .map_err(settings_database_error)?;
@@ -331,70 +324,6 @@ where
             CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
                 .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
         )
-    }
-
-    fn validate_label_agent_assignment(
-        &self,
-        scope: &ProjectLabelScope,
-        project_id: Option<i64>,
-        agent_profile_id: Option<i64>,
-        workflow_skill: Option<&str>,
-    ) -> Result<(), CommandError> {
-        if workflow_skill.is_some() && agent_profile_id.is_none() {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentProfileValidationFailed,
-                "未选择 Agent 时不能设置 Workflow Skill。",
-            )
-            .with_detail(ErrorDetail::new("Field").with_value("name", "workflowSkill")));
-        }
-
-        let Some(agent_profile_id) = agent_profile_id else {
-            return Ok(());
-        };
-
-        let profile = self
-            .repository
-            .find_profile_by_id(agent_profile_id)
-            .map_err(settings_database_error)?
-            .filter(|profile| profile.del == 0)
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentProfileValidationFailed,
-                    "关联的 Agent Profile 不存在。",
-                )
-                .with_detail(
-                    ErrorDetail::new("AgentProfile").with_value("agentProfileId", agent_profile_id),
-                )
-            })?;
-
-        match scope {
-            ProjectLabelScope::Global => {
-                if profile.scope != AgentScope::Global {
-                    return Err(CommandError::new(
-                        CommandErrorCode::AgentProfileValidationFailed,
-                        "全局 Label 只能关联全局 Agent。",
-                    )
-                    .with_detail(
-                        ErrorDetail::new("AgentProfile")
-                            .with_value("agentProfileId", agent_profile_id),
-                    ));
-                }
-            }
-            ProjectLabelScope::Project => {
-                if profile.scope == AgentScope::Project && profile.project_id != project_id {
-                    return Err(CommandError::new(
-                        CommandErrorCode::AgentProfileValidationFailed,
-                        "项目级 Label 只能关联当前项目或全局 Agent。",
-                    )
-                    .with_detail(
-                        ErrorDetail::new("AgentProfile")
-                            .with_value("agentProfileId", agent_profile_id),
-                    ));
-                }
-            }
-        }
-
-        Ok(())
     }
 
     fn ensure_saved_agent_skill_name_unique(
@@ -681,8 +610,6 @@ fn project_label_record_from_row(
         scope: row.scope,
         project_id: row.project_id,
         color: row.color,
-        agent_profile_id: row.agent_profile_id,
-        agent_name: row.agent_name,
         workflow_skill: row.workflow_skill,
         del: row.del,
     }
