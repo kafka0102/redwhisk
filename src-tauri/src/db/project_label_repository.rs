@@ -24,13 +24,9 @@ impl<'connection> ProjectLabelRepository<'connection> {
                             project_labels.scope,
                             project_labels.project_id,
                             project_labels.color,
-                            project_labels.agent_profile_id,
-                            agent_profiles.name,
                             project_labels.workflow_skill,
                             project_labels.del
                      FROM project_labels
-                     LEFT JOIN agent_profiles
-                       ON agent_profiles.id = project_labels.agent_profile_id
                      WHERE project_labels.scope = 'global'
                        AND project_labels.del = 0
                      ORDER BY project_labels.id ASC",
@@ -47,13 +43,9 @@ impl<'connection> ProjectLabelRepository<'connection> {
                             project_labels.scope,
                             project_labels.project_id,
                             project_labels.color,
-                            project_labels.agent_profile_id,
-                            agent_profiles.name,
                             project_labels.workflow_skill,
                             project_labels.del
                      FROM project_labels
-                     LEFT JOIN agent_profiles
-                       ON agent_profiles.id = project_labels.agent_profile_id
                      WHERE project_labels.scope = 'project'
                        AND project_labels.project_id = ?1
                        AND project_labels.del = 0
@@ -75,13 +67,9 @@ impl<'connection> ProjectLabelRepository<'connection> {
                         project_labels.scope,
                         project_labels.project_id,
                         project_labels.color,
-                        project_labels.agent_profile_id,
-                        agent_profiles.name,
                         project_labels.workflow_skill,
                         project_labels.del
                  FROM project_labels
-                 LEFT JOIN agent_profiles
-                   ON agent_profiles.id = project_labels.agent_profile_id
                  WHERE project_labels.id = ?1",
                 params![id],
                 project_label_from_row,
@@ -105,13 +93,9 @@ impl<'connection> ProjectLabelRepository<'connection> {
                             project_labels.scope,
                             project_labels.project_id,
                             project_labels.color,
-                            project_labels.agent_profile_id,
-                            agent_profiles.name,
                             project_labels.workflow_skill,
                             project_labels.del
                      FROM project_labels
-                     LEFT JOIN agent_profiles
-                       ON agent_profiles.id = project_labels.agent_profile_id
                      WHERE project_labels.del = 0
                        AND project_labels.scope = 'project'
                        AND project_labels.project_id = ?2
@@ -130,13 +114,9 @@ impl<'connection> ProjectLabelRepository<'connection> {
                             project_labels.scope,
                             project_labels.project_id,
                             project_labels.color,
-                            project_labels.agent_profile_id,
-                            agent_profiles.name,
                             project_labels.workflow_skill,
                             project_labels.del
                      FROM project_labels
-                     LEFT JOIN agent_profiles
-                       ON agent_profiles.id = project_labels.agent_profile_id
                      WHERE project_labels.del = 0
                        AND lower(project_labels.name) = lower(?1)
                        AND (?2 IS NULL OR project_labels.id != ?2)
@@ -155,7 +135,6 @@ impl<'connection> ProjectLabelRepository<'connection> {
         scope: &ProjectLabelScope,
         project_id: Option<i64>,
         color: &str,
-        agent_profile_id: Option<i64>,
         workflow_skill: Option<&str>,
     ) -> rusqlite::Result<ProjectLabelRow> {
         let scope_str = scope_to_str(scope);
@@ -168,20 +147,11 @@ impl<'connection> ProjectLabelRepository<'connection> {
                          scope = ?2,
                          project_id = ?3,
                          color = ?4,
-                         agent_profile_id = ?5,
-                         workflow_skill = ?6,
+                         workflow_skill = ?5,
                          del = 0,
                          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                     WHERE id = ?7",
-                    params![
-                        name,
-                        scope_str,
-                        project_id,
-                        color,
-                        agent_profile_id,
-                        workflow_skill,
-                        id
-                    ],
+                     WHERE id = ?6",
+                    params![name, scope_str, project_id, color, workflow_skill, id],
                 )?;
                 self.find_label_by_id(id)?
                     .ok_or(rusqlite::Error::QueryReturnedNoRows)
@@ -193,18 +163,10 @@ impl<'connection> ProjectLabelRepository<'connection> {
                         scope,
                         project_id,
                         color,
-                        agent_profile_id,
                         workflow_skill,
                         del
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
-                    params![
-                        name,
-                        scope_str,
-                        project_id,
-                        color,
-                        agent_profile_id,
-                        workflow_skill
-                    ],
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+                    params![name, scope_str, project_id, color, workflow_skill],
                 )?;
                 self.find_label_by_id(self.connection.last_insert_rowid())?
                     .ok_or(rusqlite::Error::QueryReturnedNoRows)
@@ -228,8 +190,6 @@ pub struct ProjectLabelRow {
     pub scope: ProjectLabelScope,
     pub project_id: Option<i64>,
     pub color: String,
-    pub agent_profile_id: Option<i64>,
-    pub agent_name: Option<String>,
     pub workflow_skill: Option<String>,
     pub del: i64,
 }
@@ -241,10 +201,8 @@ fn project_label_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectLa
         scope: scope_from_str(&row.get::<_, String>(2)?)?,
         project_id: row.get(3)?,
         color: row.get(4)?,
-        agent_profile_id: row.get(5)?,
-        agent_name: row.get(6)?,
-        workflow_skill: row.get(7)?,
-        del: row.get(8)?,
+        workflow_skill: row.get(5)?,
+        del: row.get(6)?,
     })
 }
 
