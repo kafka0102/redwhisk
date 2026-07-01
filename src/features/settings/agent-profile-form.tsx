@@ -1,14 +1,10 @@
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   detectCodexCommand,
-  listAgentSkills,
   saveAgentProfile,
   testAgentCommand,
-  type AgentSkillRecord,
-  type AgentSkillsUpdatedEvent,
   type AgentProfileRecord,
   type AgentScope,
   type AgentType,
@@ -23,10 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import {
-  parseDefaultSkills,
-  serializeDefaultSkills,
-} from "./agent-profile-skills";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface AgentProfileFormProps {
@@ -57,62 +49,16 @@ export function AgentProfileForm({
   );
   const [modeValue] = useState(() => profile?.mode ?? "full-access");
   const [dangerous] = useState(() => profile?.dangerous ?? true);
-  const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>(() =>
-    parseDefaultSkills(profile?.defaultSkill ?? "").map(toMissingSkillKey),
-  );
   const [promptTemplate] = useState(() => profile?.promptTemplate ?? "");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
-  const [skills, setSkills] = useState<AgentSkillRecord[]>([]);
-  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
-  const [skillLoadFailed, setSkillLoadFailed] = useState(false);
-  const isMountedRef = useRef(true);
-  const skillRequestSequenceRef = useRef(0);
   const toastTimeoutRef = useRef<number | null>(null);
 
-  const skillProjectId = scopeValue === "project" ? projectId : null;
-  const loadSkills = useCallback(() => {
-    const requestSequence = skillRequestSequenceRef.current + 1;
-    skillRequestSequenceRef.current = requestSequence;
-    setIsLoadingSkills(true);
-    setSkillLoadFailed(false);
-
-    return listAgentSkills({
-      agentType,
-      projectId: skillProjectId,
-    })
-      .then((response) => {
-        if (!isCurrentSkillRequest()) return;
-        setSkills(response.skills);
-        setSkillLoadFailed(false);
-      })
-      .catch(() => {
-        if (!isCurrentSkillRequest()) return;
-        setSkills([]);
-        setSkillLoadFailed(true);
-      })
-      .finally(() => {
-        if (!isCurrentSkillRequest()) return;
-        setIsLoadingSkills(false);
-      });
-
-    function isCurrentSkillRequest() {
-      return (
-        isMountedRef.current &&
-        skillRequestSequenceRef.current === requestSequence
-      );
-    }
-  }, [agentType, skillProjectId]);
-
   useEffect(() => {
-    isMountedRef.current = true;
-
     return () => {
-      isMountedRef.current = false;
-      skillRequestSequenceRef.current += 1;
       if (toastTimeoutRef.current !== null) {
         window.clearTimeout(toastTimeoutRef.current);
       }
@@ -183,93 +129,6 @@ export function AgentProfileForm({
     };
   }, [profile]);
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadSkills();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [loadSkills]);
-
-  useEffect(() => {
-    let isDisposed = false;
-    let unlisten: (() => void) | null = null;
-
-    void listen<AgentSkillsUpdatedEvent>("agent-skills-updated", (event) => {
-      if (!shouldReloadSkillsForEvent(event.payload, skillProjectId)) return;
-      void loadSkills();
-    }).then((cleanup) => {
-      if (isDisposed) {
-        cleanup();
-        return;
-      }
-      unlisten = cleanup;
-    });
-
-    return () => {
-      isDisposed = true;
-      unlisten?.();
-    };
-  }, [loadSkills, skillProjectId]);
-
-  const visibleSkills = useMemo(
-    () => skills.filter((skill) => skill.scope === scopeValue),
-    [skills, scopeValue],
-  );
-  const visibleSkillNames = useMemo(
-    () => new Set(visibleSkills.map((skill) => skill.name)),
-    [visibleSkills],
-  );
-  const effectiveSelectedSkillKeys = useMemo(
-    () =>
-      selectedSkillKeys.map((key) => {
-        if (!isMissingSkillKey(key)) {
-          return key;
-        }
-
-        const matchingSkill = visibleSkills.find(
-          (skill) => skill.name === fromMissingSkillKey(key),
-        );
-        return matchingSkill?.path ?? key;
-      }),
-    [selectedSkillKeys, visibleSkills],
-  );
-  const selectedSkillNames = useMemo(
-    () =>
-      dedupeStrings(
-        effectiveSelectedSkillKeys
-          .map((key) => resolveSkillNameFromKey(key, visibleSkills))
-          .filter((skillName) => skillName.length > 0),
-      ),
-    [effectiveSelectedSkillKeys, visibleSkills],
-  );
-  const missingSkillNames = useMemo(() => {
-    const names = selectedSkillKeys
-      .filter((key) => isMissingSkillKey(key))
-      .map(fromMissingSkillKey);
-    return dedupeStrings(
-      names.filter((skillName) => !visibleSkillNames.has(skillName)),
-    );
-  }, [selectedSkillKeys, visibleSkillNames]);
-  const workflowSkillOptions = useMemo(() => {
-    const missingOptions = missingSkillNames.map((skillName) => ({
-      value: toMissingSkillKey(skillName),
-      label: skillName,
-      description: messages.agentsFeature.unavailableInCurrentScope,
-    }));
-    const visibleOptions = visibleSkills.map((skill) => ({
-      value: skill.path,
-      label: skill.name,
-      description: skill.path,
-    }));
-
-    return dedupeOptionsByValue([...missingOptions, ...visibleOptions]);
-  }, [
-    messages.agentsFeature.unavailableInCurrentScope,
-    missingSkillNames,
-    visibleSkills,
-  ]);
-
   async function handleTestCommand() {
     setIsTesting(true);
     setStatusMessage(null);
@@ -304,7 +163,7 @@ export function AgentProfileForm({
         projectId: effectiveProjectId,
         mode: modeValue,
         dangerous,
-        defaultSkill: serializeDefaultSkills(selectedSkillNames),
+        defaultSkill: "",
         promptTemplate,
       });
       onSaved(savedProfile);
@@ -381,11 +240,7 @@ export function AgentProfileForm({
               ]}
               value={agentType}
               onValueChange={(value) => {
-                skillRequestSequenceRef.current += 1;
                 setAgentType(value as AgentType);
-                setSelectedSkillKeys([]);
-                setSkills([]);
-                setSkillLoadFailed(false);
               }}
             >
               <SelectTrigger
@@ -438,40 +293,9 @@ export function AgentProfileForm({
               { value: "project", label: messages.settings.projectScope },
             ]}
             onChange={(nextScope) => {
-              skillRequestSequenceRef.current += 1;
               setScopeValue(nextScope as AgentScope);
-              setSelectedSkillKeys([]);
-              setSkills([]);
-              setSkillLoadFailed(false);
             }}
           />
-
-          <div className="agent-dialog__select-block">
-            <SearchableMultiSelect
-              label={messages.settings.workflowSkill}
-              ariaLabel={messages.settings.workflowSkill}
-              values={effectiveSelectedSkillKeys}
-              options={workflowSkillOptions}
-              onChange={setSelectedSkillKeys}
-            />
-            <div className="agent-dialog__skill-list">
-              {isLoadingSkills ? (
-                <p className="agent-dialog__skill-status">
-                  {messages.settings.loadingSkills}
-                </p>
-              ) : null}
-              {!isLoadingSkills && visibleSkills.length === 0 ? (
-                <p className="agent-dialog__skill-status">
-                  {messages.settings.noSkills}
-                </p>
-              ) : null}
-              {skillLoadFailed ? (
-                <p className="agent-dialog__skill-status">
-                  {messages.settings.skillLoadFailed}
-                </p>
-              ) : null}
-            </div>
-          </div>
         </div>
 
         {statusMessage ? (
@@ -663,242 +487,10 @@ function SearchableSelect({
   );
 }
 
-function SearchableMultiSelect({
-  ariaLabel,
-  label,
-  onChange,
-  options,
-  values,
-}: {
-  ariaLabel: string;
-  label: string;
-  onChange: (values: string[]) => void;
-  options: SearchableSelectOption[];
-  values: string[];
-}) {
-  const { messages } = useI18n();
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredOptions = normalizedQuery
-    ? options.filter((option) =>
-        `${option.label} ${option.description ?? ""}`
-          .toLowerCase()
-          .includes(normalizedQuery),
-      )
-    : options;
-  const selectedOptions = values
-    .map((value) => options.find((option) => option.value === value))
-    .filter((option): option is SearchableSelectOption => option !== undefined);
-  const selectedValuesLabel =
-    selectedOptions.length > 0
-      ? selectedOptions.map((option) => option.label).join(", ")
-      : "";
-  const displayValue = isOpen ? query : selectedValuesLabel;
-
-  function toggleOption(option: SearchableSelectOption) {
-    const nextValues = values.includes(option.value)
-      ? values.filter((value) => value !== option.value)
-      : [...values, option.value];
-    onChange(nextValues);
-    setQuery("");
-  }
-
-  return (
-    <div
-      className="settings-search-select"
-      ref={rootRef}
-      onBlur={(event) => {
-        if (rootRef.current?.contains(event.relatedTarget as Node | null)) {
-          return;
-        }
-
-        setQuery("");
-        setIsOpen(false);
-      }}
-    >
-      <label className="settings-field">
-        <span>{label}</span>
-        <input
-          aria-autocomplete="list"
-          aria-expanded={isOpen}
-          aria-label={ariaLabel}
-          autoCapitalize="none"
-          className="settings-input settings-search-select__input"
-          role="combobox"
-          spellCheck={false}
-          value={displayValue}
-          onClick={() => {
-            setActiveIndex(0);
-            setIsOpen(true);
-          }}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActiveIndex(0);
-            setIsOpen(true);
-          }}
-          onFocus={() => {
-            setActiveIndex(0);
-            setIsOpen(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setIsOpen(true);
-              setActiveIndex((current) =>
-                Math.min(current + 1, filteredOptions.length - 1),
-              );
-            }
-
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setIsOpen(true);
-              setActiveIndex((current) => Math.max(current - 1, 0));
-            }
-
-            if (event.key === "Enter" && isOpen) {
-              event.preventDefault();
-              const option = filteredOptions[activeIndex];
-              if (option) {
-                toggleOption(option);
-              }
-            }
-
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setQuery("");
-              setIsOpen(false);
-            }
-          }}
-        />
-      </label>
-      {selectedOptions.length > 0 ? (
-        <div
-          className="settings-search-select__chips"
-          aria-label={`${ariaLabel} selected`}
-        >
-          {selectedOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className="settings-search-select__chip"
-              onClick={() => toggleOption(option)}
-            >
-              <span>{option.label}</span>
-              <span aria-hidden="true">&times;</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {isOpen ? (
-        <div
-          className="settings-search-select__menu settings-search-select__menu--top"
-          role="listbox"
-          aria-multiselectable="true"
-        >
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option, index) => {
-              const isSelected = values.includes(option.value);
-
-              return (
-                <button
-                  aria-selected={isSelected}
-                  aria-label={
-                    option.description
-                      ? `${option.label} ${option.description}`
-                      : option.label
-                  }
-                  className="settings-search-select__option"
-                  key={option.value}
-                  role="option"
-                  tabIndex={-1}
-                  type="button"
-                  data-active={index === activeIndex ? "true" : "false"}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => toggleOption(option)}
-                >
-                  <span className="settings-search-select__option-row">
-                    <span className="settings-search-select__option-label">
-                      {option.label}
-                    </span>
-                    <span className="settings-search-select__option-check">
-                      {isSelected ? "✓" : ""}
-                    </span>
-                  </span>
-                  {option.description ? (
-                    <span className="settings-search-select__option-description">
-                      {option.description}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })
-          ) : (
-            <p className="settings-search-select__empty">
-              {messages.settings.noMatches}
-            </p>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function shouldReloadSkillsForEvent(
-  event: AgentSkillsUpdatedEvent,
-  projectId: number | null,
-): boolean {
-  if (event.scope === "global") return true;
-  return projectId !== null && event.projectId === projectId;
-}
-
 function toCommandName(commandPath: string): string {
   const trimmedCommand = commandPath.trim();
   if (trimmedCommand.length === 0) return "";
   const normalizedCommand = trimmedCommand.replace(/\\/g, "/");
   const commandParts = normalizedCommand.split("/").filter(Boolean);
   return commandParts[commandParts.length - 1] ?? trimmedCommand;
-}
-
-function dedupeOptionsByValue(
-  options: SearchableSelectOption[],
-): SearchableSelectOption[] {
-  const seenValues = new Set<string>();
-  return options.filter((option) => {
-    if (seenValues.has(option.value)) {
-      return false;
-    }
-
-    seenValues.add(option.value);
-    return true;
-  });
-}
-
-function dedupeStrings(values: string[]): string[] {
-  return Array.from(new Set(values));
-}
-
-function resolveSkillNameFromKey(
-  key: string,
-  visibleSkills: AgentSkillRecord[],
-): string {
-  if (isMissingSkillKey(key)) {
-    return fromMissingSkillKey(key);
-  }
-
-  return visibleSkills.find((skill) => skill.path === key)?.name ?? "";
-}
-
-function toMissingSkillKey(skillName: string): string {
-  return `missing:${skillName}`;
-}
-
-function fromMissingSkillKey(key: string): string {
-  return key.replace(/^missing:/, "");
-}
-
-function isMissingSkillKey(key: string): boolean {
-  return key.startsWith("missing:");
 }
