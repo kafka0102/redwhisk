@@ -92,6 +92,42 @@ export interface ProjectLabelRecord {
   workflowSkill: string | null;
 }
 
+export type AgentSkillScope = "project" | "global";
+
+export interface SavedAgentSkillPath {
+  agentType: AgentType;
+  path: string;
+}
+
+export interface SavedAgentSkillRecord {
+  id: number;
+  name: string;
+  scope: AgentSkillScope;
+  projectId: number | null;
+  skillPaths: SavedAgentSkillPath[];
+}
+
+export interface SaveSavedAgentSkillInput {
+  id?: number;
+  name: string;
+  scope: AgentSkillScope;
+  projectId: number | null;
+  skillPaths: SavedAgentSkillPath[];
+}
+
+export interface ListSavedAgentSkillsInput {
+  scope?: AgentSkillScope;
+  projectId?: number | null;
+}
+
+export interface SavedAgentSkillListResponse {
+  skills: SavedAgentSkillRecord[];
+}
+
+export interface DeleteSavedAgentSkillInput {
+  id: number;
+}
+
 export interface ListProjectLabelsInput {
   scope: ProjectLabelScope;
   projectId: number | null;
@@ -195,6 +231,30 @@ export function deleteProjectLabel(
   input: DeleteProjectLabelInput,
 ): Promise<void> {
   return invokeCommand("delete_project_label", {
+    input,
+  });
+}
+
+export function listSavedAgentSkills(
+  input: ListSavedAgentSkillsInput,
+): Promise<SavedAgentSkillListResponse> {
+  return invokeCommand("list_saved_agent_skills", {
+    input,
+  });
+}
+
+export function saveSavedAgentSkill(
+  input: SaveSavedAgentSkillInput,
+): Promise<SavedAgentSkillRecord> {
+  return invokeCommand("save_saved_agent_skill", {
+    input,
+  });
+}
+
+export function deleteSavedAgentSkill(
+  input: DeleteSavedAgentSkillInput,
+): Promise<void> {
+  return invokeCommand("delete_saved_agent_skill", {
     input,
   });
 }
