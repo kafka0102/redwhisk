@@ -115,7 +115,10 @@ pub fn run() {
             commands::settings_commands::delete_agent_profile,
             commands::settings_commands::list_project_labels,
             commands::settings_commands::save_project_label,
-            commands::settings_commands::delete_project_label
+            commands::settings_commands::delete_project_label,
+            commands::settings_commands::list_saved_agent_skills,
+            commands::settings_commands::save_saved_agent_skill,
+            commands::settings_commands::delete_saved_agent_skill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

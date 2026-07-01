@@ -6,6 +6,7 @@ use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
+use crate::db::saved_agent_skill_repository::SavedAgentSkillRepository;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
     DeleteAgentProfileInput, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
@@ -15,10 +16,16 @@ use crate::types::project_label::{
     DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse, ProjectLabelRecord,
     ProjectLabelScope, SaveProjectLabelInput,
 };
+use crate::types::saved_agent_skill::{
+    DeleteSavedAgentSkillInput, ListSavedAgentSkillsInput, SavedAgentSkillListResponse,
+    SavedAgentSkillPath, SavedAgentSkillRecord, SaveSavedAgentSkillInput,
+};
+use crate::types::agent_skill::AgentSkillScope;
 
 pub struct SettingsService<'connection, TDetector> {
     repository: AgentProfileRepository<'connection>,
     project_label_repository: ProjectLabelRepository<'connection>,
+    saved_agent_skill_repository: SavedAgentSkillRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
     detector: TDetector,
 }
@@ -30,12 +37,14 @@ where
     pub fn new(
         repository: AgentProfileRepository<'connection>,
         project_label_repository: ProjectLabelRepository<'connection>,
+        saved_agent_skill_repository: SavedAgentSkillRepository<'connection>,
         project_repository: ProjectRepository<'connection>,
         detector: TDetector,
     ) -> Self {
         Self {
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             detector,
         }
@@ -228,6 +237,64 @@ where
         .with_detail(ErrorDetail::new("ProjectLabel").with_value("labelId", input.id)))
     }
 
+    pub fn list_saved_agent_skills(
+        &self,
+        input: ListSavedAgentSkillsInput,
+    ) -> Result<SavedAgentSkillListResponse, CommandError> {
+        let skills = self
+            .saved_agent_skill_repository
+            .list_skills(input.scope.as_ref(), input.project_id)
+            .map_err(settings_database_error)?
+            .into_iter()
+            .map(saved_agent_skill_record_from_row)
+            .collect();
+
+        Ok(SavedAgentSkillListResponse { skills })
+    }
+
+    pub fn save_saved_agent_skill(
+        &self,
+        input: SaveSavedAgentSkillInput,
+    ) -> Result<SavedAgentSkillRecord, CommandError> {
+        let name = validate_saved_agent_skill_name(&input.name)?;
+
+        if input.scope == AgentSkillScope::Project {
+            let project_id = input.project_id.ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "项目级 Skill 必须指定 project_id。",
+                )
+            })?;
+            self.ensure_project_exists(project_id)?;
+        }
+
+        self.ensure_saved_agent_skill_name_unique(&name, &input.scope, input.project_id, input.id)?;
+
+        let row = self
+            .saved_agent_skill_repository
+            .save_skill(input.id, &name, &input.scope, input.project_id, &input.skill_paths)
+            .map_err(settings_database_error)?;
+
+        Ok(saved_agent_skill_record_from_row(row))
+    }
+
+    pub fn delete_saved_agent_skill(&self, input: DeleteSavedAgentSkillInput) -> Result<(), CommandError> {
+        let deleted = self
+            .saved_agent_skill_repository
+            .soft_delete_skill(input.id)
+            .map_err(settings_database_error)?;
+
+        if deleted {
+            return Ok(());
+        }
+
+        Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Skill 不存在或已删除。",
+        )
+        .with_detail(ErrorDetail::new("SavedAgentSkill").with_value("savedAgentSkillId", input.id)))
+    }
+
     fn ensure_project_exists(&self, project_id: i64) -> Result<(), CommandError> {
         self.project_repository
             .find_by_id(project_id)
@@ -329,6 +396,33 @@ where
 
         Ok(())
     }
+
+    fn ensure_saved_agent_skill_name_unique(
+        &self,
+        name: &str,
+        scope: &AgentSkillScope,
+        project_id: Option<i64>,
+        excluding_id: Option<i64>,
+    ) -> Result<(), CommandError> {
+        let duplicate = self
+            .saved_agent_skill_repository
+            .find_duplicate_name(name, scope, project_id, excluding_id)
+            .map_err(settings_database_error)?;
+
+        if duplicate.is_none() {
+            return Ok(());
+        }
+
+        let message = match scope {
+            AgentSkillScope::Project => "同一项目内的 Skill 名称必须唯一。",
+            AgentSkillScope::Global => "全局 Skill 名称必须唯一。",
+        };
+
+        Err(
+            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
+                .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
+        )
+    }
 }
 
 impl SettingsService<'_, ShellAgentCommandDetector> {
@@ -338,10 +432,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -355,10 +451,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -372,10 +470,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -389,10 +489,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -406,10 +508,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -423,10 +527,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -440,10 +546,12 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
@@ -457,14 +565,73 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         SettingsService::new(
             repository,
             project_label_repository,
+            saved_agent_skill_repository,
             project_repository,
             ShellAgentCommandDetector::new(),
         )
         .delete_project_label(input)
+    }
+
+    pub fn list_saved_agent_skills_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ListSavedAgentSkillsInput,
+    ) -> Result<SavedAgentSkillListResponse, CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            saved_agent_skill_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .list_saved_agent_skills(input)
+    }
+
+    pub fn save_saved_agent_skill_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SaveSavedAgentSkillInput,
+    ) -> Result<SavedAgentSkillRecord, CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            saved_agent_skill_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .save_saved_agent_skill(input)
+    }
+
+    pub fn delete_saved_agent_skill_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteSavedAgentSkillInput,
+    ) -> Result<(), CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            saved_agent_skill_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .delete_saved_agent_skill(input)
     }
 }
 
@@ -518,6 +685,18 @@ fn project_label_record_from_row(
         agent_name: row.agent_name,
         workflow_skill: row.workflow_skill,
         del: row.del,
+    }
+}
+
+fn saved_agent_skill_record_from_row(
+    row: crate::db::saved_agent_skill_repository::SavedAgentSkillRow,
+) -> SavedAgentSkillRecord {
+    SavedAgentSkillRecord {
+        id: row.id,
+        name: row.name,
+        scope: row.scope,
+        project_id: row.project_id,
+        skill_paths: row.skill_paths,
     }
 }
 
@@ -583,6 +762,19 @@ fn validate_project_label_color(color: &str) -> Result<String, CommandError> {
     }
 
     Ok(trimmed.to_uppercase())
+}
+
+fn validate_saved_agent_skill_name(name: &str) -> Result<String, CommandError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "Skill 名称不能为空。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
+    }
+
+    Ok(trimmed.to_string())
 }
 
 fn normalize_optional_string(value: Option<&str>) -> Option<String> {
@@ -819,6 +1011,7 @@ mod tests {
         SettingsService::new(
             AgentProfileRepository::new(connection),
             ProjectLabelRepository::new(connection),
+            SavedAgentSkillRepository::new(connection),
             ProjectRepository::new(connection),
             TestDetector,
         )

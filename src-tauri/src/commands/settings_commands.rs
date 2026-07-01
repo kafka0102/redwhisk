@@ -11,6 +11,10 @@ use crate::types::project_label::{
     DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse, ProjectLabelRecord,
     SaveProjectLabelInput,
 };
+use crate::types::saved_agent_skill::{
+    DeleteSavedAgentSkillInput, ListSavedAgentSkillsInput, SavedAgentSkillListResponse,
+    SavedAgentSkillRecord, SaveSavedAgentSkillInput,
+};
 
 #[tauri::command]
 pub fn detect_codex_command(
@@ -89,6 +93,36 @@ pub fn delete_project_label(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::delete_project_label_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn list_saved_agent_skills(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ListSavedAgentSkillsInput,
+) -> Result<SavedAgentSkillListResponse, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::list_saved_agent_skills_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn save_saved_agent_skill(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SaveSavedAgentSkillInput,
+) -> Result<SavedAgentSkillRecord, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::save_saved_agent_skill_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn delete_saved_agent_skill(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteSavedAgentSkillInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::delete_saved_agent_skill_in_data_dir(data_dir, input)
 }
 
 fn prepare_settings_data_dir(

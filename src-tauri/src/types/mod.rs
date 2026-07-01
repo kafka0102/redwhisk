@@ -12,5 +12,6 @@ pub mod project;
 pub mod project_label;
 pub mod project_terminal;
 pub mod project_terminal_config;
+pub mod saved_agent_skill;
 pub mod session_event;
 pub mod session_workspace;
