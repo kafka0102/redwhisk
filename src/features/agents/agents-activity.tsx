@@ -286,9 +286,6 @@ export function AgentsActivity({
 
   useEffect(() => {
     let isMounted = true;
-    if (!shouldLoadDeferredContent) {
-      return;
-    }
 
     async function loadAgentTypes() {
       setIsLoadingAgentTypes(true);
@@ -332,7 +329,7 @@ export function AgentsActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId, shouldLoadDeferredContent]);
+  }, [projectId]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
