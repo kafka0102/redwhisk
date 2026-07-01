@@ -355,17 +355,102 @@ function generateCommitMessage(files, config) {
     return "chore: auto commit Claude task changes";
   }
 
-  if (
-    files.every((file) => file.startsWith(".claude/") || file === "CLAUDE.md")
-  ) {
-    return "chore: 调整 Claude 自动提交配置";
+  // 1. 分析文件类型
+  const allDocs = files.every((file) => file.endsWith(".md"));
+  const allClaudeConfig = files.every(
+    (file) => file.startsWith(".claude/") || file === "CLAUDE.md"
+  );
+  const hasCodeFiles = files.some(
+    (file) =>
+      file.endsWith(".ts") ||
+      file.endsWith(".tsx") ||
+      file.endsWith(".js") ||
+      file.endsWith(".jsx")
+  );
+  const hasTestFiles = files.some(
+    (file) =>
+      file.includes("test") ||
+      file.includes("spec") ||
+      file.endsWith(".test.ts") ||
+      file.endsWith(".test.tsx")
+  );
+
+  // 2. 分析文件路径中的特征关键词
+  const paths = files.join(" ");
+  const isFix = paths.includes("fix") || paths.includes("bug");
+  const isPerf = paths.includes("perf") || paths.includes("performance") || paths.includes("优化");
+  const isRefactor = paths.includes("refactor") || paths.includes("重构");
+  const isFeat = paths.includes("feat") || paths.includes("feature") || paths.includes("新功能");
+  const isStyle = paths.includes("style") || paths.includes("样式");
+  const isBuild = paths.includes("build") || paths.includes("构建") || paths.includes("package.json") || paths.includes("tsconfig");
+  const isCi = paths.includes("ci") || paths.includes(".github/workflows");
+
+  // 3. 尝试从文件路径中提取更具体的描述
+  let description = "";
+
+  // 检查 OpenSpec 变更
+  if (paths.includes("openspec/changes/")) {
+    const match = paths.match(/openspec\/changes\/([^/]+)/);
+    if (match && match[1]) {
+      const changeName = match[1].replace(/-/g, " ");
+      description = `更新 OpenSpec 变更: ${changeName}`;
+      return `docs: ${description}`;
+    }
   }
 
-  if (files.every((file) => file.endsWith(".md"))) {
-    return "docs: 自动提交任务文档改动";
+  // 检查常见的目录结构
+  if (paths.includes("components/")) {
+    description = "更新组件";
+  } else if (paths.includes("hooks/")) {
+    description = "更新 Hooks";
+  } else if (paths.includes("utils/") || paths.includes("lib/")) {
+    description = "更新工具函数";
+  } else if (paths.includes("docs/")) {
+    description = "更新文档";
+  } else if (paths.includes("src/")) {
+    description = "更新源码";
   }
 
-  return "chore: 自动提交 Claude 任务改动";
+  // 4. 根据文件特征确定 type
+  let type = "chore";
+  if (allClaudeConfig) {
+    type = "chore";
+    description = description || "调整 Claude 配置";
+  } else if (allDocs) {
+    type = "docs";
+    description = description || "更新文档";
+  } else if (isFeat) {
+    type = "feat";
+    description = description || "实现新功能";
+  } else if (isFix) {
+    type = "fix";
+    description = description || "修复问题";
+  } else if (isPerf) {
+    type = "perf";
+    description = description || "优化性能";
+  } else if (isRefactor) {
+    type = "refactor";
+    description = description || "重构代码";
+  } else if (isStyle) {
+    type = "style";
+    description = description || "调整样式";
+  } else if (isBuild) {
+    type = "build";
+    description = description || "更新构建配置";
+  } else if (isCi) {
+    type = "ci";
+    description = description || "更新 CI 配置";
+  } else if (hasTestFiles) {
+    type = "test";
+    description = description || "更新测试";
+  } else if (hasCodeFiles) {
+    type = "refactor";
+    description = description || "更新代码";
+  } else {
+    description = description || "自动提交任务改动";
+  }
+
+  return `${type}: ${description}`;
 }
 
 function writeHookLog(message) {
