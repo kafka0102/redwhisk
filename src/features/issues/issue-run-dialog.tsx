@@ -20,7 +20,9 @@ import {
 } from "./issue-commands";
 import {
   listAgentProfiles,
+  listSavedAgentSkills,
   type AgentProfileRecord,
+  type SavedAgentSkillRecord,
 } from "../settings/settings-commands";
 import type { ProjectCompletionPolicy } from "../project/project-commands";
 import {
@@ -31,15 +33,12 @@ import {
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
-import { parseDefaultSkills } from "../settings/agent-profile-skills";
 import {
   IssueRunWorktreeProgressDialog,
   type WorktreeStartProgressStepId,
 } from "./issue-run-worktree-progress-dialog";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
-const RECENT_WORKFLOW_SKILL_STORAGE_KEY =
-  "redwhisk.issue-run.recent-workflow-skill";
 const RECENT_WORKSPACE_SELECTION_STORAGE_KEY =
   "redwhisk.issue-run.recent-workspace-selection";
 const WORKTREE_PROGRESS_COMPLETION_DELAY_MS = 300;
@@ -78,6 +77,7 @@ export function IssueRunDialog({
   const [selectedWorkflowSkill, setSelectedWorkflowSkill] = useState<
     string | null
   >(null);
+  const [savedSkills, setSavedSkills] = useState<SavedAgentSkillRecord[]>([]);
   const [completionPolicy, setCompletionPolicy] =
     useState<ProjectCompletionPolicy>("manual");
   const [workspaceMode, setWorkspaceMode] =
@@ -112,11 +112,15 @@ export function IssueRunDialog({
           globalProfilesResponse,
           sessionsResponse,
           branchesResponse,
+          projectSavedSkillsResponse,
+          globalSavedSkillsResponse,
         ] = await Promise.all([
           listAgentProfiles({ scope: "project", projectId }),
           listAgentProfiles({ scope: "global", projectId: null }),
           listAgentSessions(projectId),
           getProjectGitBranches({ projectId }),
+          listSavedAgentSkills({ scope: "project", projectId }),
+          listSavedAgentSkills({ scope: "global", projectId: null }),
         ]);
 
         if (!isMounted) {
@@ -126,6 +130,10 @@ export function IssueRunDialog({
         const mergedProfiles = [
           ...projectProfilesResponse.profiles,
           ...globalProfilesResponse.profiles,
+        ];
+        const mergedSavedSkills = [
+          ...projectSavedSkillsResponse.skills,
+          ...globalSavedSkillsResponse.skills,
         ];
         const initialProfile = resolveInitialProfile({
           profiles: mergedProfiles,
@@ -148,13 +156,17 @@ export function IssueRunDialog({
         });
 
         setProfiles(mergedProfiles);
+        setSavedSkills(mergedSavedSkills);
         setSelectedProfileId(initialProfile?.id ?? null);
         setSelectedWorkflowSkill(
           initialProfile
             ? resolveInitialWorkflowSkill({
                 issue,
-                profile: initialProfile,
-                projectId,
+                options: mergedSavedSkills.filter((skill) =>
+                  skill.skillPaths.some(
+                    (p) => p.agentType === initialProfile.agentType,
+                  ),
+                ),
               })
             : null,
         );
@@ -220,24 +232,27 @@ export function IssueRunDialog({
     if (!selectedProfile) {
       return [];
     }
-
-    return parseDefaultSkills(selectedProfile.defaultSkill);
-  }, [selectedProfile]);
-  const shouldShowWorkflowSkill =
-    selectedProfile !== null && workflowSkillOptions.length > 0;
-  const defaultWorkflowSkill = workflowSkillOptions[0] ?? null;
+    const seen = new Set<string>();
+    return savedSkills
+      .filter((skill) =>
+        skill.skillPaths.some((p) => p.agentType === selectedProfile.agentType),
+      )
+      .filter((skill) => {
+        if (seen.has(skill.name)) return false;
+        seen.add(skill.name);
+        return true;
+      });
+  }, [savedSkills, selectedProfile]);
   const effectiveWorkflowSkill =
     selectedWorkflowSkill === null
-      ? defaultWorkflowSkill
+      ? null
       : selectedWorkflowSkill.length === 0
         ? ""
         : selectedWorkflowSkill;
   const workflowSkillValue =
-    effectiveWorkflowSkill === null
+    effectiveWorkflowSkill === null || effectiveWorkflowSkill.length === 0
       ? NO_WORKFLOW_SKILL_VALUE
-      : effectiveWorkflowSkill.length === 0
-        ? NO_WORKFLOW_SKILL_VALUE
-        : effectiveWorkflowSkill;
+      : effectiveWorkflowSkill;
 
   const preview = useMemo(() => {
     if (!selectedProfile) {
@@ -401,8 +416,11 @@ export function IssueRunDialog({
                     nextProfile
                       ? resolveInitialWorkflowSkill({
                           issue,
-                          profile: nextProfile,
-                          projectId,
+                          options: savedSkills.filter((skill) =>
+                            skill.skillPaths.some(
+                              (p) => p.agentType === nextProfile.agentType,
+                            ),
+                          ),
                         })
                       : null,
                   );
@@ -430,60 +448,51 @@ export function IssueRunDialog({
               </Select>
             </div>
 
-            {shouldShowWorkflowSkill ? (
-              <div className="grid gap-1.5">
-                <Label
-                  htmlFor="run-workflow-skill"
-                  className="text-xs text-muted-foreground"
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="run-workflow-skill"
+                className="text-xs text-muted-foreground"
+              >
+                {messages.issues.workflowSkill}
+              </Label>
+              <Select
+                items={[
+                  {
+                    value: NO_WORKFLOW_SKILL_VALUE,
+                    label: messages.settings.none,
+                  },
+                  ...workflowSkillOptions.map((skill) => ({
+                    value: skill.name,
+                    label: skill.name,
+                  })),
+                ]}
+                value={workflowSkillValue}
+                onValueChange={(nextValue) => {
+                  const nextWorkflowSkill =
+                    nextValue === NO_WORKFLOW_SKILL_VALUE ? "" : nextValue;
+                  setSelectedWorkflowSkill(nextWorkflowSkill);
+                }}
+              >
+                <SelectTrigger
+                  id="run-workflow-skill"
+                  aria-label={messages.issues.workflowSkill}
+                  className="w-full"
+                  disabled={isLoadingProfiles || isStarting}
                 >
-                  {messages.issues.workflowSkill}
-                </Label>
-                <Select
-                  items={[
-                    {
-                      value: NO_WORKFLOW_SKILL_VALUE,
-                      label: messages.settings.none,
-                    },
-                    ...workflowSkillOptions.map((skill) => ({
-                      value: skill,
-                      label: skill,
-                    })),
-                  ]}
-                  value={workflowSkillValue}
-                  onValueChange={(nextValue) => {
-                    const nextWorkflowSkill =
-                      nextValue === NO_WORKFLOW_SKILL_VALUE ? "" : nextValue;
-                    setSelectedWorkflowSkill(nextWorkflowSkill);
-                    if (selectedProfile) {
-                      saveRecentWorkflowSkill({
-                        projectId,
-                        profileId: selectedProfile.id,
-                        workflowSkill: nextWorkflowSkill,
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger
-                    id="run-workflow-skill"
-                    aria-label={messages.issues.workflowSkill}
-                    className="w-full"
-                    disabled={isLoadingProfiles || isStarting}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_WORKFLOW_SKILL_VALUE}>
-                      {messages.settings.none}
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_WORKFLOW_SKILL_VALUE}>
+                    {messages.settings.none}
+                  </SelectItem>
+                  {workflowSkillOptions.map((skill) => (
+                    <SelectItem key={skill.name} value={skill.name}>
+                      {skill.name}
                     </SelectItem>
-                    {workflowSkillOptions.map((skill) => (
-                      <SelectItem key={skill} value={skill}>
-                        {skill}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="grid gap-1.5">
               <Label
@@ -646,108 +655,19 @@ function delay(milliseconds: number): Promise<void> {
 
 function resolveInitialWorkflowSkill({
   issue,
-  profile,
-  projectId,
+  options,
 }: {
   issue: Pick<IssueRecord, "labels">;
-  profile: Pick<AgentProfileRecord, "defaultSkill" | "id">;
-  projectId: number;
+  options: SavedAgentSkillRecord[];
 }): string | null {
-  const configuredSkills = parseDefaultSkills(profile.defaultSkill);
-  if (configuredSkills.length === 0) {
-    return null;
-  }
-
-  const labelWorkflowSkill = resolveLabelWorkflowSkill(issue.labels ?? []);
-  if (labelWorkflowSkill !== null) {
-    return labelWorkflowSkill;
-  }
-
-  const recentWorkflowSkill = readRecentWorkflowSkill({
-    projectId,
-    profileId: profile.id,
-  });
-  if (recentWorkflowSkill === null) {
-    return configuredSkills[0] ?? null;
-  }
-
-  if (recentWorkflowSkill.length === 0) {
-    return "";
-  }
-
-  return configuredSkills.includes(recentWorkflowSkill)
-    ? recentWorkflowSkill
-    : null;
-}
-
-function resolveLabelWorkflowSkill(
-  labels: NonNullable<IssueRecord["labels"]>,
-): string | null {
-  if (labels.length === 0) {
-    return null;
-  }
-
-  const configuredLabel = labels.find(
-    (label) => (label.workflowSkill ?? "").trim().length > 0,
-  );
-
-  return configuredLabel?.workflowSkill?.trim() ?? "";
-}
-
-function readRecentWorkflowSkill({
-  profileId,
-  projectId,
-}: {
-  profileId: number;
-  projectId: number;
-}): string | null {
-  try {
-    const rawValue = window.localStorage.getItem(
-      RECENT_WORKFLOW_SKILL_STORAGE_KEY,
-    );
-    if (!rawValue) {
-      return null;
+  const optionNames = new Set(options.map((skill) => skill.name));
+  for (const label of issue.labels ?? []) {
+    const name = (label.workflowSkill ?? "").trim();
+    if (name.length > 0 && optionNames.has(name)) {
+      return name;
     }
-
-    const records = JSON.parse(rawValue) as Record<string, string | null>;
-    const key = workflowSkillStorageKey(projectId, profileId);
-    return typeof records[key] === "string" || records[key] === null
-      ? records[key]
-      : null;
-  } catch {
-    return null;
   }
-}
-
-function saveRecentWorkflowSkill({
-  profileId,
-  projectId,
-  workflowSkill,
-}: {
-  profileId: number;
-  projectId: number;
-  workflowSkill: string | null;
-}) {
-  try {
-    const rawValue = window.localStorage.getItem(
-      RECENT_WORKFLOW_SKILL_STORAGE_KEY,
-    );
-    const records =
-      rawValue === null
-        ? {}
-        : (JSON.parse(rawValue) as Record<string, string | null>);
-    records[workflowSkillStorageKey(projectId, profileId)] = workflowSkill;
-    window.localStorage.setItem(
-      RECENT_WORKFLOW_SKILL_STORAGE_KEY,
-      JSON.stringify(records),
-    );
-  } catch {
-    // Ignore local storage failures and fall back to default ordering.
-  }
-}
-
-function workflowSkillStorageKey(projectId: number, profileId: number): string {
-  return `${projectId}:${profileId}`;
+  return null;
 }
 
 function readRecentWorkspaceSelection(
