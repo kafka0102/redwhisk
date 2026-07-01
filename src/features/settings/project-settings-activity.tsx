@@ -669,7 +669,6 @@ export function ProjectSettingsActivity({
                 errorMessage={currentLabelsErrorMessage}
                 labels={currentLabels}
                 loadState={currentLabelsLoadState}
-                profiles={currentProfiles}
                 projectId={projectId}
                 onAddFormChange={handleAddLabelFormChange}
                 onDeleteLabel={handleDeleteLabel}
