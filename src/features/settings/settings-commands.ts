@@ -92,8 +92,6 @@ export interface ProjectLabelRecord {
   workflowSkill: string | null;
 }
 
-export type AgentSkillScope = "project" | "global";
-
 export interface SavedAgentSkillPath {
   agentType: AgentType;
   path: string;
