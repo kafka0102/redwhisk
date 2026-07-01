@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_skill::AgentSkillScope;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedAgentSkillPath {
     pub agent_type: AgentType,
     pub path: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedAgentSkillRecord {
     pub id: i64,

@@ -89,6 +89,9 @@ const ISSUE_COMPLETION_FLOWS_MIGRATION_SQL: &str =
 const AGENT_SESSION_TURN_STATE_MIGRATION_VERSION: &str = "0028_agent_session_turn_state";
 const AGENT_SESSION_TURN_STATE_MIGRATION_SQL: &str =
     include_str!("../../migrations/0028_agent_session_turn_state.sql");
+const SAVED_AGENT_SKILLS_MIGRATION_VERSION: &str = "0029_saved_agent_skills";
+const SAVED_AGENT_SKILLS_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0029_saved_agent_skills.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -270,6 +273,10 @@ impl MigrationRunner {
                 Migration {
                     version: AGENT_SESSION_TURN_STATE_MIGRATION_VERSION,
                     sql: AGENT_SESSION_TURN_STATE_MIGRATION_SQL,
+                },
+                Migration {
+                    version: SAVED_AGENT_SKILLS_MIGRATION_VERSION,
+                    sql: SAVED_AGENT_SKILLS_MIGRATION_SQL,
                 },
             ];
         }

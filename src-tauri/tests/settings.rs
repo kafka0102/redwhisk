@@ -7,11 +7,16 @@ use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_label_repository::ProjectLabelRepository;
 use redwhisk_lib::db::project_repository::ProjectRepository;
+use redwhisk_lib::db::saved_agent_skill_repository::SavedAgentSkillRepository;
 use redwhisk_lib::types::agent_profile::{
     AgentScope, AgentType, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project_label::{ProjectLabelScope, SaveProjectLabelInput};
+use redwhisk_lib::types::agent_skill::AgentSkillScope;
+use redwhisk_lib::types::saved_agent_skill::{
+    ListSavedAgentSkillsInput, SaveSavedAgentSkillInput, SavedAgentSkillPath,
+};
 
 #[test]
 fn settings_migration_creates_restructured_agent_profiles_table() {
@@ -55,6 +60,69 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
         !override_exists,
         "project_agent_overrides should be dropped"
     );
+}
+
+#[test]
+fn settings_migration_creates_saved_agent_skills_table() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    let columns = table_columns(&database.connection, "saved_agent_skills");
+    assert_eq!(
+        columns,
+        vec![
+            "id",
+            "name",
+            "scope",
+            "project_id",
+            "skill_paths_json",
+            "del",
+            "created_at",
+            "updated_at",
+        ],
+    );
+}
+
+#[test]
+fn save_and_list_saved_agent_skill_round_trip() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let service = settings_service(
+        &database.connection,
+        StubCommandDetector::with_test_result("codex", Ok("/usr/local/bin/codex")),
+    );
+
+    let saved = service
+        .save_saved_agent_skill(SaveSavedAgentSkillInput {
+            id: None,
+            name: "build".to_string(),
+            scope: AgentSkillScope::Global,
+            project_id: None,
+            skill_paths: vec![SavedAgentSkillPath {
+                agent_type: AgentType::Codex,
+                path: "/skills/build".to_string(),
+            }],
+        })
+        .expect("saved agent skill");
+
+    assert!(saved.id > 0);
+    assert_eq!(saved.name, "build");
+    assert_eq!(saved.scope, AgentSkillScope::Global);
+
+    let response = service
+        .list_saved_agent_skills(ListSavedAgentSkillsInput {
+            scope: None,
+            project_id: None,
+        })
+        .expect("list saved agent skills");
+
+    assert_eq!(response.skills, vec![saved]);
 }
 
 #[test]
@@ -547,6 +615,7 @@ fn settings_service<'connection>(
     SettingsService::new(
         AgentProfileRepository::new(connection),
         ProjectLabelRepository::new(connection),
+        SavedAgentSkillRepository::new(connection),
         ProjectRepository::new(connection),
         detector,
     )
