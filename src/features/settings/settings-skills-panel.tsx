@@ -8,9 +8,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import {
-  type SavedAgentSkillRecord,
-} from "./settings-commands";
+import { type SavedAgentSkillRecord } from "./settings-commands";
 import { SavedAgentSkillForm } from "./saved-agent-skill-form";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";

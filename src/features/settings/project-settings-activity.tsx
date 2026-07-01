@@ -166,9 +166,7 @@ export function ProjectSettingsActivity({
   const [projectSkills, setProjectSkills] = useState<SavedAgentSkillRecord[]>(
     [],
   );
-  const [globalSkills, setGlobalSkills] = useState<SavedAgentSkillRecord[]>(
-    [],
-  );
+  const [globalSkills, setGlobalSkills] = useState<SavedAgentSkillRecord[]>([]);
   const [skillsErrorMessage, setSkillsErrorMessage] = useState<string | null>(
     null,
   );

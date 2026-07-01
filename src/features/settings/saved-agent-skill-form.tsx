@@ -55,9 +55,7 @@ export function SavedAgentSkillForm({
   const { messages } = useI18n();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
-  const [scope, setScope] = useState<AgentSkillScope>(
-    skill?.scope ?? "global",
-  );
+  const [scope, setScope] = useState<AgentSkillScope>(skill?.scope ?? "global");
   const [skillName, setSkillName] = useState(skill?.name ?? "");
   const [selectedPaths, setSelectedPaths] = useState<SavedAgentSkillPath[]>(
     skill?.skillPaths ?? [],
@@ -72,18 +70,21 @@ export function SavedAgentSkillForm({
   const [isSaving, setIsSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
 
-  const loadSkills = useCallback(async (targetScope: AgentSkillScope) => {
-    setSkillsLoadState("loading");
-    try {
-      const result = await listAgentSkills({
-        projectId: targetScope === "project" ? projectId : null,
-      });
-      setAvailableSkills(result.skills);
-      setSkillsLoadState("ready");
-    } catch {
-      setSkillsLoadState("error");
-    }
-  }, [projectId]);
+  const loadSkills = useCallback(
+    async (targetScope: AgentSkillScope) => {
+      setSkillsLoadState("loading");
+      try {
+        const result = await listAgentSkills({
+          projectId: targetScope === "project" ? projectId : null,
+        });
+        setAvailableSkills(result.skills);
+        setSkillsLoadState("ready");
+      } catch {
+        setSkillsLoadState("error");
+      }
+    },
+    [projectId],
+  );
 
   const handleScopeChange = useCallback((newScope: AgentSkillScope) => {
     setScope(newScope);
@@ -119,8 +120,8 @@ export function SavedAgentSkillForm({
 
   const allPathsSelected =
     selectedSkillPaths.length > 0 &&
-    selectedSkillPaths.every(
-      (path) => pathSelectionMap.get(`${path.agentType}:${path.path}`),
+    selectedSkillPaths.every((path) =>
+      pathSelectionMap.get(`${path.agentType}:${path.path}`),
     );
 
   const handleSelectSkillName = (name: string) => {
@@ -140,7 +141,9 @@ export function SavedAgentSkillForm({
     const key = `${path.agentType}:${path.path}`;
     if (pathSelectionMap.get(key)) {
       setSelectedPaths((prev) =>
-        prev.filter((p) => !(p.agentType === path.agentType && p.path === path.path)),
+        prev.filter(
+          (p) => !(p.agentType === path.agentType && p.path === path.path),
+        ),
       );
     } else {
       setSelectedPaths((prev) => [
@@ -308,16 +311,24 @@ export function SavedAgentSkillForm({
                   />
                   <CommandList>
                     {skillsLoadState === "loading" ? (
-                      <CommandEmpty>{messages.settings.loadingSkills}</CommandEmpty>
+                      <CommandEmpty>
+                        {messages.settings.loadingSkills}
+                      </CommandEmpty>
                     ) : skillsLoadState === "error" ? (
-                      <CommandEmpty>{messages.settings.skillLoadFailed}</CommandEmpty>
+                      <CommandEmpty>
+                        {messages.settings.skillLoadFailed}
+                      </CommandEmpty>
                     ) : (
                       <>
-                        <CommandEmpty>{messages.settings.noMatches}</CommandEmpty>
+                        <CommandEmpty>
+                          {messages.settings.noMatches}
+                        </CommandEmpty>
                         <CommandGroup>
                           {availableSkillNames
                             .filter((name) =>
-                              name.toLowerCase().includes(searchValue.toLowerCase()),
+                              name
+                                .toLowerCase()
+                                .includes(searchValue.toLowerCase()),
                             )
                             .map((name) => (
                               <CommandItem
@@ -328,7 +339,9 @@ export function SavedAgentSkillForm({
                                 <Check
                                   className={cn(
                                     "mr-2 h-4 w-4",
-                                    skillName === name ? "opacity-100" : "opacity-0",
+                                    skillName === name
+                                      ? "opacity-100"
+                                      : "opacity-0",
                                   )}
                                 />
                                 {name}
@@ -369,10 +382,7 @@ export function SavedAgentSkillForm({
                   const key = `${path.agentType}:${path.path}`;
                   const isSelected = pathSelectionMap.get(key) ?? false;
                   return (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 py-1.5"
-                    >
+                    <div key={index} className="flex items-center gap-2 py-1.5">
                       <Checkbox
                         id={`path-${index}`}
                         checked={isSelected}

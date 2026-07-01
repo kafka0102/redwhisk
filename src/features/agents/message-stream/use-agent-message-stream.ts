@@ -170,7 +170,6 @@ export function useAgentMessageStream({
 
     stateSessionIdRef.current = sessionId;
 
-
     const dispatchStreamEvent = (event: AgentStreamEvent) => {
       if (hasCachedInitialized && !isCacheRestored) {
         deferredEvents.push(event);
@@ -211,11 +210,11 @@ export function useAgentMessageStream({
           }
           isCacheRestored = true;
           cachedState.lastAccessTime = Date.now();
-          
+
           const fullState = cachedState.state;
           const allEntries = fullState.entries;
           const BATCH_SIZE = 50; // 每次恢复50条
-          
+
           if (allEntries.length <= BATCH_SIZE) {
             // 条目不多，一次性恢复
             dispatch({ type: "RESTORE", state: fullState });
@@ -226,7 +225,7 @@ export function useAgentMessageStream({
             }
             return;
           }
-          
+
           // 先恢复最新的BATCH_SIZE条，让用户尽快看到内容
           let currentEntries = allEntries.slice(-BATCH_SIZE);
           dispatch({
@@ -236,9 +235,9 @@ export function useAgentMessageStream({
               entries: currentEntries,
             },
           });
-          
+
           let currentIndex = allEntries.length - BATCH_SIZE;
-          
+
           // 逐步恢复历史消息，从旧到新
           const restoreNextBatch = () => {
             if (isDisposed || currentIndex <= 0) {
@@ -250,11 +249,11 @@ export function useAgentMessageStream({
               }
               return;
             }
-            
+
             const endIndex = currentIndex;
             currentIndex = Math.max(0, currentIndex - BATCH_SIZE);
             const batchEntries = allEntries.slice(currentIndex, endIndex);
-            
+
             // 合并到现有 entries 前面
             currentEntries = [...batchEntries, ...currentEntries];
             dispatch({
@@ -264,15 +263,14 @@ export function useAgentMessageStream({
                 entries: currentEntries,
               },
             });
-            
+
             // 下一帧继续恢复下一批
             restoreFrameHandle = window.requestAnimationFrame(restoreNextBatch);
           };
-          
+
           // 延迟一帧再开始恢复历史
           restoreFrameHandle = window.requestAnimationFrame(restoreNextBatch);
         });
-
 
         try {
           unlisten = await subscribeAgentSessionStream((envelope) => {

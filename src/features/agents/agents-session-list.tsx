@@ -182,9 +182,7 @@ const SessionRow = memo(function SessionRow({
         </span>
         <span className="agents-session-row__output">
           <span
-            aria-label={messages.agentsFeature.sessionStatus(
-              statusLabel,
-            )}
+            aria-label={messages.agentsFeature.sessionStatus(statusLabel)}
             className={buildSessionStatusDotClassName(statusTone)}
           />
           <span className="agents-session-row__latest-output">
