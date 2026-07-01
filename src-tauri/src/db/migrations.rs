@@ -92,6 +92,9 @@ const AGENT_SESSION_TURN_STATE_MIGRATION_SQL: &str =
 const SAVED_AGENT_SKILLS_MIGRATION_VERSION: &str = "0029_saved_agent_skills";
 const SAVED_AGENT_SKILLS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0029_saved_agent_skills.sql");
+const DROP_LABEL_AGENT_PROFILE_MIGRATION_VERSION: &str = "0030_drop_label_agent_profile";
+const DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0030_drop_label_agent_profile.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -277,6 +280,10 @@ impl MigrationRunner {
                 Migration {
                     version: SAVED_AGENT_SKILLS_MIGRATION_VERSION,
                     sql: SAVED_AGENT_SKILLS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: DROP_LABEL_AGENT_PROFILE_MIGRATION_VERSION,
+                    sql: DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL,
                 },
             ];
         }
