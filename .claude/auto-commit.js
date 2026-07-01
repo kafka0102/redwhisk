@@ -1,6 +1,10 @@
 #!/usr/bin/env node
-// auto-commit-hook-version: 3.0.0
-// Claude Code Hook：PostToolUse 记录写入文件，Stop 在主任务完成后提交改动。
+// auto-commit-hook-version: 4.0.0
+// Claude Code Hook：PostToolUse 记录写入文件，允许 Agent 设置 commit message，Stop 在主任务完成后提交改动。
+// 关键改进：
+// 1. 支持 Agent 显式设置 commit message（优先级最高）
+// 2. 跟踪文件变更时间而不是简单清空 state，避免遗漏重复修改的文件
+// 3. 结合 git 实际状态而不是只依赖记录的文件列表
 
 import fs from "node:fs";
 import os from "node:os";
@@ -9,7 +13,7 @@ import { spawnSync } from "node:child_process";
 
 const STATE_FILE = path.join(
   os.tmpdir(),
-  "redwhisk-claude-auto-commit-state-v3.json",
+  "redwhisk-claude-auto-commit-state-v4.json",
 );
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
@@ -55,7 +59,7 @@ async function main() {
   const state = loadState(stateKey);
 
   if (data.hook_event_name === "PostToolUse") {
-    recordWriteFiles(data, cwd, repoRoot, state);
+    handlePostToolUse(data, cwd, repoRoot, state);
     saveState(stateKey, state);
     return;
   }
@@ -151,33 +155,78 @@ function clearState(stateKey) {
 
 function createEmptyState() {
   return {
-    files: [],
+    // files: Map<path, { lastModifiedAt, committedAt? }>
+    files: {},
+    // Agent 显式设置的 commit message（优先级最高）
+    commitMessage: null,
     lastWriteAt: null,
   };
 }
 
-function recordWriteFiles(data, cwd, repoRoot, state) {
-  if (!WRITE_TOOLS.has(data.tool_name)) {
-    return;
-  }
+function handlePostToolUse(data, cwd, repoRoot, state) {
+  // 1. 检查是否有 Agent 写入了 commit message 文件
+  checkForCommitMessageFile(data, cwd, repoRoot, state);
 
+  // 2. 记录写入的文件
+  if (WRITE_TOOLS.has(data.tool_name)) {
+    recordWriteFiles(data, cwd, repoRoot, state);
+  }
+}
+
+function checkForCommitMessageFile(data, cwd, repoRoot, state) {
+  // 检查是否写入了约定的 commit message 文件
+  const toolInput = data.tool_input || {};
+  const writtenFile = toolInput.file_path;
+
+  if (writtenFile) {
+    const repoRelativePath = toRepoRelativePath(writtenFile, cwd, repoRoot);
+    // 检查是否是约定的 commit message 文件
+    if (repoRelativePath === ".claude/.commit-message.tmp") {
+      try {
+        // 读取这个文件的内容作为 commit message
+        const content = fs.readFileSync(writtenFile, "utf8").trim();
+        if (content) {
+          state.commitMessage = content;
+        }
+        // 删除这个临时文件
+        fs.unlinkSync(writtenFile);
+      } catch {
+        // 读取失败时忽略
+      }
+    }
+  }
+}
+
+function recordWriteFiles(data, cwd, repoRoot, state) {
   const files = extractToolFiles(data.tool_name, data.tool_input || {});
-  const currentFiles = new Set(state.files || []);
+  const now = new Date().toISOString();
 
   for (const file of files) {
     const repoRelativePath = toRepoRelativePath(file, cwd, repoRoot);
     if (repoRelativePath) {
-      currentFiles.add(repoRelativePath);
+      // 记录文件的最后修改时间，但不清空已提交的标记
+      // 这样如果一个文件被提交后又修改，我们可以再次捕获到
+      state.files[repoRelativePath] = {
+        lastModifiedAt: now,
+        // 保留之前的 committedAt（如果有）
+        ...(state.files[repoRelativePath] || {}),
+      };
     }
   }
 
-  state.files = Array.from(currentFiles).sort();
-  state.lastWriteAt = new Date().toISOString();
+  state.lastWriteAt = now;
 }
 
 function extractToolFiles(toolName, toolInput) {
   if (toolName === "NotebookEdit") {
     return [toolInput.notebook_path].filter(Boolean);
+  }
+
+  if (toolName === "MultiEdit") {
+    // MultiEdit 可能有多个 edits
+    if (toolInput.edits && Array.isArray(toolInput.edits)) {
+      return toolInput.edits.map((e) => e.file_path).filter(Boolean);
+    }
   }
 
   return [toolInput.file_path].filter(Boolean);
@@ -208,14 +257,21 @@ async function commitOnStop(repoRoot, stateKey, state) {
 
   const statusEntries = getGitStatus(repoRoot);
   if (statusEntries.length === 0) {
-    clearState(stateKey);
+    // 没有任何改动，只清理状态中的 committedAt 标记（保留文件记录以防后续修改）
+    resetCommittedMarkers(state);
+    saveState(stateKey, state);
     return;
   }
 
   const dirtyFiles = new Set(statusEntries.map((entry) => entry.path));
-  const recordedDirtyFiles = (state.files || []).filter((file) =>
-    dirtyFiles.has(file),
+
+  // 1. 找出候选文件：
+  //    a) 我们记录过的文件中，当前是 dirty 的
+  //    b) 或者启用了 commitDirtyFallback 时，所有 dirty 文件
+  const recordedDirtyFiles = Object.keys(state.files).filter((file) =>
+    dirtyFiles.has(file)
   );
+
   const candidateFiles =
     recordedDirtyFiles.length > 0 || !config.commitDirtyFallback
       ? recordedDirtyFiles
@@ -244,10 +300,14 @@ async function commitOnStop(repoRoot, stateKey, state) {
     },
   );
   if (diffResult.status === 0) {
+    // 没有实际变更（可能是权限变化等）
     return;
   }
 
-  const commitMessage = generateCommitMessage(filesToCommit, config);
+  // 优先使用 Agent 设置的 commit message，否则回退到自动生成
+  const commitMessage =
+    state.commitMessage || generateCommitMessage(filesToCommit, config);
+
   runGit(repoRoot, ["commit", "-m", commitMessage, "--", ...filesToCommit], {
     stdio: ["ignore", "ignore", "pipe"],
   });
@@ -257,8 +317,29 @@ async function commitOnStop(repoRoot, stateKey, state) {
     "--short",
     "HEAD",
   ]).stdout.trim();
-  writeHookLog(`Auto commit ${commitHash}: ${commitMessage}`);
-  clearState(stateKey);
+
+  writeHookLog(repoRoot, `Auto commit ${commitHash}: ${commitMessage}`);
+
+  // 标记这些文件已提交，但不删除记录
+  // 这样如果文件再次修改，我们还能捕获到
+  const now = new Date().toISOString();
+  for (const file of filesToCommit) {
+    if (state.files[file]) {
+      state.files[file].committedAt = now;
+    }
+  }
+
+  // 清空已使用的 commit message，避免下次重复使用
+  state.commitMessage = null;
+
+  saveState(stateKey, state);
+}
+
+function resetCommittedMarkers(state) {
+  // 重置 committedAt 标记，但保留文件记录
+  for (const file of Object.keys(state.files)) {
+    delete state.files[file].committedAt;
+  }
 }
 
 function loadProjectConfig(repoRoot) {
@@ -453,10 +534,10 @@ function generateCommitMessage(files, config) {
   return `${type}: ${description}`;
 }
 
-function writeHookLog(message) {
+function writeHookLog(repoRoot, message) {
   try {
     const logPath = path.join(os.tmpdir(), "redwhisk-claude-auto-commit.log");
-    const line = `${new Date().toISOString()} ${message}\n`;
+    const line = `${new Date().toISOString()} [${repoRoot}] ${message}\n`;
     fs.appendFileSync(logPath, line);
   } catch {
     // 日志失败不影响主流程。
