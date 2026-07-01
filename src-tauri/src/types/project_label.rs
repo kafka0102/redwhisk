@@ -15,8 +15,6 @@ pub struct ProjectLabelRecord {
     pub scope: ProjectLabelScope,
     pub project_id: Option<i64>,
     pub color: String,
-    pub agent_profile_id: Option<i64>,
-    pub agent_name: Option<String>,
     pub workflow_skill: Option<String>,
     pub del: i64,
 }
@@ -42,7 +40,6 @@ pub struct SaveProjectLabelInput {
     pub scope: ProjectLabelScope,
     pub project_id: Option<i64>,
     pub color: String,
-    pub agent_profile_id: Option<i64>,
     pub workflow_skill: Option<String>,
 }
 
