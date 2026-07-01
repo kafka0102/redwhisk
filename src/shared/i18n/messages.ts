@@ -65,7 +65,6 @@ export interface I18nMessages {
   };
   settings: {
     actions: string;
-    agent: string;
     agents: string;
     autoCommit: string;
     cancel: string;
@@ -103,7 +102,6 @@ export interface I18nMessages {
     newTerminal: string;
     noAgents: string;
     noLabels: string;
-    noSkills: string;
     noTerminals: string;
     none: string;
     projectName: string;
@@ -455,7 +453,6 @@ export interface I18nMessages {
     changedFilesCount: (count: number) => string;
     head: (head: string) => string;
     completionOption: (option: string) => string;
-    unavailableInCurrentScope: string;
   };
   designSystem: {
     title: string;
@@ -563,7 +560,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     settings: {
       actions: "Actions",
-      agent: "Agent",
       agents: "Agents",
       autoCommit: "Auto Commit",
       cancel: "Cancel",
@@ -602,7 +598,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newTerminal: "New terminal",
       noAgents: "No agents",
       noLabels: "No labels",
-      noSkills: "No skills",
       noTerminals: "No terminals yet.",
       none: "None",
       projectName: "Project Name",
@@ -966,7 +961,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       changedFilesCount: (count) => `Changed files: ${count}`,
       head: (head) => `HEAD: ${head}`,
       completionOption: (option) => `Completion option: ${option}`,
-      unavailableInCurrentScope: "Unavailable in current scope",
     },
     designSystem: {
       title: "Design System",
@@ -1068,7 +1062,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     settings: {
       actions: "操作",
-      agent: "Agent",
       agents: "Agents",
       autoCommit: "自动提交",
       cancel: "取消",
@@ -1107,7 +1100,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newTerminal: "新建终端",
       noAgents: "暂无 Agents",
       noLabels: "暂无标签",
-      noSkills: "暂无技能",
       noTerminals: "暂无终端。",
       none: "无",
       projectName: "项目名称",
@@ -1463,7 +1455,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       changedFilesCount: (count) => `变更文件：${count}`,
       head: (head) => `当前提交：${head}`,
       completionOption: (option) => `完成选项：${option}`,
-      unavailableInCurrentScope: "当前范围不可用",
     },
     designSystem: {
       title: "设计系统",
