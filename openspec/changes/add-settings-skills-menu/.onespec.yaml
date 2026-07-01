@@ -1,0 +1,22 @@
+version: 1
+change: add-settings-skills-menu
+phase: proposal-ready
+ambiguity: low
+complexity: unknown
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/add-settings-skills-menu/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: proposal handoff from 3 file(s); primary artifact: openspec/changes/add-settings-skills-menu/proposal.md
+handoff_hash: 894b802cf5267d1630307ee4c3cebcd7cb6127dfee7c64a0f0fdfc05a61f2442
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-07-01
+updated_at: 2026-07-01T01:24:45Z
