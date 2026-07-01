@@ -18,7 +18,7 @@ use crate::types::project_label::{
 };
 use crate::types::saved_agent_skill::{
     DeleteSavedAgentSkillInput, ListSavedAgentSkillsInput, SavedAgentSkillListResponse,
-    SavedAgentSkillPath, SavedAgentSkillRecord, SaveSavedAgentSkillInput,
+    SavedAgentSkillRecord, SaveSavedAgentSkillInput,
 };
 use crate::types::agent_skill::AgentSkillScope;
 
