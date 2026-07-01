@@ -8,10 +8,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import {
-  type AgentProfileRecord,
-  type ProjectLabelRecord,
-} from "./settings-commands";
+import { type ProjectLabelRecord } from "./settings-commands";
 import { ProjectLabelForm } from "./project-label-form";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -31,7 +28,6 @@ interface LabelsSettingsPanelProps {
   errorMessage: string | null;
   labels: ProjectLabelRecord[];
   loadState: "loading" | "ready" | "error";
-  profiles: AgentProfileRecord[];
   projectId: number;
   onAddFormChange: (form: AddLabelFormState | null) => void;
   onDeleteLabel: (label: ProjectLabelRecord) => void;
@@ -46,7 +42,6 @@ export function LabelsSettingsPanel({
   errorMessage,
   labels,
   loadState,
-  profiles,
   projectId,
   onAddFormChange,
   onDeleteLabel,
@@ -84,7 +79,6 @@ export function LabelsSettingsPanel({
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>{messages.settings.name}</TableHead>
-                <TableHead>{messages.settings.agent}</TableHead>
                 <TableHead className="w-24">
                   {messages.settings.scope}
                 </TableHead>
@@ -114,11 +108,6 @@ export function LabelsSettingsPanel({
                     >
                       <span className="min-w-0 truncate">{label.name}</span>
                     </Button>
-                  </TableCell>
-                  <TableCell>
-                    <span className="block truncate text-muted-foreground">
-                      {label.agentName ?? messages.settings.none}
-                    </span>
                   </TableCell>
                   <TableCell>
                     {label.scope === "global"
@@ -169,7 +158,6 @@ export function LabelsSettingsPanel({
           key={`create-label-${addForm.projectId}`}
           mode="create"
           projectId={addForm.projectId}
-          profiles={profiles}
           onCancel={() => onAddFormChange(null)}
           onSaved={onLabelSaved}
         />
@@ -181,7 +169,6 @@ export function LabelsSettingsPanel({
           label={editingLabel.label}
           mode="edit"
           projectId={projectId}
-          profiles={profiles}
           onCancel={() => onEditingLabelChange(null)}
           onSaved={onLabelSaved}
         />
