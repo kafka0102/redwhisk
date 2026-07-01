@@ -1,5 +1,4 @@
 import type { AgentProfileRecord } from "../settings/settings-commands";
-import { parseDefaultSkills } from "../settings/agent-profile-skills";
 import type { IssueRecord } from "./issue-commands";
 
 export interface RunPromptSource {
@@ -42,14 +41,11 @@ export function buildRunPromptPreview(
     input.issue.attachments
       ?.map((attachment) => attachment.absolutePath.trim())
       .filter((path) => path.length > 0) ?? [];
-  const configuredSkills = parseDefaultSkills(input.profile.defaultSkill);
   const selectedWorkflowSkill = input.selectedWorkflowSkill ?? null;
   const defaultSkills =
-    selectedWorkflowSkill === null
-      ? configuredSkills
-      : selectedWorkflowSkill.trim().length > 0
-        ? [selectedWorkflowSkill.trim()]
-        : [];
+    selectedWorkflowSkill !== null && selectedWorkflowSkill.trim().length > 0
+      ? [selectedWorkflowSkill.trim()]
+      : [];
   const promptTemplate = input.profile.promptTemplate.trim();
   const sources: RunPromptSource[] = [];
 
