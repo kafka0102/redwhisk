@@ -1,0 +1,22 @@
+version: 1
+change: decouple-label-agent-skills
+phase: proposal-ready
+ambiguity: high
+complexity: unknown
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/decouple-label-agent-skills/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: proposal handoff from 7 file(s); primary artifact: openspec/changes/decouple-label-agent-skills/proposal.md
+handoff_hash: 23a62be46c5f1d7e3fd7a904810af1b1c1fbc8fb1cc58d9e41f568279e4f77a2
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-07-01
+updated_at: 2026-07-01T12:41:27Z
