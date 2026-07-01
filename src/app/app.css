@@ -761,7 +761,9 @@ button:focus-visible {
 .settings-section--agents .settings-section__header,
 .settings-section--agents .settings-section__body,
 .settings-section--labels .settings-section__header,
-.settings-section--labels .settings-section__body {
+.settings-section--labels .settings-section__body,
+.settings-section--skills .settings-section__header,
+.settings-section--skills .settings-section__body {
   width: min(90vw, 100%);
 }
 
