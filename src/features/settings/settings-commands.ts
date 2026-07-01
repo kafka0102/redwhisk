@@ -87,8 +87,6 @@ export interface ProjectLabelRecord {
   scope: ProjectLabelScope;
   projectId: number | null;
   color: string;
-  agentProfileId: number | null;
-  agentName: string | null;
   workflowSkill: string | null;
 }
 
@@ -141,7 +139,6 @@ export interface SaveProjectLabelInput {
   scope: ProjectLabelScope;
   projectId: number | null;
   color: string;
-  agentProfileId: number | null;
   workflowSkill: string | null;
 }
 
