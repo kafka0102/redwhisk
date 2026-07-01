@@ -5,17 +5,20 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Bot, Info, Tag } from "lucide-react";
+import { Bot, Info, Tag, Wrench } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import {
   deleteAgentProfile,
   deleteProjectLabel,
+  deleteSavedAgentSkill,
   listAgentProfiles,
   listProjectLabels,
+  listSavedAgentSkills,
   type AgentProfileRecord,
   type ProjectLabelRecord,
+  type SavedAgentSkillRecord,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import type {
@@ -33,8 +36,9 @@ import {
 import { GeneralSettingsPanel } from "./settings-general-panel";
 import { AgentsSettingsPanel } from "./settings-agents-panel";
 import { LabelsSettingsPanel } from "./settings-labels-panel";
+import { SkillsSettingsPanel } from "./settings-skills-panel";
 
-export type SettingsMenu = "general" | "agents" | "labels";
+export type SettingsMenu = "general" | "agents" | "labels" | "skills";
 
 interface AddFormState {
   projectId: number;
@@ -52,6 +56,15 @@ interface AddLabelFormState {
 interface EditingLabelState {
   contextProjectId: number;
   label: ProjectLabelRecord;
+}
+
+interface AddSkillFormState {
+  projectId: number;
+}
+
+interface EditingSkillState {
+  contextProjectId: number;
+  skill: SavedAgentSkillRecord;
 }
 
 const SETTINGS_MENU_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -77,6 +90,11 @@ const SETTINGS_MENU_ITEMS: {
     iconTestId: "settings-menu-icon-labels",
     key: "labels",
     MenuIcon: Tag,
+  },
+  {
+    iconTestId: "settings-menu-icon-skills",
+    key: "skills",
+    MenuIcon: Wrench,
   },
 ];
 
@@ -145,6 +163,26 @@ export function ProjectSettingsActivity({
     null,
   );
   const [deletingLabelId, setDeletingLabelId] = useState<number | null>(null);
+  const [projectSkills, setProjectSkills] = useState<SavedAgentSkillRecord[]>(
+    [],
+  );
+  const [globalSkills, setGlobalSkills] = useState<SavedAgentSkillRecord[]>(
+    [],
+  );
+  const [skillsErrorMessage, setSkillsErrorMessage] = useState<string | null>(
+    null,
+  );
+  const [skillsLoadState, setSkillsLoadState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [skillsProjectId, setSkillsProjectId] = useState(projectId);
+  const [addSkillForm, setAddSkillForm] = useState<AddSkillFormState | null>(
+    null,
+  );
+  const [editingSkill, setEditingSkill] = useState<EditingSkillState | null>(
+    null,
+  );
+  const [deletingSkillId, setDeletingSkillId] = useState<number | null>(null);
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
@@ -183,6 +221,18 @@ export function ProjectSettingsActivity({
     addLabelForm?.projectId === projectId ? addLabelForm : null;
   const currentEditingLabel =
     editingLabel?.contextProjectId === projectId ? editingLabel : null;
+  const isSkillsCurrent = skillsProjectId === projectId;
+  const currentProjectSkills = isSkillsCurrent ? projectSkills : [];
+  const currentGlobalSkills = isSkillsCurrent ? globalSkills : [];
+  const currentSkills = [...currentProjectSkills, ...currentGlobalSkills].sort(
+    (left, right) => left.id - right.id,
+  );
+  const currentSkillsErrorMessage = isSkillsCurrent ? skillsErrorMessage : null;
+  const currentSkillsLoadState = isSkillsCurrent ? skillsLoadState : "loading";
+  const currentAddSkillForm =
+    addSkillForm?.projectId === projectId ? addSkillForm : null;
+  const currentEditingSkill =
+    editingSkill?.contextProjectId === projectId ? editingSkill : null;
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
@@ -253,6 +303,35 @@ export function ProjectSettingsActivity({
   }, [projectId]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    void Promise.all([
+      listSavedAgentSkills({ scope: "project", projectId }),
+      listSavedAgentSkills({ scope: "global", projectId: null }),
+    ])
+      .then(([projectResponse, globalResponse]) => {
+        if (!isMounted) return;
+        setProjectSkills(projectResponse.skills);
+        setGlobalSkills(globalResponse.skills);
+        setSkillsErrorMessage(null);
+        setSkillsProjectId(projectId);
+        setSkillsLoadState("ready");
+      })
+      .catch((error: unknown) => {
+        if (!isMounted) return;
+        setProjectSkills([]);
+        setGlobalSkills([]);
+        setSkillsErrorMessage(toCommandError(error).message);
+        setSkillsProjectId(projectId);
+        setSkillsLoadState("error");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
       if (!dragStateRef.current) {
         return;
@@ -307,6 +386,21 @@ export function ProjectSettingsActivity({
     setEditingLabel(null);
   }
 
+  function handleSkillSaved(savedSkill: SavedAgentSkillRecord) {
+    setProjectSkills((current) => {
+      const remaining = removeSkill(current, savedSkill.id);
+      if (savedSkill.scope !== "project") return remaining;
+      return mergeSkill(remaining, savedSkill);
+    });
+    setGlobalSkills((current) => {
+      const remaining = removeSkill(current, savedSkill.id);
+      if (savedSkill.scope !== "global") return remaining;
+      return mergeSkill(remaining, savedSkill);
+    });
+    setAddSkillForm(null);
+    setEditingSkill(null);
+  }
+
   async function handleDeleteProfile(profile: AgentProfileRecord) {
     const isConfirmed = await confirm({
       message: messages.settings.deleteConfirm(profile.name),
@@ -359,6 +453,32 @@ export function ProjectSettingsActivity({
     }
   }
 
+  async function handleDeleteSkill(skill: SavedAgentSkillRecord) {
+    const isConfirmed = await confirm({
+      message: messages.settings.deleteConfirm(skill.name),
+    });
+    if (!isConfirmed) {
+      return;
+    }
+
+    setSkillsErrorMessage(null);
+    setDeletingSkillId(skill.id);
+
+    try {
+      await deleteSavedAgentSkill({ id: skill.id });
+      setProjectSkills((current) => removeSkill(current, skill.id));
+      setGlobalSkills((current) => removeSkill(current, skill.id));
+      setEditingSkill((current) =>
+        current?.skill.id === skill.id ? null : current,
+      );
+      toast.success(messages.toast.deleteSuccess);
+    } catch (error: unknown) {
+      setSkillsErrorMessage(toCommandError(error).message);
+    } finally {
+      setDeletingSkillId(null);
+    }
+  }
+
   function handleAddFormChange(form: AddFormState | null) {
     setAddForm(form);
   }
@@ -373,6 +493,14 @@ export function ProjectSettingsActivity({
 
   function handleEditingLabelChange(state: EditingLabelState | null) {
     setEditingLabel(state);
+  }
+
+  function handleAddSkillFormChange(form: AddSkillFormState | null) {
+    setAddSkillForm(form);
+  }
+
+  function handleEditingSkillChange(state: EditingSkillState | null) {
+    setEditingSkill(state);
   }
 
   return (
@@ -492,6 +620,18 @@ export function ProjectSettingsActivity({
                 >
                   <span>{messages.settings.newLabel}</span>
                 </Button>
+              ) : activeMenu === "skills" ? (
+                <Button
+                  variant="outline"
+                  type="button"
+                  aria-label={messages.settings.newSkill}
+                  onClick={() => {
+                    setAddSkillForm({ projectId });
+                    setEditingSkill(null);
+                  }}
+                >
+                  <span>{messages.settings.newSkill}</span>
+                </Button>
               ) : null
             }
           >
@@ -537,6 +677,22 @@ export function ProjectSettingsActivity({
                 onDeleteLabel={handleDeleteLabel}
                 onEditingLabelChange={handleEditingLabelChange}
                 onLabelSaved={handleLabelSaved}
+              />
+            ) : null}
+
+            {activeMenu === "skills" ? (
+              <SkillsSettingsPanel
+                addForm={currentAddSkillForm}
+                deletingSkillId={deletingSkillId}
+                editingSkill={currentEditingSkill}
+                errorMessage={currentSkillsErrorMessage}
+                skills={currentSkills}
+                loadState={currentSkillsLoadState}
+                projectId={projectId}
+                onAddFormChange={handleAddSkillFormChange}
+                onDeleteSkill={handleDeleteSkill}
+                onEditingSkillChange={handleEditingSkillChange}
+                onSkillSaved={handleSkillSaved}
               />
             ) : null}
           </SettingsContentFrame>
@@ -600,7 +756,8 @@ function getSettingsMenuLabel(
 ): string {
   if (key === "general") return messages.settings.general;
   if (key === "agents") return messages.settings.agents;
-  return messages.settings.labels;
+  if (key === "labels") return messages.settings.labels;
+  return messages.settings.skills;
 }
 
 function mergeLabel(
@@ -616,4 +773,19 @@ function removeLabel(
   labelId: number,
 ): ProjectLabelRecord[] {
   return currentLabels.filter((label) => label.id !== labelId);
+}
+
+function mergeSkill(
+  currentSkills: SavedAgentSkillRecord[],
+  savedSkill: SavedAgentSkillRecord,
+): SavedAgentSkillRecord[] {
+  const remaining = removeSkill(currentSkills, savedSkill.id);
+  return [...remaining, savedSkill].sort((left, right) => left.id - right.id);
+}
+
+function removeSkill(
+  currentSkills: SavedAgentSkillRecord[],
+  skillId: number,
+): SavedAgentSkillRecord[] {
+  return currentSkills.filter((skill) => skill.id !== skillId);
 }

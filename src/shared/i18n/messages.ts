@@ -130,6 +130,15 @@ export interface I18nMessages {
     worktreeSetupAfterCreation: string;
     colorPresets: string;
     noMatches: string;
+    skills: string;
+    newSkill: string;
+    noSkillsSaved: string;
+    editSkill: string;
+    skillPaths: string;
+    selectSkillName: string;
+    searchSkillName: string;
+    skillNameDuplicate: string;
+    skillNameRequired: string;
   };
   projectHome: {
     chooseFolder: string;
@@ -620,6 +629,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       worktreeSetupAfterCreation: "Worktree setup after creation",
       colorPresets: "Color presets",
       noMatches: "No matches",
+      skills: "Skills",
+      newSkill: "New skill",
+      noSkillsSaved: "No skills saved",
+      editSkill: "Edit skill",
+      skillPaths: "Skill paths",
+      selectSkillName: "Select skill name",
+      searchSkillName: "Search skill name...",
+      skillNameDuplicate: "Skill name already exists in this scope",
+      skillNameRequired: "Skill name is required",
     },
     projectHome: {
       chooseFolder: "Choose folder",
@@ -1116,6 +1134,15 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       worktreeSetupAfterCreation: "创建工作树后的初始化命令",
       colorPresets: "颜色预设",
       noMatches: "无匹配项",
+      skills: "技能",
+      newSkill: "新建技能",
+      noSkillsSaved: "暂无技能配置",
+      editSkill: "编辑技能",
+      skillPaths: "技能路径",
+      selectSkillName: "选择技能名称",
+      searchSkillName: "搜索技能名称...",
+      skillNameDuplicate: "该范围内此技能名称已存在",
+      skillNameRequired: "技能名称不能为空",
     },
     projectHome: {
       chooseFolder: "选择目录",
