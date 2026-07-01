@@ -9,7 +9,6 @@ import {
 } from "@/components/ui";
 import { type AgentProfileRecord } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
-import { formatDefaultSkills } from "./agent-profile-skills";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -87,7 +86,6 @@ export function AgentsSettingsPanel({
                 <TableHead className="w-24">
                   {messages.settings.scope}
                 </TableHead>
-                <TableHead>{messages.settings.workflowSkill}</TableHead>
                 <TableHead className="w-40">
                   {messages.settings.actions}
                 </TableHead>
@@ -96,7 +94,6 @@ export function AgentsSettingsPanel({
             <TableBody>
               {profiles.map((profile) => {
                 const agentLabel = formatAgentTypeLabel(profile.agentType);
-                const skills = formatDefaultSkills(profile.defaultSkill);
 
                 return (
                   <TableRow key={profile.id}>
@@ -133,14 +130,6 @@ export function AgentsSettingsPanel({
                       {profile.scope === "global"
                         ? messages.settings.globalScope
                         : messages.settings.projectScope}
-                    </TableCell>
-                    <TableCell
-                      data-slot="settings-agents-skill-cell"
-                      className="overflow-hidden"
-                    >
-                      <span className="block truncate">
-                        {skills.length > 0 ? skills : "—"}
-                      </span>
                     </TableCell>
                     <TableCell>
                       <Button
