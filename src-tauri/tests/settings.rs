@@ -489,7 +489,6 @@ fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
             scope: ProjectLabelScope::Project,
             project_id: Some(project_id),
             color: "#112233".to_string(),
-            agent_profile_id: None,
             workflow_skill: None,
         })
         .expect("project label");
@@ -501,7 +500,6 @@ fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
             scope: ProjectLabelScope::Global,
             project_id: None,
             color: "#445566".to_string(),
-            agent_profile_id: None,
             workflow_skill: None,
         })
         .expect_err("global duplicate should fail");
@@ -527,7 +525,6 @@ fn save_project_label_allows_same_name_in_other_project() {
             scope: ProjectLabelScope::Project,
             project_id: Some(project_a),
             color: "#112233".to_string(),
-            agent_profile_id: None,
             workflow_skill: None,
         })
         .expect("project a label");
@@ -539,7 +536,6 @@ fn save_project_label_allows_same_name_in_other_project() {
             scope: ProjectLabelScope::Project,
             project_id: Some(project_b),
             color: "#445566".to_string(),
-            agent_profile_id: None,
             workflow_skill: None,
         })
         .expect("project b label");
@@ -549,7 +545,7 @@ fn save_project_label_allows_same_name_in_other_project() {
 }
 
 #[test]
-fn save_project_label_rejects_workflow_skill_without_agent() {
+fn save_project_label_allows_workflow_skill_without_agent() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let service = settings_service(
@@ -558,19 +554,18 @@ fn save_project_label_rejects_workflow_skill_without_agent() {
     );
     let project_id = insert_project(&database.connection, "redwhisk");
 
-    let error = service
+    let saved = service
         .save_project_label(SaveProjectLabelInput {
             id: None,
             name: "ops".to_string(),
             scope: ProjectLabelScope::Project,
             project_id: Some(project_id),
             color: "#112233".to_string(),
-            agent_profile_id: None,
             workflow_skill: Some("triage".to_string()),
         })
-        .expect_err("workflow skill without agent should fail");
+        .expect("workflow skill without agent should succeed");
 
-    assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    assert_eq!(saved.workflow_skill.as_deref(), Some("triage"));
 }
 
 struct StubCommandDetector {
@@ -708,4 +703,37 @@ fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<Str
         .expect("query columns")
         .collect::<Result<Vec<_>, _>>()
         .expect("collect columns")
+}
+
+#[test]
+fn migration_drops_label_agent_profile_id_and_nulls_workflow_skill() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+
+    let columns = table_columns(&database.connection, "project_labels");
+    assert!(
+        !columns.iter().any(|c| c == "agent_profile_id"),
+        "agent_profile_id 列应已被删除，实际列: {:?}",
+        columns
+    );
+    assert!(columns.iter().any(|c| c == "workflow_skill"));
+
+    // workflow_skill 列仍可写入（语义为 saved skill name）。
+    database
+        .connection
+        .execute(
+            "INSERT INTO project_labels (name, scope, project_id, color, workflow_skill, del)
+             VALUES ('ops', 'global', NULL, '#112233', 'triage', 0)",
+            [],
+        )
+        .expect("insert label");
+    let skill: Option<String> = database
+        .connection
+        .query_row(
+            "SELECT workflow_skill FROM project_labels WHERE name = 'ops'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("select skill");
+    assert_eq!(skill.as_deref(), Some("triage"));
 }
