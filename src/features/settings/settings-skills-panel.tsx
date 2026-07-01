@@ -79,11 +79,13 @@ export function SkillsSettingsPanel({
           >
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>{messages.settings.name}</TableHead>
+                <TableHead className="w-40">{messages.settings.name}</TableHead>
                 <TableHead className="w-24">
                   {messages.settings.scope}
                 </TableHead>
-                <TableHead>{messages.settings.skillPaths}</TableHead>
+                <TableHead className="w-80">
+                  {messages.settings.skillPaths}
+                </TableHead>
                 <TableHead className="w-40">
                   {messages.settings.actions}
                 </TableHead>
@@ -115,20 +117,18 @@ export function SkillsSettingsPanel({
                       : messages.settings.projectScope}
                   </TableCell>
                   <TableCell className="overflow-hidden">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-col gap-1">
                       {skill.skillPaths.map((path, index) => (
                         <span
                           key={index}
-                          className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                          className="inline-flex w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
                         >
                           <img
                             alt={formatAgentTypeLabel(path.agentType)}
-                            className="block size-3"
+                            className="block size-3 shrink-0"
                             src={getAgentLogoSrc(path.agentType)}
                           />
-                          <span className="truncate max-w-[200px]">
-                            {path.path}
-                          </span>
+                          <span className="truncate">{path.path}</span>
                         </span>
                       ))}
                     </div>
