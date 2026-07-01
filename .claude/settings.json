@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/auto-commit.js",
+            "command": "node /Users/yujianjia/workspace/kafka/redwhisk/.claude/auto-commit.js",
             "timeout": 20
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/auto-commit.js",
+            "command": "node /Users/yujianjia/workspace/kafka/redwhisk/.claude/auto-commit.js",
             "timeout": 30
           }
         ]
