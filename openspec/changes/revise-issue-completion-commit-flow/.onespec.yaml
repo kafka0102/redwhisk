@@ -1,14 +1,14 @@
 version: 1
 change: revise-issue-completion-commit-flow
-phase: proposal-ready
+phase: approved
 ambiguity: high
 complexity: high
-implementation_path: undecided
-execution_method: undecided
-workspace: undecided
-origin_branch: unknown
-origin_workspace_path: unknown
-origin_workspace_mode: unknown
+implementation_path: superpowers
+execution_method: subagent
+workspace: worktree
+origin_branch: devlop
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
+origin_workspace_mode: current-branch
 implementation_workspace_path: unknown
 plan: null
 handoff_context: openspec/changes/revise-issue-completion-commit-flow/.onespec.yaml
@@ -19,4 +19,4 @@ touched_files_b64: null
 review_result: pending
 archive: pending
 created_at: 2026-07-02
-updated_at: 2026-07-02T13:22:44Z
+updated_at: 2026-07-02T13:26:12Z
