@@ -2222,10 +2222,6 @@ describe("IssuesActivity", () => {
 
   it("defaults to no workflow skill when issue labels have no configured workflow skill", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "redwhisk.issue-run.recent-workflow-skill",
-      JSON.stringify({ "1:100": "skill-b" }),
-    );
     listIssuesMock.mockResolvedValue({
       issues: [
         {
@@ -2239,14 +2235,7 @@ describe("IssuesActivity", () => {
     });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
-        return {
-          profiles: [
-            {
-              ...projectProfile,
-              defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
-            },
-          ],
-        };
+        return { profiles: [projectProfile] };
       }
 
       return { profiles: [globalProfile] };

@@ -76,11 +76,6 @@ export interface AgentSkillListResponse {
   lastError: string | null;
 }
 
-export interface AgentSkillsUpdatedEvent {
-  scope: AgentSkillScope;
-  projectId: number | null;
-}
-
 export interface ProjectLabelRecord {
   id: number;
   name: string;

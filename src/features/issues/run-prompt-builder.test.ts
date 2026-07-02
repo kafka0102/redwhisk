@@ -11,7 +11,6 @@ describe("buildRunPromptPreview", () => {
         attachments: [],
       },
       profile: {
-        defaultSkill: "bmad-dev-story",
         promptTemplate: "Focus on {{issue.description}} in {{project.name}}.",
       },
       selectedWorkflowSkill: "bmad-dev-story",
@@ -46,7 +45,6 @@ describe("buildRunPromptPreview", () => {
         ],
       },
       profile: {
-        defaultSkill: "bmad-dev-story",
         promptTemplate: "Template body",
       },
       selectedWorkflowSkill: "bmad-dev-story",
@@ -95,7 +93,6 @@ describe("buildRunPromptPreview", () => {
         ],
       },
       profile: {
-        defaultSkill: "",
         promptTemplate: "",
       },
     });
@@ -143,7 +140,6 @@ describe("buildRunPromptPreview", () => {
         ],
       },
       profile: {
-        defaultSkill: "",
         promptTemplate: "",
       },
     });
@@ -163,7 +159,6 @@ describe("buildRunPromptPreview", () => {
         attachments: [],
       },
       profile: {
-        defaultSkill: "bmad-dev-story",
         promptTemplate: "",
       },
       selectedWorkflowSkill: "bmad-dev-story",
@@ -185,7 +180,6 @@ describe("buildRunPromptPreview", () => {
         attachments: [],
       },
       profile: {
-        defaultSkill: "",
         promptTemplate: "",
       },
       selectedWorkflowSkill: "skill-a",

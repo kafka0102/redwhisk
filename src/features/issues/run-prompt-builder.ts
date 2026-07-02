@@ -19,7 +19,7 @@ export interface RunPromptPreview {
 
 interface BuildRunPromptPreviewInput {
   issue: Pick<IssueRecord, "title" | "description" | "attachments">;
-  profile: Pick<AgentProfileRecord, "defaultSkill" | "promptTemplate">;
+  profile: Pick<AgentProfileRecord, "promptTemplate">;
   selectedWorkflowSkill?: string | null;
 }
 
