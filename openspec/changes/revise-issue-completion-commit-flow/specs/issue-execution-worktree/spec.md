@@ -46,7 +46,8 @@ The runtime SHALL support launching an issue agent session inside either the cur
 - **WHEN** an issue session was started in `Current branch` mode
 - **AND** a workflow skill creates an additional git worktree during the run that causes the session's effective working directory to move into that worktree
 - **THEN** the runtime does not treat the startup workspace snapshot as the final execution path
-- **AND** at completion time the runtime resolves the session's actual current working directory to detect the drift
+- **AND** for a structured Codex session, the runtime reads the most recent shell-command working directory recorded in the session thread as the best-effort actual path
+- **AND** when that best-effort path is unavailable (for example a pure file-edit turn with no shell command, or a PTY session), the runtime falls back to the startup workspace path and lets the user confirm or correct the path in the completion dialog
 - **AND** the runtime treats any such mid-run worktree as `External` ownership regardless of how it was created
 
 ### Requirement: Persistent completion orchestration
