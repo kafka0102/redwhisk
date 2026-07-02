@@ -1103,9 +1103,7 @@ mod tests {
     use crate::db::connection::DatabaseConfig;
     use crate::db::project_repository::ProjectRepository;
     use crate::types::agent_session::WorkspaceMode;
-    use crate::types::project::{
-        CreateProjectInput, ProjectCompletionPolicy, ProjectWorktreeLocation,
-    };
+    use crate::types::project::{CreateProjectInput, ProjectWorktreeLocation};
     use crate::types::project_terminal::{
         CloseProjectTerminalInput, CreateProjectTerminalInput, CreateTemporaryProjectTerminalInput,
         DeleteProjectTerminalConfigInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
@@ -1183,7 +1181,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: ".".to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1200,7 +1197,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1318,7 +1314,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: repo_dir.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1355,7 +1350,6 @@ mod tests {
             Some("develop"),
             Some("issue-20-redwhisk"),
             Some(&worktree_dir.to_string_lossy()),
-            Some(ProjectCompletionPolicy::Manual),
             Some(&temp_dir.path().join("redwhisk.worktrees").to_string_lossy()),
             None,
             &temp_dir.path().join("agent-session.log").to_string_lossy(),
@@ -1412,7 +1406,6 @@ mod tests {
             CreateProjectInput {
                 name: "transient-repo".to_string(),
                 repo_path: repo_dir.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1466,7 +1459,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1525,7 +1517,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1582,7 +1573,6 @@ mod tests {
             CreateProjectInput {
                 name: "owner".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1593,7 +1583,6 @@ mod tests {
             CreateProjectInput {
                 name: "other".to_string(),
                 repo_path: other_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1679,7 +1668,6 @@ mod tests {
             CreateProjectInput {
                 name: "owner".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1690,7 +1678,6 @@ mod tests {
             CreateProjectInput {
                 name: "other".to_string(),
                 repo_path: other_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1823,7 +1810,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -1904,7 +1890,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -2027,7 +2012,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -2159,7 +2143,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },
@@ -2281,7 +2264,6 @@ mod tests {
             CreateProjectInput {
                 name: "redwhisk".to_string(),
                 repo_path: current_repo.to_string_lossy().to_string(),
-                completion_policy: ProjectCompletionPolicy::Manual,
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
             },

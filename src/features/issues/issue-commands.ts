@@ -1,5 +1,4 @@
 import { invokeCommand } from "../../shared/commands/command-client";
-import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
@@ -270,7 +269,6 @@ export interface StartAgentSessionInput {
   issueId: number;
   agentProfileId: number;
   promptSnapshot: string;
-  completionPolicyOverride?: ProjectCompletionPolicy | null;
   workspaceMode?: WorkspaceMode;
   targetBranch?: string | null;
   worktreeSetupCommand?: string | null;

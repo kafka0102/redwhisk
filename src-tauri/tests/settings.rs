@@ -674,8 +674,8 @@ CREATE TABLE agent_profiles (
 fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
     connection
         .execute(
-            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
-             VALUES (?1, ?2, 1780624800000, 1780624800000, 'manual')",
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES (?1, ?2, 1780624800000, 1780624800000)",
             rusqlite::params![name, format!("/tmp/{}", name)],
         )
         .expect("insert project");

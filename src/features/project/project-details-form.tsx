@@ -10,27 +10,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import type {
-  ProjectCompletionPolicy,
-  ProjectWorktreeLocation,
-} from "./project-commands";
+import type { ProjectWorktreeLocation } from "./project-commands";
 import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 
 interface ProjectDetailsFormProps {
   ariaStatusLabel: string;
-  autoCommitLabel?: string;
   cancelLabel?: string;
   chooseFolderLabel: string;
   choosingFolderLabel?: string;
   className?: string;
-  completionPolicy: ProjectCompletionPolicy;
-  completionStrategyLabel: string;
   errorMessage: string | null;
   isChoosingRepoPath: boolean;
   isSubmitting: boolean;
   onCancel?: () => void;
   onChooseRepoPath: () => void;
-  onCompletionPolicyChange: (value: ProjectCompletionPolicy) => void;
   onNameChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onWorktreeLocationChange?: (value: ProjectWorktreeLocation) => void;
@@ -39,7 +32,6 @@ interface ProjectDetailsFormProps {
   projectNameLabel: string;
   repoPath: string;
   repoPathLabel: string;
-  manualLabel?: string;
   submitDisabled: boolean;
   submitLabel: string;
   submittingLabel: string;
@@ -52,19 +44,15 @@ interface ProjectDetailsFormProps {
 
 export function ProjectDetailsForm({
   ariaStatusLabel,
-  autoCommitLabel = "Auto Commit",
   cancelLabel,
   chooseFolderLabel,
   choosingFolderLabel = chooseFolderLabel,
   className = "settings-card settings-general-card",
-  completionPolicy,
-  completionStrategyLabel,
   errorMessage,
   isChoosingRepoPath,
   isSubmitting,
   onCancel,
   onChooseRepoPath,
-  onCompletionPolicyChange,
   onNameChange,
   onSubmit,
   onWorktreeLocationChange,
@@ -73,7 +61,6 @@ export function ProjectDetailsForm({
   projectNameLabel,
   repoPath,
   repoPathLabel,
-  manualLabel = "Manual",
   submitDisabled,
   submitLabel,
   submittingLabel,
@@ -124,37 +111,6 @@ export function ProjectDetailsForm({
             {isChoosingRepoPath ? choosingFolderLabel : chooseFolderLabel}
           </Button>
         </div>
-      </div>
-      <div className="grid gap-1.5">
-        <Label
-          htmlFor="project-completion-strategy"
-          className="text-xs text-muted-foreground"
-        >
-          {completionStrategyLabel}
-        </Label>
-        <Select
-          items={[
-            { value: "agent_auto_commit", label: autoCommitLabel },
-            { value: "manual", label: manualLabel },
-          ]}
-          value={completionPolicy}
-          onValueChange={(value) =>
-            onCompletionPolicyChange(value as ProjectCompletionPolicy)
-          }
-        >
-          <SelectTrigger
-            id="project-completion-strategy"
-            aria-label={completionStrategyLabel}
-            className="w-full"
-            disabled={isSubmitting}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="agent_auto_commit">{autoCommitLabel}</SelectItem>
-            <SelectItem value="manual">{manualLabel}</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
       {worktreeLocationLabel ? (
         <div className="grid gap-1.5">

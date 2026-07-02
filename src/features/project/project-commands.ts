@@ -9,7 +9,6 @@ export interface LocalDataStatus {
 export interface CreateProjectInput {
   name: string;
   repoPath: string;
-  completionPolicy: ProjectCompletionPolicy;
   worktreeLocation: ProjectWorktreeLocation;
   worktreeSetupCommand: string;
 }
@@ -27,22 +26,15 @@ export interface OpenProjectInput {
   projectId: number;
 }
 
-export type ProjectCompletionPolicy = "manual" | "agent_auto_commit";
 export type ProjectWorktreeLocation =
   | "repo_sibling"
   | "repo_internal"
   | "user_home";
 
-export interface UpdateProjectCompletionPolicyInput {
-  projectId: number;
-  completionPolicy: ProjectCompletionPolicy;
-}
-
 export interface UpdateProjectSettingsInput {
   projectId: number;
   name: string;
   repoPath: string;
-  completionPolicy: ProjectCompletionPolicy;
   worktreeLocation: ProjectWorktreeLocation;
   worktreeSetupCommand: string;
 }
@@ -51,7 +43,6 @@ export interface ProjectRecord {
   id: number;
   name: string;
   repoPath: string;
-  completionPolicy: ProjectCompletionPolicy;
   worktreeLocation?: ProjectWorktreeLocation;
   worktreeSetupCommand?: string;
   createdAt: number;
@@ -96,14 +87,6 @@ export function listProjects(): Promise<ProjectListResponse> {
 
 export function openProject(input: OpenProjectInput): Promise<ProjectRecord> {
   return invokeCommand<ProjectRecord>("open_project", { input });
-}
-
-export function updateProjectCompletionPolicy(
-  input: UpdateProjectCompletionPolicyInput,
-): Promise<ProjectRecord> {
-  return invokeCommand<ProjectRecord>("update_project_completion_policy", {
-    input,
-  });
 }
 
 export function updateProjectSettings(

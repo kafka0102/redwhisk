@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use crate::types::issue::IssueStatus;
-use crate::types::project::ProjectCompletionPolicy;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,7 +34,6 @@ pub struct StartAgentSessionInput {
     pub issue_id: i64,
     pub agent_profile_id: i64,
     pub prompt_snapshot: String,
-    pub completion_policy_override: Option<ProjectCompletionPolicy>,
     pub workspace_mode: Option<WorkspaceMode>,
     pub target_branch: Option<String>,
     pub worktree_setup_command: Option<String>,
@@ -226,7 +224,6 @@ pub struct AgentSessionRecord {
     pub workspace_path: Option<String>,
     pub origin_branch: Option<String>,
     pub worktree_owner: WorktreeOwner,
-    pub completion_policy: Option<ProjectCompletionPolicy>,
     pub worktree_root_path: Option<String>,
     pub worktree_setup_command: Option<String>,
     pub log_path: String,

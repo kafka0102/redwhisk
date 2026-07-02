@@ -3,7 +3,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { toCommandError } from "../../shared/commands/command-error";
 import {
-  type ProjectCompletionPolicy,
   type ProjectWorktreeLocation,
   type UpdateProjectSettingsInput,
   updateProjectSettings,
@@ -19,7 +18,6 @@ import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
 
 interface GeneralSettingsPanelProps {
-  completionPolicy: ProjectCompletionPolicy;
   projectId: number;
   projectName: string;
   projectPath: string;
@@ -29,7 +27,6 @@ interface GeneralSettingsPanelProps {
 }
 
 interface GeneralSettingsFormProps {
-  completionPolicy: ProjectCompletionPolicy;
   messages: I18nMessages;
   onSave: (input: GeneralSettingsSaveInput) => Promise<void>;
   projectName: string;
@@ -40,15 +37,10 @@ interface GeneralSettingsFormProps {
 
 type GeneralSettingsSaveInput = Pick<
   UpdateProjectSettingsInput,
-  | "name"
-  | "repoPath"
-  | "completionPolicy"
-  | "worktreeLocation"
-  | "worktreeSetupCommand"
+  "name" | "repoPath" | "worktreeLocation" | "worktreeSetupCommand"
 >;
 
 export function GeneralSettingsPanel({
-  completionPolicy,
   projectId,
   projectName,
   projectPath,
@@ -63,7 +55,6 @@ export function GeneralSettingsPanel({
       projectId,
       name: input.name,
       repoPath: input.repoPath,
-      completionPolicy: input.completionPolicy,
       worktreeLocation: input.worktreeLocation,
       worktreeSetupCommand: input.worktreeSetupCommand,
     });
@@ -71,7 +62,6 @@ export function GeneralSettingsPanel({
       id: updatedProject.id,
       name: updatedProject.name,
       path: updatedProject.repoPath,
-      completionPolicy: updatedProject.completionPolicy,
       worktreeLocation: updatedProject.worktreeLocation ?? "repo_sibling",
       worktreeSetupCommand: updatedProject.worktreeSetupCommand ?? "",
       recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
@@ -81,8 +71,7 @@ export function GeneralSettingsPanel({
 
   return (
     <GeneralSettingsForm
-      key={`${projectId}:${projectName}:${projectPath}:${completionPolicy}:${worktreeLocation}:${worktreeSetupCommand}`}
-      completionPolicy={completionPolicy}
+      key={`${projectId}:${projectName}:${projectPath}:${worktreeLocation}:${worktreeSetupCommand}`}
       messages={messages}
       onSave={handleGeneralSettingsSave}
       projectName={projectName}
@@ -94,7 +83,6 @@ export function GeneralSettingsPanel({
 }
 
 function GeneralSettingsForm({
-  completionPolicy,
   messages,
   onSave,
   projectName,
@@ -104,8 +92,6 @@ function GeneralSettingsForm({
 }: GeneralSettingsFormProps) {
   const [projectNameValue, setProjectNameValue] = useState(projectName);
   const [projectPathValue, setProjectPathValue] = useState(projectPath);
-  const [completionPolicyValue, setCompletionPolicyValue] =
-    useState<ProjectCompletionPolicy>(completionPolicy);
   const [worktreeLocationValue, setWorktreeLocationValue] =
     useState<ProjectWorktreeLocation>(worktreeLocation);
   const [worktreeSetupCommandValue, setWorktreeSetupCommandValue] = useState(
@@ -119,7 +105,6 @@ function GeneralSettingsForm({
   const isDirty =
     trimmedProjectName !== projectName ||
     trimmedProjectPath !== projectPath ||
-    completionPolicyValue !== completionPolicy ||
     worktreeLocationValue !== worktreeLocation ||
     worktreeSetupCommandValue !== worktreeSetupCommand;
   const isSaveDisabled =
@@ -179,7 +164,6 @@ function GeneralSettingsForm({
       await onSave({
         name: trimmedProjectName,
         repoPath: trimmedProjectPath,
-        completionPolicy: completionPolicyValue,
         worktreeLocation: worktreeLocationValue,
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
       });
@@ -193,16 +177,12 @@ function GeneralSettingsForm({
   return (
     <ProjectDetailsForm
       ariaStatusLabel={`${messages.settings.general} ${messages.settings.status}`}
-      autoCommitLabel={messages.settings.autoCommit}
       chooseFolderLabel={messages.projectHome.chooseFolder}
       className="settings-card settings-general-card"
-      completionPolicy={completionPolicyValue}
-      completionStrategyLabel={messages.settings.completionStrategy}
       errorMessage={errorMessage}
       isChoosingRepoPath={isChoosingRepoPath}
       isSubmitting={isSaving}
       onChooseRepoPath={handleChooseRepoPath}
-      onCompletionPolicyChange={setCompletionPolicyValue}
       onNameChange={setProjectNameValue}
       onSubmit={handleSubmit}
       onWorktreeLocationChange={setWorktreeLocationValue}
@@ -211,7 +191,6 @@ function GeneralSettingsForm({
       projectNameLabel={messages.settings.projectName}
       repoPath={projectPathValue}
       repoPathLabel={messages.settings.repositoryPath}
-      manualLabel={messages.settings.manual}
       submitDisabled={isSaveDisabled}
       submitLabel={messages.settings.save}
       submittingLabel={messages.settings.saving}

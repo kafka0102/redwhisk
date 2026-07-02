@@ -34,7 +34,6 @@ use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::issue_completion::{
     IssueCompletionExternalWorktreeDecision, IssueCompletionPhase,
 };
-use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 use serde_json::Value;
 
@@ -128,7 +127,6 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "target_branch",
             "workspace_branch",
             "workspace_path",
-            "completion_policy",
             "worktree_root_path",
             "worktree_setup_command",
             "list_inserted_at",
@@ -287,7 +285,6 @@ fn start_agent_session_rejects_blank_prompt_snapshot() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "   ".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -322,7 +319,6 @@ fn start_agent_session_rejects_non_backlog_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -361,7 +357,6 @@ fn start_agent_session_rejects_project_profile_from_another_project() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -399,7 +394,6 @@ fn start_agent_session_rejects_deleted_agent_profile() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -438,7 +432,6 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -674,7 +667,6 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -690,7 +682,6 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Retry snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -757,7 +748,6 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -962,7 +952,6 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -1048,7 +1037,6 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -1111,7 +1099,6 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "please start working".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -1271,7 +1258,6 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: Some(ProjectCompletionPolicy::AgentAutoCommit),
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: Some("printf run-setup > run-setup.txt".to_string()),
@@ -1288,10 +1274,6 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
     assert_eq!(session.target_branch.as_deref(), Some("main"));
     assert_eq!(session.origin_branch.as_deref(), Some("main"));
     assert_eq!(session.worktree_owner, WorktreeOwner::Redwhisk);
-    assert_eq!(
-        session.completion_policy,
-        Some(ProjectCompletionPolicy::AgentAutoCommit)
-    );
     assert_eq!(
         session.worktree_root_path.as_deref(),
         Some(repo_path.join(".worktrees").to_string_lossy().as_ref())
@@ -1355,7 +1337,6 @@ fn start_agent_session_in_worktree_mode_runs_setup_command_before_agent_start() 
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: Some(ProjectCompletionPolicy::Manual),
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: None,
@@ -1419,7 +1400,6 @@ fn start_agent_session_in_worktree_mode_rejects_failed_setup_command_without_ses
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: Some(ProjectCompletionPolicy::Manual),
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: None,
@@ -1497,7 +1477,6 @@ fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_ove
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
-                completion_policy_override: Some(ProjectCompletionPolicy::Manual),
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: None,
@@ -1560,7 +1539,6 @@ fn complete_issue_manual_with_pty_terminates_tracked_session() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "ready to complete".to_string(),
-                completion_policy_override: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -3248,8 +3226,8 @@ fn insert_project(connection: &rusqlite::Connection, repo_name: &str) -> i64 {
     init_repo(&repo_dir);
     connection
         .execute(
-            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
-             VALUES (?1, ?2, 1780624800000, 1780624800000, 'manual')",
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES (?1, ?2, 1780624800000, 1780624800000)",
             rusqlite::params![repo_name, repo_dir.to_string_lossy().to_string()],
         )
         .expect("insert project");
@@ -3385,13 +3363,12 @@ fn insert_standalone_agent_session_row(
                 target_branch,
                 workspace_branch,
                 workspace_path,
-                completion_policy,
                 worktree_root_path,
                 log_path,
                 last_active_at,
                 started_at,
                 closed_at
-            ) VALUES (?1, NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', 'current_branch', NULL, NULL, '/tmp/repo', NULL, NULL, ?5, ?6, ?6, ?7)",
+            ) VALUES (?1, NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', 'current_branch', NULL, NULL, '/tmp/repo', NULL, ?5, ?6, ?6, ?7)",
             rusqlite::params![
                 project_id,
                 agent_profile_id,

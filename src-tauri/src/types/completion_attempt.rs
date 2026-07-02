@@ -5,7 +5,6 @@ use serde::Serialize;
 pub enum CompletionAttemptOption {
     CompleteManual,
     CompleteClean,
-    AgentAutoCommit,
 }
 
 impl CompletionAttemptOption {
@@ -13,7 +12,6 @@ impl CompletionAttemptOption {
         match self {
             Self::CompleteManual => "complete_manual",
             Self::CompleteClean => "complete_clean",
-            Self::AgentAutoCommit => "agent_auto_commit",
         }
     }
 }
