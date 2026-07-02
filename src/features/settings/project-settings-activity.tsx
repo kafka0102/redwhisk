@@ -21,10 +21,7 @@ import {
   type SavedAgentSkillRecord,
 } from "./settings-commands";
 import { toCommandError } from "../../shared/commands/command-error";
-import type {
-  ProjectCompletionPolicy,
-  ProjectWorktreeLocation,
-} from "../project/project-commands";
+import type { ProjectWorktreeLocation } from "../project/project-commands";
 import type { ProjectSummary } from "../../app/app";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { I18nMessages } from "../../shared/i18n/messages";
@@ -100,7 +97,6 @@ const SETTINGS_MENU_ITEMS: {
 
 interface ProjectSettingsActivityProps {
   activeMenu?: SettingsMenu;
-  completionPolicy: ProjectCompletionPolicy;
   onMenuChange?: (menu: SettingsMenu) => void;
   onProjectUpdated?: (project: ProjectSummary) => void;
   projectId: number;
@@ -112,7 +108,6 @@ interface ProjectSettingsActivityProps {
 
 export function ProjectSettingsActivity({
   activeMenu: requestedMenu = "general",
-  completionPolicy,
   onMenuChange,
   onProjectUpdated,
   projectId,
@@ -635,7 +630,6 @@ export function ProjectSettingsActivity({
           >
             {activeMenu === "general" ? (
               <GeneralSettingsPanel
-                completionPolicy={completionPolicy}
                 projectId={projectId}
                 projectName={projectName}
                 projectPath={projectPath}

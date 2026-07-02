@@ -738,7 +738,6 @@ mod tests {
     use crate::db::connection::DatabaseConfig;
     use crate::db::migrations::MigrationRunner;
     use crate::types::agent_profile::{AgentScope, AgentType, SaveAgentProfileInput};
-    use crate::types::project::ProjectCompletionPolicy;
     use rusqlite::Connection;
 
     #[derive(Default)]
@@ -946,11 +945,7 @@ mod tests {
 
     fn insert_project(connection: &Connection, repo_name: &str) -> i64 {
         ProjectRepository::new(connection)
-            .insert(
-                repo_name,
-                &format!("/tmp/{repo_name}"),
-                ProjectCompletionPolicy::Manual,
-            )
+            .insert(repo_name, &format!("/tmp/{repo_name}"))
             .expect("project")
             .id
     }

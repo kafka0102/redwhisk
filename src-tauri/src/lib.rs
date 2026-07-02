@@ -46,7 +46,6 @@ pub fn run() {
             commands::project_commands::list_projects,
             commands::project_commands::open_project,
             commands::project_commands::open_project_window,
-            commands::project_commands::update_project_completion_policy,
             commands::project_commands::update_project_settings,
             commands::project_commands::validate_project_repo_path,
             commands::project_terminal_commands::create_project_terminal,

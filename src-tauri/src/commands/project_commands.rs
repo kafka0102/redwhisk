@@ -6,8 +6,8 @@ use crate::core::project_service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,
-    ProjectSummary, UpdateProjectCompletionPolicyInput, UpdateProjectSettingsInput,
-    ValidateProjectRepoPathInput, ValidateProjectRepoPathResponse,
+    ProjectSummary, UpdateProjectSettingsInput, ValidateProjectRepoPathInput,
+    ValidateProjectRepoPathResponse,
 };
 
 #[tauri::command]
@@ -56,16 +56,6 @@ pub fn open_project(
         std::path::PathBuf::from(&project.repo_path),
     );
     Ok(project)
-}
-
-#[tauri::command]
-pub fn update_project_completion_policy(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: UpdateProjectCompletionPolicyInput,
-) -> Result<ProjectSummary, CommandError> {
-    let data_dir = prepare_project_data_dir(&app, &state)?;
-    ProjectService::update_project_completion_policy_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]

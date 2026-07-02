@@ -31,7 +31,6 @@ use redwhisk_lib::types::issue_completion::{
     CompleteIssueFlowAction, CompleteIssueFlowInput, IssueCompletionExternalWorktreeDecision,
     IssueCompletionPhase,
 };
-use redwhisk_lib::types::project::ProjectCompletionPolicy;
 use redwhisk_lib::types::session_event::SessionEventType;
 
 #[test]
@@ -485,7 +484,6 @@ fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
         &database.connection,
         "attachment-create-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let source_path = temp_dir.path().join("draft-note.md");
     fs::write(&source_path, "# Draft\n").expect("write draft attachment");
@@ -555,7 +553,6 @@ fn update_issue_removes_deleted_attachments_and_keeps_referenced_ones() {
         &database.connection,
         "attachment-update-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -627,7 +624,6 @@ fn preview_issue_attachment_returns_text_for_saved_and_draft_files() {
         &database.connection,
         "attachment-preview-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let source_path = temp_dir.path().join("preview.md");
     fs::write(&source_path, "preview text").expect("write attachment");
@@ -684,7 +680,6 @@ fn preview_issue_attachment_rejects_non_previewable_binary_file() {
         &database.connection,
         "attachment-binary-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let source_path = temp_dir.path().join("archive.bin");
     fs::write(&source_path, [0_u8, 159, 146, 150]).expect("write binary attachment");
@@ -715,7 +710,6 @@ fn export_issue_attachment_supports_saved_and_draft_files() {
         &database.connection,
         "attachment-export-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let source_path = temp_dir.path().join("export.txt");
     fs::write(&source_path, "export me").expect("write source");
@@ -1069,7 +1063,6 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
         &database.connection,
         "complete-review-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1157,7 +1150,6 @@ fn complete_issue_manual_allows_running_issue_without_review_gate() {
         &database.connection,
         "complete-running-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1229,7 +1221,6 @@ fn complete_issue_manual_finishes_when_project_git_status_is_unavailable() {
         &database.connection,
         "deleted-project-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -1271,7 +1262,6 @@ fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
         &database.connection,
         "manual-complete-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1324,8 +1314,7 @@ fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
                  workspace_branch = 'issue-manual-branch',
                  workspace_path = ?1,
                  worktree_root_path = ?2,
-                 worktree_owner = 'redwhisk',
-                 completion_policy = 'manual'
+                 worktree_owner = 'redwhisk'
              WHERE id = ?3",
             rusqlite::params![
                 workspace_path.to_string_lossy().to_string(),
@@ -1410,7 +1399,6 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
         &database.connection,
         "summary-manual-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1493,7 +1481,6 @@ fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_
         &database.connection,
         "summary-final-fact-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1612,7 +1599,6 @@ fn complete_issue_clean_closes_running_session_and_records_audit() {
         &database.connection,
         "clean-complete-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1730,7 +1716,6 @@ fn complete_issue_clean_allows_closed_linked_session() {
         &database.connection,
         "clean-closed-session-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1783,7 +1768,6 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
         &database.connection,
         "dirty-complete-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1884,7 +1868,6 @@ fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progres
         &database.connection,
         "blocked-clean-complete-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -1965,7 +1948,6 @@ fn prepare_agent_commit_completion_returns_preview_for_dirty_review_issue() {
         &database.connection,
         "prepare-agent-commit-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2030,7 +2012,6 @@ fn prepare_agent_commit_completion_rejects_clean_repo() {
         &database.connection,
         "prepare-agent-commit-clean-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2092,7 +2073,6 @@ fn prepare_agent_commit_completion_records_blocked_attempt_when_git_operation_is
         &database.connection,
         "prepare-agent-commit-blocked-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2176,7 +2156,6 @@ fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
         &database.connection,
         "send-agent-commit-prompt-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2285,7 +2264,6 @@ fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
         &database.connection,
         "detect-agent-commit-completion-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2446,7 +2424,6 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
         &database.connection,
         "detect-agent-commit-no-commit-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2579,7 +2556,6 @@ fn detect_agent_commit_completion_resumes_after_no_commit_and_records_commit_has
         &database.connection,
         "detect-agent-commit-resume-after-no-commit-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2694,7 +2670,6 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
         &database.connection,
         "detect-agent-commit-blocked-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2816,7 +2791,6 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
         &database.connection,
         "detect-agent-commit-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2870,8 +2844,7 @@ fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
                  workspace_path = ?1,
                  worktree_root_path = ?2,
                  origin_branch = 'main',
-                 worktree_owner = 'redwhisk',
-                 completion_policy = 'agent_auto_commit'
+                 worktree_owner = 'redwhisk'
              WHERE id = ?3",
             rusqlite::params![
                 workspace_path.to_string_lossy().to_string(),
@@ -2957,7 +2930,6 @@ fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_mi
         &database.connection,
         "detect-agent-commit-missing-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -2999,8 +2971,7 @@ fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_mi
                  workspace_path = ?1,
                  worktree_root_path = ?2,
                  origin_branch = 'main',
-                 worktree_owner = 'redwhisk',
-                 completion_policy = 'agent_auto_commit'
+                 worktree_owner = 'redwhisk'
              WHERE id = ?3",
             rusqlite::params![
                 workspace_path.to_string_lossy().to_string(),
@@ -3062,7 +3033,6 @@ fn complete_issue_flow_allows_running_issue_before_review() {
         &database.connection,
         "flow-running-before-review-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -3151,7 +3121,6 @@ fn complete_issue_flow_allows_running_issue_even_when_session_is_inactive() {
         &database.connection,
         "flow-running-inactive-session-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = IssueService::new(
         IssueRepository::new(&database.connection),
@@ -3239,7 +3208,6 @@ fn complete_issue_flow_completes_review_issue_with_closed_linked_session() {
         &database.connection,
         "flow-closed-session-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3289,7 +3257,6 @@ fn complete_issue_flow_manual_dirty_blocks_and_persists_flow() {
         &database.connection,
         "flow-manual-dirty-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3337,7 +3304,6 @@ fn complete_issue_flow_manual_dirty_ignore_continues_to_current_branch_completio
         &database.connection,
         "flow-manual-ignore-dirty-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3386,7 +3352,6 @@ fn complete_issue_flow_auto_commit_dirty_waits_for_agent_commit_attempt() {
         &database.connection,
         "flow-auto-dirty-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3440,7 +3405,6 @@ fn complete_issue_flow_resumes_pending_agent_commit_after_new_commit() {
         &database.connection,
         "flow-auto-resume-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3506,7 +3470,6 @@ fn complete_issue_flow_redwhisk_worktree_rebases_fast_forwards_and_cleans_up() {
         &database.connection,
         "flow-redwhisk-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3536,7 +3499,6 @@ fn complete_issue_flow_redwhisk_worktree_rebases_fast_forwards_and_cleans_up() {
         &worktree_root,
         "issue-flow-redwhisk",
         WorktreeOwner::Redwhisk,
-        ProjectCompletionPolicy::Manual,
     );
     write_file(&workspace_path, "tracked.txt", "worktree completed\n");
     git(&workspace_path, &["commit", "-am", "worktree completion"]);
@@ -3582,7 +3544,6 @@ fn complete_issue_flow_blocks_missing_redwhisk_worktree_with_unmerged_branch() {
         &database.connection,
         "flow-missing-redwhisk-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3612,7 +3573,6 @@ fn complete_issue_flow_blocks_missing_redwhisk_worktree_with_unmerged_branch() {
         &worktree_root,
         "issue-flow-missing-redwhisk",
         WorktreeOwner::Redwhisk,
-        ProjectCompletionPolicy::Manual,
     );
     write_file(
         &workspace_path,
@@ -3674,7 +3634,6 @@ fn complete_issue_flow_rebase_conflict_persists_merge_block_and_keeps_worktree()
         &database.connection,
         "flow-rebase-conflict-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3704,7 +3663,6 @@ fn complete_issue_flow_rebase_conflict_persists_merge_block_and_keeps_worktree()
         &worktree_root,
         "issue-flow-conflict",
         WorktreeOwner::Redwhisk,
-        ProjectCompletionPolicy::Manual,
     );
     write_file(&workspace_path, "tracked.txt", "worktree side\n");
     git(&workspace_path, &["commit", "-am", "worktree side"]);
@@ -3753,7 +3711,6 @@ fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
         &database.connection,
         "flow-external-worktree-repo",
         &repo_dir,
-        ProjectCompletionPolicy::Manual,
     );
     let service = issue_service(&database.connection);
     let (issue, session_id) = create_review_issue_with_session(
@@ -3783,7 +3740,6 @@ fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
         &worktree_root,
         "issue-flow-external",
         WorktreeOwner::External,
-        ProjectCompletionPolicy::Manual,
     );
     write_file(&workspace_path, "tracked.txt", "external completed\n");
     git(&workspace_path, &["commit", "-am", "external completion"]);
@@ -3859,7 +3815,6 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
         &database.connection,
         "flow-legacy-bypass-repo",
         &repo_dir,
-        ProjectCompletionPolicy::AgentAutoCommit,
     );
     let service = issue_service(&database.connection);
     let (manual_issue, _manual_session_id) = create_review_issue_with_session(
@@ -3941,7 +3896,6 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
         &worktree_root,
         "legacy-external",
         WorktreeOwner::External,
-        ProjectCompletionPolicy::Manual,
     );
     write_file(&workspace_path, "tracked.txt", "legacy external\n");
     git(&workspace_path, &["commit", "-am", "legacy external"]);
@@ -4729,7 +4683,7 @@ fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection
 fn insert_project(connection: &rusqlite::Connection, name: &str) -> i64 {
     let repo_path = format!("/tmp/{name}");
     ProjectRepository::new(connection)
-        .insert(name, &repo_path, ProjectCompletionPolicy::AgentAutoCommit)
+        .insert(name, &repo_path)
         .expect("insert project")
         .id
 }
@@ -4766,21 +4720,12 @@ fn insert_project_with_repo_path_and_policy(
     connection: &rusqlite::Connection,
     name: &str,
     repo_path: &Path,
-    completion_policy: ProjectCompletionPolicy,
 ) -> i64 {
-    let completion_policy = match completion_policy {
-        ProjectCompletionPolicy::Manual => "manual",
-        ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
-    };
     connection
         .execute(
-            "INSERT INTO projects (name, repo_path, created_at, last_opened_at, completion_policy)
-             VALUES (?1, ?2, 1780624800000, 1780624800000, ?3)",
-            rusqlite::params![
-                name,
-                repo_path.to_string_lossy().to_string(),
-                completion_policy
-            ],
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES (?1, ?2, 1780624800000, 1780624800000)",
+            rusqlite::params![name, repo_path.to_string_lossy().to_string()],
         )
         .expect("insert project");
     connection.last_insert_rowid()
@@ -4898,12 +4843,7 @@ fn update_session_worktree(
     worktree_root: &Path,
     workspace_branch: &str,
     owner: WorktreeOwner,
-    completion_policy: ProjectCompletionPolicy,
 ) {
-    let completion_policy = match completion_policy {
-        ProjectCompletionPolicy::Manual => "manual",
-        ProjectCompletionPolicy::AgentAutoCommit => "agent_auto_commit",
-    };
     connection
         .execute(
             "UPDATE agent_sessions
@@ -4914,15 +4854,13 @@ fn update_session_worktree(
                  workspace_path = ?1,
                  origin_branch = 'main',
                  worktree_owner = ?3,
-                 worktree_root_path = ?4,
-                 completion_policy = ?5
-             WHERE id = ?6",
+                 worktree_root_path = ?4
+             WHERE id = ?5",
             rusqlite::params![
                 workspace_path.to_string_lossy().to_string(),
                 workspace_branch,
                 owner.as_str(),
                 worktree_root.to_string_lossy().to_string(),
-                completion_policy,
                 session_id,
             ],
         )

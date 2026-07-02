@@ -95,6 +95,9 @@ const SAVED_AGENT_SKILLS_MIGRATION_SQL: &str =
 const DROP_LABEL_AGENT_PROFILE_MIGRATION_VERSION: &str = "0030_drop_label_agent_profile";
 const DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL: &str =
     include_str!("../../migrations/0030_drop_label_agent_profile.sql");
+const DROP_COMPLETION_POLICY_MIGRATION_VERSION: &str = "0031_drop_completion_policy";
+const DROP_COMPLETION_POLICY_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0031_drop_completion_policy.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -284,6 +287,10 @@ impl MigrationRunner {
                 Migration {
                     version: DROP_LABEL_AGENT_PROFILE_MIGRATION_VERSION,
                     sql: DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL,
+                },
+                Migration {
+                    version: DROP_COMPLETION_POLICY_MIGRATION_VERSION,
+                    sql: DROP_COMPLETION_POLICY_MIGRATION_SQL,
                 },
             ];
         }

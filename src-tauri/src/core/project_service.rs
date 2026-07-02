@@ -9,8 +9,8 @@ use crate::git::repository::is_git_repository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
-    ProjectSummary, ProjectWorktreeLocation, UpdateProjectCompletionPolicyInput,
-    UpdateProjectSettingsInput, ValidateProjectRepoPathResponse,
+    ProjectSummary, ProjectWorktreeLocation, UpdateProjectSettingsInput,
+    ValidateProjectRepoPathResponse,
 };
 
 pub struct ProjectService<'connection> {
@@ -34,7 +34,6 @@ impl<'connection> ProjectService<'connection> {
             .insert_or_get_existing_for_path(
                 &name,
                 &validated_repo.repo_path,
-                input.completion_policy,
                 input.worktree_location,
                 input.worktree_setup_command.trim(),
             )
@@ -74,17 +73,6 @@ impl<'connection> ProjectService<'connection> {
             .map_err(project_database_error)
     }
 
-    pub fn update_project_completion_policy(
-        &self,
-        input: UpdateProjectCompletionPolicyInput,
-    ) -> Result<ProjectSummary, CommandError> {
-        self.project_by_id(input.project_id)?;
-
-        self.repository
-            .update_completion_policy(input.project_id, input.completion_policy)
-            .map_err(project_database_error)
-    }
-
     pub fn update_project_settings(
         &self,
         input: UpdateProjectSettingsInput,
@@ -100,7 +88,6 @@ impl<'connection> ProjectService<'connection> {
                 input.project_id,
                 &project_name,
                 &validated_repo.repo_path.to_string_lossy(),
-                input.completion_policy,
                 input.worktree_location,
                 input.worktree_setup_command.trim(),
             )
@@ -192,15 +179,6 @@ impl<'connection> ProjectService<'connection> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).record_project_opened(project_id)
-    }
-
-    pub fn update_project_completion_policy_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: UpdateProjectCompletionPolicyInput,
-    ) -> Result<ProjectSummary, CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectService::new(repository).update_project_completion_policy(input)
     }
 
     pub fn update_project_settings_in_data_dir(
@@ -396,7 +374,6 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         id: project.id,
         name: project.name,
         repo_path: project.repo_path,
-        completion_policy: project.completion_policy,
         worktree_location: project.worktree_location,
         worktree_setup_command: project.worktree_setup_command,
         created_at: project.created_at,

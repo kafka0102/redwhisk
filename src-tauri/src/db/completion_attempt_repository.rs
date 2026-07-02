@@ -57,27 +57,6 @@ impl<'connection> CompletionAttemptRepository<'connection> {
         find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
-    pub fn find_latest_pending_agent_commit_attempt_in_transaction(
-        transaction: &Transaction<'_>,
-        issue_id: i64,
-        session_id: i64,
-    ) -> rusqlite::Result<Option<CompletionAttemptRecord>> {
-        transaction
-            .query_row(
-                "SELECT id, issue_id, session_id, option, head_before, head_after, commit_hash, failure_reason, changed_files_json, result, created_at
-                 FROM completion_attempts
-                 WHERE issue_id = ?1
-                   AND session_id = ?2
-                   AND option = 'agent_auto_commit'
-                   AND result IN ('prompt_sent', 'no_commit_detected')
-                 ORDER BY created_at DESC, id DESC
-                 LIMIT 1",
-                params![issue_id, session_id],
-                completion_attempt_from_row,
-            )
-            .optional()
-    }
-
     pub fn update_result_in_transaction(
         transaction: &Transaction<'_>,
         id: i64,
@@ -159,7 +138,6 @@ fn completion_attempt_option_from_str(value: &str) -> rusqlite::Result<Completio
     match value {
         "complete_manual" => Ok(CompletionAttemptOption::CompleteManual),
         "complete_clean" => Ok(CompletionAttemptOption::CompleteClean),
-        "agent_auto_commit" => Ok(CompletionAttemptOption::AgentAutoCommit),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

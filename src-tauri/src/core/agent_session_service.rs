@@ -30,8 +30,6 @@ use crate::db::event_repository::EventRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
-use crate::git::operation_state::GitOperationState;
-use crate::git::status::read_git_snapshot;
 use crate::git::worktree::{
     cleanup_worktree, create_worktree_for_issue, list_local_branches, restore_worktree_for_branch,
     GitBranchInfo,
@@ -57,7 +55,7 @@ use crate::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, IssueRecord, IssueStatus,
 };
 use crate::types::issue_action::IssueActionType;
-use crate::types::project::{ProjectCompletionPolicy, ProjectSummary, ProjectWorktreeLocation};
+use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
 const SESSION_LOG_DIR_NAME: &str = "session-logs";
@@ -88,7 +86,6 @@ struct SessionLaunchContext {
     workspace_path: Option<String>,
     origin_branch: Option<String>,
     worktree_owner: WorktreeOwner,
-    completion_policy: Option<ProjectCompletionPolicy>,
     worktree_root_path: Option<String>,
     worktree_setup_command: Option<String>,
 }
@@ -316,7 +313,6 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.workspace_path.as_deref(),
                 launch.origin_branch.as_deref(),
                 launch.worktree_owner,
-                launch.completion_policy,
                 launch.worktree_root_path.as_deref(),
                 launch.worktree_setup_command.as_deref(),
                 &launch.log_path,
@@ -530,7 +526,6 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.workspace_path.as_deref(),
                 launch.origin_branch.as_deref(),
                 launch.worktree_owner,
-                launch.completion_policy,
                 launch.worktree_root_path.as_deref(),
                 launch.worktree_setup_command.as_deref(),
                 &structured_log_path,
@@ -754,7 +749,6 @@ impl<'connection> AgentSessionService<'connection> {
                     Some(working_dir.as_str()),
                     None,
                     None,
-                    None,
                     &log_path,
                     started_at,
                 )?;
@@ -942,11 +936,6 @@ impl<'connection> AgentSessionService<'connection> {
             .workspace_mode
             .clone()
             .unwrap_or(WorkspaceMode::CurrentBranch);
-        let completion_policy = Some(
-            input
-                .completion_policy_override
-                .unwrap_or(project.completion_policy),
-        );
         let worktree_setup_command = Some(
             input
                 .worktree_setup_command
@@ -969,7 +958,6 @@ impl<'connection> AgentSessionService<'connection> {
                 workspace_path: Some(project.repo_path.clone()),
                 origin_branch: Some(branch_info.current_branch),
                 worktree_owner: WorktreeOwner::External,
-                completion_policy,
                 worktree_root_path: None,
                 worktree_setup_command: worktree_setup_command.clone(),
             }),
@@ -1008,7 +996,6 @@ impl<'connection> AgentSessionService<'connection> {
                     workspace_path: Some(created.workspace_path),
                     origin_branch: Some(branch_info.current_branch),
                     worktree_owner: WorktreeOwner::Redwhisk,
-                    completion_policy,
                     worktree_root_path: Some(created.worktree_root_path),
                     worktree_setup_command,
                 })
@@ -1022,7 +1009,7 @@ impl<'connection> AgentSessionService<'connection> {
     ) -> Result<AgentSessionListResponse, CommandError> {
         let project = self.project_by_id(project_id)?;
         let (can_complete_clean_for_project, can_complete_agent_commit_for_project) =
-            project_completion_capabilities(&project.repo_path, project.completion_policy);
+            project_completion_capabilities(&project.repo_path);
 
         self.agent_session_repository
             .prune_broken_structured_standalone_sessions(project_id, current_epoch_millis()?)
@@ -1599,20 +1586,10 @@ impl<'connection> AgentSessionService<'connection> {
     }
 }
 
-fn project_completion_capabilities(
-    repo_path: &str,
-    completion_policy: crate::types::project::ProjectCompletionPolicy,
-) -> (bool, bool) {
-    if completion_policy != crate::types::project::ProjectCompletionPolicy::AgentAutoCommit {
-        return (false, false);
-    }
-
-    match read_git_snapshot(repo_path) {
-        Ok(snapshot) if snapshot.operation_state == GitOperationState::None => {
-            (snapshot.is_clean, !snapshot.is_clean)
-        }
-        _ => (false, false),
-    }
+fn project_completion_capabilities(_repo_path: &str) -> (bool, bool) {
+    // TODO(Impl-D): 重写为统一检测+弹框流程；当前 completion_policy 已移除，
+    // completion 流程行为待重写，暂时返回全部不可用。
+    (false, false)
 }
 
 impl AgentSessionService<'_> {
@@ -2756,13 +2733,12 @@ fn insert_structured_session_in_transaction(
            target_branch,
            workspace_branch,
            workspace_path,
-           completion_policy,
            worktree_root_path,
            log_path,
            list_inserted_at,
            last_active_at,
            started_at
-         ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, '', 'current_branch', NULL, NULL, ?4, NULL, NULL, ?6, ?7, ?7, ?7)",
+         ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, '', 'current_branch', NULL, NULL, ?4, NULL, ?6, ?7, ?7, ?7)",
         params![
             project_id,
             title,
@@ -3907,7 +3883,6 @@ mod tests {
         AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
         ToolCallDetail, ToolCallStatus,
     };
-    use crate::types::project::ProjectCompletionPolicy;
     use crate::types::session_event::SessionEventType;
     use rusqlite::{params, Connection};
     use std::fs;
@@ -4962,7 +4937,6 @@ mod tests {
             workspace_path: None,
             origin_branch: None,
             worktree_owner: WorktreeOwner::External,
-            completion_policy: Some(ProjectCompletionPolicy::Manual),
             worktree_root_path: None,
             worktree_setup_command: None,
             log_path: log_path.to_string(),
@@ -4992,7 +4966,6 @@ mod tests {
             workspace_path: Some(worktree_path.to_string()),
             origin_branch: Some("devlop".to_string()),
             worktree_owner: WorktreeOwner::Redwhisk,
-            completion_policy: Some(ProjectCompletionPolicy::AgentAutoCommit),
             worktree_root_path: None,
             worktree_setup_command: Some(String::new()),
             log_path: "/tmp/redwhisk-session-30.jsonl".to_string(),
@@ -5036,8 +5009,8 @@ mod tests {
             .expect("run migrations");
         connection
             .execute(
-                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at, completion_policy)
-                 VALUES (1, 'RedWhisk', ?1, 1, 1, 'manual')",
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1)",
                 params![std::env::temp_dir().to_string_lossy().to_string()],
             )
             .expect("insert project");
@@ -5087,13 +5060,13 @@ mod tests {
                 "INSERT INTO agent_sessions (
                    id, project_id, issue_id, title, agent_profile_id, status, attention,
                    working_dir, command_snapshot, prompt_snapshot, workspace_mode,
-                   target_branch, workspace_branch, workspace_path, completion_policy,
+                   target_branch, workspace_branch, workspace_path,
                    worktree_root_path, log_path, list_inserted_at, last_active_at, started_at,
                    closed_at, del
                  ) VALUES (
                    ?1, 1, ?2, NULL, 101, ?3, 'none',
                    ?4, '', '', 'current_branch',
-                   NULL, NULL, ?4, 'manual',
+                   NULL, NULL, ?4,
                    NULL, ?5, ?6, ?6, ?7, ?8, 0
                  )",
                 params![

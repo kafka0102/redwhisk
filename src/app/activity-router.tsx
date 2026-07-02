@@ -7,10 +7,7 @@ import {
 } from "../features/settings/project-settings-activity";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
 import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
-import type {
-  ProjectCompletionPolicy,
-  ProjectWorktreeLocation,
-} from "../features/project/project-commands";
+import type { ProjectWorktreeLocation } from "../features/project/project-commands";
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -33,7 +30,6 @@ interface ActivityRouterProps {
     SetStateAction<ProjectTerminalsActivityState>
   >;
   onSelectAgentSession: (sessionId: number) => void;
-  projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   projectName: string;
   projectPath: string;
@@ -53,7 +49,6 @@ export function ActivityRouter({
   onProjectUpdated,
   onProjectTerminalsStateChange,
   onSelectAgentSession,
-  projectCompletionPolicy,
   projectId,
   projectName,
   projectPath,
@@ -67,7 +62,6 @@ export function ActivityRouter({
       <AgentsActivity
         activeSessionId={activeAgentSessionId}
         onSelectSession={onSelectAgentSession}
-        projectCompletionPolicy={projectCompletionPolicy}
         projectId={projectId}
       />
     );
@@ -90,7 +84,6 @@ export function ActivityRouter({
     return (
       <ProjectSettingsActivity
         activeMenu={activeProjectSettingsMenu}
-        completionPolicy={projectCompletionPolicy}
         key={projectId}
         onMenuChange={onProjectSettingsMenuChange}
         onProjectUpdated={onProjectUpdated}
@@ -112,7 +105,6 @@ export function ActivityRouter({
       key={projectId}
       onOpenAgentsActivity={onOpenAgentsActivity}
       onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
-      projectCompletionPolicy={projectCompletionPolicy}
       projectId={projectId}
       requestedIssueId={requestedIssueId}
       worktreeSetupCommand={projectWorktreeSetupCommand}

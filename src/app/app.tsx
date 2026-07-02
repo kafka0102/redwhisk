@@ -22,7 +22,6 @@ import {
   openProjectWindow,
   validateProjectRepoPath,
   type CreateProjectInput,
-  type ProjectCompletionPolicy,
   type ProjectWorktreeLocation,
   type ProjectRecord,
   type ProjectListItem,
@@ -38,7 +37,6 @@ export interface ProjectSummary {
   id: number;
   name: string;
   path: string;
-  completionPolicy: ProjectCompletionPolicy;
   worktreeLocation: ProjectWorktreeLocation;
   worktreeSetupCommand: string;
   recentOpenedAt: string;
@@ -46,7 +44,6 @@ export interface ProjectSummary {
 }
 
 interface CreateProjectDraft {
-  completionPolicy: ProjectCompletionPolicy;
   name: string;
   openInNewWindow: boolean;
   repoPath: string;
@@ -219,7 +216,6 @@ function ProjectApp() {
           repoPath: selectedPath,
         });
         setCreateProjectDraft({
-          completionPolicy: "agent_auto_commit",
           name: validatedProject.suggestedName,
           openInNewWindow,
           repoPath: validatedProject.repoPath,
@@ -383,7 +379,6 @@ function toProjectSummary(
     id: project.id,
     name: project.name,
     path: project.repoPath,
-    completionPolicy: project.completionPolicy,
     worktreeLocation: project.worktreeLocation ?? "repo_sibling",
     worktreeSetupCommand: project.worktreeSetupCommand ?? "",
     recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,

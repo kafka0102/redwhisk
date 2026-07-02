@@ -208,7 +208,6 @@ export function AppShell({
               onProjectTerminalsStateChange={handleProjectTerminalsStateChange}
               onSelectAgentSession={setActiveAgentSessionId}
               activeProjectSettingsMenu={activeProjectSettingsMenu}
-              projectCompletionPolicy={project.completionPolicy}
               projectWorktreeSetupCommand={project.worktreeSetupCommand}
               projectId={project.id}
               projectName={project.name}

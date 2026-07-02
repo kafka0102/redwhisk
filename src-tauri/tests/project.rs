@@ -8,8 +8,8 @@ use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
-    CreateProjectInput, OpenProjectInput, ProjectCompletionPolicy, ProjectPathStatus,
-    ProjectWorktreeLocation, UpdateProjectSettingsInput,
+    CreateProjectInput, OpenProjectInput, ProjectPathStatus, ProjectWorktreeLocation,
+    UpdateProjectSettingsInput,
 };
 use redwhisk_lib::types::project_terminal::{
     CreateProjectTerminalInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
@@ -59,7 +59,6 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "repo_path",
             "created_at",
             "last_opened_at",
-            "completion_policy",
             "worktree_location",
             "worktree_setup_command",
         ],
@@ -160,7 +159,6 @@ fn repository_persists_project_terminal_config_lifecycle() {
         .insert(
             "sample-repo",
             "/tmp/sample-repo",
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert project");
 
@@ -228,14 +226,12 @@ fn repository_rejects_project_terminal_config_update_from_other_project() {
         .insert(
             "first-repo",
             "/tmp/first-repo",
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert first project");
     let second_project = repository
         .insert(
             "second-repo",
             "/tmp/second-repo",
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert second project");
     let inserted = repository
@@ -278,14 +274,12 @@ fn repository_rejects_project_terminal_config_delete_from_other_project() {
         .insert(
             "first-repo",
             "/tmp/first-repo",
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert first project");
     let second_project = repository
         .insert(
             "second-repo",
             "/tmp/second-repo",
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert second project");
     let inserted = repository
@@ -372,10 +366,6 @@ fn project_integer_id_migration_converts_existing_text_schema() {
     assert!(project.id > 0);
     assert_eq!(project.name, "old-repo");
     assert_eq!(
-        project.completion_policy,
-        redwhisk_lib::types::project::ProjectCompletionPolicy::Manual
-    );
-    assert_eq!(
         project.worktree_location,
         ProjectWorktreeLocation::RepoSibling
     );
@@ -442,10 +432,6 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
         .expect("project");
     assert_eq!(project.id, 42);
     assert_eq!(
-        project.completion_policy,
-        redwhisk_lib::types::project::ProjectCompletionPolicy::Manual
-    );
-    assert_eq!(
         project.worktree_location,
         ProjectWorktreeLocation::RepoSibling
     );
@@ -471,7 +457,6 @@ fn create_project_persists_git_repo_with_confirmed_name() {
         .create_project(CreateProjectInput {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -485,10 +470,6 @@ fn create_project_persists_git_repo_with_confirmed_name() {
             .canonicalize()
             .expect("canonical repo")
             .to_string_lossy()
-    );
-    assert_eq!(
-        project.completion_policy,
-        redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
     );
     assert_eq!(project.created_at, project.last_opened_at);
     assert!(project.created_at > 1_700_000_000_000);
@@ -517,7 +498,6 @@ fn create_project_persists_worktree_settings() {
         .create_project(CreateProjectInput {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::UserHome,
             worktree_setup_command: "pnpm install\npnpm test  ".to_string(),
         })
@@ -544,7 +524,6 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
         .create_project(CreateProjectInput {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -553,7 +532,6 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
         .create_project(CreateProjectInput {
             name: "sample-repo".to_string(),
             repo_path: repo_dir.join(".").to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -591,7 +569,6 @@ fn create_project_rejects_non_git_directory_without_insert() {
         .create_project(CreateProjectInput {
             name: "plain-dir".to_string(),
             repo_path: non_git_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -621,7 +598,6 @@ fn create_project_reports_missing_path_as_invalid_without_insert() {
         .create_project(CreateProjectInput {
             name: "missing-repo".to_string(),
             repo_path: missing_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -650,7 +626,6 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
     let input = CreateProjectInput {
         name: "sample-repo".to_string(),
         repo_path: repo_dir.to_string_lossy().to_string(),
-        completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
         worktree_location: ProjectWorktreeLocation::RepoSibling,
         worktree_setup_command: "".to_string(),
     };
@@ -683,27 +658,17 @@ fn repository_insert_is_idempotent_for_existing_repo_path() {
         .insert_or_get_existing(
             "sample-repo",
             "/tmp/sample-repo",
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("first insert");
     let second_project = repository
         .insert_or_get_existing(
             "sample-repo",
             "/tmp/sample-repo",
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("second insert");
 
     assert_eq!(first_project.id, second_project.id);
     assert!(first_project.id > 0);
-    assert_eq!(
-        first_project.completion_policy,
-        redwhisk_lib::types::project::ProjectCompletionPolicy::AgentAutoCommit
-    );
-    assert_eq!(
-        first_project.completion_policy,
-        second_project.completion_policy
-    );
     let count: i64 = database
         .connection
         .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
@@ -726,14 +691,12 @@ fn repository_generates_unique_project_ids_for_multiple_repos() {
         .insert_or_get_existing(
             "first-repo",
             "/tmp/first-repo",
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("first insert");
     let second_project = repository
         .insert_or_get_existing(
             "second-repo",
             "/tmp/second-repo",
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("second insert");
 
@@ -759,7 +722,6 @@ fn list_projects_returns_all_projects_with_path_status_in_recent_order() {
         .insert(
             "available-repo",
             available_repo.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert available project");
     let old_project = repository
@@ -770,7 +732,6 @@ fn list_projects_returns_all_projects_with_path_status_in_recent_order() {
         .insert(
             "missing-repo",
             missing_repo.to_str().unwrap(),
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert missing project");
     let new_project = repository
@@ -821,7 +782,6 @@ fn open_project_updates_last_opened_at_for_available_project() {
         .insert(
             "sample-repo",
             repo_dir.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert project");
     let stored_project = repository
@@ -865,7 +825,6 @@ fn open_project_restores_saved_project_terminals_without_duplicate_launches() {
         .insert(
             "sample-repo",
             repo_dir.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert project");
     let terminal_service =
@@ -981,7 +940,6 @@ fn open_project_ignores_individual_terminal_restore_failures() {
         .insert(
             "healthy-repo",
             healthy_repo.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert project");
     repository
@@ -1053,7 +1011,6 @@ fn open_project_rejects_missing_path_without_deleting_or_updating_project() {
         .insert(
             "missing-repo",
             missing_repo.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert project");
     let stored_project = repository
@@ -1099,7 +1056,6 @@ fn prepare_project_window_open_validates_target_without_updating_last_opened_at(
         .insert(
             "target-repo",
             repo_dir.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert project");
     let stored_project = repository
@@ -1141,7 +1097,6 @@ fn record_project_opened_updates_last_opened_at_after_window_success() {
         .insert(
             "target-repo",
             repo_dir.to_str().unwrap(),
-            ProjectCompletionPolicy::AgentAutoCommit,
         )
         .expect("insert project");
     let stored_project = repository
@@ -1167,7 +1122,7 @@ fn record_project_opened_updates_last_opened_at_after_window_success() {
 }
 
 #[test]
-fn update_project_settings_persists_project_name_and_completion_policy() {
+fn update_project_settings_persists_project_name_and_repo_path() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = DatabaseConfig::new(temp_dir.path())
         .open()
@@ -1182,7 +1137,6 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
         .insert(
             "sample-repo",
             repo_dir.to_str().unwrap(),
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert project");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
@@ -1192,7 +1146,6 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
             project_id: stored_project.id,
             name: "RedWhisk Desktop".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -1206,10 +1159,6 @@ fn update_project_settings_persists_project_name_and_completion_policy() {
             .canonicalize()
             .expect("canonical repo")
             .to_string_lossy()
-    );
-    assert_eq!(
-        updated.completion_policy,
-        ProjectCompletionPolicy::AgentAutoCommit
     );
 }
 
@@ -1229,7 +1178,6 @@ fn update_project_settings_rejects_blank_name() {
         .insert(
             "sample-repo",
             repo_dir.to_str().unwrap(),
-            ProjectCompletionPolicy::Manual,
         )
         .expect("insert project");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
@@ -1239,7 +1187,6 @@ fn update_project_settings_rejects_blank_name() {
             project_id: stored_project.id,
             name: "   ".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::Manual,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -1271,7 +1218,6 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
         .create_project(CreateProjectInput {
             name: "initial-repo".to_string(),
             repo_path: initial_repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::Manual,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -1282,7 +1228,6 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             project_id: project.id,
             name: "Moved Repo".to_string(),
             repo_path: moved_repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::AgentAutoCommit,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "pnpm install\npnpm test".to_string(),
         })
@@ -1295,10 +1240,6 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             .canonicalize()
             .expect("canonical moved repo")
             .to_string_lossy()
-    );
-    assert_eq!(
-        updated_project.completion_policy,
-        ProjectCompletionPolicy::AgentAutoCommit
     );
     assert_eq!(
         updated_project.worktree_location,
@@ -1327,7 +1268,6 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
         .create_project(CreateProjectInput {
             name: "repo-without-worktrees-ignore".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::Manual,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -1338,7 +1278,6 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             project_id: project.id,
             name: "Repo".to_string(),
             repo_path: repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::Manual,
             worktree_location: ProjectWorktreeLocation::RepoInternal,
             worktree_setup_command: "".to_string(),
         })
@@ -1365,7 +1304,6 @@ fn update_project_settings_rejects_non_git_repo_path() {
         .create_project(CreateProjectInput {
             name: "initial-repo".to_string(),
             repo_path: initial_repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::Manual,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
@@ -1376,7 +1314,6 @@ fn update_project_settings_rejects_non_git_repo_path() {
             project_id: project.id,
             name: "Initial Repo".to_string(),
             repo_path: invalid_repo_dir.to_string_lossy().to_string(),
-            completion_policy: ProjectCompletionPolicy::Manual,
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
         })
