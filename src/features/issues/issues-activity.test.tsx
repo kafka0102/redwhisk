@@ -36,6 +36,7 @@ import {
 import {
   listAgentProfiles,
   listProjectLabels,
+  listSavedAgentSkills,
 } from "../settings/settings-commands";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
@@ -69,6 +70,7 @@ vi.mock("../agents/agent-session-commands", () => ({
 vi.mock("../settings/settings-commands", () => ({
   listAgentProfiles: vi.fn(),
   listProjectLabels: vi.fn(),
+  listSavedAgentSkills: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -209,6 +211,7 @@ const startAgentSessionMock = vi.mocked(startAgentSession);
 const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
+const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
 const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
@@ -220,6 +223,16 @@ const existingIssue: IssueRecord = {
   title: "Existing issue",
   description: "Existing description",
   status: "backlog",
+  labels: [
+    {
+      id: 301,
+      name: "bug",
+      scope: "project",
+      projectId: 1,
+      color: "#E11D48",
+      workflowSkill: "bmad-dev-story",
+    },
+  ],
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_632_000_000,
 };
@@ -340,8 +353,6 @@ const projectLabel = {
   scope: "project" as const,
   projectId: 1,
   color: "#E11D48",
-  agentProfileId: null,
-  agentName: null,
   workflowSkill: null,
 };
 
@@ -351,8 +362,6 @@ const globalLabel = {
   scope: "global" as const,
   projectId: null,
   color: "#3B82F6",
-  agentProfileId: null,
-  agentName: null,
   workflowSkill: null,
 };
 
@@ -411,6 +420,7 @@ describe("IssuesActivity", () => {
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
     listProjectLabelsMock.mockReset();
+    listSavedAgentSkillsMock.mockReset();
     openDialogMock.mockReset();
     saveDialogMock.mockReset();
     convertFileSrcMock.mockReset();
@@ -446,6 +456,25 @@ describe("IssuesActivity", () => {
       }
       return { labels: [] };
     });
+    listSavedAgentSkillsMock.mockImplementation(async ({ scope }) => ({
+      skills:
+        scope === "global"
+          ? [
+              {
+                id: 1,
+                name: "bmad-dev-story",
+                scope: "global",
+                projectId: null,
+                skillPaths: [
+                  {
+                    agentType: "codex",
+                    path: "/home/me/.agents/skills/bmad-dev-story/SKILL.md",
+                  },
+                ],
+              },
+            ]
+          : [],
+    }));
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
     injectAgentSessionPromptMock.mockResolvedValue({
       sessionId: 1,
@@ -1010,7 +1039,7 @@ describe("IssuesActivity", () => {
             mimeType: "text/markdown",
           },
         ],
-        labelIds: [],
+        labelIds: [301],
       }),
     );
   });
@@ -1046,7 +1075,7 @@ describe("IssuesActivity", () => {
         title: "Updated issue",
         description: "Updated description",
         attachments: [],
-        labelIds: [],
+        labelIds: [301],
       }),
     );
     expect(
@@ -1080,7 +1109,7 @@ describe("IssuesActivity", () => {
       title: "Failed update",
       description: "Existing description",
       attachments: [],
-      labelIds: [],
+      labelIds: [301],
     });
     const page = screen.getByRole("form", { name: "Edit Issue" });
     expect(
@@ -2046,7 +2075,7 @@ describe("IssuesActivity", () => {
         title: "Updated issue",
         description: "Updated description",
         attachments: [],
-        labelIds: [],
+        labelIds: [301],
       }),
     );
     const runDialog = await screen.findByRole("dialog", {
@@ -2170,25 +2199,6 @@ describe("IssuesActivity", () => {
     );
   });
 
-  it("hides the workflow skill field when the selected agent profile has no configured skill", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") {
-        return { profiles: [] };
-      }
-
-      return { profiles: [globalProfile] };
-    });
-
-    renderIssuesActivity();
-
-    const { dialog } = await openExistingIssueRunDialog(user);
-    expect(
-      within(dialog).queryByLabelText("Workflow skill"),
-    ).not.toBeInTheDocument();
-  });
-
   it("allows selecting none for workflow skill and updates the final prompt", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -2207,43 +2217,6 @@ describe("IssuesActivity", () => {
 
     expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
       existingIssueRunPromptWithoutSkill,
-    );
-  });
-
-  it("restores the most recently used workflow skill for the selected agent profile", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") {
-        return {
-          profiles: [
-            {
-              ...projectProfile,
-              defaultSkill: JSON.stringify(["bmad-dev-story", "review-skill"]),
-            },
-          ],
-        };
-      }
-
-      return { profiles: [globalProfile] };
-    });
-
-    renderIssuesActivity();
-
-    let { dialog } = await openExistingIssueRunDialog(user);
-    await selectShadcnOption(
-      user,
-      within(dialog),
-      "Workflow skill",
-      "review-skill",
-    );
-    await user.click(
-      within(dialog).getByRole("button", { name: "Close run dialog" }),
-    );
-
-    ({ dialog } = await openExistingIssueRunDialog(user));
-    expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
-      "review-skill",
     );
   });
 
@@ -2292,10 +2265,6 @@ describe("IssuesActivity", () => {
 
   it("defaults to the first workflow skill configured by issue labels", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "redwhisk.issue-run.recent-workflow-skill",
-      JSON.stringify({ "1:100": "skill-a" }),
-    );
     listIssuesMock.mockResolvedValue({
       issues: [
         {
@@ -2309,17 +2278,32 @@ describe("IssuesActivity", () => {
     });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
-        return {
-          profiles: [
-            {
-              ...projectProfile,
-              defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
-            },
-          ],
-        };
+        return { profiles: [projectProfile] };
       }
 
       return { profiles: [globalProfile] };
+    });
+    listSavedAgentSkillsMock.mockResolvedValue({
+      skills: [
+        {
+          id: 1,
+          name: "skill-a",
+          scope: "global",
+          projectId: null,
+          skillPaths: [
+            { agentType: "codex", path: "/home/me/.agents/skills/skill-a/SKILL.md" },
+          ],
+        },
+        {
+          id: 2,
+          name: "skill-b",
+          scope: "global",
+          projectId: null,
+          skillPaths: [
+            { agentType: "codex", path: "/home/me/.agents/skills/skill-b/SKILL.md" },
+          ],
+        },
+      ],
     });
 
     renderIssuesActivity();
@@ -2333,19 +2317,12 @@ describe("IssuesActivity", () => {
     );
   });
 
-  it("falls back to the first configured workflow skill when there is no recent selection", async () => {
+  it("defaults to the workflow skill configured by issue labels when matched by saved skills", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
-        return {
-          profiles: [
-            {
-              ...projectProfile,
-              defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
-            },
-          ],
-        };
+        return { profiles: [projectProfile] };
       }
 
       return { profiles: [globalProfile] };
@@ -2355,7 +2332,7 @@ describe("IssuesActivity", () => {
 
     const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
-      "skill-a",
+      "bmad-dev-story",
     );
   });
 

@@ -14,6 +14,7 @@ describe("buildRunPromptPreview", () => {
         defaultSkill: "bmad-dev-story",
         promptTemplate: "Focus on {{issue.description}} in {{project.name}}.",
       },
+      selectedWorkflowSkill: "bmad-dev-story",
     });
 
     expect(preview.finalPrompt).toBe(
@@ -48,6 +49,7 @@ describe("buildRunPromptPreview", () => {
         defaultSkill: "bmad-dev-story",
         promptTemplate: "Template body",
       },
+      selectedWorkflowSkill: "bmad-dev-story",
     });
 
     expect(preview.sources.map((source) => source.id)).toEqual([
@@ -164,6 +166,7 @@ describe("buildRunPromptPreview", () => {
         defaultSkill: "bmad-dev-story",
         promptTemplate: "",
       },
+      selectedWorkflowSkill: "bmad-dev-story",
     });
 
     expect(preview.finalPrompt).toBe(
@@ -174,7 +177,7 @@ describe("buildRunPromptPreview", () => {
     );
   });
 
-  it("builds prompt sections for multiple workflow skills stored as a JSON array", () => {
+  it("builds a prompt section for the selected workflow skill", () => {
     const preview = buildRunPromptPreview({
       issue: {
         title: "Prompt preview",
@@ -182,20 +185,20 @@ describe("buildRunPromptPreview", () => {
         attachments: [],
       },
       profile: {
-        defaultSkill: JSON.stringify(["skill-a", "skill-b"]),
+        defaultSkill: "",
         promptTemplate: "",
       },
+      selectedWorkflowSkill: "skill-a",
     });
 
     expect(preview.finalPrompt).toBe(
       [
         "using skill skill-a for task:",
-        "using skill skill-b for task:",
         "Make the preview reflect the selected profile.",
       ].join("\n\n"),
     );
     expect(
       preview.sources.find((source) => source.id === "default-skill")?.content,
-    ).toBe("skill-a\nskill-b");
+    ).toBe("skill-a");
   });
 });
