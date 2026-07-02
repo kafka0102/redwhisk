@@ -187,7 +187,6 @@ describe("ProjectSettingsActivity", () => {
       id: 1,
       name: "RedWhisk",
       repoPath: "/tmp/redwhisk",
-      completionPolicy: "agent_auto_commit",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
@@ -253,7 +252,6 @@ describe("ProjectSettingsActivity", () => {
   it("renders two-column layout with general menu active by default", async () => {
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -296,7 +294,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -326,7 +323,6 @@ describe("ProjectSettingsActivity", () => {
   it("resizes the settings menu by mouse drag and clears global drag state", async () => {
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -369,7 +365,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -396,9 +391,6 @@ describe("ProjectSettingsActivity", () => {
     expect(screen.getByLabelText("Repository path")).toHaveValue(
       "/tmp/redwhisk",
     );
-    expect(screen.getByLabelText("Git completion strategy")).toHaveTextContent(
-      "Manual",
-    );
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Agents" }));
@@ -422,7 +414,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -491,7 +482,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -532,7 +522,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -581,7 +570,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -653,7 +641,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -687,7 +674,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -713,7 +699,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -756,7 +741,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -778,7 +762,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -833,7 +816,6 @@ describe("ProjectSettingsActivity", () => {
       id: 1,
       name: "RedWhisk",
       repoPath: "/tmp/redwhisk",
-      completionPolicy: "manual",
       worktreeLocation: "repo_internal",
       worktreeSetupCommand: "",
       createdAt: 1,
@@ -842,7 +824,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -865,7 +846,6 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
         name: "RedWhisk",
         repoPath: "/tmp/redwhisk",
-        completionPolicy: "manual",
         worktreeLocation: "repo_internal",
         worktreeSetupCommand: "",
       }),
@@ -878,7 +858,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -900,7 +879,6 @@ describe("ProjectSettingsActivity", () => {
   it("uses a detected worktree setup command as the textarea value", () => {
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="Go Service"
@@ -918,7 +896,6 @@ describe("ProjectSettingsActivity", () => {
   it("prompts for setup command input when no command is detected", () => {
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="Plain"
@@ -953,7 +930,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1006,7 +982,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1041,7 +1016,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1089,7 +1063,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1131,7 +1104,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1185,7 +1157,6 @@ describe("ProjectSettingsActivity", () => {
 
     const { rerender } = render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1201,7 +1172,6 @@ describe("ProjectSettingsActivity", () => {
 
     rerender(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={2}
         projectName="Agents Lab"
@@ -1229,7 +1199,6 @@ describe("ProjectSettingsActivity", () => {
 
     const { rerender } = render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1244,7 +1213,6 @@ describe("ProjectSettingsActivity", () => {
 
     rerender(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={2}
         projectName="Agents Lab"
@@ -1256,20 +1224,18 @@ describe("ProjectSettingsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("saves project name and completion strategy from the general settings section", async () => {
+  it("saves project name from the general settings section", async () => {
     const user = userEvent.setup();
     updateProjectSettingsMock.mockResolvedValue({
       id: 1,
       name: "RedWhisk Desktop",
       repoPath: "/tmp/redwhisk",
-      completionPolicy: "agent_auto_commit",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
     });
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1280,12 +1246,6 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "General" }));
     await user.clear(await screen.findByLabelText("Project Name"));
     await user.type(screen.getByLabelText("Project Name"), "RedWhisk Desktop");
-    await selectShadcnOption(
-      user,
-      screen,
-      "Git completion strategy",
-      "Auto Commit",
-    );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -1293,7 +1253,6 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
         name: "RedWhisk Desktop",
         repoPath: "/tmp/redwhisk",
-        completionPolicy: "agent_auto_commit",
         worktreeLocation: "repo_sibling",
         worktreeSetupCommand: "",
       }),
@@ -1302,7 +1261,6 @@ describe("ProjectSettingsActivity", () => {
       expect.objectContaining({
         id: 1,
         name: "RedWhisk Desktop",
-        completionPolicy: "agent_auto_commit",
       }),
     );
   });
@@ -1314,14 +1272,12 @@ describe("ProjectSettingsActivity", () => {
       id: 1,
       name: "RedWhisk",
       repoPath: "/tmp/other-repo",
-      completionPolicy: "manual",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
     });
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"
@@ -1346,7 +1302,6 @@ describe("ProjectSettingsActivity", () => {
         projectId: 1,
         name: "RedWhisk",
         repoPath: "/tmp/other-repo",
-        completionPolicy: "manual",
         worktreeLocation: "repo_sibling",
         worktreeSetupCommand: "",
       }),
@@ -1363,7 +1318,6 @@ describe("ProjectSettingsActivity", () => {
 
     render(
       <ProjectSettingsActivity
-        completionPolicy="manual"
         onProjectUpdated={onProjectUpdated}
         projectId={1}
         projectName="RedWhisk"

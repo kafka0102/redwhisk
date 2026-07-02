@@ -29,7 +29,6 @@ import {
   type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
-import type { ProjectCompletionPolicy } from "../project/project-commands";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
@@ -84,14 +83,12 @@ interface SessionBrowserToolTab {
 interface AgentsActivityProps {
   activeSessionId: number | null;
   onSelectSession?: (sessionId: number) => void;
-  projectCompletionPolicy?: ProjectCompletionPolicy;
   projectId: number;
 }
 
 export function AgentsActivity({
   activeSessionId,
   onSelectSession,
-  projectCompletionPolicy = "manual",
   projectId,
 }: AgentsActivityProps) {
   const { messages } = useI18n();
@@ -836,7 +833,7 @@ export function AgentsActivity({
       ) ?? { ...currentSession, issueStatus: "review" as const };
     }
 
-    if (projectCompletionPolicy === "manual" || isSessionClosed) {
+    if (isSessionClosed) {
       await completeLinkedIssueManual(linkedIssue, nextSession);
       return;
     }

@@ -66,7 +66,6 @@ export interface I18nMessages {
   settings: {
     actions: string;
     agents: string;
-    autoCommit: string;
     cancel: string;
     close: string;
     closeMessage: string;
@@ -76,7 +75,6 @@ export interface I18nMessages {
     commandAvailable: (commandName: string) => string;
     commandTesting: string;
     commandTest: string;
-    completionStrategy: string;
     configuredAgents: string;
     delete: string;
     deleteConfirm: (profileName: string) => string;
@@ -94,7 +92,6 @@ export interface I18nMessages {
     loadingLabels: string;
     loadingSkills: string;
     loadingTerminals: string;
-    manual: string;
     menuLabel: string;
     name: string;
     newAgent: string;
@@ -161,11 +158,9 @@ export interface I18nMessages {
     status: string;
   };
   createProject: {
-    autoCommit: string;
     create: string;
     creating: string;
     dialogTitle: string;
-    gitCompletionStrategy: string;
     selectGitRepository: string;
     status: string;
     worktreeSetupPlaceholder: string;
@@ -232,7 +227,6 @@ export interface I18nMessages {
     statusLabel: string;
     summaryClose: string;
     runDialogClose: string;
-    commitStrategy: string;
     confirmCompleteWhileRunning: string;
     confirmMoveBackToStatus: (statusLabel: string) => string;
     confirmReturnToBacklog: string;
@@ -254,7 +248,6 @@ export interface I18nMessages {
     worktreeCreatedProgress: string;
     dialogStatus: string;
     agentProfile: string;
-    agentAutoCommit: string;
     completionDirtyTitle: string;
     completionDirtyMessage: string;
     completionIgnoreDirty: string;
@@ -561,7 +554,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     settings: {
       actions: "Actions",
       agents: "Agents",
-      autoCommit: "Auto Commit",
       cancel: "Cancel",
       close: "Close",
       closeMessage: "Close message",
@@ -571,7 +563,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       commandAvailable: (commandName) => `Command available: ${commandName}`,
       commandTesting: "Testing...",
       commandTest: "Test",
-      completionStrategy: "Git completion strategy",
       configuredAgents: "Configured agents",
       delete: "Delete",
       deleteConfirm: (profileName) =>
@@ -590,7 +581,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       loadingLabels: "Loading labels...",
       loadingSkills: "Loading skills...",
       loadingTerminals: "Loading terminals...",
-      manual: "Manual",
       menuLabel: "Settings menu",
       name: "Name",
       newAgent: "New agent",
@@ -657,11 +647,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       status: "Project switcher status",
     },
     createProject: {
-      autoCommit: "Auto Commit",
       create: "Create Project",
       creating: "Creating Project",
       dialogTitle: "New Project",
-      gitCompletionStrategy: "Git completion strategy",
       selectGitRepository: "Select Git Repository",
       status: "Project creation status",
       worktreeSetupPlaceholder:
@@ -729,7 +717,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       statusLabel: "Issue status",
       summaryClose: "Close issue summary",
       runDialogClose: "Close run dialog",
-      commitStrategy: "Commit strategy",
       confirmCompleteWhileRunning:
         "This issue is still running. Mark it as completed?",
       confirmMoveBackToStatus: (statusLabel) =>
@@ -756,7 +743,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       worktreeCreatedProgress: "Completed worktree creation.",
       dialogStatus: "Dialog status",
       agentProfile: "Agent profile",
-      agentAutoCommit: "Agent auto commit",
       completionDirtyTitle: "Uncommitted changes",
       completionDirtyMessage:
         "This session has uncommitted local changes. Ignore them and continue completing the Issue?",
@@ -1063,7 +1049,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     settings: {
       actions: "操作",
       agents: "Agents",
-      autoCommit: "自动提交",
       cancel: "取消",
       close: "关闭",
       closeMessage: "关闭消息",
@@ -1073,7 +1058,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       commandAvailable: (commandName) => `命令可用：${commandName}`,
       commandTesting: "测试中...",
       commandTest: "测试",
-      completionStrategy: "Git 完成策略",
       configuredAgents: "已配置 Agents",
       delete: "删除",
       deleteConfirm: (profileName) =>
@@ -1092,7 +1076,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       loadingLabels: "正在加载标签...",
       loadingSkills: "正在加载技能...",
       loadingTerminals: "正在加载终端...",
-      manual: "手动",
       menuLabel: "设置菜单",
       name: "名称",
       newAgent: "新建 Agent",
@@ -1159,11 +1142,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       status: "项目切换器状态",
     },
     createProject: {
-      autoCommit: "自动提交",
       create: "创建项目",
       creating: "创建项目中",
       dialogTitle: "新建项目",
-      gitCompletionStrategy: "Git 完成策略",
       selectGitRepository: "选择 Git 仓库",
       status: "创建项目状态",
       worktreeSetupPlaceholder: "请输入创建工作树后的初始化命令",
@@ -1230,7 +1211,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       statusLabel: "Issue 状态",
       summaryClose: "关闭 Issue 总结",
       runDialogClose: "关闭运行弹窗",
-      commitStrategy: "提交策略",
       confirmCompleteWhileRunning: "当前 Issue 正在执行，是否标记为完成？",
       confirmMoveBackToStatus: (statusLabel) =>
         `确定要回退到 ${statusLabel} 阶段吗？`,
@@ -1255,7 +1235,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       worktreeCreatedProgress: "完成 worktree 创建。",
       dialogStatus: "弹窗状态",
       agentProfile: "Agent 配置",
-      agentAutoCommit: "Agent 自动提交",
       completionDirtyTitle: "存在未提交改动",
       completionDirtyMessage:
         "当前会话存在本地未提交改动。是否忽略这些改动并继续完成 Issue？",

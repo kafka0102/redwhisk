@@ -678,13 +678,7 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={301}
-        projectCompletionPolicy="manual"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Agents" }),
@@ -1295,13 +1289,7 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={301}
-        projectCompletionPolicy="manual"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     const activity = (
       await screen.findByRole("separator", { name: "Resize session list" })
@@ -1652,13 +1640,7 @@ describe("AgentsActivity", () => {
         ],
       });
 
-    render(
-      <AgentsActivity
-        activeSessionId={301}
-        projectCompletionPolicy="manual"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     const newSessionButton = await screen.findByRole("button", {
       name: "New session",
@@ -2250,13 +2232,7 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={302}
-        projectCompletionPolicy="manual"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
     const sessionList = await findSessionList();
     expect(
@@ -2315,13 +2291,7 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={301}
-        projectCompletionPolicy="manual"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     const sessionList = await findSessionList();
     const existingIssueRow = within(sessionList).getByRole("button", {
@@ -2387,13 +2357,7 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={304}
-        projectCompletionPolicy="manual"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={304} projectId={1} />);
 
     const sessionList = await findSessionList();
     const attentionRow = within(sessionList).getByRole("button", {
@@ -3293,13 +3257,7 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     expect(
       await screen.findByRole("button", { name: "Mark done" }),
@@ -3406,13 +3364,7 @@ describe("AgentsActivity", () => {
         ],
       });
 
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
 
@@ -3476,13 +3428,7 @@ describe("AgentsActivity", () => {
         ],
       });
 
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {
@@ -3574,13 +3520,7 @@ describe("AgentsActivity", () => {
         ],
       });
 
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {
@@ -3678,13 +3618,7 @@ describe("AgentsActivity", () => {
         ],
       });
 
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {
@@ -3745,13 +3679,7 @@ describe("AgentsActivity", () => {
         },
       ],
     });
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
 
@@ -3860,13 +3788,7 @@ describe("AgentsActivity", () => {
         ],
       });
 
-    render(
-      <AgentsActivity
-        activeSessionId={502}
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={1}
-      />,
-    );
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog", {

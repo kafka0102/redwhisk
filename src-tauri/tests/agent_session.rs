@@ -919,7 +919,6 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
             WorktreeOwner::External,
             None,
             None,
-            None,
             "/tmp/redwhisk-session-race.log",
             1_780_000_000_000,
         )
@@ -1006,7 +1005,6 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
             None,
             Some("main"),
             WorktreeOwner::External,
-            None,
             None,
             None,
             "/tmp/redwhisk-soft-deleted-session.log",

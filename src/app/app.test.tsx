@@ -184,7 +184,6 @@ describe("App project entry", () => {
           id: 1,
           name: "RedWhisk",
           repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-          completionPolicy: "manual",
           createdAt: 1_780_581_600_000,
           lastOpenedAt: 1_780_624_800_000,
           pathStatus: "available",
@@ -193,7 +192,6 @@ describe("App project entry", () => {
           id: 2,
           name: "Local Agents Lab",
           repoPath: "/Users/kafka0102/workspace/local-agents",
-          completionPolicy: "manual",
           createdAt: 1_780_578_000_000,
           lastOpenedAt: 1_780_621_200_000,
           pathStatus: "missing",
@@ -255,7 +253,6 @@ describe("App project entry", () => {
         id: project.id,
         name: project.name,
         repoPath: project.repoPath,
-        completionPolicy: project.completionPolicy,
         createdAt: project.createdAt,
         lastOpenedAt: 1_780_628_400_000,
       };
@@ -742,7 +739,6 @@ describe("App project entry", () => {
       id: 3,
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
-      completionPolicy: "manual",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_581_600_000,
     });
@@ -770,9 +766,6 @@ describe("App project entry", () => {
       "/Users/kafka0102/workspace/new-repo",
     );
     expect(
-      within(projectDialog).getByLabelText("Git 完成策略"),
-    ).toHaveTextContent("自动提交");
-    expect(
       within(projectDialog).getByLabelText("工作树路径"),
     ).toHaveTextContent("~/workspace/new-repo.worktrees");
     expect(
@@ -787,7 +780,6 @@ describe("App project entry", () => {
     expect(createProjectMock).toHaveBeenCalledWith({
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
-      completionPolicy: "agent_auto_commit",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
     });
@@ -943,7 +935,6 @@ describe("App project entry", () => {
           id: 1,
           name: "RedWhisk",
           repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
-          completionPolicy: "manual",
           createdAt: 1_780_581_600_000,
           lastOpenedAt: 1_780_624_800_000,
           pathStatus: "available",
@@ -952,7 +943,6 @@ describe("App project entry", () => {
           id: 3,
           name: "Other Project",
           repoPath: "/Users/kafka0102/workspace/other-project",
-          completionPolicy: "manual",
           createdAt: 1_780_578_000_000,
           lastOpenedAt: 1_780_621_200_000,
           pathStatus: "available",
@@ -985,7 +975,6 @@ describe("App project entry", () => {
       id: 4,
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
-      completionPolicy: "agent_auto_commit",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_581_600_000,
     });
@@ -1027,7 +1016,6 @@ describe("App project entry", () => {
     expect(createProjectMock).toHaveBeenCalledWith({
       name: "new-repo",
       repoPath: "/Users/kafka0102/workspace/new-repo",
-      completionPolicy: "agent_auto_commit",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
     });

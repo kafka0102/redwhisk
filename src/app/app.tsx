@@ -437,8 +437,6 @@ function CreateProjectDialog({
   const [projectPathValue, setProjectPathValue] = useState(
     initialDraft.repoPath,
   );
-  const [completionPolicyValue, setCompletionPolicyValue] =
-    useState<ProjectCompletionPolicy>(initialDraft.completionPolicy);
   const [worktreeLocationValue, setWorktreeLocationValue] =
     useState<ProjectWorktreeLocation>(initialDraft.worktreeLocation);
   const [worktreeSetupCommandValue, setWorktreeSetupCommandValue] = useState(
@@ -515,7 +513,6 @@ function CreateProjectDialog({
       await onCreate({
         name: trimmedProjectName,
         repoPath: trimmedProjectPath,
-        completionPolicy: completionPolicyValue,
         worktreeLocation: worktreeLocationValue,
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
       });
@@ -539,20 +536,14 @@ function CreateProjectDialog({
         <div className="issue-dialog__body issue-dialog__body--single">
           <ProjectDetailsForm
             ariaStatusLabel={messages.createProject.status}
-            autoCommitLabel={messages.createProject.autoCommit}
             cancelLabel={messages.settings.cancel}
             chooseFolderLabel={messages.projectHome.chooseFolder}
             className="settings-card settings-general-card project-details-card"
-            completionPolicy={completionPolicyValue}
-            completionStrategyLabel={
-              messages.createProject.gitCompletionStrategy
-            }
             errorMessage={errorMessage}
             isChoosingRepoPath={isChoosingRepoPath}
             isSubmitting={isSubmitting}
             onCancel={onClose}
             onChooseRepoPath={handleChooseRepoPath}
-            onCompletionPolicyChange={setCompletionPolicyValue}
             onNameChange={setProjectNameValue}
             onSubmit={handleSubmit}
             onWorktreeLocationChange={setWorktreeLocationValue}

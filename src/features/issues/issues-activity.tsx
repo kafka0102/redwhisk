@@ -46,10 +46,8 @@ import {
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
-import type { ProjectCompletionPolicy } from "../project/project-commands";
 
 interface IssuesActivityProps {
-  projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   onOpenAgentsActivity?: (sessionId: number) => void;
   onOpenProjectSettingsLabels?: () => void;
@@ -58,7 +56,6 @@ interface IssuesActivityProps {
 }
 
 export function IssuesActivity({
-  projectCompletionPolicy,
   projectId,
   onOpenAgentsActivity,
   onOpenProjectSettingsLabels,
@@ -1152,7 +1149,6 @@ export function IssuesActivity({
       {runDialogIssue ? (
         <IssueRunDialog
           issue={runDialogIssue}
-          projectCompletionPolicy={projectCompletionPolicy}
           projectId={projectId}
           worktreeSetupCommand={worktreeSetupCommand}
           onClose={closeRunDialog}
