@@ -70,17 +70,14 @@ OpenSpec / OneSpec：
 
 ---
 
-### Task 1: Spike — PTY live cwd 上报能力验证
+### Task 1: Spike — live cwd 上报能力验证（已完成）
 
-**Files:**
-- Investigate: `src-tauri/src/agent/**`（PTY session 句柄）、`src-tauri/src/core/agent_session_service.rs`
+**结论（已写入 design.md §1.3）：** 路径 D + S 混合。
+- [x] 1.1 PTY session 无法自动获取 cwd（句柄不存 pid、不解析 OSC 7）→ 走兜底。
+- [x] 1.2 结构化 codex session 的 `commandExecution` thread item 下发 cwd（`thread_item.rs:119-121` 现丢弃），可经 `thread/read` 回放取「最近已知 cwd」，best-effort；纯文件编辑轮次不可得 → 回退启动快照/手填。
+- [x] 1.3 design.md 已记录分层回退策略与最小改动点。
 
-**Steps:**
-- [ ] 1.1 确认 PTY session 句柄是否能在运行中上报当前 cwd（读进程 cwd / shell 集成 / 已有上报字段）；结构化 codex app-server session 是否上报 workspace cwd。
-- [ ] 1.2 若可得上报 → 在 design.md 记录获取方式，后续 Task 9 直接用。
-- [ ] 1.3 若不可得 → 在 design.md 记录兜底（弹框手填分支名 + 路径），并在 Task 9 实现兜底分支。
-
-**Verification:** design.md 补一条「PTY live cwd 结论」记录；结论决定 Task 9 实现形态。
+**Verification:** design.md §1.3 + §2 已定稿。
 
 ---
 
@@ -162,22 +159,23 @@ OpenSpec / OneSpec：
 ### Task 6: 实际执行路径解析与 worktree 漂移捕获
 
 **Files:**
+- Modify: `src-tauri/src/agent/codex_app_server/session.rs`（`SessionState.last_known_cwd` + `build_item_event`/`read_timeline` 抽 cwd + `last_known_cwd()` 访问器）
 - Modify: `src-tauri/src/core/agent_session_service.rs`
 - Modify: `src-tauri/src/core/session_workspace_service.rs`
 - Modify: `src-tauri/src/git/worktree.rs`（如需新增 cwd→worktree 判定 helper）
 
 **Interfaces:**
-- `resolve_actual_execution_path(project, session) -> ActualPath { path, in_worktree, worktree_branch, worktree_root, drifted: bool }`。
+- `resolve_actual_execution_path(project, session) -> ActualPath { path, in_worktree, worktree_branch, worktree_root, drifted: bool, source: CodexCwd|StartupSnapshot|UserProvided }`。
 
 **Steps:**
-- [ ] 6.1 实现 live cwd 获取（按 Task 1 结论；不可得走兜底）。
-- [ ] 6.2 session 关闭 → 用 `session.workspace_path`。
+- [ ] 6.1 codex `SessionState` 加 `last_known_cwd`，`build_item_event` 与 `read_timeline` 抽 `item.cwd` 写入；加 `CodexSessionHandle::last_known_cwd()`。
+- [ ] 6.2 `resolve_actual_execution_path` 分层回退：结构化 session 活跃 → `last_known_cwd()`；不可得/PTY/关闭 → `session.workspace_path`；用户弹框手填覆盖。
 - [ ] 6.3 在 `actual_path` 上判定是否在 worktree（`--git-dir` vs `--git-common-dir`），取 checkout 分支与根。
 - [ ] 6.4 路径比对：`actual_path != startup_path` 且在 worktree → `drifted=true`，owner 视为 External。
 - [ ] 6.5 dirty 检测（`git status --porcelain`）与新 commit 检测（对比记录的 head）helper。
-- [ ] 6.6 `rtk cargo test` 覆盖三种路径 + 漂移。
+- [ ] 6.6 `rtk cargo test` 覆盖：codex cwd 命中漂移 / codex cwd 缺失回退 / PTY 回退 / 用户手填。
 
-**Verification:** 三种路径解析与漂移识别单元测试通过。
+**Verification:** 分层路径解析与漂移识别单元测试通过。
 
 ---
 

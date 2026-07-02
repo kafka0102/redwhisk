@@ -24,15 +24,27 @@
 
 phase 持久化保证应用重启后可恢复，与现有 `complete_issue_flow_transaction` 的可恢复语义一致。
 
+## 1.3 PTY live cwd 能力结论（Task 1 spike 结果）
+
+**结论：路径 D + S 混合。**
+
+- **PTY session**：句柄（`pty_session_manager.rs:29-34`）不存 child pid、不解析 OSC 7 → **无法**自动获取运行中 cwd。走兜底：启动快照 + 弹框手填。
+- **结构化 codex session**：codex 的 `commandExecution` thread item **确实下发 `cwd`**（`thread_item.rs:119-121` 当前主动丢弃）。完成时可通过 `thread/read`（`client.rs:243`）回放整条 thread，取最后一个 `commandExecution` 的 cwd 作为「最近已知 cwd」→ **尽力自动捕获**漂移。
+  - **局限**：纯 apply_patch / 文件编辑轮次不下发 cwd（`fileChange` 路径不读 cwd，codex 是否下发未证实）。整轮没跑过 shell 命令则拿不到 → 回退到启动快照 / 弹框手填。
+- **实现要点（最小改动）**：
+  - `SessionState`（`session.rs:121`）加 `last_known_cwd: Option<String>`，初始化处与 `empty_state` 测试同步加 `None`。
+  - `build_item_event`（`session.rs:740`）在调 `map_thread_item` 前抽 `item.get("cwd")` 写入 state；`read_timeline`（`session.rs:401`）回放时同样更新。
+  - `CodexSessionHandle` 加 `pub fn last_known_cwd(&self) -> Option<String>`。
+  - 通过 `AgentSessionHandle` trait 或 issue_service 取值时，结构化 session 优先用此值。
+
 ## 2. 实际执行路径解析（核心新增能力）
 
-入口：完成流程的 `detecting_workspace` 阶段，新增 `resolve_actual_execution_path(project, session)`：
+入口：完成流程的 `detecting_workspace` 阶段，新增 `resolve_actual_execution_path(project, session)`，采用**分层回退**：
 
-1. 若 session 活跃（`status == Running && closed_at.is_none()`）：
-   - PTY session → 读取 PTY 进程的当前 cwd（复用现有 pty session 句柄上报能力；若无，则回退到启动记录 `workspace_path`，并在路径比对阶段允许用户手填兜底）。
-   - 结构化（codex app-server）session → 读取 session 上报的 workspace cwd。
-2. 若 session 已关闭 → 使用启动记录的 `session.workspace_path`。
-3. 拿到 `actual_path` 后判断是否在 worktree：
+1. 结构化 codex session 活跃 → 取 `last_known_cwd()`（来自 codex `commandExecution` 的 cwd，best-effort）。
+2. 任一来源取不到（PTY session / codex cwd 缺失 / session 关闭）→ 取启动记录 `session.workspace_path`。
+3. 若用户在弹框中手填了路径（兜底，见 §4）→ 以用户值为准。
+4. 拿到 `actual_path` 后判断是否在 worktree：
    - `git -C <actual_path> rev-parse --is-inside-work-tree`、`git -C <actual_path> rev-parse --git-dir` 与 `--git-common-dir` 比对，不同则在附加 worktree 内。
    - 取该 worktree 的 checkout 分支 `git -C <actual_path> rev-parse --abbrev-ref HEAD` 与 worktree 根路径。
 
