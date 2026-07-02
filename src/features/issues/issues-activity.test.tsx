@@ -1136,12 +1136,7 @@ describe("IssuesActivity", () => {
       code: "PROJECT_NOT_FOUND",
       message: "Project 不存在。",
     });
-    rerender(
-      <IssuesActivity
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={2}
-      />,
-    );
+    rerender(<IssuesActivity projectId={2} />);
 
     expect(
       await screen.findByRole("status", { name: "Issues status" }),
@@ -1171,12 +1166,7 @@ describe("IssuesActivity", () => {
     );
     await user.type(screen.getByLabelText("Title"), "Late issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
-    rerender(
-      <IssuesActivity
-        projectCompletionPolicy="agent_auto_commit"
-        projectId={2}
-      />,
-    );
+    rerender(<IssuesActivity projectId={2} />);
     resolveCreate({
       id: 24,
       projectId: 1,
@@ -1411,9 +1401,6 @@ describe("IssuesActivity", () => {
     expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "bmad-dev-story",
     );
-    expect(within(dialog).getByLabelText("Commit strategy")).toHaveTextContent(
-      "Agent auto commit",
-    );
     expect(within(dialog).getByLabelText("Development mode")).toHaveTextContent(
       "Worktree",
     );
@@ -1590,7 +1577,6 @@ describe("IssuesActivity", () => {
       issueId: 20,
       agentProfileId: 100,
       promptSnapshot: existingIssueRunPrompt,
-      completionPolicyOverride: "agent_auto_commit",
       workspaceMode: "worktree",
       targetBranch: "main",
       worktreeSetupCommand: "pnpm install",
@@ -1625,7 +1611,6 @@ describe("IssuesActivity", () => {
       "Worktree",
     );
     await selectShadcnOption(user, within(dialog), "Target branch", "develop");
-    await selectShadcnOption(user, within(dialog), "Commit strategy", "Manual");
     expect(
       within(dialog).getByRole("combobox", { name: "Target branch" }),
     ).toBeEnabled();
@@ -1649,7 +1634,6 @@ describe("IssuesActivity", () => {
       issueId: 20,
       agentProfileId: 100,
       promptSnapshot: existingIssueRunPrompt,
-      completionPolicyOverride: "agent_auto_commit",
       workspaceMode: "worktree",
       targetBranch: "develop",
       worktreeSetupCommand: "pnpm install",
@@ -2280,7 +2264,10 @@ describe("IssuesActivity", () => {
           scope: "global",
           projectId: null,
           skillPaths: [
-            { agentType: "codex", path: "/home/me/.agents/skills/skill-a/SKILL.md" },
+            {
+              agentType: "codex",
+              path: "/home/me/.agents/skills/skill-a/SKILL.md",
+            },
           ],
         },
         {
@@ -2289,7 +2276,10 @@ describe("IssuesActivity", () => {
           scope: "global",
           projectId: null,
           skillPaths: [
-            { agentType: "codex", path: "/home/me/.agents/skills/skill-b/SKILL.md" },
+            {
+              agentType: "codex",
+              path: "/home/me/.agents/skills/skill-b/SKILL.md",
+            },
           ],
         },
       ],
@@ -2931,7 +2921,7 @@ describe("IssuesActivity", () => {
       sessionId: 504,
     });
 
-    renderIssuesActivity({ projectCompletionPolicy: "manual" });
+    renderIssuesActivity({});
 
     await user.click(
       await screen.findByRole("button", { name: "Review issue" }),
@@ -2979,7 +2969,7 @@ describe("IssuesActivity", () => {
         }),
       );
 
-    renderIssuesActivity({ projectCompletionPolicy: "manual" });
+    renderIssuesActivity({});
 
     await user.click(
       await screen.findByRole("button", { name: "Review issue" }),
@@ -3528,7 +3518,6 @@ function renderIssuesActivity(
   return render(
     <I18nProvider>
       <IssuesActivity
-        projectCompletionPolicy="agent_auto_commit"
         projectId={1}
         worktreeSetupCommand="pnpm install"
         {...props}

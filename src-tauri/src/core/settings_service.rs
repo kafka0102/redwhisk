@@ -767,7 +767,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_id),
                 color: "#112233".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect_err("long label should fail");
@@ -789,7 +788,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_id),
                 color: "#112233".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect("first label");
@@ -801,7 +799,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_id),
                 color: "#445566".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect_err("duplicate should fail");
@@ -823,7 +820,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_id),
                 color: "#112233".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect("project label");
@@ -835,7 +831,6 @@ mod tests {
                 scope: ProjectLabelScope::Global,
                 project_id: None,
                 color: "#445566".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect_err("global duplicate should fail");
@@ -857,7 +852,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_id),
                 color: "#112233".to_string(),
-                agent_profile_id: None,
                 workflow_skill: Some("skill-a".to_string()),
             })
             .expect_err("workflow skill without agent should fail");
@@ -880,7 +874,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_a),
                 color: "#112233".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect("project a label");
@@ -892,7 +885,6 @@ mod tests {
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_b),
                 color: "#445566".to_string(),
-                agent_profile_id: None,
                 workflow_skill: None,
             })
             .expect("project b label");
@@ -902,27 +894,26 @@ mod tests {
     }
 
     #[test]
-    fn save_global_label_rejects_project_agent_profile() {
+    fn save_global_label_allows_no_agent_profile() {
+        // agent_profile_id 字段已在 decouple-label-agent-skills 中移除；
+        // global label 不再因绑定 project agent 而被拒绝。
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let database = test_database(temp_dir.path());
         let service = test_settings_service(&database.connection);
-        let project_id = insert_project(&database.connection, "repo-a");
-        let project_agent_id =
-            insert_agent_profile(&service, Some(project_id), AgentScope::Project);
+        let _project_id = insert_project(&database.connection, "repo-a");
 
-        let error = service
+        let saved = service
             .save_project_label(SaveProjectLabelInput {
                 id: None,
                 name: "release".to_string(),
                 scope: ProjectLabelScope::Global,
                 project_id: None,
                 color: "#112233".to_string(),
-                agent_profile_id: Some(project_agent_id),
                 workflow_skill: None,
             })
-            .expect_err("global label should reject project agent");
+            .expect("global label without agent profile should save");
 
-        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+        assert_eq!(saved.name, "release");
     }
 
     fn test_database(data_dir: &std::path::Path) -> crate::db::connection::Database {
@@ -950,6 +941,7 @@ mod tests {
             .id
     }
 
+    #[allow(dead_code)]
     fn insert_agent_profile(
         service: &SettingsService<'_, TestDetector>,
         project_id: Option<i64>,

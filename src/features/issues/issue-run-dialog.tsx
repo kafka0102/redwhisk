@@ -24,7 +24,6 @@ import {
   type AgentProfileRecord,
   type SavedAgentSkillRecord,
 } from "../settings/settings-commands";
-import type { ProjectCompletionPolicy } from "../project/project-commands";
 import {
   listAgentSessions,
   type AgentSessionListItem,
@@ -48,7 +47,6 @@ interface IssueRunDialogProps {
     IssueRecord,
     "id" | "title" | "description" | "attachments" | "labels"
   >;
-  projectCompletionPolicy: ProjectCompletionPolicy;
   projectId: number;
   worktreeSetupCommand?: string;
   onClose: () => void;
@@ -62,7 +60,6 @@ interface RecentWorkspaceSelection {
 
 export function IssueRunDialog({
   issue,
-  projectCompletionPolicy,
   projectId,
   worktreeSetupCommand = "",
   onClose,
@@ -78,8 +75,6 @@ export function IssueRunDialog({
     string | null
   >(null);
   const [savedSkills, setSavedSkills] = useState<SavedAgentSkillRecord[]>([]);
-  const [completionPolicy, setCompletionPolicy] =
-    useState<ProjectCompletionPolicy>("manual");
   const [workspaceMode, setWorkspaceMode] =
     useState<WorkspaceMode>("current_branch");
   const [targetBranch, setTargetBranch] = useState("");
@@ -170,7 +165,6 @@ export function IssueRunDialog({
               })
             : null,
         );
-        setCompletionPolicy(projectCompletionPolicy);
         setWorkspaceMode(initialWorkspaceMode);
         setTargetBranch(resolvedTargetBranch);
         setBranchState(branchesResponse);
@@ -198,12 +192,7 @@ export function IssueRunDialog({
     return () => {
       isMounted = false;
     };
-  }, [
-    issue,
-    messages.agentsFeature.noProfilesForAgentType,
-    projectCompletionPolicy,
-    projectId,
-  ]);
+  }, [issue, messages.agentsFeature.noProfilesForAgentType, projectId]);
 
   useEffect(() => {
     if (isLoadingProfiles || profiles.length === 0) {
@@ -332,7 +321,6 @@ export function IssueRunDialog({
         issueId: issue.id,
         agentProfileId: selectedProfile.id,
         promptSnapshot: promptDraft,
-        completionPolicyOverride: completionPolicy,
         workspaceMode,
         targetBranch: effectiveTargetBranch,
         worktreeSetupCommand: effectiveSetupCommand,
@@ -490,45 +478,6 @@ export function IssueRunDialog({
                       {skill.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label
-                htmlFor="run-commit-strategy"
-                className="text-xs text-muted-foreground"
-              >
-                {messages.issues.commitStrategy}
-              </Label>
-              <Select
-                items={[
-                  { value: "manual", label: messages.settings.manual },
-                  {
-                    value: "agent_auto_commit",
-                    label: messages.issues.agentAutoCommit,
-                  },
-                ]}
-                value={completionPolicy}
-                onValueChange={(value) =>
-                  setCompletionPolicy(value as ProjectCompletionPolicy)
-                }
-              >
-                <SelectTrigger
-                  id="run-commit-strategy"
-                  aria-label={messages.issues.commitStrategy}
-                  className="w-full"
-                  disabled={isLoadingBranches || isStarting}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manual">
-                    {messages.settings.manual}
-                  </SelectItem>
-                  <SelectItem value="agent_auto_commit">
-                    {messages.issues.agentAutoCommit}
-                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
