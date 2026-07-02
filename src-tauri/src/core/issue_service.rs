@@ -47,7 +47,7 @@ use crate::types::issue::{
 use crate::types::issue_action::IssueActionType;
 use crate::types::issue_completion::{
     CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult,
-    IssueCompletionExternalWorktreeDecision, IssueCompletionFlowRecord, IssueCompletionPhase,
+    DirtyWorkspaceOption, IssueCompletionFlowRecord, IssueCompletionPhase,
 };
 use crate::types::session_event::SessionEventType;
 
@@ -502,8 +502,12 @@ impl<'connection> IssueService<'connection> {
             CompleteIssueFlowInput {
                 project_id: input.project_id,
                 issue_id: input.issue_id,
+                dirty_decision: None,
                 ignore_dirty: Some(true),
-                external_worktree_decision: None,
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
             },
             self.data_dir.clone(),
             &PtySessionManager::new(),
@@ -617,8 +621,12 @@ impl<'connection> IssueService<'connection> {
             CompleteIssueFlowInput {
                 project_id: input.project_id,
                 issue_id: input.issue_id,
+                dirty_decision: None,
                 ignore_dirty: None,
-                external_worktree_decision: None,
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
             },
             self.data_dir.clone(),
             &PtySessionManager::new(),
@@ -731,10 +739,15 @@ impl<'connection> IssueService<'connection> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        // TODO(Impl-D): completion_policy 已移除，此处统一回落到 manual 路径，
-        // 后续重写为「统一检测 + UI 弹框确认」流程。
+        // completion_policy 已移除：完成时统一检测实际路径与未提交改动，
+        // 由用户在弹框中选择「自动提交 / 不提交 / 取消」。
         let option = forced_option.unwrap_or(CompletionAttemptOption::CompleteManual);
-        if (issue.status == IssueStatus::Review || issue.status == IssueStatus::Running) && is_session_closed_out(&session) {
+        let dirty_already_skipped = input.ignore_dirty == Some(true)
+            || input.dirty_decision == Some(DirtyWorkspaceOption::Skip);
+
+        if (issue.status == IssueStatus::Review || issue.status == IssueStatus::Running)
+            && is_session_closed_out(&session)
+        {
             // 对于 worktree 模式，即使 session 已关闭，也需要走完整的完成流程来处理 worktree 合并和清理
             if session.workspace_mode == WorkspaceMode::Worktree {
                 // 继续走下面的完整流程
@@ -772,7 +785,7 @@ impl<'connection> IssueService<'connection> {
                         option,
                         None,
                         None,
-                        input.ignore_dirty == Some(true),
+                        dirty_already_skipped,
                     )?;
 
                     return Ok(self.flow_result(
@@ -806,7 +819,7 @@ impl<'connection> IssueService<'connection> {
             transaction.commit().map_err(issue_database_error)?;
 
             return Ok(self.flow_result(
-                CompleteIssueFlowAction::GitOperationBlocked,
+                CompleteIssueFlowAction::Blocked,
                 issue,
                 None,
                 "当前 Git 正在进行中的操作阻止 Issue 完成。".to_string(),
@@ -814,46 +827,72 @@ impl<'connection> IssueService<'connection> {
             ));
         }
 
-        if !snapshot.is_clean {
-            match option {
-                CompletionAttemptOption::CompleteClean => {
+        if !snapshot.is_clean && !dirty_already_skipped {
+            // 未提交改动且用户尚未选择「不提交」：按用户 dirty_decision 分流。
+            match input.dirty_decision {
+                Some(DirtyWorkspaceOption::Cancel) => {
                     let flow = self.upsert_completion_flow(
                         issue.id,
                         Some(session.id),
-                        IssueCompletionPhase::ManualDirtyBlocked,
+                        IssueCompletionPhase::Cancelled,
                         false,
-                        input.external_worktree_decision,
+                        input.dirty_decision,
+                        None,
                         &session,
                         None,
+                        Some("user_cancelled"),
                     )?;
                     return Ok(self.flow_result(
-                        CompleteIssueFlowAction::ManualDirtyPrompt,
+                        CompleteIssueFlowAction::Cancelled,
                         issue,
                         Some(flow),
-                        "当前仓库存在未提交改动，不能直接完成。".to_string(),
+                        "完成已取消，Issue 保持待验收。".to_string(),
                         &session,
                     ));
                 }
-                CompletionAttemptOption::CompleteManual if input.ignore_dirty != Some(true) => {
+                Some(DirtyWorkspaceOption::AutoCommit) => {
+                    // TODO(Impl-D full): 实际向 session 发送 commit 指令并跳转 session 页；
+                    // 当前最小版本仅记录 AutoCommitting 阶段并等待 detect_agent_commit_completion。
                     let flow = self.upsert_completion_flow(
                         issue.id,
                         Some(session.id),
-                        IssueCompletionPhase::ManualDirtyBlocked,
+                        IssueCompletionPhase::AutoCommitting,
                         false,
-                        input.external_worktree_decision,
+                        input.dirty_decision,
+                        None,
                         &session,
+                        Some(detection_repo_path.as_str()),
                         None,
                     )?;
                     return Ok(self.flow_result(
-                        CompleteIssueFlowAction::ManualDirtyPrompt,
+                        CompleteIssueFlowAction::WaitingAutoCommit,
                         issue,
                         Some(flow),
-                        "当前工作区存在未提交改动，请确认是否继续完成。".to_string(),
+                        "已请求 Agent 自动提交，请在 session 中完成提交后再次确认。".to_string(),
                         &session,
                     ));
                 }
+                // None 或 Some(Skip) 走到默认 dirty 提示
                 _ => {}
             }
+            let flow = self.upsert_completion_flow(
+                issue.id,
+                Some(session.id),
+                IssueCompletionPhase::PromptingDirtyDecision,
+                false,
+                input.dirty_decision,
+                None,
+                &session,
+                None,
+                None,
+            )?;
+            return Ok(self.flow_result(
+                CompleteIssueFlowAction::PromptDirtyDecision,
+                issue,
+                Some(flow),
+                "当前工作区存在未提交改动，请选择自动提交 / 不提交 / 取消。".to_string(),
+                &session,
+            ));
         }
 
         self.complete_clean_or_accepted_flow(input, issue, session, snapshot, option, None)
@@ -869,6 +908,8 @@ impl<'connection> IssueService<'connection> {
         pending_commit: Option<(i64, String)>,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
         let project = self.require_project(input.project_id)?;
+        let dirty_already_skipped = input.ignore_dirty == Some(true)
+            || input.dirty_decision == Some(DirtyWorkspaceOption::Skip);
         let target_branch = session
             .origin_branch
             .clone()
@@ -885,14 +926,16 @@ impl<'connection> IssueService<'connection> {
                 let flow = self.upsert_completion_flow(
                     issue.id,
                     Some(session.id),
-                    IssueCompletionPhase::AgentMergeBlocked,
-                    input.ignore_dirty == Some(true),
-                    input.external_worktree_decision,
+                    IssueCompletionPhase::Blocked,
+                    dirty_already_skipped,
+                    input.dirty_decision,
+                    None,
                     &session,
+                    None,
                     Some(&error),
                 )?;
                 return Ok(self.flow_result(
-                    CompleteIssueFlowAction::AgentMergeBlocked,
+                    CompleteIssueFlowAction::Blocked,
                     issue,
                     Some(flow),
                     "Agent worktree 缺失且无法确认分支已合入，请手动处理。".to_string(),
@@ -915,18 +958,22 @@ impl<'connection> IssueService<'connection> {
                     if let Err(error) =
                         rebase_fast_forward_and_cleanup(&project.repo_path, &session)
                     {
+                        // TODO(Impl-D full): rebase 失败时应向活跃 session 发送
+                        // "代码合并冲突，请根据本次修改合并代码。"；session 关闭则新建 session。
                         let merge_block = describe_worktree_merge_block(&error);
                         let flow = self.upsert_completion_flow(
                             issue.id,
                             Some(session.id),
-                            IssueCompletionPhase::AgentMergeBlocked,
-                            input.ignore_dirty == Some(true),
-                            input.external_worktree_decision,
+                            IssueCompletionPhase::Blocked,
+                            dirty_already_skipped,
+                            input.dirty_decision,
+                            None,
                             &session,
+                            None,
                             Some(&error.to_string()),
                         )?;
                         return Ok(self.flow_result_with_merge_block(
-                            CompleteIssueFlowAction::AgentMergeBlocked,
+                            CompleteIssueFlowAction::Blocked,
                             issue,
                             Some(flow),
                             merge_block.message,
@@ -935,45 +982,50 @@ impl<'connection> IssueService<'connection> {
                         ));
                     }
                 }
-                WorktreeOwner::External => match input.external_worktree_decision {
-                    None => {
+                WorktreeOwner::External => {
+                    // External worktree（含运行中漂移 worktree）：按用户删除确认分流。
+                    let cleanup_decision = input.worktree_cleanup_decision;
+                    let wants_merge_and_cleanup = cleanup_decision == Some(true);
+                    let cancelled = input.dirty_decision == Some(DirtyWorkspaceOption::Cancel);
+                    if cancelled {
                         let flow = self.upsert_completion_flow(
                             issue.id,
                             Some(session.id),
-                            IssueCompletionPhase::ConfirmingExternalWorktree,
-                            input.ignore_dirty == Some(true),
-                            None,
+                            IssueCompletionPhase::Cancelled,
+                            dirty_already_skipped,
+                            input.dirty_decision,
+                            cleanup_decision,
                             &session,
                             None,
-                        )?;
-                        return Ok(self.flow_result(
-                            CompleteIssueFlowAction::ConfirmExternalWorktree,
-                            issue,
-                            Some(flow),
-                            "当前使用外部 worktree，请确认是否合并并清理。".to_string(),
-                            &session,
-                        ));
-                    }
-                    Some(IssueCompletionExternalWorktreeDecision::Cancel) => {
-                        let flow = self.upsert_completion_flow(
-                            issue.id,
-                            Some(session.id),
-                            IssueCompletionPhase::ConfirmingExternalWorktree,
-                            input.ignore_dirty == Some(true),
-                            input.external_worktree_decision,
-                            &session,
                             Some("completion_paused"),
                         )?;
                         return Ok(self.flow_result(
-                            CompleteIssueFlowAction::ConfirmExternalWorktree,
+                            CompleteIssueFlowAction::Cancelled,
                             issue,
                             Some(flow),
-                            "完成已暂停，Issue 保持待验收。".to_string(),
+                            "完成已取消，Issue 保持待验收。".to_string(),
                             &session,
                         ));
-                    }
-                    Some(IssueCompletionExternalWorktreeDecision::Skip) => {}
-                    Some(IssueCompletionExternalWorktreeDecision::MergeAndDelete) => {
+                    } else if cleanup_decision.is_none() {
+                        let flow = self.upsert_completion_flow(
+                            issue.id,
+                            Some(session.id),
+                            IssueCompletionPhase::ConfirmingWorktreeCleanup,
+                            dirty_already_skipped,
+                            input.dirty_decision,
+                            None,
+                            &session,
+                            None,
+                            None,
+                        )?;
+                        return Ok(self.flow_result(
+                            CompleteIssueFlowAction::ConfirmWorktreeCleanup,
+                            issue,
+                            Some(flow),
+                            "当前使用外部 worktree，请确认是否合并并删除该 worktree。".to_string(),
+                            &session,
+                        ));
+                    } else if wants_merge_and_cleanup {
                         if let Err(error) =
                             rebase_fast_forward_and_cleanup(&project.repo_path, &session)
                         {
@@ -981,14 +1033,16 @@ impl<'connection> IssueService<'connection> {
                             let flow = self.upsert_completion_flow(
                                 issue.id,
                                 Some(session.id),
-                                IssueCompletionPhase::AgentMergeBlocked,
-                                input.ignore_dirty == Some(true),
-                                input.external_worktree_decision,
+                                IssueCompletionPhase::Blocked,
+                                dirty_already_skipped,
+                                input.dirty_decision,
+                                cleanup_decision,
                                 &session,
+                                None,
                                 Some(&error.to_string()),
                             )?;
                             return Ok(self.flow_result_with_merge_block(
-                                CompleteIssueFlowAction::AgentMergeBlocked,
+                                CompleteIssueFlowAction::Blocked,
                                 issue,
                                 Some(flow),
                                 merge_block.message,
@@ -997,7 +1051,8 @@ impl<'connection> IssueService<'connection> {
                             ));
                         }
                     }
-                },
+                    // cleanup_decision == Some(false): 跳过合并与清理，继续完成。
+                }
             }
         }
 
@@ -1010,7 +1065,7 @@ impl<'connection> IssueService<'connection> {
             option,
             attempt_id,
             commit_hash.as_deref(),
-            input.ignore_dirty == Some(true),
+            dirty_already_skipped,
         )?;
 
         Ok(self.flow_result(
@@ -1165,8 +1220,10 @@ impl<'connection> IssueService<'connection> {
         session_id: Option<i64>,
         phase: IssueCompletionPhase,
         ignore_dirty: bool,
-        external_worktree_decision: Option<IssueCompletionExternalWorktreeDecision>,
+        dirty_decision: Option<DirtyWorkspaceOption>,
+        worktree_cleanup_decision: Option<bool>,
         session: &AgentSessionRecord,
+        actual_path: Option<&str>,
         failure_reason: Option<&str>,
     ) -> Result<IssueCompletionFlowRecord, CommandError> {
         let transaction = self
@@ -1181,10 +1238,13 @@ impl<'connection> IssueService<'connection> {
                 session_id,
                 phase,
                 ignore_dirty,
-                external_worktree_decision,
+                dirty_decision,
+                continue_after_commit: None,
+                worktree_cleanup_decision,
                 base_branch: session.origin_branch.as_deref(),
                 workspace_branch: session.workspace_branch.as_deref(),
                 workspace_path: session.workspace_path.as_deref(),
+                actual_path,
                 failure_reason,
                 updated_at: current_epoch_millis_for_db().map_err(issue_database_error)?,
             },
@@ -1226,6 +1286,8 @@ impl<'connection> IssueService<'connection> {
                 .or_else(|| session.target_branch.clone()),
             workspace_branch: session.workspace_branch.clone(),
             workspace_path: session.workspace_path.clone(),
+            actual_path: session.workspace_path.clone(),
+            drifted: false,
             session_id: Some(session.id),
         }
     }
@@ -2280,8 +2342,8 @@ fn completion_session_close_reason(option: CompletionAttemptOption) -> &'static 
 
 fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> CommandError {
     let message = match action {
-        CompleteIssueFlowAction::ManualDirtyPrompt => "当前仓库存在未提交改动，不能直接完成。",
-        CompleteIssueFlowAction::GitOperationBlocked => "当前 Git 正在进行中的操作阻止直接完成。",
+        CompleteIssueFlowAction::PromptDirtyDecision => "当前仓库存在未提交改动，不能直接完成。",
+        CompleteIssueFlowAction::Blocked => "当前 Git 正在进行中的操作阻止直接完成。",
         _ => "Issue 完成必须通过 complete_issue_flow 继续处理。",
     };
     CommandError::new(CommandErrorCode::IssueValidationFailed, message)
