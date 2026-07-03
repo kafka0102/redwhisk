@@ -189,6 +189,7 @@ export interface SendAgentCommitPromptResult {
 export type DetectAgentCommitCompletionOutcome =
   | "completed"
   | "no_commit_detected"
+  | "commit_detected"
   | "git_operation_blocked";
 
 export interface DetectAgentCommitCompletionResult {
@@ -197,37 +198,60 @@ export interface DetectAgentCommitCompletionResult {
   message: string;
 }
 
-export type IssueCompletionExternalWorktreeDecision =
-  | "merge_and_delete"
-  | "skip"
-  | "cancel";
+/** dirty 工作区三选项。 */
+export type DirtyWorkspaceOption = "auto_commit" | "skip" | "cancel";
+
+/** 完成流程 phase（与后端 `IssueCompletionPhase` 对应）。 */
+export type IssueCompletionPhase =
+  | "detecting_workspace"
+  | "prompting_dirty_decision"
+  | "auto_committing"
+  | "confirming_continue_after_commit"
+  | "reconciling_worktree"
+  | "confirming_worktree_cleanup"
+  | "completed"
+  | "cancelled"
+  | "blocked";
 
 export type CompleteIssueFlowAction =
   | "completed"
-  | "manual_dirty_prompt"
-  | "waiting_agent_commit"
-  | "confirm_external_worktree"
-  | "agent_merge_blocked"
-  | "no_commit_detected"
-  | "git_operation_blocked";
+  | "prompt_dirty_decision"
+  | "waiting_auto_commit"
+  | "confirm_continue_after_commit"
+  | "confirm_worktree_cleanup"
+  | "blocked"
+  | "cancelled";
 
 export interface CompleteIssueFlowInput {
   projectId: number;
   issueId: number;
+  /** dirty 三选项；仅在与 `prompting_dirty_decision` 继续时使用。 */
+  dirtyDecision?: DirtyWorkspaceOption | null;
+  /** 用户选了「不提交（忽略未提交改动）」。 */
   ignoreDirty?: boolean | null;
-  externalWorktreeDecision?: IssueCompletionExternalWorktreeDecision | null;
+  /** 用户在弹框中确认/修正的分支名（情况三/session 关闭时手填兜底）。 */
+  branchName?: string | null;
+  /** 用户在弹框中确认/修正的实际执行路径（兜底用）。 */
+  actualPath?: string | null;
+  /** 「确定继续标记完成吗」确认；仅在 `confirming_continue_after_commit` 继续时使用。 */
+  continueAfterCommit?: boolean | null;
+  /** External worktree 删除确认；仅在 `confirming_worktree_cleanup` 继续时使用。 */
+  worktreeCleanupDecision?: boolean | null;
 }
 
 export interface IssueCompletionFlowRecord {
   id: number;
   issueId: number;
   sessionId?: number | null;
-  phase: string;
+  phase: IssueCompletionPhase;
   ignoreDirty: boolean;
-  externalWorktreeDecision?: IssueCompletionExternalWorktreeDecision | null;
+  dirtyDecision?: DirtyWorkspaceOption | null;
+  continueAfterCommit?: boolean | null;
+  worktreeCleanupDecision?: boolean | null;
   baseBranch?: string | null;
   workspaceBranch?: string | null;
   workspacePath?: string | null;
+  actualPath?: string | null;
   failureReason?: string | null;
   updatedAt: number;
 }
@@ -238,9 +262,14 @@ export interface CompleteIssueFlowResult {
   flow?: IssueCompletionFlowRecord | null;
   message: string;
   mergeBlockReason?: string | null;
+  /** 弹框预填的基线分支（origin / workspace 分支）。 */
   targetBranch?: string | null;
   workspaceBranch?: string | null;
   workspacePath?: string | null;
+  /** 完成时解析出的实际执行路径。 */
+  actualPath?: string | null;
+  /** 实际路径与启动快照不同（运行中漂移到新 worktree）。 */
+  drifted: boolean;
   sessionId?: number | null;
 }
 

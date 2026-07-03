@@ -393,6 +393,8 @@ function completedFlowResult(issue: Partial<IssueRecord> & { id: number }) {
     targetBranch: null,
     workspaceBranch: null,
     workspacePath: null,
+    actualPath: null,
+    drifted: false,
     sessionId: completedIssue.linkedSessionId,
   };
 }
@@ -2863,13 +2865,15 @@ describe("IssuesActivity", () => {
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock
       .mockResolvedValueOnce({
-        action: "waiting_agent_commit",
+        action: "waiting_auto_commit",
         issue: reviewWithSession,
         flow: null,
         message: "正在等待 Agent 提交。",
         targetBranch: null,
         workspaceBranch: null,
         workspacePath: null,
+        actualPath: null,
+        drifted: false,
         sessionId: 503,
       })
       .mockResolvedValueOnce(
@@ -2911,13 +2915,15 @@ describe("IssuesActivity", () => {
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock.mockResolvedValueOnce({
-      action: "manual_dirty_prompt",
+      action: "prompt_dirty_decision",
       issue: reviewWithSession,
       flow: null,
       message: "当前工作区存在未提交改动，请确认是否继续完成。",
       targetBranch: null,
       workspaceBranch: null,
       workspacePath: null,
+      actualPath: null,
+      drifted: false,
       sessionId: 504,
     });
 
@@ -2951,13 +2957,15 @@ describe("IssuesActivity", () => {
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock
       .mockResolvedValueOnce({
-        action: "manual_dirty_prompt",
+        action: "prompt_dirty_decision",
         issue: reviewWithSession,
         flow: null,
         message: "当前工作区存在未提交改动，请确认是否继续完成。",
         targetBranch: null,
         workspaceBranch: null,
         workspacePath: null,
+        actualPath: null,
+        drifted: false,
         sessionId: 514,
       })
       .mockResolvedValueOnce(
@@ -3009,13 +3017,15 @@ describe("IssuesActivity", () => {
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock
       .mockResolvedValueOnce({
-        action: "confirm_external_worktree",
+        action: "confirm_worktree_cleanup",
         issue: reviewWithSession,
         flow: null,
         message: "需要确认外部 worktree。",
         targetBranch: "dev",
         workspaceBranch: "issue-505",
         workspacePath: "/tmp/worktrees/issue-505",
+        actualPath: null,
+        drifted: false,
         sessionId: 505,
       })
       .mockResolvedValueOnce(
@@ -3065,23 +3075,27 @@ describe("IssuesActivity", () => {
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock.mockResolvedValueOnce({
-      action: "confirm_external_worktree",
+      action: "confirm_worktree_cleanup",
       issue: reviewWithSession,
       flow: null,
       message: "需要确认外部 worktree。",
       targetBranch: "dev",
       workspaceBranch: "issue-515",
       workspacePath: "/tmp/worktrees/issue-515",
+      actualPath: null,
+      drifted: false,
       sessionId: 515,
     });
     completeIssueFlowMock.mockResolvedValueOnce({
-      action: "confirm_external_worktree",
+      action: "confirm_worktree_cleanup",
       issue: reviewWithSession,
       flow: null,
       message: "完成已暂停。",
       targetBranch: "dev",
       workspaceBranch: "issue-515",
       workspacePath: "/tmp/worktrees/issue-515",
+      actualPath: null,
+      drifted: false,
       sessionId: 515,
     });
 
@@ -3110,13 +3124,15 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
 
     completeIssueFlowMock.mockResolvedValueOnce({
-      action: "confirm_external_worktree",
+      action: "confirm_worktree_cleanup",
       issue: reviewWithSession,
       flow: null,
       message: "需要确认外部 worktree。",
       targetBranch: "dev",
       workspaceBranch: "issue-515",
       workspacePath: "/tmp/worktrees/issue-515",
+      actualPath: null,
+      drifted: false,
       sessionId: 515,
     });
     completeIssueFlowMock.mockResolvedValueOnce(
@@ -3158,7 +3174,7 @@ describe("IssuesActivity", () => {
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock.mockResolvedValueOnce({
-      action: "agent_merge_blocked",
+      action: "blocked",
       issue: reviewWithSession,
       flow: null,
       message: "Agent worktree 合并被阻止，请手动处理冲突。",
@@ -3166,6 +3182,8 @@ describe("IssuesActivity", () => {
       targetBranch: "dev",
       workspaceBranch: "issue-506",
       workspacePath: "/tmp/worktrees/issue-506",
+      actualPath: null,
+      drifted: false,
       sessionId: 506,
     });
     injectAgentSessionPromptMock.mockResolvedValueOnce({
@@ -3212,7 +3230,7 @@ describe("IssuesActivity", () => {
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
     completeIssueFlowMock.mockResolvedValueOnce({
-      action: "agent_merge_blocked",
+      action: "blocked",
       issue: reviewWithSession,
       flow: null,
       message:
@@ -3221,6 +3239,8 @@ describe("IssuesActivity", () => {
       targetBranch: "dev",
       workspaceBranch: "issue-516",
       workspacePath: "/tmp/worktrees/issue-516",
+      actualPath: null,
+      drifted: false,
       sessionId: 516,
     });
 

@@ -894,7 +894,7 @@ export function AgentsActivity({
         issueId: linkedIssue.issueId,
       });
       setIsDetectingAgentCommitCompletion(true);
-      if (completionResult.action === "waiting_agent_commit") {
+      if (completionResult.action === "waiting_auto_commit") {
         completionResult = await completeIssueFlow({
           projectId,
           issueId: linkedIssue.issueId,

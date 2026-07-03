@@ -250,17 +250,19 @@ export interface I18nMessages {
     agentProfile: string;
     completionDirtyTitle: string;
     completionDirtyMessage: string;
-    completionIgnoreDirty: string;
-    completionHandleManually: string;
-    completionExternalWorktreeTitle: string;
-    completionExternalWorktreeMessage: (branch: string) => string;
-    completionMergeAndDelete: string;
-    completionSkipMerge: string;
+    completionBranchNameLabel: string;
+    completionAutoCommit: string;
+    completionSkipDirty: string;
     completionCancel: string;
-    completionWaitingAgentCommit: string;
+    completionContinueAfterCommitTitle: string;
+    completionContinueAfterCommitMessage: string;
+    completionContinueLabel: string;
+    completionWorktreeCleanupTitle: string;
+    completionWorktreeCleanupMessage: (branch: string) => string;
+    completionWorktreeCleanupConfirm: string;
+    completionWorktreeCleanupKeep: string;
     completionNoCommitDetected: string;
     completionGitOperationBlocked: string;
-    completionAgentMergeBlocked: string;
   };
   issueSummary: {
     closedAt: string;
@@ -745,21 +747,23 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       agentProfile: "Agent profile",
       completionDirtyTitle: "Uncommitted changes",
       completionDirtyMessage:
-        "This session has uncommitted local changes. Ignore them and continue completing the Issue?",
-      completionIgnoreDirty: "Ignore and continue",
-      completionHandleManually: "Handle manually",
-      completionExternalWorktreeTitle: "External worktree",
-      completionExternalWorktreeMessage: (branch) =>
-        `This session is on external worktree branch ${branch}. Merge it and delete the worktree?`,
-      completionMergeAndDelete: "Merge and delete",
-      completionSkipMerge: "Complete without merge",
+        "This session has uncommitted local changes. Choose how to proceed.",
+      completionBranchNameLabel: "Branch",
+      completionAutoCommit: "Auto commit",
+      completionSkipDirty: "Complete without commit",
       completionCancel: "Cancel",
-      completionWaitingAgentCommit: "Waiting for Agent commit.",
+      completionContinueAfterCommitTitle: "Commit detected",
+      completionContinueAfterCommitMessage:
+        "Code has been committed successfully. Continue marking this Issue complete?",
+      completionContinueLabel: "Continue",
+      completionWorktreeCleanupTitle: "Delete worktree",
+      completionWorktreeCleanupMessage: (branch) =>
+        `Code has been committed to ${branch}. Delete the current worktree?`,
+      completionWorktreeCleanupConfirm: "Delete",
+      completionWorktreeCleanupKeep: "Keep",
       completionNoCommitDetected: "No new commit was detected.",
       completionGitOperationBlocked:
         "A Git operation is in progress. Resolve it before completing.",
-      completionAgentMergeBlocked:
-        "Worktree merge is blocked. Handing it back to the Agent.",
     },
     issueSummary: {
       closedAt: "Closed",
@@ -1236,20 +1240,22 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       dialogStatus: "弹窗状态",
       agentProfile: "Agent 配置",
       completionDirtyTitle: "存在未提交改动",
-      completionDirtyMessage:
-        "当前会话存在本地未提交改动。是否忽略这些改动并继续完成 Issue？",
-      completionIgnoreDirty: "忽略并继续",
-      completionHandleManually: "手动处理",
-      completionExternalWorktreeTitle: "外部 worktree",
-      completionExternalWorktreeMessage: (branch) =>
-        `当前会话位于外部 worktree 分支 ${branch}。是否合入并删除该 worktree？`,
-      completionMergeAndDelete: "合入并删除",
-      completionSkipMerge: "不合入直接完成",
+      completionDirtyMessage: "当前会话存在本地未提交改动，请选择处理方式。",
+      completionBranchNameLabel: "分支",
+      completionAutoCommit: "自动提交",
+      completionSkipDirty: "不提交直接完成",
       completionCancel: "取消",
-      completionWaitingAgentCommit: "正在等待 Agent 提交。",
+      completionContinueAfterCommitTitle: "已检测到提交",
+      completionContinueAfterCommitMessage:
+        "代码已提交成功。是否继续标记完成？",
+      completionContinueLabel: "继续",
+      completionWorktreeCleanupTitle: "删除 worktree",
+      completionWorktreeCleanupMessage: (branch) =>
+        `代码已提交至 ${branch}。是否删除当前 worktree？`,
+      completionWorktreeCleanupConfirm: "删除",
+      completionWorktreeCleanupKeep: "保留",
       completionNoCommitDetected: "未检测到新的提交。",
       completionGitOperationBlocked: "当前 Git 正在执行操作，请处理后再完成。",
-      completionAgentMergeBlocked: "worktree 合入被阻塞，正在交回 Agent 处理。",
     },
     issueSummary: {
       closedAt: "结束时间",

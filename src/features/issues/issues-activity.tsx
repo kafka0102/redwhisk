@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   advanceIssueStatus,
   completeIssueFlow,
+  detectAgentCommitCompletion,
   createIssue,
   deleteIssue,
   exportIssueAttachment,
@@ -14,14 +15,14 @@ import {
   saveIssueAttachmentDraft,
   updateIssue,
   type CompleteIssueFlowResult,
-  type IssueCompletionExternalWorktreeDecision,
+  type DirtyWorkspaceOption,
   type IssueStatus,
   type IssueAttachmentRecord,
   type IssueAttachmentPreviewRecord,
   type IssueRecord,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog";
-import { IssueCompletionExternalWorktreeDialog } from "./issue-completion-external-worktree-dialog";
+import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion-dirty-workspace-dialog";
 import {
   EMPTY_FORM,
   type AttachmentPreviewState,
@@ -90,8 +91,8 @@ export function IssuesActivity({
   );
   const [completionProgress, setCompletionProgress] =
     useState<CompletionProgressState | null>(null);
-  const [externalWorktreeDialog, setExternalWorktreeDialog] =
-    useState<ExternalWorktreeDialogState | null>(null);
+  const [dirtyWorkspaceDialog, setDirtyWorkspaceDialog] =
+    useState<DirtyWorkspaceDialogState | null>(null);
   const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>(
     [],
   );
@@ -111,8 +112,8 @@ export function IssuesActivity({
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
-  const externalWorktreeDecisionRef = useRef<
-    ((decision: IssueCompletionExternalWorktreeDecision) => void) | null
+  const dirtyWorkspaceDecisionRef = useRef<
+    ((decision: DirtyWorkspaceOption, branchName: string | null) => void) | null
   >(null);
   const { confirm, confirmationDialog } = useConfirmDialog();
   const { alertDialog, showAlert } = useAlertDialog();
@@ -834,28 +835,33 @@ export function IssuesActivity({
     requestProjectId: number,
     issueId: number,
   ): Promise<IssueRecord> {
-    let ignoreDirty: boolean | null = null;
-    let externalWorktreeDecision: IssueCompletionExternalWorktreeDecision | null =
-      null;
-    let hasWaitedForAgentCommit = false;
+    let dirtyDecision: DirtyWorkspaceOption | null = null;
+    let branchName: string | null = null;
+    let actualPath: string | null = null;
+    let continueAfterCommit: boolean | null = null;
+    let worktreeCleanupDecision: boolean | null = null;
 
     while (true) {
       setCompletionProgress({
         title: getCompletionProgressTitle(locale),
-        steps: buildCompletionProgressSteps(
-          locale,
-          externalWorktreeDecision === "merge_and_delete"
-            ? "rebasing"
-            : "checking_commit",
-        ),
+        steps: buildCompletionProgressSteps(locale, "checking_commit"),
       });
 
       const result = await completeIssueFlow({
         projectId: requestProjectId,
         issueId,
-        ignoreDirty,
-        externalWorktreeDecision,
+        dirtyDecision,
+        branchName,
+        actualPath,
+        continueAfterCommit,
+        worktreeCleanupDecision,
       });
+      // 决策一次性消费，下一轮不再重复发送。
+      dirtyDecision = null;
+      branchName = null;
+      actualPath = null;
+      continueAfterCommit = null;
+      worktreeCleanupDecision = null;
 
       if (result.action === "completed") {
         setCompletionProgress({
@@ -865,58 +871,16 @@ export function IssuesActivity({
         return result.issue;
       }
 
-      if (result.action === "manual_dirty_prompt") {
-        setCompletionProgress(null);
-        const shouldIgnoreDirty = await confirm({
-          title: messages.issues.completionDirtyTitle,
-          message: messages.issues.completionDirtyMessage,
-          confirmLabel: messages.issues.completionIgnoreDirty,
-          cancelLabel: messages.issues.completionHandleManually,
-          confirmVariant: "default",
-        });
-        if (!shouldIgnoreDirty) {
-          throw new CompletionCancelledError();
-        }
-        ignoreDirty = true;
-        externalWorktreeDecision = null;
-        continue;
+      if (result.action === "cancelled") {
+        throw new CompletionCancelledError();
       }
 
-      if (result.action === "waiting_agent_commit") {
-        if (hasWaitedForAgentCommit) {
-          throw new Error(
-            result.message || messages.issues.completionWaitingAgentCommit,
-          );
-        }
-        hasWaitedForAgentCommit = true;
-        setCompletionProgress({
-          title: getCompletionProgressTitle(locale),
-          steps: buildCompletionProgressSteps(locale, "waiting_commit"),
-        });
-        ignoreDirty = null;
-        externalWorktreeDecision = null;
-        continue;
-      }
-
-      if (result.action === "confirm_external_worktree") {
+      if (result.action === "blocked") {
         setCompletionProgress(null);
-        const decision = await requestExternalWorktreeDecision(result);
-        if (decision === "cancel") {
-          await completeIssueFlow({
-            projectId: requestProjectId,
-            issueId,
-            externalWorktreeDecision: "cancel",
-          });
-          throw new CompletionCancelledError();
-        }
-        ignoreDirty = null;
-        externalWorktreeDecision = decision;
-        continue;
-      }
-
-      if (result.action === "agent_merge_blocked") {
-        setCompletionProgress(null);
-        if (result.mergeBlockReason !== "merge_conflict") {
+        if (
+          result.mergeBlockReason &&
+          result.mergeBlockReason !== "merge_conflict"
+        ) {
           throw new Error(result.message);
         }
         throw new WorktreeMergeConflictError({
@@ -928,42 +892,108 @@ export function IssuesActivity({
         });
       }
 
-      if (result.action === "no_commit_detected") {
-        throw new Error(
-          result.message || messages.issues.completionNoCommitDetected,
-        );
+      if (result.action === "prompt_dirty_decision") {
+        setCompletionProgress(null);
+        const decision = await requestDirtyWorkspaceDecision(result);
+        dirtyDecision = decision.decision;
+        branchName = decision.branchName;
+        if (decision.decision === "cancel") {
+          // 让后端记录 cancelled，下一轮返回 cancelled → 抛 CompletionCancelledError。
+          continue;
+        }
+        continue;
       }
 
-      if (result.action === "git_operation_blocked") {
-        throw new Error(
-          result.message || messages.issues.completionGitOperationBlocked,
-        );
+      if (result.action === "waiting_auto_commit") {
+        setCompletionProgress({
+          title: getCompletionProgressTitle(locale),
+          steps: buildCompletionProgressSteps(locale, "waiting_commit"),
+        });
+        const outcome = await waitForAgentCommit(requestProjectId, issueId);
+        if (outcome === "blocked") {
+          throw new Error(messages.issues.completionGitOperationBlocked);
+        }
+        if (outcome === "no_commit_detected") {
+          throw new Error(messages.issues.completionNoCommitDetected);
+        }
+        // commit_detected → 弹「代码已提交成功。确定继续标记完成吗？」
+        setCompletionProgress(null);
+        const proceed = await confirm({
+          title: messages.issues.completionContinueAfterCommitTitle,
+          message: messages.issues.completionContinueAfterCommitMessage,
+          confirmLabel: messages.issues.completionContinueLabel,
+          cancelLabel: messages.issues.completionCancel,
+          confirmVariant: "default",
+        });
+        continueAfterCommit = proceed;
+        continue;
+      }
+
+      if (result.action === "confirm_worktree_cleanup") {
+        setCompletionProgress(null);
+        const del = await confirm({
+          title: messages.issues.completionWorktreeCleanupTitle,
+          message: messages.issues.completionWorktreeCleanupMessage(
+            result.targetBranch ?? "",
+          ),
+          confirmLabel: messages.issues.completionWorktreeCleanupConfirm,
+          cancelLabel: messages.issues.completionWorktreeCleanupKeep,
+          confirmVariant: "destructive",
+        });
+        worktreeCleanupDecision = del;
+        continue;
       }
 
       throw new Error(result.message);
     }
   }
 
-  function requestExternalWorktreeDecision(
+  function requestDirtyWorkspaceDecision(
     result: CompleteIssueFlowResult,
-  ): Promise<IssueCompletionExternalWorktreeDecision> {
+  ): Promise<{ decision: DirtyWorkspaceOption; branchName: string | null }> {
     return new Promise((resolve) => {
-      externalWorktreeDecisionRef.current = resolve;
-      setExternalWorktreeDialog({
+      dirtyWorkspaceDecisionRef.current = (decision, branchName) =>
+        resolve({ decision, branchName });
+      const prefill = result.workspaceBranch ?? result.targetBranch ?? null;
+      setDirtyWorkspaceDialog({
         issueId: result.issue.id,
-        targetBranch: result.targetBranch,
-        workspaceBranch: result.workspaceBranch,
-        workspacePath: result.workspacePath,
+        branchName: prefill,
+        // 情况一/二（已知分支）只读预填；情况三（漂移）/session 关闭无预填时允许手填。
+        branchNameEditable: result.drifted || prefill == null,
       });
     });
   }
 
-  function resolveExternalWorktreeDecision(
-    decision: IssueCompletionExternalWorktreeDecision,
+  function resolveDirtyWorkspaceDecision(
+    decision: DirtyWorkspaceOption,
+    branchName: string | null,
   ) {
-    externalWorktreeDecisionRef.current?.(decision);
-    externalWorktreeDecisionRef.current = null;
-    setExternalWorktreeDialog(null);
+    dirtyWorkspaceDecisionRef.current?.(decision, branchName);
+    dirtyWorkspaceDecisionRef.current = null;
+    setDirtyWorkspaceDialog(null);
+  }
+
+  /** 轮询检测 agent 是否已提交新 commit。 */
+  async function waitForAgentCommit(
+    requestProjectId: number,
+    issueId: number,
+  ): Promise<"commit_detected" | "no_commit_detected" | "blocked"> {
+    const maxAttempts = 60;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await delay(2000);
+      const detection = await detectAgentCommitCompletion({
+        projectId: requestProjectId,
+        issueId,
+      });
+      if (detection.outcome === "commit_detected") {
+        return "commit_detected";
+      }
+      if (detection.outcome === "git_operation_blocked") {
+        return "blocked";
+      }
+      // no_commit_detected → 继续轮询。
+    }
+    return "no_commit_detected";
   }
 
   async function handOffWorktreeMergeConflict(
@@ -1171,18 +1201,17 @@ export function IssuesActivity({
       {completionProgress ? (
         <IssueCompletionProgressDialog progress={completionProgress} />
       ) : null}
-      {externalWorktreeDialog ? (
-        <IssueCompletionExternalWorktreeDialog
-          title={messages.issues.completionExternalWorktreeTitle}
-          message={messages.issues.completionExternalWorktreeMessage(
-            externalWorktreeDialog.workspaceBranch ??
-              externalWorktreeDialog.targetBranch ??
-              "",
-          )}
-          mergeAndDeleteLabel={messages.issues.completionMergeAndDelete}
-          skipLabel={messages.issues.completionSkipMerge}
+      {dirtyWorkspaceDialog ? (
+        <IssueCompletionDirtyWorkspaceDialog
+          title={messages.issues.completionDirtyTitle}
+          message={messages.issues.completionDirtyMessage}
+          branchName={dirtyWorkspaceDialog.branchName}
+          branchNameEditable={dirtyWorkspaceDialog.branchNameEditable}
+          branchNameLabel={messages.issues.completionBranchNameLabel}
+          autoCommitLabel={messages.issues.completionAutoCommit}
+          skipLabel={messages.issues.completionSkipDirty}
           cancelLabel={messages.issues.completionCancel}
-          onDecision={resolveExternalWorktreeDecision}
+          onDecision={resolveDirtyWorkspaceDecision}
         />
       ) : null}
       {alertDialog}
@@ -1211,11 +1240,14 @@ interface CompletionProgressState {
   steps: CompletionProgressStep[];
 }
 
-interface ExternalWorktreeDialogState {
+interface DirtyWorkspaceDialogState {
   issueId: number;
-  targetBranch?: string | null;
-  workspaceBranch?: string | null;
-  workspacePath?: string | null;
+  branchName: string | null;
+  branchNameEditable: boolean;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 class CompletionCancelledError extends Error {
