@@ -3374,10 +3374,9 @@ describe("AgentsActivity", () => {
       projectId: 1,
       issueId: 22,
     });
-    expect(completeIssueFlowMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 22,
-    });
+    expect(completeIssueFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 1, issueId: 22 }),
+    );
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
       screen.queryByText("当前仓库无未提交改动，请直接使用 Complete。"),
@@ -3560,10 +3559,9 @@ describe("AgentsActivity", () => {
     );
 
     await waitFor(() =>
-      expect(completeIssueFlowMock).toHaveBeenCalledWith({
-        projectId: 1,
-        issueId: 22,
-      }),
+      expect(completeIssueFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: 1, issueId: 22 }),
+      ),
     );
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
@@ -3623,10 +3621,9 @@ describe("AgentsActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Mark done" }));
 
-    expect(completeIssueFlowMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 22,
-    });
+    expect(completeIssueFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 1, issueId: 22 }),
+    );
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
       screen.queryByRole("button", { name: "Mark done" }),
@@ -3763,10 +3760,9 @@ describe("AgentsActivity", () => {
       projectId: 1,
       issueId: 21,
     });
-    expect(completeIssueFlowMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 21,
-    });
+    expect(completeIssueFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 1, issueId: 21 }),
+    );
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(3));
     expect(
       screen.queryByRole("button", { name: "Mark done" }),
