@@ -179,6 +179,8 @@ pub struct SendAgentCommitPromptResult {
 pub enum DetectAgentCommitCompletionOutcome {
     Completed,
     NoCommitDetected,
+    /// 检测到新 commit，但需用户确认是否继续标记完成（phase → ConfirmingContinueAfterCommit）。
+    CommitDetected,
     GitOperationBlocked,
 }
 

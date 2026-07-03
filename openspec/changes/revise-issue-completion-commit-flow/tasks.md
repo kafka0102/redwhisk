@@ -28,9 +28,9 @@
 ## 5. 三选项对话框与自动提交流（前端 + 后端）
 
 - [ ] 5.1 前端新增 dirty-workspace 三选项对话框组件（自动提交 / 不提交 / 取消），分支名按情况一/二只读预填、情况三/关闭可编辑。
-- [ ] 5.2 「自动提交」：前端跳转 session 页；后端复用 `send_agent_commit_prompt` 注入 commit 指令，phase → `auto_committing`。（**当前后端仅 `WaitingAutoCommit` 桩，未真正发送指令。**）
-- [ ] 5.3 后端在 `actual_path` 上检测新 commit（对比弹框前 git head），命中后 phase → `confirming_continue_after_commit`，前端弹「代码已提交成功。确定继续标记完成吗？」。
-- [ ] 5.4 是 → 进入 worktree reconciliation；否 → phase → `cancelled`，issue 保持未完成。
+- [x] 5.2 「自动提交」：前端跳转 session 页；后端复用 `send_agent_commit_prompt` 注入 commit 指令，phase → `auto_committing`。（实现：`complete_issue_flow_with_option` 的 AutoCommit 分支经 `agent_registry` 取活跃 handle `send_message` 注入 `build_agent_commit_completion_prompt`，并记 `PromptSent` completion_attempt（`head_before` 供 detect 比对）；前端跳转属 Impl-F。）
+- [x] 5.3 后端在 `actual_path` 上检测新 commit（对比弹框前 git head），命中后 phase → `confirming_continue_after_commit`，前端弹「代码已提交成功。确定继续标记完成吗？」。（实现：`detect_agent_commit_completion` 重写——`AutoCommitting` 阶段读 `actual_path` head 与 `PromptSent` attempt 的 `head_before` 比对，命中则 update attempt + phase `ConfirmingContinueAfterCommit` + 返回 `CommitDetected` outcome。）
+- [x] 5.4 是 → 进入 worktree reconciliation；否 → phase → `cancelled`，issue 保持未完成。（实现：`complete_issue_flow_with_option` 顶部检查 `ConfirmingContinueAfterCommit` + `input.continue_after_commit`：`true`→`complete_clean_or_accepted_flow`，`false`→`Cancelled`。）
 - [ ] 5.5 「不提交」→ 记录忽略，进入 worktree reconciliation；「取消」→ `cancelled`。（后端分流已实现，前端入口未做。）
 - [ ] 5.6 接入 i18n（中英文），清理旧 `commitStrategy/agentAutoCommit/...` key。（旧 key 已在前端移除阶段清理。）
 
