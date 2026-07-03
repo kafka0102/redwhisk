@@ -25,7 +25,7 @@ use redwhisk_lib::types::issue::{
     DeleteIssueInput, DetectAgentCommitCompletionInput, ExportIssueAttachmentInput,
     GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind, IssueRecord, IssueStatus,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
-    SaveIssueAttachmentDraftInput, SendAgentCommitPromptInput, UpdateIssueInput,
+    SaveIssueAttachmentDraftInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::issue_completion::{
@@ -1466,125 +1466,6 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
         .any(|item| item.contains("缺少 CompletionAttempt 记录")));
 }
 
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn get_issue_summary_uses_final_completed_fact_after_failed_attempt_then_manual_completion() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("summary-final-fact-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    write_file(&repo_dir, "tracked.txt", "dirty change\n");
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "summary-final-fact-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Manual complete after failed attempt".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: repo_dir.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .path()
-                .join("session.log")
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
-
-    service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
-                project_id,
-                issue_id: issue.id,
-            },
-            temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
-        )
-        .expect("send prompt");
-
-    let failed_completion = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("detect no commit");
-    assert_eq!(
-        failed_completion.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::NoCommitDetected
-    );
-
-    service
-        .complete_issue_manual(CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("manual complete");
-
-    let summary = service
-        .get_issue_summary(GetIssueSummaryInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("summary");
-
-    assert_eq!(summary.issue.status, IssueStatus::Completed);
-    assert_eq!(
-        summary.completion.as_ref().map(|info| info.option.as_str()),
-        Some("complete_manual")
-    );
-    assert_eq!(
-        summary.completion.as_ref().map(|info| info.source.as_str()),
-        Some("completion_attempt")
-    );
-    assert!(!summary
-        .diagnostics
-        .iter()
-        .any(|item| item.contains("未找到可代表最终 completed")));
-}
-
 #[test]
 fn complete_issue_clean_closes_running_session_and_records_audit() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -2053,371 +1934,10 @@ fn prepare_agent_commit_completion_rejects_clean_repo() {
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
 }
 
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn prepare_agent_commit_completion_records_blocked_attempt_when_git_operation_is_in_progress() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("prepare-agent-commit-blocked-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "conflict.txt", "base\n");
-    git(&repo_dir, &["add", "conflict.txt"]);
-    git(&repo_dir, &["commit", "-m", "base"]);
-    git(&repo_dir, &["checkout", "-b", "feature"]);
-    write_file(&repo_dir, "conflict.txt", "feature\n");
-    git(&repo_dir, &["commit", "-am", "feature"]);
-    git(&repo_dir, &["checkout", "main"]);
-    write_file(&repo_dir, "conflict.txt", "main\n");
-    git(&repo_dir, &["commit", "-am", "main"]);
-    git_expect_failure(&repo_dir, &["merge", "feature"]);
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "prepare-agent-commit-blocked-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Blocked agent commit".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-
-    let error = service
-        .prepare_agent_commit_completion(PrepareAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect_err("git operation should block agent commit prepare");
-
-    assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
-    assert_eq!(
-        error.message,
-        "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。"
-    );
-
-    let stored_issue = IssueRepository::new(&database.connection)
-        .find_by_id(issue.id)
-        .expect("query issue")
-        .expect("issue exists");
-    assert_eq!(stored_issue.status, IssueStatus::Review);
-
-    let stored_session = AgentSessionRepository::new(&database.connection)
-        .find_by_id(session_id)
-        .expect("query session")
-        .expect("session exists");
-    assert_eq!(stored_session.status, AgentSessionStatus::Running);
-
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].option.as_str(), "agent_auto_commit");
-    assert_eq!(attempts[0].result.as_str(), "git_operation_blocked");
-    assert_eq!(
-        attempts[0].failure_reason.as_deref(),
-        Some("merge_in_progress")
-    );
-    assert_eq!(attempts[0].commit_hash, None);
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn send_agent_commit_prompt_records_attempt_and_keeps_issue_in_review() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("send-agent-commit-prompt-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    write_file(&repo_dir, "tracked.txt", "dirty change\n");
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "send-agent-commit-prompt-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Review issue".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: repo_dir.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .path()
-                .join("session.log")
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
-
-    let result = service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
-                project_id,
-                issue_id: issue.id,
-            },
-            temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
-        )
-        .expect("send prompt");
-
-    assert_eq!(result.issue_id, issue.id);
-    assert_eq!(result.session_id, session_id);
-
-    let persisted_issue = IssueRepository::new(&database.connection)
-        .find_by_id(issue.id)
-        .expect("query issue")
-        .expect("issue exists");
-    assert_eq!(persisted_issue.status, IssueStatus::Review);
-
-    let session_events = EventRepository::new(&database.connection)
-        .list_session_events(session_id)
-        .expect("session events");
-    let prompt_event = session_events
-        .iter()
-        .find(|event| event.event_type == SessionEventType::SessionPromptInjected)
-        .expect("prompt injected event");
-    let prompt_payload: serde_json::Value =
-        serde_json::from_str(&prompt_event.payload_json).expect("prompt payload");
-    assert_eq!(prompt_payload["kind"], "completion");
-    assert_eq!(prompt_payload["issueId"], issue.id);
-
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].option.as_str(), "agent_auto_commit");
-    assert_eq!(attempts[0].result.as_str(), "prompt_sent");
-    assert!(attempts[0].changed_files_json.contains("tracked.txt"));
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn detect_agent_commit_completion_records_commit_hash_and_completes_issue() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("detect-agent-commit-completion-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    write_file(&repo_dir, "tracked.txt", "dirty change\n");
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "detect-agent-commit-completion-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Review issue".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: repo_dir.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .path()
-                .join("session.log")
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
-
-    service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
-                project_id,
-                issue_id: issue.id,
-            },
-            temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
-        )
-        .expect("send prompt");
-
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "agent completion"]);
-
-    let completion_result = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("detect completion");
-
-    assert_eq!(
-        completion_result.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
-    );
-    assert_eq!(completion_result.issue.status, IssueStatus::Completed);
-    assert_eq!(
-        completion_result.message,
-        "已检测到新的 commit，Issue 已完成。"
-    );
-
-    let persisted_issue = IssueRepository::new(&database.connection)
-        .find_by_id(issue.id)
-        .expect("query issue")
-        .expect("issue exists");
-    assert_eq!(persisted_issue.status, IssueStatus::Completed);
-
-    let session = AgentSessionRepository::new(&database.connection)
-        .find_by_id(session_id)
-        .expect("query session")
-        .expect("session exists");
-    assert_eq!(session.status, AgentSessionStatus::Closed);
-
-    let session_events = EventRepository::new(&database.connection)
-        .list_session_events(session_id)
-        .expect("session events");
-    assert!(session_events
-        .iter()
-        .any(|event| event.event_type == SessionEventType::SessionClosed));
-
-    let issue_actions = EventRepository::new(&database.connection)
-        .list_issue_actions(issue.id)
-        .expect("issue actions");
-    assert!(issue_actions
-        .iter()
-        .any(|action| action.action_type == IssueActionType::IssueCompleted));
-
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].result.as_str(), "completed");
-    assert_ne!(attempts[0].head_before, attempts[0].head_after);
-    assert_eq!(
-        attempts[0].commit_hash.as_deref(),
-        Some(attempts[0].head_after.as_str())
-    );
-
-    let summary = service
-        .get_issue_summary(GetIssueSummaryInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("summary");
-    assert_eq!(summary.issue.status, IssueStatus::Completed);
-    assert_eq!(
-        summary.completion.as_ref().map(|info| info.option.as_str()),
-        Some("agent_auto_commit")
-    );
-    assert_eq!(
-        summary.completion.as_ref().map(|info| info.result.as_str()),
-        Some("completed")
-    );
-    assert_eq!(
-        summary
-            .completion
-            .as_ref()
-            .and_then(|info| info.commit_hash.as_deref()),
-        Some(attempts[0].head_after.as_str())
-    );
-    assert!(summary.diagnostics.is_empty());
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
 #[test]
 fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("detect-agent-commit-no-commit-repo");
+    let repo_dir = temp_dir.path().join("detect-no-commit-repo");
     init_repo(&repo_dir);
     write_file(&repo_dir, "tracked.txt", "initial\n");
     git(&repo_dir, &["add", "tracked.txt"]);
@@ -2427,241 +1947,69 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project_with_repo_path_and_policy(
         &database.connection,
-        "detect-agent-commit-no-commit-repo",
+        "detect-no-commit-repo",
         &repo_dir,
     );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Review issue".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
         &database.connection,
         project_id,
-        issue.id,
-        profile_id,
+        &service,
+        "detect no commit",
         "running",
     );
+    let registry = AgentSessionRegistry::new();
+    let (handle, _sent) = RecordingHandle::new();
+    registry.register(session_id, Arc::new(handle));
 
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: repo_dir.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .path()
-                .join("session.log")
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
-
+    // 推进到 AutoCommitting（注入 commit 指令，但 agent 尚未提交）。
     service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
                 project_id,
                 issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: Some(DirtyWorkspaceOption::AutoCommit),
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
             },
             temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
         )
-        .expect("send prompt");
+        .expect("auto commit waits");
 
-    let completion_result = service
+    // 未提交新 commit → NoCommitDetected，phase 仍 AutoCommitting，attempt 仍 PromptSent。
+    let result = service
         .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
             project_id,
             issue_id: issue.id,
         })
-        .expect("detect completion without commit");
-
+        .expect("detect");
     assert_eq!(
-        completion_result.outcome,
+        result.outcome,
         redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::NoCommitDetected
     );
-    assert_eq!(completion_result.issue.status, IssueStatus::Review);
-    assert_eq!(
-        completion_result.message,
-        "尚未检测到新的 commit，Issue 保持待验收。"
-    );
-
-    let persisted_issue = IssueRepository::new(&database.connection)
-        .find_by_id(issue.id)
-        .expect("query issue")
-        .expect("issue exists");
-    assert_eq!(persisted_issue.status, IssueStatus::Review);
-
-    let session = AgentSessionRepository::new(&database.connection)
-        .find_by_id(session_id)
-        .expect("query session")
-        .expect("session exists");
-    assert_eq!(session.status, AgentSessionStatus::Running);
-
-    let session_events = EventRepository::new(&database.connection)
-        .list_session_events(session_id)
-        .expect("session events");
-    assert!(!session_events
-        .iter()
-        .any(|event| event.event_type == SessionEventType::SessionClosed));
-
-    let issue_actions = EventRepository::new(&database.connection)
-        .list_issue_actions(issue.id)
-        .expect("issue actions");
-    assert!(!issue_actions
-        .iter()
-        .any(|action| action.action_type == IssueActionType::IssueCompleted));
-
+    assert_eq!(result.issue.status, IssueStatus::Review);
+    let flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .expect("flow exists");
+    assert_eq!(flow.phase, IssueCompletionPhase::AutoCommitting);
     let attempts = CompletionAttemptRepository::new(&database.connection)
         .list_by_issue_id(issue.id)
         .expect("attempts");
     assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].result.as_str(), "no_commit_detected");
+    assert_eq!(attempts[0].result.as_str(), "prompt_sent");
     assert_eq!(attempts[0].commit_hash, None);
-    assert_eq!(attempts[0].head_before, attempts[0].head_after);
 }
 
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn detect_agent_commit_completion_resumes_after_no_commit_and_records_commit_hash() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir
-        .path()
-        .join("detect-agent-commit-resume-after-no-commit-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    write_file(&repo_dir, "tracked.txt", "dirty change\n");
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "detect-agent-commit-resume-after-no-commit-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Review issue".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    register_test_pty_session(&pty_sessions, session_id, &repo_dir, temp_dir.path());
-
-    service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
-                project_id,
-                issue_id: issue.id,
-            },
-            temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
-        )
-        .expect("send prompt");
-
-    let first_result = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("detect without commit");
-    assert_eq!(
-        first_result.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::NoCommitDetected
-    );
-
-    let attempts_after_no_commit = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts after no commit");
-    assert_eq!(attempts_after_no_commit.len(), 1);
-    let pending_attempt_id = attempts_after_no_commit[0].id;
-    let original_head = attempts_after_no_commit[0].head_before.clone();
-    assert_eq!(
-        attempts_after_no_commit[0].result.as_str(),
-        "no_commit_detected"
-    );
-
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "agent completion after retry"]);
-    let new_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
-
-    let completed_result = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("detect completion after retry");
-
-    assert_eq!(
-        completed_result.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
-    );
-    assert_eq!(completed_result.issue.status, IssueStatus::Completed);
-
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].id, pending_attempt_id);
-    assert_eq!(attempts[0].result.as_str(), "completed");
-    assert_eq!(attempts[0].head_before, original_head);
-    assert_eq!(attempts[0].head_after, new_head);
-    assert_eq!(attempts[0].commit_hash.as_deref(), Some(new_head.as_str()));
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
 #[test]
 fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_starts() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("detect-agent-commit-blocked-repo");
+    let repo_dir = temp_dir.path().join("detect-blocked-repo");
     init_repo(&repo_dir);
     write_file(&repo_dir, "conflict.txt", "base\n");
     git(&repo_dir, &["add", "conflict.txt"]);
@@ -2670,362 +2018,61 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
     write_file(&repo_dir, "conflict.txt", "feature\n");
     git(&repo_dir, &["commit", "-am", "feature"]);
     git(&repo_dir, &["checkout", "main"]);
+    // 主分支制造未提交改动，使完成入口进入 dirty → AutoCommit。
     write_file(&repo_dir, "conflict.txt", "main dirty\n");
 
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project_with_repo_path_and_policy(
         &database.connection,
-        "detect-agent-commit-blocked-repo",
+        "detect-blocked-repo",
         &repo_dir,
     );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Blocked detect".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
         &database.connection,
         project_id,
-        issue.id,
-        profile_id,
+        &service,
+        "blocked detect",
         "running",
     );
+    let registry = AgentSessionRegistry::new();
+    let (handle, _sent) = RecordingHandle::new();
+    registry.register(session_id, Arc::new(handle));
 
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: repo_dir.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .path()
-                .join("session.log")
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
-
+    // 推进到 AutoCommitting。
     service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
                 project_id,
                 issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: Some(DirtyWorkspaceOption::AutoCommit),
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
             },
             temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
         )
-        .expect("send prompt");
+        .expect("auto commit waits");
 
+    // 制造进行中的 merge 冲突 → detect 应返回 GitOperationBlocked，Issue 保持 review。
     git(&repo_dir, &["commit", "-am", "main update"]);
     git_expect_failure(&repo_dir, &["merge", "feature"]);
 
-    let completion_result = service
+    let result = service
         .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
             project_id,
             issue_id: issue.id,
         })
-        .expect("detect completion blocked by git operation");
-
+        .expect("detect");
     assert_eq!(
-        completion_result.outcome,
+        result.outcome,
         redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::GitOperationBlocked
     );
-    assert_eq!(completion_result.issue.status, IssueStatus::Review);
-    assert_eq!(
-        completion_result.message,
-        "当前 Git 正在进行中的操作阻止 Agent Commit 完成，请先手动处理 Git 状态。"
-    );
-
-    let stored_issue = IssueRepository::new(&database.connection)
-        .find_by_id(issue.id)
-        .expect("query issue")
-        .expect("issue exists");
-    assert_eq!(stored_issue.status, IssueStatus::Review);
-
-    let stored_session = AgentSessionRepository::new(&database.connection)
-        .find_by_id(session_id)
-        .expect("query session")
-        .expect("session exists");
-    assert_eq!(stored_session.status, AgentSessionStatus::Running);
-
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].result.as_str(), "git_operation_blocked");
-    assert_eq!(
-        attempts[0].failure_reason.as_deref(),
-        Some("merge_in_progress")
-    );
-    assert_eq!(attempts[0].commit_hash, None);
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn detect_agent_commit_completion_merges_and_cleans_up_worktree_session() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("detect-agent-commit-worktree-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "detect-agent-commit-worktree-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Worktree review issue".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-    let worktree_root = temp_dir.path().join("worktrees");
-    let workspace_path = worktree_root.join("issue-worktree");
-    git(
-        &repo_dir,
-        &[
-            "worktree",
-            "add",
-            "-B",
-            "issue-branch",
-            workspace_path.to_string_lossy().as_ref(),
-            "main",
-        ],
-    );
-    database
-        .connection
-        .execute(
-            "UPDATE agent_sessions
-             SET working_dir = ?1,
-                 workspace_mode = 'worktree',
-                 target_branch = 'main',
-                 workspace_branch = 'issue-branch',
-                 workspace_path = ?1,
-                 worktree_root_path = ?2,
-                 origin_branch = 'main',
-                 worktree_owner = 'redwhisk'
-             WHERE id = ?3",
-            rusqlite::params![
-                workspace_path.to_string_lossy().to_string(),
-                worktree_root.to_string_lossy().to_string(),
-                session_id,
-            ],
-        )
-        .expect("update worktree session");
-
-    write_file(&workspace_path, "tracked.txt", "worktree change\n");
-
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: workspace_path.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .path()
-                .join("session.log")
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
-
-    service
-        .send_agent_commit_prompt(
-            SendAgentCommitPromptInput {
-                project_id,
-                issue_id: issue.id,
-            },
-            temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
-        )
-        .expect("send prompt");
-
-    git(&workspace_path, &["add", "tracked.txt"]);
-    git(&workspace_path, &["commit", "-m", "agent completion"]);
-
-    let completion_result = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("detect completion");
-
-    assert_eq!(
-        completion_result.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
-    );
-    assert_eq!(completion_result.issue.status, IssueStatus::Completed);
-    assert!(!workspace_path.exists());
-    let main_content = fs::read_to_string(repo_dir.join("tracked.txt")).expect("read main file");
-    assert_eq!(main_content, "worktree change\n");
-    assert_eq!(
-        git_output(&repo_dir, &["branch", "--list", "issue-branch"]),
-        ""
-    );
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn detect_agent_commit_completion_skips_worktree_merge_when_workspace_path_is_missing() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir
-        .path()
-        .join("detect-agent-commit-missing-worktree-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    let initial_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "detect-agent-commit-missing-worktree-repo",
-        &repo_dir,
-    );
-    let service = IssueService::new(
-        IssueRepository::new(&database.connection),
-        ProjectRepository::new(&database.connection),
-    );
-    let issue = service
-        .create_issue(CreateIssueInput {
-            project_id,
-            title: "Missing worktree review issue".to_string(),
-            description: "".to_string(),
-            attachments: Vec::new(),
-            label_ids: Vec::new(),
-        })
-        .expect("created issue");
-    database
-        .connection
-        .execute(
-            "UPDATE issues SET status = 'review' WHERE id = ?1",
-            [issue.id],
-        )
-        .expect("set review");
-    let profile_id = insert_agent_profile(&database.connection);
-    let session_id = insert_agent_session_for_issue(
-        &database.connection,
-        project_id,
-        issue.id,
-        profile_id,
-        "running",
-    );
-    let workspace_path = temp_dir.path().join("deleted-worktree");
-    database
-        .connection
-        .execute(
-            "UPDATE agent_sessions
-             SET working_dir = ?1,
-                 workspace_mode = 'worktree',
-                 target_branch = 'main',
-                 workspace_branch = 'issue-deleted',
-                 workspace_path = ?1,
-                 worktree_root_path = ?2,
-                 origin_branch = 'main',
-                 worktree_owner = 'redwhisk'
-             WHERE id = ?3",
-            rusqlite::params![
-                workspace_path.to_string_lossy().to_string(),
-                temp_dir
-                    .path()
-                    .join("worktrees")
-                    .to_string_lossy()
-                    .to_string(),
-                session_id,
-            ],
-        )
-        .expect("update worktree session");
-    database
-        .connection
-        .execute(
-            "INSERT INTO completion_attempts (
-                issue_id,
-                session_id,
-                option,
-                head_before,
-                head_after,
-                changed_files_json,
-                result,
-                created_at
-            ) VALUES (?1, ?2, 'agent_auto_commit', ?3, ?3, '[]', 'prompt_sent', 1780628500000)",
-            rusqlite::params![issue.id, session_id, initial_head],
-        )
-        .expect("insert attempt");
-    git(
-        &repo_dir,
-        &["commit", "--allow-empty", "-m", "agent completion"],
-    );
-
-    let completion_result = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: issue.id,
-        })
-        .expect("detect completion");
-
-    assert_eq!(
-        completion_result.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
-    );
-    assert_eq!(completion_result.issue.status, IssueStatus::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Review);
 }
 
 #[test]
@@ -3362,135 +2409,6 @@ fn complete_issue_flow_manual_dirty_ignore_continues_to_current_branch_completio
         .expect("session")
         .expect("session exists");
     assert_eq!(stored_session.status, AgentSessionStatus::Closed);
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn complete_issue_flow_auto_commit_dirty_waits_for_agent_commit_attempt() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("flow-auto-dirty-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    write_file(&repo_dir, "tracked.txt", "dirty agent\n");
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "flow-auto-dirty-repo",
-        &repo_dir,
-    );
-    let service = issue_service(&database.connection);
-    let (issue, session_id) = create_review_issue_with_session(
-        &database.connection,
-        project_id,
-        &service,
-        "auto dirty flow",
-        "running",
-    );
-    let pty_sessions = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
-    register_test_pty_session(&pty_sessions, session_id, &repo_dir, temp_dir.path());
-
-    let result = service
-        .complete_issue_flow(
-            CompleteIssueFlowInput {
-                project_id,
-                issue_id: issue.id,
-                ignore_dirty: None,
-                dirty_decision: None,
-                branch_name: None,
-                actual_path: None,
-                continue_after_commit: None,
-                worktree_cleanup_decision: None,
-            },
-            temp_dir.path(),
-            &pty_sessions,
-            &AgentSessionRegistry::new(),
-        )
-        .expect("auto dirty waits");
-
-    assert_eq!(result.action, CompleteIssueFlowAction::WaitingAutoCommit);
-    assert_eq!(result.issue.status, IssueStatus::Review);
-    let flow = result.flow.expect("flow");
-    assert_eq!(flow.phase, IssueCompletionPhase::AutoCommitting);
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].option.as_str(), "agent_auto_commit");
-    assert_eq!(attempts[0].result.as_str(), "prompt_sent");
-}
-
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
-#[test]
-fn complete_issue_flow_resumes_pending_agent_commit_after_new_commit() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let repo_dir = temp_dir.path().join("flow-auto-resume-repo");
-    init_repo(&repo_dir);
-    write_file(&repo_dir, "tracked.txt", "initial\n");
-    git(&repo_dir, &["add", "tracked.txt"]);
-    git(&repo_dir, &["commit", "-m", "initial"]);
-    let initial_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
-
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project_with_repo_path_and_policy(
-        &database.connection,
-        "flow-auto-resume-repo",
-        &repo_dir,
-    );
-    let service = issue_service(&database.connection);
-    let (issue, session_id) = create_review_issue_with_session(
-        &database.connection,
-        project_id,
-        &service,
-        "auto resume flow",
-        "running",
-    );
-    database
-        .connection
-        .execute(
-            "INSERT INTO completion_attempts (
-                issue_id,
-                session_id,
-                option,
-                head_before,
-                head_after,
-                changed_files_json,
-                result,
-                created_at
-            ) VALUES (?1, ?2, 'agent_auto_commit', ?3, ?3, '[]', 'prompt_sent', 1780628500000)",
-            rusqlite::params![issue.id, session_id, initial_head],
-        )
-        .expect("insert pending attempt");
-    write_file(&repo_dir, "tracked.txt", "agent committed\n");
-    git(&repo_dir, &["commit", "-am", "agent completion"]);
-
-    let result = service
-        .complete_issue_flow(
-            CompleteIssueFlowInput {
-                project_id,
-                issue_id: issue.id,
-                ignore_dirty: None,
-                dirty_decision: None,
-                branch_name: None,
-                actual_path: None,
-                continue_after_commit: None,
-                worktree_cleanup_decision: None,
-            },
-            temp_dir.path(),
-            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
-            &AgentSessionRegistry::new(),
-        )
-        .expect("resume completes");
-
-    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
-    assert_eq!(result.issue.status, IssueStatus::Completed);
-    let attempts = CompletionAttemptRepository::new(&database.connection)
-        .list_by_issue_id(issue.id)
-        .expect("attempts");
-    assert_eq!(attempts[0].result.as_str(), "completed");
-    assert!(attempts[0].commit_hash.is_some());
 }
 
 #[test]
@@ -4131,7 +3049,6 @@ fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
     assert!(workspace_path.exists());
 }
 
-#[ignore = "Impl-D: agent auto-commit/detect path pending rewrite"]
 #[test]
 fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -4247,45 +3164,6 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
         IssueCompletionPhase::ConfirmingWorktreeCleanup
     );
     assert!(workspace_path.exists());
-
-    let (detect_issue, detect_session_id) = create_review_issue_with_session(
-        &database.connection,
-        project_id,
-        &service,
-        "legacy detect flow",
-        "running",
-    );
-    let before_head = git_output(&repo_dir, &["rev-parse", "HEAD"]);
-    database
-        .connection
-        .execute(
-            "INSERT INTO completion_attempts (
-                issue_id,
-                session_id,
-                option,
-                head_before,
-                head_after,
-                changed_files_json,
-                result,
-                created_at
-            ) VALUES (?1, ?2, 'agent_auto_commit', ?3, ?3, '[]', 'prompt_sent', 1780628500000)",
-            rusqlite::params![detect_issue.id, detect_session_id, before_head],
-        )
-        .expect("insert pending attempt");
-    git(
-        &repo_dir,
-        &["commit", "--allow-empty", "-m", "legacy detect completion"],
-    );
-    let detect = service
-        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
-            project_id,
-            issue_id: detect_issue.id,
-        })
-        .expect("detect legacy entry delegates");
-    assert_eq!(
-        detect.outcome,
-        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::Completed
-    );
 }
 
 #[test]
@@ -5196,32 +4074,6 @@ fn update_session_worktree(
             ],
         )
         .expect("update worktree session");
-}
-
-fn register_test_pty_session(
-    pty_sessions: &redwhisk_lib::agent::pty_session_manager::PtySessionManager,
-    session_id: i64,
-    working_dir: &Path,
-    temp_dir: &Path,
-) {
-    let pending = pty_sessions
-        .spawn_pending(&redwhisk_lib::agent::pty_session_manager::PtySpawnRequest {
-            command: "/bin/sh".to_string(),
-            working_dir: working_dir.to_string_lossy().into_owned(),
-            log_path: temp_dir
-                .join(format!("session-{session_id}.log"))
-                .to_string_lossy()
-                .into_owned(),
-            initial_prompt: None,
-            rows: 24,
-            cols: 80,
-            startup_check_total_ms: 200,
-            startup_check_interval_ms: 25,
-        })
-        .expect("spawn pending");
-    pty_sessions
-        .register(session_id, pending, |_| {})
-        .expect("register session");
 }
 
 fn table_columns(connection: &rusqlite::Connection, table_name: &str) -> Vec<String> {

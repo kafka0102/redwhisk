@@ -3339,7 +3339,6 @@ mod tests {
     use std::process::Command;
     use tempfile::tempdir;
 
-    #[ignore = "Impl-D: agent_auto_commit 路径已移除，待新自动提交-跳转-session 流程实现后重写"]
     #[test]
     fn complete_issue_flow_completes_review_issue_with_closed_session_without_agent_commit_check() {
         let temp_dir = tempdir().expect("create temp dir");
@@ -3374,6 +3373,8 @@ mod tests {
         assert_eq!(result.action, CompleteIssueFlowAction::Completed);
         assert_eq!(result.issue.status, IssueStatus::Completed);
 
+        // 关闭的 session（非 worktree）走快速完成路径，不经过 agent 自动提交检测；
+        // 记录 complete_manual 完成审计。
         let (option, completion_result): (String, String) = connection
             .query_row(
                 "SELECT option, result FROM completion_attempts WHERE issue_id = 16",
@@ -3381,7 +3382,7 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .expect("completion attempt");
-        assert_eq!(option, "agent_auto_commit");
+        assert_eq!(option, "complete_manual");
         assert_eq!(completion_result, "completed");
     }
 
