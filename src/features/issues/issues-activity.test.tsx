@@ -2689,8 +2689,11 @@ describe("IssuesActivity", () => {
       expect(completeIssueFlowMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: attentionIssue.id,
-        ignoreDirty: null,
-        externalWorktreeDecision: null,
+        dirtyDecision: null,
+        branchName: null,
+        actualPath: null,
+        continueAfterCommit: null,
+        worktreeCleanupDecision: null,
       }),
     );
     await openIssueMoreMenu(user);
@@ -2843,8 +2846,11 @@ describe("IssuesActivity", () => {
       expect(completeIssueFlowMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: reviewWithClosedSession.id,
-        ignoreDirty: null,
-        externalWorktreeDecision: null,
+        dirtyDecision: null,
+        branchName: null,
+        actualPath: null,
+        continueAfterCommit: null,
+        worktreeCleanupDecision: null,
       }),
     );
     expect(
@@ -2854,58 +2860,7 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("sends an agent commit prompt before completing a dirty auto-commit review issue", async () => {
-    const user = userEvent.setup();
-    const reviewWithSession = {
-      ...reviewIssue,
-      linkedSessionId: 503,
-      linkedSessionStatus: "running" as const,
-      linkedSessionAttention: "none" as const,
-    };
-    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    completeIssueFlowMock
-      .mockResolvedValueOnce({
-        action: "waiting_auto_commit",
-        issue: reviewWithSession,
-        flow: null,
-        message: "正在等待 Agent 提交。",
-        targetBranch: null,
-        workspaceBranch: null,
-        workspacePath: null,
-        actualPath: null,
-        drifted: false,
-        sessionId: 503,
-      })
-      .mockResolvedValueOnce(
-        completedFlowResult({
-          ...reviewWithSession,
-          status: "completed",
-          linkedSessionStatus: "closed",
-          updatedAt: reviewWithSession.updatedAt + 1_000,
-        }),
-      );
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", { name: "Review issue" }),
-    );
-    const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await user.click(
-      within(dialog).getByRole("button", { name: "Open status options" }),
-    );
-    await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
-
-    await waitFor(() => expect(completeIssueFlowMock).toHaveBeenCalledTimes(2));
-    expect(completeIssueManualMock).not.toHaveBeenCalled();
-    await openIssueMoreMenu(user);
-    expect(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
-    ).toBeInTheDocument();
-  });
-
-  it("blocks Done when related dirty files exist and completion policy is manual", async () => {
+  it("blocks Done when related dirty files exist and shows the dirty workspace dialog", async () => {
     const user = userEvent.setup();
     const reviewWithSession = {
       ...reviewIssue,
@@ -2914,18 +2869,31 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none" as const,
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    completeIssueFlowMock.mockResolvedValueOnce({
-      action: "prompt_dirty_decision",
-      issue: reviewWithSession,
-      flow: null,
-      message: "当前工作区存在未提交改动，请确认是否继续完成。",
-      targetBranch: null,
-      workspaceBranch: null,
-      workspacePath: null,
-      actualPath: null,
-      drifted: false,
-      sessionId: 504,
-    });
+    completeIssueFlowMock
+      .mockResolvedValueOnce({
+        action: "prompt_dirty_decision",
+        issue: reviewWithSession,
+        flow: null,
+        message: "当前工作区存在未提交改动，请选择处理方式。",
+        targetBranch: null,
+        workspaceBranch: null,
+        workspacePath: null,
+        actualPath: null,
+        drifted: false,
+        sessionId: 504,
+      })
+      .mockResolvedValueOnce({
+        action: "cancelled",
+        issue: reviewWithSession,
+        flow: null,
+        message: "完成已取消，Issue 保持待验收。",
+        targetBranch: null,
+        workspaceBranch: null,
+        workspacePath: null,
+        actualPath: null,
+        drifted: false,
+        sessionId: 504,
+      });
 
     renderIssuesActivity({});
 
@@ -2943,10 +2911,10 @@ describe("IssuesActivity", () => {
     expect(
       await screen.findByRole("dialog", { name: "Uncommitted changes" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Handle manually" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
   });
 
-  it("continues completion when manual dirty changes are ignored", async () => {
+  it("continues completion when dirty changes are skipped", async () => {
     const user = userEvent.setup();
     const reviewWithSession = {
       ...reviewIssue,
@@ -2989,15 +2957,18 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: "确认" }));
     await user.click(
-      await screen.findByRole("button", { name: "Ignore and continue" }),
+      await screen.findByRole("button", { name: "Complete without commit" }),
     );
 
     await waitFor(() =>
       expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
         projectId: 1,
         issueId: reviewWithSession.id,
-        ignoreDirty: true,
-        externalWorktreeDecision: null,
+        dirtyDecision: "skip",
+        branchName: null,
+        actualPath: null,
+        continueAfterCommit: null,
+        worktreeCleanupDecision: null,
       }),
     );
     await openIssueMoreMenu(user);
@@ -3051,21 +3022,24 @@ describe("IssuesActivity", () => {
 
     expect(
       screen.getByRole("dialog", {
-        name: "External worktree",
+        name: "Delete worktree",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Merge and delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
         projectId: 1,
         issueId: reviewWithSession.id,
-        ignoreDirty: null,
-        externalWorktreeDecision: "merge_and_delete",
+        dirtyDecision: null,
+        branchName: null,
+        actualPath: null,
+        continueAfterCommit: null,
+        worktreeCleanupDecision: true,
       }),
     );
   });
 
-  it("supports skipping or canceling external worktree completion", async () => {
+  it("supports keeping the worktree when completing an external worktree issue", async () => {
     const user = userEvent.setup();
     const reviewWithSession = {
       ...reviewIssue,
@@ -3074,30 +3048,27 @@ describe("IssuesActivity", () => {
       linkedSessionAttention: "none" as const,
     };
     listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
-    completeIssueFlowMock.mockResolvedValueOnce({
-      action: "confirm_worktree_cleanup",
-      issue: reviewWithSession,
-      flow: null,
-      message: "需要确认外部 worktree。",
-      targetBranch: "dev",
-      workspaceBranch: "issue-515",
-      workspacePath: "/tmp/worktrees/issue-515",
-      actualPath: null,
-      drifted: false,
-      sessionId: 515,
-    });
-    completeIssueFlowMock.mockResolvedValueOnce({
-      action: "confirm_worktree_cleanup",
-      issue: reviewWithSession,
-      flow: null,
-      message: "完成已暂停。",
-      targetBranch: "dev",
-      workspaceBranch: "issue-515",
-      workspacePath: "/tmp/worktrees/issue-515",
-      actualPath: null,
-      drifted: false,
-      sessionId: 515,
-    });
+    completeIssueFlowMock
+      .mockResolvedValueOnce({
+        action: "confirm_worktree_cleanup",
+        issue: reviewWithSession,
+        flow: null,
+        message: "代码已提交至 dev。是否删除当前 worktree？",
+        targetBranch: "dev",
+        workspaceBranch: "issue-515",
+        workspacePath: "/tmp/worktrees/issue-515",
+        actualPath: null,
+        drifted: false,
+        sessionId: 515,
+      })
+      .mockResolvedValueOnce(
+        completedFlowResult({
+          ...reviewWithSession,
+          status: "completed",
+          linkedSessionStatus: "closed",
+          updatedAt: reviewWithSession.updatedAt + 1_000,
+        }),
+      );
 
     renderIssuesActivity();
 
@@ -3110,57 +3081,28 @@ describe("IssuesActivity", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: "确认" }));
-    await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
-    await waitFor(() =>
-      expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
-        projectId: 1,
-        issueId: reviewWithSession.id,
-        externalWorktreeDecision: "cancel",
-      }),
-    );
+    // 保留 worktree（不删除）→ worktreeCleanupDecision=false → 完成。
     expect(
-      screen.queryByRole("menuitem", { name: "View Summary" }),
-    ).not.toBeInTheDocument();
-
-    completeIssueFlowMock.mockResolvedValueOnce({
-      action: "confirm_worktree_cleanup",
-      issue: reviewWithSession,
-      flow: null,
-      message: "需要确认外部 worktree。",
-      targetBranch: "dev",
-      workspaceBranch: "issue-515",
-      workspacePath: "/tmp/worktrees/issue-515",
-      actualPath: null,
-      drifted: false,
-      sessionId: 515,
-    });
-    completeIssueFlowMock.mockResolvedValueOnce(
-      completedFlowResult({
-        ...reviewWithSession,
-        status: "completed",
-        linkedSessionStatus: "closed",
-        updatedAt: reviewWithSession.updatedAt + 1_000,
-      }),
-    );
-
-    await user.click(
-      within(dialog).getByRole("button", { name: "Open status options" }),
-    );
-    await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
-    await user.click(
-      await screen.findByRole("button", { name: "Complete without merge" }),
-    );
+      await screen.findByRole("dialog", { name: "Delete worktree" }),
+    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Keep" }));
 
     await waitFor(() =>
       expect(completeIssueFlowMock).toHaveBeenLastCalledWith({
         projectId: 1,
         issueId: reviewWithSession.id,
-        ignoreDirty: null,
-        externalWorktreeDecision: "skip",
+        dirtyDecision: null,
+        branchName: null,
+        actualPath: null,
+        continueAfterCommit: null,
+        worktreeCleanupDecision: false,
       }),
     );
+    await openIssueMoreMenu(user);
+    expect(
+      await screen.findByRole("menuitem", { name: "View Summary" }),
+    ).toBeInTheDocument();
   });
 
   it("hands off worktree merge conflicts to the linked agent session", async () => {
