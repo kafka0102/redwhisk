@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
 use redwhisk_lib::core::issue_service::IssueService;
@@ -3746,6 +3747,88 @@ fn complete_issue_flow_rebase_conflict_persists_merge_block_and_keeps_worktree()
 }
 
 #[test]
+fn complete_issue_flow_rebase_conflict_notifies_active_session_with_conflict_prompt() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-rebase-notify-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-rebase-notify-repo",
+        &repo_dir,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "conflict notify flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-flow-notify");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-flow-notify",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        session_id,
+        &workspace_path,
+        &worktree_root,
+        "issue-flow-notify",
+        WorktreeOwner::Redwhisk,
+    );
+    write_file(&workspace_path, "tracked.txt", "worktree side\n");
+    git(&workspace_path, &["commit", "-am", "worktree side"]);
+    write_file(&repo_dir, "tracked.txt", "main side\n");
+    git(&repo_dir, &["commit", "-am", "main side"]);
+
+    // 注册活跃 session 句柄，捕获完成流程注入的提示。
+    let registry = AgentSessionRegistry::new();
+    let (handle, sent) = RecordingHandle::new();
+    registry.register(session_id, Arc::new(handle));
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: None,
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
+        )
+        .expect("merge blocked");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::Blocked);
+    let sent = sent.lock().expect("recorder lock");
+    assert_eq!(sent.len(), 1, "活跃 session 应收到一条冲突提示");
+    assert!(
+        sent[0].contains("代码合并冲突"),
+        "冲突提示应包含「代码合并冲突」，实际：{}",
+        sent[0]
+    );
+}
+
+#[test]
 fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-external-worktree-repo");
@@ -5036,4 +5119,82 @@ fn git_output(repo: &Path, args: &[&str]) -> String {
         .expect("utf8 output")
         .trim()
         .to_string()
+}
+
+/// 测试用结构化 session 句柄：记录所有 `send_message` 注入的文本，供断言完成流程
+/// 向 session 发送了预期提示（如 rebase 冲突提示）。其余方法空实现。
+struct RecordingHandle {
+    sent: Arc<Mutex<Vec<String>>>,
+}
+
+impl RecordingHandle {
+    fn new() -> (Self, Arc<Mutex<Vec<String>>>) {
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let handle = RecordingHandle {
+            sent: Arc::clone(&sent),
+        };
+        (handle, sent)
+    }
+}
+
+impl redwhisk_lib::agent::session_handle::AgentSessionHandle for RecordingHandle {
+    fn send_message(
+        &self,
+        text: String,
+        _attachments: Vec<redwhisk_lib::types::agent_session::AgentMessageAttachment>,
+    ) -> Result<(), redwhisk_lib::agent::session_handle::AgentSessionError> {
+        self.sent.lock().expect("recorder lock").push(text);
+        Ok(())
+    }
+    fn cancel_turn(&self) -> Result<(), redwhisk_lib::agent::session_handle::AgentSessionError> {
+        Ok(())
+    }
+    fn respond_permission(
+        &self,
+        _: &str,
+        _: redwhisk_lib::types::agent_session::AgentPermissionDecision,
+    ) -> Result<(), redwhisk_lib::agent::session_handle::AgentSessionError> {
+        Ok(())
+    }
+    fn set_model(
+        &self,
+        _: String,
+    ) -> Result<(), redwhisk_lib::agent::session_handle::AgentSessionError> {
+        Ok(())
+    }
+    fn set_effort(
+        &self,
+        _: Option<String>,
+    ) -> Result<(), redwhisk_lib::agent::session_handle::AgentSessionError> {
+        Ok(())
+    }
+    fn set_mode(
+        &self,
+        _: &str,
+    ) -> Result<(), redwhisk_lib::agent::session_handle::AgentSessionError> {
+        Ok(())
+    }
+    fn list_models(
+        &self,
+    ) -> Result<
+        Vec<redwhisk_lib::types::agent_session_stream::AgentModel>,
+        redwhisk_lib::agent::session_handle::AgentSessionError,
+    > {
+        Ok(Vec::new())
+    }
+    fn list_modes(&self) -> Vec<redwhisk_lib::types::agent_session_stream::AgentMode> {
+        Vec::new()
+    }
+    fn read_timeline(
+        &self,
+    ) -> Result<
+        Vec<redwhisk_lib::types::agent_session_stream::AgentTimelineItem>,
+        redwhisk_lib::agent::session_handle::AgentSessionError,
+    > {
+        Ok(Vec::new())
+    }
+    fn shutdown(&self) {}
+    fn thread_id(&self) -> Option<String> {
+        None
+    }
 }
