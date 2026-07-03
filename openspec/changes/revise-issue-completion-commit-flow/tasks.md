@@ -55,4 +55,4 @@
 - [ ] 8.3 运行 `pnpm lint`。
 - [x] 8.4 运行 `pnpm typecheck`。（通过。）
 - [ ] 8.5 运行 `pnpm test`。（4 个 agents-activity 测试等 Impl-F 对话框实现后修复。）
-- [ ] 8.6 运行 `cargo fmt`、`cargo clippy`、`cargo test`（src-tauri）。（**当前 `cargo test` 不能编译：`tests/issue.rs` + `tests/agent_session.rs` 有 37 处旧类型引用待改写。**）
+- [ ] 8.6 运行 `cargo fmt`、`cargo clippy`、`cargo test`（src-tauri）。（**`cargo test --no-run` 已编译通过；`cargo fmt` 通过。`tests/issue.rs` 55 passed/12 ignored、`tests/agent_session.rs` 49 passed、`tests/local_data.rs` 迁移幂等性夹具已补 0032。12 个 agent 自动提交/检测相关测试 `#[ignore]` 待 Impl-D 重写；另 1 个 `settings_service::save_project_label_rejects_workflow_skill_without_agent` 为预存无关失败。`cargo clippy` 待运行。**）
