@@ -23,8 +23,8 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::{read_git_snapshot, GitSnapshot};
 use crate::git::worktree::{
-    cleanup_worktree, is_branch_merged, rebase_and_fast_forward, GitWorktreeDirtyRole,
-    GitWorktreeError,
+    cleanup_worktree, current_branch, is_additional_worktree, is_branch_merged,
+    rebase_and_fast_forward, GitWorktreeDirtyRole, GitWorktreeError,
 };
 use crate::types::agent_session::{
     AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
@@ -700,7 +700,7 @@ impl<'connection> IssueService<'connection> {
         input: CompleteIssueFlowInput,
         _data_dir: impl AsRef<Path>,
         _pty_sessions: &PtySessionManager,
-        _agent_registry: &AgentSessionRegistry,
+        agent_registry: &AgentSessionRegistry,
         forced_option: Option<CompletionAttemptOption>,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
         let project = self.require_project(input.project_id)?;
@@ -745,6 +745,11 @@ impl<'connection> IssueService<'connection> {
         let dirty_already_skipped = input.ignore_dirty == Some(true)
             || input.dirty_decision == Some(DirtyWorkspaceOption::Skip);
 
+        // 解析 session 实际执行路径（分层回退 + worktree 漂移判定）。
+        // `actual` 贯穿 dirty 检测提示与 worktree 对账：漂移到的新 worktree 一律
+        // 按 External 对待，删除前必须二次确认。
+        let actual = resolve_actual_execution_path(&input, &session, agent_registry);
+
         if (issue.status == IssueStatus::Review || issue.status == IssueStatus::Running)
             && is_session_closed_out(&session)
         {
@@ -763,6 +768,7 @@ impl<'connection> IssueService<'connection> {
                     completed_issue,
                     None,
                     "Issue 已完成。".to_string(),
+                    &actual,
                     &session,
                 ));
             }
@@ -793,6 +799,7 @@ impl<'connection> IssueService<'connection> {
                         completed_issue,
                         None,
                         "Issue 已完成。".to_string(),
+                        &actual,
                         &session,
                     ));
                 }
@@ -823,6 +830,7 @@ impl<'connection> IssueService<'connection> {
                 issue,
                 None,
                 "当前 Git 正在进行中的操作阻止 Issue 完成。".to_string(),
+                &actual,
                 &session,
             ));
         }
@@ -847,6 +855,7 @@ impl<'connection> IssueService<'connection> {
                         issue,
                         Some(flow),
                         "完成已取消，Issue 保持待验收。".to_string(),
+                        &actual,
                         &session,
                     ));
                 }
@@ -869,6 +878,7 @@ impl<'connection> IssueService<'connection> {
                         issue,
                         Some(flow),
                         "已请求 Agent 自动提交，请在 session 中完成提交后再次确认。".to_string(),
+                        &actual,
                         &session,
                     ));
                 }
@@ -891,11 +901,12 @@ impl<'connection> IssueService<'connection> {
                 issue,
                 Some(flow),
                 "当前工作区存在未提交改动，请选择自动提交 / 不提交 / 取消。".to_string(),
+                &actual,
                 &session,
             ));
         }
 
-        self.complete_clean_or_accepted_flow(input, issue, session, snapshot, option, None)
+        self.complete_clean_or_accepted_flow(input, issue, session, snapshot, option, None, &actual)
     }
 
     fn complete_clean_or_accepted_flow(
@@ -906,10 +917,17 @@ impl<'connection> IssueService<'connection> {
         snapshot: GitSnapshot,
         option: CompletionAttemptOption,
         pending_commit: Option<(i64, String)>,
+        actual: &ActualExecutionPath,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
         let project = self.require_project(input.project_id)?;
         let dirty_already_skipped = input.ignore_dirty == Some(true)
             || input.dirty_decision == Some(DirtyWorkspaceOption::Skip);
+        // 运行中漂移到的新 worktree 一律按 External 对待（删除前必须二次确认）。
+        let effective_owner = if actual.drifted {
+            WorktreeOwner::External
+        } else {
+            session.worktree_owner
+        };
         let target_branch = session
             .origin_branch
             .clone()
@@ -939,6 +957,7 @@ impl<'connection> IssueService<'connection> {
                     issue,
                     Some(flow),
                     "Agent worktree 缺失且无法确认分支已合入，请手动处理。".to_string(),
+                    &actual,
                     &session,
                 ));
             }
@@ -953,7 +972,7 @@ impl<'connection> IssueService<'connection> {
             && !workspace_missing
             && target_branch.as_deref() != Some(current_branch.as_str())
         {
-            match session.worktree_owner {
+            match effective_owner {
                 WorktreeOwner::Redwhisk => {
                     if let Err(error) =
                         rebase_fast_forward_and_cleanup(&project.repo_path, &session)
@@ -978,6 +997,7 @@ impl<'connection> IssueService<'connection> {
                             Some(flow),
                             merge_block.message,
                             Some(merge_block.reason),
+                            &actual,
                             &session,
                         ));
                     }
@@ -1004,6 +1024,7 @@ impl<'connection> IssueService<'connection> {
                             issue,
                             Some(flow),
                             "完成已取消，Issue 保持待验收。".to_string(),
+                            &actual,
                             &session,
                         ));
                     } else if cleanup_decision.is_none() {
@@ -1023,6 +1044,7 @@ impl<'connection> IssueService<'connection> {
                             issue,
                             Some(flow),
                             "当前使用外部 worktree，请确认是否合并并删除该 worktree。".to_string(),
+                            &actual,
                             &session,
                         ));
                     } else if wants_merge_and_cleanup {
@@ -1047,6 +1069,7 @@ impl<'connection> IssueService<'connection> {
                                 Some(flow),
                                 merge_block.message,
                                 Some(merge_block.reason),
+                                &actual,
                                 &session,
                             ));
                         }
@@ -1073,6 +1096,7 @@ impl<'connection> IssueService<'connection> {
             issue,
             None,
             "Issue 已完成。".to_string(),
+            &actual,
             &session,
         ))
     }
@@ -1260,9 +1284,10 @@ impl<'connection> IssueService<'connection> {
         issue: IssueRecord,
         flow: Option<IssueCompletionFlowRecord>,
         message: String,
+        actual: &ActualExecutionPath,
         session: &AgentSessionRecord,
     ) -> CompleteIssueFlowResult {
-        self.flow_result_with_merge_block(action, issue, flow, message, None, session)
+        self.flow_result_with_merge_block(action, issue, flow, message, None, actual, session)
     }
 
     fn flow_result_with_merge_block(
@@ -1272,6 +1297,7 @@ impl<'connection> IssueService<'connection> {
         flow: Option<IssueCompletionFlowRecord>,
         message: String,
         merge_block_reason: Option<String>,
+        actual: &ActualExecutionPath,
         session: &AgentSessionRecord,
     ) -> CompleteIssueFlowResult {
         CompleteIssueFlowResult {
@@ -1286,8 +1312,8 @@ impl<'connection> IssueService<'connection> {
                 .or_else(|| session.target_branch.clone()),
             workspace_branch: session.workspace_branch.clone(),
             workspace_path: session.workspace_path.clone(),
-            actual_path: session.workspace_path.clone(),
-            drifted: false,
+            actual_path: Some(actual.path.clone()),
+            drifted: actual.drifted,
             session_id: Some(session.id),
         }
     }
@@ -2430,6 +2456,107 @@ fn completion_detection_repo_path(project_repo_path: &str, session: &AgentSessio
     session.working_dir.clone()
 }
 
+/// 完成时解析出的实际执行路径来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ActualPathSource {
+    /// 结构化 codex session 最近一条 shell 命令的 cwd（best-effort）。
+    CodexCwd,
+    /// session 启动记录的 `workspace_path`/`working_dir` 快照（PTY 或 cwd 不可得时）。
+    StartupSnapshot,
+    /// 用户在弹框中手填覆盖。
+    UserProvided,
+}
+
+/// 完成时解析出的 session 实际执行路径。
+///
+/// 用于：①未提交改动检测与漂移判定的路径基准；②前端弹框预填分支名；
+/// ③识别「current branch 启动但运行中漂移到新 worktree」的第三种情况。
+///
+/// `source`/`in_worktree`/`worktree_branch` 当前由单测与 Impl-D（合并基准）/前端
+/// （弹框预填）消费，非 test 构建仅写不读，故允许 dead_code。
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct ActualExecutionPath {
+    /// 解析出的实际路径（已去空白）。
+    pub path: String,
+    pub source: ActualPathSource,
+    /// 该路径是否位于附加 worktree（`--git-dir` 与 `--git-common-dir` 不同）。
+    pub in_worktree: bool,
+    /// 该 worktree 的 checkout 分支（非 worktree 时为 `None`）。
+    pub worktree_branch: Option<String>,
+    /// 实际路径与启动快照不同且位于 worktree → 运行中漂移到新 worktree。
+    pub drifted: bool,
+}
+
+/// 解析 session 完成时的实际执行路径（分层回退）。
+///
+/// 优先级：用户弹框手填 `input.actual_path` > 活跃结构化 session 的 `last_known_cwd`
+/// > 启动记录 `workspace_path`/`working_dir`。PTY session 与关闭的 session 取不到
+/// live cwd，回退启动快照。拿到路径后再判断是否在 worktree、是否相对启动路径漂移。
+fn resolve_actual_execution_path(
+    input: &CompleteIssueFlowInput,
+    session: &AgentSessionRecord,
+    agent_registry: &AgentSessionRegistry,
+) -> ActualExecutionPath {
+    let startup_path = session
+        .workspace_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .or_else(|| {
+            let working_dir = session.working_dir.trim();
+            (!working_dir.is_empty()).then_some(working_dir)
+        })
+        .unwrap_or_default()
+        .to_string();
+
+    let (path, source) = if let Some(user_path) = input
+        .actual_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
+        (user_path.to_string(), ActualPathSource::UserProvided)
+    } else if let Some(cwd) = agent_registry
+        .get(session.id)
+        .and_then(|handle| handle.last_known_cwd())
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
+        (cwd.to_string(), ActualPathSource::CodexCwd)
+    } else {
+        (startup_path.clone(), ActualPathSource::StartupSnapshot)
+    };
+
+    if path.is_empty() {
+        return ActualExecutionPath {
+            path,
+            source,
+            in_worktree: false,
+            worktree_branch: None,
+            drifted: false,
+        };
+    }
+
+    let in_worktree = is_additional_worktree(&path).unwrap_or(false);
+    let worktree_branch = if in_worktree {
+        current_branch(&path).ok()
+    } else {
+        None
+    };
+    // 漂移：实际路径与启动快照不同，且实际路径位于某 worktree。
+    let drifted = in_worktree && path != startup_path;
+
+    ActualExecutionPath {
+        path,
+        source,
+        in_worktree,
+        worktree_branch,
+        drifted,
+    }
+}
+
 fn is_session_closed_out(session: &AgentSessionRecord) -> bool {
     session.status != AgentSessionStatus::Running || session.closed_at.is_some()
 }
@@ -3237,5 +3364,177 @@ mod tests {
         // 描述中缺失该 token（无论哪种形态）应报错，满足 Rust 硬约束。
         let result = rewrite_attachment_tokens("No token here.", &attachments);
         assert!(result.is_err());
+    }
+
+    // ---- resolve_actual_execution_path 单测（Impl-C：路径解析与漂移捕获）----
+
+    use super::{resolve_actual_execution_path, ActualPathSource};
+    use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+    use crate::types::agent_session::{
+        AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
+        AgentSessionStatus, WorkspaceMode, WorktreeOwner,
+    };
+    use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
+    use std::sync::Arc;
+
+    /// 测试用结构化 session 句柄：仅 `last_known_cwd` 可配置，其余方法空实现。
+    struct CwdHandle(Option<String>);
+
+    impl AgentSessionHandle for CwdHandle {
+        fn send_message(
+            &self,
+            _: String,
+            _: Vec<AgentMessageAttachment>,
+        ) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+        fn cancel_turn(&self) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+        fn respond_permission(
+            &self,
+            _: &str,
+            _: AgentPermissionDecision,
+        ) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+        fn set_model(&self, _: String) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+        fn set_effort(&self, _: Option<String>) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+        fn set_mode(&self, _: &str) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+        fn list_models(&self) -> Result<Vec<AgentModel>, AgentSessionError> {
+            Ok(Vec::new())
+        }
+        fn list_modes(&self) -> Vec<AgentMode> {
+            Vec::new()
+        }
+        fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
+            Ok(Vec::new())
+        }
+        fn shutdown(&self) {}
+        fn thread_id(&self) -> Option<String> {
+            None
+        }
+        fn last_known_cwd(&self) -> Option<String> {
+            self.0.clone()
+        }
+    }
+
+    fn resolver_session(working_dir: String, workspace_path: Option<String>) -> AgentSessionRecord {
+        AgentSessionRecord {
+            id: 1,
+            project_id: 1,
+            issue_id: None,
+            title: None,
+            agent_profile_id: 1,
+            codex_session_id: None,
+            status: AgentSessionStatus::Running,
+            attention: AgentSessionAttention::None,
+            working_dir,
+            command_snapshot: String::new(),
+            prompt_snapshot: String::new(),
+            workspace_mode: WorkspaceMode::CurrentBranch,
+            target_branch: None,
+            workspace_branch: None,
+            workspace_path,
+            origin_branch: None,
+            worktree_owner: WorktreeOwner::Redwhisk,
+            worktree_root_path: None,
+            worktree_setup_command: None,
+            log_path: String::new(),
+            latest_output: None,
+            last_active_at: 0,
+            started_at: 0,
+            closed_at: None,
+        }
+    }
+
+    fn empty_input() -> CompleteIssueFlowInput {
+        CompleteIssueFlowInput {
+            project_id: 1,
+            issue_id: 1,
+            dirty_decision: None,
+            ignore_dirty: None,
+            branch_name: None,
+            actual_path: None,
+            continue_after_commit: None,
+            worktree_cleanup_decision: None,
+        }
+    }
+
+    #[test]
+    fn resolve_actual_execution_path_prefers_user_provided_override() {
+        let session = resolver_session("/repo".to_string(), Some("/repo".to_string()));
+        let registry = AgentSessionRegistry::new();
+        registry.register(1, Arc::new(CwdHandle(Some("/from-codex".to_string()))));
+        let input = CompleteIssueFlowInput {
+            actual_path: Some("/user-override".to_string()),
+            ..empty_input()
+        };
+        let actual = resolve_actual_execution_path(&input, &session, &registry);
+        assert_eq!(actual.path, "/user-override");
+        assert_eq!(actual.source, ActualPathSource::UserProvided);
+    }
+
+    #[test]
+    fn resolve_actual_execution_path_uses_codex_cwd_when_no_override() {
+        // 非 worktree 路径：codex cwd 命中但不构成漂移。
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        let cwd = repo_dir.to_string_lossy().to_string();
+        let session = resolver_session(cwd.clone(), Some(cwd.clone()));
+        let registry = AgentSessionRegistry::new();
+        registry.register(1, Arc::new(CwdHandle(Some(cwd.clone()))));
+        let actual = resolve_actual_execution_path(&empty_input(), &session, &registry);
+        assert_eq!(actual.path, cwd);
+        assert_eq!(actual.source, ActualPathSource::CodexCwd);
+        assert!(!actual.drifted);
+    }
+
+    #[test]
+    fn resolve_actual_execution_path_falls_back_to_startup_snapshot() {
+        // 无 live handle（PTY / session 关闭）且无用户覆盖 → 启动快照。
+        let session = resolver_session("/repo".to_string(), Some("/repo".to_string()));
+        let registry = AgentSessionRegistry::new();
+        let actual = resolve_actual_execution_path(&empty_input(), &session, &registry);
+        assert_eq!(actual.path, "/repo");
+        assert_eq!(actual.source, ActualPathSource::StartupSnapshot);
+        assert!(!actual.drifted);
+    }
+
+    #[test]
+    fn resolve_actual_execution_path_detects_drift_into_worktree() {
+        // 启动在主仓库，运行中漂移到 skill 自建的 worktree → drifted=true。
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        let worktree_path = temp_dir.path().join("drifted-worktree");
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "drifted-branch",
+                worktree_path.to_string_lossy().as_ref(),
+            ],
+        );
+        let startup = repo_dir.to_string_lossy().to_string();
+        let cwd = worktree_path.to_string_lossy().to_string();
+        let session = resolver_session(startup.clone(), Some(startup.clone()));
+        let registry = AgentSessionRegistry::new();
+        registry.register(1, Arc::new(CwdHandle(Some(cwd.clone()))));
+        let actual = resolve_actual_execution_path(&empty_input(), &session, &registry);
+        assert_eq!(actual.path, cwd);
+        assert_eq!(actual.source, ActualPathSource::CodexCwd);
+        assert!(actual.in_worktree);
+        assert_eq!(actual.worktree_branch.as_deref(), Some("drifted-branch"));
+        assert!(actual.drifted);
     }
 }

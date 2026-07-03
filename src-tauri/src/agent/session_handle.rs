@@ -102,4 +102,12 @@ pub trait AgentSessionHandle: Send + Sync {
 
     /// 当前 thread 标识（codex threadId 等）；尚未建立时返回 `None`。
     fn thread_id(&self) -> Option<String>;
+
+    /// 最近已知 cwd（结构化 session 来自最近 shell 命令所在目录，best-effort）。
+    ///
+    /// PTY session 无法上报 cwd，默认返回 `None`，调用方回退到启动快照。
+    /// 完成流程据此识别运行中漂移到新 worktree 的情况。
+    fn last_known_cwd(&self) -> Option<String> {
+        None
+    }
 }
