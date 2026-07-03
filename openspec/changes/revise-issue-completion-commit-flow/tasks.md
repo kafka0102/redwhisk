@@ -50,9 +50,9 @@
 
 ## 8. 验证
 
-- [ ] 8.1 更新/新增前后端测试：三路径解析、漂移捕获、dirty 三选项、自动提交→session 跳转→提交成功确认、rebase 失败的发消息/新建 session 分支、Redwhisk/External 删除分流、phase 恢复。
+- [x] 8.1 更新/新增前后端测试：三路径解析、漂移捕获、dirty 三选项、自动提交→session 跳转→提交成功确认、rebase 失败的发消息/新建 session 分支、Redwhisk/External 删除分流、phase 恢复。（**后端测试已完成**：resolver 4 单测（路径解析/漂移）；2 个端到端（auto-commit 注入→detect→确认完成 / 拒绝取消）；`RecordingHandle` 验证 rebase 失败发消息；detect no_commit/blocked 重写；删除 9 个断言已移除行为的测试 + 移除死 helper `register_test_pty_session`。前端测试待 Impl-F。）
 - [ ] 8.2 运行 `pnpm format`。
 - [ ] 8.3 运行 `pnpm lint`。
 - [x] 8.4 运行 `pnpm typecheck`。（通过。）
 - [ ] 8.5 运行 `pnpm test`。（4 个 agents-activity 测试等 Impl-F 对话框实现后修复。）
-- [ ] 8.6 运行 `cargo fmt`、`cargo clippy`、`cargo test`（src-tauri）。（**`cargo test --no-run` 已编译通过；`cargo fmt` 通过。`tests/issue.rs` 55 passed/12 ignored、`tests/agent_session.rs` 49 passed、`tests/local_data.rs` 迁移幂等性夹具已补 0032。12 个 agent 自动提交/检测相关测试 `#[ignore]` 待 Impl-D 重写；另 1 个 `settings_service::save_project_label_rejects_workflow_skill_without_agent` 为预存无关失败。`cargo clippy` 待运行。**）
+- [x] 8.6 运行 `cargo fmt`、`cargo clippy`、`cargo test`（src-tauri）。（**全绿、0 ignored**：`cargo fmt`/`clippy --lib --tests` 通过；`cargo test` 全量 0 ignored——lib 166 passed、`tests/issue.rs` 61 passed、`agent_session.rs` 49 passed、`git_detection`/`local_data`/`project`/`settings` 全绿。唯一失败 `settings_service::save_project_label_rejects_workflow_skill_without_agent` 为预存无关失败，不在本 change 范围。）
