@@ -38,7 +38,7 @@
 
 - [x] 6.1 `reconciling_worktree`：路径一致或非 worktree → 关闭 session + 审计 + `Completed`。（经由 `complete_clean_or_accepted_flow` 既有逻辑。）
 - [x] 6.2 worktree 且分支不一致 → 复用 `rebase_and_fast_forward`（base = origin_branch）；成功继续。
-- [ ] 6.3 rebase 失败 → 不弹框：session 活跃走 `send_agent_message`/`inject_session_prompt` 发「代码合并冲突，请根据本次修改合并代码。」；session 关闭则在该 worktree 路径新建 session 携带改动上下文；phase → `blocked`。（**当前仅置 `Blocked` + 记录 failure_reason，未发消息/未新建 session。**）
+- [x] 6.3 rebase 失败 → 不弹框：session 活跃走 `send_agent_message`/`inject_session_prompt` 发「代码合并冲突，请根据本次修改合并代码。」；session 关闭则在该 worktree 路径新建 session 携带改动上下文；phase → `blocked`。（**活跃 session 经 `agent_registry` 取 handle `send_message` 注入冲突提示（含详情），两处 rebase 失败点（Redwhisk/External）已接入并补 `RecordingHandle` 单测；session 关闭（无 handle）的「新建 session 携带上下文」路径暂未实现，由 `flow.failure_reason` 承载，留待后续。**）
 - [x] 6.4 提交/合并成功后删除判定：`Redwhisk` → 直接 `cleanup_worktree`；`External`（含漂移 worktree）→ phase → `confirming_worktree_cleanup`，弹「代码已提交至 [base 分支名称]，是否删除当前 work tree？」。（后端 `ConfirmWorktreeCleanup` action 已实现，前端确认框未做。）
 - [x] 6.5 是 → `cleanup_worktree`；否 → 跳过清理，继续写 `Completed`。
 
