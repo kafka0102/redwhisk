@@ -3829,6 +3829,197 @@ fn complete_issue_flow_rebase_conflict_notifies_active_session_with_conflict_pro
 }
 
 #[test]
+fn complete_issue_flow_auto_commit_injects_detects_and_confirms_completion() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-auto-full-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty agent\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-auto-full-repo",
+        &repo_dir,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "auto full flow",
+        "running",
+    );
+
+    let registry = AgentSessionRegistry::new();
+    let (handle, sent) = RecordingHandle::new();
+    registry.register(session_id, Arc::new(handle));
+
+    // 1) dirty + AutoCommit → 注入 commit 指令，phase AutoCommitting。
+    let wait = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: Some(DirtyWorkspaceOption::AutoCommit),
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
+        )
+        .expect("auto dirty waits");
+    assert_eq!(wait.action, CompleteIssueFlowAction::WaitingAutoCommit);
+    let wait_flow = wait.flow.expect("flow");
+    assert_eq!(wait_flow.phase, IssueCompletionPhase::AutoCommitting);
+    let attempts = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts");
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].option.as_str(), "complete_manual");
+    assert_eq!(attempts[0].result.as_str(), "prompt_sent");
+    let head_before = attempts[0].head_before.clone();
+    let sent = sent.lock().expect("recorder lock");
+    assert_eq!(sent.len(), 1, "应向 session 注入 commit 指令");
+    assert!(
+        sent[0].contains("commit"),
+        "注入文本应为 commit 指令，实际：{}",
+        sent[0]
+    );
+    drop(sent);
+
+    // 2) 模拟 agent 提交 → detect 检测到新 commit，phase ConfirmingContinueAfterCommit。
+    git(&repo_dir, &["commit", "-am", "agent completion"]);
+    let detected = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect");
+    assert_eq!(
+        detected.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::CommitDetected
+    );
+    let detect_flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .expect("flow exists");
+    assert_eq!(
+        detect_flow.phase,
+        IssueCompletionPhase::ConfirmingContinueAfterCommit
+    );
+    let completed_attempt = CompletionAttemptRepository::new(&database.connection)
+        .list_by_issue_id(issue.id)
+        .expect("attempts")[0]
+        .clone();
+    assert_eq!(completed_attempt.result.as_str(), "completed");
+    assert_ne!(completed_attempt.head_after, head_before);
+
+    // 3) 用户确认继续 → Completed。
+    let confirmed = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: None,
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: Some(true),
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
+        )
+        .expect("confirm completes");
+    assert_eq!(confirmed.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(confirmed.issue.status, IssueStatus::Completed);
+}
+
+#[test]
+fn complete_issue_flow_auto_commit_confirm_false_cancels() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-auto-cancel-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    write_file(&repo_dir, "tracked.txt", "dirty agent\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-auto-cancel-repo",
+        &repo_dir,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "auto cancel flow",
+        "running",
+    );
+    let registry = AgentSessionRegistry::new();
+    let (handle, _sent) = RecordingHandle::new();
+    registry.register(session_id, Arc::new(handle));
+
+    // 推进到 ConfirmingContinueAfterCommit。
+    service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                dirty_decision: Some(DirtyWorkspaceOption::AutoCommit),
+                ignore_dirty: None,
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
+        )
+        .expect("wait");
+    git(&repo_dir, &["commit", "-am", "agent completion"]);
+    service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect");
+
+    // 用户拒绝继续 → Cancelled，Issue 保持待验收。
+    let cancelled = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: None,
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: Some(false),
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
+        )
+        .expect("cancel");
+    assert_eq!(cancelled.action, CompleteIssueFlowAction::Cancelled);
+    assert_eq!(cancelled.issue.status, IssueStatus::Review);
+}
+
+#[test]
 fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-external-worktree-repo");
