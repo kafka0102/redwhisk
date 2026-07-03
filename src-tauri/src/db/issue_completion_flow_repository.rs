@@ -77,9 +77,7 @@ impl<'connection> IssueCompletionFlowRepository<'connection> {
                 bool_to_int(record_input.ignore_dirty),
                 record_input.dirty_decision.map(|value| value.as_str()),
                 record_input.continue_after_commit.map(bool_to_int),
-                record_input
-                    .worktree_cleanup_decision
-                    .map(bool_to_int),
+                record_input.worktree_cleanup_decision.map(bool_to_int),
                 record_input.base_branch,
                 record_input.workspace_branch,
                 record_input.workspace_path,
@@ -141,14 +139,8 @@ fn issue_completion_flow_from_row(
             .get::<_, Option<String>>(5)?
             .map(|value| dirty_workspace_option_from_str(&value))
             .transpose()?,
-        continue_after_commit: row
-            .get::<_, Option<i64>>(6)?
-            .map(int_to_bool)
-            .transpose()?,
-        worktree_cleanup_decision: row
-            .get::<_, Option<i64>>(7)?
-            .map(int_to_bool)
-            .transpose()?,
+        continue_after_commit: row.get::<_, Option<i64>>(6)?.map(int_to_bool).transpose()?,
+        worktree_cleanup_decision: row.get::<_, Option<i64>>(7)?.map(int_to_bool).transpose()?,
         base_branch: row.get(8)?,
         workspace_branch: row.get(9)?,
         workspace_path: row.get(10)?,

@@ -20,7 +20,8 @@ impl<'connection> SavedAgentSkillRepository<'connection> {
     ) -> rusqlite::Result<Vec<SavedAgentSkillRow>> {
         let mut sql = "SELECT id, name, scope, project_id, skill_paths_json, del
                        FROM saved_agent_skills
-                       WHERE del = 0".to_string();
+                       WHERE del = 0"
+            .to_string();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         let mut param_idx = 1;
 
@@ -32,7 +33,10 @@ impl<'connection> SavedAgentSkillRepository<'connection> {
 
         if let Some(project_id) = project_id_filter {
             if scope_filter.is_none() || scope_filter == Some(&AgentSkillScope::Project) {
-                sql.push_str(&format!(" AND (scope != 'project' OR project_id = ?{})", param_idx));
+                sql.push_str(&format!(
+                    " AND (scope != 'project' OR project_id = ?{})",
+                    param_idx
+                ));
                 params_vec.push(Box::new(project_id));
             }
         }
@@ -40,7 +44,10 @@ impl<'connection> SavedAgentSkillRepository<'connection> {
         sql.push_str(" ORDER BY id ASC");
 
         let mut statement = self.connection.prepare(&sql)?;
-        let params_slice = params_vec.iter().map(|p| p.as_ref() as &dyn rusqlite::ToSql).collect::<Vec<_>>();
+        let params_slice = params_vec
+            .iter()
+            .map(|p| p.as_ref() as &dyn rusqlite::ToSql)
+            .collect::<Vec<_>>();
         let rows = statement
             .query_map(params_slice.as_slice(), saved_agent_skill_from_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -122,13 +129,7 @@ impl<'connection> SavedAgentSkillRepository<'connection> {
                          del = 0,
                          updated_at = strftime('%s', 'now') * 1000
                      WHERE id = ?5",
-                    params![
-                        name,
-                        scope_str,
-                        project_id,
-                        skill_paths_json,
-                        id
-                    ],
+                    params![name, scope_str, project_id, skill_paths_json, id],
                 )?;
                 self.find_skill_by_id(id)?
                     .ok_or(rusqlite::Error::QueryReturnedNoRows)
@@ -178,12 +179,10 @@ pub struct SavedAgentSkillRow {
 
 fn saved_agent_skill_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedAgentSkillRow> {
     let skill_paths_json: String = row.get(4)?;
-    let skill_paths: Vec<SavedAgentSkillPath> = serde_json::from_str(&skill_paths_json)
-        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
-            4,
-            rusqlite::types::Type::Text,
-            Box::new(e)
-        ))?;
+    let skill_paths: Vec<SavedAgentSkillPath> =
+        serde_json::from_str(&skill_paths_json).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e))
+        })?;
 
     Ok(SavedAgentSkillRow {
         id: row.get(0)?,

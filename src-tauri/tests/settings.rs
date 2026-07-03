@@ -11,9 +11,9 @@ use redwhisk_lib::db::saved_agent_skill_repository::SavedAgentSkillRepository;
 use redwhisk_lib::types::agent_profile::{
     AgentScope, AgentType, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
+use redwhisk_lib::types::agent_skill::AgentSkillScope;
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project_label::{ProjectLabelScope, SaveProjectLabelInput};
-use redwhisk_lib::types::agent_skill::AgentSkillScope;
 use redwhisk_lib::types::saved_agent_skill::{
     ListSavedAgentSkillsInput, SaveSavedAgentSkillInput, SavedAgentSkillPath,
 };

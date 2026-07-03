@@ -98,7 +98,8 @@ const DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL: &str =
 const DROP_COMPLETION_POLICY_MIGRATION_VERSION: &str = "0031_drop_completion_policy";
 const DROP_COMPLETION_POLICY_MIGRATION_SQL: &str =
     include_str!("../../migrations/0031_drop_completion_policy.sql");
-const ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_VERSION: &str = "0032_issue_completion_flows_unified";
+const ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_VERSION: &str =
+    "0032_issue_completion_flows_unified";
 const ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_SQL: &str =
     include_str!("../../migrations/0032_issue_completion_flows_unified.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"

@@ -156,10 +156,7 @@ fn repository_persists_project_terminal_config_lifecycle() {
 
     let repository = ProjectRepository::new(&database.connection);
     let project = repository
-        .insert(
-            "sample-repo",
-            "/tmp/sample-repo",
-        )
+        .insert("sample-repo", "/tmp/sample-repo")
         .expect("insert project");
 
     let inserted = repository
@@ -223,16 +220,10 @@ fn repository_rejects_project_terminal_config_update_from_other_project() {
 
     let repository = ProjectRepository::new(&database.connection);
     let first_project = repository
-        .insert(
-            "first-repo",
-            "/tmp/first-repo",
-        )
+        .insert("first-repo", "/tmp/first-repo")
         .expect("insert first project");
     let second_project = repository
-        .insert(
-            "second-repo",
-            "/tmp/second-repo",
-        )
+        .insert("second-repo", "/tmp/second-repo")
         .expect("insert second project");
     let inserted = repository
         .insert_project_terminal_config(first_project.id, "API", "/tmp/first-repo", "pnpm dev")
@@ -271,16 +262,10 @@ fn repository_rejects_project_terminal_config_delete_from_other_project() {
 
     let repository = ProjectRepository::new(&database.connection);
     let first_project = repository
-        .insert(
-            "first-repo",
-            "/tmp/first-repo",
-        )
+        .insert("first-repo", "/tmp/first-repo")
         .expect("insert first project");
     let second_project = repository
-        .insert(
-            "second-repo",
-            "/tmp/second-repo",
-        )
+        .insert("second-repo", "/tmp/second-repo")
         .expect("insert second project");
     let inserted = repository
         .insert_project_terminal_config(first_project.id, "API", "/tmp/first-repo", "pnpm dev")
@@ -655,16 +640,10 @@ fn repository_insert_is_idempotent_for_existing_repo_path() {
     let repository = ProjectRepository::new(&database.connection);
 
     let first_project = repository
-        .insert_or_get_existing(
-            "sample-repo",
-            "/tmp/sample-repo",
-        )
+        .insert_or_get_existing("sample-repo", "/tmp/sample-repo")
         .expect("first insert");
     let second_project = repository
-        .insert_or_get_existing(
-            "sample-repo",
-            "/tmp/sample-repo",
-        )
+        .insert_or_get_existing("sample-repo", "/tmp/sample-repo")
         .expect("second insert");
 
     assert_eq!(first_project.id, second_project.id);
@@ -688,16 +667,10 @@ fn repository_generates_unique_project_ids_for_multiple_repos() {
     let repository = ProjectRepository::new(&database.connection);
 
     let first_project = repository
-        .insert_or_get_existing(
-            "first-repo",
-            "/tmp/first-repo",
-        )
+        .insert_or_get_existing("first-repo", "/tmp/first-repo")
         .expect("first insert");
     let second_project = repository
-        .insert_or_get_existing(
-            "second-repo",
-            "/tmp/second-repo",
-        )
+        .insert_or_get_existing("second-repo", "/tmp/second-repo")
         .expect("second insert");
 
     assert_ne!(first_project.id, second_project.id);
@@ -719,20 +692,14 @@ fn list_projects_returns_all_projects_with_path_status_in_recent_order() {
     let missing_repo = temp_dir.path().join("missing-repo");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert(
-            "available-repo",
-            available_repo.to_str().unwrap(),
-        )
+        .insert("available-repo", available_repo.to_str().unwrap())
         .expect("insert available project");
     let old_project = repository
         .find_by_repo_path(available_repo.to_str().unwrap())
         .expect("query available project")
         .expect("available project");
     repository
-        .insert(
-            "missing-repo",
-            missing_repo.to_str().unwrap(),
-        )
+        .insert("missing-repo", missing_repo.to_str().unwrap())
         .expect("insert missing project");
     let new_project = repository
         .find_by_repo_path(missing_repo.to_str().unwrap())
@@ -779,10 +746,7 @@ fn open_project_updates_last_opened_at_for_available_project() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert(
-            "sample-repo",
-            repo_dir.to_str().unwrap(),
-        )
+        .insert("sample-repo", repo_dir.to_str().unwrap())
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(repo_dir.to_str().unwrap())
@@ -822,10 +786,7 @@ fn open_project_restores_saved_project_terminals_without_duplicate_launches() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     let stored_project = repository
-        .insert(
-            "sample-repo",
-            repo_dir.to_str().unwrap(),
-        )
+        .insert("sample-repo", repo_dir.to_str().unwrap())
         .expect("insert project");
     let terminal_service =
         ProjectTerminalService::new(ProjectRepository::new(&database.connection));
@@ -937,10 +898,7 @@ fn open_project_ignores_individual_terminal_restore_failures() {
     fs::create_dir_all(broken_repo.join(".git")).expect("broken git dir");
     let repository = ProjectRepository::new(&database.connection);
     let stored_project = repository
-        .insert(
-            "healthy-repo",
-            healthy_repo.to_str().unwrap(),
-        )
+        .insert("healthy-repo", healthy_repo.to_str().unwrap())
         .expect("insert project");
     repository
         .insert_project_terminal_config(
@@ -1008,10 +966,7 @@ fn open_project_rejects_missing_path_without_deleting_or_updating_project() {
     let missing_repo = temp_dir.path().join("missing-repo");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert(
-            "missing-repo",
-            missing_repo.to_str().unwrap(),
-        )
+        .insert("missing-repo", missing_repo.to_str().unwrap())
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(missing_repo.to_str().unwrap())
@@ -1053,10 +1008,7 @@ fn prepare_project_window_open_validates_target_without_updating_last_opened_at(
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert(
-            "target-repo",
-            repo_dir.to_str().unwrap(),
-        )
+        .insert("target-repo", repo_dir.to_str().unwrap())
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(repo_dir.to_str().unwrap())
@@ -1094,10 +1046,7 @@ fn record_project_opened_updates_last_opened_at_after_window_success() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     repository
-        .insert(
-            "target-repo",
-            repo_dir.to_str().unwrap(),
-        )
+        .insert("target-repo", repo_dir.to_str().unwrap())
         .expect("insert project");
     let stored_project = repository
         .find_by_repo_path(repo_dir.to_str().unwrap())
@@ -1134,10 +1083,7 @@ fn update_project_settings_persists_project_name_and_repo_path() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     let stored_project = repository
-        .insert(
-            "sample-repo",
-            repo_dir.to_str().unwrap(),
-        )
+        .insert("sample-repo", repo_dir.to_str().unwrap())
         .expect("insert project");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
 
@@ -1175,10 +1121,7 @@ fn update_project_settings_rejects_blank_name() {
     fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
     let repository = ProjectRepository::new(&database.connection);
     let stored_project = repository
-        .insert(
-            "sample-repo",
-            repo_dir.to_str().unwrap(),
-        )
+        .insert("sample-repo", repo_dir.to_str().unwrap())
         .expect("insert project");
     let service = ProjectService::new(ProjectRepository::new(&database.connection));
 
