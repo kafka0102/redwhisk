@@ -286,3 +286,36 @@ OpenSpec / OneSpec：
 - [ ] 12.5 `rtk proxy openspec validate revise-issue-completion-commit-flow --strict`。
 
 **Verification:** 全部验证通过；OpenSpec 校验通过。
+
+---
+
+## 续作须知（resume — 下一会话起点）
+
+**当前 worktree 分支**：`worktree-revise-issue-completion-commit-flow`
+**最后两个 commit**：
+- `9138fa7` refactor(completion): 移除 completion_policy 字段（前后端+迁移0031）— Impl-A/E 完成
+- `fda3f49` feat(completion): 统一完成流程状态机骨架（Impl-B + 最小 Impl-D）— lib 编译通过
+
+**编译状态**：
+- `cargo build`（lib）✅ 通过
+- `pnpm typecheck` ✅ 通过
+- `cargo test` ❌ 不能编译：`tests/issue.rs` + `tests/agent_session.rs` 37 处旧类型引用
+- `pnpm test` ❌ 4 个 agents-activity 测试失败（等 Impl-F）
+
+**下一步严格按序**：
+1. **让 `cargo test --no-run` 编译通过**：改写 `src-tauri/tests/issue.rs` 与 `src-tauri/tests/agent_session.rs`：
+   - `CompleteIssueFlowInput` 字面量：删 `external_worktree_decision`，补 `dirty_decision/branch_name/actual_path/continue_after_commit/worktree_cleanup_decision`（多数 None）。
+   - `IssueCompletionFlowRecordInput` 字面量：删 `external_worktree_decision`，补 `dirty_decision/continue_after_commit/worktree_cleanup_decision/actual_path`。
+   - 删 import `IssueCompletionExternalWorktreeDecision`。
+   - 旧 action/phase 断言改名：`ManualDirtyPrompt`→`PromptDirtyDecision`、`WaitingAgentCommit`→`WaitingAutoCommit`、`ConfirmExternalWorktree`→`ConfirmWorktreeCleanup`、`AgentMergeBlocked`/`GitOperationBlocked`→`Blocked`、phase `CheckingDirty`/`ManualDirtyBlocked`/`ConfirmingExternalWorktree`→新枚举。
+   - `IssueCompletionFlowRecord.external_worktree_decision` 字段访问 → 删。
+   - `tests/agent_session.rs:160` INSERT 列表里的 `external_worktree_decision` 列 → 删（flows 表已重建无此列）。
+   - 断言旧行为的测试（如 `WaitingAgentCommit`、`CheckingDirty` 语义）按新状态机重写断言或临时 `#[ignore]` + TODO。
+2. **Impl-C**：codex `SessionState.last_known_cwd`（`codex_app_server/session.rs`：`build_item_event`/`read_timeline` 抽 `item.cwd` + 访问器）+ `resolve_actual_execution_path` 分层回退 + worktree 漂移判定（`agent_session_service.rs`/`session_workspace_service.rs`/`git/worktree.rs`）。Spike 结论见 design.md §1.3。
+3. **Impl-D full**：
+   - 5.2/5.3：`send_agent_commit_prompt` 真正发送 commit 指令（取消 `issue_service.rs:664` 的桩）；`detect_agent_commit_completion`（取消 `:1233` 的桩）检测新 commit → `ConfirmingContinueAfterCommit`。
+   - 6.3：rebase 失败向活跃 session 发「代码合并冲突，请根据本次修改合并代码。」（`inject_session_prompt`/`send_agent_message`），session 关闭则新建 session 携带上下文。当前代码 TODO 标记在 `complete_clean_or_accepted_flow` 两处 rebase 失败分支。
+4. **Impl-F**：前端 `issues-activity.tsx` 接入三选项对话框 + 自动提交跳转 session + 提交成功确认 + worktree cleanup 确认；`issue-commands.ts` 新 action DTO；`messages.ts` 新 i18n。注意 4 个失败的 `agents-activity.test.tsx` 要一起修。
+5. **Impl-G**：`pnpm format/lint/test` + `cargo fmt/clippy/test` + `openspec validate --strict`。
+
+**关键约束**（同 Global Constraints）：shell 命令加 `rtk` 前缀；但 `pnpm typecheck/lint/test` **不要用 rtk**（rtk 代理会用错 TS 版本，直接 `pnpm ...`）。`cargo` 用 rtk 正常。
