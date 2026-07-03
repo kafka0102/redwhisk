@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// auto-commit-hook-version: 4.0.0
-// Claude Code Hook：PostToolUse 记录写入文件，允许 Agent 设置 commit message，Stop 在主任务完成后提交改动。
-// 关键改进：
-// 1. 支持 Agent 显式设置 commit message（优先级最高）
-// 2. 跟踪文件变更时间而不是简单清空 state，避免遗漏重复修改的文件
-// 3. 结合 git 实际状态而不是只依赖记录的文件列表
+// auto-commit-hook-version: 5.0.0
+// Claude Code Hook：
+// - PostToolUse：记录 Agent 写入的文件（用于区分"本任务文件"与仓库中无关的 dirty 文件）。
+// - Stop：若检测到本任务产生的未提交改动，向 Claude Code 反馈一条提示词
+//        （Stop hook 的 decision:block + reason），由 Claude Code 自行按项目
+//        提交规范（docs/standards/git-workflow.md）生成 commit message 并执行提交。
+//        本脚本自身不生成 message、不执行 git commit，彻底避免规则匹配产出的占位 message。
+// 循环防护：用 askedCount 限制连续 block 次数；一旦没有未提交改动即复位计数。
 
 import fs from "node:fs";
 import os from "node:os";
@@ -13,15 +15,17 @@ import { spawnSync } from "node:child_process";
 
 const STATE_FILE = path.join(
   os.tmpdir(),
-  "redwhisk-claude-auto-commit-state-v4.json",
+  "redwhisk-claude-auto-commit-state-v5.json",
 );
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+// 连续 block 上限：达到后不再拦截 Stop，避免 Claude 因故未提交时无限循环。
+const MAX_BLOCK_COUNT = 2;
 
 const DEFAULT_CONFIG = {
   enabled: true,
   maxFiles: 80,
   commitDirtyFallback: true,
-  useChineseDescription: true,
   excludePatterns: [
     "node_modules/",
     "dist/",
@@ -65,7 +69,7 @@ async function main() {
   }
 
   if (data.hook_event_name === "Stop") {
-    await commitOnStop(repoRoot, stateKey, state);
+    await handleStop(repoRoot, stateKey, state);
   }
 }
 
@@ -139,61 +143,19 @@ function saveState(stateKey, state) {
   }
 }
 
-function clearState(stateKey) {
-  try {
-    if (!fs.existsSync(STATE_FILE)) {
-      return;
-    }
-
-    const allStates = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    delete allStates[stateKey];
-    fs.writeFileSync(STATE_FILE, JSON.stringify(allStates, null, 2));
-  } catch {
-    // 忽略清理失败。
-  }
-}
-
 function createEmptyState() {
   return {
     // files: Map<path, { lastModifiedAt, committedAt? }>
     files: {},
-    // Agent 显式设置的 commit message（优先级最高）
-    commitMessage: null,
     lastWriteAt: null,
+    // 连续向 Claude Code 反馈提交提示词的次数；无改动时复位为 0。
+    askedCount: 0,
   };
 }
 
 function handlePostToolUse(data, cwd, repoRoot, state) {
-  // 1. 检查是否有 Agent 写入了 commit message 文件
-  checkForCommitMessageFile(data, cwd, repoRoot, state);
-
-  // 2. 记录写入的文件
   if (WRITE_TOOLS.has(data.tool_name)) {
     recordWriteFiles(data, cwd, repoRoot, state);
-  }
-}
-
-function checkForCommitMessageFile(data, cwd, repoRoot, state) {
-  // 检查是否写入了约定的 commit message 文件
-  const toolInput = data.tool_input || {};
-  const writtenFile = toolInput.file_path;
-
-  if (writtenFile) {
-    const repoRelativePath = toRepoRelativePath(writtenFile, cwd, repoRoot);
-    // 检查是否是约定的 commit message 文件
-    if (repoRelativePath === ".claude/.commit-message.tmp") {
-      try {
-        // 读取这个文件的内容作为 commit message
-        const content = fs.readFileSync(writtenFile, "utf8").trim();
-        if (content) {
-          state.commitMessage = content;
-        }
-        // 删除这个临时文件
-        fs.unlinkSync(writtenFile);
-      } catch {
-        // 读取失败时忽略
-      }
-    }
   }
 }
 
@@ -204,11 +166,10 @@ function recordWriteFiles(data, cwd, repoRoot, state) {
   for (const file of files) {
     const repoRelativePath = toRepoRelativePath(file, cwd, repoRoot);
     if (repoRelativePath) {
-      // 记录文件的最后修改时间，但不清空已提交的标记
-      // 这样如果一个文件被提交后又修改，我们可以再次捕获到
+      // 记录文件的最后修改时间，但不清空已提交的标记，
+      // 这样如果一个文件被提交后又修改，我们还能再次捕获到。
       state.files[repoRelativePath] = {
         lastModifiedAt: now,
-        // 保留之前的 committedAt（如果有）
         ...(state.files[repoRelativePath] || {}),
       };
     }
@@ -223,7 +184,6 @@ function extractToolFiles(toolName, toolInput) {
   }
 
   if (toolName === "MultiEdit") {
-    // MultiEdit 可能有多个 edits
     if (toolInput.edits && Array.isArray(toolInput.edits)) {
       return toolInput.edits.map((e) => e.file_path).filter(Boolean);
     }
@@ -249,7 +209,7 @@ function toRepoRelativePath(filePath, cwd, repoRoot) {
   return normalizeGitPath(relativePath);
 }
 
-async function commitOnStop(repoRoot, stateKey, state) {
+async function handleStop(repoRoot, stateKey, state) {
   const config = loadProjectConfig(repoRoot);
   if (!config.enabled) {
     return;
@@ -257,19 +217,19 @@ async function commitOnStop(repoRoot, stateKey, state) {
 
   const statusEntries = getGitStatus(repoRoot);
   if (statusEntries.length === 0) {
-    // 没有任何改动，只清理状态中的 committedAt 标记（保留文件记录以防后续修改）
-    resetCommittedMarkers(state);
+    // 没有任何改动：说明上一轮 Claude 已完成提交，复位计数并放行 Stop。
+    state.askedCount = 0;
     saveState(stateKey, state);
     return;
   }
 
   const dirtyFiles = new Set(statusEntries.map((entry) => entry.path));
 
-  // 1. 找出候选文件：
-  //    a) 我们记录过的文件中，当前是 dirty 的
-  //    b) 或者启用了 commitDirtyFallback 时，所有 dirty 文件
+  // 候选文件：
+  //   a) 我们记录过的、当前 dirty 的文件（本任务直接相关）
+  //   b) 启用 commitDirtyFallback 时，回退为所有 dirty 文件
   const recordedDirtyFiles = Object.keys(state.files).filter((file) =>
-    dirtyFiles.has(file)
+    dirtyFiles.has(file),
   );
 
   const candidateFiles =
@@ -285,61 +245,41 @@ async function commitOnStop(repoRoot, stateKey, state) {
   if (config.maxFiles > 0 && filesToCommit.length > config.maxFiles) {
     writeHookLog(
       repoRoot,
-      `Skip auto commit: ${filesToCommit.length} files exceed maxFiles=${config.maxFiles}.`,
+      `Skip commit prompt: ${filesToCommit.length} files exceed maxFiles=${config.maxFiles}.`,
     );
     return;
   }
 
-  runGit(repoRoot, ["add", "--", ...filesToCommit]);
-
-  const diffResult = runGit(
-    repoRoot,
-    ["diff", "--cached", "--quiet", "--", ...filesToCommit],
-    {
-      allowFailure: true,
-    },
-  );
-  if (diffResult.status === 0) {
-    // 没有实际变更（可能是权限变化等）
+  // 循环防护：连续反馈次数达到上限后不再拦截 Stop，避免无限 block。
+  if (state.askedCount >= MAX_BLOCK_COUNT) {
+    writeHookLog(
+      repoRoot,
+      `Skip commit prompt: askedCount=${state.askedCount} reached limit, letting Claude stop.`,
+    );
     return;
   }
 
-  // 优先使用 Agent 设置的 commit message，否则回退到自动生成
-  const commitMessage =
-    state.commitMessage || generateCommitMessage(filesToCommit, config);
-
-  runGit(repoRoot, ["commit", "-m", commitMessage, "--", ...filesToCommit], {
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-
-  const commitHash = runGit(repoRoot, [
-    "rev-parse",
-    "--short",
-    "HEAD",
-  ]).stdout.trim();
-
-  writeHookLog(repoRoot, `Auto commit ${commitHash}: ${commitMessage}`);
-
-  // 标记这些文件已提交，但不删除记录
-  // 这样如果文件再次修改，我们还能捕获到
-  const now = new Date().toISOString();
-  for (const file of filesToCommit) {
-    if (state.files[file]) {
-      state.files[file].committedAt = now;
-    }
-  }
-
-  // 清空已使用的 commit message，避免下次重复使用
-  state.commitMessage = null;
-
+  state.askedCount += 1;
   saveState(stateKey, state);
-}
 
-function resetCommittedMarkers(state) {
-  // 重置 committedAt 标记，但保留文件记录
-  for (const file of Object.keys(state.files)) {
-    delete state.files[file].committedAt;
-  }
+  const fileList = filesToCommit.map((f) => `- ${f}`).join("\n");
+  const reason = [
+    "检测到本次任务存在未提交改动：",
+    fileList,
+    "",
+    "请由你自行完成提交（不要依赖外部脚本生成 message）：",
+    "1. 仅 `git add` 上面列出的、与本次任务直接相关的文件，不要混入无关改动；",
+    "2. commit message 必须遵循 docs/standards/git-workflow.md 的 Conventional Commits 规范，并准确描述本次任务的真实意图（禁止使用「更新源码」「更新文档」这类泛化措辞）；",
+    "3. 提交完成后即可结束本轮回复，无需等待额外确认。",
+  ].join("\n");
+
+  writeHookLog(
+    repoRoot,
+    `Blocking Stop to request commit (${state.askedCount}/${MAX_BLOCK_COUNT}): ${filesToCommit.length} files.`,
+  );
+
+  // 通过 Stop hook 的 decision:block + reason 把提示词喂回 Claude Code。
+  console.log(JSON.stringify({ decision: "block", reason }));
 }
 
 function loadProjectConfig(repoRoot) {
@@ -425,113 +365,6 @@ function matchesPattern(file, pattern) {
   }
 
   return file === normalizedPattern || file.startsWith(`${normalizedPattern}/`);
-}
-
-function generateCommitMessage(files, config) {
-  if (config.commitMessage) {
-    return config.commitMessage;
-  }
-
-  if (!config.useChineseDescription) {
-    return "chore: auto commit Claude task changes";
-  }
-
-  // 1. 分析文件类型
-  const allDocs = files.every((file) => file.endsWith(".md"));
-  const allClaudeConfig = files.every(
-    (file) => file.startsWith(".claude/") || file === "CLAUDE.md"
-  );
-  const hasCodeFiles = files.some(
-    (file) =>
-      file.endsWith(".ts") ||
-      file.endsWith(".tsx") ||
-      file.endsWith(".js") ||
-      file.endsWith(".jsx")
-  );
-  const hasTestFiles = files.some(
-    (file) =>
-      file.includes("test") ||
-      file.includes("spec") ||
-      file.endsWith(".test.ts") ||
-      file.endsWith(".test.tsx")
-  );
-
-  // 2. 分析文件路径中的特征关键词
-  const paths = files.join(" ");
-  const isFix = paths.includes("fix") || paths.includes("bug");
-  const isPerf = paths.includes("perf") || paths.includes("performance") || paths.includes("优化");
-  const isRefactor = paths.includes("refactor") || paths.includes("重构");
-  const isFeat = paths.includes("feat") || paths.includes("feature") || paths.includes("新功能");
-  const isStyle = paths.includes("style") || paths.includes("样式");
-  const isBuild = paths.includes("build") || paths.includes("构建") || paths.includes("package.json") || paths.includes("tsconfig");
-  const isCi = paths.includes("ci") || paths.includes(".github/workflows");
-
-  // 3. 尝试从文件路径中提取更具体的描述
-  let description = "";
-
-  // 检查 OpenSpec 变更
-  if (paths.includes("openspec/changes/")) {
-    const match = paths.match(/openspec\/changes\/([^/]+)/);
-    if (match && match[1]) {
-      const changeName = match[1].replace(/-/g, " ");
-      description = `更新 OpenSpec 变更: ${changeName}`;
-      return `docs: ${description}`;
-    }
-  }
-
-  // 检查常见的目录结构
-  if (paths.includes("components/")) {
-    description = "更新组件";
-  } else if (paths.includes("hooks/")) {
-    description = "更新 Hooks";
-  } else if (paths.includes("utils/") || paths.includes("lib/")) {
-    description = "更新工具函数";
-  } else if (paths.includes("docs/")) {
-    description = "更新文档";
-  } else if (paths.includes("src/")) {
-    description = "更新源码";
-  }
-
-  // 4. 根据文件特征确定 type
-  let type = "chore";
-  if (allClaudeConfig) {
-    type = "chore";
-    description = description || "调整 Claude 配置";
-  } else if (allDocs) {
-    type = "docs";
-    description = description || "更新文档";
-  } else if (isFeat) {
-    type = "feat";
-    description = description || "实现新功能";
-  } else if (isFix) {
-    type = "fix";
-    description = description || "修复问题";
-  } else if (isPerf) {
-    type = "perf";
-    description = description || "优化性能";
-  } else if (isRefactor) {
-    type = "refactor";
-    description = description || "重构代码";
-  } else if (isStyle) {
-    type = "style";
-    description = description || "调整样式";
-  } else if (isBuild) {
-    type = "build";
-    description = description || "更新构建配置";
-  } else if (isCi) {
-    type = "ci";
-    description = description || "更新 CI 配置";
-  } else if (hasTestFiles) {
-    type = "test";
-    description = description || "更新测试";
-  } else if (hasCodeFiles) {
-    type = "refactor";
-    description = description || "更新代码";
-  } else {
-    description = description || "自动提交任务改动";
-  }
-
-  return `${type}: ${description}`;
 }
 
 function writeHookLog(repoRoot, message) {
