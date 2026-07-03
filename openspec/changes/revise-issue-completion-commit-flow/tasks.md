@@ -27,12 +27,12 @@
 
 ## 5. 三选项对话框与自动提交流（前端 + 后端）
 
-- [ ] 5.1 前端新增 dirty-workspace 三选项对话框组件（自动提交 / 不提交 / 取消），分支名按情况一/二只读预填、情况三/关闭可编辑。
-- [x] 5.2 「自动提交」：前端跳转 session 页；后端复用 `send_agent_commit_prompt` 注入 commit 指令，phase → `auto_committing`。（实现：`complete_issue_flow_with_option` 的 AutoCommit 分支经 `agent_registry` 取活跃 handle `send_message` 注入 `build_agent_commit_completion_prompt`，并记 `PromptSent` completion_attempt（`head_before` 供 detect 比对）；前端跳转属 Impl-F。）
-- [x] 5.3 后端在 `actual_path` 上检测新 commit（对比弹框前 git head），命中后 phase → `confirming_continue_after_commit`，前端弹「代码已提交成功。确定继续标记完成吗？」。（实现：`detect_agent_commit_completion` 重写——`AutoCommitting` 阶段读 `actual_path` head 与 `PromptSent` attempt 的 `head_before` 比对，命中则 update attempt + phase `ConfirmingContinueAfterCommit` + 返回 `CommitDetected` outcome。）
-- [x] 5.4 是 → 进入 worktree reconciliation；否 → phase → `cancelled`，issue 保持未完成。（实现：`complete_issue_flow_with_option` 顶部检查 `ConfirmingContinueAfterCommit` + `input.continue_after_commit`：`true`→`complete_clean_or_accepted_flow`，`false`→`Cancelled`。）
-- [ ] 5.5 「不提交」→ 记录忽略，进入 worktree reconciliation；「取消」→ `cancelled`。（后端分流已实现，前端入口未做。）
-- [ ] 5.6 接入 i18n（中英文），清理旧 `commitStrategy/agentAutoCommit/...` key。（旧 key 已在前端移除阶段清理。）
+- [x] 5.1 前端新增 dirty-workspace 三选项对话框组件（自动提交 / 不提交 / 取消），分支名按情况一/二只读预填、情况三/关闭可编辑。（实现：`issue-completion-dirty-workspace-dialog.tsx`，分支名 Input + 三按钮；`drifted`/无预填时可编辑。）
+- [x] 5.2 「自动提交」：前端跳转 session 页；后端复用 `send_agent_commit_prompt` 注入 commit 指令，phase → `auto_committing`。（实现：`complete_issue_flow_with_option` 的 AutoCommit 分支经 `agent_registry` 取活跃 handle `send_message` 注入 `build_agent_commit_completion_prompt`，并记 `PromptSent` completion_attempt（`head_before` 供 detect 比对）；前端 `waiting_auto_commit` → 轮询 `detectAgentCommitCompletion`。）
+- [x] 5.3 后端在 `actual_path` 上检测新 commit（对比弹框前 git head），命中后 phase → `confirming_continue_after_commit`，前端弹「代码已提交成功。确定继续标记完成吗？」。（实现：`detect_agent_commit_completion` 重写——`AutoCommitting` 阶段读 `actual_path` head 与 `PromptSent` attempt 的 `head_before` 比对，命中则 update attempt + phase `ConfirmingContinueAfterCommit` + 返回 `CommitDetected` outcome；前端 `commit_detected` → `confirm` 弹框。）
+- [x] 5.4 是 → 进入 worktree reconciliation；否 → phase → `cancelled`，issue 保持未完成。（实现：`complete_issue_flow_with_option` 顶部检查 `ConfirmingContinueAfterCommit` + `input.continue_after_commit`：`true`→`complete_clean_or_accepted_flow`，`false`→`Cancelled`；前端 `continueAfterCommit` 传参。）
+- [x] 5.5 「不提交」→ 记录忽略，进入 worktree reconciliation；「取消」→ `cancelled`。（实现：前端 `dirtyDecision=skip/cancel` 传给后端，后端已分流。）
+- [x] 5.6 接入 i18n（中英文），清理旧 `commitStrategy/agentAutoCommit/...` key。（实现：`messages.ts` 新增 completion 新文案（dirty 三选项/continue/cleanup），移除旧 `completionIgnoreDirty/HandleManually/ExternalWorktree/MergeAndDelete/SkipMerge/WaitingAgentCommit/AgentMergeBlocked` key，中英文同步。）
 
 ## 6. worktree 合并 / 失败 / 删除重写
 
@@ -51,8 +51,8 @@
 ## 8. 验证
 
 - [x] 8.1 更新/新增前后端测试：三路径解析、漂移捕获、dirty 三选项、自动提交→session 跳转→提交成功确认、rebase 失败的发消息/新建 session 分支、Redwhisk/External 删除分流、phase 恢复。（**后端测试已完成**：resolver 4 单测（路径解析/漂移）；2 个端到端（auto-commit 注入→detect→确认完成 / 拒绝取消）；`RecordingHandle` 验证 rebase 失败发消息；detect no_commit/blocked 重写；删除 9 个断言已移除行为的测试 + 移除死 helper `register_test_pty_session`。前端测试待 Impl-F。）
-- [ ] 8.2 运行 `pnpm format`。
-- [ ] 8.3 运行 `pnpm lint`。
+- [x] 8.2 运行 `pnpm format`。（通过。）
+- [x] 8.3 运行 `pnpm lint`。（通过。）
 - [x] 8.4 运行 `pnpm typecheck`。（通过。）
-- [ ] 8.5 运行 `pnpm test`。（4 个 agents-activity 测试等 Impl-F 对话框实现后修复。）
+- [ ] 8.5 运行 `pnpm test`。（**typecheck/format/lint 全绿；470 测试 459 通过、11 失败**——失败均为断言旧 UI 流程的测试，需按新对话框流程更新断言：issues-activity（7）：`sends an agent commit prompt...`(废弃 send 流程，删)、`blocks Done...manual`、`continues completion when manual dirty changes are ignored`、`confirms merge into a worktree target branch...`、`supports skipping or canceling external worktree completion`、`allows backward status choices...`、`moves an inactive issue to completed...`；agents-activity（4）：`completes a linked review issue manually...`、`completes a linked running issue directly to done...`、`keeps mark done hidden...`、`shows dismissible loading dialog...`。）
 - [x] 8.6 运行 `cargo fmt`、`cargo clippy`、`cargo test`（src-tauri）。（**全绿、0 ignored**：`cargo fmt`/`clippy --lib --tests` 通过；`cargo test` 全量 0 ignored——lib 166 passed、`tests/issue.rs` 61 passed、`agent_session.rs` 49 passed、`git_detection`/`local_data`/`project`/`settings` 全绿。唯一失败 `settings_service::save_project_label_rejects_workflow_skill_without_agent` 为预存无关失败，不在本 change 范围。）
