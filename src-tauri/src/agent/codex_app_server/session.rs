@@ -140,6 +140,10 @@ struct SessionState {
     pending_permissions: HashMap<String, PendingPermission>,
     /// 最新一次 token 用量，供前端 context meter 复用。
     latest_usage: Option<AgentUsage>,
+    /// 最近已知 cwd：来自 codex `commandExecution` thread item 的 `cwd` 字段，
+    /// best-effort。供完成流程解析 session 实际执行路径（识别运行中 worktree 漂移）。
+    /// 纯文件编辑轮次不下发 cwd，此时保持 `None`，回退到启动快照。
+    last_known_cwd: Option<String>,
 }
 
 struct PendingPermission {
@@ -200,6 +204,7 @@ impl CodexSessionHandle {
             reasoning_flushed_len: HashMap::new(),
             pending_permissions: HashMap::new(),
             latest_usage: None,
+            last_known_cwd: None,
         }));
 
         // 注册 notification handler
@@ -420,6 +425,8 @@ impl CodexSessionHandle {
             for turn in turns {
                 if let Some(items) = turn.get("items").and_then(Value::as_array) {
                     for item in items {
+                        // 回放时同样捕获 cwd，使重启后 last_known_cwd 可恢复。
+                        update_last_known_cwd(&self.state, item);
                         if let Some(timeline_item) = map_thread_item(item, true) {
                             timeline.push(timeline_item);
                         }
@@ -443,6 +450,17 @@ impl CodexSessionHandle {
             .lock()
             .ok()
             .and_then(|state| state.thread_id.clone())
+    }
+
+    /// 最近已知 cwd（来自 codex `commandExecution` 的 `cwd`，best-effort）。
+    ///
+    /// 完成流程据此解析 session 实际执行路径，识别运行中漂移到新 worktree 的情况。
+    /// 未经任何 shell 命令轮次时返回 `None`，调用方应回退到启动快照 `workspace_path`。
+    pub fn last_known_cwd(&self) -> Option<String> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.last_known_cwd.clone())
     }
 }
 
@@ -576,6 +594,10 @@ impl AgentSessionHandle for CodexSessionHandle {
 
     fn thread_id(&self) -> Option<String> {
         CodexSessionHandle::thread_id(self)
+    }
+
+    fn last_known_cwd(&self) -> Option<String> {
+        CodexSessionHandle::last_known_cwd(self)
     }
 }
 
@@ -737,11 +759,29 @@ fn build_events(
     }
 }
 
+/// 从 thread item 的 `cwd` 字段更新「最近已知 cwd」。
+///
+/// 仅 `commandExecution` item 会下发 `cwd`（参见 `thread_item.rs`）。拿到非空
+/// cwd 即覆盖 state（最后一条命令所在目录最贴近 session 当前真实位置）；无 cwd
+/// 字段或加锁失败时静默跳过。
+fn update_last_known_cwd(state: &Arc<Mutex<SessionState>>, item: &Value) {
+    if let Some(cwd) = item.get("cwd").and_then(Value::as_str) {
+        if !cwd.is_empty() {
+            if let Ok(mut state) = state.lock() {
+                state.last_known_cwd = Some(cwd.to_string());
+            }
+        }
+    }
+}
+
 fn build_item_event(
     state: &Arc<Mutex<SessionState>>,
     item: &Value,
     is_started: bool,
 ) -> Vec<AgentStreamEvent> {
+    // commandExecution item 下发 cwd：捕获为「最近已知 cwd」，供完成流程解析
+    // session 实际执行路径。best-effort，纯文件编辑轮次无 cwd 则不改写。
+    update_last_known_cwd(state, item);
     // item/started 与 item/completed 都映射为同一条 timeline 项；status 由
     // map_thread_item 根据 item 自身字段决定。对于 started 且无 status 的
     // commandExecution，强制标记 running。
@@ -1357,6 +1397,7 @@ mod tests {
             reasoning_flushed_len: HashMap::new(),
             pending_permissions: HashMap::new(),
             latest_usage: None,
+            last_known_cwd: None,
         }
     }
 

@@ -13,10 +13,10 @@
 
 ## 3. 实际执行路径解析与漂移捕获
 
-- [ ] 3.1 实现 `resolve_actual_execution_path(project, session)`：session 活跃取 live cwd（PTY / 结构化），关闭取启动记录 `workspace_path`。
-- [ ] 3.2 验证 PTY session 的 live cwd 上报能力；若不可得，实现「弹框手填分支名+路径」兜底。（Spike 已确认 PTY 不可得、结构化 codex commandExecution cwd 可得但仅 best-effort。）
-- [ ] 3.3 在 `actual_path` 上判定是否在 worktree（`--git-dir` vs `--git-common-dir`）并取 checkout 分支与 worktree 根。
-- [ ] 3.4 路径比对：`actual_path != startup_path` 且在 worktree 内 → 命中漂移，owner 强制为 `External`。
+- [x] 3.1 实现 `resolve_actual_execution_path(project, session)`：session 活跃取 live cwd（PTY / 结构化），关闭取启动记录 `workspace_path`。
+- [x] 3.2 验证 PTY session 的 live cwd 上报能力；若不可得，实现「弹框手填分支名+路径」兜底。（Spike 已确认 PTY 不可得、结构化 codex commandExecution cwd 可得但仅 best-effort。实现：codex `SessionState.last_known_cwd`（build_item_event/read_timeline 抽 item.cwd + 访问器 + trait 默认方法）；用户 `input.actual_path` 手填覆盖优先级最高。）
+- [x] 3.3 在 `actual_path` 上判定是否在 worktree（`--git-dir` vs `--git-common-dir`）并取 checkout 分支与 worktree 根。
+- [x] 3.4 路径比对：`actual_path != startup_path` 且在 worktree 内 → 命中漂移，owner 强制为 `External`（`complete_clean_or_accepted_flow` 中 `effective_owner`）。
 
 ## 4. 完成流程状态机重写（issue_completion_flows.phase）
 
