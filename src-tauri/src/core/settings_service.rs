@@ -11,16 +11,16 @@ use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
     DeleteAgentProfileInput, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
+use crate::types::agent_skill::AgentSkillScope;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_label::{
     DeleteProjectLabelInput, ListProjectLabelsInput, ProjectLabelListResponse, ProjectLabelRecord,
     ProjectLabelScope, SaveProjectLabelInput,
 };
 use crate::types::saved_agent_skill::{
-    DeleteSavedAgentSkillInput, ListSavedAgentSkillsInput, SavedAgentSkillListResponse,
-    SavedAgentSkillRecord, SaveSavedAgentSkillInput,
+    DeleteSavedAgentSkillInput, ListSavedAgentSkillsInput, SaveSavedAgentSkillInput,
+    SavedAgentSkillListResponse, SavedAgentSkillRecord,
 };
-use crate::types::agent_skill::AgentSkillScope;
 
 pub struct SettingsService<'connection, TDetector> {
     repository: AgentProfileRepository<'connection>,
@@ -265,13 +265,22 @@ where
 
         let row = self
             .saved_agent_skill_repository
-            .save_skill(input.id, &name, &input.scope, input.project_id, &input.skill_paths)
+            .save_skill(
+                input.id,
+                &name,
+                &input.scope,
+                input.project_id,
+                &input.skill_paths,
+            )
             .map_err(settings_database_error)?;
 
         Ok(saved_agent_skill_record_from_row(row))
     }
 
-    pub fn delete_saved_agent_skill(&self, input: DeleteSavedAgentSkillInput) -> Result<(), CommandError> {
+    pub fn delete_saved_agent_skill(
+        &self,
+        input: DeleteSavedAgentSkillInput,
+    ) -> Result<(), CommandError> {
         let deleted = self
             .saved_agent_skill_repository
             .soft_delete_skill(input.id)
