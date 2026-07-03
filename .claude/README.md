@@ -8,17 +8,21 @@
 
 `auto-commit.js` 是一个自动提交 Hook，它会：
 
-- 在 Claude Code 主任务完成后提交改动
-- 遵循项目的 [Git 工作流规范](../docs/standards/git-workflow.md)
-- 优先提交 Claude 本轮实际写入的文件
-- 生成符合规范的中文 commit message
+- 在 Claude Code 主任务完成后检测未提交改动
+- 通过 Stop hook 反馈提示词，交由 Claude 按 [Git 工作流规范](../docs/standards/git-workflow.md) 自行编写 message 并提交
+- 仅针对 Claude 本轮实际写入的文件发起提交提示
+- 自身不生成 message、不执行 `git add` / `git commit`
 
 ### 工作原理
 
 1. **跟踪写入文件**：`PostToolUse` 只记录 `Write` / `Edit` / `MultiEdit` / `NotebookEdit` 涉及的文件路径。
-2. **任务完成提交**：`Stop` 在 Claude Code 主响应完成时触发自动提交。
-3. **兜底提交**：如果没有记录到写入文件但工作区存在改动，会按配置提交当前 dirty 文件。
-4. **提交日志**：提交结果写入系统临时目录下的 `redwhisk-claude-auto-commit.log`，不会污染仓库工作区。
+2. **任务完成反馈**：`Stop` 在 Claude Code 主响应完成时触发；若存在本任务产生的未提交改动，通过 `decision: "block"` + `reason` 把提交提示词喂回主 Agent。
+3. **由 Claude 提交**：主 Agent 收到提示后自行 `git add` + `git commit`，message 遵循 Git 工作流规范。
+4. **兜底提示**：如果没有记录到写入文件但工作区存在改动，且开启 `commitDirtyFallback`，会对全部 dirty 文件发起提交提示。
+5. **循环防护**：连续 block 达上限后放行 Stop，避免无限循环；无 dirty 改动时复位计数。
+6. **提交日志**：Hook 行为写入系统临时目录下的 `redwhisk-claude-auto-commit.log`，不会污染仓库工作区。
+
+更详细的机制与 v4 差异见 [auto-commit-usage.md](./auto-commit-usage.md)。
 
 ### 配置
 
@@ -29,7 +33,6 @@
   "enabled": true,
   "maxFiles": 80,
   "commitDirtyFallback": true,
-  "useChineseDescription": true,
   "excludePatterns": [
     "node_modules/",
     "dist/",
