@@ -114,12 +114,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0029_saved_agent_skills",
             "0030_drop_label_agent_profile",
             "0031_drop_completion_policy",
+            "0032_issue_completion_flows_unified",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0031_drop_completion_policy".to_string())
+        Some("0032_issue_completion_flows_unified".to_string())
     );
 
     let schema_migrations_count: i64 = database

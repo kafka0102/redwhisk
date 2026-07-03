@@ -31,9 +31,7 @@ use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::issue::IssueStatus;
 use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
-use redwhisk_lib::types::issue_completion::{
-    IssueCompletionExternalWorktreeDecision, IssueCompletionPhase,
-};
+use redwhisk_lib::types::issue_completion::IssueCompletionPhase;
 use redwhisk_lib::types::session_event::SessionEventType;
 use serde_json::Value;
 
@@ -157,10 +155,13 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "session_id",
             "phase",
             "ignore_dirty",
-            "external_worktree_decision",
+            "dirty_decision",
+            "continue_after_commit",
+            "worktree_cleanup_decision",
             "base_branch",
             "workspace_branch",
             "workspace_path",
+            "actual_path",
             "failure_reason",
             "updated_at",
         ]
@@ -193,12 +194,15 @@ fn issue_completion_flow_repository_upserts_finds_and_clears_by_issue_id() {
         IssueCompletionFlowRecordInput {
             issue_id,
             session_id: None,
-            phase: IssueCompletionPhase::CheckingDirty,
+            phase: IssueCompletionPhase::DetectingWorkspace,
             ignore_dirty: false,
-            external_worktree_decision: None,
+            dirty_decision: None,
+            continue_after_commit: None,
+            worktree_cleanup_decision: None,
             base_branch: Some("main"),
             workspace_branch: Some("feature/task"),
             workspace_path: Some("/tmp/worktree"),
+            actual_path: None,
             failure_reason: None,
             updated_at: 1_780_628_600_000,
         },
@@ -206,7 +210,7 @@ fn issue_completion_flow_repository_upserts_finds_and_clears_by_issue_id() {
     .expect("create flow");
 
     assert_eq!(created.issue_id, issue_id);
-    assert_eq!(created.phase, IssueCompletionPhase::CheckingDirty);
+    assert_eq!(created.phase, IssueCompletionPhase::DetectingWorkspace);
     assert!(!created.ignore_dirty);
     assert_eq!(created.base_branch.as_deref(), Some("main"));
 
@@ -215,14 +219,15 @@ fn issue_completion_flow_repository_upserts_finds_and_clears_by_issue_id() {
         IssueCompletionFlowRecordInput {
             issue_id,
             session_id: Some(session_id),
-            phase: IssueCompletionPhase::ConfirmingExternalWorktree,
+            phase: IssueCompletionPhase::ConfirmingWorktreeCleanup,
             ignore_dirty: true,
-            external_worktree_decision: Some(
-                IssueCompletionExternalWorktreeDecision::MergeAndDelete,
-            ),
+            dirty_decision: None,
+            continue_after_commit: None,
+            worktree_cleanup_decision: Some(true),
             base_branch: Some("main"),
             workspace_branch: Some("feature/task"),
             workspace_path: Some("/tmp/worktree"),
+            actual_path: None,
             failure_reason: Some("needs confirmation"),
             updated_at: 1_780_628_700_000,
         },
@@ -233,13 +238,10 @@ fn issue_completion_flow_repository_upserts_finds_and_clears_by_issue_id() {
     assert_eq!(updated.session_id, Some(session_id));
     assert_eq!(
         updated.phase,
-        IssueCompletionPhase::ConfirmingExternalWorktree
+        IssueCompletionPhase::ConfirmingWorktreeCleanup
     );
     assert!(updated.ignore_dirty);
-    assert_eq!(
-        updated.external_worktree_decision,
-        Some(IssueCompletionExternalWorktreeDecision::MergeAndDelete)
-    );
+    assert_eq!(updated.worktree_cleanup_decision, Some(true));
     assert_eq!(
         updated.failure_reason.as_deref(),
         Some("needs confirmation")

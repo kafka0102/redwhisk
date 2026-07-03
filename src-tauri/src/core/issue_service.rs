@@ -46,8 +46,8 @@ use crate::types::issue::{
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::issue_completion::{
-    CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult,
-    DirtyWorkspaceOption, IssueCompletionFlowRecord, IssueCompletionPhase,
+    CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult, DirtyWorkspaceOption,
+    IssueCompletionFlowRecord, IssueCompletionPhase,
 };
 use crate::types::session_event::SessionEventType;
 
@@ -2983,6 +2983,7 @@ mod tests {
     use std::process::Command;
     use tempfile::tempdir;
 
+    #[ignore = "Impl-D: agent_auto_commit 路径已移除，待新自动提交-跳转-session 流程实现后重写"]
     #[test]
     fn complete_issue_flow_completes_review_issue_with_closed_session_without_agent_commit_check() {
         let temp_dir = tempdir().expect("create temp dir");
@@ -3002,7 +3003,11 @@ mod tests {
                     project_id: 1,
                     issue_id: 16,
                     ignore_dirty: None,
-                    external_worktree_decision: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
                 },
                 temp_dir.path().join("data"),
                 &PtySessionManager::new(),
@@ -3077,7 +3082,11 @@ mod tests {
                     project_id: 1,
                     issue_id: 16,
                     ignore_dirty: None,
-                    external_worktree_decision: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
                 },
                 temp_dir.path().join("data"),
                 &PtySessionManager::new(),
@@ -3085,7 +3094,7 @@ mod tests {
             )
             .expect("complete issue flow");
 
-        assert_eq!(result.action, CompleteIssueFlowAction::AgentMergeBlocked);
+        assert_eq!(result.action, CompleteIssueFlowAction::Blocked);
         assert_eq!(
             result.merge_block_reason.as_deref(),
             Some("target_worktree_dirty")
