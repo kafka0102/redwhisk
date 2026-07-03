@@ -838,14 +838,14 @@ export function AgentsActivity({
       return;
     }
 
-    if (nextSession.canCompleteClean) {
-      await completeLinkedIssueClean(linkedIssue, nextSession);
+    if (nextSession.canCompleteAgentCommit) {
+      await prepareLinkedIssueAgentCommit(linkedIssue, nextSession);
       return;
     }
 
-    if (nextSession.canCompleteAgentCommit) {
-      await prepareLinkedIssueAgentCommit(linkedIssue, nextSession);
-    }
+    // completion_policy 已移除：默认走 clean 完成入口，由 complete_issue_flow
+    // 在后端统一检测实际工作区状态并驱动新流程。
+    await completeLinkedIssueClean(linkedIssue, nextSession);
   }
 
   async function handleTransitionAction(action: SessionIssueTransition) {

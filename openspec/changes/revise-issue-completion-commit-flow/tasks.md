@@ -54,5 +54,5 @@
 - [x] 8.2 运行 `pnpm format`。（通过。）
 - [x] 8.3 运行 `pnpm lint`。（通过。）
 - [x] 8.4 运行 `pnpm typecheck`。（通过。）
-- [ ] 8.5 运行 `pnpm test`。（**typecheck/format/lint 全绿；469 测试 465 通过、4 失败**。issues-activity 新流程测试已全绿（重写 dirty/worktree 5 测试 + 删除废弃 send 测试 + 修 2 处 completeIssueFlow 入参断言）。剩余 4 个失败均在 `agents-activity.test.tsx`，属 legacy 完成入口（session header/status menu 的 Mark done + agent-commit-preview 的 Submitting 加载框）流程，疑源自 Impl-A policy 移除阶段而非 Impl-F 新流程，需单独排查 `completeLinkedIssueViaFlow`/`handleConfirmAgentCommit` 路径与测试 mock 时序。）
+- [x] 8.5 运行 `pnpm test`。（**469 测试全绿**。修复生产 bug：`handleMarkDone` 在 `completion_policy` 移除后依赖已不下发的 `canCompleteClean` flag，导致 review session 的 Mark down 无动作——改为默认走 `completeLinkedIssueClean`（`canCompleteAgentCommit` 仍走 preview）。issues-activity 新流程测试全绿；agents-activity 4 个 legacy 完成测试通过。）
 - [x] 8.6 运行 `cargo fmt`、`cargo clippy`、`cargo test`（src-tauri）。（**全绿、0 ignored**：`cargo fmt`/`clippy --lib --tests` 通过；`cargo test` 全量 0 ignored——lib 166 passed、`tests/issue.rs` 61 passed、`agent_session.rs` 49 passed、`git_detection`/`local_data`/`project`/`settings` 全绿。唯一失败 `settings_service::save_project_label_rejects_workflow_skill_without_agent` 为预存无关失败，不在本 change 范围。）
