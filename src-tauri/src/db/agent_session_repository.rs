@@ -65,6 +65,28 @@ impl<'connection> AgentSessionRepository<'connection> {
             .optional()
     }
 
+    /// 查找 issue 最近一次 worktree 模式 session，忽略软删标记。
+    ///
+    /// 退回 Backlog 后旧 session 被软删（`del = 1`），但其 `workspace_path` /
+    /// `workspace_branch` 仍指向残留的 worktree 目录与分支。再次运行前需要据此
+    /// 判断是否存在同名 worktree 占用，运行时也需要据此兜底拦截。
+    pub fn find_latest_worktree_session_by_issue_id(
+        &self,
+        issue_id: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at
+                 FROM agent_sessions
+                 WHERE issue_id = ?1 AND workspace_mode = 'worktree'
+                 ORDER BY id DESC
+                 LIMIT 1",
+                params![issue_id],
+                agent_session_from_row,
+            )
+            .optional()
+    }
+
     pub fn list_by_project_id(
         &self,
         project_id: i64,

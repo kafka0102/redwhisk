@@ -14,9 +14,11 @@ import {
   completeIssueManual,
   createIssue,
   deleteIssue,
+  deleteIssueWorktree,
   detectAgentCommitCompletion,
   exportIssueAttachment,
   getIssueSummary,
+  getIssueWorktreeStatus,
   listIssues,
   markIssueReview,
   prepareAgentCommitCompletion,
@@ -48,9 +50,11 @@ vi.mock("./issue-commands", () => ({
   completeIssueManual: vi.fn(),
   createIssue: vi.fn(),
   deleteIssue: vi.fn(),
+  deleteIssueWorktree: vi.fn(),
   detectAgentCommitCompletion: vi.fn(),
   exportIssueAttachment: vi.fn(),
   getIssueSummary: vi.fn(),
+  getIssueWorktreeStatus: vi.fn(),
   getProjectGitBranches: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
@@ -193,9 +197,11 @@ const completeIssueFlowMock = vi.mocked(completeIssueFlow);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
 const createIssueMock = vi.mocked(createIssue);
 const deleteIssueMock = vi.mocked(deleteIssue);
+const deleteIssueWorktreeMock = vi.mocked(deleteIssueWorktree);
 const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
 const exportIssueAttachmentMock = vi.mocked(exportIssueAttachment);
 const getIssueSummaryMock = vi.mocked(getIssueSummary);
+const getIssueWorktreeStatusMock = vi.mocked(getIssueWorktreeStatus);
 const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
@@ -406,9 +412,11 @@ describe("IssuesActivity", () => {
     completeIssueManualMock.mockReset();
     createIssueMock.mockReset();
     deleteIssueMock.mockReset();
+    deleteIssueWorktreeMock.mockReset();
     detectAgentCommitCompletionMock.mockReset();
     exportIssueAttachmentMock.mockReset();
     getIssueSummaryMock.mockReset();
+    getIssueWorktreeStatusMock.mockReset();
     getProjectGitBranchesMock.mockReset();
     injectAgentSessionPromptMock.mockReset();
     listAgentSessionsMock.mockReset();
@@ -485,6 +493,17 @@ describe("IssuesActivity", () => {
     getProjectGitBranchesMock.mockResolvedValue({
       currentBranch: "main",
       localBranches: ["main", "develop", "release"],
+    });
+    getIssueWorktreeStatusMock.mockResolvedValue({
+      exists: false,
+      canDelete: false,
+      workspacePath: null,
+      workspaceBranch: null,
+    });
+    deleteIssueWorktreeMock.mockResolvedValue({
+      issueId: 0,
+      deleted: true,
+      workspacePath: null,
     });
     prepareAgentCommitCompletionMock.mockRejectedValue({
       code: "ISSUE_VALIDATION_FAILED",
@@ -2905,6 +2924,134 @@ describe("IssuesActivity", () => {
         targetStatus: "backlog",
       }),
     );
+  });
+
+  it("asks to delete the same-name worktree before returning to backlog and deletes on confirm", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [attentionIssue] });
+    getIssueWorktreeStatusMock.mockResolvedValue({
+      exists: true,
+      canDelete: true,
+      workspacePath: "/tmp/redwhisk/worktrees/issue-27",
+      workspaceBranch: "issue-27",
+    });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...attentionIssue,
+      status: "backlog",
+      linkedSessionId: null,
+      linkedSessionStatus: null,
+      linkedSessionAttention: null,
+      updatedAt: attentionIssue.updatedAt + 1_000,
+    });
+    deleteIssueWorktreeMock.mockResolvedValueOnce({
+      issueId: attentionIssue.id,
+      deleted: true,
+      workspacePath: "/tmp/redwhisk/worktrees/issue-27",
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Attention issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
+
+    // 第一步：确认终止并退回 Backlog
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    // 第二步：同名 worktree 删除询问，确认删除
+    await screen.findByRole("dialog", { name: "Same-name worktree exists" });
+    await user.click(screen.getByRole("button", { name: "Delete worktree" }));
+
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: attentionIssue.id,
+        targetStatus: "backlog",
+      }),
+    );
+    expect(deleteIssueWorktreeMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: attentionIssue.id,
+    });
+  });
+
+  it("keeps the residual worktree when the user declines deletion on return to backlog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [attentionIssue] });
+    getIssueWorktreeStatusMock.mockResolvedValue({
+      exists: true,
+      canDelete: true,
+      workspacePath: "/tmp/redwhisk/worktrees/issue-27",
+      workspaceBranch: "issue-27",
+    });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...attentionIssue,
+      status: "backlog",
+      linkedSessionId: null,
+      linkedSessionStatus: null,
+      linkedSessionAttention: null,
+      updatedAt: attentionIssue.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Attention issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    await screen.findByRole("dialog", { name: "Same-name worktree exists" });
+    // 选择保留：仅退回状态，不删除 worktree
+    await user.click(screen.getByRole("button", { name: "Keep" }));
+
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: attentionIssue.id,
+        targetStatus: "backlog",
+      }),
+    );
+    expect(deleteIssueWorktreeMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks running when a same-name worktree already exists", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    getIssueWorktreeStatusMock.mockResolvedValue({
+      exists: true,
+      canDelete: true,
+      workspacePath: "/tmp/redwhisk/worktrees/issue-20",
+      workspaceBranch: "issue-20",
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(
+      await within(dialog).findByText(
+        "A same-name worktree already exists. Delete it before running.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("moves an inactive issue to completed without the extra running-session confirmation", async () => {

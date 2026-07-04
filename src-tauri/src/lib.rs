@@ -74,6 +74,8 @@ pub fn run() {
             commands::issue_commands::detect_agent_commit_completion,
             commands::issue_commands::get_issue_summary,
             commands::issue_commands::delete_issue,
+            commands::issue_commands::get_issue_worktree_status,
+            commands::issue_commands::delete_issue_worktree,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::start_agent_session,
             commands::agent_session_commands::get_project_git_branches,

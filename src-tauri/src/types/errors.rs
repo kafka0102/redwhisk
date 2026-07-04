@@ -25,6 +25,7 @@ pub enum CommandErrorCode {
     AgentSessionStreamFailed,
     AgentSessionPermissionFailed,
     AgentSessionModelUnavailable,
+    IssueWorktreeOccupied,
     ProjectTerminalPersistenceFailed,
     ProjectTerminalValidationFailed,
     ProjectTerminalStartFailed,

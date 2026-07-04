@@ -146,6 +146,42 @@ pub struct DeleteIssueResult {
     pub linked_session_id: Option<i64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetIssueWorktreeStatusInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
+/// Issue 关联 worktree 的残留状态。
+///
+/// `exists` 以最近一次 worktree session 的 `workspace_path` 目录是否存在为准；
+/// `can_delete` 仅在目录存在且 worktree 由 RedWhisk 管理时为真，前端据此决定
+/// 是否弹出"删除同名 worktree"确认框。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueWorktreeStatusResult {
+    pub exists: bool,
+    pub can_delete: bool,
+    pub workspace_path: Option<String>,
+    pub workspace_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteIssueWorktreeInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteIssueWorktreeResult {
+    pub issue_id: i64,
+    pub deleted: bool,
+    pub workspace_path: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCommitChangedFileSummary {
