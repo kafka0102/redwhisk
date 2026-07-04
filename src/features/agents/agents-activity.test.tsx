@@ -1255,18 +1255,55 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a text label for every changed file kind", async () => {
-    const kinds: WorkspaceChangeKind[] = [
-      "added",
-      "modified",
-      "deleted",
-      "renamed",
-      "copied",
-      "binary",
+  it("shows a status letter for every changed file kind", async () => {
+    const expectations: Array<{
+      kind: WorkspaceChangeKind;
+      fileName: string;
+      status: string;
+      className: string;
+    }> = [
+      {
+        kind: "added",
+        fileName: "added.ts",
+        status: "A",
+        className: "session-commit-file__status--added",
+      },
+      {
+        kind: "modified",
+        fileName: "modified.ts",
+        status: "M",
+        className: "session-commit-file__status--modified",
+      },
+      {
+        kind: "deleted",
+        fileName: "deleted.ts",
+        status: "D",
+        className: "session-commit-file__status--deleted",
+      },
+      {
+        kind: "renamed",
+        fileName: "renamed.ts",
+        status: "R",
+        className: "session-commit-file__status--renamed",
+      },
+      {
+        kind: "copied",
+        fileName: "copied.ts",
+        status: "C",
+        className: "session-commit-file__status--copied",
+      },
+      {
+        kind: "binary",
+        fileName: "binary.ts",
+        status: "X",
+        className: "session-commit-file__status--unknown",
+      },
     ];
     getProjectWorktreeChangesMock.mockResolvedValue({
       signature: "changes",
-      files: kinds.map((kind) => changedFile(`src/${kind}.ts`, kind)),
+      files: expectations.map(({ kind }) =>
+        changedFile(`src/${kind}.ts`, kind),
+      ),
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],
@@ -1277,8 +1314,14 @@ describe("AgentsActivity", () => {
       await screen.findByLabelText("Open session side panel"),
     );
 
-    for (const label of ["新增", "修改", "删除", "重命名", "复制", "二进制"]) {
-      expect(await screen.findByText(label)).toBeInTheDocument();
+    for (const { fileName, status, className } of expectations) {
+      const row = await screen.findByRole("button", {
+        name: new RegExp(fileName),
+      });
+      expect(within(row).getByText(status)).toHaveClass(
+        "session-change-row__status",
+        className,
+      );
     }
   });
 
