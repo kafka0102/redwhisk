@@ -38,11 +38,11 @@ export function formatSessionStatusLabel(
   session: AgentSessionListItem,
 ): string {
   if (session.status === "crashed") {
-    return "crashed";
+    return messages.agentsFeature.sessionCrashed;
   }
 
   if (session.status === "stopped") {
-    return "stopped";
+    return messages.agentsFeature.sessionStopped;
   }
 
   if (session.issueStatus === "completed") {
@@ -65,7 +65,7 @@ export function formatSessionStatusLabel(
     return messages.agentsFeature.running;
   }
 
-  return "closed";
+  return messages.agentsFeature.sessionClosed;
 }
 
 export function shouldShowExplicitSessionStatus(

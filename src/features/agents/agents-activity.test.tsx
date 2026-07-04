@@ -1405,7 +1405,7 @@ describe("AgentsActivity", () => {
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
 
     expect(within(sessionList).getAllByRole("button")[0]).toHaveTextContent(
-      "First visible session",
+      "#20 First visible session",
     );
 
     await act(async () => {
@@ -1413,8 +1413,61 @@ describe("AgentsActivity", () => {
     });
 
     expect(within(sessionList).getAllByRole("button")[0]).toHaveTextContent(
-      "First visible session",
+      "#20 First visible session",
     );
+  });
+
+  it("shows the issue id and active branch in the session card meta row", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 502,
+          issueId: 22,
+          issueTitle: "Current branch issue",
+          issueStatus: "running",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          originBranch: "main",
+          workspaceMode: "current_branch",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+        {
+          sessionId: 503,
+          issueId: 23,
+          issueTitle: "Worktree issue",
+          issueStatus: "review",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          originBranch: "main",
+          workspaceBranch: "issue-23",
+          workspaceMode: "worktree",
+          lastActiveAt: 1_780_639_000_000,
+          startedAt: 1_780_639_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    const sessionList = await findSessionList();
+    const currentBranchRow = within(sessionList).getByRole("button", {
+      name: /Current branch issue/i,
+    });
+    const worktreeRow = within(sessionList).getByRole("button", {
+      name: /Worktree issue/i,
+    });
+
+    expect(currentBranchRow).toHaveTextContent("#22");
+    expect(currentBranchRow).toHaveTextContent("main");
+    expect(worktreeRow).toHaveTextContent("#23");
+    expect(worktreeRow).toHaveTextContent("issue-23");
   });
 
   it("shows review running sessions as blue without a running spinner", async () => {
@@ -1565,10 +1618,10 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(codexRow).getByRole("img", { name: "Agent 类型：Codex" }),
+      within(codexRow).getByRole("img", { name: "Agent type: Codex" }),
     ).toHaveAttribute("src", codexLogoSrc);
     expect(
-      within(claudeRow).getByRole("img", { name: "Agent 类型：Claude" }),
+      within(claudeRow).getByRole("img", { name: "Agent type: Claude" }),
     ).toHaveAttribute("src", claudeLogoSrc);
     expect(codexRow).not.toHaveTextContent("Codex");
     expect(claudeRow).not.toHaveTextContent("Claude");
@@ -2429,9 +2482,9 @@ describe("AgentsActivity", () => {
     });
 
     expect(
-      within(completedRow).getByLabelText("Session status: closed"),
+      within(completedRow).getByLabelText("Session status: Completed"),
     ).toHaveClass("agents-session-row__status-dot--done");
-    expect(completedRow).toHaveTextContent("closed");
+    expect(completedRow).toHaveTextContent("Completed");
   });
 
   it("shows crashed status without exposing a header log opener", async () => {
@@ -2461,11 +2514,11 @@ describe("AgentsActivity", () => {
       name: /Crashed issue/i,
     });
 
-    expect(crashedRow).toHaveTextContent("crashed");
+    expect(crashedRow).toHaveTextContent("Failed");
     expect(
       await screen.findByRole("heading", { name: "#23 Crashed issue" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Status: crashed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Status: Failed")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
@@ -2502,11 +2555,11 @@ describe("AgentsActivity", () => {
       name: /Stopped issue/i,
     });
 
-    expect(stoppedRow).toHaveTextContent("stopped");
+    expect(stoppedRow).toHaveTextContent("Stopped");
     expect(
       await screen.findByRole("heading", { name: "#24 Stopped issue" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Status: stopped")).not.toBeInTheDocument();
+    expect(screen.queryByText("Status: Stopped")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open Log" }),
     ).not.toBeInTheDocument();
@@ -2583,7 +2636,7 @@ describe("AgentsActivity", () => {
     });
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
     const initialRow = within(sessionList).getByRole("button", {
-      name: /Session is runningPolling issue/i,
+      name: /#21 Polling issue/i,
     });
     expect(
       within(initialRow).getByLabelText("Session status: Running"),
@@ -2592,7 +2645,7 @@ describe("AgentsActivity", () => {
     await emitSessionListChanged(1, 302);
 
     const refreshedRow = within(sessionList).getByRole("button", {
-      name: /^Polling issue/i,
+      name: /#21 Polling issue/i,
     });
     expect(
       within(refreshedRow).getByLabelText("Session status: Output complete"),

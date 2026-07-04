@@ -386,11 +386,13 @@ export interface I18nMessages {
     sessionMonitorMenu: string;
     sessionMonitorUpdatedAt: (updatedAt: string) => string;
     sessionMonitorView: string;
+    sessionAgentType: (agentLabel: string) => string;
     sessionRunning: string;
     sessionClosed: string;
     sessionCrashed: string;
     sessionStopped: string;
     sessionStatus: (statusLabel: string) => string;
+    moreSessions: (count: number) => string;
     issueDetailsTitle: string;
     fileTree: string;
     refreshChanges: string;
@@ -900,11 +902,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sessionMonitorMenu: "Session monitor menu",
       sessionMonitorUpdatedAt: (updatedAt) => `Updated ${updatedAt}`,
       sessionMonitorView: "View session",
+      sessionAgentType: (agentLabel) => `Agent type: ${agentLabel}`,
       sessionRunning: "Session is running",
       sessionClosed: "Completed",
       sessionCrashed: "Failed",
       sessionStopped: "Stopped",
       sessionStatus: (statusLabel) => `Session status: ${statusLabel}`,
+      moreSessions: (count) => `${count} more sessions`,
       issueDetailsTitle: "Issue details",
       fileTree: "Project file tree",
       refreshChanges: "Refresh changes",
@@ -1398,11 +1402,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       sessionMonitorMenu: "会话监控菜单",
       sessionMonitorUpdatedAt: (updatedAt) => `更新于 ${updatedAt}`,
       sessionMonitorView: "查看会话",
+      sessionAgentType: (agentLabel) => `Agent 类型：${agentLabel}`,
       sessionRunning: "会话正在运行",
       sessionClosed: "已完成",
       sessionCrashed: "失败",
       sessionStopped: "已停止",
       sessionStatus: (statusLabel) => `会话状态：${statusLabel}`,
+      moreSessions: (count) => `还有 ${count} 个会话`,
       issueDetailsTitle: "Issue 详情",
       fileTree: "项目文件树",
       refreshChanges: "刷新变更",

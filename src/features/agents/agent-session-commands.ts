@@ -30,6 +30,8 @@ export interface AgentSessionListItem {
   workspaceMode?: WorkspaceMode;
   workingDir?: string;
   workspacePath?: string | null;
+  originBranch?: string | null;
+  workspaceBranch?: string | null;
   logPath?: string | null;
   latestOutput?: string | null;
   lastActiveAt: number;

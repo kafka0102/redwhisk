@@ -2455,9 +2455,9 @@ button:focus-visible {
 .agents-session-row__agent {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-subtle);
   font-size: 10px;
   line-height: 1.3;
 }
@@ -2470,8 +2470,25 @@ button:focus-visible {
   object-fit: contain;
 }
 
-.agents-session-row__meta-status {
-  text-transform: none;
+.agents-session-row__meta-issue {
+  flex: 0 0 auto;
+}
+
+.agents-session-row__meta-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agents-session-row__meta-branch-icon {
+  flex: 0 0 auto;
+}
+
+.agents-session-row__meta-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agents-splitter {
