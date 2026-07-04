@@ -203,6 +203,11 @@ impl ClaudeSessionHandle {
         self.config.broadcaster.emit_stream_event(
             self.config.project_id,
             self.config.session_id,
+            timeline_event(&turn_id, user_message_timeline_item(&turn_id, text)),
+        );
+        self.config.broadcaster.emit_stream_event(
+            self.config.project_id,
+            self.config.session_id,
             AgentStreamEvent::TurnStarted {
                 turn_id: turn_id.clone(),
             },
@@ -1014,6 +1019,13 @@ fn timeline_event(turn_id: &Option<String>, item: AgentTimelineItem) -> AgentStr
     }
 }
 
+fn user_message_timeline_item(turn_id: &Option<String>, text: String) -> AgentTimelineItem {
+    AgentTimelineItem::UserMessage {
+        text,
+        message_id: turn_id.as_ref().map(|id| format!("user-{id}")),
+    }
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1169,6 +1181,18 @@ mod tests {
                 ..
             } if name == "shell"
         )));
+    }
+
+    #[test]
+    fn user_message_timeline_item_uses_stable_turn_scoped_message_id() {
+        let item = user_message_timeline_item(&Some("t1".into()), "hello".into());
+        assert!(matches!(
+            item,
+            AgentTimelineItem::UserMessage {
+                text,
+                message_id: Some(message_id),
+            } if text == "hello" && message_id == "user-t1"
+        ));
     }
 
     #[test]
