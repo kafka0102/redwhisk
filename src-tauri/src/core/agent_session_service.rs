@@ -49,7 +49,7 @@ use crate::types::agent_session::{
     UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner, WriteAgentSessionTerminalInput,
 };
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -3518,6 +3518,7 @@ fn read_structured_timeline_log(
     let reader = BufReader::new(file);
     let mut saw_structured_line = false;
     let mut history = StructuredTimelineHistory::default();
+    let mut pending_reasoning_started_at: Option<i64> = None;
 
     for line in reader.lines() {
         let line = line.map_err(agent_session_start_error)?;
@@ -3526,18 +3527,55 @@ fn read_structured_timeline_log(
             continue;
         }
 
-        let Some(line_history) = structured_history_from_log_line(trimmed) else {
+        let Some(events) = structured_events_from_log_line(trimmed) else {
             if saw_structured_line {
                 continue;
             }
             return Ok(None);
         };
         saw_structured_line = true;
-        for item in line_history.items {
-            push_compacted_timeline_item(&mut history.items, item);
-        }
-        if line_history.effort.is_some() {
-            history.effort = line_history.effort;
+        for event in events {
+            match event {
+                AgentStreamEvent::Timeline {
+                    item, timestamp, ..
+                } => {
+                    if !matches!(item, AgentTimelineItem::Reasoning { .. }) {
+                        finalize_pending_reasoning_duration(
+                            &mut history.items,
+                            pending_reasoning_started_at.take(),
+                            timestamp,
+                        );
+                    }
+
+                    let starts_reasoning_without_duration = matches!(
+                        &item,
+                        AgentTimelineItem::Reasoning {
+                            duration_ms: None,
+                            ..
+                        }
+                    );
+                    let has_explicit_reasoning_duration = matches!(
+                        &item,
+                        AgentTimelineItem::Reasoning {
+                            duration_ms: Some(_),
+                            ..
+                        }
+                    );
+
+                    push_compacted_timeline_item(&mut history.items, item);
+
+                    if has_explicit_reasoning_duration {
+                        pending_reasoning_started_at = None;
+                    } else if starts_reasoning_without_duration
+                        && pending_reasoning_started_at.is_none()
+                        && timestamp > 0
+                    {
+                        pending_reasoning_started_at = Some(timestamp);
+                    }
+                }
+                AgentStreamEvent::EffortChanged { effort } => history.effort = effort,
+                _ => {}
+            }
         }
     }
 
@@ -3548,23 +3586,37 @@ fn read_structured_timeline_log(
     }
 }
 
-fn structured_history_from_log_line(line: &str) -> Option<StructuredTimelineHistory> {
+fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {
     let stream = serde_json::Deserializer::from_str(line).into_iter::<Value>();
     let mut saw_value = false;
-    let mut history = StructuredTimelineHistory::default();
+    let mut events = Vec::new();
 
     for value in stream {
         saw_value = true;
         let value = value.ok()?;
-        let event = stream_event_from_log_value(value)?;
-        match event {
-            AgentStreamEvent::Timeline { item, .. } => history.items.push(item),
-            AgentStreamEvent::EffortChanged { effort } => history.effort = effort,
-            _ => {}
-        }
+        events.push(stream_event_from_log_value(value)?);
     }
 
-    saw_value.then_some(history)
+    saw_value.then_some(events)
+}
+
+fn finalize_pending_reasoning_duration(
+    items: &mut [AgentTimelineItem],
+    started_at: Option<i64>,
+    end_timestamp: i64,
+) {
+    let Some(started_at) = started_at else {
+        return;
+    };
+    if end_timestamp <= started_at {
+        return;
+    }
+    let Some(AgentTimelineItem::Reasoning { duration_ms, .. }) = items.last_mut() else {
+        return;
+    };
+    if duration_ms.is_none() {
+        *duration_ms = Some((end_timestamp - started_at) as u64);
+    }
 }
 
 fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentTimelineItem) {
@@ -3606,7 +3658,8 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
         AgentTimelineItem::Reasoning { .. } => {
             if matches!(items.last(), Some(AgentTimelineItem::Reasoning { .. })) {
                 if let Some(last) = items.last_mut() {
-                    *last = item;
+                    let previous = last.clone();
+                    *last = merge_reasoning_timeline_item(previous, item);
                     return;
                 }
             }
@@ -3621,7 +3674,8 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                     } if existing_id == call_id
                 )
             }) {
-                items[index] = item;
+                let previous = items[index].clone();
+                items[index] = merge_tool_call_timeline_item(previous, item);
                 return;
             }
         }
@@ -3637,6 +3691,187 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
     }
 
     items.push(item);
+}
+
+fn merge_reasoning_timeline_item(
+    previous: AgentTimelineItem,
+    incoming: AgentTimelineItem,
+) -> AgentTimelineItem {
+    match (previous, incoming) {
+        (
+            AgentTimelineItem::Reasoning {
+                text: previous_text,
+                duration_ms: previous_duration_ms,
+            },
+            AgentTimelineItem::Reasoning {
+                text,
+                duration_ms: None,
+            },
+        ) if previous_duration_ms.is_some() && previous_text == text => {
+            AgentTimelineItem::Reasoning {
+                text,
+                duration_ms: previous_duration_ms,
+            }
+        }
+        (_, incoming) => incoming,
+    }
+}
+
+fn merge_tool_call_timeline_item(
+    previous: AgentTimelineItem,
+    incoming: AgentTimelineItem,
+) -> AgentTimelineItem {
+    match (previous, incoming) {
+        (
+            AgentTimelineItem::ToolCall {
+                call_id,
+                name: previous_name,
+                detail: previous_detail,
+                status: _,
+                error: _,
+            },
+            AgentTimelineItem::ToolCall {
+                name,
+                detail,
+                status,
+                error,
+                ..
+            },
+        ) => AgentTimelineItem::ToolCall {
+            call_id,
+            name: if should_preserve_existing_tool_name(&previous_name, &name) {
+                previous_name
+            } else {
+                name
+            },
+            detail: merge_tool_call_detail(previous_detail, detail),
+            status,
+            error,
+        },
+        (_, incoming) => incoming,
+    }
+}
+
+fn should_preserve_existing_tool_name(previous: &str, incoming: &str) -> bool {
+    !is_generic_tool_name(previous)
+        && (incoming.trim().is_empty() || is_generic_tool_name(incoming))
+}
+
+fn is_generic_tool_name(name: &str) -> bool {
+    name.trim().eq_ignore_ascii_case("tool")
+}
+
+fn merge_tool_call_detail(previous: ToolCallDetail, incoming: ToolCallDetail) -> ToolCallDetail {
+    if std::mem::discriminant(&previous) != std::mem::discriminant(&incoming) {
+        return incoming;
+    }
+
+    match (previous, incoming) {
+        (
+            ToolCallDetail::Shell {
+                command: previous_command,
+                output: previous_output,
+                exit_code: previous_exit_code,
+            },
+            ToolCallDetail::Shell {
+                command,
+                output,
+                exit_code,
+            },
+        ) => ToolCallDetail::Shell {
+            command: if command.is_empty() {
+                previous_command
+            } else {
+                command
+            },
+            output: output.or(previous_output),
+            exit_code: exit_code.or(previous_exit_code),
+        },
+        (
+            ToolCallDetail::Read {
+                path: previous_path,
+                content: previous_content,
+            },
+            ToolCallDetail::Read { path, content },
+        ) => ToolCallDetail::Read {
+            path: if path.is_empty() { previous_path } else { path },
+            content: content.or(previous_content),
+        },
+        (
+            ToolCallDetail::Edit {
+                path: previous_path,
+                diff: previous_diff,
+            },
+            ToolCallDetail::Edit { path, diff },
+        ) => ToolCallDetail::Edit {
+            path: if path.is_empty() { previous_path } else { path },
+            diff: diff.or(previous_diff),
+        },
+        (
+            ToolCallDetail::Write {
+                path: previous_path,
+                content: previous_content,
+            },
+            ToolCallDetail::Write { path, content },
+        ) => ToolCallDetail::Write {
+            path: if path.is_empty() { previous_path } else { path },
+            content: content.or(previous_content),
+        },
+        (
+            ToolCallDetail::Search {
+                query: previous_query,
+                mode: _previous_mode,
+                matches: previous_matches,
+            },
+            ToolCallDetail::Search {
+                query,
+                mode,
+                matches,
+            },
+        ) => ToolCallDetail::Search {
+            query: if query.is_empty() {
+                previous_query
+            } else {
+                query
+            },
+            mode,
+            matches: if matches.is_empty() {
+                previous_matches
+            } else {
+                matches
+            },
+        },
+        (
+            ToolCallDetail::SubAgent {
+                child_session_id: previous_child_session_id,
+            },
+            ToolCallDetail::SubAgent { child_session_id },
+        ) => ToolCallDetail::SubAgent {
+            child_session_id: child_session_id.or(previous_child_session_id),
+        },
+        (
+            ToolCallDetail::Plan {
+                text: previous_text,
+            },
+            ToolCallDetail::Plan { text },
+        ) => ToolCallDetail::Plan {
+            text: if text.is_empty() { previous_text } else { text },
+        },
+        (
+            ToolCallDetail::Unknown {
+                raw_input: previous_raw_input,
+                raw_output: previous_raw_output,
+            },
+            ToolCallDetail::Unknown {
+                raw_input,
+                raw_output,
+            },
+        ) => ToolCallDetail::Unknown {
+            raw_input: raw_input.or(previous_raw_input),
+            raw_output: raw_output.or(previous_raw_output),
+        },
+        (_, incoming) => incoming,
+    }
 }
 
 fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
@@ -4461,7 +4696,7 @@ mod tests {
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析完成".to_string(),
-                        duration_ms: None,
+                        duration_ms: Some(4200),
                     },
                     turn_id: None,
                     seq: 0,
@@ -4474,16 +4709,9 @@ mod tests {
                 seq: 5,
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::ToolCall {
-                        call_id: "call-1".to_string(),
-                        name: "shell".to_string(),
-                        detail: ToolCallDetail::Shell {
-                            command: "pnpm test".to_string(),
-                            output: None,
-                            exit_code: None,
-                        },
-                        status: ToolCallStatus::Running,
-                        error: None,
+                    item: AgentTimelineItem::Reasoning {
+                        text: "分析完成".to_string(),
+                        duration_ms: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -4498,18 +4726,38 @@ mod tests {
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::ToolCall {
                         call_id: "call-1".to_string(),
-                        name: "shell".to_string(),
-                        detail: ToolCallDetail::Shell {
-                            command: "pnpm test".to_string(),
-                            output: Some("ok".to_string()),
-                            exit_code: Some(0),
+                        name: "TodoWrite".to_string(),
+                        detail: ToolCallDetail::Unknown {
+                            raw_input: Some("{\"task\":\"优化浏览器 tab\"}".to_string()),
+                            raw_output: None,
+                        },
+                        status: ToolCallStatus::Running,
+                        error: None,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 6,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 7,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall {
+                        call_id: "call-1".to_string(),
+                        name: "tool".to_string(),
+                        detail: ToolCallDetail::Unknown {
+                            raw_input: None,
+                            raw_output: Some("Updated task #2 status".to_string()),
                         },
                         status: ToolCallStatus::Completed,
                         error: None,
                     },
                     turn_id: None,
                     seq: 0,
-                    timestamp: 6,
+                    timestamp: 7,
                 },
             },
         ];
@@ -4532,18 +4780,93 @@ mod tests {
                 },
                 AgentTimelineItem::Reasoning {
                     text: "分析完成".to_string(),
-                    duration_ms: None,
+                    duration_ms: Some(4200),
                 },
                 AgentTimelineItem::ToolCall {
                     call_id: "call-1".to_string(),
-                    name: "shell".to_string(),
-                    detail: ToolCallDetail::Shell {
-                        command: "pnpm test".to_string(),
-                        output: Some("ok".to_string()),
-                        exit_code: Some(0),
+                    name: "TodoWrite".to_string(),
+                    detail: ToolCallDetail::Unknown {
+                        raw_input: Some("{\"task\":\"优化浏览器 tab\"}".to_string()),
+                        raw_output: Some("Updated task #2 status".to_string()),
                     },
                     status: ToolCallStatus::Completed,
                     error: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn read_timeline_from_structured_log_backfills_reasoning_duration_from_timestamps() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("structured-reasoning-duration.jsonl");
+        let events = [
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 1,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning {
+                        text: "分析中".to_string(),
+                        duration_ms: None,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 1_000,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 2,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning {
+                        text: "分析完成".to_string(),
+                        duration_ms: None,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 2_500,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 3,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::AssistantMessage {
+                        text: "结论".to_string(),
+                        message_id: Some("msg-1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 5_000,
+                },
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log_path, format!("{lines}\n")).expect("write structured log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let history = read_timeline_from_session_log(&session).expect("read timeline");
+
+        assert_eq!(
+            history.items,
+            vec![
+                AgentTimelineItem::Reasoning {
+                    text: "分析完成".to_string(),
+                    duration_ms: Some(4_000),
+                },
+                AgentTimelineItem::AssistantMessage {
+                    text: "结论".to_string(),
+                    message_id: Some("msg-1".to_string()),
                 },
             ]
         );
