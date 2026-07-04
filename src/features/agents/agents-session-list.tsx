@@ -1,4 +1,4 @@
-import { LoaderCircle, Plus } from "lucide-react";
+import { GitBranch, LoaderCircle, Plus } from "lucide-react";
 import { memo, useMemo, type RefObject } from "react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
@@ -158,6 +158,7 @@ const SessionRow = memo(function SessionRow({
   const statusTone = getSessionStatusTone(session);
   const statusLabel = formatSessionStatusLabel(messages, session);
   const agentLabel = formatAgentTypeLabel(session.agentType);
+  const branchName = resolveSessionBranchName(session);
 
   return (
     <div role="listitem">
@@ -177,7 +178,7 @@ const SessionRow = memo(function SessionRow({
             />
           ) : null}
           <span className="agents-session-row__title">
-            {formatSessionTitle(session)}
+            {formatSessionRowTitle(session)}
           </span>
         </span>
         <span className="agents-session-row__output">
@@ -191,13 +192,26 @@ const SessionRow = memo(function SessionRow({
         </span>
         <span className="agents-session-row__agent">
           <img
-            alt={`Agent 类型：${agentLabel}`}
+            alt={messages.agentsFeature.sessionAgentType(agentLabel)}
             className="agents-session-row__agent-logo"
             src={getAgentLogoSrc(session.agentType)}
           />
-          {shouldShowSessionRowStatus(session) ? (
-            <span className="agents-session-row__meta-status">
-              {statusLabel}
+          {session.issueId != null ? (
+            <span className="agents-session-row__meta-issue">
+              {`#${session.issueId}`}
+            </span>
+          ) : null}
+          {branchName ? (
+            <span className="agents-session-row__meta-branch">
+              <GitBranch
+                aria-hidden="true"
+                className="agents-session-row__meta-branch-icon"
+                size={11}
+                strokeWidth={1.8}
+              />
+              <span className="agents-session-row__meta-branch-name">
+                {branchName}
+              </span>
             </span>
           ) : null}
           <span className="sr-only">{`，${statusLabel}`}</span>
@@ -251,7 +265,7 @@ function SessionRows({
       )}
       {sessions.length > 20 && (
         <p className="agents-session-list__more">
-          还有 {sessions.length - 20} 个会话
+          {messages.agentsFeature.moreSessions(sessions.length - 20)}
         </p>
       )}
     </div>
@@ -332,6 +346,20 @@ function isNonOutputLine(line: string): boolean {
   );
 }
 
-function shouldShowSessionRowStatus(session: AgentSessionListItem): boolean {
-  return session.status === "crashed";
+function formatSessionRowTitle(session: AgentSessionListItem): string {
+  if (session.issueId != null && session.issueTitle) {
+    return `#${session.issueId} ${session.issueTitle}`;
+  }
+
+  return formatSessionTitle(session);
+}
+
+function resolveSessionBranchName(
+  session: AgentSessionListItem,
+): string | null {
+  if (session.workspaceMode === "worktree") {
+    return session.workspaceBranch ?? session.originBranch ?? null;
+  }
+
+  return session.originBranch ?? session.workspaceBranch ?? null;
 }

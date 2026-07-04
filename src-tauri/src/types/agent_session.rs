@@ -196,6 +196,7 @@ pub struct AgentSessionListItem {
     pub working_dir: String,
     pub workspace_path: Option<String>,
     pub origin_branch: Option<String>,
+    pub workspace_branch: Option<String>,
     pub worktree_owner: WorktreeOwner,
     pub log_path: String,
     pub latest_output: Option<String>,

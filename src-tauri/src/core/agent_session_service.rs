@@ -1451,6 +1451,7 @@ impl<'connection> AgentSessionService<'connection> {
                     working_dir: row.working_dir,
                     workspace_path: row.workspace_path,
                     origin_branch: row.origin_branch,
+                    workspace_branch: row.workspace_branch,
                     worktree_owner: row.worktree_owner,
                     log_path: row.log_path,
                     latest_output,
