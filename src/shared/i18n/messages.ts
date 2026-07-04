@@ -223,6 +223,7 @@ export interface I18nMessages {
     selectLabels: string;
     start: string;
     starting: string;
+    sessionStarting: string;
     status: string;
     statusLabel: string;
     summaryClose: string;
@@ -247,10 +248,6 @@ export interface I18nMessages {
     currentBranch: string;
     targetBranch: string;
     worktree: string;
-    worktreeStartProgressTitle: string;
-    worktreeCreatingProgress: (worktreeName: string) => string;
-    worktreeSetupProgress: (command: string) => string;
-    worktreeCreatedProgress: string;
     dialogStatus: string;
     agentProfile: string;
     completionDirtyTitle: string;
@@ -723,6 +720,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       selectLabels: "Select labels",
       start: "Start",
       starting: "Starting...",
+      sessionStarting: "Starting agent session...",
       status: "Status",
       statusLabel: "Issue status",
       summaryClose: "Close issue summary",
@@ -753,11 +751,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       currentBranch: "Current branch",
       targetBranch: "Target branch",
       worktree: "Worktree",
-      worktreeStartProgressTitle: "Worktree setup progress",
-      worktreeCreatingProgress: (worktreeName) =>
-        `Creating worktree ${worktreeName}`,
-      worktreeSetupProgress: (command) => `Running setup command: ${command}`,
-      worktreeCreatedProgress: "Completed worktree creation.",
       dialogStatus: "Dialog status",
       agentProfile: "Agent profile",
       completionDirtyTitle: "Uncommitted changes",
@@ -1228,6 +1221,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       selectLabels: "选择标签",
       start: "开始",
       starting: "启动中...",
+      sessionStarting: "正在创建 Agent 会话...",
       status: "状态",
       statusLabel: "Issue 状态",
       summaryClose: "关闭 Issue 总结",
@@ -1255,11 +1249,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       currentBranch: "当前分支",
       targetBranch: "目标分支",
       worktree: "工作树",
-      worktreeStartProgressTitle: "Worktree 创建进度",
-      worktreeCreatingProgress: (worktreeName) =>
-        `正在创建 worktree ${worktreeName}`,
-      worktreeSetupProgress: (command) => `执行初始化命令：${command}`,
-      worktreeCreatedProgress: "完成 worktree 创建。",
       dialogStatus: "弹窗状态",
       agentProfile: "Agent 配置",
       completionDirtyTitle: "存在未提交改动",

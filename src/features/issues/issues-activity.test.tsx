@@ -1934,7 +1934,7 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).toHaveBeenCalledTimes(2);
   });
 
-  it("disables start action shows non-dismissible worktree progress while starting", async () => {
+  it("shows a non-dismissible loading dialog while the session is starting", async () => {
     const user = userEvent.setup();
     const pendingStart = createDeferred<StartAgentSessionResult>();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -1958,25 +1958,22 @@ describe("IssuesActivity", () => {
     await user.click(startButton);
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
 
-    const progressDialog = screen.getByRole("dialog", {
-      name: "Worktree setup progress",
+    const loadingDialog = screen.getByRole("dialog", {
+      name: "Starting agent session...",
     });
+    expect(loadingDialog).toBeInTheDocument();
+    // Loading 弹窗以 Radix portal 渲染，会把背后的 run dialog 标记为 aria-hidden，
+    // 因此需要 hidden: true 才能查到 run dialog 内被禁用的关闭按钮。
     expect(
-      within(progressDialog).getByText("Creating worktree issue-20"),
-    ).toBeInTheDocument();
-    expect(
-      within(progressDialog).getByText("Running setup command: pnpm install"),
-    ).toBeInTheDocument();
-    expect(
-      within(progressDialog).getByText("Completed worktree creation."),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("button", { name: "Close run dialog" }),
+      within(dialog).getByRole("button", {
+        hidden: true,
+        name: "Close run dialog",
+      }),
     ).toBeDisabled();
 
     await user.keyboard("{Escape}");
     expect(
-      screen.getByRole("dialog", { name: "Worktree setup progress" }),
+      screen.getByRole("dialog", { name: "Starting agent session..." }),
     ).toBeInTheDocument();
 
     pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
