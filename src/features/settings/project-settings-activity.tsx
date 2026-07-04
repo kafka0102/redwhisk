@@ -397,6 +397,7 @@ export function ProjectSettingsActivity({
   async function handleDeleteProfile(profile: AgentProfileRecord) {
     const isConfirmed = await confirm({
       message: messages.settings.deleteConfirm(profile.name),
+      confirmVariant: "destructive",
     });
     if (!isConfirmed) {
       return;
@@ -423,6 +424,7 @@ export function ProjectSettingsActivity({
   async function handleDeleteLabel(label: ProjectLabelRecord) {
     const isConfirmed = await confirm({
       message: messages.settings.deleteConfirm(label.name),
+      confirmVariant: "destructive",
     });
     if (!isConfirmed) {
       return;
@@ -449,6 +451,7 @@ export function ProjectSettingsActivity({
   async function handleDeleteSkill(skill: SavedAgentSkillRecord) {
     const isConfirmed = await confirm({
       message: messages.settings.deleteConfirm(skill.name),
+      confirmVariant: "destructive",
     });
     if (!isConfirmed) {
       return;

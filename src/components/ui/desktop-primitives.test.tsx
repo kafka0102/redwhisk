@@ -47,6 +47,7 @@ describe("desktop ui primitives", () => {
       <ConfirmDialog
         message="确认要删除吗？"
         confirmLabel="删除"
+        confirmVariant="destructive"
         onConfirm={handleConfirm}
       >
         <Button>删除项目</Button>

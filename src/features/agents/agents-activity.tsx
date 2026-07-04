@@ -1063,6 +1063,7 @@ export function AgentsActivity({
 
     const confirmed = await confirm({
       message: messages.agentsFeature.confirmDeleteSession,
+      confirmVariant: "destructive",
     });
     if (!confirmed) {
       return;
