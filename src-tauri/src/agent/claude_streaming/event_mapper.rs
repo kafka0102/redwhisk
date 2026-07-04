@@ -259,7 +259,12 @@ fn extract_exit_code(content: &str) -> Option<i32> {
         let value = trimmed
             .strip_prefix("exit_code:")
             .or_else(|| trimmed.strip_prefix("Exit code:"))?;
-        value.trim().trim_end_matches(';').trim().parse::<i32>().ok()
+        value
+            .trim()
+            .trim_end_matches(';')
+            .trim()
+            .parse::<i32>()
+            .ok()
     })
 }
 
@@ -402,9 +407,7 @@ mod tests {
             content: "file contents".into(),
             is_error: false,
         }];
-        let updates = map_tool_results(&blocks, |id| {
-            (id == "t1").then(|| "Read".to_string())
-        });
+        let updates = map_tool_results(&blocks, |id| (id == "t1").then(|| "Read".to_string()));
         assert_eq!(updates.len(), 1);
         match &updates[0].patch {
             ToolResultPatch::Read { content } => {
@@ -421,9 +424,7 @@ mod tests {
             content: "ls output\nexit_code: 0".into(),
             is_error: false,
         }];
-        let updates = map_tool_results(&blocks, |id| {
-            (id == "t1").then(|| "Bash".to_string())
-        });
+        let updates = map_tool_results(&blocks, |id| (id == "t1").then(|| "Bash".to_string()));
         assert_eq!(updates.len(), 1);
         match &updates[0].patch {
             ToolResultPatch::Shell { output, exit_code } => {
