@@ -3748,7 +3748,7 @@ button:focus-visible {
   align-items: center;
   grid-template-columns: minmax(0, auto) 22px;
   justify-content: flex-end;
-  column-gap: 8px;
+  column-gap: 6px;
   min-width: 102px;
 }
 
