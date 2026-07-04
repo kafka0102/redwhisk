@@ -4,6 +4,9 @@ import type { I18nMessages } from "../../shared/i18n/messages";
 export type SessionIssueGroup = "inProcess" | "review" | "done";
 
 export function formatSessionTitle(session: AgentSessionListItem): string {
+  if (session.issueId != null && session.issueTitle) {
+    return `#${session.issueId} ${session.issueTitle}`;
+  }
   return session.issueTitle ?? session.title ?? `Session #${session.sessionId}`;
 }
 
