@@ -46,6 +46,8 @@ export interface UseAgentComposerResult {
   cancelToastMessage: string | null;
   /** 派生自 turnStatus，供组件切换发送/取消按钮。 */
   isSending: boolean;
+  /** 是否正在请求取消当前 turn（防重复点击，给按钮 loading 态）。 */
+  isCancelling: boolean;
   /** 提交当前文本；空文本（trim 后）不发。 */
   handleSubmit: () => Promise<void>;
   /** 取消当前 turn。 */
@@ -109,6 +111,7 @@ export function useAgentComposer({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [cancelToastMessage, setCancelToastMessage] = useState<string | null>(
     null,
   );
@@ -186,13 +189,19 @@ export function useAgentComposer({
   ]);
 
   const handleCancel = useCallback(async () => {
+    if (isCancelling) {
+      return;
+    }
     setSubmitError(null);
+    setIsCancelling(true);
     try {
       await cancelAgentTurn({ projectId, sessionId });
     } catch (error) {
       showCancelToast(toCommandError(error).message);
+    } finally {
+      setIsCancelling(false);
     }
-  }, [projectId, sessionId, showCancelToast]);
+  }, [isCancelling, projectId, sessionId, showCancelToast]);
 
   const handleAddAttachment = useCallback(async () => {
     if (isReadOnly) {
@@ -285,6 +294,7 @@ export function useAgentComposer({
     submitError,
     cancelToastMessage,
     isSending,
+    isCancelling,
     handleSubmit,
     handleCancel,
     handleAddAttachment,

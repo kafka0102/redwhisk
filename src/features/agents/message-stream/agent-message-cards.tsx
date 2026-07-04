@@ -68,6 +68,7 @@ const MessageCard = memo(function MessageCard({
         <ReasoningCard
           item={item}
           thinkingLabel={messages.agentsFeature.reasoningTitle}
+          completedLabel={messages.agentsFeature.reasoningDuration}
         />
       );
     case "tool_call":
@@ -114,16 +115,25 @@ function AssistantMessageCard({
 function ReasoningCard({
   item,
   thinkingLabel,
+  completedLabel,
 }: {
   item: Extract<AgentTimelineItem, { type: "reasoning" }>;
   thinkingLabel: string;
+  /** 已完成 reasoning 的时长文案 formatter：入参为秒。 */
+  completedLabel: (seconds: number) => string;
 }) {
+  // durationMs 存在表示 reasoning 块已结束（后端 force flush 时填充）。
+  // 此时标题展示「思考过程 持续了 X 秒」；否则回退到「正在思考…」。
+  const label =
+    item.durationMs != null
+      ? completedLabel(Math.max(1, Math.round(item.durationMs / 1000)))
+      : thinkingLabel;
   return (
     <article className="agents-message__entry agents-message__entry--reasoning">
       <details className="agents-message__reasoning">
         <summary className="agents-message__reasoning-summary">
           <Sparkles aria-hidden="true" size={13} strokeWidth={1.8} />
-          <span>{thinkingLabel}</span>
+          <span>{label}</span>
           <ChevronDown
             aria-hidden="true"
             size={13}

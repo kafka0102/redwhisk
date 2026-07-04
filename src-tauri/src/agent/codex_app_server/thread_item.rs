@@ -53,7 +53,11 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
                     .join("\n")
             });
             let text = summary.or(content)?;
-            Some(AgentTimelineItem::Reasoning { text })
+            // Codex timeline 历史回放不携带 per-block 计时，duration_ms 留 None。
+            Some(AgentTimelineItem::Reasoning {
+                text,
+                duration_ms: None,
+            })
         }
         "plan" => {
             let call_id = str_field(item, "id")

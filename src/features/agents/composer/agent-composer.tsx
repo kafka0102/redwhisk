@@ -48,7 +48,9 @@ export function AgentComposer({
     projectId,
     sessionId,
     currentModelId,
-    enabled: capabilities.supportsModelSwitching,
+    // 只要该 agent 展示模型信息（Codex/Claude 均为 true），就拉取模型列表；
+    // 实际能否切换由后端返回的 isReadOnly（第三方接口=true）动态决定。
+    enabled: capabilities.canShowModel,
     onBeforeSelectModel,
   });
 
@@ -60,6 +62,7 @@ export function AgentComposer({
     submitError,
     cancelToastMessage,
     isSending,
+    isCancelling,
     handleSubmit,
     handleCancel,
     handleAddAttachment,
@@ -153,6 +156,7 @@ export function AgentComposer({
           void handleSetEffort(nextEffort);
         }}
         isSending={isSending}
+        isCancelling={isCancelling}
         canSend={canSend}
         isReadOnly={isReadOnly}
         onSubmit={() => {

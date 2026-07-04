@@ -74,14 +74,17 @@ export function useAgentModels({
       setError(null);
       setIsReadOnly(false);
       try {
-        const { models: nextModels } = await listAgentModels({
-          projectId,
-          sessionId,
-        });
+        const { models: nextModels, isReadOnly: serverReadOnly } =
+          await listAgentModels({
+            projectId,
+            sessionId,
+          });
         if (isDisposed) {
           return;
         }
         setModels(nextModels);
+        // 后端按第三方接口判定只读（Claude 配置了 base_url/auth_token 时为 true）。
+        setIsReadOnly(serverReadOnly === true);
       } catch (loadError) {
         if (isDisposed) {
           return;

@@ -19,6 +19,7 @@ import type {
   AgentStreamEvent,
   AgentTimelineItem,
   AgentUsage,
+  ToolCallDetail,
 } from "../agent-stream-types";
 import type {
   MessageStreamAction,
@@ -295,7 +296,27 @@ function applyTimelineItem(
         (entry) => entry.kind === "tool_call" && entry.id === callId,
       );
       if (index >= 0) {
-        return replaceAt(entries, index, { id: callId, kind: item.type, item });
+        // tool_use 阶段（带 path/command/diff 等摘要）与 tool_result 回填
+        // （带 output/exit_code 但可能清空摘要）会按同一 callId 到达。
+        // 字段级合并：incoming 非空字段覆盖 existing，空字段保留 existing，
+        // 避免后端 patch_detail 新建空 detail 时丢失 tool_use 阶段的 path/command。
+        const existing = entries[index];
+        const existingDetail =
+          existing.kind === "tool_call" && existing.item.type === "tool_call"
+            ? existing.item.detail
+            : null;
+        const mergedDetail = existingDetail
+          ? mergeToolCallDetail(existingDetail, item.detail)
+          : item.detail;
+        const mergedItem: Extract<AgentTimelineItem, { type: "tool_call" }> = {
+          ...item,
+          detail: mergedDetail,
+        };
+        return replaceAt(entries, index, {
+          id: callId,
+          kind: item.type,
+          item: mergedItem,
+        });
       }
       return [...entries, toEntry(item, nextLocalId(entries))];
     }
@@ -362,11 +383,27 @@ function isEmptyToolCall(
   const detail = item.detail;
   switch (detail.type) {
     case "shell":
-      return detail.command.trim().length === 0;
+      // 回填场景：command 可能为空但 output/exit_code 有值，任一非空即非空。
+      return (
+        detail.command.trim().length === 0 &&
+        !(detail.output && detail.output.trim().length > 0) &&
+        detail.exitCode == null
+      );
     case "read":
+      return (
+        detail.path.trim().length === 0 &&
+        !(detail.content && detail.content.trim().length > 0)
+      );
     case "edit":
+      return (
+        detail.path.trim().length === 0 &&
+        !(detail.diff && detail.diff.trim().length > 0)
+      );
     case "write":
-      return detail.path.trim().length === 0;
+      return (
+        detail.path.trim().length === 0 &&
+        !(detail.content && detail.content.trim().length > 0)
+      );
     case "search":
       return detail.query.trim().length === 0;
     case "plan":
@@ -433,6 +470,93 @@ function mergeUsage(
     contextWindowUsedTokens:
       next.contextWindowUsedTokens ?? current.contextWindowUsedTokens,
   };
+}
+
+/**
+ * 合并同一 callId 的两个 ToolCallDetail（字段级合并）。
+ *
+ * 场景：tool_use 事件先建立 detail（带 path/command/diff 等摘要），
+ * tool_result 事件回填时新建 detail（带 output/exit_code/content，但摘要
+ * 可能为空）。整体替换会丢失摘要，故按字段合并：incoming 非空字段覆盖
+ * existing，incoming 空字段保留 existing。
+ *
+ * type 不一致时以 incoming 为准（降级场景，少见）。
+ * matches 列表：取非空一方（incoming 非空优先）。
+ */
+function mergeToolCallDetail(
+  existing: ToolCallDetail,
+  incoming: ToolCallDetail,
+): ToolCallDetail {
+  if (existing.type !== incoming.type) {
+    return incoming;
+  }
+  switch (incoming.type) {
+    case "shell": {
+      const prev = existing as Extract<ToolCallDetail, { type: "shell" }>;
+      return {
+        type: "shell",
+        command: incoming.command || prev.command,
+        output: incoming.output ?? prev.output,
+        exitCode: incoming.exitCode ?? prev.exitCode,
+      };
+    }
+    case "read": {
+      const prev = existing as Extract<ToolCallDetail, { type: "read" }>;
+      return {
+        type: "read",
+        path: incoming.path || prev.path,
+        content: incoming.content ?? prev.content,
+      };
+    }
+    case "edit": {
+      const prev = existing as Extract<ToolCallDetail, { type: "edit" }>;
+      return {
+        type: "edit",
+        path: incoming.path || prev.path,
+        diff: incoming.diff ?? prev.diff,
+      };
+    }
+    case "write": {
+      const prev = existing as Extract<ToolCallDetail, { type: "write" }>;
+      return {
+        type: "write",
+        path: incoming.path || prev.path,
+        content: incoming.content ?? prev.content,
+      };
+    }
+    case "search": {
+      const prev = existing as Extract<ToolCallDetail, { type: "search" }>;
+      return {
+        type: "search",
+        query: incoming.query || prev.query,
+        mode: incoming.mode,
+        matches: incoming.matches.length > 0 ? incoming.matches : prev.matches,
+      };
+    }
+    case "sub_agent": {
+      const prev = existing as Extract<ToolCallDetail, { type: "sub_agent" }>;
+      return {
+        type: "sub_agent",
+        childSessionId: incoming.childSessionId ?? prev.childSessionId,
+      };
+    }
+    case "plan": {
+      return {
+        type: "plan",
+        text: incoming.text,
+      };
+    }
+    case "unknown": {
+      const prev = existing as Extract<ToolCallDetail, { type: "unknown" }>;
+      return {
+        type: "unknown",
+        rawInput: incoming.rawInput ?? prev.rawInput,
+        rawOutput: incoming.rawOutput ?? prev.rawOutput,
+      };
+    }
+    default:
+      return incoming;
+  }
 }
 
 function replaceAt(

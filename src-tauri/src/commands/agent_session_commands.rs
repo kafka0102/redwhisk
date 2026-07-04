@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 
+use crate::agent::claude_config;
 use crate::agent::codex_app_server::session::default_codex_models;
 use crate::agent::codex_config;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
@@ -27,6 +28,7 @@ use crate::types::agent_session::{
     StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
     UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult, WriteAgentSessionTerminalInput,
 };
+use crate::types::agent_profile::AgentType;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
@@ -598,8 +600,26 @@ pub fn set_agent_model(
 ) -> Result<(), CommandError> {
     let database = open_agent_session_database(&app)?;
     let service = build_agent_session_service(&database.connection);
-    service.find_project_session_record(input.project_id, input.session_id)?;
+    let agent_type = service.find_session_agent_type(input.project_id, input.session_id)?;
     let handle = require_structured_handle(&state, input.session_id)?;
+    // Claude 且为官方模型时，把 model 持久化到 ~/.claude/settings.json，
+    // 保证 claude CLI 下次 spawn（以及应用重启后）沿用该模型。
+    if matches!(agent_type, AgentType::Claude) {
+        let home_dir = app.path().home_dir().map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent 配置保存失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+        claude_config::write_model_to_home(&home_dir, &input.model_id).map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent 配置保存失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+    }
     handle
         .set_model(input.model_id)
         .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
@@ -658,10 +678,72 @@ pub fn list_agent_models(
 ) -> Result<ListAgentModelsResult, CommandError> {
     let database = open_agent_session_database(&app)?;
     let service = build_agent_session_service(&database.connection);
-    service.find_project_session_record(input.project_id, input.session_id)?;
+    let agent_type = service.find_session_agent_type(input.project_id, input.session_id)?;
+    let models = match agent_type {
+        AgentType::Codex => default_codex_models(),
+        AgentType::Claude => {
+            let home_dir = app.path().home_dir().map_err(|error| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionPersistenceFailed,
+                    "读取 Claude 配置失败。",
+                )
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            })?;
+            claude_models_from_home(&home_dir)
+        }
+    };
+    // 第三方接口（Claude 配置了 base_url / auth_token）不允许切换，前端展示只读标签。
+    let is_read_only = matches!(agent_type, AgentType::Claude)
+        && app
+            .path()
+            .home_dir()
+            .ok()
+            .and_then(|home| claude_config::read_settings_from_home(&home))
+            .map(|s| claude_config::is_third_party(&s))
+            .unwrap_or(false);
     Ok(ListAgentModelsResult {
-        models: default_codex_models(),
+        models,
+        is_read_only: Some(is_read_only),
     })
+}
+
+/// 从 `~/.claude/settings.json` 解析 Claude 可用模型列表。
+///
+/// - 第三方接口（存在 base_url / auth_token）：返回单个只读模型，modelId 取
+///   `env.ANTHROPIC_MODEL` 或顶层 `model`，前端展示但不允许切换。
+/// - 官方接口：返回 opus / sonnet / haiku 列表，当前 settings.json 的 `model`
+///   字段对应项标 `is_default`，允许用户切换并持久化。
+fn claude_models_from_home(home_dir: &std::path::Path) -> Vec<crate::types::agent_session_stream::AgentModel> {
+    use crate::types::agent_session_stream::AgentModel;
+    let snapshot = match claude_config::read_settings_from_home(home_dir) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    if claude_config::is_third_party(&snapshot) {
+        // 第三方接口：只读展示当前真实模型（env.ANTHROPIC_MODEL 优先于顶层 model）。
+        let current = snapshot.anthropic_model.or(snapshot.model.clone());
+        let model_id = current.clone().unwrap_or_else(|| "claude".to_string());
+        return vec![AgentModel {
+            model_id,
+            display_name: current,
+            is_default: Some(true),
+            default_reasoning_effort: None,
+            supported_reasoning_efforts: Vec::new(),
+        }];
+    }
+    // 官方接口：返回 opus / sonnet / haiku，当前 settings.json 的 model 标默认。
+    let current = snapshot.model.as_deref();
+    claude_config::OFFICIAL_CLAUDE_MODELS
+        .iter()
+        .map(|(model_id, display_name)| AgentModel {
+            model_id: model_id.to_string(),
+            display_name: Some(display_name.to_string()),
+            // 当前 settings.json 的 model 字段匹配则标默认（兼容 "sonnet[1m]" 等带后缀别名）。
+            is_default: Some(current.is_some_and(|c| c == *model_id || c.starts_with(model_id))),
+            default_reasoning_effort: None,
+            supported_reasoning_efforts: Vec::new(),
+        })
+        .collect()
 }
 
 #[tauri::command]

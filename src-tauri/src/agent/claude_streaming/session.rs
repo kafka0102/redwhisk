@@ -75,6 +75,19 @@ struct SessionState {
     text_last_flush_at: HashMap<usize, Instant>,
     /// 流式文本上次 flush 长度：block_index → 已广播字节长度。
     text_flushed_len: HashMap<usize, usize>,
+    /// 流式 reasoning（thinking）增量累积：block_index → 累积文本。
+    ///
+    /// 与 Codex 的 reasoning_buffer 对齐：Claude 的 ThinkingDelta 原始片段
+    /// 先累积，再按节流间隔广播完整文本，避免前端按尾项替换语义产生堆积。
+    reasoning_buffer: HashMap<usize, String>,
+    /// reasoning 上次 flush 时间：block_index → flush 时间。
+    reasoning_last_flush_at: HashMap<usize, Instant>,
+    /// reasoning 上次 flush 长度：block_index → 已广播字节长度。
+    reasoning_flushed_len: HashMap<usize, usize>,
+    /// reasoning 块开始时间：block_index → 首帧 Instant。
+    ///
+    /// 用于 per-block 计时，在块结束（force flush）时计算 duration_ms。
+    reasoning_started_at: HashMap<usize, Instant>,
     /// 流式工具入参累积：block_index → 累积 partial_json。
     tool_input_buffer: HashMap<usize, String>,
     /// 当前 turn 的 tool_use 映射：block_index → (call_id, tool_name)。
@@ -107,6 +120,10 @@ impl ClaudeSessionHandle {
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
+            reasoning_buffer: HashMap::new(),
+            reasoning_last_flush_at: HashMap::new(),
+            reasoning_flushed_len: HashMap::new(),
+            reasoning_started_at: HashMap::new(),
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
             turn_finalized: true,
@@ -158,6 +175,10 @@ impl ClaudeSessionHandle {
             state.text_buffer.clear();
             state.text_last_flush_at.clear();
             state.text_flushed_len.clear();
+            state.reasoning_buffer.clear();
+            state.reasoning_last_flush_at.clear();
+            state.reasoning_flushed_len.clear();
+            state.reasoning_started_at.clear();
             state.tool_input_buffer.clear();
             state.tool_index.clear();
             state.turn_finalized = false;
@@ -464,14 +485,24 @@ fn build_events(
                     thread_id: session_id,
                 });
             }
+            // 补发 ModelChanged：claude CLI 启动后从 settings.json / --model 解析出
+            // 实际生效模型，需广播给前端，使 composer 的模型选择器展示当前模型
+            // （否则前端 state.model 永远为 null）。
+            if let Some(model_id) = model.filter(|m| !m.is_empty()) {
+                events.push(AgentStreamEvent::ModelChanged { model_id });
+            }
         }
         ClaudeStreamMessage::StreamEvent(event) => {
             events.extend(handle_stream_event(state, turn_id, event));
         }
         ClaudeStreamMessage::Assistant { message, .. } => {
             // 完整 assistant 消息：用 content 块组装 timeline。
-            // 先 flush 残留的流式文本。
+            // 先 flush 残留的流式文本与 reasoning（stream-json 模式下完整 assistant
+            // 消息与流式增量可能重复到达，先 flush 保证不丢失尾部内容）。
             flush_all_text_deltas(state, turn_id)
+                .into_iter()
+                .for_each(|e| events.push(e));
+            flush_all_reasoning_deltas(state, turn_id)
                 .into_iter()
                 .for_each(|e| events.push(e));
             let mapped = map_assistant_blocks(&message.blocks);
@@ -492,7 +523,11 @@ fn build_events(
                         if !text.is_empty() {
                             events.push(timeline_event(
                                 turn_id,
-                                AgentTimelineItem::Reasoning { text },
+                                AgentTimelineItem::Reasoning {
+                                    text,
+                                    // 完整 assistant 消息无 per-block 计时上下文，不填充 duration。
+                                    duration_ms: None,
+                                },
                             ));
                         }
                     }
@@ -543,8 +578,11 @@ fn build_events(
             errors,
             ..
         } => {
-            // flush 残留文本。
+            // flush 残留文本与 reasoning（turn 结束前确保所有增量都已广播）。
             flush_all_text_deltas(state, turn_id)
+                .into_iter()
+                .for_each(|e| events.push(e));
+            flush_all_reasoning_deltas(state, turn_id)
                 .into_iter()
                 .for_each(|e| events.push(e));
             // 记录 session_id（续接用）。
@@ -612,12 +650,16 @@ fn handle_stream_event(
                         guard.tool_input_buffer.entry(index).or_default();
                     }
                     ContentBlock::Thinking { thinking } => {
-                        if !thinking.is_empty() {
-                            events.push(timeline_event(
-                                turn_id,
-                                AgentTimelineItem::Reasoning { text: thinking },
-                            ));
+                        // 累积模式（与 Text 一致）：首帧文本记入 buffer，并记录块开始时间用于计时。
+                        // flush 在 ThinkingDelta / ContentBlockStop 时发生，避免在此处二次加锁。
+                        let buffer = guard.reasoning_buffer.entry(index).or_default();
+                        let was_empty = buffer.is_empty();
+                        buffer.push_str(&thinking);
+                        if was_empty {
+                            guard.reasoning_started_at.insert(index, Instant::now());
                         }
+                        guard.reasoning_last_flush_at.remove(&index);
+                        guard.reasoning_flushed_len.remove(&index);
                     }
                     ContentBlock::Other => {}
                 }
@@ -643,11 +685,17 @@ fn handle_stream_event(
                 }
             }
             ContentDelta::ThinkingDelta { thinking } => {
-                if !thinking.is_empty() {
-                    events.push(timeline_event(
-                        turn_id,
-                        AgentTimelineItem::Reasoning { text: thinking },
-                    ));
+                // 累积 thinking 增量，按节流间隔 flush 完整文本（与 text delta 对齐）。
+                if let Ok(mut guard) = state.lock() {
+                    let buffer = guard.reasoning_buffer.entry(index).or_default();
+                    let was_empty = buffer.is_empty();
+                    buffer.push_str(&thinking);
+                    if was_empty {
+                        guard.reasoning_started_at.insert(index, Instant::now());
+                    }
+                }
+                if let Some(event) = try_flush_reasoning_delta(state, index, false) {
+                    events.push(event);
                 }
             }
             ContentDelta::Other => {}
@@ -655,6 +703,10 @@ fn handle_stream_event(
         AnthropicStreamEvent::ContentBlockStop { index } => {
             // block 结束时强制 flush 文本。
             if let Some(event) = try_flush_text_delta(state, index, true) {
+                events.push(event);
+            }
+            // thinking 块结束：强制 flush 完整 reasoning 文本，并带上 per-block 计时。
+            if let Some(event) = try_flush_reasoning_delta(state, index, true) {
                 events.push(event);
             }
             // 工具入参完成：发 ToolCall（Running，等 assistant 完整消息或 tool_result 回填）。
@@ -754,6 +806,86 @@ fn flush_all_text_deltas(
     indices
         .into_iter()
         .filter_map(|index| try_flush_text_delta(state, index, true))
+        .collect()
+}
+
+/// 尝试 flush 一个 reasoning（thinking）block 的累积文本（节流）。
+///
+/// 返回 `Timeline{Reasoning}` 事件（带完整累积文本，前端幂等替换）。
+/// `force=true` 时无视节流立即 flush（用于 block stop / turn 结束），
+/// 此时若存在块开始时间，则计算并携带 `duration_ms`，供前端展示
+/// 「思考过程 持续了 X 秒」。中间节流 flush 不携带 duration（块尚未结束）。
+fn try_flush_reasoning_delta(
+    state: &Arc<Mutex<SessionState>>,
+    index: usize,
+    force: bool,
+) -> Option<AgentStreamEvent> {
+    let now = Instant::now();
+    let mut guard = state.lock().ok()?;
+    let text = guard.reasoning_buffer.get(&index).cloned()?;
+    if text.is_empty() {
+        return None;
+    }
+    let flushed_len = guard.reasoning_flushed_len.get(&index).copied().unwrap_or(0);
+    let text_changed = text.len() != flushed_len;
+    // 块结束（force）时即使文本未变，也可能需要补发 duration（节流 flush 不带 duration）。
+    // 仅当 force 且存在 started_at 时，允许「文本未变但补 duration」的一次广播。
+    let has_duration_to_emit = force
+        && guard
+            .reasoning_started_at
+            .get(&index)
+            .map(|started| now.duration_since(*started).as_millis() > 0)
+            .unwrap_or(false);
+    if !text_changed && !has_duration_to_emit {
+        return None;
+    }
+    let should_flush = force
+        || text_changed
+        || match guard.reasoning_last_flush_at.get(&index) {
+            Some(last) => now.duration_since(*last) >= DELTA_FLUSH_INTERVAL,
+            None => true,
+        };
+    if !should_flush {
+        return None;
+    }
+    guard.reasoning_last_flush_at.insert(index, now);
+    // 补发 duration 后清除 started_at，避免后续重复补发。
+    let duration_ms = if force {
+        guard.reasoning_started_at.remove(&index).map(|started| {
+            now.duration_since(started).as_millis() as u64
+        })
+    } else {
+        None
+    };
+    // 若文本未变（仅补 duration），不更新 flushed_len，保持已 flush 状态。
+    if text_changed {
+        guard.reasoning_flushed_len.insert(index, text.len());
+    }
+    let turn_id = guard.current_turn_id.clone();
+    Some(AgentStreamEvent::Timeline {
+        item: AgentTimelineItem::Reasoning {
+            text,
+            duration_ms,
+        },
+        turn_id,
+        seq: 0,
+        timestamp: now_ms(),
+    })
+}
+
+/// 强制 flush 所有残留的 reasoning 增量（turn 结束 / assistant 完整消息到来时）。
+fn flush_all_reasoning_deltas(
+    state: &Arc<Mutex<SessionState>>,
+    _turn_id: &Option<String>,
+) -> Vec<AgentStreamEvent> {
+    let indices: Vec<usize> = state
+        .lock()
+        .ok()
+        .map(|guard| guard.reasoning_buffer.keys().copied().collect())
+        .unwrap_or_default();
+    indices
+        .into_iter()
+        .filter_map(|index| try_flush_reasoning_delta(state, index, true))
         .collect()
 }
 
@@ -873,10 +1005,16 @@ mod tests {
                 tools: vec![],
             },
         );
-        assert_eq!(events.len(), 1);
+        // SystemInit 带 session_id 和 model 时广播两个事件：
+        // ThreadStarted（对齐前端契约）+ ModelChanged（让前端展示当前模型）。
+        assert_eq!(events.len(), 2);
         assert!(matches!(
             &events[0],
             AgentStreamEvent::ThreadStarted { thread_id } if thread_id == "abc"
+        ));
+        assert!(matches!(
+            &events[1],
+            AgentStreamEvent::ModelChanged { model_id } if model_id == "glm-5.2"
         ));
         let guard = state.lock().unwrap();
         assert_eq!(guard.session_id.as_deref(), Some("abc"));
@@ -975,6 +1113,90 @@ mod tests {
         )));
     }
 
+    #[test]
+    fn thinking_delta_accumulates_and_flushes_full_text_on_block_stop() {
+        use super::super::message::AnthropicStreamEvent;
+        use std::time::Duration;
+
+        let state = test_state(Some("abc".into()));
+        let turn_id = Some("t1".into());
+
+        // 首帧：ContentBlockStart::Thinking 累积起始文本（与 Text 一致，不立即 flush）。
+        let events_start = handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockStart {
+                index: 0,
+                block: ContentBlock::Thinking {
+                    thinking: "Hello".into(),
+                },
+            },
+        );
+        assert!(
+            events_start.is_empty(),
+            "ContentBlockStart 不应立即 flush（累积阶段），实际：{events_start:?}"
+        );
+
+        // 第二个 delta：累积更多文本。等待超过节流间隔后触发节流 flush。
+        std::thread::sleep(Duration::from_millis(90));
+        let events_delta = handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: ContentDelta::ThinkingDelta {
+                    thinking: " world".into(),
+                },
+            },
+        );
+        // 节流 flush 应广播完整累积文本 "Hello world"，且不带 duration（块未结束）。
+        let reasoning_after_delta = events_delta
+            .iter()
+            .filter_map(|e| match e {
+                AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning { text, duration_ms },
+                    ..
+                } => Some((text.clone(), *duration_ms)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            reasoning_after_delta.iter().any(|(t, _)| t == "Hello world"),
+            "节流 flush 应广播完整累积文本，实际：{reasoning_after_delta:?}"
+        );
+        assert!(
+            reasoning_after_delta.iter().all(|(_, d)| d.is_none()),
+            "节流 flush 不应携带 duration，实际：{reasoning_after_delta:?}"
+        );
+
+        // 块结束：ContentBlockStop，force flush 带上 duration。
+        let events_stop = handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockStop { index: 0 },
+        );
+        let reasoning_at_stop = events_stop
+            .iter()
+            .filter_map(|e| match e {
+                AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning { text, duration_ms },
+                    ..
+                } => Some((text.clone(), *duration_ms)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            reasoning_at_stop.iter().any(|(t, _)| t == "Hello world"),
+            "块结束应 flush 完整文本，实际：{reasoning_at_stop:?}"
+        );
+        assert!(
+            reasoning_at_stop
+                .iter()
+                .all(|(_, d)| d.is_some_and(|ms| ms > 0)),
+            "块结束 flush 应携带非零 duration，实际：{reasoning_at_stop:?}"
+        );
+    }
+
     fn test_state(session_id: Option<String>) -> Arc<Mutex<SessionState>> {
         Arc::new(Mutex::new(SessionState {
             session_id,
@@ -983,6 +1205,10 @@ mod tests {
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
+            reasoning_buffer: HashMap::new(),
+            reasoning_last_flush_at: HashMap::new(),
+            reasoning_flushed_len: HashMap::new(),
+            reasoning_started_at: HashMap::new(),
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
             turn_finalized: false,
@@ -1041,6 +1267,10 @@ mod tests {
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
+            reasoning_buffer: HashMap::new(),
+            reasoning_last_flush_at: HashMap::new(),
+            reasoning_flushed_len: HashMap::new(),
+            reasoning_started_at: HashMap::new(),
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
             turn_finalized: false,

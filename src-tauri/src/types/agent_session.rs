@@ -419,6 +419,11 @@ pub struct ListAgentModelsInput {
 #[serde(rename_all = "camelCase")]
 pub struct ListAgentModelsResult {
     pub models: Vec<AgentModel>,
+    /// 模型列表是否只读（第三方接口不允许切换）。
+    ///
+    /// Codex / Claude 官方模型为 false；Claude 第三方接口为 true。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_read_only: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

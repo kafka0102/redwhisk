@@ -366,6 +366,8 @@ export interface I18nMessages {
     emptyMessageStream: string;
     thinking: string;
     reasoningTitle: string;
+    /** 已完成 reasoning 块的标题文案，入参为持续秒数。 */
+    reasoningDuration: (seconds: number) => string;
     structuredSessionView: string;
     readOnlyCompletedIssue: string;
     permissionCard: string;
@@ -870,6 +872,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       emptyMessageStream: "Send a message to start the conversation.",
       thinking: "Thinking...",
       reasoningTitle: "Thinking",
+      reasoningDuration: (seconds) => `Thought for ${seconds}s`,
       structuredSessionView: "Agent structured session view",
       readOnlyCompletedIssue: "Completed Issues cannot be run again.",
       permissionCard: "Agent permission approval card",
@@ -1360,6 +1363,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       emptyMessageStream: "发送一条消息开始对话。",
       thinking: "正在思考…",
       reasoningTitle: "正在思考…",
+      reasoningDuration: (seconds) => `思考过程 持续了 ${seconds} 秒`,
       structuredSessionView: "Agent 结构化会话视图",
       readOnlyCompletedIssue: "已完成的 Issue 不能继续运行。",
       permissionCard: "Agent 权限审批卡片",

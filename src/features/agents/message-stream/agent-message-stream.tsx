@@ -13,6 +13,7 @@ import { LoaderCircle } from "lucide-react";
 import { memo, useEffect, useRef, type UIEvent } from "react";
 
 import type { AgentTimelineItem } from "../agent-stream-types";
+import type { AgentType } from "../agent-session-commands";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { AgentMessageCards } from "./agent-message-cards";
@@ -41,6 +42,8 @@ export function AgentMessageStream({
 interface AgentMessageStreamViewProps {
   state: MessageStreamState;
   isTurnRunning?: boolean;
+  /** 当前 session 的 agent 类型，用于区分 Claude / Codex 的渲染策略。 */
+  agentType?: AgentType;
 }
 
 /**
@@ -55,12 +58,17 @@ interface AgentMessageStreamViewProps {
 export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   state,
   isTurnRunning = false,
+  agentType,
 }: AgentMessageStreamViewProps) {
   const { messages } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const { entries, turnStatus, isInitialized, lastError } = state;
-  const shouldShowThinking = turnStatus === "running" || isTurnRunning;
+  // Claude Code 持续输出 reasoning/assistant_message，自身已展示运行进展；
+  // 额外的「正在思考」加载框与之重复，故对 Claude 完全隐藏。Codex 保持原行为。
+  const isClaude = agentType === "claude" || agentType === "claude_code";
+  const shouldShowThinking =
+    (turnStatus === "running" || isTurnRunning) && !isClaude;
 
   // 新内容到达时，若用户贴底则滚动到底。
   const lastSignature =

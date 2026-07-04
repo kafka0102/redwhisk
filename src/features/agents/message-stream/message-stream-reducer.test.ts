@@ -413,6 +413,100 @@ describe("messageStreamReducer", () => {
         expect(item.status).toBe("completed");
       }
     });
+
+    it("tool_result 回填空 path/command 时保留 tool_use 阶段的摘要", () => {
+      // 模拟 Claude tool_use → tool_result 链路：
+      // tool_use 事件带完整 detail（path/command），tool_result 回填时
+      // 后端 patch_detail 新建空 detail（path/command 为空字符串）。
+      // 字段级合并应保留 tool_use 阶段的摘要，同时补上 output/exit_code。
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-bash",
+          name: "shell",
+          detail: { type: "shell", command: "npm test" },
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-bash",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "",
+            output: "all passed",
+            exitCode: 0,
+          },
+          status: "completed",
+        }),
+      });
+      expect(state.entries).toHaveLength(1);
+      const item = state.entries[0].item;
+      expect(item.type).toBe("tool_call");
+      if (item.type === "tool_call") {
+        expect(item.detail).toEqual({
+          type: "shell",
+          command: "npm test",
+          output: "all passed",
+          exitCode: 0,
+        });
+      }
+    });
+
+    it("Read 工具回填空 path 时保留原 path 并补 content", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-read",
+          name: "read",
+          detail: { type: "read", path: "src/app.ts" },
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-read",
+          name: "read",
+          detail: { type: "read", path: "", content: "file body" },
+          status: "completed",
+        }),
+      });
+      const item = state.entries[0].item;
+      expect(item.type).toBe("tool_call");
+      if (item.type === "tool_call") {
+        expect(item.detail).toEqual({
+          type: "read",
+          path: "src/app.ts",
+          content: "file body",
+        });
+      }
+    });
+
+    it("reasoning 携带 durationMs 时透传到 entry", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "reasoning",
+          text: "思考完成",
+          durationMs: 3500,
+        }),
+      });
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "reasoning",
+        text: "思考完成",
+        durationMs: 3500,
+      });
+    });
   });
 
   describe("todo 渐进更新", () => {

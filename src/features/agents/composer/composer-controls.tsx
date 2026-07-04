@@ -1,6 +1,6 @@
 // composer 控制行（纯展示）：附件图标 + 模型菜单/只读模型信息 + Think 菜单 + 发送/终止按钮 + 用量。
 
-import { ArrowUp, Paperclip, Square } from "lucide-react";
+import { ArrowUp, LoaderCircle, Paperclip, Square } from "lucide-react";
 
 import {
   Select,
@@ -26,6 +26,8 @@ interface ComposerControlsProps {
   thinkOptions: string[];
   onSelectEffort: (effort: ComposerEffort) => void;
   isSending: boolean;
+  /** 取消请求进行中：按钮禁用 + spinner，防止重复点击并给用户反馈。 */
+  isCancelling: boolean;
   canSend: boolean;
   isReadOnly: boolean;
   onAddAttachment: () => void;
@@ -53,6 +55,7 @@ export function ComposerControls({
   thinkOptions,
   onSelectEffort,
   isSending,
+  isCancelling,
   canSend,
   isReadOnly,
   onAddAttachment,
@@ -67,10 +70,15 @@ export function ComposerControls({
   const effortValue =
     effort ?? currentModel?.defaultReasoningEffort ?? thinkOptions[0] ?? "";
   const hasModels = models.length > 0;
+  // canShowModel 控制是否展示模型区域；isModelReadOnly（后端按第三方接口判定）
+  // 决定是只读标签还是可切换下拉。
   const showModelSelect =
-    capabilities.supportsModelSwitching && !isModelReadOnly;
+    capabilities.canShowModel &&
+    capabilities.supportsModelSwitching &&
+    !isModelReadOnly;
   const showReadOnlyModel =
-    isModelReadOnly || !capabilities.supportsModelSwitching;
+    capabilities.canShowModel &&
+    (isModelReadOnly || !capabilities.supportsModelSwitching);
   const showThinkSelect = capabilities.supportsReasoningEffort && !isReadOnly;
   const modelLabel = formatModelLabel(
     selectedModelId,
@@ -174,14 +182,24 @@ export function ComposerControls({
             type="button"
             className="agents-composer__cancel"
             aria-label={messages.agentsFeature.cancelCurrentTurn}
+            disabled={isCancelling}
             onClick={onCancel}
           >
-            <Square
-              aria-hidden="true"
-              size={12}
-              strokeWidth={2}
-              fill="currentColor"
-            />
+            {isCancelling ? (
+              <LoaderCircle
+                aria-hidden="true"
+                size={12}
+                strokeWidth={2}
+                className="agents-message__spinner"
+              />
+            ) : (
+              <Square
+                aria-hidden="true"
+                size={12}
+                strokeWidth={2}
+                fill="currentColor"
+              />
+            )}
           </button>
         ) : (
           <button
