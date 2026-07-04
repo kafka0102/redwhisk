@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension, Transaction};
 
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use crate::types::issue::{IssueRecord, IssueStatus};
@@ -75,6 +75,79 @@ impl<'connection> IssueRepository<'connection> {
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(issues)
+    }
+
+    /// 按 status 过滤并应用 `LIMIT`/`OFFSET` 分页；`status`/`limit`/`offset` 均可选。
+    /// 排序与 `list_by_project_id` 一致，保证分页游标稳定。
+    pub fn list_by_project_id_paged(
+        &self,
+        project_id: i64,
+        status: Option<IssueStatus>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> rusqlite::Result<Vec<IssueRecord>> {
+        let mut sql = format!(
+            "{ISSUE_SELECT_COLUMNS}
+             WHERE issues.project_id = ?1
+               AND issues.del = 0"
+        );
+        let mut bindings: Vec<Value> = vec![Value::Integer(project_id)];
+
+        if let Some(status) = status {
+            let idx = bindings.len() + 1;
+            sql.push_str(&format!(" AND issues.status = ?{idx}"));
+            bindings.push(Value::Text(issue_status_to_str(&status).to_string()));
+        }
+
+        sql.push_str(
+            " ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC",
+        );
+
+        // SQLite 要求 OFFSET 必须配合 LIMIT，因此仅在提供 limit 时附加分页子句。
+        if let Some(limit) = limit {
+            let idx = bindings.len() + 1;
+            sql.push_str(&format!(" LIMIT ?{idx}"));
+            bindings.push(Value::Integer(limit));
+            if let Some(offset) = offset {
+                let offset_idx = bindings.len() + 1;
+                sql.push_str(&format!(" OFFSET ?{offset_idx}"));
+                bindings.push(Value::Integer(offset));
+            }
+        }
+
+        let mut statement = self.connection.prepare(&sql)?;
+        let issues = statement
+            .query_map(params_from_iter(bindings.iter()), issue_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(issues)
+    }
+
+    /// 看板首屏：对四个状态各自取前 `per_status_limit` 条，单次返回扁平列表。
+    /// 让前端用一次调用即可渲染每个甬道的前 N 条，后续滚动到甬道底部再用
+    /// `list_by_project_id_paged` 按状态加载下一页。
+    pub fn list_by_project_id_per_status(
+        &self,
+        project_id: i64,
+        per_status_limit: i64,
+    ) -> rusqlite::Result<Vec<IssueRecord>> {
+        let statuses = [
+            IssueStatus::Backlog,
+            IssueStatus::Running,
+            IssueStatus::Review,
+            IssueStatus::Completed,
+        ];
+        let mut all = Vec::new();
+        for status in statuses {
+            let page = self.list_by_project_id_paged(
+                project_id,
+                Some(status),
+                Some(per_status_limit),
+                Some(0),
+            )?;
+            all.extend(page);
+        }
+        Ok(all)
     }
 
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<IssueRecord>> {

@@ -1,12 +1,21 @@
-import { Play, Plus } from "lucide-react";
+import { LoaderCircle, Play, Plus } from "lucide-react";
 
 import type { IssueRecord, IssueStatus } from "./issue-commands";
 import { useI18n } from "../../shared/i18n/i18n";
+
+/** 滚动到距底部多少像素时触发加载下一页。 */
+const ISSUE_LANE_LOAD_MORE_THRESHOLD = 80;
 
 interface IssueLane {
   status: IssueStatus;
   label: string;
   issues: IssueRecord[];
+}
+
+/** 看板只关心每个甬道是否还有更多、是否正在加载更多。 */
+interface LaneLoadStateView {
+  hasMore: boolean;
+  isLoadingMore: boolean;
 }
 
 interface IssuesKanbanProps {
@@ -15,6 +24,7 @@ interface IssuesKanbanProps {
   selectedIssueId: number | null;
   cardRefs: React.RefObject<Map<number, HTMLButtonElement>>;
   createButtonRef: React.RefObject<HTMLButtonElement | null>;
+  laneLoadState: Record<IssueStatus, LaneLoadStateView>;
   onCreateIssue: (trigger: HTMLElement | null) => void;
   onOpenIssue: (issue: IssueRecord, trigger: HTMLElement | null) => void;
   onRunIssue: (
@@ -34,6 +44,7 @@ interface IssuesKanbanProps {
   ) => boolean;
   formatTimestamp: (epochMilliseconds: number) => string;
   toDescriptionExcerpt: (markdown: string) => string;
+  onLoadMore: (status: IssueStatus) => void;
 }
 
 export function IssuesKanban({
@@ -42,12 +53,14 @@ export function IssuesKanban({
   selectedIssueId,
   cardRefs,
   createButtonRef,
+  laneLoadState,
   onCreateIssue,
   onOpenIssue,
   onRunIssue,
   canRunIssue,
   formatTimestamp,
   toDescriptionExcerpt,
+  onLoadMore,
 }: IssuesKanbanProps) {
   const { messages } = useI18n();
   return (
@@ -60,51 +73,86 @@ export function IssuesKanban({
           {messages.issues.loadingIssues}
         </p>
       ) : null}
-      {lanes.map((lane) => (
-        <section
-          key={lane.status}
-          aria-label={lane.label}
-          className={`issue-lane issue-lane--${lane.status}`}
-        >
-          <div className="issue-lane__header">
-            <div className="issue-lane__title-row">
-              <span className="issue-lane__status-dot" aria-hidden="true" />
-              <h3>{lane.label}</h3>
-              <span className="issue-lane__count">{lane.issues.length}</span>
-              {lane.status === "backlog" ? (
-                <button
-                  ref={createButtonRef}
-                  aria-label={messages.issues.newIssue}
-                  className="issue-lane__create"
-                  title={messages.issues.newIssue}
-                  type="button"
-                  onClick={(event) => onCreateIssue(event.currentTarget)}
-                >
-                  <Plus aria-hidden="true" size={14} strokeWidth={2} />
-                </button>
+      {lanes.map((lane) => {
+        const laneView = laneLoadState[lane.status];
+        return (
+          <section
+            key={lane.status}
+            aria-label={lane.label}
+            className={`issue-lane issue-lane--${lane.status}`}
+          >
+            <div className="issue-lane__header">
+              <div className="issue-lane__title-row">
+                <span className="issue-lane__status-dot" aria-hidden="true" />
+                <h3>{lane.label}</h3>
+                <span className="issue-lane__count">{lane.issues.length}</span>
+                {lane.status === "backlog" ? (
+                  <button
+                    ref={createButtonRef}
+                    aria-label={messages.issues.newIssue}
+                    className="issue-lane__create"
+                    title={messages.issues.newIssue}
+                    type="button"
+                    onClick={(event) => onCreateIssue(event.currentTarget)}
+                  >
+                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div
+              className="issue-lane__cards"
+              role="list"
+              onScroll={(event) => {
+                if (isLoading) {
+                  return;
+                }
+                if (!laneView || !laneView.hasMore || laneView.isLoadingMore) {
+                  return;
+                }
+                const target = event.currentTarget;
+                if (target.scrollHeight === 0) {
+                  return;
+                }
+                if (
+                  target.scrollHeight - target.clientHeight - target.scrollTop <
+                  ISSUE_LANE_LOAD_MORE_THRESHOLD
+                ) {
+                  onLoadMore(lane.status);
+                }
+              }}
+            >
+              {lane.issues.map((issue) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  isSelected={issue.id === selectedIssueId}
+                  cardRefs={cardRefs}
+                  canRunIssue={canRunIssue}
+                  formatTimestamp={formatTimestamp}
+                  toDescriptionExcerpt={toDescriptionExcerpt}
+                  onOpenIssue={onOpenIssue}
+                  onRunIssue={onRunIssue}
+                />
+              ))}
+              {!isLoading && lane.issues.length === 0 ? (
+                <p className="issue-lane__empty">{messages.issues.emptyLane}</p>
+              ) : null}
+              {laneView?.isLoadingMore ? (
+                <div className="issue-lane__load-more" role="status">
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="issue-lane__load-more-spinner"
+                    size={13}
+                    strokeWidth={2}
+                  />
+                  <span>{messages.issues.loadingMore}</span>
+                </div>
               ) : null}
             </div>
-          </div>
-          <div className="issue-lane__cards" role="list">
-            {lane.issues.map((issue) => (
-              <IssueCard
-                key={issue.id}
-                issue={issue}
-                isSelected={issue.id === selectedIssueId}
-                cardRefs={cardRefs}
-                canRunIssue={canRunIssue}
-                formatTimestamp={formatTimestamp}
-                toDescriptionExcerpt={toDescriptionExcerpt}
-                onOpenIssue={onOpenIssue}
-                onRunIssue={onRunIssue}
-              />
-            ))}
-            {!isLoading && lane.issues.length === 0 ? (
-              <p className="issue-lane__empty">{messages.issues.emptyLane}</p>
-            ) : null}
-          </div>
-        </section>
-      ))}
+          </section>
+        );
+      })}
     </section>
   );
 }

@@ -11,7 +11,7 @@ use crate::types::issue::{
     DeleteIssueWorktreeInput, DeleteIssueWorktreeResult, DetectAgentCommitCompletionInput,
     DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
     GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueListResponse, IssueRecord,
-    IssueSummaryRecord, IssueWorktreeStatusResult, MarkIssueReviewInput,
+    IssueStatus, IssueSummaryRecord, IssueWorktreeStatusResult, MarkIssueReviewInput,
     PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput,
     SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
     UpdateIssueInput,
@@ -23,6 +23,10 @@ pub fn list_issues(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     project_id: i64,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    status: Option<IssueStatus>,
+    per_status_limit: Option<i64>,
 ) -> Result<IssueListResponse, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
@@ -31,6 +35,24 @@ pub fn list_issues(
         &state.pty_sessions,
         &state.agent_sessions,
     )?;
+    // 首屏：四个状态各取前 N 条，单次返回扁平列表。
+    if let Some(per_status_limit) = per_status_limit {
+        return IssueService::list_issues_per_status_in_data_dir(
+            data_dir,
+            project_id,
+            per_status_limit,
+        );
+    }
+    // 滚动加载下一页：按状态 + limit/offset 取数。
+    if status.is_some() || limit.is_some() || offset.is_some() {
+        return IssueService::list_issues_page_in_data_dir(
+            data_dir,
+            project_id,
+            status,
+            limit,
+            offset,
+        );
+    }
     IssueService::list_issues_in_data_dir(data_dir, project_id)
 }
 
