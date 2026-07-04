@@ -321,7 +321,8 @@ interface ChangedFileRowProps {
 
 function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-  const kindLabel = formatChangeKindLabel(file.kind);
+  const kindStatus = getChangeKindStatusLabel(file.kind);
+  const kindStatusClassName = getChangeKindStatusClassName(file.kind);
 
   return (
     <button
@@ -340,10 +341,14 @@ function ChangedFileRow({ file, onOpenChangedFile }: ChangedFileRowProps) {
         </span>
       </span>
       <span className="session-change-row__actions">
-        <span className="session-change-row__label">{kindLabel}</span>
         <span className="session-change-row__stats">
           <span className="session-change-row__added">{`+${file.additions}`}</span>
           <span className="session-change-row__deleted">{`-${file.deletions}`}</span>
+        </span>
+        <span
+          className={`session-change-row__status session-commit-file__status ${kindStatusClassName}`}
+        >
+          {kindStatus}
         </span>
       </span>
       {isTooltipVisible ? (
@@ -360,21 +365,39 @@ function getParentPath(filePath: string): string {
   return lastSlashIndex >= 0 ? filePath.slice(0, lastSlashIndex) : "";
 }
 
-function formatChangeKindLabel(kind: WorkspaceChangeKind): string {
+function getChangeKindStatusLabel(kind: WorkspaceChangeKind): string {
   switch (kind) {
     case "added":
     case "untracked":
-      return "新增";
+      return "A";
     case "deleted":
-      return "删除";
+      return "D";
     case "renamed":
-      return "重命名";
+      return "R";
     case "copied":
-      return "复制";
+      return "C";
     case "binary":
-      return "二进制";
+      return "X";
     case "modified":
-      return "修改";
+      return "M";
+  }
+}
+
+function getChangeKindStatusClassName(kind: WorkspaceChangeKind): string {
+  switch (kind) {
+    case "modified":
+      return "session-commit-file__status--modified";
+    case "added":
+    case "untracked":
+      return "session-commit-file__status--added";
+    case "renamed":
+      return "session-commit-file__status--renamed";
+    case "copied":
+      return "session-commit-file__status--copied";
+    case "deleted":
+      return "session-commit-file__status--deleted";
+    case "binary":
+      return "session-commit-file__status--unknown";
   }
 }
 

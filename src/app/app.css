@@ -3744,23 +3744,12 @@ button:focus-visible {
 }
 
 .session-change-row__actions {
-  display: inline-flex;
+  display: inline-grid;
   align-items: center;
+  grid-template-columns: minmax(0, auto) 22px;
   justify-content: flex-end;
-  gap: 4px;
-  min-width: 118px;
-}
-
-.session-change-row__label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 18px;
-  padding: 1px 4px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  color: var(--color-text-muted);
-  font-size: 11px;
-  line-height: 1.2;
+  column-gap: 8px;
+  min-width: 102px;
 }
 
 .session-change-row--deleted .session-change-row__name > span:first-child {
@@ -3773,6 +3762,10 @@ button:focus-visible {
   justify-content: flex-end;
   gap: 4px;
   font-size: 12px;
+}
+
+.session-change-row__status {
+  justify-self: end;
 }
 
 .session-change-row__added {
