@@ -92,17 +92,20 @@ fn run_command_lookup_with_path_with_shells_and_env(
     let mut last_error = None;
 
     for shell in shells {
+        // 先尝试 login 非交互式（-lc，加载 .zshenv/.zprofile，快），用于解析命令路径。
         let login_result =
             run_shell_command_lookup_with_path(shell, &["-lc"], command, environment_overrides);
-        if let Ok(resolved_command) = login_result {
-            return Ok(resolved_command);
-        }
 
+        // 再尝试交互式（-lic，额外加载 .zshrc/.bashrc，含 nvm/rbenv 等用户配置）。
+        // 优先采用 interactive 结果：它的 PATH 更完整，spawn 出的子进程才能找到
+        // hook 脚本依赖的 node 等命令（用户常把 nvm 写在 .zshrc 而非 .zshenv）。
+        // 若 interactive 失败但 login 成功，回退到 login 结果，保证命令仍可解析。
         let interactive_result =
             run_shell_command_lookup_with_path(shell, &["-lic"], command, environment_overrides);
-        match interactive_result {
-            Ok(resolved_command) => return Ok(resolved_command),
-            Err(error) => last_error = Some(error),
+        match (login_result, interactive_result) {
+            (_, Ok(interactive)) => return Ok(interactive),
+            (Ok(login), Err(_)) => return Ok(login),
+            (Err(_), Err(error)) => last_error = Some(error),
         }
     }
 
@@ -305,5 +308,52 @@ mod tests {
         .expect("fallback shell command");
 
         assert_eq!(resolved_command, command_path.display().to_string());
+    }
+
+    #[test]
+    fn command_lookup_prefers_interactive_path_when_login_resolves_but_misses_paths() {
+        // 场景：命令在 .zshenv 的 PATH 里（login -lc 能找到），但用户还把另一个
+        // 目录（模拟 nvm/node）写在 .zshrc 里。login 命中后仍应跑 interactive，
+        // 采用 interactive 的完整 PATH，保证 spawn 出的子进程能找到 node 等依赖。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let agent_dir = temp_dir.path().join("agent-bin");
+        let extra_dir = temp_dir.path().join("extra-bin");
+        let command_path = agent_dir.join("redwhisk-test-agent");
+        fs::create_dir_all(&agent_dir).expect("agent bin dir");
+        fs::create_dir_all(&extra_dir).expect("extra bin dir");
+        fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("test command");
+        fs::set_permissions(&command_path, fs::Permissions::from_mode(0o755))
+            .expect("executable command");
+        // .zshenv 只把 agent 目录加入 PATH（login -lc 能解析命令）。
+        fs::write(
+            temp_dir.path().join(".zshenv"),
+            format!("export PATH=\"{}:$PATH\"\n", agent_dir.display()),
+        )
+        .expect("zshenv");
+        // .zshrc 额外把 extra 目录加入 PATH（模拟 nvm node 目录）。
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!("export PATH=\"{}:$PATH\"\n", extra_dir.display()),
+        )
+        .expect("zshrc");
+
+        let home = temp_dir.path().as_os_str();
+        let baseline_path = OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin");
+        let lookup = run_command_lookup_with_path_with_shells_and_env(
+            "redwhisk-test-agent",
+            &["/bin/zsh".to_string()],
+            &[("HOME", home), ("PATH", baseline_path)],
+        )
+        .expect("command lookup");
+
+        // 命令路径解析正确。
+        assert_eq!(lookup.command, command_path.display().to_string());
+        // PATH 应包含 extra 目录（来自 interactive .zshrc），login 阶段拿不到它。
+        let path = lookup.path.expect("lookup path");
+        let path_entries: Vec<_> = env::split_paths(&path).collect();
+        assert!(
+            path_entries.iter().any(|p| p == &extra_dir),
+            "PATH 应包含 interactive 加载的 extra 目录，实际：{path_entries:?}"
+        );
     }
 }
