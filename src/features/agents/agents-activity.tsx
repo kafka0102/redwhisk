@@ -392,6 +392,15 @@ export function AgentsActivity({
     sessionId: currentSessionId,
     isSidePanelOpen: isSessionSidePanelOpen && selectedSession !== null,
   });
+  // 判断某个 session 是否处于 open（运行中）状态：实例池据此跳过淘汰，
+  // 避免 running session 的 handle 被 drop 导致 agent 进程被 kill
+  //（典型场景：claude code 单轮进程被 shutdown 后报「客户端主动关闭」）。
+  const isOpenSession = useCallback(
+    (sessionId: number) =>
+      visibleSessions.find((session) => session.sessionId === sessionId)
+        ?.status === "running",
+    [visibleSessions],
+  );
   // 实例池：与 AgentsSessionPane 共用同一份 cachedSessionIds。在此调用以拿到
   // 缓存列表，为每个 cached session 构造 workspace 渲染数据（tab 状态 + tool
   // tabs），供 AgentsSessionPane 池化渲染。
@@ -399,6 +408,7 @@ export function AgentsActivity({
     {
       currentSessionId: cacheableSessionId,
       maxCached: MAX_CACHED_SESSION_VIEWS,
+      isOpenSession,
     },
   );
 

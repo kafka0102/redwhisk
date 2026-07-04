@@ -162,6 +162,12 @@ impl AgentEventBroadcaster {
             .map(|_| self.should_update_latest_output(envelope.session_id, &envelope.event))
             .unwrap_or(false);
         let turn_running = turn_running_from_stream_event(&envelope.event);
+        // ThreadStarted 携带 agent 会话标识（Codex threadId / Claude session_id）。
+        // Claude 首轮 send_message 在后台异步产生 session_id，无法在启动路径同步
+        // 回填 DB；此处作为统一回流入口，把会话标识写入 codex_session_id 列，
+        // 使崩溃后的 resume 续接能拿到标识（update SQL 自带
+        // `WHERE codex_session_id IS NULL`，幂等且不覆盖已写入值）。
+        let resume_session_id = session_id_from_thread_started(&envelope.event);
         let Some(log_path) = self.resolve_log_path(envelope.session_id, app_handle) else {
             return false;
         };
@@ -176,7 +182,7 @@ impl AgentEventBroadcaster {
             }
         }
 
-        if !should_update_latest_output && turn_running.is_none() {
+        if !should_update_latest_output && turn_running.is_none() && resume_session_id.is_none() {
             return false;
         }
         let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
@@ -196,6 +202,9 @@ impl AgentEventBroadcaster {
         if let Some(is_turn_running) = turn_running {
             let _ =
                 repository.update_turn_running(envelope.session_id, is_turn_running, updated_at);
+        }
+        if let Some(session_id) = resume_session_id {
+            let _ = repository.update_codex_session_id(envelope.session_id, session_id);
         }
         true
     }
@@ -287,6 +296,19 @@ fn turn_running_from_stream_event(event: &AgentStreamEvent) -> Option<bool> {
         AgentStreamEvent::TurnCompleted { .. }
         | AgentStreamEvent::TurnFailed { .. }
         | AgentStreamEvent::TurnCanceled { .. } => Some(false),
+        _ => None,
+    }
+}
+
+/// 从 `ThreadStarted` 事件提取 agent 会话标识（Codex threadId / Claude session_id）。
+///
+/// 用于在事件回流时回填 DB 的 `codex_session_id` 列。空字符串视为缺失返回 None，
+/// 避免把无效值写入。
+fn session_id_from_thread_started(event: &AgentStreamEvent) -> Option<&str> {
+    match event {
+        AgentStreamEvent::ThreadStarted { thread_id } if !thread_id.is_empty() => {
+            Some(thread_id.as_str())
+        }
         _ => None,
     }
 }
@@ -421,6 +443,39 @@ mod tests {
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::ModelChanged {
                 model_id: "gpt-5".to_string(),
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn session_id_from_thread_started_extracts_non_empty_thread_id() {
+        // 正常 ThreadStarted：返回 thread_id 切片，供回填 DB。
+        let event = AgentStreamEvent::ThreadStarted {
+            thread_id: "thr_abc".into(),
+        };
+        assert_eq!(session_id_from_thread_started(&event), Some("thr_abc"));
+    }
+
+    #[test]
+    fn session_id_from_thread_started_rejects_empty_thread_id() {
+        // 空 thread_id 视为缺失，避免把无效值写入 codex_session_id 列。
+        let event = AgentStreamEvent::ThreadStarted {
+            thread_id: String::new(),
+        };
+        assert_eq!(session_id_from_thread_started(&event), None);
+    }
+
+    #[test]
+    fn session_id_from_thread_started_returns_none_for_other_events() {
+        // 非 ThreadStarted 事件一律返回 None。
+        assert_eq!(
+            session_id_from_thread_started(&AgentStreamEvent::TurnStarted { turn_id: None }),
+            None
+        );
+        assert_eq!(
+            session_id_from_thread_started(&AgentStreamEvent::ModelChanged {
+                model_id: "gpt-5".into(),
             }),
             None
         );

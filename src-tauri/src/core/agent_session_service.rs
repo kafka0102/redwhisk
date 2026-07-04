@@ -832,9 +832,10 @@ impl<'connection> AgentSessionService<'connection> {
         }
         agent_registry.register(result.session_id, handle);
 
-        // Claude session_id 暂不回填 DB 的 codex_session_id 列：首轮 send_message
-        // 在后台异步产生 session_id，issue 场景下 session 生命周期内由 handle 内存
-        // state 维护，足够前端订阅与发消息。resume 续接主路径走 standalone 入口。
+        // Claude 首轮 send_message 在后台异步产生 session_id，此处无法同步回填。
+        // 会话标识由 broadcaster 在 `ThreadStarted` 事件回流时统一写入
+        // codex_session_id 列（见 agent_event_broadcaster::persist_stream_event），
+        // 保证崩溃后 resume 续接能拿到标识。
         Ok(result)
     }
 
@@ -2122,7 +2123,8 @@ impl AgentSessionService<'_> {
                 }
                 broadcaster.register_session(session_id);
                 agent_registry.register(session_id, Arc::new(claude_handle));
-                // 新建场景下首轮 session_id 由后续 send_message 异步产生；
+                // 新建场景下首轮 session_id 由后续 send_message 异步产生，
+                // 由 broadcaster 在 ThreadStarted 回流时回填 codex_session_id 列；
                 // resume 场景下已有 session_id。二者均允许 thread_id 为 None。
                 thread_id.unwrap_or_default()
             }
@@ -2217,7 +2219,7 @@ impl AgentSessionService<'_> {
             .ok_or_else(|| {
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
-                    "当前 Session 缺少可续接的 Codex threadId。",
+                    "当前 Session 缺少可续接的会话标识。",
                 )
                 .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
             })?;
