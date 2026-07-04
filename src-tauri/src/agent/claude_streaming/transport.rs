@@ -90,9 +90,10 @@ impl ClaudeTransport {
         } else {
             let mut command = Command::new(&resolved_program.program);
             command.args(preset_args).args(args);
-            apply_spawn_path(
+            apply_spawn_environment(
                 &mut command,
                 resolved_program.lookup_path.as_deref(),
+                &resolved_program.lookup_environment,
                 &resolved_program.path_entries,
             );
             command
@@ -238,6 +239,7 @@ fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), ClaudeStreamin
 struct ResolvedSpawnProgram {
     program: String,
     lookup_path: Option<OsString>,
+    lookup_environment: Vec<(OsString, OsString)>,
     path_entries: Vec<PathBuf>,
     requires_shell: bool,
 }
@@ -259,6 +261,7 @@ fn resolve_spawn_program_from_lookup(
         return ResolvedSpawnProgram {
             program: program.to_string(),
             lookup_path: None,
+            lookup_environment: Vec::new(),
             path_entries: spawn_path_entries_for_program(program),
             requires_shell: false,
         };
@@ -270,7 +273,13 @@ fn resolve_spawn_program_from_lookup(
     if requires_shell {
         return ResolvedSpawnProgram {
             program: program.to_string(),
-            lookup_path: lookup_result.and_then(|result| result.path),
+            lookup_path: lookup_result
+                .as_ref()
+                .and_then(|result| result.path.clone()),
+            lookup_environment: lookup_result
+                .as_ref()
+                .map(|result| result.environment.clone())
+                .unwrap_or_default(),
             path_entries: Vec::new(),
             requires_shell: true,
         };
@@ -288,7 +297,13 @@ fn resolve_spawn_program_from_lookup(
 
     ResolvedSpawnProgram {
         program: resolved_program.to_string(),
-        lookup_path: lookup_result.and_then(|result| result.path),
+        lookup_path: lookup_result
+            .as_ref()
+            .and_then(|result| result.path.clone()),
+        lookup_environment: lookup_result
+            .as_ref()
+            .map(|result| result.environment.clone())
+            .unwrap_or_default(),
         path_entries,
         requires_shell: false,
     }
@@ -341,11 +356,23 @@ fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-fn apply_spawn_path(command: &mut Command, lookup_path: Option<&OsStr>, path_entries: &[PathBuf]) {
+fn apply_spawn_environment(
+    command: &mut Command,
+    lookup_path: Option<&OsStr>,
+    lookup_environment: &[(OsString, OsString)],
+    path_entries: &[PathBuf],
+) {
     let fallback_path = env::var_os("PATH");
     let current_path = lookup_path.or(fallback_path.as_deref());
     if let Some(path) = build_spawn_path(current_path, path_entries) {
         command.env("PATH", path);
+    }
+
+    for (key, value) in lookup_environment {
+        if is_shell_runtime_variable(key.as_os_str()) {
+            continue;
+        }
+        command.env(key, value);
     }
 }
 
@@ -360,6 +387,13 @@ fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> O
     }
 
     env::join_paths(paths).ok()
+}
+
+fn is_shell_runtime_variable(key: &OsStr) -> bool {
+    matches!(
+        key.to_str(),
+        Some("PATH" | "PWD" | "OLDPWD" | "SHLVL" | "_")
+    )
 }
 
 fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {
@@ -453,6 +487,48 @@ mod tests {
             resolve_spawn_program("/opt/claude/bin/claude").path_entries,
             vec![PathBuf::from("/opt/claude/bin")]
         );
+    }
+
+    #[test]
+    fn apply_spawn_environment_skips_shell_runtime_variables() {
+        let mut command = Command::new("/usr/bin/env");
+        apply_spawn_environment(
+            &mut command,
+            Some(OsStr::new("/opt/node/bin:/usr/bin:/bin")),
+            &[
+                (
+                    OsString::from("GVM_ROOT"),
+                    OsString::from("/tmp/redwhisk-gvm"),
+                ),
+                (
+                    OsString::from("PWD"),
+                    OsString::from("/tmp/should-not-leak"),
+                ),
+            ],
+            &[PathBuf::from("/opt/claude/bin")],
+        );
+
+        let envs: Vec<_> = command
+            .get_envs()
+            .map(|(key, value)| (key.to_os_string(), value.map(|entry| entry.to_os_string())))
+            .collect();
+        assert!(envs.iter().any(|(key, value)| {
+            key == &OsString::from("GVM_ROOT")
+                && value.as_ref() == Some(&OsString::from("/tmp/redwhisk-gvm"))
+        }));
+        assert!(envs.iter().all(|(key, _)| key != &OsString::from("PWD")));
+        assert!(envs.iter().any(|(key, value)| {
+            key == &OsString::from("PATH")
+                && value.as_ref().is_some_and(|path| {
+                    env::split_paths(path).collect::<Vec<_>>()
+                        == vec![
+                            PathBuf::from("/opt/claude/bin"),
+                            PathBuf::from("/opt/node/bin"),
+                            PathBuf::from("/usr/bin"),
+                            PathBuf::from("/bin"),
+                        ]
+                })
+        }));
     }
 
     #[test]
