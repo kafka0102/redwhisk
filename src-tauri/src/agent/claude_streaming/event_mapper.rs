@@ -164,6 +164,7 @@ fn build_edit_diff(input: &Value) -> Option<String> {
 }
 
 /// tool_result 回填结果。
+#[derive(Debug)]
 pub struct ToolResultUpdate {
     pub call_id: String,
     pub status: ToolCallStatus,
@@ -172,6 +173,7 @@ pub struct ToolResultUpdate {
 }
 
 /// tool_result 对 ToolCallDetail 的部分更新。
+#[derive(Debug)]
 pub enum ToolResultPatch {
     /// Bash 命令结果。
     Shell {
@@ -185,7 +187,15 @@ pub enum ToolResultPatch {
 }
 
 /// 解析 user 消息里的 tool_result 块，返回更新列表。
-pub fn map_tool_results(blocks: &[UserBlock]) -> Vec<ToolResultUpdate> {
+///
+/// `resolve_tool_name` 把 tool_use_id 映射到该调用对应的原始工具名
+/// （如 "Bash" / "Read" / "Edit"）。用于保留 tool_result 回填时的工具类型，
+/// 避免把已建立的 `Read { path }` / `Edit { path }` 降级成 `Unknown`。
+/// 若映射缺失（未捕获到对应的 tool_use 块），回退到 `Unknown`。
+pub fn map_tool_results(
+    blocks: &[UserBlock],
+    resolve_tool_name: impl Fn(&str) -> Option<String>,
+) -> Vec<ToolResultUpdate> {
     blocks
         .iter()
         .filter_map(|block| match block {
@@ -193,24 +203,64 @@ pub fn map_tool_results(blocks: &[UserBlock]) -> Vec<ToolResultUpdate> {
                 tool_use_id,
                 content,
                 is_error,
-            } => Some(ToolResultUpdate {
-                call_id: tool_use_id.clone(),
-                status: if *is_error {
-                    ToolCallStatus::Failed
+            } => {
+                let tool_name = resolve_tool_name(tool_use_id);
+                let output = if content.is_empty() {
+                    None
                 } else {
-                    ToolCallStatus::Completed
-                },
-                patch: ToolResultPatch::Unknown {
-                    raw_output: if content.is_empty() {
-                        None
+                    Some(content.clone())
+                };
+                let patch = build_tool_result_patch(tool_name.as_deref(), output, content);
+                Some(ToolResultUpdate {
+                    call_id: tool_use_id.clone(),
+                    status: if *is_error {
+                        ToolCallStatus::Failed
                     } else {
-                        Some(content.clone())
+                        ToolCallStatus::Completed
                     },
-                },
-            }),
+                    patch,
+                })
+            }
             UserBlock::Text { .. } => None,
         })
         .collect()
+}
+
+/// 根据已知工具名派生对应类型的 patch，保持与 tool_use 阶段一致的 detail type。
+///
+/// 已知工具：Bash → Shell（output 取 content，exit_code 解析自尾部，缺失则 None），
+/// Read → Read。未知或缺失工具名 → Unknown。保持类型一致是关键：前端 reducer
+/// 在 type 一致时做字段级合并（incoming 空字段保留 existing），type 不一致时
+/// 整体覆盖；若降级到 Unknown 会丢失 tool_use 阶段的 path/command/diff。
+fn build_tool_result_patch(
+    tool_name: Option<&str>,
+    output: Option<String>,
+    content: &str,
+) -> ToolResultPatch {
+    match tool_name {
+        Some("Bash") => {
+            let exit_code = extract_exit_code(content);
+            ToolResultPatch::Shell { output, exit_code }
+        }
+        Some("Read") => ToolResultPatch::Read { content: output },
+        _ => ToolResultPatch::Unknown { raw_output: output },
+    }
+}
+
+/// 从 Bash 工具结果文本尾部解析 exit code。
+///
+/// Claude Code 的 Bash 工具结果通常在末尾以明确标记附上退出码，常见格式：
+/// - `exit_code: N`（auto-commit 脚本与其他遵循该约定的输出）
+/// - `Exit code: N`
+/// 仅匹配这些明确前缀，避免误解析普通输出行（如 "exiting..."）。
+fn extract_exit_code(content: &str) -> Option<i32> {
+    content.lines().rev().find_map(|line| {
+        let trimmed = line.trim();
+        let value = trimmed
+            .strip_prefix("exit_code:")
+            .or_else(|| trimmed.strip_prefix("Exit code:"))?;
+        value.trim().trim_end_matches(';').trim().parse::<i32>().ok()
+    })
 }
 
 /// 从用量统计构造 `AgentUsage`。
@@ -337,12 +387,66 @@ mod tests {
                 is_error: true,
             },
         ];
-        let updates = map_tool_results(&blocks);
+        let updates = map_tool_results(&blocks, |_| None);
         assert_eq!(updates.len(), 2);
         assert_eq!(updates[0].call_id, "t1");
         assert_eq!(updates[0].status, ToolCallStatus::Completed);
         assert_eq!(updates[1].call_id, "t2");
         assert_eq!(updates[1].status, ToolCallStatus::Failed);
+    }
+
+    #[test]
+    fn tool_result_preserves_read_patch_type_when_tool_name_known() {
+        let blocks = vec![UserBlock::ToolResult {
+            tool_use_id: "t1".into(),
+            content: "file contents".into(),
+            is_error: false,
+        }];
+        let updates = map_tool_results(&blocks, |id| {
+            (id == "t1").then(|| "Read".to_string())
+        });
+        assert_eq!(updates.len(), 1);
+        match &updates[0].patch {
+            ToolResultPatch::Read { content } => {
+                assert_eq!(content.as_deref(), Some("file contents"));
+            }
+            other => panic!("期望 Read patch，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tool_result_preserves_shell_patch_type_when_tool_name_known() {
+        let blocks = vec![UserBlock::ToolResult {
+            tool_use_id: "t1".into(),
+            content: "ls output\nexit_code: 0".into(),
+            is_error: false,
+        }];
+        let updates = map_tool_results(&blocks, |id| {
+            (id == "t1").then(|| "Bash".to_string())
+        });
+        assert_eq!(updates.len(), 1);
+        match &updates[0].patch {
+            ToolResultPatch::Shell { output, exit_code } => {
+                assert_eq!(output.as_deref(), Some("ls output\nexit_code: 0"));
+                assert_eq!(*exit_code, Some(0));
+            }
+            other => panic!("期望 Shell patch，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tool_result_falls_back_to_unknown_when_tool_name_missing() {
+        let blocks = vec![UserBlock::ToolResult {
+            tool_use_id: "t1".into(),
+            content: "raw".into(),
+            is_error: false,
+        }];
+        let updates = map_tool_results(&blocks, |_| None);
+        assert_eq!(updates.len(), 1);
+        assert!(matches!(
+            &updates[0].patch,
+            ToolResultPatch::Unknown { raw_output } if raw_output.as_deref() == Some("raw")
+        ));
     }
 
     #[test]

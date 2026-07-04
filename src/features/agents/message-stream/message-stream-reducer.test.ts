@@ -551,6 +551,35 @@ describe("messageStreamReducer", () => {
       });
     });
 
+    it("assistant 回放 reasoning 与流式文本存在空白差异时仍保留已有时长", () => {
+      // 流式 flush 与完整 assistant 消息阶段的 reasoning 文本可能存在尾部空白、
+      // \r\n 等差异。归一化比较后应保留已带的 durationMs，不应回退到「正在思考」。
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "reasoning",
+          text: "我已经想完了",
+          durationMs: 3500,
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "reasoning",
+          // 流式阶段无尾部空格，完整消息阶段多了一个尾随空格 + \r\n。
+          text: "我已经想完了 \r\n",
+        }),
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "reasoning",
+        text: "我已经想完了 \r\n",
+        durationMs: 3500,
+      });
+    });
+
     it("Claude tool_result 回填 generic tool 名称时保留 tool_use 阶段的真实工具名", () => {
       let state = createInitialState();
       state = messageStreamReducer(state, {
