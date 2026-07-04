@@ -12,6 +12,7 @@ use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
+use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentPermissionDecision, AgentSessionListResponse, CancelAgentTurnInput,
     DeleteAgentSessionInput, DeleteAgentSessionResult, InjectAgentSessionPromptInput,
@@ -28,7 +29,6 @@ use crate::types::agent_session::{
     StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
     UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult, WriteAgentSessionTerminalInput,
 };
-use crate::types::agent_profile::AgentType;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
@@ -713,7 +713,9 @@ pub fn list_agent_models(
 ///   `env.ANTHROPIC_MODEL` 或顶层 `model`，前端展示但不允许切换。
 /// - 官方接口：返回 opus / sonnet / haiku 列表，当前 settings.json 的 `model`
 ///   字段对应项标 `is_default`，允许用户切换并持久化。
-fn claude_models_from_home(home_dir: &std::path::Path) -> Vec<crate::types::agent_session_stream::AgentModel> {
+fn claude_models_from_home(
+    home_dir: &std::path::Path,
+) -> Vec<crate::types::agent_session_stream::AgentModel> {
     use crate::types::agent_session_stream::AgentModel;
     let snapshot = match claude_config::read_settings_from_home(home_dir) {
         Some(s) => s,

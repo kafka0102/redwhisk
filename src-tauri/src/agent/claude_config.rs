@@ -27,11 +27,8 @@ const ENV_MODEL: &str = "ANTHROPIC_MODEL";
 ///
 /// 仅当未检测到第三方接口时，前端才允许用户在这些模型间切换。
 /// `(model_id, display_name)`。
-pub const OFFICIAL_CLAUDE_MODELS: &[(&str, &str)] = &[
-    ("opus", "Opus"),
-    ("sonnet", "Sonnet"),
-    ("haiku", "Haiku"),
-];
+pub const OFFICIAL_CLAUDE_MODELS: &[(&str, &str)] =
+    &[("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")];
 
 /// redwhisk 关心的 `~/.claude/settings.json` 字段子集快照。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,7 +128,8 @@ fn write_model_content(content: &str, model: &str) -> String {
         );
     }
     // pretty 序列化，保持与 Claude CLI 原生格式一致。
-    serde_json::to_string_pretty(&root).unwrap_or_else(|_| format!("{{\n  \"model\": \"{model}\"\n}}"))
+    serde_json::to_string_pretty(&root)
+        .unwrap_or_else(|_| format!("{{\n  \"model\": \"{model}\"\n}}"))
         + "\n"
 }
 
@@ -165,7 +163,10 @@ mod tests {
         }"#;
         let snapshot = parse_settings(content).expect("应解析成功");
         assert_eq!(snapshot.model.as_deref(), Some("sonnet[1m]"));
-        assert_eq!(snapshot.base_url.as_deref(), Some("http://example.com:9009"));
+        assert_eq!(
+            snapshot.base_url.as_deref(),
+            Some("http://example.com:9009")
+        );
         assert_eq!(snapshot.auth_token.as_deref(), Some("sk-xxx"));
         assert_eq!(snapshot.anthropic_model.as_deref(), Some("glm-5.2[1m]"));
         assert!(is_third_party(&snapshot));
