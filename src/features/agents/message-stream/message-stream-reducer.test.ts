@@ -147,6 +147,23 @@ describe("messageStreamReducer", () => {
       });
     });
 
+    it("历史 reasoning 末尾重复回放且缺少 durationMs 时保留已完成时长", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [
+          { type: "reasoning", text: "形成结论", durationMs: 4200 },
+          { type: "reasoning", text: "形成结论" },
+        ],
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "reasoning",
+        text: "形成结论",
+        durationMs: 4200,
+      });
+    });
+
     it("过滤历史中的启动噪音与空消息", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "HYDRATE",
@@ -505,6 +522,77 @@ describe("messageStreamReducer", () => {
         type: "reasoning",
         text: "思考完成",
         durationMs: 3500,
+      });
+    });
+
+    it("assistant 完整回放重复 reasoning 且未带 durationMs 时保留已有时长", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "reasoning",
+          text: "我已经想完了",
+          durationMs: 3500,
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "reasoning",
+          text: "我已经想完了",
+        }),
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "reasoning",
+        text: "我已经想完了",
+        durationMs: 3500,
+      });
+    });
+
+    it("Claude tool_result 回填 generic tool 名称时保留 tool_use 阶段的真实工具名", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-plan",
+          name: "TodoWrite",
+          detail: {
+            type: "unknown",
+            rawInput:
+              '{"todos":[{"content":"优化浏览器 tab","status":"in_progress"}]}',
+          },
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-plan",
+          name: "tool",
+          detail: {
+            type: "unknown",
+            rawOutput: "Updated task #2 status",
+          },
+          status: "completed",
+        }),
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].item).toEqual({
+        type: "tool_call",
+        callId: "c-plan",
+        name: "TodoWrite",
+        detail: {
+          type: "unknown",
+          rawInput:
+            '{"todos":[{"content":"优化浏览器 tab","status":"in_progress"}]}',
+          rawOutput: "Updated task #2 status",
+        },
+        status: "completed",
       });
     });
   });

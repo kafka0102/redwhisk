@@ -123,7 +123,7 @@ function ReasoningCard({
   completedLabel: (seconds: number) => string;
 }) {
   // durationMs 存在表示 reasoning 块已结束（后端 force flush 时填充）。
-  // 此时标题展示「思考过程 持续了 X 秒」；否则回退到「正在思考…」。
+  // 此时标题展示「思考过程（共进行了 X 秒）」；否则回退到「正在思考…」。
   const label =
     item.durationMs != null
       ? completedLabel(Math.max(1, Math.round(item.durationMs / 1000)))

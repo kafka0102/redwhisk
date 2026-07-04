@@ -280,10 +280,17 @@ function applyTimelineItem(
       const lastIndex = entries.length - 1;
       const last = entries[lastIndex];
       if (last && last.kind === "reasoning") {
+        const mergedItem: Extract<AgentTimelineItem, { type: "reasoning" }> =
+          item.durationMs == null &&
+          last.item.type === "reasoning" &&
+          last.item.durationMs != null &&
+          last.item.text === item.text
+            ? { ...item, durationMs: last.item.durationMs }
+            : item;
         return replaceAt(entries, lastIndex, {
           id: last.id,
           kind: "reasoning",
-          item,
+          item: mergedItem,
         });
       }
       return [...entries, toEntry(item, nextLocalId(entries))];
@@ -310,6 +317,12 @@ function applyTimelineItem(
           : item.detail;
         const mergedItem: Extract<AgentTimelineItem, { type: "tool_call" }> = {
           ...item,
+          name:
+            existing.kind === "tool_call" &&
+            existing.item.type === "tool_call" &&
+            shouldPreserveExistingToolName(existing.item.name, item.name)
+              ? existing.item.name
+              : item.name,
           detail: mergedDetail,
         };
         return replaceAt(entries, index, {
@@ -444,6 +457,20 @@ function deriveEntryId(item: AgentTimelineItem, localId: number): string {
 
 function normalizeMessageText(text: string): string {
   return text.trim().replace(/\r\n/g, "\n");
+}
+
+function shouldPreserveExistingToolName(
+  existingName: string,
+  incomingName: string,
+): boolean {
+  return (
+    !isGenericToolName(existingName) &&
+    (incomingName.trim().length === 0 || isGenericToolName(incomingName))
+  );
+}
+
+function isGenericToolName(name: string): boolean {
+  return name.trim().toLowerCase() === "tool";
 }
 
 /** 生成下一个 local 自增序号（基于现有 entries 数量）。 */
