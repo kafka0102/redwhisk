@@ -418,6 +418,7 @@ export interface I18nMessages {
     browserTab: string;
     browserAddress: string;
     browserAddressPlaceholder: string;
+    browserRecentUrls: string;
     browserEmpty: string;
     browserFrameTitle: (url: string) => string;
     sessionTerminal: string;
@@ -924,6 +925,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       browserTab: "Session browser",
       browserAddress: "Browser address",
       browserAddressPlaceholder: "Enter address and press Enter",
+      browserRecentUrls: "Recent browser addresses",
       browserEmpty: "Enter an address to open a page.",
       browserFrameTitle: (url) => `Browser page ${url}`,
       sessionTerminal: "Session terminal",
@@ -1414,6 +1416,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       browserTab: "会话浏览器",
       browserAddress: "浏览器地址",
       browserAddressPlaceholder: "输入地址并按 Enter",
+      browserRecentUrls: "最近访问的浏览器地址",
       browserEmpty: "输入地址后打开页面。",
       browserFrameTitle: (url) => `浏览器页面 ${url}`,
       sessionTerminal: "会话终端",
