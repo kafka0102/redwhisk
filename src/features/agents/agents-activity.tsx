@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import {
+  injectAgentSessionPrompt,
   deleteAgentSession,
   listAgentSessions,
   setAgentSessionAttention,
@@ -26,6 +27,7 @@ import {
   markIssueReview,
   prepareAgentCommitCompletion,
   type AgentCommitCompletionPreview,
+  type CompleteIssueFlowResult,
   type IssueRecord,
 } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -62,7 +64,16 @@ import {
   closeProjectTerminal,
   createTemporaryProjectTerminal,
 } from "../terminals/project-terminal-commands";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
+import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion-helpers";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -91,7 +102,7 @@ export function AgentsActivity({
   onSelectSession,
   projectId,
 }: AgentsActivityProps) {
-  const { messages } = useI18n();
+  const { locale, messages } = useI18n();
   const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
   const { confirm, confirmationDialog } = useConfirmDialog();
   const { alertDialog, showAlert } = useAlertDialog();
@@ -114,6 +125,7 @@ export function AgentsActivity({
     isDetectingAgentCommitCompletion,
     setIsDetectingAgentCommitCompletion,
   ] = useState(false);
+  const [isSubmittingMergePrompt, setIsSubmittingMergePrompt] = useState(false);
   const [
     isCompletionLoadingDialogDismissed,
     setIsCompletionLoadingDialogDismissed,
@@ -131,6 +143,12 @@ export function AgentsActivity({
   const [isNewSessionMenuOpen, setIsNewSessionMenuOpen] = useState(false);
   const [agentCommitPreview, setAgentCommitPreview] =
     useState<AgentCommitCompletionPreview | null>(null);
+  const [mergePromptSessionId, setMergePromptSessionId] = useState<
+    number | null
+  >(null);
+  const [mergePromptContent, setMergePromptContent] = useState<string | null>(
+    null,
+  );
   const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
   const [terminalPanelStateBySessionId, setTerminalPanelStateBySessionId] =
@@ -365,7 +383,7 @@ export function AgentsActivity({
         : null) ??
       visibleSessions[0]?.sessionId ??
       null)
-    : (selectedSessionId ?? null);
+    : (selectedSessionId ?? visibleSessions[0]?.sessionId ?? null);
 
   const selectedSession =
     visibleSessions.find((session) => session.sessionId === currentSessionId) ??
@@ -520,17 +538,20 @@ export function AgentsActivity({
     isPreparingAgentCommit ||
     isSendingAgentCommitPrompt ||
     isDetectingAgentCommitCompletion ||
+    isSubmittingMergePrompt ||
     isDeletingSession;
   const isAgentCommitPreviewPending =
     isCompletingManual ||
     isSendingAgentCommitPrompt ||
-    isDetectingAgentCommitCompletion;
+    isDetectingAgentCommitCompletion ||
+    isSubmittingMergePrompt;
   const isCompletionCheckPending =
     isCompletingManual ||
     isCompletingClean ||
     isPreparingAgentCommit ||
     isSendingAgentCommitPrompt ||
-    isDetectingAgentCommitCompletion;
+    isDetectingAgentCommitCompletion ||
+    isSubmittingMergePrompt;
   const isCompletionLoadingDialogOpen =
     isCompletionCheckPending && !isCompletionLoadingDialogDismissed;
 
@@ -689,6 +710,7 @@ export function AgentsActivity({
 
   async function completeLinkedIssueViaFlow(
     issueId: number,
+    sessionId: number,
     options: { ignoreDirty?: boolean } = {},
   ) {
     const result = await completeIssueFlow({
@@ -696,10 +718,13 @@ export function AgentsActivity({
       issueId,
       ignoreDirty: options.ignoreDirty ?? undefined,
     });
-    if (result.action !== "completed") {
-      throw new Error(result.message);
+    if (result.action === "completed") {
+      return result.issue;
     }
-    return result.issue;
+    if (handleMergePromptRequirement(result, sessionId)) {
+      return null;
+    }
+    throw new Error(result.message);
   }
 
   async function completeLinkedIssueManual(
@@ -717,8 +742,12 @@ export function AgentsActivity({
     try {
       const completedIssue = await completeLinkedIssueViaFlow(
         issue.issueId,
+        targetSessionId,
         options,
       );
+      if (completedIssue == null) {
+        return;
+      }
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
@@ -761,7 +790,13 @@ export function AgentsActivity({
     let completedSessionId: number | null = null;
 
     try {
-      const completedIssue = await completeLinkedIssueViaFlow(issue.issueId);
+      const completedIssue = await completeLinkedIssueViaFlow(
+        issue.issueId,
+        targetSessionId,
+      );
+      if (completedIssue == null) {
+        return;
+      }
       completedIssueId = completedIssue.id;
       completedSessionId = session.sessionId;
       applyCompletedIssueToSessions(completedIssue, targetSessionId);
@@ -827,35 +862,21 @@ export function AgentsActivity({
         (session: AgentSessionListItem) =>
           session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
-    let nextSession = currentSession;
-
-    // 如果 session 已关闭，直接完成，不需要先标记为 review
     const isSessionClosed = currentSession.status === "closed";
 
-    if (currentSession.issueStatus === "running" && !isSessionClosed) {
-      const refreshedSessions = await markLinkedIssueReview(linkedIssue);
-      if (!refreshedSessions) {
-        return;
-      }
-
-      nextSession = refreshedSessions.find(
-        (session) => session.sessionId === currentSession.sessionId,
-      ) ?? { ...currentSession, issueStatus: "review" as const };
-    }
-
     if (isSessionClosed) {
-      await completeLinkedIssueManual(linkedIssue, nextSession);
+      await completeLinkedIssueManual(linkedIssue, currentSession);
       return;
     }
 
-    if (nextSession.canCompleteAgentCommit) {
-      await prepareLinkedIssueAgentCommit(linkedIssue, nextSession);
+    if (currentSession.canCompleteAgentCommit) {
+      await prepareLinkedIssueAgentCommit(linkedIssue, currentSession);
       return;
     }
 
     // completion_policy 已移除：默认走 clean 完成入口，由 complete_issue_flow
     // 在后端统一检测实际工作区状态并驱动新流程。
-    await completeLinkedIssueClean(linkedIssue, nextSession);
+    await completeLinkedIssueClean(linkedIssue, currentSession);
   }
 
   async function handleTransitionAction(action: SessionIssueTransition) {
@@ -919,6 +940,13 @@ export function AgentsActivity({
         setAgentCommitPreview(null);
         const response = await listAgentSessions(projectId);
         setAllSessions(applySessionListOverlays(response.sessions));
+      } else if (
+        handleMergePromptRequirement(
+          completionResult,
+          selectedSession.sessionId,
+        )
+      ) {
+        return;
       } else {
         setAgentCommitPreview(null);
         showAlert({ message: completionResult.message, type: "error" });
@@ -1118,6 +1146,74 @@ export function AgentsActivity({
     } finally {
       setIsDeletingSession(false);
     }
+  }
+
+  function handleMergePromptRequirement(
+    result: CompleteIssueFlowResult,
+    fallbackSessionId: number,
+  ) {
+    if (
+      result.action !== "blocked" ||
+      (result.mergeBlockReason !== "merge_conflict" &&
+        result.mergeBlockReason !== "target_worktree_dirty")
+    ) {
+      return false;
+    }
+
+    const sessionId = result.sessionId ?? fallbackSessionId;
+    if (sessionId == null) {
+      showAlert({ message: result.message, type: "error" });
+      return true;
+    }
+
+    setMergePromptSessionId(sessionId);
+    setMergePromptContent(
+      buildWorktreeMergeConflictPrompt(
+        {
+          message: result.message,
+          targetBranch: result.targetBranch,
+          workspaceBranch: result.workspaceBranch,
+          workspacePath: result.workspacePath,
+        },
+        locale,
+      ),
+    );
+    return true;
+  }
+
+  async function handleConfirmMergePrompt() {
+    if (
+      mergePromptContent == null ||
+      mergePromptSessionId == null ||
+      isSubmittingMergePrompt
+    ) {
+      return;
+    }
+
+    setIsSubmittingMergePrompt(true);
+
+    try {
+      await injectAgentSessionPrompt({
+        projectId,
+        sessionId: mergePromptSessionId,
+        prompt: mergePromptContent,
+        kind: "follow_up",
+      });
+      setMergePromptSessionId(null);
+      setMergePromptContent(null);
+    } catch (error) {
+      showCommandErrorAlert(error);
+    } finally {
+      setIsSubmittingMergePrompt(false);
+    }
+  }
+
+  function handleCloseMergePrompt() {
+    if (isSubmittingMergePrompt) {
+      return;
+    }
+    setMergePromptSessionId(null);
+    setMergePromptContent(null);
   }
 
   async function handleRenameSessionTitle(sessionId: number, title: string) {
@@ -1588,6 +1684,43 @@ export function AgentsActivity({
           }
         }}
       />
+      <Dialog
+        open={mergePromptSessionId !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            handleCloseMergePrompt();
+          }
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>
+              {messages.agentsFeature.mergeToBaseBranchQuestion}
+            </DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              disabled={isSubmittingMergePrompt}
+              type="button"
+              variant="secondary"
+              onClick={handleCloseMergePrompt}
+            >
+              {messages.agentsFeature.mergeToBaseBranchNo}
+            </Button>
+            <Button
+              disabled={isSubmittingMergePrompt}
+              type="button"
+              onClick={() => {
+                void handleConfirmMergePrompt();
+              }}
+            >
+              {isSubmittingMergePrompt
+                ? messages.agentsFeature.submitting
+                : messages.agentsFeature.mergeToBaseBranchYes}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {alertDialog}
       {confirmationDialog}
     </main>

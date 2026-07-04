@@ -16,6 +16,7 @@ import claudeLogoSrc from "../../assets/images/claude.svg";
 import codexLogoSrc from "../../assets/images/codex.svg";
 import { AgentsActivity } from "./agents-activity";
 import {
+  injectAgentSessionPrompt,
   deleteAgentSession,
   listAgentSessions,
   setAgentSessionAttention,
@@ -138,6 +139,7 @@ vi.mock("@monaco-editor/react", () => ({
 
 vi.mock("./agent-session-commands", () => ({
   deleteAgentSession: vi.fn(),
+  injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
   setAgentSessionAttention: vi.fn(),
   startStructuredAgentSession: vi.fn(),
@@ -189,6 +191,7 @@ vi.mock("../../shared/toast", () => ({
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const deleteAgentSessionMock = vi.mocked(deleteAgentSession);
+const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
 const updateAgentSessionTitleMock = vi.mocked(updateAgentSessionTitle);
@@ -410,6 +413,7 @@ describe("AgentsActivity", () => {
     eventMocks.unlisten.mockReset();
     listAgentSessionsMock.mockReset();
     deleteAgentSessionMock.mockReset();
+    injectAgentSessionPromptMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
     startStructuredAgentSessionMock.mockReset();
     updateAgentSessionTitleMock.mockReset();
@@ -444,6 +448,10 @@ describe("AgentsActivity", () => {
     });
     deleteAgentSessionMock.mockResolvedValue({
       sessionId: 701,
+    });
+    injectAgentSessionPromptMock.mockResolvedValue({
+      sessionId: 502,
+      codexSessionId: "thread-502",
     });
     updateAgentSessionTitleMock.mockResolvedValue({
       sessionId: 701,
@@ -2575,7 +2583,7 @@ describe("AgentsActivity", () => {
     });
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
     const initialRow = within(sessionList).getByRole("button", {
-      name: /Session is running#21 Polling issue/i,
+      name: /Session is runningPolling issue/i,
     });
     expect(
       within(initialRow).getByLabelText("Session status: Running"),
@@ -2584,7 +2592,7 @@ describe("AgentsActivity", () => {
     await emitSessionListChanged(1, 302);
 
     const refreshedRow = within(sessionList).getByRole("button", {
-      name: /^#21 Polling issue/i,
+      name: /^Polling issue/i,
     });
     expect(
       within(refreshedRow).getByLabelText("Session status: Output complete"),
@@ -3692,23 +3700,6 @@ describe("AgentsActivity", () => {
             sessionId: 302,
             issueId: 21,
             issueTitle: "Review candidate",
-            issueStatus: "review",
-            title: null,
-            agentType: "codex",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_638_001_000,
-            startedAt: 1_780_638_000_000,
-            closedAt: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 302,
-            issueId: 21,
-            issueTitle: "Review candidate",
             issueStatus: "completed",
             title: null,
             agentType: "codex",
@@ -3720,18 +3711,6 @@ describe("AgentsActivity", () => {
           },
         ],
       });
-    markIssueReviewMock.mockResolvedValueOnce({
-      id: 21,
-      projectId: 1,
-      title: "Review candidate",
-      description: "",
-      status: "review",
-      linkedSessionId: 302,
-      linkedSessionStatus: "running",
-      linkedSessionAttention: "none",
-      createdAt: 1_780_637_000_000,
-      updatedAt: 1_780_638_001_000,
-    });
     completeIssueFlowMock.mockResolvedValueOnce({
       ...completedFlowResult(21),
       issue: {
@@ -3750,17 +3729,193 @@ describe("AgentsActivity", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
-    expect(markIssueReviewMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 21,
-    });
+    expect(markIssueReviewMock).not.toHaveBeenCalled();
     expect(completeIssueFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 1, issueId: 21 }),
     );
-    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
       screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("asks before handing off a worktree merge to the session and does nothing on no", async () => {
+    const user = userEvent.setup();
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "blocked",
+      issue: {
+        id: 21,
+        projectId: 1,
+        title: "Review candidate",
+        description: "",
+        status: "running",
+        linkedSessionId: 302,
+        linkedSessionStatus: "running",
+        linkedSessionAttention: "none",
+        createdAt: 1_780_637_000_000,
+        updatedAt: 1_780_638_000_000,
+      },
+      flow: null,
+      message:
+        "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先处理这些改动。",
+      mergeBlockReason: "target_worktree_dirty",
+      targetBranch: "main",
+      workspaceBranch: "issue-21",
+      workspacePath: "/tmp/worktrees/issue-21",
+      actualPath: null,
+      drifted: false,
+      sessionId: 302,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Review candidate",
+          issueStatus: "running",
+          workspaceMode: "worktree",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Merge the current branch into the base branch?",
+    });
+    expect(dialog).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "No" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "Merge the current branch into the base branch?",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(injectAgentSessionPromptMock).not.toHaveBeenCalled();
+    expect(markIssueReviewMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Mark review" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows submitting state and loading while sending a worktree merge handoff", async () => {
+    const user = userEvent.setup();
+    const handoff =
+      deferred<Awaited<ReturnType<typeof injectAgentSessionPrompt>>>();
+    injectAgentSessionPromptMock.mockReturnValueOnce(handoff.promise);
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "blocked",
+      issue: {
+        id: 21,
+        projectId: 1,
+        title: "Review candidate",
+        description: "",
+        status: "running",
+        linkedSessionId: 302,
+        linkedSessionStatus: "running",
+        linkedSessionAttention: "none",
+        createdAt: 1_780_637_000_000,
+        updatedAt: 1_780_638_000_000,
+      },
+      flow: null,
+      message: "Agent worktree 合并被阻止，请手动处理冲突。",
+      mergeBlockReason: "merge_conflict",
+      targetBranch: "main",
+      workspaceBranch: "issue-21",
+      workspacePath: "/tmp/worktrees/issue-21",
+      actualPath: null,
+      drifted: false,
+      sessionId: 302,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 302,
+          issueId: 21,
+          issueTitle: "Review candidate",
+          issueStatus: "running",
+          workspaceMode: "worktree",
+          title: null,
+          agentType: "codex",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_638_000_000,
+          startedAt: 1_780_638_000_000,
+          closedAt: null,
+        },
+      ],
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Merge the current branch into the base branch?",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Yes" }));
+
+    expect(
+      within(dialog).getByText("Submitting").closest("button"),
+    ).toBeDisabled();
+    expect(
+      await screen.findByRole("dialog", { name: "Submitting..." }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Close completion progress" }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Submitting..." }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", {
+        name: "Merge the current branch into the base branch?",
+      }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      handoff.resolve({
+        sessionId: 302,
+        codexSessionId: "thread-302",
+      });
+      await handoff.promise;
+    });
+
+    await waitFor(() =>
+      expect(injectAgentSessionPromptMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 302,
+        kind: "follow_up",
+        prompt: expect.stringContaining(
+          "Please resolve the conflicts from merging issue-21 into the originally recorded target branch main",
+        ),
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", {
+        name: "Merge the current branch into the base branch?",
+      }),
+    ).not.toBeInTheDocument();
+    expect(markIssueReviewMock).not.toHaveBeenCalled();
   });
 
   it("clears requested attention from the selected running session", async () => {
