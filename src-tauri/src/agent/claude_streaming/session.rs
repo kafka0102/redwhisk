@@ -826,7 +826,11 @@ fn try_flush_reasoning_delta(
     if text.is_empty() {
         return None;
     }
-    let flushed_len = guard.reasoning_flushed_len.get(&index).copied().unwrap_or(0);
+    let flushed_len = guard
+        .reasoning_flushed_len
+        .get(&index)
+        .copied()
+        .unwrap_or(0);
     let text_changed = text.len() != flushed_len;
     // 块结束（force）时即使文本未变，也可能需要补发 duration（节流 flush 不带 duration）。
     // 仅当 force 且存在 started_at 时，允许「文本未变但补 duration」的一次广播。
@@ -851,9 +855,10 @@ fn try_flush_reasoning_delta(
     guard.reasoning_last_flush_at.insert(index, now);
     // 补发 duration 后清除 started_at，避免后续重复补发。
     let duration_ms = if force {
-        guard.reasoning_started_at.remove(&index).map(|started| {
-            now.duration_since(started).as_millis() as u64
-        })
+        guard
+            .reasoning_started_at
+            .remove(&index)
+            .map(|started| now.duration_since(started).as_millis() as u64)
     } else {
         None
     };
@@ -863,10 +868,7 @@ fn try_flush_reasoning_delta(
     }
     let turn_id = guard.current_turn_id.clone();
     Some(AgentStreamEvent::Timeline {
-        item: AgentTimelineItem::Reasoning {
-            text,
-            duration_ms,
-        },
+        item: AgentTimelineItem::Reasoning { text, duration_ms },
         turn_id,
         seq: 0,
         timestamp: now_ms(),
@@ -1161,7 +1163,9 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert!(
-            reasoning_after_delta.iter().any(|(t, _)| t == "Hello world"),
+            reasoning_after_delta
+                .iter()
+                .any(|(t, _)| t == "Hello world"),
             "节流 flush 应广播完整累积文本，实际：{reasoning_after_delta:?}"
         );
         assert!(
