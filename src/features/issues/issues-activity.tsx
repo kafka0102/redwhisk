@@ -401,6 +401,7 @@ export function IssuesActivity({
         setForm(EMPTY_FORM);
         restoreDialogTriggerFocus(createdIssue);
       } else if (selectedIssue) {
+        const wasReadOnlyEdit = isReadOnlyEditRequested;
         const updatedIssue = await saveSelectedIssueDraft(
           requestProjectId,
           selectedIssue.id,
@@ -410,10 +411,15 @@ export function IssuesActivity({
         }
         setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
         setSelectedIssueId(updatedIssue.id);
-        setDialogMode(null);
         setIsReadOnlyEditRequested(false);
-        setForm(EMPTY_FORM);
-        restoreDialogTriggerFocus(updatedIssue);
+        if (wasReadOnlyEdit) {
+          // 从只读页发起的编辑：保存后回到该 Issue 的只读页，而非看板。
+          setForm(issueToForm(updatedIssue));
+        } else {
+          setDialogMode(null);
+          setForm(EMPTY_FORM);
+          restoreDialogTriggerFocus(updatedIssue);
+        }
       }
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
@@ -534,6 +540,10 @@ export function IssuesActivity({
     setDialogMode(null);
     setIsReadOnlyEditRequested(false);
     setForm(EMPTY_FORM);
+    // 跳转到 session 页面会触发 IssuesActivity 卸载，依赖 dialogMode 变化的
+    // 缓存清理 effect 不会执行，需在此同步清缓存，确保返回 issues 标签时回到
+    // 看板而非只读 Issue 页。
+    issuePageStateCache.delete(projectId);
     onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
   }
 

@@ -1088,6 +1088,63 @@ describe("IssuesActivity", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("returns to the read-only page after saving an edit started from the read-only page", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [runningIssue] });
+    updateIssueMock.mockResolvedValue({
+      ...runningIssue,
+      title: "Updated running issue",
+      description: "Updated running description",
+      updatedAt: 1_780_640_000_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Running issue" }),
+    );
+    const readOnlyPage = screen.getByRole("region", { name: "Issue Detail" });
+    await openIssueMoreMenu(user, readOnlyPage);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit Issue" }),
+    );
+
+    const editForm = screen.getByRole("form", { name: "Edit Issue" });
+    await user.clear(within(editForm).getByLabelText("Title"));
+    await user.type(
+      within(editForm).getByLabelText("Title"),
+      "Updated running issue",
+    );
+    await user.clear(within(editForm).getByLabelText("Description"));
+    await user.type(
+      within(editForm).getByLabelText("Description"),
+      "Updated running description",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateIssueMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: 21,
+        title: "Updated running issue",
+        description: "Updated running description",
+        attachments: [],
+        labelIds: [],
+      }),
+    );
+    expect(
+      screen.queryByRole("form", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+    const readOnlyPageAfterSave = screen.getByRole("region", {
+      name: "Issue Detail",
+    });
+    expect(
+      within(readOnlyPageAfterSave).getByRole("heading", {
+        name: "Updated running issue",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the stored issue card when update fails", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -2629,6 +2686,42 @@ describe("IssuesActivity", () => {
     );
 
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
+    expect(
+      screen.queryByRole("region", { name: "Issue Detail" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears the cached read-only page when opening the linked session so the kanban shows on return", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+
+    // 模拟从只读 Issue 页跳转 session 页面：父组件同步卸载 IssuesActivity，
+    // 依赖 dialogMode 变化的缓存清理 effect 不会执行，必须由 openLinkedSession
+    // 同步清缓存，否则返回 issues 标签时会复现只读 Issue 页而非看板。
+    const view = renderIssuesActivity({ onOpenAgentsActivity });
+    onOpenAgentsActivity.mockImplementation(() => {
+      view.unmount();
+    });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await openIssueMoreMenu(user, dialog);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "View Session" }),
+    );
+
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
+
+    // 重新挂载 IssuesActivity 模拟回到 issues 标签：缓存应已清空，回到看板。
+    renderIssuesActivity({ onOpenAgentsActivity });
+    expect(
+      await screen.findByRole("region", { name: "Issues kanban" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "Issue Detail" }),
     ).not.toBeInTheDocument();
