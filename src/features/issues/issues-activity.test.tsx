@@ -3024,6 +3024,51 @@ describe("IssuesActivity", () => {
     expect(deleteIssueWorktreeMock).not.toHaveBeenCalled();
   });
 
+  it("returns to the board after switching an issue back to backlog", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [reviewIssue] });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...reviewIssue,
+      status: "backlog",
+      updatedAt: reviewIssue.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
+
+    // 退回 Backlog 需要二次确认。
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: reviewIssue.id,
+        targetStatus: "backlog",
+      }),
+    );
+    // 退回待办后直接回到看板：不应停留在只读页，也不应翻转为编辑页。
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("region", { name: "Issue Detail" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("form", { name: "Edit Issue" }),
+      ).not.toBeInTheDocument();
+    });
+    const backlogLane = screen.getByRole("region", { name: "Backlog" });
+    expect(
+      within(backlogLane).getByRole("button", { name: "Review issue" }),
+    ).toBeInTheDocument();
+  });
+
   it("blocks running when a same-name worktree already exists", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });

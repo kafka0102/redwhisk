@@ -856,8 +856,17 @@ export function IssuesActivity({
 
       setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
       setSelectedIssueId(updatedIssue.id);
-      setForm(issueToForm(updatedIssue));
       setCompletionProgress(null);
+
+      if (targetStatus === "backlog") {
+        // 退回待办后直接回到看板：避免 status 变为 backlog 时只读页翻转为编辑页。
+        setDialogMode(null);
+        setIsReadOnlyEditRequested(false);
+        setForm(EMPTY_FORM);
+        restoreDialogTriggerFocus(updatedIssue);
+      } else {
+        setForm(issueToForm(updatedIssue));
+      }
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
         if (error instanceof CompletionCancelledError) {
