@@ -217,8 +217,7 @@ impl<'connection> AgentSessionService<'connection> {
         let exists = workspace_path
             .as_deref()
             .is_some_and(|path| Path::new(path).exists());
-        let can_delete =
-            exists && session.worktree_owner == WorktreeOwner::Redwhisk;
+        let can_delete = exists && session.worktree_owner == WorktreeOwner::Redwhisk;
 
         Ok(IssueWorktreeStatusResult {
             exists,
@@ -4602,11 +4601,9 @@ mod tests {
         AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
         ToolCallDetail, ToolCallStatus,
     };
-    use crate::types::session_event::SessionEventType;
     use crate::types::errors::CommandErrorCode;
-    use crate::types::issue::{
-        DeleteIssueWorktreeInput, GetIssueWorktreeStatusInput,
-    };
+    use crate::types::issue::{DeleteIssueWorktreeInput, GetIssueWorktreeStatusInput};
+    use crate::types::session_event::SessionEventType;
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
@@ -6256,7 +6253,12 @@ mod tests {
 
     fn branch_exists(repo_dir: &Path, branch: &str) -> bool {
         let output = Command::new("git")
-            .args(["show-ref", "--verify", "--quiet", &format!("refs/heads/{branch}")])
+            .args([
+                "show-ref",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{branch}"),
+            ])
             .current_dir(repo_dir)
             .output()
             .expect("verify branch");
