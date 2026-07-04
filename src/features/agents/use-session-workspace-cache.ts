@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { toCommandError } from "../../shared/commands/command-error";
+import { toCommandError, type CommandError } from "../../shared/commands/command-error";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
@@ -54,6 +54,7 @@ interface SessionWorkspaceCache {
   fileTreeErrorMessage: string | null;
   fileTreeRequestSequence: number;
   isChangesLoading: boolean;
+  isChangesUnavailable: boolean;
   isCommitHistoryLoading: boolean;
   isFileTreeLoading: boolean;
   lastCommitHistorySignature: string | null;
@@ -76,6 +77,7 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   fileTreeErrorMessage: null,
   fileTreeRequestSequence: 0,
   isChangesLoading: false,
+  isChangesUnavailable: false,
   isCommitHistoryLoading: false,
   isFileTreeLoading: false,
   lastCommitHistorySignature: null,
@@ -183,17 +185,21 @@ export function useSessionWorkspaceCache({
                   : response.files,
               isChangesLoading: false,
               changesErrorMessage: null,
+              isChangesUnavailable: false,
               lastChangesSignature: response.signature,
             }
           : cache,
       );
     } catch (error) {
+      const commandError = toCommandError(error);
+      const isUnavailable = isWorkspaceRootInaccessibleError(commandError);
       updateCurrentCache((cache) =>
         cache.changesRequestSequence === requestSequence
           ? {
               ...cache,
               isChangesLoading: false,
-              changesErrorMessage: toCommandError(error).message,
+              changesErrorMessage: commandError.message,
+              isChangesUnavailable: isUnavailable,
             }
           : cache,
       );
@@ -548,6 +554,13 @@ export function useSessionWorkspaceCache({
       return;
     }
 
+    // 仓库路径不可访问属于不可恢复错误：worktree 目录已被删除或移动，继续轮询只会
+    // 反复失败并让错误提示闪烁。此时停止自动刷新，交由用户手动操作；手动刷新成功
+    // 后 isChangesUnavailable 会被重置为 false，本 effect 随即恢复轮询。
+    if (currentCache.isChangesUnavailable) {
+      return;
+    }
+
     void refreshChanges();
     const intervalId = window.setInterval(
       () => void refreshChanges(),
@@ -557,7 +570,12 @@ export function useSessionWorkspaceCache({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentCache.sidePanelTab, isSidePanelOpen, refreshChanges]);
+  }, [
+    currentCache.sidePanelTab,
+    currentCache.isChangesUnavailable,
+    isSidePanelOpen,
+    refreshChanges,
+  ]);
 
   useEffect(() => {
     if (!isSidePanelOpen || currentCache.sidePanelTab !== "files") {
@@ -615,4 +633,13 @@ function getSessionCache(
   const nextCache = defaultWorkspaceCache();
   cacheBySession.set(sessionId, nextCache);
   return nextCache;
+}
+
+// 仓库路径不可访问（worktree 目录被删除/移动等）时，后端返回带 WorkspaceRoot
+// detail 的 AGENT_SESSION_VALIDATION_FAILED 错误。此类错误无法通过轮询自愈，需停止
+// 自动刷新；其他可恢复错误（如临时 git 锁）仍允许继续轮询。
+function isWorkspaceRootInaccessibleError(error: CommandError): boolean {
+  return (error.details ?? []).some(
+    (detail) => detail["@type"] === "WorkspaceRoot",
+  );
 }

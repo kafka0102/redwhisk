@@ -842,6 +842,37 @@ describe("AgentsActivity", () => {
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
   });
 
+  it("stops auto-refreshing uncommitted changes when the workspace root is inaccessible", async () => {
+    vi.useFakeTimers();
+    getProjectWorktreeChangesMock.mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "仓库路径不可访问。",
+      details: [{ "@type": "WorkspaceRoot", path: "/tmp/worktrees/missing" }],
+    });
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await flushMicrotasks();
+    fireEvent.click(screen.getByLabelText("Open session side panel"));
+    await flushMicrotasks();
+
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("仓库路径不可访问。")).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    // 仓库路径不可访问属于不可恢复错误，自动轮询应停止，调用次数不再增加。
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+  });
+
   it("loads committed branch history and expands changed files", async () => {
     const user = userEvent.setup();
     getProjectWorktreeCommitHistoryMock.mockResolvedValue({
