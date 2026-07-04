@@ -53,13 +53,16 @@ export const AgentSessionView = memo(function AgentSessionView({
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const capabilities = getAgentCapabilities(agentType);
+  const canUseExternalTurnRunning =
+    sessionStatus === "running" && issueStatus !== "completed";
 
   // 使用 useMemo 避免不必要的重新计算
   const effectiveTurnStatus = useMemo(() => {
-    return state.turnStatus === "running" || isTurnRunning
+    return state.turnStatus === "running" ||
+      (canUseExternalTurnRunning && isTurnRunning)
       ? "running"
       : state.turnStatus;
-  }, [state.turnStatus, isTurnRunning]);
+  }, [canUseExternalTurnRunning, isTurnRunning, state.turnStatus]);
 
   const isReadOnly = issueStatus === "completed";
   const readOnlyReason = isReadOnly
@@ -82,7 +85,7 @@ export const AgentSessionView = memo(function AgentSessionView({
       {/* 消息流区域先显示轻量加载态，再恢复缓存或历史 timeline。 */}
       <AgentMessageStreamView
         state={state}
-        isTurnRunning={isTurnRunning}
+        isTurnRunning={canUseExternalTurnRunning && isTurnRunning}
         agentType={agentType}
       />
 

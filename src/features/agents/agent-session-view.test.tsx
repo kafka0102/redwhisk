@@ -285,6 +285,32 @@ describe("AgentSessionView", () => {
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
   });
 
+  it("已关闭或已完成的 session 不使用外部 isTurnRunning 强行显示运行态", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "最终结论",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="completed"
+        isTurnRunning={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("最终结论")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Thinking...")).not.toBeInTheDocument();
+  });
+
   it("claude agentType 时 composer 也请求模型列表（展示模型区域）", async () => {
     setupTimeline([]);
 

@@ -379,6 +379,44 @@ describe("AgentMessageStream", () => {
     expect(details?.open).toBe(false);
   });
 
+  it("把 TaskUpdate unknown 工具渲染为带图标的任务状态更新卡片", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [
+        {
+          type: "tool_call",
+          callId: "task-update-1",
+          name: "TaskUpdate",
+          detail: {
+            type: "unknown",
+            rawInput: JSON.stringify({
+              taskId: "5",
+              status: "completed",
+            }),
+            rawOutput: "Updated task #5 status",
+          },
+          status: "completed",
+        },
+      ],
+    });
+    const { container } = render(
+      <AgentMessageStream projectId={1} sessionId={15} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Task")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Task #5 -> completed")).toBeInTheDocument();
+    expect(
+      container.querySelector(".agents-message__tool-icon svg"),
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByText("Task"));
+
+    expect(
+      screen.getByText("Updated task #5 status to completed."),
+    ).toBeInTheDocument();
+  });
+
   it("渲染 todo 清单", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({

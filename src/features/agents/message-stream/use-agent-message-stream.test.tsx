@@ -330,7 +330,7 @@ describe("useAgentMessageStream", () => {
     expect(state.entries[0].id).toBe("u2");
   });
 
-  it("切回已缓存 session 时恢复对应 state", async () => {
+  it("切回已缓存 session 时先恢复缓存预览，再后台重读 timeline 校正", async () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValueOnce({
@@ -355,15 +355,28 @@ describe("useAgentMessageStream", () => {
     });
     expect(getState()!.entries[0]?.id).toBe("u2");
 
-    readAgentTimelineMock.mockClear();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [{ type: "user_message", text: "最新", messageId: "u3" }],
+    });
     rerenderWith({ projectId: 1, sessionId: 17 });
 
     expect(getState()!.isInitialized).toBe(false);
     expect(getState()!.entries).toHaveLength(0);
-    expect(readAgentTimelineMock).not.toHaveBeenCalled();
 
     dispatchFrame();
 
     expect(getState()!.entries[0]?.id).toBe("u1");
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(readAgentTimelineMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 17,
+    });
+    expect(getState()!.entries[0]?.id).toBe("u3");
   });
 });
