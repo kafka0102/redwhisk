@@ -92,6 +92,12 @@ struct SessionState {
     tool_input_buffer: HashMap<usize, String>,
     /// 当前 turn 的 tool_use 映射：block_index → (call_id, tool_name)。
     tool_index: HashMap<usize, (String, String)>,
+    /// 当前 turn 的 tool_use_id → 原始工具名映射（如 "Bash" / "Read"）。
+    ///
+    /// tool_result 回填（user 消息）时用于派生与 tool_use 阶段一致类型的 patch，
+    /// 避免把已建立的 `Read { path }` / `Edit { path }` 降级成 `Unknown`，
+    /// 进而丢失 path/command/diff 摘要与图标类型。
+    tool_use_names: HashMap<String, String>,
     /// 当前 turn 是否已发过 result（防止 EOF 时重复发 TurnFailed）。
     turn_finalized: bool,
     /// 最近已知 cwd（best-effort，来自 system/init）。
@@ -126,6 +132,7 @@ impl ClaudeSessionHandle {
             reasoning_started_at: HashMap::new(),
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
+            tool_use_names: HashMap::new(),
             turn_finalized: true,
             last_known_cwd: None,
         }));
@@ -181,6 +188,7 @@ impl ClaudeSessionHandle {
             state.reasoning_started_at.clear();
             state.tool_input_buffer.clear();
             state.tool_index.clear();
+            state.tool_use_names.clear();
             state.turn_finalized = false;
             state.current_turn_id = Some(format!(
                 "turn-{}",
@@ -505,6 +513,15 @@ fn build_events(
             flush_all_reasoning_deltas(state, turn_id)
                 .into_iter()
                 .for_each(|e| events.push(e));
+            // 记录 tool_use_id → 原始工具名映射，供后续 tool_result 回填派生同类型 patch。
+            // 从原始 blocks 提取（map_assistant_blocks 会把 name 归一化为展示名，丢失原名）。
+            if let Ok(mut guard) = state.lock() {
+                for block in &message.blocks {
+                    if let super::message::AssistantBlock::ToolUse { id, name, .. } = block {
+                        guard.tool_use_names.insert(id.clone(), name.clone());
+                    }
+                }
+            }
             let mapped = map_assistant_blocks(&message.blocks);
             for block in mapped {
                 match block {
@@ -557,7 +574,18 @@ fn build_events(
             }
         }
         ClaudeStreamMessage::User { message, .. } => {
-            let updates = map_tool_results(&message.blocks);
+            // 用已记录的 tool_use_id → 原始工具名映射，派生与 tool_use 阶段一致类型的 patch，
+            // 避免 Read/Edit 等被 tool_result 回填降级成 Unknown。
+            let tool_name_resolver = {
+                let state = Arc::clone(state);
+                move |tool_use_id: &str| {
+                    state
+                        .lock()
+                        .ok()
+                        .and_then(|guard| guard.tool_use_names.get(tool_use_id).cloned())
+                }
+            };
+            let updates = map_tool_results(&message.blocks, tool_name_resolver);
             for update in updates {
                 events.push(timeline_event(
                     turn_id,
@@ -710,7 +738,7 @@ fn handle_stream_event(
                 events.push(event);
             }
             // 工具入参完成：发 ToolCall（Running，等 assistant 完整消息或 tool_result 回填）。
-            if let Ok(guard) = state.lock() {
+            if let Ok(mut guard) = state.lock() {
                 if let Some((id, name)) = guard.tool_index.get(&index).cloned() {
                     let input_json = guard
                         .tool_input_buffer
@@ -719,6 +747,8 @@ fn handle_stream_event(
                         .unwrap_or_default();
                     let input: Value = serde_json::from_str(&input_json).unwrap_or(Value::Null);
                     let (detail, tool_name) = map_tool_use_from_input(&name, &input);
+                    // 记录 tool_use_id → 原始工具名，供后续 tool_result 回填派生同类型 patch。
+                    guard.tool_use_names.insert(id.clone(), name);
                     events.push(timeline_event(
                         turn_id,
                         AgentTimelineItem::ToolCall {
@@ -730,6 +760,14 @@ fn handle_stream_event(
                         },
                     ));
                 }
+                // 清理该 block index 的所有累积状态。
+                //
+                // Claude 的 content block index 在每个新 message 中从 0 重置，
+                // 若不清理，下一个 message 的同 index block 会复用残留 buffer，
+                // 导致 reasoning/text 内容追加堆叠，且 reasoning_started_at 不重置
+                // 使后续 reasoning 块拿不到 duration。tool_use_names 按 id 而非 index
+                // 索引，且 tool_result 回填发生在后续 user 消息中，不能在此清理。
+                clear_block_state(&mut guard, index);
             }
         }
         AnthropicStreamEvent::MessageStart { usage } => {
@@ -749,6 +787,24 @@ fn handle_stream_event(
         AnthropicStreamEvent::MessageStop | AnthropicStreamEvent::Other => {}
     }
     events
+}
+
+/// 清理某个 content block index 对应的所有累积状态。
+///
+/// 在 `ContentBlockStop` 后调用。Claude 的 content block index 在每个新 message
+/// 中从 0 重置，若不清理，下一个 message 的同 index block 会复用残留 buffer，
+/// 导致 reasoning/text 内容追加堆叠，且 `reasoning_started_at` 不重置使后续
+/// reasoning 块拿不到 duration。
+fn clear_block_state(state: &mut SessionState, index: usize) {
+    state.text_buffer.remove(&index);
+    state.text_last_flush_at.remove(&index);
+    state.text_flushed_len.remove(&index);
+    state.reasoning_buffer.remove(&index);
+    state.reasoning_last_flush_at.remove(&index);
+    state.reasoning_flushed_len.remove(&index);
+    state.reasoning_started_at.remove(&index);
+    state.tool_input_buffer.remove(&index);
+    state.tool_index.remove(&index);
 }
 
 /// 尝试 flush 一个 text block 的累积文本（节流）。
@@ -1201,6 +1257,149 @@ mod tests {
         );
     }
 
+    #[test]
+    fn consecutive_reasoning_blocks_with_same_index_do_not_stack() {
+        use super::super::message::AnthropicStreamEvent;
+        use std::time::Duration;
+
+        let state = test_state(Some("abc".into()));
+        let turn_id = Some("t1".into());
+
+        // 第一个 message 的 reasoning block（index=0）。
+        handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockStart {
+                index: 0,
+                block: ContentBlock::Thinking {
+                    thinking: "first".into(),
+                },
+            },
+        );
+        std::thread::sleep(Duration::from_millis(10));
+        handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockStop { index: 0 },
+        );
+
+        // 第二个 message 的 reasoning block（同样 index=0，Claude 每个 message 重置 index）。
+        handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockStart {
+                index: 0,
+                block: ContentBlock::Thinking {
+                    thinking: "second".into(),
+                },
+            },
+        );
+        std::thread::sleep(Duration::from_millis(10));
+        let events_second = handle_stream_event(
+            &state,
+            &turn_id,
+            AnthropicStreamEvent::ContentBlockStop { index: 0 },
+        );
+
+        // 第二个 block flush 的文本应仅为 "second"，不应追加残留的 "first"。
+        let second_text = events_second
+            .iter()
+            .filter_map(|e| match e {
+                AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning { text, .. },
+                    ..
+                } => Some(text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            second_text.iter().any(|t| t == "second"),
+            "第二个 reasoning block 应只含 'second'，实际：{second_text:?}"
+        );
+        assert!(
+            !second_text.iter().any(|t| t.contains("first")),
+            "第二个 reasoning block 不应残留 'first'，实际：{second_text:?}"
+        );
+    }
+
+    #[test]
+    fn tool_result_backfill_preserves_read_type_via_tool_use_names() {
+        use super::super::message::{AssistantBlock, UserBlock};
+
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        // 1. assistant 完整消息阶段建立 Read 工具调用（带 path）。
+        let assistant_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: super::super::message::AssistantMessage {
+                    blocks: vec![AssistantBlock::ToolUse {
+                        id: "toolu_1".into(),
+                        name: "Read".into(),
+                        input: json!({ "file_path": "src/main.rs" }),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+        // 验证初始 ToolCall 是 Read 类型且带 path。
+        let initial = assistant_events
+            .iter()
+            .filter_map(|e| match e {
+                AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall { detail, .. },
+                    ..
+                } => Some(detail.clone()),
+                _ => None,
+            })
+            .last()
+            .expect("应有一个 ToolCall");
+        match initial {
+            ToolCallDetail::Read { path, .. } => assert_eq!(path, "src/main.rs"),
+            other => panic!("期望 Read，实际 {other:?}"),
+        }
+
+        // 2. user 消息（tool_result）回填：类型应保持 Read，不应降级到 Unknown。
+        let user_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::User {
+                message: super::super::message::UserMessage {
+                    blocks: vec![UserBlock::ToolResult {
+                        tool_use_id: "toolu_1".into(),
+                        content: "file contents here".into(),
+                        is_error: false,
+                    }],
+                },
+                session_id: None,
+            },
+        );
+        let backfill = user_events
+            .iter()
+            .filter_map(|e| match e {
+                AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall { detail, .. },
+                    ..
+                } => Some(detail.clone()),
+                _ => None,
+            })
+            .last()
+            .expect("应有一个 ToolCall 回填");
+        match backfill {
+            ToolCallDetail::Read { path, content } => {
+                // path 为空骨架（前端 reducer 字段级合并会保留 existing 的 path）。
+                assert!(path.is_empty(), "回填 path 应为空骨架");
+                assert_eq!(content.as_deref(), Some("file contents here"));
+            }
+            other => panic!("期望 Read 回填，实际 {other:?}（类型被降级了）"),
+        }
+    }
+
     fn test_state(session_id: Option<String>) -> Arc<Mutex<SessionState>> {
         Arc::new(Mutex::new(SessionState {
             session_id,
@@ -1215,6 +1414,7 @@ mod tests {
             reasoning_started_at: HashMap::new(),
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
+            tool_use_names: HashMap::new(),
             turn_finalized: false,
             last_known_cwd: None,
         }))
@@ -1277,6 +1477,7 @@ mod tests {
             reasoning_started_at: HashMap::new(),
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
+            tool_use_names: HashMap::new(),
             turn_finalized: false,
             last_known_cwd: None,
         }));

@@ -280,11 +280,16 @@ function applyTimelineItem(
       const lastIndex = entries.length - 1;
       const last = entries[lastIndex];
       if (last && last.kind === "reasoning") {
+        // 流式 flush 与 assistant 完整消息阶段的 reasoning 文本可能存在空白/换行
+        // 差异（trim、\r\n 等）。用 normalizeMessageText 归一化比较，避免因细微
+        // 差异用 durationMs=null 的 incoming 覆盖掉已带 duration 的 last 条目，
+        // 导致「思考过程」标题回退成「正在思考…」。
         const mergedItem: Extract<AgentTimelineItem, { type: "reasoning" }> =
           item.durationMs == null &&
           last.item.type === "reasoning" &&
           last.item.durationMs != null &&
-          last.item.text === item.text
+          normalizeMessageText(last.item.text) ===
+            normalizeMessageText(item.text)
             ? { ...item, durationMs: last.item.durationMs }
             : item;
         return replaceAt(entries, lastIndex, {
