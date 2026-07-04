@@ -32,16 +32,12 @@ import {
 } from "../agents/agent-session-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { buildRunPromptPreview } from "./run-prompt-builder";
-import {
-  IssueRunWorktreeProgressDialog,
-  type WorktreeStartProgressStepId,
-} from "./issue-run-worktree-progress-dialog";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
 const RECENT_WORKSPACE_SELECTION_STORAGE_KEY =
   "redwhisk.issue-run.recent-workspace-selection";
-const WORKTREE_PROGRESS_COMPLETION_DELAY_MS = 300;
 
 interface IssueRunDialogProps {
   issue: Pick<
@@ -86,8 +82,6 @@ export function IssueRunDialog({
   const [isLoadingBranches, setIsLoadingBranches] = useState(true);
   const [hasLoadedRunContext, setHasLoadedRunContext] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-  const [worktreeProgressStep, setWorktreeProgressStep] =
-    useState<WorktreeStartProgressStepId | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -313,7 +307,6 @@ export function IssueRunDialog({
 
     isStartingRef.current = true;
     setIsStarting(true);
-    setWorktreeProgressStep(workspaceMode === "worktree" ? "creating" : null);
     setStatusMessage(null);
 
     try {
@@ -339,10 +332,6 @@ export function IssueRunDialog({
         targetBranch: effectiveTargetBranch,
         worktreeSetupCommand: effectiveSetupCommand,
       });
-      if (workspaceMode === "worktree") {
-        setWorktreeProgressStep("completed");
-        await delay(WORKTREE_PROGRESS_COMPLETION_DELAY_MS);
-      }
       await onStarted(result);
     } catch (error) {
       const commandError = toCommandError(error);
@@ -358,7 +347,6 @@ export function IssueRunDialog({
     } finally {
       isStartingRef.current = false;
       setIsStarting(false);
-      setWorktreeProgressStep(null);
     }
   }
 
@@ -599,21 +587,16 @@ export function IssueRunDialog({
             {isStarting ? messages.issues.starting : messages.issues.start}
           </Button>
         </div>
-        {isStarting && workspaceMode === "worktree" ? (
-          <IssueRunWorktreeProgressDialog
-            activeStep={worktreeProgressStep ?? "creating"}
-            issueId={issue.id}
-            messages={messages.issues}
-            setupCommand={effectiveSetupCommand}
+        {isStarting ? (
+          <LoadingDialog
+            dismissible={false}
+            message={messages.issues.sessionStarting}
+            open
           />
         ) : null}
       </div>
     </div>
   );
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function resolveInitialWorkflowSkill({
