@@ -527,8 +527,14 @@ fn build_events(
                     }
                 }
             }
+            // 注意：完整 assistant 消息与流式增量可能承载同一段文本。流式 flush
+            // 用 `claude-text-{block_index}` 作为 message_id（见 try_flush_text_delta），
+            // 这里必须使用与流式一致的 message_id，前后端两条去重路径（前端 reducer
+            // 按 messageId 幂等替换、后端 push_compacted_timeline_item 按 message_id
+            // 合并）才能正确归并，避免同一段结论文本被当作两条独立消息重复展示，
+            // 以及由此导致的顺序错乱。
             let mapped = map_assistant_blocks(&message.blocks);
-            for block in mapped {
+            for (index, block) in mapped.into_iter().enumerate() {
                 match block {
                     MappedBlock::AssistantText { text } => {
                         if !text.is_empty() {
@@ -536,7 +542,7 @@ fn build_events(
                                 turn_id,
                                 AgentTimelineItem::AssistantMessage {
                                     text,
-                                    message_id: None,
+                                    message_id: Some(format!("claude-text-{index}")),
                                 },
                             ));
                         }
@@ -988,6 +994,8 @@ fn tool_name_for_patch(patch: &ToolResultPatch) -> String {
     match patch {
         ToolResultPatch::Shell { .. } => "shell".into(),
         ToolResultPatch::Read { .. } => "read".into(),
+        ToolResultPatch::Edit => "edit".into(),
+        ToolResultPatch::Write => "write".into(),
         ToolResultPatch::Unknown { .. } => "tool".into(),
     }
 }
@@ -1002,6 +1010,17 @@ fn patch_detail(patch: ToolResultPatch) -> ToolCallDetail {
         ToolResultPatch::Read { content } => ToolCallDetail::Read {
             path: String::new(),
             content,
+        },
+        // Edit/Write 的 tool_result 成功结果无信息量，不回填 path/diff/content。
+        // 返回空同类型 detail，前端 reducer 字段级合并（mergeToolCallDetail）
+        // 时空字段保留 existing，从而保留 tool_use 阶段建立的 path/diff。
+        ToolResultPatch::Edit => ToolCallDetail::Edit {
+            path: String::new(),
+            diff: None,
+        },
+        ToolResultPatch::Write => ToolCallDetail::Write {
+            path: String::new(),
+            content: None,
         },
         ToolResultPatch::Unknown { raw_output } => ToolCallDetail::Unknown {
             raw_input: None,
@@ -1181,6 +1200,81 @@ mod tests {
                 ..
             } if name == "shell"
         )));
+    }
+
+    #[test]
+    fn assistant_message_text_carries_same_message_id_as_streaming_flush() {
+        // 回归：完整 assistant 消息的 text block 必须使用与流式增量 flush 一致的
+        // message_id（claude-text-{block_index}），前后端两条去重路径（前端 reducer
+        // 按 messageId 幂等替换、后端 push_compacted_timeline_item 按 message_id
+        // 合并）才能把同一段结论文本归并为一条，避免重复展示与顺序错乱。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+        let events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![
+                        AssistantBlock::Text {
+                            text: "first block".into(),
+                        },
+                        AssistantBlock::Text {
+                            text: "second block".into(),
+                        },
+                    ],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+        let assistant_texts: Vec<&AgentTimelineItem> = events
+            .iter()
+            .filter_map(|e| match e {
+                AgentStreamEvent::Timeline {
+                    item: item @ AgentTimelineItem::AssistantMessage { .. },
+                    ..
+                } => Some(item),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(assistant_texts.len(), 2, "应有两条 AssistantMessage");
+        assert!(
+            matches!(
+                assistant_texts[0],
+                AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
+                    if text == "first block" && id == "claude-text-0"
+            ),
+            "第一条 text block 应携带 claude-text-0，实际 {:?}",
+            assistant_texts[0]
+        );
+        assert!(
+            matches!(
+                assistant_texts[1],
+                AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
+                    if text == "second block" && id == "claude-text-1"
+            ),
+            "第二条 text block 应携带 claude-text-1，实际 {:?}",
+            assistant_texts[1]
+        );
+    }
+
+    #[test]
+    fn patch_detail_for_edit_keeps_edit_type_with_empty_fields() {
+        // 回归：Edit 工具的 tool_result 回填时，patch_detail 必须保持 Edit 类型
+        // （而非降级成 Unknown），且 path/diff 为空，以便前端 reducer 字段级合并时
+        // 保留 tool_use 阶段建立的 path/diff，避免丢失 edit 图标、文件名与 diff 详情。
+        let detail = patch_detail(ToolResultPatch::Edit);
+        match detail {
+            ToolCallDetail::Edit { path, diff } => {
+                assert!(path.is_empty(), "patch 的 path 应为空，留给 reducer 合并");
+                assert!(diff.is_none(), "patch 的 diff 应为 None，留给 reducer 合并");
+            }
+            other => panic!("期望 Edit detail，实际 {other:?}"),
+        }
+        assert_eq!(tool_name_for_patch(&ToolResultPatch::Edit), "edit");
     }
 
     #[test]
