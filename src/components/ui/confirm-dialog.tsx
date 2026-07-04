@@ -65,7 +65,7 @@ export function ConfirmDialog({
   cancelLabel = "取消",
   children,
   confirmLabel = "确认",
-  confirmVariant = "destructive",
+  confirmVariant = "default",
   message,
   title,
   onConfirm,

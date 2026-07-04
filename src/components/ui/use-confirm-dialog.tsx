@@ -50,7 +50,7 @@ export function useConfirmDialog(): {
       <ConfirmContent
         cancelLabel={options.cancelLabel ?? "取消"}
         confirmLabel={options.confirmLabel ?? "确认"}
-        confirmVariant={options.confirmVariant ?? "destructive"}
+        confirmVariant={options.confirmVariant ?? "default"}
         message={options.message}
         title={options.title}
         onCancel={() => closeWithResult(false)}
