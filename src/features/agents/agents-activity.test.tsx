@@ -2575,7 +2575,7 @@ describe("AgentsActivity", () => {
     });
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
     const initialRow = within(sessionList).getByRole("button", {
-      name: /Session is runningPolling issue/i,
+      name: /Session is running#21 Polling issue/i,
     });
     expect(
       within(initialRow).getByLabelText("Session status: Running"),
@@ -2584,7 +2584,7 @@ describe("AgentsActivity", () => {
     await emitSessionListChanged(1, 302);
 
     const refreshedRow = within(sessionList).getByRole("button", {
-      name: /^Polling issue/i,
+      name: /^#21 Polling issue/i,
     });
     expect(
       within(refreshedRow).getByLabelText("Session status: Output complete"),
@@ -3162,9 +3162,6 @@ describe("AgentsActivity", () => {
       within(sessionList).getByRole("button", { name: /Review issue/i }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.queryByRole("button", { name: /#22.*Review issue/i }),
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
@@ -3211,9 +3208,6 @@ describe("AgentsActivity", () => {
     expect(
       await screen.findByRole("heading", { name: "#22 Review issue" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /#22.*Review issue/i }),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
@@ -4089,9 +4083,6 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("complementary", { name: "Issue details" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /#20.*Existing issue/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByLabelText("Agent session message stream"),
