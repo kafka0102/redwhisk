@@ -22,6 +22,7 @@ import { memo, useState } from "react";
 
 import { Badge } from "@/components/ui";
 import { useI18n } from "../../../shared/i18n/i18n";
+import type { I18nMessages } from "../../../shared/i18n/messages";
 import type {
   AgentTimelineItem,
   ToolCallDetail,
@@ -152,8 +153,13 @@ function ToolCallCard({
 }: {
   item: Extract<AgentTimelineItem, { type: "tool_call" }>;
 }) {
+  const { messages } = useI18n();
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const presentation = buildToolCallPresentation(item.name, item.detail);
+  const presentation = buildToolCallPresentation(
+    messages.agentsFeature,
+    item.name,
+    item.detail,
+  );
   const hasExpandableDetail = hasToolCallDetail(item.detail);
   return (
     <article className="agents-message__entry agents-message__entry--tool">
@@ -172,25 +178,29 @@ function ToolCallCard({
               }}
             >
               <ToolCallHeader
+                toolName={item.name}
                 detail={item.detail}
                 presentation={presentation}
                 status={item.status}
                 isExpandable
               />
             </summary>
-            {isDetailOpen ? <ToolCallDetail detail={item.detail} /> : null}
+            {isDetailOpen ? (
+              <ToolCallDetail name={item.name} detail={item.detail} />
+            ) : null}
           </details>
         ) : (
           <>
             <div className="agents-message__tool-header">
               <ToolCallHeader
+                toolName={item.name}
                 detail={item.detail}
                 presentation={presentation}
                 status={item.status}
                 isExpandable={false}
               />
             </div>
-            <ToolCallDetail detail={item.detail} />
+            <ToolCallDetail name={item.name} detail={item.detail} />
           </>
         )}
         {item.error ? (
@@ -202,11 +212,13 @@ function ToolCallCard({
 }
 
 function ToolCallHeader({
+  toolName,
   detail,
   presentation,
   status,
   isExpandable,
 }: {
+  toolName: string;
   detail: ToolCallDetail;
   presentation: ToolCallPresentation;
   status: ToolCallStatus;
@@ -217,7 +229,7 @@ function ToolCallHeader({
       <span className="agents-message__tool-name">
         <span className="agents-message__tool-icon" aria-hidden="true">
           <span className="agents-message__tool-type-icon">
-            <ToolCallIcon detail={detail} />
+            <ToolCallIcon name={toolName} detail={detail} />
           </span>
           {isExpandable ? (
             <ChevronRight
@@ -242,7 +254,13 @@ function ToolCallHeader({
   );
 }
 
-function ToolCallIcon({ detail }: { detail: ToolCallDetail }) {
+function ToolCallIcon({
+  name,
+  detail,
+}: {
+  name: string;
+  detail: ToolCallDetail;
+}) {
   switch (detail.type) {
     case "shell":
       return <Terminal aria-hidden="true" size={13} strokeWidth={1.8} />;
@@ -256,6 +274,10 @@ function ToolCallIcon({ detail }: { detail: ToolCallDetail }) {
       return <FilePlus aria-hidden="true" size={13} strokeWidth={1.8} />;
     case "sub_agent":
       return <GitBranch aria-hidden="true" size={13} strokeWidth={1.8} />;
+    case "unknown":
+      return extractTaskUpdateInfo(name, detail) ? (
+        <ListChecks aria-hidden="true" size={13} strokeWidth={1.8} />
+      ) : null;
     default:
       return null;
   }
@@ -295,7 +317,13 @@ function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
   }
 }
 
-function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
+function ToolCallDetail({
+  name,
+  detail,
+}: {
+  name: string;
+  detail: ToolCallDetail;
+}) {
   const { messages } = useI18n();
   switch (detail.type) {
     case "shell": {
@@ -459,7 +487,23 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
           <p className="agents-message__plan">{detail.text}</p>
         </div>
       );
-    default:
+    default: {
+      const taskUpdate = extractTaskUpdateInfo(name, detail);
+      if (taskUpdate) {
+        const statusLabel = messages.agentsFeature.taskStatusLabel(
+          taskUpdate.status ?? "updated",
+        );
+        return (
+          <div className="agents-message__tool-body">
+            <p className="agents-message__plan">
+              {messages.agentsFeature.taskUpdateDetail(
+                taskUpdate.taskId,
+                statusLabel,
+              )}
+            </p>
+          </div>
+        );
+      }
       return (
         <div className="agents-message__tool-body">
           {detail.rawInput || detail.rawOutput ? (
@@ -474,6 +518,7 @@ function ToolCallDetail({ detail }: { detail: ToolCallDetail }) {
           ) : null}
         </div>
       );
+    }
   }
 }
 
@@ -550,40 +595,51 @@ interface ToolCallPresentation {
 }
 
 function buildToolCallPresentation(
+  copy: I18nMessages["agentsFeature"],
   name: string,
   detail: ToolCallDetail,
 ): ToolCallPresentation {
   switch (detail.type) {
     case "shell":
-      return { displayName: "Shell", summary: detail.command };
+      return { displayName: copy.toolShell, summary: detail.command };
     case "edit":
-      return { displayName: "Edit", summary: detail.path };
+      return { displayName: copy.toolEdit, summary: detail.path };
     case "write":
-      return { displayName: "Write", summary: detail.path };
+      return { displayName: copy.toolWrite, summary: detail.path };
     case "read":
-      return { displayName: "Read", summary: detail.path };
+      return { displayName: copy.toolRead, summary: detail.path };
     case "search":
-      return { displayName: "Search", summary: detail.query };
+      return { displayName: copy.toolSearch, summary: detail.query };
     case "sub_agent":
       return {
-        displayName: "Task",
+        displayName: copy.toolTask,
         summary: detail.childSessionId
-          ? `子会话：${detail.childSessionId}`
+          ? copy.subSession(detail.childSessionId)
           : undefined,
       };
     case "plan":
-      return { displayName: "Plan" };
+      return { displayName: copy.toolPlan };
     case "unknown":
-      return buildUnknownToolCallPresentation(name, detail);
+      return buildUnknownToolCallPresentation(copy, name, detail);
     default:
       return { displayName: formatToolName(name) };
   }
 }
 
 function buildUnknownToolCallPresentation(
+  copy: I18nMessages["agentsFeature"],
   name: string,
   detail: Extract<ToolCallDetail, { type: "unknown" }>,
 ): ToolCallPresentation {
+  const taskUpdate = extractTaskUpdateInfo(name, detail);
+  if (taskUpdate) {
+    const statusLabel = copy.taskStatusLabel(taskUpdate.status ?? "updated");
+    return {
+      displayName: copy.toolTask,
+      summary: copy.taskUpdateSummary(taskUpdate.taskId, statusLabel),
+    };
+  }
+
   const displayName = formatToolName(name);
   if (!isWebSearchName(name)) {
     return { displayName };
@@ -637,6 +693,117 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : undefined;
+}
+
+interface TaskUpdateInfo {
+  taskId: string;
+  status?: string;
+}
+
+function extractTaskUpdateInfo(
+  name: string,
+  detail: Extract<ToolCallDetail, { type: "unknown" }>,
+): TaskUpdateInfo | null {
+  if (!isTaskUpdateName(name) && !looksLikeTaskUpdatePayload(detail)) {
+    return null;
+  }
+
+  const inputPayload = parseUnknownToolPayload(detail.rawInput);
+  const outputPayload = parseUnknownToolPayload(detail.rawOutput);
+  const taskId =
+    readTaskId(inputPayload) ??
+    readTaskId(outputPayload) ??
+    extractTaskIdFromText(detail.rawOutput) ??
+    extractTaskIdFromText(detail.rawInput);
+  if (!taskId) {
+    return null;
+  }
+
+  return {
+    taskId,
+    status:
+      readTaskStatus(inputPayload) ??
+      readTaskStatus(outputPayload) ??
+      extractTaskStatusFromText(detail.rawOutput),
+  };
+}
+
+function isTaskUpdateName(name: string): boolean {
+  const normalized = name.replace(/[\s_-]+/g, "").toLowerCase();
+  return normalized === "taskupdate";
+}
+
+function looksLikeTaskUpdatePayload(
+  detail: Extract<ToolCallDetail, { type: "unknown" }>,
+): boolean {
+  return (
+    extractTaskIdFromText(detail.rawInput) != null ||
+    extractTaskIdFromText(detail.rawOutput) != null
+  );
+}
+
+function parseUnknownToolPayload(
+  raw: string | undefined,
+): Record<string, unknown> | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const value = JSON.parse(raw);
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function readTaskId(value: Record<string, unknown> | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const taskId = value.taskId;
+  if (typeof taskId === "number") {
+    return String(taskId);
+  }
+  return readString(taskId);
+}
+
+function readTaskStatus(
+  value: Record<string, unknown> | null,
+): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return readString(value.status);
+}
+
+function extractTaskIdFromText(raw: string | undefined): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const match = raw.match(/task\s*#?(\d+)/i);
+  return match?.[1];
+}
+
+function extractTaskStatusFromText(
+  raw: string | undefined,
+): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("completed")) {
+    return "completed";
+  }
+  if (
+    normalized.includes("in_progress") ||
+    normalized.includes("in progress")
+  ) {
+    return "in_progress";
+  }
+  if (normalized.includes("updated")) {
+    return "updated";
+  }
+  return undefined;
 }
 
 function formatToolName(name: string): string {

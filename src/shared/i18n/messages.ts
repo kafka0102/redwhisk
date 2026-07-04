@@ -447,6 +447,9 @@ export interface I18nMessages {
     toolSearch: string;
     toolTask: string;
     toolPlan: string;
+    taskStatusLabel: (status: string) => string;
+    taskUpdateSummary: (taskId: string | number, statusLabel: string) => string;
+    taskUpdateDetail: (taskId: string | number, statusLabel: string) => string;
     toolRunning: string;
     toolFailed: string;
     toolCanceled: string;
@@ -964,6 +967,22 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       toolSearch: "Search",
       toolTask: "Task",
       toolPlan: "Plan",
+      taskStatusLabel: (status) => {
+        switch (status) {
+          case "completed":
+            return "completed";
+          case "in_progress":
+            return "in progress";
+          case "updated":
+            return "updated";
+          default:
+            return status.replace(/_/g, " ");
+        }
+      },
+      taskUpdateSummary: (taskId, statusLabel) =>
+        `Task #${taskId} -> ${statusLabel}`,
+      taskUpdateDetail: (taskId, statusLabel) =>
+        `Updated task #${taskId} status to ${statusLabel}.`,
       toolRunning: "Running",
       toolFailed: "Failed",
       toolCanceled: "Canceled",
@@ -1463,6 +1482,22 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       toolSearch: "搜索",
       toolTask: "任务",
       toolPlan: "计划",
+      taskStatusLabel: (status) => {
+        switch (status) {
+          case "completed":
+            return "已完成";
+          case "in_progress":
+            return "进行中";
+          case "updated":
+            return "已更新";
+          default:
+            return status.replace(/_/g, " ");
+        }
+      },
+      taskUpdateSummary: (taskId, statusLabel) =>
+        `任务 #${taskId} -> ${statusLabel}`,
+      taskUpdateDetail: (taskId, statusLabel) =>
+        `已将任务 #${taskId} 标记为${statusLabel}。`,
       toolRunning: "运行中",
       toolFailed: "失败",
       toolCanceled: "已取消",

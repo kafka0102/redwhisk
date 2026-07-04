@@ -37,6 +37,7 @@ interface CachedSessionState {
 
 // 最大缓存的 session 数量（LRU 策略）
 const MAX_CACHED_SESSIONS = 5;
+const CACHE_PREVIEW_BATCH_SIZE = 50;
 
 // 全局的 session 状态缓存
 const sessionStateCache = new Map<number, CachedSessionState>();
@@ -118,7 +119,6 @@ export function useAgentMessageStream({
     let unlisten: (() => void) | null = null;
     let pendingEvents: AgentStreamEvent[] = [];
     let deferredEvents: AgentStreamEvent[] = [];
-    let isCacheRestored = false;
     let flushHandle: ReturnType<typeof setTimeout> | number | null = null;
     let flushHandleKind: "animation-frame" | "timeout" | null = null;
     let restoreFrameHandle: number | null = null;
@@ -167,11 +167,12 @@ export function useAgentMessageStream({
     // 检查是否已有缓存的初始化状态
     const cachedState = sessionStateCache.get(sessionId);
     const hasCachedInitialized = cachedState?.state.isInitialized ?? false;
+    let isWaitingForTimeline = hasCachedInitialized;
 
     stateSessionIdRef.current = sessionId;
 
     const dispatchStreamEvent = (event: AgentStreamEvent) => {
-      if (hasCachedInitialized && !isCacheRestored) {
+      if (isWaitingForTimeline) {
         deferredEvents.push(event);
         return;
       }
@@ -200,76 +201,48 @@ export function useAgentMessageStream({
       }, 0);
     };
 
+    const cancelCacheRestoreSchedule = () => {
+      if (restoreFrameHandle !== null) {
+        window.cancelAnimationFrame(restoreFrameHandle);
+        restoreFrameHandle = null;
+      }
+      if (restoreTimeoutHandle !== null) {
+        globalThis.clearTimeout(restoreTimeoutHandle);
+        restoreTimeoutHandle = null;
+      }
+    };
+
+    const flushDeferredEvents = () => {
+      if (deferredEvents.length === 0) {
+        return;
+      }
+      const events = deferredEvents;
+      deferredEvents = [];
+      dispatch({ type: "EVENT_BATCH", events });
+    };
+
     async function initialize() {
-      // 如果已经有缓存的初始化状态，直接订阅事件，不需要重新读取 timeline
+      // 如果已有缓存，先用缓存做轻量预览，再后台重读 timeline 校正最终状态。
       if (hasCachedInitialized && cachedState) {
-        // 分批次恢复缓存，避免一次性渲染大量DOM阻塞主线程
         scheduleCacheRestore(() => {
           if (isDisposed) {
             return;
           }
-          isCacheRestored = true;
           cachedState.lastAccessTime = Date.now();
 
           const fullState = cachedState.state;
-          const allEntries = fullState.entries;
-          const BATCH_SIZE = 50; // 每次恢复50条
-
-          if (allEntries.length <= BATCH_SIZE) {
-            // 条目不多，一次性恢复
+          if (fullState.entries.length <= CACHE_PREVIEW_BATCH_SIZE) {
             dispatch({ type: "RESTORE", state: fullState });
-            if (deferredEvents.length > 0) {
-              const events = deferredEvents;
-              deferredEvents = [];
-              dispatch({ type: "EVENT_BATCH", events });
-            }
             return;
           }
 
-          // 先恢复最新的BATCH_SIZE条，让用户尽快看到内容
-          let currentEntries = allEntries.slice(-BATCH_SIZE);
           dispatch({
             type: "RESTORE",
             state: {
               ...fullState,
-              entries: currentEntries,
+              entries: fullState.entries.slice(-CACHE_PREVIEW_BATCH_SIZE),
             },
           });
-
-          let currentIndex = allEntries.length - BATCH_SIZE;
-
-          // 逐步恢复历史消息，从旧到新
-          const restoreNextBatch = () => {
-            if (isDisposed || currentIndex <= 0) {
-              // 全部恢复完成，处理 deferred events
-              if (deferredEvents.length > 0) {
-                const events = deferredEvents;
-                deferredEvents = [];
-                dispatch({ type: "EVENT_BATCH", events });
-              }
-              return;
-            }
-
-            const endIndex = currentIndex;
-            currentIndex = Math.max(0, currentIndex - BATCH_SIZE);
-            const batchEntries = allEntries.slice(currentIndex, endIndex);
-
-            // 合并到现有 entries 前面
-            currentEntries = [...batchEntries, ...currentEntries];
-            dispatch({
-              type: "RESTORE",
-              state: {
-                ...fullState,
-                entries: currentEntries,
-              },
-            });
-
-            // 下一帧继续恢复下一批
-            restoreFrameHandle = window.requestAnimationFrame(restoreNextBatch);
-          };
-
-          // 延迟一帧再开始恢复历史
-          restoreFrameHandle = window.requestAnimationFrame(restoreNextBatch);
         });
 
         try {
@@ -288,6 +261,28 @@ export function useAgentMessageStream({
           }
         } catch {
           // 订阅失败不阻塞：用户可刷新历史回放补齐。
+        }
+
+        try {
+          const { items, effort } = await readAgentTimeline({
+            projectId,
+            sessionId,
+          });
+          if (isDisposed) {
+            return;
+          }
+          cancelCacheRestoreSchedule();
+          isWaitingForTimeline = false;
+          dispatch({ type: "HYDRATE", items, effort });
+          flushDeferredEvents();
+        } catch {
+          if (isDisposed) {
+            return;
+          }
+          cancelCacheRestoreSchedule();
+          isWaitingForTimeline = false;
+          dispatch({ type: "RESTORE", state: cachedState.state });
+          flushDeferredEvents();
         }
         return;
       }
@@ -335,12 +330,7 @@ export function useAgentMessageStream({
 
     return () => {
       isDisposed = true;
-      if (restoreFrameHandle !== null) {
-        window.cancelAnimationFrame(restoreFrameHandle);
-      }
-      if (restoreTimeoutHandle !== null) {
-        globalThis.clearTimeout(restoreTimeoutHandle);
-      }
+      cancelCacheRestoreSchedule();
       cancelFlush();
       pendingEvents = [];
       deferredEvents = [];
