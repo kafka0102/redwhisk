@@ -3540,6 +3540,7 @@ mod worktree_setup_command_tests {
             &["/bin/zsh".to_string()],
             &[
                 ("HOME", home_dir.as_os_str()),
+                ("ZDOTDIR", home_dir.as_os_str()),
                 ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
             ],
         )

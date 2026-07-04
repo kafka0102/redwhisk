@@ -4,11 +4,13 @@ use std::process::Command;
 
 const DEFAULT_LOOKUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
 const LOOKUP_PATH_MARKER: &str = "__REDWHISK_LOOKUP_PATH__=";
+const LOOKUP_ENV_MARKER: &str = "__REDWHISK_LOOKUP_ENV__";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CommandLookupResult {
     pub command: String,
     pub path: Option<OsString>,
+    pub environment: Vec<(OsString, OsString)>,
 }
 
 pub trait AgentCommandDetector {
@@ -132,7 +134,7 @@ fn run_shell_command_lookup_with_path(
     let quoted_command = shell_quote(command);
     let mut process = Command::new(shell);
     process.args(shell_args).arg(format!(
-        "command -v {quoted_command} && printf '\\n{LOOKUP_PATH_MARKER}%s\\n' \"$PATH\""
+        "command -v {quoted_command} && printf '\\n{LOOKUP_PATH_MARKER}%s\\n{LOOKUP_ENV_MARKER}\\n' \"$PATH\" && env -0"
     ));
     for (key, value) in environment_overrides {
         process.env(key, value);
@@ -149,7 +151,22 @@ fn run_shell_command_lookup_with_path(
         });
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_command_lookup_output(&output.stdout, command)
+}
+
+fn parse_command_lookup_output(
+    stdout: &[u8],
+    command: &str,
+) -> Result<CommandLookupResult, String> {
+    let marker = format!("{LOOKUP_ENV_MARKER}\n");
+    let (metadata_bytes, environment_bytes) =
+        if let Some(index) = find_byte_subsequence(stdout, marker.as_bytes()) {
+            (&stdout[..index], &stdout[index + marker.len()..])
+        } else {
+            (stdout, &[][..])
+        };
+
+    let stdout = String::from_utf8_lossy(metadata_bytes);
     let mut resolved_command = None;
     let mut path = None;
     for line in stdout.lines() {
@@ -173,7 +190,32 @@ fn run_shell_command_lookup_with_path(
     Ok(CommandLookupResult {
         command: resolved_command,
         path,
+        environment: parse_environment_entries(environment_bytes),
     })
+}
+
+fn find_byte_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn parse_environment_entries(environment_bytes: &[u8]) -> Vec<(OsString, OsString)> {
+    environment_bytes
+        .split(|byte| *byte == b'\0')
+        .filter_map(|entry| {
+            if entry.is_empty() {
+                return None;
+            }
+
+            let entry = String::from_utf8_lossy(entry);
+            let (key, value) = entry.split_once('=')?;
+            Some((OsString::from(key), OsString::from(value)))
+        })
+        .collect()
 }
 
 fn shell_quote(value: &str) -> String {
@@ -231,13 +273,13 @@ mod tests {
             "/bin/zsh",
             &["-lc"],
             "redwhisk-test-agent",
-            &[("HOME", home), ("PATH", baseline_path)],
+            &[("HOME", home), ("ZDOTDIR", home), ("PATH", baseline_path)],
         );
         let interactive_result = run_shell_command_lookup(
             "/bin/zsh",
             &["-lic"],
             "redwhisk-test-agent",
-            &[("HOME", home), ("PATH", baseline_path)],
+            &[("HOME", home), ("ZDOTDIR", home), ("PATH", baseline_path)],
         );
 
         assert!(missing_result.is_err());
@@ -268,6 +310,7 @@ mod tests {
             "redwhisk-test-agent",
             &[
                 ("HOME", temp_dir.path().as_os_str()),
+                ("ZDOTDIR", temp_dir.path().as_os_str()),
                 ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
             ],
         )
@@ -276,6 +319,41 @@ mod tests {
         assert_eq!(lookup.command, command_path.display().to_string());
         let lookup_path = lookup.path.expect("lookup path");
         assert!(env::split_paths(&lookup_path).any(|path| path == bin_dir));
+    }
+
+    #[test]
+    fn interactive_shell_lookup_returns_exported_environment() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        let command_path = bin_dir.join("redwhisk-test-agent");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("test command");
+        fs::set_permissions(&command_path, fs::Permissions::from_mode(0o755))
+            .expect("executable command");
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!(
+                "export PATH=\"{}:$PATH\"\nexport GVM_ROOT=\"/tmp/redwhisk-gvm\"\n",
+                bin_dir.display()
+            ),
+        )
+        .expect("zshrc");
+
+        let lookup = run_shell_command_lookup_with_path(
+            "/bin/zsh",
+            &["-lic"],
+            "redwhisk-test-agent",
+            &[
+                ("HOME", temp_dir.path().as_os_str()),
+                ("ZDOTDIR", temp_dir.path().as_os_str()),
+                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
+            ],
+        )
+        .expect("interactive shell command");
+
+        assert!(lookup.environment.iter().any(|(key, value)| {
+            key == OsStr::new("GVM_ROOT") && value == OsStr::new("/tmp/redwhisk-gvm")
+        }));
     }
 
     #[test]
@@ -303,7 +381,7 @@ mod tests {
         let resolved_command = run_command_lookup_with_shells_and_env(
             "redwhisk-test-agent",
             &shells,
-            &[("HOME", home), ("PATH", baseline_path)],
+            &[("HOME", home), ("ZDOTDIR", home), ("PATH", baseline_path)],
         )
         .expect("fallback shell command");
 
@@ -342,7 +420,7 @@ mod tests {
         let lookup = run_command_lookup_with_path_with_shells_and_env(
             "redwhisk-test-agent",
             &["/bin/zsh".to_string()],
-            &[("HOME", home), ("PATH", baseline_path)],
+            &[("HOME", home), ("ZDOTDIR", home), ("PATH", baseline_path)],
         )
         .expect("command lookup");
 
@@ -354,6 +432,13 @@ mod tests {
         assert!(
             path_entries.iter().any(|p| p == &extra_dir),
             "PATH 应包含 interactive 加载的 extra 目录，实际：{path_entries:?}"
+        );
+        assert!(
+            lookup.environment.iter().any(|(key, value)| {
+                key == OsStr::new("PATH") && env::split_paths(value).any(|entry| entry == extra_dir)
+            }),
+            "环境快照应包含 interactive PATH，实际：{:?}",
+            lookup.environment
         );
     }
 }
