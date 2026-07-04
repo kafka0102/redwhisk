@@ -1238,7 +1238,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       confirmReturnToBacklog: "确定要退回至 Backlog 阶段吗？",
       confirmRunIssue: "确定要执行吗？",
       confirmTerminateAndReturnToBacklog:
-        "当前 Issue 正在执行，是否终止并退回至 Backlog？",
+        "当前 Issue 正在执行，是否终止并退回至 待办？",
       worktreeConflictTitle: "存在同名 worktree",
       worktreeConflictMessage:
         "存在上次运行残留的同名 worktree，是否在退回 Backlog 前删除？",
