@@ -313,6 +313,9 @@ export interface I18nMessages {
     loadingSessions: string;
     markDone: string;
     markReview: string;
+    mergeToBaseBranchNo: string;
+    mergeToBaseBranchQuestion: string;
+    mergeToBaseBranchYes: string;
     newSession: string;
     noChangedFiles: string;
     noDoneSessions: string;
@@ -346,6 +349,7 @@ export interface I18nMessages {
     saveSessionTitle: string;
     start: string;
     starting: string;
+    submitting: string;
     temporarySessionDefaultPrompt: string;
     temporarySessionDefaultTitle: string;
     titleField: string;
@@ -820,6 +824,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       loadingSessions: "Loading sessions...",
       markDone: "Mark done",
       markReview: "Mark review",
+      mergeToBaseBranchNo: "No",
+      mergeToBaseBranchQuestion:
+        "Merge the current branch into the base branch?",
+      mergeToBaseBranchYes: "Yes",
       newSession: "New session",
       noChangedFiles: "No changed files.",
       noDoneSessions: "No done sessions.",
@@ -854,6 +862,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       saveSessionTitle: "Save session title",
       start: "Start",
       starting: "Starting...",
+      submitting: "Submitting",
       temporarySessionDefaultPrompt:
         "Ask Codex to help with the current project without linking an issue.",
       temporarySessionDefaultTitle: "Untitled Session",
@@ -1316,6 +1325,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       loadingSessions: "正在加载会话...",
       markDone: "完成",
       markReview: "待验收",
+      mergeToBaseBranchNo: "否",
+      mergeToBaseBranchQuestion: "是否将当前分支代码合并到 base 分支？",
+      mergeToBaseBranchYes: "是",
       newSession: "新建会话",
       noChangedFiles: "暂无变更文件。",
       noDoneSessions: "暂无已完成的会话。",
@@ -1349,6 +1361,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       saveSessionTitle: "保存会话标题",
       start: "开始",
       starting: "启动中...",
+      submitting: "提交中",
       temporarySessionDefaultPrompt:
         "请 Codex 在当前项目中协助处理任务，不关联具体 Issue。",
       temporarySessionDefaultTitle: "未命名会话",

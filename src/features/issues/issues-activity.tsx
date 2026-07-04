@@ -37,6 +37,10 @@ import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
+import {
+  buildWorktreeMergeConflictPrompt,
+  type WorktreeMergeDetail,
+} from "./issue-completion-helpers";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
@@ -1057,7 +1061,7 @@ export function IssuesActivity({
   async function handOffWorktreeMergeConflict(
     requestProjectId: number,
     issue: IssueRecord,
-    detail: WorktreeMergeDetail,
+    detail: WorktreeMergeConflictSessionDetail,
   ) {
     const sessionId = detail.sessionId ?? issue.linkedSessionId;
     if (sessionId == null) {
@@ -1315,17 +1319,13 @@ class CompletionCancelledError extends Error {
 }
 
 class WorktreeMergeConflictError extends Error {
-  constructor(readonly detail: WorktreeMergeDetail) {
+  constructor(readonly detail: WorktreeMergeConflictSessionDetail) {
     super("worktree merge conflict");
   }
 }
 
-interface WorktreeMergeDetail {
+interface WorktreeMergeConflictSessionDetail extends WorktreeMergeDetail {
   sessionId?: number | null;
-  targetBranch?: string;
-  workspaceBranch?: string;
-  workspacePath?: string;
-  message?: string;
 }
 
 function getCompletionProgressTitle(locale: string): string {
@@ -1377,31 +1377,6 @@ function buildCompletionProgressSteps(
           ? "active"
           : "pending",
   }));
-}
-
-function buildWorktreeMergeConflictPrompt(
-  detail: WorktreeMergeDetail,
-  locale: string,
-): string {
-  const targetBranch = detail.targetBranch || "target branch";
-  const workspaceBranch = detail.workspaceBranch || "temporary issue branch";
-  const workspacePath = detail.workspacePath || "current worktree";
-
-  if (locale === "zh") {
-    return [
-      detail.message || "代码合并存在冲突，需要你接管处理。",
-      `请解决临时分支 ${workspaceBranch} 合并到最初记录的目标分支 ${targetBranch} 时产生的冲突。`,
-      `相关 worktree：${workspacePath}`,
-      "解决冲突后，请完成合并并确保代码最终合入目标分支。",
-    ].join("\n");
-  }
-
-  return [
-    detail.message || "A merge conflict was detected and needs your help.",
-    `Please resolve the conflicts from merging ${workspaceBranch} into the originally recorded target branch ${targetBranch}.`,
-    `Related worktree: ${workspacePath}`,
-    "After resolving conflicts, complete the merge and make sure the code lands on the target branch.",
-  ].join("\n");
 }
 
 function IssueCompletionProgressDialog({
