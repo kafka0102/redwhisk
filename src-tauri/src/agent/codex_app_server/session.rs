@@ -932,7 +932,11 @@ fn flush_reasoning_delta(
         (text, state.current_turn_id.clone())
     };
     vec![AgentStreamEvent::Timeline {
-        item: AgentTimelineItem::Reasoning { text },
+        // Codex 的 reasoning 不携带 per-block 计时（仅 Claude 支持），duration_ms 留 None。
+        item: AgentTimelineItem::Reasoning {
+            text,
+            duration_ms: None,
+        },
         turn_id,
         seq: next_seq(),
         timestamp: now_ms(),
@@ -1366,7 +1370,7 @@ mod tests {
         assert_eq!(events3.len(), 2);
         match &events3[0] {
             AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::Reasoning { text },
+                item: AgentTimelineItem::Reasoning { text, .. },
                 ..
             } => {
                 assert_eq!(text, "先分析再总结");

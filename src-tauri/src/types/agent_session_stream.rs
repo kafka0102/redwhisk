@@ -89,6 +89,10 @@ pub enum AgentTimelineItem {
     },
     Reasoning {
         text: String,
+        /// reasoning 块持续时长（毫秒）。仅在块结束时（force flush）填充；
+        /// 中间节流 flush 为 None。前端据此展示「思考过程 持续了 X 秒」。
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
     },
     ToolCall {
         call_id: String,

@@ -68,7 +68,7 @@ export type AgentTimelineItem =
       text: string;
       messageId?: string;
     }
-  | { type: "reasoning"; text: string }
+  | { type: "reasoning"; text: string; durationMs?: number }
   | {
       type: "tool_call";
       callId: string;
@@ -168,6 +168,8 @@ export interface AgentModel {
 
 export interface ListAgentModelsResult {
   models: AgentModel[];
+  /** 模型列表是否只读（第三方接口不允许切换）。 */
+  isReadOnly?: boolean;
 }
 
 export interface ListAgentModesResult {

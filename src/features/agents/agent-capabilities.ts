@@ -9,6 +9,13 @@ import type { AgentType } from "./agent-session-commands";
 export interface AgentCapabilities {
   /** 当前 agent/provider 的只读模型类型标签。 */
   modelTypeLabel: string;
+  /**
+   * 是否在 composer 展示模型信息（下拉或只读标签）。
+   *
+   * Codex 与 Claude 均为 true：模型来源由后端 list_agent_models 按 agent 类型
+   * 解析（Codex 写死，Claude 读 ~/.claude/settings.json）。
+   */
+  canShowModel: boolean;
   /** 是否支持运行时切换模型。 */
   supportsModelSwitching: boolean;
   /** 是否支持 reasoning effort（Think 模式）。 */
@@ -20,19 +27,23 @@ export interface AgentCapabilities {
 const AGENT_CAPABILITIES: Record<AgentType, AgentCapabilities> = {
   codex: {
     modelTypeLabel: "Codex",
+    canShowModel: true,
     supportsModelSwitching: true,
     supportsReasoningEffort: true,
     supportsModes: true,
   },
   claude: {
     modelTypeLabel: "Claude",
-    supportsModelSwitching: false,
+    // Claude 也展示模型：第三方接口只读标签，官方模型可切换。
+    canShowModel: true,
+    supportsModelSwitching: true,
     supportsReasoningEffort: false,
     supportsModes: false,
   },
   claude_code: {
     modelTypeLabel: "Claude",
-    supportsModelSwitching: false,
+    canShowModel: true,
+    supportsModelSwitching: true,
     supportsReasoningEffort: false,
     supportsModes: false,
   },

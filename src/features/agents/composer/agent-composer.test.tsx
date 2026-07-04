@@ -325,16 +325,21 @@ describe("AgentComposer", () => {
     ).toHaveTextContent("GPT-5");
   });
 
-  it("capabilities 关闭模型与 Think 时不请求模型列表，显示只读 Claude 类型", async () => {
+  it("Claude 也请求模型列表并展示模型选择器（Think 仍不展示）", async () => {
     await renderComposer({
       capabilities: getAgentCapabilities("claude"),
     });
-    expect(listAgentModelsMock).not.toHaveBeenCalled();
-    expect(screen.queryByText("模型")).not.toBeInTheDocument();
+    // Claude 现在也会展示模型：canShowModel=true，会请求模型列表。
+    expect(listAgentModelsMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+    });
+    // 模型区域展示（mock 返回非空 + isReadOnly 默认 false → 可切换下拉）。
+    expect(
+      screen.getByRole("combobox", { name: "Select model" }),
+    ).toBeInTheDocument();
+    // Think 模式 Claude 不支持，仍不展示。
     expect(screen.queryByText("Think")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Current model type")).toHaveTextContent(
-      "Claude",
-    );
     // 发送按钮仍渲染。
     expect(
       screen.getByRole("button", { name: "Send message" }),

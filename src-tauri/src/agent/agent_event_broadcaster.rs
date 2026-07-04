@@ -299,7 +299,7 @@ fn latest_output_from_timeline_item(
     match item {
         AgentTimelineItem::AssistantMessage { text, .. }
         | AgentTimelineItem::UserMessage { text, .. }
-        | AgentTimelineItem::Reasoning { text } => Some(text.as_str()),
+        | AgentTimelineItem::Reasoning { text, .. } => Some(text.as_str()),
         AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
             ToolCallDetail::Shell { command, .. } => Some(command.as_str()),
             ToolCallDetail::Read { path, .. }

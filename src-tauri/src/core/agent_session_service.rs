@@ -1648,6 +1648,33 @@ impl<'connection> AgentSessionService<'connection> {
         self.find_project_session(project_id, session_id)
     }
 
+    /// 查询指定 session 的 agent 类型（经 profile 表反查）。
+    ///
+    /// 供 `list_agent_models` / `set_agent_model` 命令按 agent 类型分发：
+    /// Codex 走写死模型列表，Claude 走 `~/.claude/settings.json` 解析。
+    pub fn find_session_agent_type(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<AgentType, CommandError> {
+        let session = self.find_project_session(project_id, session_id)?;
+        let profile = self
+            .agent_profile_repository
+            .find_profile_by_id(session.agent_profile_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "Agent Session 关联的 Agent Profile 不存在。",
+                )
+                .with_detail(
+                    ErrorDetail::new("AgentProfile")
+                        .with_value("profileId", session.agent_profile_id),
+                )
+            })?;
+        Ok(profile.agent_type)
+    }
+
     pub fn delete_standalone_session(
         &self,
         project_id: i64,
@@ -3713,7 +3740,7 @@ fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Option<String> 
     let text = match item {
         AgentTimelineItem::AssistantMessage { text, .. }
         | AgentTimelineItem::UserMessage { text, .. }
-        | AgentTimelineItem::Reasoning { text } => text.as_str(),
+        | AgentTimelineItem::Reasoning { text, .. } => text.as_str(),
         AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
             ToolCallDetail::Shell { command, .. } => command.as_str(),
             ToolCallDetail::Read { path, .. }
@@ -4419,6 +4446,7 @@ mod tests {
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析一步".to_string(),
+                        duration_ms: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -4433,6 +4461,7 @@ mod tests {
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析完成".to_string(),
+                        duration_ms: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -4503,6 +4532,7 @@ mod tests {
                 },
                 AgentTimelineItem::Reasoning {
                     text: "分析完成".to_string(),
+                    duration_ms: None,
                 },
                 AgentTimelineItem::ToolCall {
                     call_id: "call-1".to_string(),

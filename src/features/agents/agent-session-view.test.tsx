@@ -285,7 +285,7 @@ describe("AgentSessionView", () => {
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
   });
 
-  it("claude agentType 时 composer 不渲染模型 Select", async () => {
+  it("claude agentType 时 composer 也请求模型列表（展示模型区域）", async () => {
     setupTimeline([]);
 
     render(
@@ -298,7 +298,11 @@ describe("AgentSessionView", () => {
       ).toBeInTheDocument();
     });
 
-    expect(screen.queryByLabelText("Select model")).not.toBeInTheDocument();
+    // Claude 现在也会展示模型：canShowModel=true，会请求模型列表。
+    expect(listAgentModelsMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+    });
   });
 
   it("已完成 Issue 的 session 不渲染底部输入框", async () => {
