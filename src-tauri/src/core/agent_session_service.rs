@@ -53,7 +53,9 @@ use crate::types::agent_session_stream::{
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    CompleteIssueCleanInput, CompleteIssueManualInput, IssueRecord, IssueStatus,
+    CompleteIssueCleanInput, CompleteIssueManualInput, DeleteIssueWorktreeInput,
+    DeleteIssueWorktreeResult, GetIssueWorktreeStatusInput, IssueRecord, IssueStatus,
+    IssueWorktreeStatusResult,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
@@ -185,6 +187,160 @@ impl<'connection> AgentSessionService<'connection> {
         pty_sessions: &PtySessionManager,
     ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
         self.start_standalone_agent_session_internal(data_dir, input, Some(pty_sessions))
+    }
+
+    /// 查询 Issue 最近一次 worktree 模式 session 的残留状态。
+    ///
+    /// 退回 Backlog 会软删旧 session 但不清理 worktree 目录与分支；再次运行前
+    /// 前端据此判断是否需要弹出"删除同名 worktree"确认框。
+    pub fn get_issue_worktree_status(
+        &self,
+        input: GetIssueWorktreeStatusInput,
+    ) -> Result<IssueWorktreeStatusResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+
+        let session = self
+            .agent_session_repository
+            .find_latest_worktree_session_by_issue_id(input.issue_id)
+            .map_err(agent_session_database_error)?;
+
+        let Some(session) = session else {
+            return Ok(IssueWorktreeStatusResult {
+                exists: false,
+                can_delete: false,
+                workspace_path: None,
+                workspace_branch: None,
+            });
+        };
+
+        let workspace_path = session.workspace_path.clone();
+        let exists = workspace_path
+            .as_deref()
+            .is_some_and(|path| Path::new(path).exists());
+        let can_delete =
+            exists && session.worktree_owner == WorktreeOwner::Redwhisk;
+
+        Ok(IssueWorktreeStatusResult {
+            exists,
+            can_delete,
+            workspace_path: if exists { workspace_path } else { None },
+            workspace_branch: if exists {
+                session.workspace_branch.clone()
+            } else {
+                None
+            },
+        })
+    }
+
+    /// 删除 Issue 关联的 RedWhisk worktree（目录 + 工作分支 + prune）。
+    ///
+    /// 仅允许删除 `WorktreeOwner::Redwhisk` 管理的 worktree；外部 worktree 由
+    /// 完成流程的二次确认处理，不在此处删除。
+    pub fn delete_issue_worktree(
+        &self,
+        input: DeleteIssueWorktreeInput,
+    ) -> Result<DeleteIssueWorktreeResult, CommandError> {
+        let project = self.project_by_id(input.project_id)?;
+
+        let session = self
+            .agent_session_repository
+            .find_latest_worktree_session_by_issue_id(input.issue_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "未找到关联的 worktree，无需删除。",
+                )
+                .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+            })?;
+
+        if session.worktree_owner != WorktreeOwner::Redwhisk {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "当前 worktree 非 RedWhisk 管理，无法删除。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
+        }
+
+        let Some(workspace_path) = session.workspace_path.as_deref() else {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "关联 worktree 缺少工作目录信息，无法删除。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
+        };
+
+        if !Path::new(workspace_path).exists() {
+            return Ok(DeleteIssueWorktreeResult {
+                issue_id: input.issue_id,
+                deleted: false,
+                workspace_path: Some(workspace_path.to_string()),
+            });
+        }
+
+        let workspace_branch = session.workspace_branch.as_deref().ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "关联 worktree 缺少工作分支信息，无法删除。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
+        })?;
+
+        cleanup_worktree(&project.repo_path, workspace_path, workspace_branch).map_err(
+            |error| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionStartFailed,
+                    "删除 worktree 失败。",
+                )
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            },
+        )?;
+
+        Ok(DeleteIssueWorktreeResult {
+            issue_id: input.issue_id,
+            deleted: true,
+            workspace_path: Some(workspace_path.to_string()),
+        })
+    }
+
+    pub fn get_issue_worktree_status_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: GetIssueWorktreeStatusInput,
+    ) -> Result<IssueWorktreeStatusResult, CommandError> {
+        let database = DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .get_issue_worktree_status(input)
+    }
+
+    pub fn delete_issue_worktree_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteIssueWorktreeInput,
+    ) -> Result<DeleteIssueWorktreeResult, CommandError> {
+        let database = DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(agent_session_database_error)?;
+
+        AgentSessionService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+            AgentProfileRepository::new(&database.connection),
+            AgentSessionRepository::new(&database.connection),
+        )
+        .delete_issue_worktree(input)
     }
 
     fn start_agent_session_internal(
@@ -1162,6 +1318,28 @@ impl<'connection> AgentSessionService<'connection> {
                 worktree_setup_command: worktree_setup_command.clone(),
             }),
             WorkspaceMode::Worktree => {
+                if let Some(existing) = self
+                    .agent_session_repository
+                    .find_latest_worktree_session_by_issue_id(input.issue_id)
+                    .map_err(agent_session_database_error)?
+                {
+                    if let Some(workspace_path) = existing.workspace_path.as_deref() {
+                        if Path::new(workspace_path).exists() {
+                            return Err(CommandError::new(
+                                CommandErrorCode::IssueWorktreeOccupied,
+                                "同名 worktree 已被占用，请删除后再运行。",
+                            )
+                            .with_detail(
+                                ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
+                            )
+                            .with_detail(
+                                ErrorDetail::new("Worktree")
+                                    .with_value("workspacePath", workspace_path),
+                            ));
+                        }
+                    }
+                }
+
                 let target_branch =
                     resolve_target_branch(&branch_info, input.target_branch.as_deref())?;
                 let worktree_root_path = resolve_worktree_root_path(&project)?;
@@ -4417,13 +4595,18 @@ mod tests {
     use crate::types::agent_profile::{AgentScope, AgentType};
     use crate::types::agent_session::{
         AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
-        AgentSessionStatus, UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
+        AgentSessionStatus, StartAgentSessionInput, UpdateAgentSessionTitleInput, WorkspaceMode,
+        WorktreeOwner,
     };
     use crate::types::agent_session_stream::{
         AgentMode, AgentModel, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
         ToolCallDetail, ToolCallStatus,
     };
     use crate::types::session_event::SessionEventType;
+    use crate::types::errors::CommandErrorCode;
+    use crate::types::issue::{
+        DeleteIssueWorktreeInput, GetIssueWorktreeStatusInput,
+    };
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
@@ -5768,5 +5951,315 @@ mod tests {
             .expect("git output utf8")
             .trim()
             .to_string()
+    }
+
+    fn insert_issue_row(connection: &Connection, issue_id: i64, status: &str) {
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, created_at, updated_at, del)
+                 VALUES (1, ?1, ?2, '', ?3, 1, 1, 0)",
+                params![issue_id, format!("issue-{issue_id}"), status],
+            )
+            .expect("insert issue");
+    }
+
+    fn insert_worktree_session_row(
+        connection: &Connection,
+        session_id: i64,
+        issue_id: i64,
+        workspace_path: &str,
+        workspace_branch: &str,
+        owner: WorktreeOwner,
+        del: bool,
+    ) {
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, workspace_mode,
+                   target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, worktree_root_path, worktree_setup_command,
+                   log_path, list_inserted_at, last_active_at, started_at, closed_at, del
+                 ) VALUES (
+                   ?1, 1, ?2, NULL, 101, 'closed', 'none',
+                   ?3, '', '', 'worktree',
+                   'devlop', ?4, ?3,
+                   'devlop', ?5, NULL, NULL,
+                   ?6, 1, 1, 1, 1, ?7
+                 )",
+                params![
+                    session_id,
+                    issue_id,
+                    workspace_path,
+                    workspace_branch,
+                    owner.as_str(),
+                    format!("/tmp/redwhisk-session-{session_id}.jsonl"),
+                    if del { 1 } else { 0 },
+                ],
+            )
+            .expect("insert worktree session");
+    }
+
+    #[test]
+    fn get_issue_worktree_status_reports_not_exists_when_no_worktree_session() {
+        let database = setup_session_list_database();
+        insert_issue_row(&database, 16, "backlog");
+        let service = test_agent_session_service(&database);
+
+        let status = service
+            .get_issue_worktree_status(GetIssueWorktreeStatusInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("status");
+
+        assert!(!status.exists);
+        assert!(!status.can_delete);
+        assert!(status.workspace_path.is_none());
+        assert!(status.workspace_branch.is_none());
+    }
+
+    #[test]
+    fn get_issue_worktree_status_detects_existing_redwhisk_worktree() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                "devlop",
+            ],
+        );
+
+        let database = setup_session_list_database();
+        database
+            .execute(
+                "UPDATE projects SET repo_path = ?1 WHERE id = 1",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update project repo");
+        insert_issue_row(&database, 16, "backlog");
+        insert_worktree_session_row(
+            &database,
+            30,
+            16,
+            worktree_path.to_string_lossy().as_ref(),
+            "issue-16",
+            WorktreeOwner::Redwhisk,
+            true,
+        );
+
+        let service = test_agent_session_service(&database);
+        let status = service
+            .get_issue_worktree_status(GetIssueWorktreeStatusInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("status");
+
+        assert!(status.exists);
+        assert!(status.can_delete);
+        assert_eq!(
+            status.workspace_path,
+            Some(worktree_path.to_string_lossy().to_string())
+        );
+        assert_eq!(status.workspace_branch.as_deref(), Some("issue-16"));
+    }
+
+    #[test]
+    fn get_issue_worktree_status_reports_not_deletable_for_external_owner() {
+        let temp_dir = tempdir().expect("temp dir");
+        let external_path = temp_dir.path().join("external-worktree");
+        fs::create_dir_all(&external_path).expect("create external dir");
+
+        let database = setup_session_list_database();
+        insert_issue_row(&database, 16, "backlog");
+        insert_worktree_session_row(
+            &database,
+            30,
+            16,
+            external_path.to_string_lossy().as_ref(),
+            "issue-16",
+            WorktreeOwner::External,
+            true,
+        );
+
+        let service = test_agent_session_service(&database);
+        let status = service
+            .get_issue_worktree_status(GetIssueWorktreeStatusInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("status");
+
+        assert!(status.exists);
+        assert!(!status.can_delete);
+    }
+
+    #[test]
+    fn delete_issue_worktree_removes_directory_and_branch() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                "devlop",
+            ],
+        );
+
+        let database = setup_session_list_database();
+        database
+            .execute(
+                "UPDATE projects SET repo_path = ?1 WHERE id = 1",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update project repo");
+        insert_issue_row(&database, 16, "backlog");
+        insert_worktree_session_row(
+            &database,
+            30,
+            16,
+            worktree_path.to_string_lossy().as_ref(),
+            "issue-16",
+            WorktreeOwner::Redwhisk,
+            true,
+        );
+
+        let service = test_agent_session_service(&database);
+        let result = service
+            .delete_issue_worktree(DeleteIssueWorktreeInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("delete");
+
+        assert!(result.deleted);
+        assert!(!worktree_path.exists());
+        assert!(!branch_exists(&repo_dir, "issue-16"));
+    }
+
+    #[test]
+    fn delete_issue_worktree_rejects_external_owner() {
+        let temp_dir = tempdir().expect("temp dir");
+        let external_path = temp_dir.path().join("external-worktree");
+        fs::create_dir_all(&external_path).expect("create external dir");
+
+        let database = setup_session_list_database();
+        insert_issue_row(&database, 16, "backlog");
+        insert_worktree_session_row(
+            &database,
+            30,
+            16,
+            external_path.to_string_lossy().as_ref(),
+            "issue-16",
+            WorktreeOwner::External,
+            true,
+        );
+
+        let service = test_agent_session_service(&database);
+        let error = service
+            .delete_issue_worktree(DeleteIssueWorktreeInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect_err("should reject external");
+
+        assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    }
+
+    #[test]
+    fn delete_issue_worktree_errors_when_no_worktree_session() {
+        let database = setup_session_list_database();
+        insert_issue_row(&database, 16, "backlog");
+
+        let service = test_agent_session_service(&database);
+        let error = service
+            .delete_issue_worktree(DeleteIssueWorktreeInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect_err("should error without session");
+
+        assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
+    }
+
+    #[test]
+    fn prepare_issue_session_launch_blocks_when_worktree_already_occupied() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                "devlop",
+            ],
+        );
+
+        let database = setup_session_list_database();
+        database
+            .execute(
+                "UPDATE projects SET repo_path = ?1 WHERE id = 1",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update project repo");
+        insert_issue_row(&database, 16, "backlog");
+        // 退回 Backlog 后旧 session 被软删，但 worktree 目录与分支仍残留。
+        insert_worktree_session_row(
+            &database,
+            30,
+            16,
+            worktree_path.to_string_lossy().as_ref(),
+            "issue-16",
+            WorktreeOwner::Redwhisk,
+            true,
+        );
+
+        let service = test_agent_session_service(&database);
+        let result = service.prepare_issue_session_launch(
+            temp_dir.path(),
+            &StartAgentSessionInput {
+                project_id: 1,
+                issue_id: 16,
+                agent_profile_id: 101,
+                prompt_snapshot: "do something".to_string(),
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("devlop".to_string()),
+                worktree_setup_command: None,
+            },
+        );
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("expected occupied worktree error"),
+        };
+
+        assert_eq!(error.code, CommandErrorCode::IssueWorktreeOccupied);
+    }
+
+    fn branch_exists(repo_dir: &Path, branch: &str) -> bool {
+        let output = Command::new("git")
+            .args(["show-ref", "--verify", "--quiet", &format!("refs/heads/{branch}")])
+            .current_dir(repo_dir)
+            .output()
+            .expect("verify branch");
+        output.status.success()
     }
 }

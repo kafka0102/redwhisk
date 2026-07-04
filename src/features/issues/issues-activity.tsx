@@ -8,7 +8,9 @@ import {
   detectAgentCommitCompletion,
   createIssue,
   deleteIssue,
+  deleteIssueWorktree,
   exportIssueAttachment,
+  getIssueWorktreeStatus,
   listIssues,
   markIssueReview,
   previewIssueAttachment,
@@ -760,6 +762,31 @@ export function IssuesActivity({
       }
     }
 
+    // 退回 Backlog 时，若存在上次运行残留的同名 worktree，叠加询问是否删除。
+    // CurrentBranch 模式无 worktree session，getIssueWorktreeStatus 会返回 exists=false，自然跳过。
+    let shouldDeleteWorktree = false;
+    if (targetStatus === "backlog") {
+      try {
+        const worktreeStatus = await getIssueWorktreeStatus({
+          projectId,
+          issueId: currentIssue.id,
+        });
+        if (worktreeStatus.exists && worktreeStatus.canDelete) {
+          const deleteConfirmed = await confirm({
+            title: messages.issues.worktreeConflictTitle,
+            message: messages.issues.worktreeConflictMessage,
+            confirmLabel: messages.issues.worktreeConflictDeleteLabel,
+            cancelLabel: messages.issues.worktreeConflictKeepLabel,
+            confirmVariant: "destructive",
+          });
+          shouldDeleteWorktree = deleteConfirmed;
+        }
+      } catch (error) {
+        setDialogErrorMessage(toCommandError(error).message);
+        return;
+      }
+    }
+
     setDialogErrorMessage(null);
     setIsSaving(true);
     const requestProjectId = projectId;
@@ -809,6 +836,18 @@ export function IssuesActivity({
           issueId: currentIssue.id,
           targetStatus,
         });
+        // 退回 Backlog 已成功（运行中 session 已由后端关闭），再删除残留 worktree。
+        // 删除失败不阻断流程：状态已退回，仅提示用户手动清理。
+        if (shouldDeleteWorktree) {
+          try {
+            await deleteIssueWorktree({
+              projectId: requestProjectId,
+              issueId: currentIssue.id,
+            });
+          } catch (error) {
+            setDialogErrorMessage(toCommandError(error).message);
+          }
+        }
       }
 
       if (activeProjectIdRef.current !== requestProjectId) {

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  getIssueWorktreeStatus,
   getProjectGitBranches,
   startAgentSession,
   type IssueRecord,
@@ -316,6 +317,19 @@ export function IssueRunDialog({
     setStatusMessage(null);
 
     try {
+      // 前端预检查：worktree 模式下若已存在同名 worktree，直接禁止运行；
+      // 后端 prepare_issue_session_launch 亦有 IssueWorktreeOccupied 兜底。
+      if (workspaceMode === "worktree") {
+        const worktreeStatus = await getIssueWorktreeStatus({
+          projectId,
+          issueId: issue.id,
+        });
+        if (worktreeStatus.exists) {
+          setStatusMessage(messages.issues.worktreeOccupiedMessage);
+          return;
+        }
+      }
+
       const result = await startAgentSession({
         projectId,
         issueId: issue.id,

@@ -8,11 +8,13 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AdvanceIssueStatusInput, AgentCommitCompletionPreview, CompleteIssueCleanInput,
     CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput, DeleteIssueResult,
-    DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
-    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentPreview, IssueListResponse,
-    IssueRecord, IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
-    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
+    DeleteIssueWorktreeInput, DeleteIssueWorktreeResult, DetectAgentCommitCompletionInput,
+    DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
+    GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueListResponse, IssueRecord,
+    IssueSummaryRecord, IssueWorktreeStatusResult, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput,
+    SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    UpdateIssueInput,
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 
@@ -234,6 +236,26 @@ pub fn delete_issue(
     }
 
     Ok(result)
+}
+
+#[tauri::command]
+pub fn get_issue_worktree_status(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: GetIssueWorktreeStatusInput,
+) -> Result<IssueWorktreeStatusResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    AgentSessionService::get_issue_worktree_status_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn delete_issue_worktree(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteIssueWorktreeInput,
+) -> Result<DeleteIssueWorktreeResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)
 }
 
 fn prepare_issue_data_dir(

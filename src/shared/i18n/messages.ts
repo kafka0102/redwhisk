@@ -232,6 +232,11 @@ export interface I18nMessages {
     confirmReturnToBacklog: string;
     confirmRunIssue: string;
     confirmTerminateAndReturnToBacklog: string;
+    worktreeConflictTitle: string;
+    worktreeConflictMessage: string;
+    worktreeConflictDeleteLabel: string;
+    worktreeConflictKeepLabel: string;
+    worktreeOccupiedMessage: string;
     title: string;
     titleField: string;
     titlePlaceholder: string;
@@ -731,6 +736,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       confirmRunIssue: "确定要执行吗？",
       confirmTerminateAndReturnToBacklog:
         "This issue is still running. Stop it and return it to Backlog?",
+      worktreeConflictTitle: "Same-name worktree exists",
+      worktreeConflictMessage:
+        "A worktree from a previous run still exists. Delete it before returning to Backlog?",
+      worktreeConflictDeleteLabel: "Delete worktree",
+      worktreeConflictKeepLabel: "Keep",
+      worktreeOccupiedMessage:
+        "A same-name worktree already exists. Delete it before running.",
       title: "Issues",
       titleField: "Title",
       titlePlaceholder: "Issue title",
@@ -1227,6 +1239,12 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       confirmRunIssue: "确定要执行吗？",
       confirmTerminateAndReturnToBacklog:
         "当前 Issue 正在执行，是否终止并退回至 Backlog？",
+      worktreeConflictTitle: "存在同名 worktree",
+      worktreeConflictMessage:
+        "存在上次运行残留的同名 worktree，是否在退回 Backlog 前删除？",
+      worktreeConflictDeleteLabel: "删除 worktree",
+      worktreeConflictKeepLabel: "保留",
+      worktreeOccupiedMessage: "同名 worktree 已被占用，请删除后再运行。",
       title: "Issues",
       titleField: "标题",
       titlePlaceholder: "Issue 标题",

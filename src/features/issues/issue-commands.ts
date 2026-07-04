@@ -137,6 +137,30 @@ export interface DeleteIssueResult {
   linkedSessionId?: number | null;
 }
 
+export interface GetIssueWorktreeStatusInput {
+  projectId: number;
+  issueId: number;
+}
+
+/** Issue 关联 worktree 的残留状态（后端 `IssueWorktreeStatusResult`）。 */
+export interface IssueWorktreeStatusResult {
+  exists: boolean;
+  canDelete: boolean;
+  workspacePath?: string | null;
+  workspaceBranch?: string | null;
+}
+
+export interface DeleteIssueWorktreeInput {
+  projectId: number;
+  issueId: number;
+}
+
+export interface DeleteIssueWorktreeResult {
+  issueId: number;
+  deleted: boolean;
+  workspacePath?: string | null;
+}
+
 export interface PreviewIssueAttachmentInput {
   projectId: number;
   attachmentId?: number;
@@ -410,6 +434,24 @@ export function deleteIssue(
   return invokeCommand<DeleteIssueResult>("delete_issue", {
     input,
   });
+}
+
+export function getIssueWorktreeStatus(
+  input: GetIssueWorktreeStatusInput,
+): Promise<IssueWorktreeStatusResult> {
+  return invokeCommand<IssueWorktreeStatusResult>(
+    "get_issue_worktree_status",
+    { input },
+  );
+}
+
+export function deleteIssueWorktree(
+  input: DeleteIssueWorktreeInput,
+): Promise<DeleteIssueWorktreeResult> {
+  return invokeCommand<DeleteIssueWorktreeResult>(
+    "delete_issue_worktree",
+    { input },
+  );
 }
 
 export function previewIssueAttachment(
