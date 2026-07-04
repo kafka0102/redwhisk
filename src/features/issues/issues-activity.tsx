@@ -27,6 +27,7 @@ import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog"
 import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion-dirty-workspace-dialog";
 import {
   EMPTY_FORM,
+  ISSUE_PAGE_SIZE,
   type AttachmentPreviewState,
   type DialogMode,
   type IssueFormState,
@@ -53,6 +54,52 @@ import {
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+
+const ISSUE_STATUSES: readonly IssueStatus[] = [
+  "backlog",
+  "running",
+  "review",
+  "completed",
+];
+
+interface LaneLoadState {
+  /** 已为该甬道加载的条数，作为下一页的 offset。 */
+  loadedCount: number;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+}
+
+type LaneLoadStateMap = Record<IssueStatus, LaneLoadState>;
+
+const INITIAL_LANE_LOAD_STATE: LaneLoadStateMap = ISSUE_STATUSES.reduce(
+  (acc, status) => {
+    acc[status] = { loadedCount: 0, hasMore: false, isLoadingMore: false };
+    return acc;
+  },
+  {} as LaneLoadStateMap,
+);
+
+/** 根据首屏返回的扁平列表，计算每个甬道的分页状态。 */
+function computeLaneLoadState(issues: IssueRecord[]): LaneLoadStateMap {
+  return ISSUE_STATUSES.reduce((acc, status) => {
+    const count = issues.filter((issue) => issue.status === status).length;
+    acc[status] = {
+      loadedCount: count,
+      hasMore: count >= ISSUE_PAGE_SIZE,
+      isLoadingMore: false,
+    };
+    return acc;
+  }, {} as LaneLoadStateMap);
+}
+
+/** 追加下一页数据，按 id 去重，保留既有顺序。 */
+function mergeIssues(
+  current: IssueRecord[],
+  next: IssueRecord[],
+): IssueRecord[] {
+  const existingIds = new Set(current.map((issue) => issue.id));
+  return [...current, ...next.filter((issue) => !existingIds.has(issue.id))];
+}
 
 interface IssuesActivityProps {
   projectId: number;
@@ -92,6 +139,9 @@ export function IssuesActivity({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [laneLoadState, setLaneLoadState] = useState<LaneLoadStateMap>(
+    INITIAL_LANE_LOAD_STATE,
+  );
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
   );
@@ -110,6 +160,7 @@ export function IssuesActivity({
     null,
   );
   const activeProjectIdRef = useRef(projectId);
+  const loadingMoreRef = useRef<Set<IssueStatus>>(new Set());
   const previousSelectedIssueIdRef = useRef<number | null>(
     cachedPageState?.previousSelectedIssueId ?? null,
   );
@@ -154,6 +205,8 @@ export function IssuesActivity({
       setIsLoading(true);
       setErrorMessage(null);
       setIssues([]);
+      setLaneLoadState(INITIAL_LANE_LOAD_STATE);
+      loadingMoreRef.current.clear();
       setSelectedIssueId(cachedState?.selectedIssueId ?? null);
       setDialogMode(cachedState?.dialogMode ?? null);
       setIsReadOnlyEditRequested(false);
@@ -166,7 +219,10 @@ export function IssuesActivity({
       setCompletionProgress(null);
 
       try {
-        const response = await listIssues({ projectId });
+        const response = await listIssues({
+          projectId,
+          perStatusLimit: ISSUE_PAGE_SIZE,
+        });
         if (!isMounted || activeProjectIdRef.current !== projectId) {
           return;
         }
@@ -179,6 +235,7 @@ export function IssuesActivity({
           );
 
         setIssues(response.issues);
+        setLaneLoadState(computeLaneLoadState(response.issues));
         if (nextCachedState && cachedIssueExists) {
           setSelectedIssueId(nextCachedState.selectedIssueId);
           setDialogMode(nextCachedState.dialogMode);
@@ -311,6 +368,52 @@ export function IssuesActivity({
       messages.issues.review,
     ],
   );
+
+  async function loadMoreIssues(status: IssueStatus) {
+    if (loadingMoreRef.current.has(status)) {
+      return;
+    }
+    const state = laneLoadState[status];
+    if (!state || !state.hasMore) {
+      return;
+    }
+    loadingMoreRef.current.add(status);
+    setLaneLoadState((prev) => ({
+      ...prev,
+      [status]: { ...prev[status], isLoadingMore: true },
+    }));
+    const requestProjectId = projectId;
+    try {
+      const response = await listIssues({
+        projectId: requestProjectId,
+        status,
+        limit: ISSUE_PAGE_SIZE,
+        offset: state.loadedCount,
+      });
+      if (activeProjectIdRef.current !== requestProjectId) {
+        return;
+      }
+      setIssues((prevIssues) => mergeIssues(prevIssues, response.issues));
+      setLaneLoadState((prev) => ({
+        ...prev,
+        [status]: {
+          loadedCount: state.loadedCount + response.issues.length,
+          hasMore: response.issues.length >= ISSUE_PAGE_SIZE,
+          isLoadingMore: false,
+        },
+      }));
+    } catch (error) {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setErrorMessage(toCommandError(error).message);
+        setLaneLoadState((prev) => ({
+          ...prev,
+          [status]: { ...prev[status], isLoadingMore: false },
+        }));
+      }
+    } finally {
+      loadingMoreRef.current.delete(status);
+    }
+  }
 
   function openCreateDialog(trigger: HTMLElement | null) {
     setErrorMessage(null);
@@ -581,12 +684,16 @@ export function IssuesActivity({
     let resolvedSessionId = result.sessionId ?? null;
 
     try {
-      const response = await listIssues({ projectId });
+      const response = await listIssues({
+        projectId,
+        perStatusLimit: ISSUE_PAGE_SIZE,
+      });
       if (activeProjectIdRef.current !== projectId) {
         return;
       }
 
       setIssues(response.issues);
+      setLaneLoadState(computeLaneLoadState(response.issues));
       setSelectedIssueId(result.issueId);
       if (resolvedSessionId == null) {
         resolvedSessionId =
@@ -1168,12 +1275,14 @@ export function IssuesActivity({
             selectedIssueId={selectedIssueId}
             cardRefs={cardRefs}
             createButtonRef={createButtonRef}
+            laneLoadState={laneLoadState}
             canRunIssue={canRunIssueFor}
             formatTimestamp={formatLocalTimestamp}
             toDescriptionExcerpt={markdownToExcerpt}
             onCreateIssue={openCreateDialog}
             onOpenIssue={openIssueDialog}
             onRunIssue={openRunDialog}
+            onLoadMore={loadMoreIssues}
           />
         </>
       ) : null}

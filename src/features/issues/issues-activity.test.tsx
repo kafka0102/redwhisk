@@ -1,12 +1,19 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
+import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
 import {
   getProjectGitBranches,
   advanceIssueStatus,
@@ -547,6 +554,95 @@ describe("IssuesActivity", () => {
     expect(
       within(backlogLane).queryByRole("button", { name: "Running issue" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads more issues for a lane when scrolled to its bottom", async () => {
+    const backlogIssues: IssueRecord[] = Array.from(
+      { length: ISSUE_PAGE_SIZE },
+      (_, index) => ({
+        ...existingIssue,
+        id: 100 + index,
+        title: `Backlog ${index}`,
+        status: "backlog" as const,
+      }),
+    );
+    const pageTwoIssues: IssueRecord[] = Array.from(
+      { length: 5 },
+      (_, index) => ({
+        ...existingIssue,
+        id: 200 + index,
+        title: `Backlog page two ${index}`,
+        status: "backlog" as const,
+      }),
+    );
+    listIssuesMock.mockImplementation(async (input) => {
+      if (input.perStatusLimit) {
+        return { issues: backlogIssues };
+      }
+      if (input.status === "backlog") {
+        return { issues: pageTwoIssues };
+      }
+      return { issues: [] };
+    });
+
+    renderIssuesActivity();
+
+    const backlogLane = await screen.findByRole("region", { name: "Backlog" });
+    expect(within(backlogLane).getByText("Backlog 0")).toBeInTheDocument();
+
+    scrollLaneToBottom(backlogLane);
+
+    await waitFor(() =>
+      expect(listIssuesMock).toHaveBeenCalledWith({
+        projectId: 1,
+        status: "backlog",
+        limit: ISSUE_PAGE_SIZE,
+        offset: ISSUE_PAGE_SIZE,
+      }),
+    );
+    expect(await screen.findByText("Backlog page two 0")).toBeInTheDocument();
+  });
+
+  it("shows a loading indicator in the lane while loading more", async () => {
+    const backlogIssues: IssueRecord[] = Array.from(
+      { length: ISSUE_PAGE_SIZE },
+      (_, index) => ({
+        ...existingIssue,
+        id: 100 + index,
+        title: `Backlog ${index}`,
+        status: "backlog" as const,
+      }),
+    );
+    let resolveLoadMore: (response: {
+      issues: IssueRecord[];
+    }) => void = () => {};
+    listIssuesMock.mockImplementation(async (input) => {
+      if (input.perStatusLimit) {
+        return { issues: backlogIssues };
+      }
+      if (input.status === "backlog") {
+        return new Promise<{ issues: IssueRecord[] }>((resolve) => {
+          resolveLoadMore = resolve;
+        });
+      }
+      return { issues: [] };
+    });
+
+    renderIssuesActivity();
+
+    const backlogLane = await screen.findByRole("region", { name: "Backlog" });
+    scrollLaneToBottom(backlogLane);
+
+    expect(
+      await screen.findByText("Loading more issues..."),
+    ).toBeInTheDocument();
+
+    resolveLoadMore({ issues: [] });
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading more issues..."),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("keeps the Issues title in English when Chinese is selected", async () => {
@@ -3779,6 +3875,27 @@ function createDeferred<T>() {
   });
 
   return { promise, reject, resolve };
+}
+
+/**
+ * 模拟甬道滚动到底部以触发加载更多。jsdom 不会计算真实滚动尺寸，
+ * 这里直接覆写 scrollHeight/clientHeight/scrollTop 后派发 scroll 事件。
+ */
+function scrollLaneToBottom(lane: HTMLElement) {
+  const cards = within(lane).getByRole("list");
+  Object.defineProperty(cards, "scrollHeight", {
+    configurable: true,
+    value: 2000,
+  });
+  Object.defineProperty(cards, "clientHeight", {
+    configurable: true,
+    value: 500,
+  });
+  Object.defineProperty(cards, "scrollTop", {
+    configurable: true,
+    value: 1500,
+  });
+  fireEvent.scroll(cards);
 }
 
 async function openExistingIssueRunDialog(

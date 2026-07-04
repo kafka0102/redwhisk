@@ -419,7 +419,10 @@ describe("App project entry", () => {
         .closest(".workbench__header"),
     ).toHaveAttribute("data-tauri-drag-region");
     await waitFor(() =>
-      expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
+      expect(listIssuesMock).toHaveBeenCalledWith({
+        projectId: 1,
+        perStatusLimit: 20,
+      }),
     );
   });
 
@@ -579,7 +582,10 @@ describe("App project entry", () => {
       within(screen.getByRole("main")).queryByText("RedWhisk"),
     ).not.toBeInTheDocument();
     await waitFor(() =>
-      expect(listIssuesMock).toHaveBeenCalledWith({ projectId: 1 }),
+      expect(listIssuesMock).toHaveBeenCalledWith({
+        projectId: 1,
+        perStatusLimit: 20,
+      }),
     );
   });
 

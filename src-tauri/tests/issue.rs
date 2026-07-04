@@ -3505,6 +3505,130 @@ fn list_issues_is_scoped_to_project_and_sorted_by_updated_at() {
 }
 
 #[test]
+fn list_issues_per_status_caps_each_status_at_limit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "per-status-cap-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+
+    let mut created = Vec::new();
+    for index in 0..25 {
+        let issue = service
+            .create_issue(CreateIssueInput {
+                project_id,
+                title: format!("Backlog {index}"),
+                description: String::new(),
+                attachments: Vec::new(),
+                label_ids: Vec::new(),
+            })
+            .expect("create backlog issue");
+        created.push(issue);
+    }
+    // 赋予递增的 updated_at，使排序确定：index 越大越新。
+    for (index, issue) in created.iter().enumerate() {
+        database
+            .connection
+            .execute(
+                "UPDATE issues SET updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![1_780_630_000_000 + index as i64, issue.id],
+            )
+            .expect("set updated_at");
+    }
+
+    let response = service
+        .list_issues_per_status(project_id, 20)
+        .expect("per-status first page");
+
+    // 25 个 backlog 被截断为 20；其余状态无 issue。
+    assert_eq!(response.issues.len(), 20);
+    assert!(response
+        .issues
+        .iter()
+        .all(|issue| issue.status == IssueStatus::Backlog));
+    // 返回的是最新的 20 条（index 5..24），最旧的 5 条被截断。
+    let returned_ids: Vec<i64> = response.issues.iter().map(|issue| issue.id).collect();
+    for issue in &created[5..25] {
+        assert!(
+            returned_ids.contains(&issue.id),
+            "missing newest issue {}",
+            issue.id
+        );
+    }
+    for issue in &created[0..5] {
+        assert!(
+            !returned_ids.contains(&issue.id),
+            "oldest issue {} should be paged out",
+            issue.id
+        );
+    }
+
+    // 调小上限：只返回 5 条。
+    let small = service
+        .list_issues_per_status(project_id, 5)
+        .expect("per-status small limit");
+    assert_eq!(small.issues.len(), 5);
+}
+
+#[test]
+fn list_issues_page_paginates_by_status_with_offset() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "paged-load-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+
+    let mut created = Vec::new();
+    for index in 0..25 {
+        let issue = service
+            .create_issue(CreateIssueInput {
+                project_id,
+                title: format!("Backlog {index}"),
+                description: String::new(),
+                attachments: Vec::new(),
+                label_ids: Vec::new(),
+            })
+            .expect("create backlog issue");
+        created.push(issue);
+    }
+    for (index, issue) in created.iter().enumerate() {
+        database
+            .connection
+            .execute(
+                "UPDATE issues SET updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![1_780_630_000_000 + index as i64, issue.id],
+            )
+            .expect("set updated_at");
+    }
+
+    let first = service
+        .list_issues_page(project_id, Some(IssueStatus::Backlog), Some(20), Some(0))
+        .expect("first page");
+    assert_eq!(first.issues.len(), 20);
+    // 排序：最新在前（index 24 在首位，index 5 在末位）。
+    assert_eq!(first.issues[0].id, created[24].id);
+    assert_eq!(first.issues[19].id, created[5].id);
+
+    let second = service
+        .list_issues_page(project_id, Some(IssueStatus::Backlog), Some(20), Some(20))
+        .expect("second page");
+    assert_eq!(second.issues.len(), 5);
+    assert_eq!(second.issues[0].id, created[4].id);
+    assert_eq!(second.issues[4].id, created[0].id);
+
+    // 第二页与第一页不应重复。
+    let first_ids: std::collections::HashSet<i64> =
+        first.issues.iter().map(|issue| issue.id).collect();
+    for issue in &second.issues {
+        assert!(!first_ids.contains(&issue.id), "duplicate issue across pages");
+    }
+}
+
+#[test]
 fn list_issues_includes_linked_session_facts() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

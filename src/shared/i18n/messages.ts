@@ -202,6 +202,7 @@ export interface I18nMessages {
     labels: string;
     labelsLoading: string;
     loadingIssues: string;
+    loadingMore: string;
     loadingSummary: string;
     moreActions: string;
     newIssue: string;
@@ -708,6 +709,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       labels: "Labels",
       labelsLoading: "Loading labels...",
       loadingIssues: "Loading issues...",
+      loadingMore: "Loading more issues...",
       loadingSummary: "Loading summary...",
       moreActions: "More issue actions",
       newIssue: "New Issue",
@@ -1232,6 +1234,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       labels: "标签",
       labelsLoading: "正在加载标签...",
       loadingIssues: "正在加载 Issues...",
+      loadingMore: "正在加载更多 Issue...",
       loadingSummary: "正在加载总结...",
       moreActions: "更多 Issue 操作",
       newIssue: "新建 Issue",

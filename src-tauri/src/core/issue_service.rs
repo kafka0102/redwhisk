@@ -111,6 +111,44 @@ impl<'connection> IssueService<'connection> {
         Ok(IssueListResponse { issues })
     }
 
+    /// 看板按状态分页加载：按 `status` 过滤并应用 `limit`/`offset`。
+    pub fn list_issues_page(
+        &self,
+        project_id: i64,
+        status: Option<IssueStatus>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<IssueListResponse, CommandError> {
+        self.ensure_project_exists(project_id)?;
+        let issues = self
+            .issue_repository
+            .list_by_project_id_paged(project_id, status, limit, offset)
+            .map_err(issue_database_error)?
+            .into_iter()
+            .map(|issue| self.hydrate_issue(issue))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(IssueListResponse { issues })
+    }
+
+    /// 看板首屏：四个状态各自取前 `per_status_limit` 条，单次返回扁平列表。
+    pub fn list_issues_per_status(
+        &self,
+        project_id: i64,
+        per_status_limit: i64,
+    ) -> Result<IssueListResponse, CommandError> {
+        self.ensure_project_exists(project_id)?;
+        let issues = self
+            .issue_repository
+            .list_by_project_id_per_status(project_id, per_status_limit)
+            .map_err(issue_database_error)?
+            .into_iter()
+            .map(|issue| self.hydrate_issue(issue))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(IssueListResponse { issues })
+    }
+
     pub fn get_issue_summary(
         &self,
         input: GetIssueSummaryInput,
@@ -1551,6 +1589,36 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).list_issues(project_id)
+    }
+
+    pub fn list_issues_page_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+        status: Option<IssueStatus>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<IssueListResponse, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).list_issues_page(
+            project_id,
+            status,
+            limit,
+            offset,
+        )
+    }
+
+    pub fn list_issues_per_status_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+        per_status_limit: i64,
+    ) -> Result<IssueListResponse, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository)
+            .list_issues_per_status(project_id, per_status_limit)
     }
 
     pub fn create_issue_in_data_dir(
