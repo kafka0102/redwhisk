@@ -182,6 +182,12 @@ pub enum ToolResultPatch {
     },
     /// Read 的文件内容。
     Read { content: Option<String> },
+    /// Edit 结果：成功结果无信息量（"文件已被成功修改"），不回填文本，
+    /// 仅保留与 tool_use 阶段一致的 detail type，避免前端 reducer 因 type
+    /// 不一致整体覆盖丢失 path/diff。失败时 is_error 已体现在 ToolResultUpdate.status。
+    Edit,
+    /// Write 结果：同 Edit，成功无信息量，仅保持 type 一致。
+    Write,
     /// 其他工具：原始输出。
     Unknown { raw_output: Option<String> },
 }
@@ -210,7 +216,8 @@ pub fn map_tool_results(
                 } else {
                     Some(content.clone())
                 };
-                let patch = build_tool_result_patch(tool_name.as_deref(), output, content);
+                let patch =
+                    build_tool_result_patch(tool_name.as_deref(), output, content, *is_error);
                 Some(ToolResultUpdate {
                     call_id: tool_use_id.clone(),
                     status: if *is_error {
@@ -229,13 +236,18 @@ pub fn map_tool_results(
 /// 根据已知工具名派生对应类型的 patch，保持与 tool_use 阶段一致的 detail type。
 ///
 /// 已知工具：Bash → Shell（output 取 content，exit_code 解析自尾部，缺失则 None），
-/// Read → Read。未知或缺失工具名 → Unknown。保持类型一致是关键：前端 reducer
-/// 在 type 一致时做字段级合并（incoming 空字段保留 existing），type 不一致时
-/// 整体覆盖；若降级到 Unknown 会丢失 tool_use 阶段的 path/command/diff。
+/// Read → Read，Edit/Write → 同名空 patch（成功结果无信息量，仅保持 type 一致，
+/// 由前端 reducer 字段级合并保留 tool_use 阶段的 path/diff）。未知或缺失工具名
+/// → Unknown。保持类型一致是关键：前端 reducer 在 type 一致时做字段级合并
+/// （incoming 空字段保留 existing），type 不一致时整体覆盖；若降级到 Unknown
+/// 会丢失 tool_use 阶段的 path/command/diff。
+///
+/// `is_error` 用于未来扩展失败文案回填（当前 Edit/Write 失败已由 status=Failed 表达）。
 fn build_tool_result_patch(
     tool_name: Option<&str>,
     output: Option<String>,
     content: &str,
+    _is_error: bool,
 ) -> ToolResultPatch {
     match tool_name {
         Some("Bash") => {
@@ -243,6 +255,8 @@ fn build_tool_result_patch(
             ToolResultPatch::Shell { output, exit_code }
         }
         Some("Read") => ToolResultPatch::Read { content: output },
+        Some("Edit") => ToolResultPatch::Edit,
+        Some("Write") => ToolResultPatch::Write,
         _ => ToolResultPatch::Unknown { raw_output: output },
     }
 }
@@ -433,6 +447,41 @@ mod tests {
             }
             other => panic!("期望 Shell patch，实际 {other:?}"),
         }
+    }
+
+    #[test]
+    fn tool_result_preserves_edit_patch_type_when_tool_name_known() {
+        // Edit 的 tool_result（"文件已被成功修改"）成功结果无信息量，
+        // 不应回填 raw_output 导致前端 reducer 把 Edit 降级成 Unknown。
+        // 这里断言 patch 仍为 Edit（保持 type 一致，path/diff 由 reducer 字段级合并保留）。
+        let blocks = vec![UserBlock::ToolResult {
+            tool_use_id: "t1".into(),
+            content: "The file has been updated".into(),
+            is_error: false,
+        }];
+        let updates = map_tool_results(&blocks, |id| (id == "t1").then(|| "Edit".to_string()));
+        assert_eq!(updates.len(), 1);
+        assert!(
+            matches!(&updates[0].patch, ToolResultPatch::Edit),
+            "期望 Edit patch，实际 {:?}",
+            updates[0].patch
+        );
+    }
+
+    #[test]
+    fn tool_result_preserves_write_patch_type_when_tool_name_known() {
+        let blocks = vec![UserBlock::ToolResult {
+            tool_use_id: "t1".into(),
+            content: "The file has been updated".into(),
+            is_error: false,
+        }];
+        let updates = map_tool_results(&blocks, |id| (id == "t1").then(|| "Write".to_string()));
+        assert_eq!(updates.len(), 1);
+        assert!(
+            matches!(&updates[0].patch, ToolResultPatch::Write),
+            "期望 Write patch，实际 {:?}",
+            updates[0].patch
+        );
     }
 
     #[test]
