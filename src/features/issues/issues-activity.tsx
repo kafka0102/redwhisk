@@ -194,7 +194,8 @@ export function IssuesActivity({
   const [laneLoadState, setLaneLoadState] = useState<LaneLoadStateMap>(
     INITIAL_LANE_LOAD_STATE,
   );
-  const [laneTotals, setLaneTotals] = useState<LaneTotalsMap>(INITIAL_LANE_TOTALS);
+  const [laneTotals, setLaneTotals] =
+    useState<LaneTotalsMap>(INITIAL_LANE_TOTALS);
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
   );
@@ -993,7 +994,9 @@ export function IssuesActivity({
         setForm(issueToForm(reviewedIssue));
         // markIssueReview 已把状态从 running 改为 review，先平移到 review；
         // 若随后完成流程被取消或失败，总数停留在 review，与实际状态一致。
-        setLaneTotals((prev) => shiftLaneTotals(prev, currentIssue, reviewedIssue));
+        setLaneTotals((prev) =>
+          shiftLaneTotals(prev, currentIssue, reviewedIssue),
+        );
         totalsAnchor = reviewedIssue;
         updatedIssue = await completeIssueWithCompletionChecks(
           requestProjectId,
@@ -1032,7 +1035,9 @@ export function IssuesActivity({
       }
 
       setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
-      setLaneTotals((prev) => shiftLaneTotals(prev, totalsAnchor, updatedIssue));
+      setLaneTotals((prev) =>
+        shiftLaneTotals(prev, totalsAnchor, updatedIssue),
+      );
       setSelectedIssueId(updatedIssue.id);
       setCompletionProgress(null);
 

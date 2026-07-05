@@ -46,11 +46,7 @@ pub fn list_issues(
     // 滚动加载下一页：按状态 + limit/offset 取数。
     if status.is_some() || limit.is_some() || offset.is_some() {
         return IssueService::list_issues_page_in_data_dir(
-            data_dir,
-            project_id,
-            status,
-            limit,
-            offset,
+            data_dir, project_id, status, limit, offset,
         );
     }
     IssueService::list_issues_in_data_dir(data_dir, project_id)
