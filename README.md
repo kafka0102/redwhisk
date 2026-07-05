@@ -1,14 +1,52 @@
-# redwhisk
+# RedWhisk
+
+> **警告**
+> RedWhisk 目前仍处于开发阶段，功能、数据结构和工作流都可能发生变化。请勿将本软件用于正式环境或关键生产项目。
+
+RedWhisk 是一款以 Issue 为核心的 AI Coding 工作台，也可以理解为面向 AI 研发 / AI 开发流程的本地工作台。
+
+它支持通过 Git Worktree 并行执行多个开发任务，并可接入 Codex、Claude Code 等 AI Coding 工具，让不同 Issue 在隔离的工作区中同时推进，从而提升开发效率。
+
+## 系统支持
+
+当前主要支持 macOS。
+
+## 安装依赖
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+```
+
+如果当前 shell 中找不到 `pnpm`，可先加载本机 Node 环境：
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.4.1/bin:$PATH"
+```
+
+## 本地开发
+
+```bash
 pnpm dev
 pnpm tauri dev
-pnpm build
-pnpm tauri build
-pnpm format
-pnpm lint
-pnpm typecheck
-pnpm test
-cd src-tauri && cargo test
 ```
+
+## 本地 Build
+
+推荐使用项目内置的 macOS 打包命令：
+
+```bash
+pnpm build:macos
+```
+
+构建完成后，安装包和应用包位于：
+
+```text
+src-tauri/target/universal-apple-darwin/release/bundle/dmg/
+src-tauri/target/universal-apple-darwin/release/bundle/macos/
+```
+
+其中 `dmg/` 目录包含可分发的 DMG 安装包，`macos/` 目录包含构建出的 `RedWhisk.app`。
+
+## Release 安装提示
+
+从 Release 下载的安装包目前未进行 Apple 开发者签名。首次打开时，macOS 可能会拦截直接双击启动；请在 Finder 中右键点击应用或安装包，选择“打开”，再在系统提示中确认打开。
