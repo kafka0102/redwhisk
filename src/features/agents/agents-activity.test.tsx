@@ -19,6 +19,7 @@ import {
   injectAgentSessionPrompt,
   deleteAgentSession,
   listAgentSessions,
+  resumeStructuredAgentSession,
   setAgentSessionAttention,
   startStructuredAgentSession,
   updateAgentSessionTitle,
@@ -141,6 +142,7 @@ vi.mock("./agent-session-commands", () => ({
   deleteAgentSession: vi.fn(),
   injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
+  resumeStructuredAgentSession: vi.fn(),
   setAgentSessionAttention: vi.fn(),
   startStructuredAgentSession: vi.fn(),
   updateAgentSessionTitle: vi.fn(),
@@ -192,6 +194,9 @@ vi.mock("../../shared/toast", () => ({
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const deleteAgentSessionMock = vi.mocked(deleteAgentSession);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
+const resumeStructuredAgentSessionMock = vi.mocked(
+  resumeStructuredAgentSession,
+);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
 const updateAgentSessionTitleMock = vi.mocked(updateAgentSessionTitle);
@@ -414,6 +419,7 @@ describe("AgentsActivity", () => {
     listAgentSessionsMock.mockReset();
     deleteAgentSessionMock.mockReset();
     injectAgentSessionPromptMock.mockReset();
+    resumeStructuredAgentSessionMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
     startStructuredAgentSessionMock.mockReset();
     updateAgentSessionTitleMock.mockReset();
@@ -448,6 +454,10 @@ describe("AgentsActivity", () => {
     });
     deleteAgentSessionMock.mockResolvedValue({
       sessionId: 701,
+    });
+    resumeStructuredAgentSessionMock.mockResolvedValue({
+      sessionId: 502,
+      threadId: "thread-502",
     });
     injectAgentSessionPromptMock.mockResolvedValue({
       sessionId: 502,
@@ -3920,19 +3930,20 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
     const dialog = await screen.findByRole("dialog", {
-      name: "Merge the current branch into the base branch?",
+      name: "Let the agent auto-merge the current branch into the base branch?",
     });
     expect(dialog).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("button", { name: "No" }));
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", {
-          name: "Merge the current branch into the base branch?",
+          name: "Let the agent auto-merge the current branch into the base branch?",
         }),
       ).not.toBeInTheDocument(),
     );
+    expect(resumeStructuredAgentSessionMock).not.toHaveBeenCalled();
     expect(injectAgentSessionPromptMock).not.toHaveBeenCalled();
     expect(markIssueReviewMock).not.toHaveBeenCalled();
     expect(
@@ -3996,9 +4007,11 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
 
     const dialog = await screen.findByRole("dialog", {
-      name: "Merge the current branch into the base branch?",
+      name: "Let the agent auto-merge the current branch into the base branch?",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Yes" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Auto-merge" }),
+    );
 
     expect(
       within(dialog).getByText("Submitting").closest("button"),
@@ -4015,7 +4028,7 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("dialog", {
-        name: "Merge the current branch into the base branch?",
+        name: "Let the agent auto-merge the current branch into the base branch?",
       }),
     ).toBeInTheDocument();
 
@@ -4037,9 +4050,14 @@ describe("AgentsActivity", () => {
         ),
       }),
     );
+    // resume 必须在 inject 之前被调用，以保证 session 在 agent_registry 中有 handle。
+    expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 302,
+    });
     expect(
       screen.queryByRole("dialog", {
-        name: "Merge the current branch into the base branch?",
+        name: "Let the agent auto-merge the current branch into the base branch?",
       }),
     ).not.toBeInTheDocument();
     expect(markIssueReviewMock).not.toHaveBeenCalled();

@@ -1672,14 +1672,32 @@ impl<'connection> AgentSessionService<'connection> {
         &self,
         input: InjectAgentSessionPromptInput,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<InjectAgentSessionPromptResult, CommandError> {
         let prompt = validate_injected_prompt(&input.prompt)?;
         let session = self.find_project_session(input.project_id, input.session_id)?;
         let submitted_prompt = normalize_submitted_prompt(&prompt);
 
-        pty_sessions
-            .write_input(input.session_id, &submitted_prompt)
-            .map_err(inactive_terminal_error)?;
+        // Structured session（codex/claude）只注册到 agent_registry，从不进入 pty_sessions；
+        // PTY session 只在 pty_sessions。两条通道分别处理，都不可用时报告 NotRunning，
+        // 让前端有机会触发 resume 后重试。
+        if pty_sessions.contains(input.session_id) {
+            pty_sessions
+                .write_input(input.session_id, &submitted_prompt)
+                .map_err(inactive_terminal_error)?;
+        } else if let Some(handle) = agent_registry.get(session.id) {
+            handle
+                .send_message(prompt.clone(), Vec::new())
+                .map_err(agent_session_error_to_command_error)?;
+        } else {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionNotRunning,
+                "当前 Session 未运行，请先恢复会话后再注入。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
+            ));
+        }
         self.clear_attention_after_successful_input(input.session_id)?;
 
         let codex_session_id = session.codex_session_id.clone();
@@ -2866,6 +2884,7 @@ impl AgentSessionService<'_> {
         data_dir: impl AsRef<Path>,
         input: InjectAgentSessionPromptInput,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<InjectAgentSessionPromptResult, CommandError> {
         let database = DatabaseConfig::new(&data_dir)
             .open()
@@ -2893,7 +2912,7 @@ impl AgentSessionService<'_> {
             )
         };
 
-        let mut result = service.inject_session_prompt(input, pty_sessions)?;
+        let mut result = service.inject_session_prompt(input, pty_sessions, agent_registry)?;
         if refreshed_codex_session_id.is_some() {
             result.codex_session_id = refreshed_codex_session_id;
         }

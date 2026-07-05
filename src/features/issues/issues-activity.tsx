@@ -54,7 +54,10 @@ import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { issuePageStateCache } from "./issues-activity-cache";
-import { injectAgentSessionPrompt } from "../agents/agent-session-commands";
+import {
+  injectAgentSessionPrompt,
+  resumeStructuredAgentSession,
+} from "../agents/agent-session-commands";
 import {
   listProjectLabels,
   type ProjectLabelRecord,
@@ -1294,6 +1297,15 @@ export function IssuesActivity({
     }
 
     const prompt = buildWorktreeMergeConflictPrompt(detail, locale);
+    // worktree session 关闭后 handle 会从 agent_registry 移除，直接注入会报
+    // AgentSessionNotRunning。先 resume 重建 handle，再注入合并 prompt。
+    // resume 失败时继续尝试注入，让后端的 AgentSessionNotRunning 错误透传给用户。
+    await resumeStructuredAgentSession({
+      projectId: requestProjectId,
+      sessionId,
+    }).catch(() => {
+      /* 忽略 resume 错误，交给 inject 阶段统一报错 */
+    });
     await injectAgentSessionPrompt({
       projectId: requestProjectId,
       sessionId,
