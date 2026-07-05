@@ -491,4 +491,67 @@ describe("AgentMessageStream", () => {
     ).not.toBeNull();
     expect(screen.getByText("const x = 1;")).toBeInTheDocument();
   });
+
+  it("Claude session 仅含用户消息且 turn 运行时展示正在思考占位", () => {
+    // 回归（问题三）：首次运行 Claude session 时，展示用户消息后到 Claude 首条输出
+    // 之间有数秒连接延迟。此期间应展示「正在思考…」占位行；一旦 Claude 产出任意
+    // assistant_message/reasoning/tool_call，占位行立即隐藏。
+    render(
+      <AgentMessageStreamView
+        agentType="claude"
+        isTurnRunning
+        state={createMessageStreamState({
+          entries: [
+            {
+              id: "u1",
+              kind: "user_message",
+              item: {
+                type: "user_message",
+                text: "开始处理",
+                messageId: "u1",
+              },
+            },
+          ],
+          turnStatus: "running",
+        })}
+      />,
+    );
+    expect(screen.getByText("Thinking...")).toBeInTheDocument();
+  });
+
+  it("Claude session 产出 assistant 消息后隐藏正在思考占位", () => {
+    // 回归（问题三）：Claude 一旦有任意产出（此处为 assistant_message），
+    // 「正在思考…」占位行应立即隐藏，避免与 Claude 自身的输出重复。
+    render(
+      <AgentMessageStreamView
+        agentType="claude"
+        isTurnRunning
+        state={createMessageStreamState({
+          entries: [
+            {
+              id: "u1",
+              kind: "user_message",
+              item: {
+                type: "user_message",
+                text: "开始处理",
+                messageId: "u1",
+              },
+            },
+            {
+              id: "a1",
+              kind: "assistant_message",
+              item: {
+                type: "assistant_message",
+                text: "我先读取文件",
+                messageId: "a1",
+              },
+            },
+          ],
+          turnStatus: "running",
+        })}
+      />,
+    );
+    expect(screen.queryByText("Thinking...")).not.toBeInTheDocument();
+    expect(screen.getByText("我先读取文件")).toBeInTheDocument();
+  });
 });

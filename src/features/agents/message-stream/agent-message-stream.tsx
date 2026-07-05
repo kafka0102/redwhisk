@@ -64,11 +64,16 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const { entries, turnStatus, isInitialized, lastError } = state;
-  // Claude Code 持续输出 reasoning/assistant_message，自身已展示运行进展；
-  // 额外的「正在思考」加载框与之重复，故对 Claude 完全隐藏。Codex 保持原行为。
   const isClaude = agentType === "claude" || agentType === "claude_code";
-  const shouldShowThinking =
-    (turnStatus === "running" || isTurnRunning) && !isClaude;
+  const isTurnActive = turnStatus === "running" || isTurnRunning;
+  // Claude Code 首次运行时，从用户消息展示到 Claude 首条输出之间有数秒连接延迟。
+  // 此前对 Claude 完全隐藏「正在思考」占位，导致这段空白无反馈。现在改为：
+  // Claude 一旦有任意产出（assistant_message/reasoning/tool_call/todo/error/
+  // compaction）就永久隐藏占位行；在此之前若 turn 正在运行则展示。
+  // Codex 保持原行为（turn 运行时始终展示）。
+  const hasClaudeOutput =
+    isClaude && entries.some((entry) => entry.kind !== "user_message");
+  const shouldShowThinking = isTurnActive && (!isClaude || !hasClaudeOutput);
 
   // 新内容到达时，若用户贴底则滚动到底。
   const lastSignature =
@@ -82,7 +87,13 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
       return;
     }
     node.scrollTop = node.scrollHeight;
-  }, [entries.length, lastSignature, turnStatus, shouldShowThinking]);
+  }, [
+    entries.length,
+    lastSignature,
+    turnStatus,
+    shouldShowThinking,
+    hasClaudeOutput,
+  ]);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
     const distanceFromBottom =

@@ -69,6 +69,15 @@ struct SessionState {
     /// 当前 turn 的进程标识（单轮模型下用进程启动时间戳模拟）。
     current_turn_id: Option<String>,
     current_model: Option<String>,
+    /// 当前 turn 内 assistant message 的序号，用于派生跨 message 不冲突的 message_id。
+    ///
+    /// Claude 每个 message 的 content block index 都从 0 重置，若 message_id
+    /// 只用 block index（如 `claude-text-0`），多轮对话中 message 2 的 text block 0
+    /// 会与 message 1 的 text block 0 共用同一 id，前端 reducer 按 messageId 幂等替换
+    /// 时 message 2 的结论会覆盖 message 1。这里在每个 assistant message 开始时
+    /// 递增该计数器，message_id 派生为 `claude-text-{message_index}-{block_index}`，
+    /// 保证跨 message 唯一。
+    message_index: usize,
     /// 流式文本增量累积：block_index → 累积文本。
     text_buffer: HashMap<usize, String>,
     /// 流式文本上次 flush 时间：block_index → flush 时间。
@@ -123,6 +132,7 @@ impl ClaudeSessionHandle {
             session_id: config.resume_session_id.clone(),
             current_turn_id: None,
             current_model: config.model.clone(),
+            message_index: 0,
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
@@ -182,6 +192,7 @@ impl ClaudeSessionHandle {
             state.text_buffer.clear();
             state.text_last_flush_at.clear();
             state.text_flushed_len.clear();
+            state.message_index = 0;
             state.reasoning_buffer.clear();
             state.reasoning_last_flush_at.clear();
             state.reasoning_flushed_len.clear();
@@ -528,11 +539,14 @@ fn build_events(
                 }
             }
             // 注意：完整 assistant 消息与流式增量可能承载同一段文本。流式 flush
-            // 用 `claude-text-{block_index}` 作为 message_id（见 try_flush_text_delta），
-            // 这里必须使用与流式一致的 message_id，前后端两条去重路径（前端 reducer
-            // 按 messageId 幂等替换、后端 push_compacted_timeline_item 按 message_id
-            // 合并）才能正确归并，避免同一段结论文本被当作两条独立消息重复展示，
-            // 以及由此导致的顺序错乱。
+            // 用 `claude-text-{message_index}-{block_index}` 作为 message_id
+            // （见 try_flush_text_delta），这里必须使用与流式一致的 message_id，
+            // 前后端两条去重路径（前端 reducer 按 messageId 幂等替换、后端
+            // push_compacted_timeline_item 按 message_id 合并）才能正确归并，
+            // 避免同一段结论文本被当作两条独立消息重复展示，以及由此导致的顺序错乱。
+            // message_index 在 MessageStart 流事件到达时递增；若该流事件未到达，
+            // 当前值为 0，与流式 flush 共用同一序号也能正确归并。
+            let message_index = state.lock().map(|guard| guard.message_index).unwrap_or(0);
             let mapped = map_assistant_blocks(&message.blocks);
             for (index, block) in mapped.into_iter().enumerate() {
                 match block {
@@ -542,7 +556,9 @@ fn build_events(
                                 turn_id,
                                 AgentTimelineItem::AssistantMessage {
                                     text,
-                                    message_id: Some(format!("claude-text-{index}")),
+                                    message_id: Some(format!(
+                                        "claude-text-{message_index}-{index}"
+                                    )),
                                 },
                             ));
                         }
@@ -622,6 +638,14 @@ fn build_events(
                 .into_iter()
                 .for_each(|e| events.push(e));
             flush_all_reasoning_deltas(state, turn_id)
+                .into_iter()
+                .for_each(|e| events.push(e));
+            // 兜底收尾：turn 结束时若仍有 tool_call 处于 Running（tool_result 未到达、
+            // 解析失败或 turn 提前结束），补发与 tool_use 阶段同类型空骨架的 ToolCall
+            // 事件，status 跟随 turn 结果（is_error=false → Completed，true → Failed）。
+            // 前端 reducer 与后端 merge_tool_call_timeline_item 按 callId 幂等合并：
+            // 已 Completed 的 tool 收到同状态事件无副作用；仍 Running 的被收尾。
+            finalize_pending_tool_calls(state, turn_id, is_error)
                 .into_iter()
                 .for_each(|e| events.push(e));
             // 记录 session_id（续接用）。
@@ -782,6 +806,13 @@ fn handle_stream_event(
             }
         }
         AnthropicStreamEvent::MessageStart { usage } => {
+            // 新 assistant message 开始：递增 message_index，用于派生跨 message 唯一的
+            // message_id（见 try_flush_text_delta / 完整 assistant 消息分支）。
+            // 流式增量与完整 assistant 消息是同一 message 的两种表达，递增只放在这里，
+            // 完整消息分支只读取当前值，保证两条路径共用同一序号。
+            if let Ok(mut guard) = state.lock() {
+                guard.message_index = guard.message_index.saturating_add(1);
+            }
             if let Some(usage) = usage {
                 events.push(AgentStreamEvent::UsageUpdated {
                     usage: map_usage(&usage),
@@ -848,11 +879,14 @@ fn try_flush_text_delta(
     guard.text_last_flush_at.insert(index, now);
     guard.text_flushed_len.insert(index, text.len());
     let turn_id = guard.current_turn_id.clone();
-    // 返回完整文本作为 AssistantMessage（message_id 用 block index 派生）。
+    let message_index = guard.message_index;
+    // 返回完整文本作为 AssistantMessage。message_id 派生为
+    // `claude-text-{message_index}-{block_index}`，跨 message 唯一，
+    // 避免多轮对话中 message 2 的 text 覆盖 message 1 的 text。
     Some(AgentStreamEvent::Timeline {
         item: AgentTimelineItem::AssistantMessage {
             text,
-            message_id: Some(format!("claude-text-{index}")),
+            message_id: Some(format!("claude-text-{message_index}-{index}")),
         },
         turn_id,
         seq: 0,
@@ -955,6 +989,68 @@ fn flush_all_reasoning_deltas(
     indices
         .into_iter()
         .filter_map(|index| try_flush_reasoning_delta(state, index, true))
+        .collect()
+}
+
+/// turn 结束时为所有未收尾的 tool_call 补发终态事件。
+///
+/// 正常情况下 user 消息（含 tool_result）会把 `ToolCall { status: Running }`
+/// 回填为 `Completed` / `Failed`。但若 tool_result 因故未到达（CLI 输出异常、
+/// 解析失败、turn 提前结束），status 会一直停在 Running，前端表现为工具卡片
+/// 永久显示「运行中」。
+///
+/// 这里在 turn 结束（Result）时，遍历本 turn 内所有 tool_use（`tool_use_names`），
+/// 为每个 call_id 补发一个与 tool_use 阶段同类型空骨架的 ToolCall 事件：
+/// - `is_error=false` → status = Completed
+/// - `is_error=true`  → status = Failed
+///
+/// detail 沿用 `patch_detail` 派生同类型空骨架，前端 reducer 字段级合并时
+/// 空字段保留 existing，从而保留 tool_use 阶段建立的 path/diff/command。
+/// 已 Completed 的 tool 收到同状态事件无副作用（reducer 按 callId 幂等合并）。
+fn finalize_pending_tool_calls(
+    state: &Arc<Mutex<SessionState>>,
+    _turn_id: &Option<String>,
+    is_error: bool,
+) -> Vec<AgentStreamEvent> {
+    let entries = state
+        .lock()
+        .map(|guard| {
+            guard
+                .tool_use_names
+                .iter()
+                .map(|(call_id, tool_name)| (call_id.clone(), tool_name.clone()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let status = if is_error {
+        ToolCallStatus::Failed
+    } else {
+        ToolCallStatus::Completed
+    };
+    entries
+        .into_iter()
+        .map(|(call_id, tool_name)| {
+            let patch = match tool_name.as_str() {
+                "Bash" => ToolResultPatch::Shell {
+                    output: None,
+                    exit_code: None,
+                },
+                "Read" => ToolResultPatch::Read { content: None },
+                "Edit" => ToolResultPatch::Edit,
+                "Write" => ToolResultPatch::Write,
+                _ => ToolResultPatch::Unknown { raw_output: None },
+            };
+            timeline_event(
+                _turn_id,
+                AgentTimelineItem::ToolCall {
+                    call_id,
+                    name: tool_name_for_patch(&patch),
+                    detail: patch_detail(patch),
+                    status,
+                    error: None,
+                },
+            )
+        })
         .collect()
 }
 
@@ -1205,9 +1301,10 @@ mod tests {
     #[test]
     fn assistant_message_text_carries_same_message_id_as_streaming_flush() {
         // 回归：完整 assistant 消息的 text block 必须使用与流式增量 flush 一致的
-        // message_id（claude-text-{block_index}），前后端两条去重路径（前端 reducer
-        // 按 messageId 幂等替换、后端 push_compacted_timeline_item 按 message_id
-        // 合并）才能把同一段结论文本归并为一条，避免重复展示与顺序错乱。
+        // message_id（claude-text-{message_index}-{block_index}），前后端两条去重路径
+        // （前端 reducer 按 messageId 幂等替换、后端 push_compacted_timeline_item 按
+        // message_id 合并）才能把同一段结论文本归并为一条，避免重复展示与顺序错乱。
+        // 该测试未触发 MessageStart 流事件，message_index 保持初始值 0。
         use super::super::message::{AssistantBlock, AssistantMessage};
         let state = test_state(Some("abc".into()));
         let config = test_config();
@@ -1245,20 +1342,99 @@ mod tests {
             matches!(
                 assistant_texts[0],
                 AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
-                    if text == "first block" && id == "claude-text-0"
+                    if text == "first block" && id == "claude-text-0-0"
             ),
-            "第一条 text block 应携带 claude-text-0，实际 {:?}",
+            "第一条 text block 应携带 claude-text-0-0，实际 {:?}",
             assistant_texts[0]
         );
         assert!(
             matches!(
                 assistant_texts[1],
                 AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
-                    if text == "second block" && id == "claude-text-1"
+                    if text == "second block" && id == "claude-text-0-1"
             ),
-            "第二条 text block 应携带 claude-text-1，实际 {:?}",
+            "第二条 text block 应携带 claude-text-0-1，实际 {:?}",
             assistant_texts[1]
         );
+    }
+
+    #[test]
+    fn assistant_text_message_id_includes_message_index_to_avoid_cross_message_collision() {
+        // 回归（问题一）：Claude 每个 message 的 content block index 都从 0 重置，
+        // 若 message_id 仅用 block_index（claude-text-{block}），message 2 的 text
+        // block 0 会与 message 1 的共用 claude-text-0，前端 reducer 按 messageId
+        // 幂等替换时 message 2 的结论会覆盖 message 1。修复后 message_id 派生为
+        // claude-text-{message_index}-{block_index}，跨 message 唯一。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        // 第一条 assistant message：经 MessageStart 流事件把 message_index 递增到 1。
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::MessageStart { usage: None }),
+        );
+        let events_msg1 = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::Text {
+                        text: "message one".into(),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+        // 第二条 assistant message：MessageStart 再次递增 message_index 到 2。
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::MessageStart { usage: None }),
+        );
+        let events_msg2 = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::Text {
+                        text: "message two".into(),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        let id_of = |events: &Vec<AgentStreamEvent>| -> String {
+            events
+                .iter()
+                .find_map(|e| match e {
+                    AgentStreamEvent::Timeline {
+                        item: AgentTimelineItem::AssistantMessage { message_id, .. },
+                        ..
+                    } => message_id.clone(),
+                    _ => None,
+                })
+                .expect("应有 AssistantMessage")
+        };
+        let id1 = id_of(&events_msg1);
+        let id2 = id_of(&events_msg2);
+        assert_eq!(
+            id1, "claude-text-1-0",
+            "第一条 message 应为 claude-text-1-0"
+        );
+        assert_eq!(
+            id2, "claude-text-2-0",
+            "第二条 message 应为 claude-text-2-0"
+        );
+        assert_ne!(id1, id2, "两条 message 的 text block id 必须不同");
     }
 
     #[test]
@@ -1275,6 +1451,136 @@ mod tests {
             other => panic!("期望 Edit detail，实际 {other:?}"),
         }
         assert_eq!(tool_name_for_patch(&ToolResultPatch::Edit), "edit");
+    }
+
+    #[test]
+    fn result_finalizes_pending_running_tool_calls_as_completed() {
+        // 回归（问题二）：Edit tool_use 后若 tool_result 未到达而 turn 直接结束，
+        // Result 分支必须为仍 Running 的 tool_call 补发 Completed 终态事件，
+        // 否则前端工具卡片永久显示「运行中」。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        // 1. assistant 完整消息阶段建立 Edit 工具调用（status=Running）。
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::ToolUse {
+                        id: "toolu_edit".into(),
+                        name: "Edit".into(),
+                        input: json!({ "file_path": "src/a.rs", "old_string": "x", "new_string": "y" }),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        // 2. 直接到达 Result（成功），无 user tool_result。
+        let result_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Result {
+                subtype: "success".into(),
+                is_error: false,
+                result_text: None,
+                session_id: Some("abc".into()),
+                usage: None,
+                errors: vec![],
+                stop_reason: Some("end_turn".into()),
+            },
+        );
+
+        // 应补发一个针对 toolu_edit 的 ToolCall 事件，status=Completed，
+        // detail 保持 Edit 类型（空骨架，前端字段级合并保留 path/diff）。
+        let finalized = result_events.iter().find_map(|e| match e {
+            AgentStreamEvent::Timeline {
+                item:
+                    AgentTimelineItem::ToolCall {
+                        call_id,
+                        status,
+                        detail,
+                        ..
+                    },
+                ..
+            } if call_id == "toolu_edit" => Some((status, detail.clone())),
+            _ => None,
+        });
+        let (status, detail) = finalized.expect("Result 应为未收尾的 Edit 补发终态事件");
+        assert_eq!(
+            *status,
+            ToolCallStatus::Completed,
+            "成功 turn 应收尾为 Completed"
+        );
+        assert!(
+            matches!(detail, ToolCallDetail::Edit { .. }),
+            "收尾事件应保持 Edit 类型，实际 {detail:?}"
+        );
+    }
+
+    #[test]
+    fn result_finalizes_pending_running_tool_calls_as_failed_on_error_turn() {
+        // 回归（问题二）补充：is_error=true 的 turn 应把残留 Running tool 收尾为 Failed。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::ToolUse {
+                        id: "toolu_bash".into(),
+                        name: "Bash".into(),
+                        input: json!({ "command": "fake-cmd" }),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        let result_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Result {
+                subtype: "error_max_turns".into(),
+                is_error: true,
+                result_text: None,
+                session_id: None,
+                usage: None,
+                errors: vec!["超过最大轮次".into()],
+                stop_reason: None,
+            },
+        );
+
+        let finalized = result_events.iter().find_map(|e| match e {
+            AgentStreamEvent::Timeline {
+                item:
+                    AgentTimelineItem::ToolCall {
+                        call_id,
+                        status,
+                        detail,
+                        ..
+                    },
+                ..
+            } if call_id == "toolu_bash" => Some((status, detail.clone())),
+            _ => None,
+        });
+        let (status, detail) = finalized.expect("Result 应为未收尾的 Bash 补发终态事件");
+        assert_eq!(*status, ToolCallStatus::Failed, "错误 turn 应收尾为 Failed");
+        assert!(
+            matches!(detail, ToolCallDetail::Shell { .. }),
+            "收尾事件应保持 Shell 类型，实际 {detail:?}"
+        );
     }
 
     #[test]
@@ -1523,6 +1829,7 @@ mod tests {
             session_id,
             current_turn_id: Some("t1".into()),
             current_model: None,
+            message_index: 0,
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
@@ -1586,6 +1893,7 @@ mod tests {
             session_id: None,
             current_turn_id: Some("t1".into()),
             current_model: None,
+            message_index: 0,
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
