@@ -348,7 +348,7 @@ function isNonOutputLine(line: string): boolean {
 
 function formatSessionRowTitle(session: AgentSessionListItem): string {
   if (session.issueId != null && session.issueTitle) {
-    return `#${session.issueId} ${session.issueTitle}`;
+    return session.issueTitle;
   }
 
   return formatSessionTitle(session);
