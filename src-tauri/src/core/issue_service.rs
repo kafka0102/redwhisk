@@ -108,7 +108,10 @@ impl<'connection> IssueService<'connection> {
             .map(|issue| self.hydrate_issue(issue))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(IssueListResponse { issues })
+        Ok(IssueListResponse {
+            issues,
+            status_totals: None,
+        })
     }
 
     /// 看板按状态分页加载：按 `status` 过滤并应用 `limit`/`offset`。
@@ -128,7 +131,10 @@ impl<'connection> IssueService<'connection> {
             .map(|issue| self.hydrate_issue(issue))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(IssueListResponse { issues })
+        Ok(IssueListResponse {
+            issues,
+            status_totals: None,
+        })
     }
 
     /// 看板首屏：四个状态各自取前 `per_status_limit` 条，单次返回扁平列表。
@@ -145,8 +151,15 @@ impl<'connection> IssueService<'connection> {
             .into_iter()
             .map(|issue| self.hydrate_issue(issue))
             .collect::<Result<Vec<_>, _>>()?;
+        let status_totals = self
+            .issue_repository
+            .count_grouped_by_status(project_id)
+            .map_err(issue_database_error)?;
 
-        Ok(IssueListResponse { issues })
+        Ok(IssueListResponse {
+            issues,
+            status_totals: Some(status_totals),
+        })
     }
 
     pub fn get_issue_summary(

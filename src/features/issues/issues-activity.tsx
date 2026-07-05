@@ -22,6 +22,7 @@ import {
   type IssueAttachmentRecord,
   type IssueAttachmentPreviewRecord,
   type IssueRecord,
+  type IssueStatusTotals,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog";
 import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion-dirty-workspace-dialog";
@@ -71,6 +72,16 @@ interface LaneLoadState {
 
 type LaneLoadStateMap = Record<IssueStatus, LaneLoadState>;
 
+type LaneTotalsMap = Record<IssueStatus, number>;
+
+const INITIAL_LANE_TOTALS: LaneTotalsMap = ISSUE_STATUSES.reduce(
+  (acc, status) => {
+    acc[status] = 0;
+    return acc;
+  },
+  {} as LaneTotalsMap,
+);
+
 const INITIAL_LANE_LOAD_STATE: LaneLoadStateMap = ISSUE_STATUSES.reduce(
   (acc, status) => {
     acc[status] = { loadedCount: 0, hasMore: false, isLoadingMore: false };
@@ -78,6 +89,47 @@ const INITIAL_LANE_LOAD_STATE: LaneLoadStateMap = ISSUE_STATUSES.reduce(
   },
   {} as LaneLoadStateMap,
 );
+
+/** 把后端返回的各状态总数落到甬道计数；后端未返回时按已加载条数兜底。 */
+function deriveLaneTotals(
+  statusTotals: IssueStatusTotals | undefined,
+  issues: IssueRecord[],
+): LaneTotalsMap {
+  if (statusTotals) {
+    return {
+      backlog: statusTotals.backlog,
+      running: statusTotals.running,
+      review: statusTotals.review,
+      completed: statusTotals.completed,
+    };
+  }
+  return ISSUE_STATUSES.reduce((acc, status) => {
+    acc[status] = issues.filter((issue) => issue.status === status).length;
+    return acc;
+  }, {} as LaneTotalsMap);
+}
+
+/**
+ * 单个 Issue 状态发生迁移（含新增/删除）时，按 (prev, next) 平移甬道总数。
+ * prev 与 next 状态相同（如仅编辑内容）时为空操作。
+ */
+function shiftLaneTotals(
+  totals: LaneTotalsMap,
+  prev: IssueRecord | null | undefined,
+  next: IssueRecord | null | undefined,
+): LaneTotalsMap {
+  if (prev?.status === next?.status) {
+    return totals;
+  }
+  const result = { ...totals };
+  if (prev) {
+    result[prev.status] = Math.max(0, result[prev.status] - 1);
+  }
+  if (next) {
+    result[next.status] = result[next.status] + 1;
+  }
+  return result;
+}
 
 /** 根据首屏返回的扁平列表，计算每个甬道的分页状态。 */
 function computeLaneLoadState(issues: IssueRecord[]): LaneLoadStateMap {
@@ -142,6 +194,7 @@ export function IssuesActivity({
   const [laneLoadState, setLaneLoadState] = useState<LaneLoadStateMap>(
     INITIAL_LANE_LOAD_STATE,
   );
+  const [laneTotals, setLaneTotals] = useState<LaneTotalsMap>(INITIAL_LANE_TOTALS);
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
   );
@@ -206,6 +259,7 @@ export function IssuesActivity({
       setErrorMessage(null);
       setIssues([]);
       setLaneLoadState(INITIAL_LANE_LOAD_STATE);
+      setLaneTotals(INITIAL_LANE_TOTALS);
       loadingMoreRef.current.clear();
       setSelectedIssueId(cachedState?.selectedIssueId ?? null);
       setDialogMode(cachedState?.dialogMode ?? null);
@@ -236,6 +290,7 @@ export function IssuesActivity({
 
         setIssues(response.issues);
         setLaneLoadState(computeLaneLoadState(response.issues));
+        setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
         if (nextCachedState && cachedIssueExists) {
           setSelectedIssueId(nextCachedState.selectedIssueId);
           setDialogMode(nextCachedState.dialogMode);
@@ -359,9 +414,11 @@ export function IssuesActivity({
       ].map((lane) => ({
         ...lane,
         issues: issues.filter((issue) => issue.status === lane.status),
+        total: laneTotals[lane.status],
       })),
     [
       issues,
+      laneTotals,
       messages.issues.backlog,
       messages.issues.done,
       messages.issues.inProgress,
@@ -504,6 +561,7 @@ export function IssuesActivity({
           return;
         }
         setIssues((currentIssues) => mergeIssue(currentIssues, createdIssue));
+        setLaneTotals((prev) => shiftLaneTotals(prev, null, createdIssue));
         setSelectedIssueId(createdIssue.id);
         setDialogMode(null);
         setIsReadOnlyEditRequested(false);
@@ -694,6 +752,7 @@ export function IssuesActivity({
 
       setIssues(response.issues);
       setLaneLoadState(computeLaneLoadState(response.issues));
+      setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
       setSelectedIssueId(result.issueId);
       if (resolvedSessionId == null) {
         resolvedSessionId =
@@ -904,6 +963,9 @@ export function IssuesActivity({
 
     try {
       let updatedIssue: IssueRecord;
+      // 已计入 laneTotals 的最近状态：完成流程会先经 review 再到 completed，
+      // 中间态单独平移，取消/异常时也能让总数落在实际状态上。
+      let totalsAnchor = currentIssue;
 
       if (
         targetStatus === "review" &&
@@ -929,6 +991,10 @@ export function IssuesActivity({
         setIssues((currentIssues) => mergeIssue(currentIssues, reviewedIssue));
         setSelectedIssueId(reviewedIssue.id);
         setForm(issueToForm(reviewedIssue));
+        // markIssueReview 已把状态从 running 改为 review，先平移到 review；
+        // 若随后完成流程被取消或失败，总数停留在 review，与实际状态一致。
+        setLaneTotals((prev) => shiftLaneTotals(prev, currentIssue, reviewedIssue));
+        totalsAnchor = reviewedIssue;
         updatedIssue = await completeIssueWithCompletionChecks(
           requestProjectId,
           currentIssue.id,
@@ -966,6 +1032,7 @@ export function IssuesActivity({
       }
 
       setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
+      setLaneTotals((prev) => shiftLaneTotals(prev, totalsAnchor, updatedIssue));
       setSelectedIssueId(updatedIssue.id);
       setCompletionProgress(null);
 
@@ -1223,6 +1290,7 @@ export function IssuesActivity({
         (issue) => issue.id !== issueToDelete.id,
       );
       setIssues(remainingIssues);
+      setLaneTotals((prev) => shiftLaneTotals(prev, issueToDelete, null));
       setSelectedIssueId(remainingIssues[0]?.id ?? null);
       setDialogMode(null);
       setIsReadOnlyEditRequested(false);

@@ -256,6 +256,19 @@ pub struct IssueSummaryRecord {
 #[serde(rename_all = "camelCase")]
 pub struct IssueListResponse {
     pub issues: Vec<IssueRecord>,
+    /// 看板首屏各状态 Issue 总数；仅在 per_status_limit 路径返回，其余路径为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_totals: Option<IssueStatusTotals>,
+}
+
+/// 看板四个甬道的 Issue 总数（按状态分组、仅统计未删除 Issue）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueStatusTotals {
+    pub backlog: i64,
+    pub running: i64,
+    pub review: i64,
+    pub completed: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

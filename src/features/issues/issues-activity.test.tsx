@@ -556,6 +556,68 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows backend lane totals even when more issues exist beyond the loaded page", async () => {
+    // 仅加载 1 条 backlog，但后端总数为 7：甬道计数应显示总数而非已加载条数。
+    listIssuesMock.mockResolvedValue({
+      issues: [existingIssue],
+      statusTotals: {
+        backlog: 7,
+        running: 2,
+        review: 0,
+        completed: 0,
+      },
+    });
+
+    renderIssuesActivity();
+
+    const backlogLane = await screen.findByRole("region", { name: "Backlog" });
+    expect(within(backlogLane).getByText("7")).toBeInTheDocument();
+    expect(
+      within(backlogLane).getByRole("button", { name: "Existing issue" }),
+    ).toBeInTheDocument();
+    const runningLane = screen.getByRole("region", { name: "In Progress" });
+    expect(within(runningLane).getByText("2")).toBeInTheDocument();
+  });
+
+  it("increments the backlog lane total after creating an issue", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [existingIssue],
+      statusTotals: {
+        backlog: 7,
+        running: 0,
+        review: 0,
+        completed: 0,
+      },
+    });
+    createIssueMock.mockResolvedValue({
+      id: 25,
+      projectId: 1,
+      title: "Brand new issue",
+      description: "",
+      status: "backlog",
+      createdAt: 1_780_632_000_000,
+      updatedAt: 1_780_640_000_000,
+    });
+
+    renderIssuesActivity();
+
+    const backlogLane = await screen.findByRole("region", { name: "Backlog" });
+    expect(within(backlogLane).getByText("7")).toBeInTheDocument();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.type(screen.getByLabelText("Title"), "Brand new issue");
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    // 创建页打开期间看板会卸载，保存后回到看板需重新定位甬道。
+    const refreshedBacklogLane = await screen.findByRole("region", {
+      name: "Backlog",
+    });
+    expect(within(refreshedBacklogLane).getByText("8")).toBeInTheDocument();
+  });
+
   it("loads more issues for a lane when scrolled to its bottom", async () => {
     const backlogIssues: IssueRecord[] = Array.from(
       { length: ISSUE_PAGE_SIZE },
