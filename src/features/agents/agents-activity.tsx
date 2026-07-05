@@ -1435,7 +1435,7 @@ export function AgentsActivity({
         onSelectSession={handleSelectSession}
         selectedSessionId={selectedSession?.sessionId ?? null}
         sessions={visibleSessions}
-        title={messages.app.agents}
+        title={messages.app.sessions}
       />
 
       <div
