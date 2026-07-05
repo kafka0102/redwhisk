@@ -3602,7 +3602,7 @@ describe("IssuesActivity", () => {
 
     expect(
       screen.getByRole("dialog", {
-        name: "Delete issue",
+        name: "This cannot be undone. Delete the current Issue?",
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete" }));
@@ -3636,7 +3636,9 @@ describe("IssuesActivity", () => {
 
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
-    const deleteDialog = screen.getByRole("dialog", { name: "Delete Issue?" });
+    const deleteDialog = screen.getByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
     expect(deleteDialog).toBeInTheDocument();
     await user.click(
       within(deleteDialog).getByRole("button", { name: "Delete" }),
@@ -3670,10 +3672,11 @@ describe("IssuesActivity", () => {
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     await user.click(
-      within(screen.getByRole("dialog", { name: "Delete Issue?" })).getByRole(
-        "button",
-        { name: "Back" },
-      ),
+      within(
+        screen.getByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Back" }),
     );
 
     expect(deleteIssueMock).not.toHaveBeenCalled();
@@ -3700,14 +3703,14 @@ describe("IssuesActivity", () => {
 
     expect(
       screen.getByRole("dialog", {
-        name: "Delete issue",
+        name: "This cannot be undone. Delete the current Issue?",
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", {
-          name: "Delete issue",
+          name: "This cannot be undone. Delete the current Issue?",
         }),
       ).not.toBeInTheDocument(),
     );
