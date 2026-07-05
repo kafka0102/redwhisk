@@ -10,7 +10,8 @@
 
 - `scripts/build-macos.sh`：本地构建 Universal Mac 安装包。
 - `scripts/bump-version.mjs`：统一同步多文件版本号。
-- `package.json` 暴露 `build:macos` 与 `bump-version` 两个根脚本入口。
+- `scripts/release-version.sh`：按版本号执行验证、构建、提交、tag 与推送。
+- `package.json` 暴露 `build:macos`、`bump-version` 与 `release:version` 根脚本入口。
 - `.github/workflows/release.yml`：tag 触发的自动发布工作流。
 - `src-tauri/tauri.conf.json` 的 `bundle.targets` 配置为 `["app", "dmg"]`。
 - `src-tauri/Cargo.toml` 配置了 `[profile.release]` 体积优化。
@@ -108,7 +109,26 @@ pnpm build:macos
 
 ### 发布流程
 
-发版操作按 [Git 工作流规范](./git-workflow.md) 属于"不自动授权"操作，必须由用户明确要求。完整流程：
+发版操作按 [Git 工作流规范](./git-workflow.md) 属于"不自动授权"操作，必须由用户明确要求。完整流程可通过脚本执行：
+
+```bash
+pnpm release:version 0.1.0
+```
+
+该脚本会按顺序执行：
+
+1. 检查工作区必须干净，避免混入无关改动
+2. 执行 `pnpm bump-version <version>` 同步版本号
+3. 执行 `pnpm format`
+4. 执行 `pnpm lint`
+5. 执行 `pnpm typecheck`
+6. 执行 `pnpm test`
+7. 执行 `pnpm build:macos`
+8. 提交版本号改动
+9. 创建 `v<version>` tag
+10. 推送当前分支与 tag，触发 GitHub Actions 发布
+
+如需手动分步操作，可执行：
 
 ```bash
 # 1. 升级版本号（同步 package.json / tauri.conf.json / Cargo.toml / Cargo.lock）
@@ -130,11 +150,15 @@ git push origin v0.1.0
 1. 安装 pnpm 9、Node 20、Rust stable 与两个 Apple target
 2. `pnpm install --frozen-lockfile`
 3. `pnpm tauri build --target universal-apple-darwin`
-4. 上传构建产物为 workflow artifact（保留构建历史）
-5. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.dmg`
-6. 启用 `generate_release_notes: true`，自动按 commit 历史生成 changelog
+4. 将 `.app` 打包为 `.app.zip`，便于作为 GitHub Release 单文件资源上传
+5. 上传构建产物为 workflow artifact（保留构建历史）
+6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.dmg` 与 `.app.zip`
+7. 启用 `generate_release_notes: true`，自动按 commit 历史生成 changelog
 
-发布后产物为 **draft** 状态，需要人工审核 changelog 与产物后，在 GitHub Releases 页面点 Publish 才对外可见。
+发布后产物为 **draft** 状态，需要人工审核 changelog 与产物后，在 GitHub Releases 页面点 Publish 才对外可见。Release asset 包含：
+
+- `RedWhisk_<version>_universal.dmg`
+- `RedWhisk_<version>_universal.app.zip`
 
 ### PR 构建检查
 
