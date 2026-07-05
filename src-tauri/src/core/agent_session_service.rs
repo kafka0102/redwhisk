@@ -62,6 +62,8 @@ use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
 const SESSION_LOG_DIR_NAME: &str = "session-logs";
+const SESSION_RUNTIME_LOG_DIR_NAME: &str = "runtime";
+const SESSION_ARCHIVE_LOG_DIR_NAME: &str = "archive";
 const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
 const CODEX_DEFAULT_MODE_ID: &str = "full-access";
 const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
@@ -99,9 +101,15 @@ pub struct AgentSessionRuntimeListResult {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-struct StructuredTimelineHistory {
+pub(crate) struct StructuredTimelineHistory {
     items: Vec<AgentTimelineItem>,
     effort: Option<String>,
+}
+
+pub(crate) struct IssueSessionArchive {
+    pub archive_path: String,
+    pub runtime_path: String,
+    pub latest_output: Option<String>,
 }
 
 pub struct AgentSessionService<'connection> {
@@ -666,8 +674,10 @@ impl<'connection> AgentSessionService<'connection> {
             ));
         }
 
-        let structured_log_path =
-            build_structured_log_path(data_dir, input.project_id, launch.started_at)?;
+        let previous_archive_path =
+            self.previous_issue_archive_log_path(data_dir, input.issue_id)?;
+        let pending_log_path =
+            build_pending_structured_log_path(data_dir, input.project_id, launch.started_at)?;
         let transaction = self
             .issue_repository
             .connection()
@@ -691,9 +701,22 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.worktree_owner,
                 launch.worktree_root_path.as_deref(),
                 launch.worktree_setup_command.as_deref(),
-                &structured_log_path,
+                &pending_log_path,
                 launch.started_at,
             )?;
+            let structured_log_path = build_issue_runtime_structured_log_path(
+                data_dir,
+                input.project_id,
+                issue.id,
+                session.id,
+            )
+            .map_err(command_error_to_sqlite)?;
+            let session = AgentSessionRepository::update_log_path_in_transaction(
+                &transaction,
+                session.id,
+                &structured_log_path,
+            )?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
 
             let updated_issue = IssueRepository::update_status_in_transaction(
                 &transaction,
@@ -709,7 +732,7 @@ impl<'connection> AgentSessionService<'connection> {
                 "agentProfileId": input.agent_profile_id,
                 "status": "running",
                 "structuredStream": true,
-                "logPath": structured_log_path,
+                "logPath": session.log_path,
             })
             .to_string();
             EventRepository::insert_session_event_in_transaction(
@@ -798,6 +821,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(agent_session_error_to_command_error(error));
         }
         agent_registry.register(result.session_id, handle);
+        remove_issue_archive_log(previous_archive_path.as_deref());
 
         Ok(result)
     }
@@ -868,8 +892,10 @@ impl<'connection> AgentSessionService<'connection> {
             ));
         }
 
-        let structured_log_path =
-            build_structured_log_path(data_dir, input.project_id, launch.started_at)?;
+        let previous_archive_path =
+            self.previous_issue_archive_log_path(data_dir, input.issue_id)?;
+        let pending_log_path =
+            build_pending_structured_log_path(data_dir, input.project_id, launch.started_at)?;
         let transaction = self
             .issue_repository
             .connection()
@@ -893,9 +919,22 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.worktree_owner,
                 launch.worktree_root_path.as_deref(),
                 launch.worktree_setup_command.as_deref(),
-                &structured_log_path,
+                &pending_log_path,
                 launch.started_at,
             )?;
+            let structured_log_path = build_issue_runtime_structured_log_path(
+                data_dir,
+                input.project_id,
+                issue.id,
+                session.id,
+            )
+            .map_err(command_error_to_sqlite)?;
+            let session = AgentSessionRepository::update_log_path_in_transaction(
+                &transaction,
+                session.id,
+                &structured_log_path,
+            )?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
 
             let updated_issue = IssueRepository::update_status_in_transaction(
                 &transaction,
@@ -911,7 +950,7 @@ impl<'connection> AgentSessionService<'connection> {
                 "agentProfileId": input.agent_profile_id,
                 "status": "running",
                 "structuredStream": true,
-                "logPath": structured_log_path,
+                "logPath": session.log_path,
             })
             .to_string();
             EventRepository::insert_session_event_in_transaction(
@@ -986,6 +1025,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(agent_session_error_to_command_error(error));
         }
         agent_registry.register(result.session_id, handle);
+        remove_issue_archive_log(previous_archive_path.as_deref());
 
         // Claude 首轮 send_message 在后台异步产生 session_id，此处无法同步回填。
         // 会话标识由 broadcaster 在 `ThreadStarted` 事件回流时统一写入
@@ -1243,7 +1283,8 @@ impl<'connection> AgentSessionService<'connection> {
 
         let started_at = current_epoch_millis()?;
         let working_dir = validate_working_dir(&project.repo_path)?;
-        let log_path = build_log_path(data_dir, log_name, agent_profile_id, started_at)?;
+        let log_path =
+            build_log_path(data_dir, project_id, log_name, agent_profile_id, started_at)?;
         let command_snapshot = build_command_snapshot(&profile);
 
         Ok((profile, working_dir, log_path, command_snapshot, started_at))
@@ -1276,6 +1317,7 @@ impl<'connection> AgentSessionService<'connection> {
         let started_at = current_epoch_millis()?;
         let log_path = build_log_path(
             data_dir,
+            input.project_id,
             &format!("issue-{}", input.issue_id),
             input.agent_profile_id,
             started_at,
@@ -1694,9 +1736,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandErrorCode::AgentSessionNotRunning,
                 "当前 Session 未运行，请先恢复会话后再注入。",
             )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
-            ));
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
         self.clear_attention_after_successful_input(input.session_id)?;
 
@@ -2181,7 +2221,8 @@ impl AgentSessionService<'_> {
             .map(validate_session_title)
             .transpose()?;
         let started_at = current_epoch_millis()?;
-        let log_path = build_structured_log_path(data_dir, input.project_id, started_at)?;
+        let pending_log_path =
+            build_pending_structured_log_path(data_dir, input.project_id, started_at)?;
 
         // 落 session 行。
         let transaction = self
@@ -2197,9 +2238,21 @@ impl AgentSessionService<'_> {
                 title.as_deref(),
                 &cwd,
                 &command_snapshot,
-                &log_path,
+                &pending_log_path,
                 started_at,
             )?;
+            let log_path = build_standalone_runtime_structured_log_path(
+                data_dir,
+                input.project_id,
+                session.id,
+            )
+            .map_err(command_error_to_sqlite)?;
+            let session = AgentSessionRepository::update_log_path_in_transaction(
+                &transaction,
+                session.id,
+                &log_path,
+            )?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
             let event_payload = json!({
                 "sessionId": session.id,
                 "projectId": input.project_id,
@@ -2349,6 +2402,20 @@ impl AgentSessionService<'_> {
         .map_err(agent_session_database_error)?;
         transaction.commit().map_err(agent_session_database_error)?;
         Ok(())
+    }
+
+    fn previous_issue_archive_log_path(
+        &self,
+        data_dir: &Path,
+        issue_id: i64,
+    ) -> Result<Option<String>, CommandError> {
+        let previous_session = self
+            .agent_session_repository
+            .find_latest_session_by_issue_id(issue_id)
+            .map_err(agent_session_database_error)?;
+        Ok(previous_session
+            .filter(|session| is_archived_issue_log_path(data_dir, &session.log_path))
+            .map(|session| session.log_path))
     }
 
     pub fn resume_structured_agent_session_in_data_dir(
@@ -3658,12 +3725,12 @@ fn codex_mode_from_structured_input(mode: Option<&str>) -> Option<CodexMode> {
 
 fn build_log_path(
     data_dir: &Path,
+    project_id: i64,
     session_name: &str,
     agent_profile_id: i64,
     started_at: i64,
 ) -> Result<String, CommandError> {
-    let logs_dir = data_dir.join(SESSION_LOG_DIR_NAME);
-    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
+    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
 
     let path = logs_dir.join(format!(
         "{session_name}-profile-{agent_profile_id}-{started_at}.log"
@@ -3671,29 +3738,174 @@ fn build_log_path(
     Ok(path.to_string_lossy().to_string())
 }
 
-fn build_structured_log_path(
+fn session_log_root_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join(SESSION_LOG_DIR_NAME)
+}
+
+fn runtime_session_log_project_dir(
+    data_dir: &Path,
+    project_id: i64,
+) -> Result<PathBuf, CommandError> {
+    let logs_dir = session_log_root_dir(data_dir)
+        .join(SESSION_RUNTIME_LOG_DIR_NAME)
+        .join(format!("project-{project_id}"));
+    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
+    Ok(logs_dir)
+}
+
+fn archive_session_log_project_dir(
+    data_dir: &Path,
+    project_id: i64,
+) -> Result<PathBuf, CommandError> {
+    let logs_dir = session_log_root_dir(data_dir)
+        .join(SESSION_ARCHIVE_LOG_DIR_NAME)
+        .join(format!("project-{project_id}"));
+    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
+    Ok(logs_dir)
+}
+
+fn build_pending_structured_log_path(
     data_dir: &Path,
     project_id: i64,
     started_at: i64,
 ) -> Result<String, CommandError> {
-    let logs_dir = data_dir.join(SESSION_LOG_DIR_NAME);
-    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
+    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
+    let path = logs_dir.join(format!("pending-session-{started_at}.jsonl"));
+    Ok(path.to_string_lossy().to_string())
+}
 
+fn build_issue_runtime_structured_log_path(
+    data_dir: &Path,
+    project_id: i64,
+    issue_id: i64,
+    session_id: i64,
+) -> Result<String, CommandError> {
+    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
     let path = logs_dir.join(format!(
-        "structured-project-{project_id}-pid-{}-{started_at}.jsonl",
-        std::process::id()
+        "project-{project_id}-issue-{issue_id}-session-{session_id}.jsonl"
     ));
     Ok(path.to_string_lossy().to_string())
+}
+
+fn build_standalone_runtime_structured_log_path(
+    data_dir: &Path,
+    project_id: i64,
+    session_id: i64,
+) -> Result<String, CommandError> {
+    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
+    let path = logs_dir.join(format!(
+        "project-{project_id}-standalone-session-{session_id}.jsonl"
+    ));
+    Ok(path.to_string_lossy().to_string())
+}
+
+pub(crate) fn build_issue_archive_log_path(
+    data_dir: &Path,
+    project_id: i64,
+    issue_id: i64,
+    session_id: i64,
+) -> Result<String, CommandError> {
+    let logs_dir = archive_session_log_project_dir(data_dir, project_id)?;
+    let path = logs_dir.join(format!(
+        "归档-项目{project_id}-issue{issue_id}-session{session_id}.log"
+    ));
+    Ok(path.to_string_lossy().to_string())
+}
+
+pub(crate) fn is_archived_issue_log_path(data_dir: &Path, log_path: &str) -> bool {
+    let archive_root = session_log_root_dir(data_dir).join(SESSION_ARCHIVE_LOG_DIR_NAME);
+    Path::new(log_path).starts_with(&archive_root)
+}
+
+pub(crate) fn build_issue_session_archive(
+    data_dir: &Path,
+    project_id: i64,
+    issue_id: i64,
+    session_id: i64,
+    runtime_log_path: &str,
+) -> Result<IssueSessionArchive, CommandError> {
+    let history = read_timeline_from_log_path(runtime_log_path)?;
+    let items = history
+        .items
+        .into_iter()
+        .filter(should_archive_timeline_item)
+        .collect::<Vec<_>>();
+    let archive_path = build_issue_archive_log_path(data_dir, project_id, issue_id, session_id)?;
+    let payload = items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            serde_json::to_string(&AgentStreamEventEnvelope {
+                project_id,
+                session_id,
+                seq: (index + 1) as u64,
+                epoch: "archive".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: item.clone(),
+                    turn_id: None,
+                    seq: (index + 1) as u64,
+                    timestamp: 0,
+                },
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| agent_session_start_error(std::io::Error::other(error.to_string())))?
+        .join("\n");
+    let file_content = if payload.is_empty() {
+        String::new()
+    } else {
+        format!("{payload}\n")
+    };
+    fs::write(&archive_path, file_content).map_err(agent_session_start_error)?;
+
+    Ok(IssueSessionArchive {
+        archive_path,
+        runtime_path: runtime_log_path.to_string(),
+        latest_output: items
+            .iter()
+            .rev()
+            .find_map(latest_output_from_timeline_item),
+    })
+}
+
+fn remove_issue_archive_log(log_path: Option<&str>) {
+    let Some(log_path) = log_path else {
+        return;
+    };
+    let path = Path::new(log_path);
+    if !path.exists() {
+        return;
+    }
+    let _ = fs::remove_file(path);
+}
+
+fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
+    matches!(
+        item,
+        AgentTimelineItem::UserMessage { .. }
+            | AgentTimelineItem::AssistantMessage { .. }
+            | AgentTimelineItem::Error { .. }
+    )
 }
 
 fn read_timeline_from_session_log(
     session: &crate::types::agent_session::AgentSessionRecord,
 ) -> Result<StructuredTimelineHistory, CommandError> {
-    if session.log_path.trim().is_empty() {
+    read_timeline_from_log_path(&session.log_path)
+}
+
+fn command_error_to_sqlite(error: CommandError) -> rusqlite::Error {
+    rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(error.message)))
+}
+
+pub(crate) fn read_timeline_from_log_path(
+    log_path: &str,
+) -> Result<StructuredTimelineHistory, CommandError> {
+    if log_path.trim().is_empty() {
         return Ok(StructuredTimelineHistory::default());
     }
 
-    let path = Path::new(&session.log_path);
+    let path = Path::new(log_path);
     if let Some(history) = read_structured_timeline_log(path)? {
         return Ok(history);
     }
@@ -4598,12 +4810,13 @@ fn missing_session_workspace_error(
 #[cfg(test)]
 mod tests {
     use super::{
-        agent_command_with_default_args, build_structured_command_snapshot,
-        codex_mode_from_profile, codex_mode_from_structured_input,
-        command_supports_prompt_argument, detect_codex_session_id_from_home,
-        latest_output_from_session_log, normalize_submitted_prompt, preferred_session_cwd,
-        read_timeline_from_session_log, should_restore_redwhisk_worktree, AgentSessionService,
-        CodexMode,
+        agent_command_with_default_args, build_issue_archive_log_path,
+        build_issue_runtime_structured_log_path, build_issue_session_archive,
+        build_structured_command_snapshot, codex_mode_from_profile,
+        codex_mode_from_structured_input, command_supports_prompt_argument,
+        detect_codex_session_id_from_home, latest_output_from_session_log,
+        normalize_submitted_prompt, preferred_session_cwd, read_timeline_from_session_log,
+        should_restore_redwhisk_worktree, AgentSessionService, CodexMode,
     };
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
@@ -4839,6 +5052,136 @@ mod tests {
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("历史回答")
         );
+    }
+
+    #[test]
+    fn structured_issue_log_paths_use_project_issue_session_segments() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let runtime_path = build_issue_runtime_structured_log_path(temp_dir.path(), 3, 16, 48)
+            .expect("runtime path");
+        let archive_path =
+            build_issue_archive_log_path(temp_dir.path(), 3, 16, 48).expect("archive path");
+
+        assert!(runtime_path
+            .ends_with("session-logs/runtime/project-3/project-3-issue-16-session-48.jsonl"));
+        assert!(archive_path
+            .ends_with("session-logs/archive/project-3/归档-项目3-issue16-session48.log"));
+    }
+
+    #[test]
+    fn build_issue_session_archive_filters_out_tool_calls_and_reasoning() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let runtime_log_path = temp_dir.path().join("runtime.jsonl");
+        let events = [
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 1,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::UserMessage {
+                        text: "请总结".to_string(),
+                        message_id: Some("u1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 1,
+                    timestamp: 1,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 2,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning {
+                        text: "分析中".to_string(),
+                        duration_ms: Some(10),
+                    },
+                    turn_id: None,
+                    seq: 2,
+                    timestamp: 2,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 3,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall {
+                        call_id: "call-1".to_string(),
+                        name: "shell".to_string(),
+                        detail: ToolCallDetail::Unknown {
+                            raw_input: Some("ls".to_string()),
+                            raw_output: Some("file.txt".to_string()),
+                        },
+                        status: ToolCallStatus::Completed,
+                        error: None,
+                    },
+                    turn_id: None,
+                    seq: 3,
+                    timestamp: 3,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 4,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::AssistantMessage {
+                        text: "已完成归纳".to_string(),
+                        message_id: Some("a1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 4,
+                    timestamp: 4,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 5,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Error {
+                        message: "收尾失败".to_string(),
+                    },
+                    turn_id: None,
+                    seq: 5,
+                    timestamp: 5,
+                },
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&runtime_log_path, format!("{lines}\n")).expect("write runtime log");
+
+        let archive = build_issue_session_archive(
+            temp_dir.path(),
+            1,
+            16,
+            30,
+            runtime_log_path.to_string_lossy().as_ref(),
+        )
+        .expect("build archive");
+
+        assert_eq!(
+            archive.runtime_path,
+            runtime_log_path.to_string_lossy().to_string()
+        );
+        assert_eq!(archive.latest_output.as_deref(), Some("收尾失败"));
+
+        let archived_lines = fs::read_to_string(&archive.archive_path).expect("read archive log");
+        assert!(!archived_lines.contains("tool_call"));
+        assert!(!archived_lines.contains("reasoning"));
+        assert!(archived_lines.contains("user_message"));
+        assert!(archived_lines.contains("assistant_message"));
+        assert!(archived_lines.contains("error"));
     }
 
     #[test]

@@ -8,6 +8,9 @@ use serde_json::json;
 
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
+use crate::core::agent_session_service::{
+    build_issue_session_archive, is_archived_issue_log_path, IssueSessionArchive,
+};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::connection::DatabaseConfig;
@@ -1299,7 +1302,7 @@ impl<'connection> IssueService<'connection> {
             .ok_or_else(|| issue_not_found(issue.id))?
         };
 
-        if session.status != AgentSessionStatus::Closed {
+        let issue_archive = if session.status != AgentSessionStatus::Closed {
             if let Some(closed_session) = AgentSessionRepository::mark_terminated_in_transaction(
                 &transaction,
                 session.id,
@@ -1308,13 +1311,21 @@ impl<'connection> IssueService<'connection> {
             )
             .map_err(issue_database_error)?
             {
+                let issue_archive = self.archive_issue_session_in_transaction(
+                    &transaction,
+                    &completed_issue,
+                    &closed_session,
+                )?;
                 let session_event_payload = json!({
                     "sessionId": closed_session.id,
                     "issueId": closed_session.issue_id,
                     "status": "closed",
                     "reason": completion_session_close_reason(option),
                     "commitHash": commit_hash,
-                    "logPath": closed_session.log_path,
+                    "logPath": issue_archive
+                        .as_ref()
+                        .map(|archive| archive.archive_path.as_str())
+                        .unwrap_or(closed_session.log_path.as_str()),
                 })
                 .to_string();
                 EventRepository::insert_session_event_in_transaction(
@@ -1325,8 +1336,13 @@ impl<'connection> IssueService<'connection> {
                     completed_issue.updated_at,
                 )
                 .map_err(issue_database_error)?;
+                issue_archive
+            } else {
+                self.archive_issue_session_in_transaction(&transaction, &completed_issue, session)?
             }
-        }
+        } else {
+            self.archive_issue_session_in_transaction(&transaction, &completed_issue, session)?
+        };
 
         let issue_action_payload = json!({
             "fromStatus": issue_status_to_str(&issue.status),
@@ -1392,8 +1408,17 @@ impl<'connection> IssueService<'connection> {
 
         IssueCompletionFlowRepository::clear_in_transaction(&transaction, issue.id)
             .map_err(issue_database_error)?;
-        transaction.commit().map_err(issue_database_error)?;
+        if let Err(error) = transaction.commit() {
+            rollback_issue_archive(issue_archive.as_ref());
+            return Err(issue_database_error(error));
+        }
 
+        cleanup_runtime_issue_log(issue_archive.as_ref());
+        let completed_issue = self
+            .issue_repository
+            .find_by_id(completed_issue.id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| issue_not_found(completed_issue.id))?;
         self.hydrate_issue(completed_issue)
     }
 
@@ -2052,6 +2077,7 @@ impl<'connection> IssueService<'connection> {
             .connection()
             .unchecked_transaction()
             .map_err(issue_database_error)?;
+        let mut issue_archive = None;
 
         let updated_issue = match input.target_status {
             IssueStatus::Running => self.update_issue_status_with_audit_in_transaction(
@@ -2183,41 +2209,66 @@ impl<'connection> IssueService<'connection> {
                         )
                         .map_err(issue_database_error)?;
 
-                        self.complete_issue_from_review_in_transaction(
-                            &transaction,
-                            input.project_id,
-                            input.issue_id,
-                            linked_session_id,
-                        )?
+                        let (completed_issue, archive) = self
+                            .complete_issue_from_review_in_transaction(
+                                &transaction,
+                                input.project_id,
+                                input.issue_id,
+                                linked_session_id,
+                            )?;
+                        issue_archive = archive;
+                        completed_issue
                     }
-                    (IssueStatus::Review, Some(linked_session_id)) => self
-                        .complete_issue_from_review_in_transaction(
-                            &transaction,
-                            input.project_id,
-                            input.issue_id,
-                            linked_session_id,
-                        )?,
-                    (_, Some(linked_session_id)) => self
-                        .complete_issue_without_review_in_transaction(
-                            &transaction,
-                            input.project_id,
-                            input.issue_id,
-                            issue.status.clone(),
-                            Some(linked_session_id),
-                        )?,
-                    (_, None) => self.complete_issue_without_review_in_transaction(
-                        &transaction,
-                        input.project_id,
-                        input.issue_id,
-                        issue.status.clone(),
-                        None,
-                    )?,
+                    (IssueStatus::Review, Some(linked_session_id)) => {
+                        let (completed_issue, archive) = self
+                            .complete_issue_from_review_in_transaction(
+                                &transaction,
+                                input.project_id,
+                                input.issue_id,
+                                linked_session_id,
+                            )?;
+                        issue_archive = archive;
+                        completed_issue
+                    }
+                    (_, Some(linked_session_id)) => {
+                        let (completed_issue, archive) = self
+                            .complete_issue_without_review_in_transaction(
+                                &transaction,
+                                input.project_id,
+                                input.issue_id,
+                                issue.status.clone(),
+                                Some(linked_session_id),
+                            )?;
+                        issue_archive = archive;
+                        completed_issue
+                    }
+                    (_, None) => {
+                        let (completed_issue, archive) = self
+                            .complete_issue_without_review_in_transaction(
+                                &transaction,
+                                input.project_id,
+                                input.issue_id,
+                                issue.status.clone(),
+                                None,
+                            )?;
+                        issue_archive = archive;
+                        completed_issue
+                    }
                 }
             }
             IssueStatus::Backlog => issue,
         };
 
-        transaction.commit().map_err(issue_database_error)?;
+        if let Err(error) = transaction.commit() {
+            rollback_issue_archive(issue_archive.as_ref());
+            return Err(issue_database_error(error));
+        }
+        cleanup_runtime_issue_log(issue_archive.as_ref());
+        let updated_issue = self
+            .issue_repository
+            .find_by_id(updated_issue.id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| issue_not_found(updated_issue.id))?;
         self.hydrate_issue(updated_issue)
     }
 
@@ -2362,7 +2413,7 @@ impl<'connection> IssueService<'connection> {
         project_id: i64,
         issue_id: i64,
         linked_session_id: i64,
-    ) -> Result<IssueRecord, CommandError> {
+    ) -> Result<(IssueRecord, Option<IssueSessionArchive>), CommandError> {
         let completed_issue = IssueRepository::complete_review_issue_manually_in_transaction(
             transaction,
             project_id,
@@ -2388,6 +2439,11 @@ impl<'connection> IssueService<'connection> {
                 ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
             )
         })?;
+        let issue_archive = self.archive_issue_session_in_transaction(
+            transaction,
+            &completed_issue,
+            &closed_session,
+        )?;
 
         let issue_action_payload = json!({
             "fromStatus": "review",
@@ -2410,7 +2466,10 @@ impl<'connection> IssueService<'connection> {
             "issueId": closed_session.issue_id,
             "status": "closed",
             "reason": "status_menu_completion",
-            "logPath": closed_session.log_path,
+            "logPath": issue_archive
+                .as_ref()
+                .map(|archive| archive.archive_path.as_str())
+                .unwrap_or(closed_session.log_path.as_str()),
         })
         .to_string();
         EventRepository::insert_session_event_in_transaction(
@@ -2422,7 +2481,7 @@ impl<'connection> IssueService<'connection> {
         )
         .map_err(issue_database_error)?;
 
-        Ok(completed_issue)
+        Ok((completed_issue, issue_archive))
     }
 
     fn complete_issue_without_review_in_transaction(
@@ -2432,7 +2491,7 @@ impl<'connection> IssueService<'connection> {
         issue_id: i64,
         from_status: IssueStatus,
         linked_session_id: Option<i64>,
-    ) -> Result<IssueRecord, CommandError> {
+    ) -> Result<(IssueRecord, Option<IssueSessionArchive>), CommandError> {
         let completed_issue = IssueRepository::update_status_in_transaction(
             transaction,
             project_id,
@@ -2441,8 +2500,12 @@ impl<'connection> IssueService<'connection> {
         )
         .map_err(issue_database_error)?
         .ok_or_else(|| issue_not_found(issue_id))?;
+        let mut issue_archive = None;
 
         if let Some(linked_session_id) = linked_session_id {
+            let session_before_close =
+                AgentSessionRepository::find_by_id_in_transaction(transaction, linked_session_id)
+                    .map_err(issue_database_error)?;
             if let Some(closed_session) = AgentSessionRepository::mark_terminated_in_transaction(
                 transaction,
                 linked_session_id,
@@ -2451,12 +2514,20 @@ impl<'connection> IssueService<'connection> {
             )
             .map_err(issue_database_error)?
             {
+                issue_archive = self.archive_issue_session_in_transaction(
+                    transaction,
+                    &completed_issue,
+                    &closed_session,
+                )?;
                 let session_event_payload = json!({
                     "sessionId": closed_session.id,
                     "issueId": closed_session.issue_id,
                     "status": "closed",
                     "reason": "status_menu_completion",
-                    "logPath": closed_session.log_path,
+                    "logPath": issue_archive
+                        .as_ref()
+                        .map(|archive| archive.archive_path.as_str())
+                        .unwrap_or(closed_session.log_path.as_str()),
                 })
                 .to_string();
                 EventRepository::insert_session_event_in_transaction(
@@ -2467,6 +2538,12 @@ impl<'connection> IssueService<'connection> {
                     completed_issue.updated_at,
                 )
                 .map_err(issue_database_error)?;
+            } else if let Some(session_before_close) = session_before_close.as_ref() {
+                issue_archive = self.archive_issue_session_in_transaction(
+                    transaction,
+                    &completed_issue,
+                    session_before_close,
+                )?;
             }
         }
 
@@ -2486,7 +2563,71 @@ impl<'connection> IssueService<'connection> {
         )
         .map_err(issue_database_error)?;
 
-        Ok(completed_issue)
+        Ok((completed_issue, issue_archive))
+    }
+
+    fn archive_issue_session_in_transaction(
+        &self,
+        transaction: &rusqlite::Transaction<'_>,
+        issue: &IssueRecord,
+        session: &AgentSessionRecord,
+    ) -> Result<Option<IssueSessionArchive>, CommandError> {
+        if session.issue_id != Some(issue.id)
+            || session.log_path.trim().is_empty()
+            || is_archived_issue_log_path(&self.data_dir, &session.log_path)
+        {
+            return Ok(None);
+        }
+
+        let archive = build_issue_session_archive(
+            &self.data_dir,
+            issue.project_id,
+            issue.id,
+            session.id,
+            &session.log_path,
+        )?;
+        AgentSessionRepository::update_log_path_and_latest_output_in_transaction(
+            transaction,
+            session.id,
+            &archive.archive_path,
+            archive.latest_output.as_deref(),
+            issue.updated_at,
+        )
+        .map_err(issue_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::IssuePersistenceFailed,
+                "Issue 归档失败，关联会话不存在。",
+            )
+            .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+        })?;
+
+        Ok(Some(archive))
+    }
+}
+
+fn rollback_issue_archive(archive: Option<&IssueSessionArchive>) {
+    let Some(archive) = archive else {
+        return;
+    };
+    remove_issue_log_file(&archive.archive_path);
+}
+
+fn cleanup_runtime_issue_log(archive: Option<&IssueSessionArchive>) {
+    let Some(archive) = archive else {
+        return;
+    };
+    if archive.runtime_path != archive.archive_path {
+        remove_issue_log_file(&archive.runtime_path);
+    }
+}
+
+fn remove_issue_log_file(path: &str) {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {}
     }
 }
 
@@ -3405,9 +3546,14 @@ mod tests {
     use super::IssueService;
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::agent::session_registry::AgentSessionRegistry;
+    use crate::core::agent_session_service::build_issue_archive_log_path;
     use crate::db::issue_repository::IssueRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
+    use crate::types::agent_session_stream::{
+        AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
+        ToolCallStatus,
+    };
     use crate::types::issue::IssueStatus;
     use crate::types::issue_completion::{CompleteIssueFlowAction, CompleteIssueFlowInput};
     use rusqlite::{params, Connection};
@@ -3461,6 +3607,153 @@ mod tests {
             .expect("completion attempt");
         assert_eq!(option, "complete_manual");
         assert_eq!(completion_result, "completed");
+    }
+
+    #[test]
+    fn complete_issue_flow_archives_session_log_and_deletes_runtime_file() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let data_dir = temp_dir.path().join("data");
+        create_git_repo(&repo_dir);
+        fs::create_dir_all(&data_dir).expect("create data dir");
+
+        let connection = setup_issue_completion_database_on_disk(&data_dir, &repo_dir);
+        let runtime_log_path = data_dir
+            .join("session-logs")
+            .join("runtime")
+            .join("project-1")
+            .join("project-1-issue-16-session-30.jsonl");
+        fs::create_dir_all(
+            runtime_log_path
+                .parent()
+                .expect("runtime log should have parent"),
+        )
+        .expect("create runtime log dir");
+        let runtime_events = [
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 1,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::UserMessage {
+                        text: "请整理结果".to_string(),
+                        message_id: Some("u1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 1,
+                    timestamp: 1,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 2,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall {
+                        call_id: "call-1".to_string(),
+                        name: "shell".to_string(),
+                        detail: ToolCallDetail::Unknown {
+                            raw_input: Some("git status".to_string()),
+                            raw_output: Some("clean".to_string()),
+                        },
+                        status: ToolCallStatus::Completed,
+                        error: None,
+                    },
+                    turn_id: None,
+                    seq: 2,
+                    timestamp: 2,
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 30,
+                seq: 3,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::AssistantMessage {
+                        text: "归档后的回答".to_string(),
+                        message_id: Some("a1".to_string()),
+                    },
+                    turn_id: None,
+                    seq: 3,
+                    timestamp: 3,
+                },
+            },
+        ];
+        let lines = runtime_events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&runtime_log_path, format!("{lines}\n")).expect("write runtime log");
+        connection
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = 30",
+                params![runtime_log_path.to_string_lossy().to_string()],
+            )
+            .expect("update runtime log path");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                &data_dir,
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        assert_eq!(result.issue.status, IssueStatus::Completed);
+        assert!(!runtime_log_path.exists());
+
+        let archived_log_path: String = connection
+            .query_row(
+                "SELECT log_path FROM agent_sessions WHERE id = 30",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query archived log path");
+        let latest_output: Option<String> = connection
+            .query_row(
+                "SELECT latest_output FROM agent_sessions WHERE id = 30",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query latest output");
+        let expected_archive_path =
+            build_issue_archive_log_path(&data_dir, 1, 16, 30).expect("archive path");
+
+        assert_eq!(
+            fs::canonicalize(&archived_log_path).expect("canonical archived log path"),
+            fs::canonicalize(&expected_archive_path).expect("canonical expected archive path")
+        );
+        assert_eq!(
+            result.issue.linked_session_log_path.as_deref(),
+            Some(archived_log_path.as_str())
+        );
+        assert_eq!(latest_output.as_deref(), Some("归档后的回答"));
+        assert!(Path::new(&archived_log_path).exists());
+
+        let archived_content =
+            fs::read_to_string(&archived_log_path).expect("read archived session log");
+        assert!(!archived_content.contains("tool_call"));
+        assert!(archived_content.contains("user_message"));
+        assert!(archived_content.contains("assistant_message"));
     }
 
     #[test]
@@ -3539,6 +3832,58 @@ mod tests {
 
     fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
         let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1)",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'Issue 16', '', 'review', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   status, attention, working_dir, command_snapshot, prompt_snapshot,
+                   workspace_mode, target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, log_path,
+                   list_inserted_at, last_active_at, started_at, closed_at, del
+                 ) VALUES (
+                   30, 1, 16, NULL, 101, 'thread-16',
+                   'stopped', 'none', ?1, 'codex', '',
+                   'current_branch', NULL, NULL, NULL,
+                   NULL, 'external', ?2,
+                   1, 2, 1, 2, 0
+                 )",
+                params![
+                    repo_dir.to_string_lossy().to_string(),
+                    repo_dir.join("session.log").to_string_lossy().to_string(),
+                ],
+            )
+            .expect("insert session");
+
+        connection
+    }
+
+    fn setup_issue_completion_database_on_disk(data_dir: &Path, repo_dir: &Path) -> Connection {
+        let db_path = data_dir.join("redwhisk.db");
+        let connection = Connection::open(db_path).expect("open on-disk database");
         MigrationRunner::default()
             .run(&connection)
             .expect("run migrations");
@@ -3681,7 +4026,7 @@ mod tests {
         AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
         AgentSessionStatus, WorkspaceMode, WorktreeOwner,
     };
-    use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
+    use crate::types::agent_session_stream::{AgentMode, AgentModel};
     use std::sync::Arc;
 
     /// 测试用结构化 session 句柄：仅 `last_known_cwd` 可配置，其余方法空实现。
