@@ -242,6 +242,7 @@ export interface I18nMessages {
     title: string;
     titleField: string;
     titlePlaceholder: string;
+    titleRequired: string;
     viewSession: string;
     viewSummary: string;
     workflowSkill: string;
@@ -755,6 +756,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       title: "Issues",
       titleField: "Title",
       titlePlaceholder: "Issue title",
+      titleRequired: "Issue title is required.",
       viewSession: "View Session",
       viewSummary: "View Summary",
       workflowSkill: "Workflow skill",
@@ -1277,6 +1279,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       title: "Issues",
       titleField: "标题",
       titlePlaceholder: "Issue 标题",
+      titleRequired: "Issue 标题不能为空。",
       viewSession: "查看会话",
       viewSummary: "查看总结",
       workflowSkill: "工作流技能",

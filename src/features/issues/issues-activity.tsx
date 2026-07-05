@@ -1,6 +1,12 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 
 import {
   advanceIssueStatus,
@@ -203,6 +209,7 @@ export function IssuesActivity({
   const [dialogErrorMessage, setDialogErrorMessage] = useState<string | null>(
     null,
   );
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [completionProgress, setCompletionProgress] =
     useState<CompletionProgressState | null>(null);
   const [dirtyWorkspaceDialog, setDirtyWorkspaceDialog] =
@@ -275,6 +282,7 @@ export function IssuesActivity({
         cachedState?.previousSelectedIssueId ?? null;
       setIsSaving(false);
       setDialogErrorMessage(null);
+      setTitleError(null);
       setCompletionProgress(null);
 
       try {
@@ -480,6 +488,7 @@ export function IssuesActivity({
   function openCreateDialog(trigger: HTMLElement | null) {
     setErrorMessage(null);
     setDialogErrorMessage(null);
+    setTitleError(null);
     setIsReadOnlyEditRequested(false);
     previousSelectedIssueIdRef.current = selectedIssueId;
     dialogTriggerRef.current = trigger;
@@ -490,6 +499,7 @@ export function IssuesActivity({
   function openIssueDialog(issue: IssueRecord, trigger: HTMLElement | null) {
     setErrorMessage(null);
     setDialogErrorMessage(null);
+    setTitleError(null);
     setIsReadOnlyEditRequested(false);
     setSelectedIssueId(issue.id);
     dialogTriggerRef.current = trigger;
@@ -504,6 +514,7 @@ export function IssuesActivity({
 
     setErrorMessage(null);
     setDialogErrorMessage(null);
+    setTitleError(null);
     setIsReadOnlyEditRequested(true);
     setDialogMode("edit");
     setForm(issueToForm(selectedIssue));
@@ -515,6 +526,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setRunDialogIssue(null);
     setSummaryIssueId(null);
     setAttachmentPreview(null);
@@ -539,6 +551,16 @@ export function IssuesActivity({
     restoreDialogTriggerFocus(previousSelectedIssue);
   }
 
+  function handleFormChange(updater: SetStateAction<IssueFormState>) {
+    setForm((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (titleError && next.title.trim() && next.title !== prev.title) {
+        setTitleError(null);
+      }
+      return next;
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -547,6 +569,12 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
+    if (form.title.trim().length === 0) {
+      setTitleError(messages.issues.titleRequired);
+      titleInputRef.current?.focus();
+      return;
+    }
     setIsSaving(true);
     const requestProjectId = projectId;
 
@@ -597,6 +625,7 @@ export function IssuesActivity({
       if (activeProjectIdRef.current === requestProjectId) {
         if (error instanceof CompletionCancelledError) {
           setDialogErrorMessage(null);
+          setTitleError(null);
         } else {
           setDialogErrorMessage(toCommandError(error).message);
         }
@@ -675,6 +704,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setIsSaving(true);
     const requestProjectId = projectId;
 
@@ -708,6 +738,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setRunDialogIssue(null);
     setDialogMode(null);
     setIsReadOnlyEditRequested(false);
@@ -725,6 +756,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setSummaryIssueId(selectedIssue.id);
   }
 
@@ -743,6 +775,7 @@ export function IssuesActivity({
     setIsStartingSession(false);
     setRunDialogIssue(null);
     setDialogErrorMessage(null);
+    setTitleError(null);
     setDialogMode(null);
     setIsReadOnlyEditRequested(false);
     setForm(EMPTY_FORM);
@@ -965,6 +998,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setIsSaving(true);
     const requestProjectId = projectId;
 
@@ -1060,6 +1094,7 @@ export function IssuesActivity({
       if (activeProjectIdRef.current === requestProjectId) {
         if (error instanceof CompletionCancelledError) {
           setDialogErrorMessage(null);
+          setTitleError(null);
         } else if (error instanceof WorktreeMergeConflictError) {
           await handOffWorktreeMergeConflict(
             requestProjectId,
@@ -1271,6 +1306,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setDialogMode(null);
     setIsReadOnlyEditRequested(false);
     setForm(EMPTY_FORM);
@@ -1283,6 +1319,7 @@ export function IssuesActivity({
     }
 
     setDialogErrorMessage(null);
+    setTitleError(null);
     setIsSaving(true);
     const requestProjectId = projectId;
     const issueToDelete = selectedIssue;
@@ -1373,13 +1410,14 @@ export function IssuesActivity({
           selectedIssue={selectedIssue}
           isSaving={isSaving}
           errorMessage={dialogErrorMessage}
+          titleError={titleError}
           availableLabels={currentAvailableLabels}
           isLoadingLabels={isLoadingLabels}
           labelsErrorMessage={currentLabelsErrorMessage}
           titleInputRef={titleInputRef}
           onCancel={closeDialog}
           onSubmit={handleSubmit}
-          onFormChange={setForm}
+          onFormChange={handleFormChange}
           onSelectAttachment={handleSelectAttachment}
           onPreviewAttachment={(attachment) =>
             void handlePreviewAttachment(attachment)

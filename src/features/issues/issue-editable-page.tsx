@@ -29,6 +29,7 @@ interface IssueEditablePageProps {
   form: IssueFormState;
   isSaving: boolean;
   errorMessage: string | null;
+  titleError: string | null;
   availableLabels: IssueLabelRecord[];
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
@@ -57,6 +58,7 @@ export function IssueEditablePage({
   form,
   isSaving,
   errorMessage,
+  titleError,
   availableLabels,
   isLoadingLabels,
   labelsErrorMessage,
@@ -141,6 +143,7 @@ export function IssueEditablePage({
             <IssueEditableFields
               availableLabels={availableLabels}
               form={form}
+              titleError={titleError}
               isLoadingLabels={isLoadingLabels}
               labelsErrorMessage={labelsErrorMessage}
               titleInputRef={titleInputRef}
@@ -184,6 +187,7 @@ export function IssueEditablePage({
 function IssueEditableFields({
   availableLabels,
   form,
+  titleError,
   isLoadingLabels,
   labelsErrorMessage,
   titleInputRef,
@@ -196,6 +200,7 @@ function IssueEditableFields({
 }: {
   availableLabels: IssueLabelRecord[];
   form: IssueFormState;
+  titleError: string | null;
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
@@ -233,6 +238,11 @@ function IssueEditableFields({
             }))
           }
         />
+        {titleError ? (
+          <p className="issue-field__error" role="alert">
+            {titleError}
+          </p>
+        ) : null}
       </div>
       <div className="issue-field issue-field--grow issue-field--editor">
         <IssueDescriptionEditor
