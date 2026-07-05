@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,6 @@ import {
 } from "../agents/agent-session-commands";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
-import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
@@ -575,7 +575,17 @@ export function IssueRunDialog({
           role="status"
           aria-label={messages.issues.runStatus}
         >
-          {statusMessage}
+          {isStarting ? (
+            <span className="inline-flex items-center gap-1.5">
+              <LoaderCircle
+                aria-hidden="true"
+                className="size-3.5 animate-spin"
+              />
+              {messages.issues.sessionStarting}
+            </span>
+          ) : (
+            statusMessage
+          )}
         </p>
         <div className="issue-dialog__footer issue-dialog__footer--end">
           <Button
@@ -584,16 +594,12 @@ export function IssueRunDialog({
             disabled={isStartDisabled}
             onClick={() => void handleStart()}
           >
+            {isStarting ? (
+              <LoaderCircle aria-hidden="true" className="animate-spin" />
+            ) : null}
             {isStarting ? messages.issues.starting : messages.issues.start}
           </Button>
         </div>
-        {isStarting ? (
-          <LoadingDialog
-            dismissible={false}
-            message={messages.issues.sessionStarting}
-            open
-          />
-        ) : null}
       </div>
     </div>
   );

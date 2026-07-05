@@ -2092,7 +2092,7 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).toHaveBeenCalledTimes(2);
   });
 
-  it("shows a non-dismissible loading dialog while the session is starting", async () => {
+  it("shows an inline starting status while the session is starting and stays non-dismissible", async () => {
     const user = userEvent.setup();
     const pendingStart = createDeferred<StartAgentSessionResult>();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -2116,22 +2116,21 @@ describe("IssuesActivity", () => {
     await user.click(startButton);
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
 
-    const loadingDialog = screen.getByRole("dialog", {
-      name: "Starting agent session...",
-    });
-    expect(loadingDialog).toBeInTheDocument();
-    // Loading 弹窗以 Radix portal 渲染，会把背后的 run dialog 标记为 aria-hidden，
-    // 因此需要 hidden: true 才能查到 run dialog 内被禁用的关闭按钮。
+    // 启动期间在 run dialog 内联显示“正在创建 Agent 会话…”状态，不再叠加
+    // 独立 Loading 弹窗，避免与 run dialog 的焦点管理冲突。
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "Starting agent session...",
+    );
     expect(
-      within(dialog).getByRole("button", {
-        hidden: true,
-        name: "Close run dialog",
-      }),
+      within(dialog).getByRole("button", { name: "Close run dialog" }),
     ).toBeDisabled();
 
-    await user.keyboard("{Escape}");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "Starting agent session...",
+    );
     expect(
-      screen.getByRole("dialog", { name: "Starting agent session..." }),
+      screen.getByRole("dialog", { name: "Run Issue #20" }),
     ).toBeInTheDocument();
 
     pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
