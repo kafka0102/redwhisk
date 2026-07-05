@@ -31,5 +31,13 @@ tauri-plugin-dialog = "2"
 portable-pty = "0.9.0"
 tauri-plugin-notification = "2"
 
+# Release 体积优化：lto 全量链接、strip 去符号、单 codegen-unit 配合 opt-level="s"
+# 不引入 panic="abort"，避免破坏 Tauri 在 unwind 路径上的错误处理
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+opt-level = "s"
+
 [dev-dependencies]
 tempfile = "3.23.0"
