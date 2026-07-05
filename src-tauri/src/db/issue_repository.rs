@@ -1,4 +1,6 @@
-use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension, Transaction};
+use rusqlite::{
+    params, params_from_iter, types::Value, Connection, OptionalExtension, Transaction,
+};
 
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
 use crate::types::issue::{IssueRecord, IssueStatus, IssueStatusTotals};
@@ -99,9 +101,7 @@ impl<'connection> IssueRepository<'connection> {
             bindings.push(Value::Text(issue_status_to_str(&status).to_string()));
         }
 
-        sql.push_str(
-            " ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC",
-        );
+        sql.push_str(" ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC");
 
         // SQLite 要求 OFFSET 必须配合 LIMIT，因此仅在提供 limit 时附加分页子句。
         if let Some(limit) = limit {
@@ -152,10 +152,7 @@ impl<'connection> IssueRepository<'connection> {
 
     /// 按状态分组统计项目下未删除 Issue 数量，用于看板甬道总数。
     /// 未出现的状态保持为 0，保证四个甬道都有确定计数。
-    pub fn count_grouped_by_status(
-        &self,
-        project_id: i64,
-    ) -> rusqlite::Result<IssueStatusTotals> {
+    pub fn count_grouped_by_status(&self, project_id: i64) -> rusqlite::Result<IssueStatusTotals> {
         let mut statement = self.connection.prepare(
             "SELECT issues.status, COUNT(*) AS count
              FROM issues

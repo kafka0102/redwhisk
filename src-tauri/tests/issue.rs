@@ -3643,7 +3643,10 @@ fn list_issues_page_paginates_by_status_with_offset() {
     let first_ids: std::collections::HashSet<i64> =
         first.issues.iter().map(|issue| issue.id).collect();
     for issue in &second.issues {
-        assert!(!first_ids.contains(&issue.id), "duplicate issue across pages");
+        assert!(
+            !first_ids.contains(&issue.id),
+            "duplicate issue across pages"
+        );
     }
 }
 

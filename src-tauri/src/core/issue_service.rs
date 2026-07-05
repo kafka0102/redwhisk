@@ -1614,12 +1614,8 @@ impl<'connection> IssueService<'connection> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
-        IssueService::new(issue_repository, project_repository).list_issues_page(
-            project_id,
-            status,
-            limit,
-            offset,
-        )
+        IssueService::new(issue_repository, project_repository)
+            .list_issues_page(project_id, status, limit, offset)
     }
 
     pub fn list_issues_per_status_in_data_dir(

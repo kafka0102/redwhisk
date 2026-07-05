@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { toCommandError, type CommandError } from "../../shared/commands/command-error";
+import {
+  toCommandError,
+  type CommandError,
+} from "../../shared/commands/command-error";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
