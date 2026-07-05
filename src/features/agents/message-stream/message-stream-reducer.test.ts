@@ -508,6 +508,49 @@ describe("messageStreamReducer", () => {
       }
     });
 
+    it("空骨架 completed tool_call 仍会收尾已有 running 条目", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-edit",
+          name: "edit",
+          detail: {
+            type: "edit",
+            path: "src/app.ts",
+            diff: "-old\n+new",
+          },
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c-edit",
+          name: "edit",
+          detail: {
+            type: "edit",
+            path: "",
+          },
+          status: "completed",
+        }),
+      });
+
+      expect(state.entries).toHaveLength(1);
+      const item = state.entries[0].item;
+      expect(item.type).toBe("tool_call");
+      if (item.type === "tool_call") {
+        expect(item.status).toBe("completed");
+        expect(item.detail).toEqual({
+          type: "edit",
+          path: "src/app.ts",
+          diff: "-old\n+new",
+        });
+      }
+    });
+
     it("reasoning 携带 durationMs 时透传到 entry", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "EVENT",

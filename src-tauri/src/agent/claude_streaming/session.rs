@@ -14,7 +14,7 @@
 //! - 无审批应答通道（bypassPermissions 模式下权限自动放行）
 //! - timeline 无历史回放（`read_timeline` 返回空，依赖实时事件流）
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -84,6 +84,12 @@ struct SessionState {
     text_last_flush_at: HashMap<usize, Instant>,
     /// 流式文本上次 flush 长度：block_index → 已广播字节长度。
     text_flushed_len: HashMap<usize, usize>,
+    /// 当前 turn 已通过 delta/block-stop flush 过的 assistant 文本：
+    /// message_id → 完整文本。
+    ///
+    /// 用于避免完整 assistant 消息到达时把相同 message_id / 相同文本再写入一次，
+    /// 否则 structured log 会出现重复结论行。
+    flushed_text_messages: HashMap<String, String>,
     /// 流式 reasoning（thinking）增量累积：block_index → 累积文本。
     ///
     /// 与 Codex 的 reasoning_buffer 对齐：Claude 的 ThinkingDelta 原始片段
@@ -107,6 +113,8 @@ struct SessionState {
     /// 避免把已建立的 `Read { path }` / `Edit { path }` 降级成 `Unknown`，
     /// 进而丢失 path/command/diff 摘要与图标类型。
     tool_use_names: HashMap<String, String>,
+    /// 当前 turn 仍待收尾的 tool call id。
+    pending_tool_call_ids: HashSet<String>,
     /// 当前 turn 是否已发过 result（防止 EOF 时重复发 TurnFailed）。
     turn_finalized: bool,
     /// 最近已知 cwd（best-effort，来自 system/init）。
@@ -136,6 +144,7 @@ impl ClaudeSessionHandle {
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
+            flushed_text_messages: HashMap::new(),
             reasoning_buffer: HashMap::new(),
             reasoning_last_flush_at: HashMap::new(),
             reasoning_flushed_len: HashMap::new(),
@@ -143,6 +152,7 @@ impl ClaudeSessionHandle {
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
             tool_use_names: HashMap::new(),
+            pending_tool_call_ids: HashSet::new(),
             turn_finalized: true,
             last_known_cwd: None,
         }));
@@ -192,6 +202,7 @@ impl ClaudeSessionHandle {
             state.text_buffer.clear();
             state.text_last_flush_at.clear();
             state.text_flushed_len.clear();
+            state.flushed_text_messages.clear();
             state.message_index = 0;
             state.reasoning_buffer.clear();
             state.reasoning_last_flush_at.clear();
@@ -200,6 +211,7 @@ impl ClaudeSessionHandle {
             state.tool_input_buffer.clear();
             state.tool_index.clear();
             state.tool_use_names.clear();
+            state.pending_tool_call_ids.clear();
             state.turn_finalized = false;
             state.current_turn_id = Some(format!(
                 "turn-{}",
@@ -523,18 +535,43 @@ fn build_events(
             // 完整 assistant 消息：用 content 块组装 timeline。
             // 先 flush 残留的流式文本与 reasoning（stream-json 模式下完整 assistant
             // 消息与流式增量可能重复到达，先 flush 保证不丢失尾部内容）。
-            flush_all_text_deltas(state, turn_id)
-                .into_iter()
-                .for_each(|e| events.push(e));
-            flush_all_reasoning_deltas(state, turn_id)
-                .into_iter()
-                .for_each(|e| events.push(e));
+            let previously_flushed_texts = state
+                .lock()
+                .map(|guard| guard.flushed_text_messages.clone())
+                .unwrap_or_default();
+            let mut flushed_texts = HashMap::new();
+            for event in flush_all_text_deltas(state, turn_id) {
+                if let AgentStreamEvent::Timeline {
+                    item:
+                        AgentTimelineItem::AssistantMessage {
+                            text,
+                            message_id: Some(message_id),
+                        },
+                    ..
+                } = &event
+                {
+                    flushed_texts.insert(message_id.clone(), text.clone());
+                }
+                events.push(event);
+            }
+            let mut flushed_reasonings = HashSet::new();
+            for event in flush_all_reasoning_deltas(state, turn_id) {
+                if let AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::Reasoning { text, .. },
+                    ..
+                } = &event
+                {
+                    flushed_reasonings.insert(text.clone());
+                }
+                events.push(event);
+            }
             // 记录 tool_use_id → 原始工具名映射，供后续 tool_result 回填派生同类型 patch。
             // 从原始 blocks 提取（map_assistant_blocks 会把 name 归一化为展示名，丢失原名）。
             if let Ok(mut guard) = state.lock() {
                 for block in &message.blocks {
                     if let super::message::AssistantBlock::ToolUse { id, name, .. } = block {
                         guard.tool_use_names.insert(id.clone(), name.clone());
+                        guard.pending_tool_call_ids.insert(id.clone());
                     }
                 }
             }
@@ -552,19 +589,30 @@ fn build_events(
                 match block {
                     MappedBlock::AssistantText { text } => {
                         if !text.is_empty() {
+                            let message_id = format!("claude-text-{message_index}-{index}");
+                            if flushed_texts
+                                .get(&message_id)
+                                .is_some_and(|flushed| flushed == &text)
+                                || previously_flushed_texts
+                                    .get(&message_id)
+                                    .is_some_and(|flushed| flushed == &text)
+                            {
+                                continue;
+                            }
                             events.push(timeline_event(
                                 turn_id,
                                 AgentTimelineItem::AssistantMessage {
                                     text,
-                                    message_id: Some(format!(
-                                        "claude-text-{message_index}-{index}"
-                                    )),
+                                    message_id: Some(message_id),
                                 },
                             ));
                         }
                     }
                     MappedBlock::Reasoning { text } => {
                         if !text.is_empty() {
+                            if flushed_reasonings.contains(&text) {
+                                continue;
+                            }
                             events.push(timeline_event(
                                 turn_id,
                                 AgentTimelineItem::Reasoning {
@@ -613,6 +661,11 @@ fn build_events(
                 }
             };
             let updates = map_tool_results(&message.blocks, tool_name_resolver);
+            if let Ok(mut guard) = state.lock() {
+                for update in &updates {
+                    guard.pending_tool_call_ids.remove(&update.call_id);
+                }
+            }
             for update in updates {
                 events.push(timeline_event(
                     turn_id,
@@ -784,6 +837,7 @@ fn handle_stream_event(
                     let (detail, tool_name) = map_tool_use_from_input(&name, &input);
                     // 记录 tool_use_id → 原始工具名，供后续 tool_result 回填派生同类型 patch。
                     guard.tool_use_names.insert(id.clone(), name);
+                    guard.pending_tool_call_ids.insert(id.clone());
                     events.push(timeline_event(
                         turn_id,
                         AgentTimelineItem::ToolCall {
@@ -880,13 +934,17 @@ fn try_flush_text_delta(
     guard.text_flushed_len.insert(index, text.len());
     let turn_id = guard.current_turn_id.clone();
     let message_index = guard.message_index;
+    let message_id = format!("claude-text-{message_index}-{index}");
+    guard
+        .flushed_text_messages
+        .insert(message_id.clone(), text.clone());
     // 返回完整文本作为 AssistantMessage。message_id 派生为
     // `claude-text-{message_index}-{block_index}`，跨 message 唯一，
     // 避免多轮对话中 message 2 的 text 覆盖 message 1 的 text。
     Some(AgentStreamEvent::Timeline {
         item: AgentTimelineItem::AssistantMessage {
             text,
-            message_id: Some(format!("claude-text-{message_index}-{index}")),
+            message_id: Some(message_id),
         },
         turn_id,
         seq: 0,
@@ -1014,12 +1072,19 @@ fn finalize_pending_tool_calls(
 ) -> Vec<AgentStreamEvent> {
     let entries = state
         .lock()
-        .map(|guard| {
-            guard
-                .tool_use_names
+        .map(|mut guard| {
+            let entries = guard
+                .pending_tool_call_ids
                 .iter()
-                .map(|(call_id, tool_name)| (call_id.clone(), tool_name.clone()))
-                .collect::<Vec<_>>()
+                .filter_map(|call_id| {
+                    guard
+                        .tool_use_names
+                        .get(call_id)
+                        .map(|tool_name| (call_id.clone(), tool_name.clone()))
+                })
+                .collect::<Vec<_>>();
+            guard.pending_tool_call_ids.clear();
+            entries
         })
         .unwrap_or_default();
     let status = if is_error {
@@ -1584,6 +1649,162 @@ mod tests {
     }
 
     #[test]
+    fn assistant_full_message_does_not_duplicate_text_already_flushed_by_delta() {
+        // 回归（问题一）：issue 57 的真实日志里，结论重复发生在最后一个 text delta
+        // 已经 flush 出完整文本后，完整 assistant 消息又以相同 message_id / 相同文本
+        // 再写一次。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::MessageStart { usage: None }),
+        );
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::ContentBlockStart {
+                index: 0,
+                block: ContentBlock::Text {
+                    text: String::new(),
+                },
+            }),
+        );
+        let delta_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: ContentDelta::TextDelta {
+                    text: "重复结论".into(),
+                },
+            }),
+        );
+
+        let assistant_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::Text {
+                        text: "重复结论".into(),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        let assistant_texts = delta_events
+            .iter()
+            .chain(assistant_events.iter())
+            .filter_map(|event| match event {
+                AgentStreamEvent::Timeline {
+                    item:
+                        AgentTimelineItem::AssistantMessage {
+                            text,
+                            message_id: Some(message_id),
+                        },
+                    ..
+                } => Some((message_id.clone(), text.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            assistant_texts,
+            vec![("claude-text-1-0".into(), "重复结论".into())],
+            "同一 text block 在 delta 已 flush 完整文本后不应再被完整 assistant 消息重复写入"
+        );
+    }
+
+    #[test]
+    fn result_only_finalizes_pending_tool_calls() {
+        // 回归：Result 兜底收尾只应覆盖仍未收到 tool_result 的调用；
+        // 已正常 completed 的 call 不应在 turn 结束时再次写入空骨架 completed。
+        use super::super::message::{AssistantBlock, AssistantMessage, UserBlock, UserMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![
+                        AssistantBlock::ToolUse {
+                            id: "toolu_done".into(),
+                            name: "Edit".into(),
+                            input: json!({ "file_path": "src/a.rs", "old_string": "x", "new_string": "y" }),
+                        },
+                        AssistantBlock::ToolUse {
+                            id: "toolu_pending".into(),
+                            name: "Read".into(),
+                            input: json!({ "file_path": "src/b.rs" }),
+                        },
+                    ],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::User {
+                message: UserMessage {
+                    blocks: vec![UserBlock::ToolResult {
+                        tool_use_id: "toolu_done".into(),
+                        content: "文件已被成功修改".into(),
+                        is_error: false,
+                    }],
+                },
+                session_id: None,
+            },
+        );
+
+        let result_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Result {
+                subtype: "success".into(),
+                is_error: false,
+                result_text: None,
+                session_id: Some("abc".into()),
+                usage: None,
+                errors: vec![],
+                stop_reason: Some("end_turn".into()),
+            },
+        );
+
+        let finalized_call_ids = result_events
+            .iter()
+            .filter_map(|event| match event {
+                AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::ToolCall { call_id, .. },
+                    ..
+                } => Some(call_id.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            finalized_call_ids,
+            vec![String::from("toolu_pending")],
+            "Result 只应为仍 pending 的 tool call 补发终态事件"
+        );
+    }
+
+    #[test]
     fn user_message_timeline_item_uses_stable_turn_scoped_message_id() {
         let item = user_message_timeline_item(&Some("t1".into()), "hello".into());
         assert!(matches!(
@@ -1833,6 +2054,7 @@ mod tests {
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
+            flushed_text_messages: HashMap::new(),
             reasoning_buffer: HashMap::new(),
             reasoning_last_flush_at: HashMap::new(),
             reasoning_flushed_len: HashMap::new(),
@@ -1840,6 +2062,7 @@ mod tests {
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
             tool_use_names: HashMap::new(),
+            pending_tool_call_ids: HashSet::new(),
             turn_finalized: false,
             last_known_cwd: None,
         }))
@@ -1897,6 +2120,7 @@ mod tests {
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
             text_flushed_len: HashMap::new(),
+            flushed_text_messages: HashMap::new(),
             reasoning_buffer: HashMap::new(),
             reasoning_last_flush_at: HashMap::new(),
             reasoning_flushed_len: HashMap::new(),
@@ -1904,6 +2128,7 @@ mod tests {
             tool_input_buffer: HashMap::new(),
             tool_index: HashMap::new(),
             tool_use_names: HashMap::new(),
+            pending_tool_call_ids: HashSet::new(),
             turn_finalized: false,
             last_known_cwd: None,
         }));

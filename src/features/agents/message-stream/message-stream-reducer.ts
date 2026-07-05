@@ -366,6 +366,15 @@ function shouldSkipTimelineItem(
   item: AgentTimelineItem,
   entries: MessageStreamEntry[],
 ): boolean {
+  if (
+    item.type === "tool_call" &&
+    item.status !== "running" &&
+    entries.some(
+      (entry) => entry.kind === "tool_call" && entry.id === item.callId,
+    )
+  ) {
+    return false;
+  }
   if (isEmptyTimelineItem(item)) {
     return true;
   }
