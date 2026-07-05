@@ -1,7 +1,7 @@
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension, Transaction};
 
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
-use crate::types::issue::{IssueRecord, IssueStatus};
+use crate::types::issue::{IssueRecord, IssueStatus, IssueStatusTotals};
 
 const ISSUE_SELECT_COLUMNS: &str = "SELECT
     issues.id,
@@ -148,6 +148,36 @@ impl<'connection> IssueRepository<'connection> {
             all.extend(page);
         }
         Ok(all)
+    }
+
+    /// 按状态分组统计项目下未删除 Issue 数量，用于看板甬道总数。
+    /// 未出现的状态保持为 0，保证四个甬道都有确定计数。
+    pub fn count_grouped_by_status(
+        &self,
+        project_id: i64,
+    ) -> rusqlite::Result<IssueStatusTotals> {
+        let mut statement = self.connection.prepare(
+            "SELECT issues.status, COUNT(*) AS count
+             FROM issues
+             WHERE issues.project_id = ?1 AND issues.del = 0
+             GROUP BY issues.status",
+        )?;
+        let counts = statement.query_map(params![project_id], |row| {
+            let status: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            Ok((status, count))
+        })?;
+        let mut totals = IssueStatusTotals::default();
+        for result in counts {
+            let (status, count) = result?;
+            match issue_status_from_str(&status)? {
+                IssueStatus::Backlog => totals.backlog = count,
+                IssueStatus::Running => totals.running = count,
+                IssueStatus::Review => totals.review = count,
+                IssueStatus::Completed => totals.completed = count,
+            }
+        }
+        Ok(totals)
     }
 
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<IssueRecord>> {

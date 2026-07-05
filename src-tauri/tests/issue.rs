@@ -24,8 +24,8 @@ use redwhisk_lib::types::issue::{
     AdvanceIssueStatusInput, CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput,
     DeleteIssueInput, DetectAgentCommitCompletionInput, ExportIssueAttachmentInput,
     GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind, IssueRecord, IssueStatus,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
-    SaveIssueAttachmentDraftInput, UpdateIssueInput,
+    IssueStatusTotals, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, UpdateIssueInput,
 };
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::issue_completion::{
@@ -3548,6 +3548,16 @@ fn list_issues_per_status_caps_each_status_at_limit() {
         .issues
         .iter()
         .all(|issue| issue.status == IssueStatus::Backlog));
+    // 甬道总数反映各状态的真实总量，不受每页上限影响。
+    assert_eq!(
+        response.status_totals,
+        Some(IssueStatusTotals {
+            backlog: 25,
+            running: 0,
+            review: 0,
+            completed: 0,
+        }),
+    );
     // 返回的是最新的 20 条（index 5..24），最旧的 5 条被截断。
     let returned_ids: Vec<i64> = response.issues.iter().map(|issue| issue.id).collect();
     for issue in &created[5..25] {
@@ -3565,11 +3575,20 @@ fn list_issues_per_status_caps_each_status_at_limit() {
         );
     }
 
-    // 调小上限：只返回 5 条。
+    // 调小上限：只返回 5 条；总数仍为 25，不随每页上限变化。
     let small = service
         .list_issues_per_status(project_id, 5)
         .expect("per-status small limit");
     assert_eq!(small.issues.len(), 5);
+    assert_eq!(
+        small.status_totals,
+        Some(IssueStatusTotals {
+            backlog: 25,
+            running: 0,
+            review: 0,
+            completed: 0,
+        }),
+    );
 }
 
 #[test]

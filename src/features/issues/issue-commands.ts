@@ -61,8 +61,17 @@ export interface IssueRecord {
   updatedAt: number;
 }
 
+export interface IssueStatusTotals {
+  backlog: number;
+  running: number;
+  review: number;
+  completed: number;
+}
+
 export interface IssueListResponse {
   issues: IssueRecord[];
+  /** 看板首屏各状态 Issue 总数；仅 perStatusLimit 路径返回。 */
+  statusTotals?: IssueStatusTotals;
 }
 
 export interface ListIssuesInput {

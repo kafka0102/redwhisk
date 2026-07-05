@@ -10,6 +10,8 @@ interface IssueLane {
   status: IssueStatus;
   label: string;
   issues: IssueRecord[];
+  /** 该甬道（状态）下的 Issue 总数，由后端按状态分组统计返回。 */
+  total: number;
 }
 
 /** 看板只关心每个甬道是否还有更多、是否正在加载更多。 */
@@ -85,7 +87,7 @@ export function IssuesKanban({
               <div className="issue-lane__title-row">
                 <span className="issue-lane__status-dot" aria-hidden="true" />
                 <h3>{lane.label}</h3>
-                <span className="issue-lane__count">{lane.issues.length}</span>
+                <span className="issue-lane__count">{lane.total}</span>
                 {lane.status === "backlog" ? (
                   <button
                     ref={createButtonRef}
