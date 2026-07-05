@@ -15,6 +15,7 @@
 - [TypeScript 工程规范](./standards/engineering-spec.md)
 - [编码风格](./standards/coding-style.md)
 - [Git 工作流规范](./standards/git-workflow.md)
+- [发布与打包规范](./standards/release-workflow.md)
 
 ## 架构与项目规范类
 
