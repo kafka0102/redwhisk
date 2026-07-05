@@ -151,7 +151,6 @@ export function IssueReadOnlyPage({
           confirmLabel={messages.issues.deleteReadonly}
           confirmVariant="destructive"
           message={messages.issues.deleteConfirmMessage}
-          title={messages.issues.deleteConfirmTitleReadonly}
           onCancel={() => setIsDeleteDialogOpen(false)}
           onConfirm={() => {
             setIsDeleteDialogOpen(false);

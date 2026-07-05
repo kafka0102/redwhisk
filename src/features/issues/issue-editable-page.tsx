@@ -9,14 +9,8 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent as UiDialogContent,
-  DialogDescription as UiDialogDescription,
-  DialogFooter as UiDialogFooter,
-  DialogHeader as UiDialogHeader,
-  DialogTitle as UiDialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmContent } from "@/components/ui/confirm-dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -171,38 +165,17 @@ export function IssueEditablePage({
         open={isDeleteDialogOpen}
         onOpenChange={(nextOpen) => setIsDeleteDialogOpen(nextOpen)}
       >
-        <UiDialogContent
-          className="issue-delete-dialog"
-          showCloseButton={false}
-        >
-          <UiDialogHeader>
-            <UiDialogTitle>{messages.issues.deleteConfirmTitle}</UiDialogTitle>
-            <UiDialogDescription>
-              {messages.issues.deleteConfirmMessage}
-            </UiDialogDescription>
-          </UiDialogHeader>
-          <UiDialogFooter className="issue-delete-dialog__footer">
-            <Button
-              disabled={isSaving}
-              type="button"
-              variant="secondary"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              {messages.issues.backEditable}
-            </Button>
-            <Button
-              disabled={isSaving}
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                setIsDeleteDialogOpen(false);
-                onDeleteIssue();
-              }}
-            >
-              {messages.issues.deleteEditable}
-            </Button>
-          </UiDialogFooter>
-        </UiDialogContent>
+        <ConfirmContent
+          cancelLabel={messages.issues.backEditable}
+          confirmLabel={messages.issues.deleteEditable}
+          confirmVariant="destructive"
+          message={messages.issues.deleteConfirmMessage}
+          onCancel={() => setIsDeleteDialogOpen(false)}
+          onConfirm={() => {
+            setIsDeleteDialogOpen(false);
+            onDeleteIssue();
+          }}
+        />
       </Dialog>
     </>
   );

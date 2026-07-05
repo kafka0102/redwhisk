@@ -23,10 +23,10 @@ import {
   Button,
   Card,
   CardContent,
+  ConfirmContent,
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DropdownMenu,
@@ -276,11 +276,16 @@ function PrototypeSurface({ mode }: { mode: PrototypeMode }) {
           }
         }}
       />
-      <DeleteIssueDialog
-        isOpen={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        mode={mode}
-      />
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <ConfirmContent
+          cancelLabel={messages.designSystem.cancel}
+          confirmLabel={messages.designSystem.delete}
+          confirmVariant="destructive"
+          message={messages.issues.deleteConfirmMessage}
+          onCancel={() => setIsDeleteDialogOpen(false)}
+          onConfirm={() => setIsDeleteDialogOpen(false)}
+        />
+      </Dialog>
     </div>
   );
 }
@@ -710,44 +715,6 @@ function AttachmentPreviewDialog({
         <div className="grid min-h-32 place-items-center rounded-[3px] border border-[var(--color-border)] bg-[var(--color-surface-panel)] text-[13px] text-[var(--color-text-muted)]">
           <Paperclip size={18} strokeWidth={1.9} />
         </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DeleteIssueDialog({
-  isOpen,
-  mode,
-  onOpenChange,
-}: {
-  isOpen: boolean;
-  mode: PrototypeMode;
-  onOpenChange: (isOpen: boolean) => void;
-}) {
-  const { messages } = useI18n();
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-md rounded-[var(--radius-dialog)]"
-        showCloseButton={false}
-      >
-        <DialogHeader>
-          <DialogTitle>确认删除 issue</DialogTitle>
-          <DialogDescription>
-            {mode === "readonly"
-              ? "此操作会删除当前只读 issue。"
-              : "此操作会删除正在编辑的 issue。"}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="rounded-b-[var(--radius-dialog)]">
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            {messages.designSystem.cancel}
-          </Button>
-          <Button variant="destructive" onClick={() => onOpenChange(false)}>
-            <Trash2 />
-            {messages.designSystem.delete}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

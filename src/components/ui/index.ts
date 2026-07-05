@@ -9,7 +9,9 @@ export {
 export { LoadingDialog, type LoadingDialogProps } from "./loading-dialog";
 export { useAlertDialog } from "./use-alert-dialog";
 export {
+  ConfirmContent,
   ConfirmDialog,
+  type ConfirmContentProps,
   type ConfirmDialogOptions,
   type ConfirmDialogProps,
 } from "./confirm-dialog";
