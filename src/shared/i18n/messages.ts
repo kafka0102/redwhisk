@@ -1033,7 +1033,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
   zh: {
     app: {
       activityBarLabel: "活动栏",
-      agents: "Agents",
+      agents: "智能体",
       designSystem: "设计系统",
       globalSettings: "全局设置",
       issues: "Issues",
@@ -1096,7 +1096,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     settings: {
       actions: "操作",
-      agents: "Agents",
+      agents: "智能体",
       cancel: "取消",
       close: "关闭",
       closeMessage: "关闭消息",
@@ -1106,7 +1106,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       commandAvailable: (commandName) => `命令可用：${commandName}`,
       commandTesting: "测试中...",
       commandTest: "测试",
-      configuredAgents: "已配置 Agents",
+      configuredAgents: "已配置智能体",
       delete: "删除",
       deleteConfirm: (profileName) =>
         `确认删除 Agent 配置「${profileName}」吗？`,
@@ -1129,7 +1129,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newAgent: "新建 Agent",
       newLabel: "新建标签",
       newTerminal: "新建终端",
-      noAgents: "暂无 Agents",
+      noAgents: "暂无智能体",
       noLabels: "暂无标签",
       noTerminals: "暂无终端。",
       none: "无",
@@ -1328,7 +1328,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     agentsFeature: {
       agentSessions: "Agent 会话",
-      agentsStatus: "Agents 状态",
+      agentsStatus: "智能体状态",
       closeCompletionConfirmation: "关闭完成确认",
       closeCompletionLoading: "关闭提交进度",
       closeIssueDetails: "关闭 Issue 详情",

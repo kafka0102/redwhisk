@@ -439,7 +439,7 @@ describe("App project entry", () => {
 
     expect(openProjectMock).toHaveBeenCalledWith({ projectId: 1 });
     expect(await screen.findByText("agents activity 77")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "智能体" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -518,7 +518,7 @@ describe("App project entry", () => {
       await screen.findByRole("navigation", { name: "活动栏" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Issues" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "智能体" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "终端" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "项目设置" }),
@@ -560,7 +560,7 @@ describe("App project entry", () => {
 
     expect(
       activityButtons.map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["Issues", "Agents", "终端", "项目设置", "设计系统", "全局设置"]);
+    ).toEqual(["Issues", "智能体", "终端", "项目设置", "设计系统", "全局设置"]);
     expect(
       within(activityBar).getByRole("button", { name: "Issues" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -598,7 +598,7 @@ describe("App project entry", () => {
     expect(
       await screen.findByRole("button", { name: "Issues" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(screen.getByRole("button", { name: "智能体" }));
     await user.click(screen.getByRole("button", { name: "全局设置" }));
 
     expect(
