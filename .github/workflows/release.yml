@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -94,6 +94,31 @@ jobs:
       - name: 构建 Universal Mac 包（.app + .dmg）
         run: pnpm tauri build --target universal-apple-darwin
 
+      - name: 打包 .app 为 Release 资源
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path=""
+          shopt -s nullglob
+          for candidate in src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app; do
+            if [[ -d "${candidate}" ]]; then
+              app_path="${candidate}"
+              break
+            fi
+          done
+          shopt -u nullglob
+
+          if [[ -z "${app_path}" ]]; then
+            echo "未找到 .app 产物" >&2
+            exit 1
+          fi
+
+          version="${GITHUB_REF_NAME#v}"
+          app_zip="src-tauri/target/universal-apple-darwin/release/bundle/macos/RedWhisk_${version}_universal.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent "${app_path}" "${app_zip}"
+          ls -lh "${app_zip}"
+
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
@@ -101,11 +126,13 @@ jobs:
           path: |
             src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip
 
-      - name: 创建 Draft Release 并附带 .dmg
+      - name: 创建 Draft Release 并附带 .dmg 与 .app.zip
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           generate_release_notes: true
           files: |
             src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip
