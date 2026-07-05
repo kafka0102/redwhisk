@@ -554,6 +554,13 @@ fn build_events(
                 }
                 events.push(event);
             }
+            let message_index = state.lock().map(|guard| guard.message_index).unwrap_or(0);
+            let message_prefix = format!("claude-text-{message_index}-");
+            let mut flushed_texts_for_message = previously_flushed_texts
+                .into_iter()
+                .chain(flushed_texts)
+                .filter(|(message_id, _)| message_id.starts_with(&message_prefix))
+                .collect::<HashMap<_, _>>();
             let mut flushed_reasonings = HashSet::new();
             for event in flush_all_reasoning_deltas(state, turn_id) {
                 if let AgentStreamEvent::Timeline {
@@ -583,20 +590,25 @@ fn build_events(
             // 避免同一段结论文本被当作两条独立消息重复展示，以及由此导致的顺序错乱。
             // message_index 在 MessageStart 流事件到达时递增；若该流事件未到达，
             // 当前值为 0，与流式 flush 共用同一序号也能正确归并。
-            let message_index = state.lock().map(|guard| guard.message_index).unwrap_or(0);
             let mapped = map_assistant_blocks(&message.blocks);
             for (index, block) in mapped.into_iter().enumerate() {
                 match block {
                     MappedBlock::AssistantText { text } => {
                         if !text.is_empty() {
                             let message_id = format!("claude-text-{message_index}-{index}");
-                            if flushed_texts
+                            if flushed_texts_for_message
                                 .get(&message_id)
                                 .is_some_and(|flushed| flushed == &text)
-                                || previously_flushed_texts
-                                    .get(&message_id)
-                                    .is_some_and(|flushed| flushed == &text)
                             {
+                                flushed_texts_for_message.remove(&message_id);
+                                continue;
+                            }
+                            if let Some((matched_id, _)) = flushed_texts_for_message
+                                .iter()
+                                .find(|(_, flushed)| *flushed == &text)
+                                .map(|(matched_id, flushed)| (matched_id.clone(), flushed.clone()))
+                            {
+                                flushed_texts_for_message.remove(&matched_id);
                                 continue;
                             }
                             events.push(timeline_event(
@@ -1721,6 +1733,81 @@ mod tests {
             assistant_texts,
             vec![("claude-text-1-0".into(), "重复结论".into())],
             "同一 text block 在 delta 已 flush 完整文本后不应再被完整 assistant 消息重复写入"
+        );
+    }
+
+    #[test]
+    fn assistant_full_message_does_not_duplicate_text_when_stream_and_full_block_indexes_differ() {
+        // 回归（issue 59）：stream_event 的 text 来自 block index=1，
+        // 但完整 assistant message 因未携带前置 thinking block，只剩一个 text block，
+        // 最终落成不同 message_id（claude-text-1-1 / claude-text-1-0）却是同一结论。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::MessageStart { usage: None }),
+        );
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::ContentBlockStart {
+                index: 1,
+                block: ContentBlock::Text {
+                    text: String::new(),
+                },
+            }),
+        );
+        let delta_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::ContentBlockDelta {
+                index: 1,
+                delta: ContentDelta::TextDelta {
+                    text: "索引错位的重复结论".into(),
+                },
+            }),
+        );
+        let assistant_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::Text {
+                        text: "索引错位的重复结论".into(),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        let assistant_texts = delta_events
+            .iter()
+            .chain(assistant_events.iter())
+            .filter_map(|event| match event {
+                AgentStreamEvent::Timeline {
+                    item:
+                        AgentTimelineItem::AssistantMessage {
+                            text,
+                            message_id: Some(message_id),
+                        },
+                    ..
+                } => Some((message_id.clone(), text.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            assistant_texts,
+            vec![("claude-text-1-1".into(), "索引错位的重复结论".into())],
+            "stream block index 与完整 assistant block index 不一致时也不应重复写入"
         );
     }
 
