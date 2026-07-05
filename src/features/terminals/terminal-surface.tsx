@@ -129,6 +129,14 @@ export function TerminalSurface({
     latestSequenceRef.current = 0;
 
     const syncSize = () => {
+      // 宿主被 hidden（切到其他 workspace tab 时 pane 变为 display:none，
+      // ResizeObserver 仍会以 0×0 尺寸回调）时跳过重算：否则 FitAddon 会用残留
+      // cell 尺寸 + 0 容器算出退化值（cols=2/rows=1），既触发 xterm 重排，又把
+      // PTY 缩成 1×2 引发 SIGWINCH 让 shell 重绘，逐次覆盖掉最后一行输出。
+      if (host.offsetWidth === 0 || host.offsetHeight === 0) {
+        return;
+      }
+
       try {
         fitAddon.fit();
       } catch (error) {
