@@ -848,24 +848,24 @@ mod tests {
     }
 
     #[test]
-    fn save_project_label_rejects_workflow_skill_without_agent() {
+    fn save_project_label_allows_workflow_skill_without_agent() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let database = test_database(temp_dir.path());
         let service = test_settings_service(&database.connection);
         let project_id = insert_project(&database.connection, "repo-a");
 
-        let error = service
+        let saved = service
             .save_project_label(SaveProjectLabelInput {
                 id: None,
                 name: "ops".to_string(),
                 scope: ProjectLabelScope::Project,
                 project_id: Some(project_id),
                 color: "#112233".to_string(),
-                workflow_skill: Some("skill-a".to_string()),
+                workflow_skill: Some(" skill-a ".to_string()),
             })
-            .expect_err("workflow skill without agent should fail");
+            .expect("workflow skill without agent should save");
 
-        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+        assert_eq!(saved.workflow_skill.as_deref(), Some("skill-a"));
     }
 
     #[test]
