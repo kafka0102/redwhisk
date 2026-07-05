@@ -66,6 +66,23 @@ impl<'connection> AgentSessionRepository<'connection> {
             .optional()
     }
 
+    pub fn find_latest_session_by_issue_id(
+        &self,
+        issue_id: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, project_id, issue_id, title, agent_profile_id, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at
+                 FROM agent_sessions
+                 WHERE issue_id = ?1
+                 ORDER BY id DESC
+                 LIMIT 1",
+                params![issue_id],
+                agent_session_from_row,
+            )
+            .optional()
+    }
+
     /// 查找 issue 最近一次 worktree 模式 session，忽略软删标记。
     ///
     /// 退回 Backlog 后旧 session 被软删（`del = 1`），但其 `workspace_path` /
@@ -518,6 +535,48 @@ impl<'connection> AgentSessionRepository<'connection> {
         }
 
         self.find_by_id(session_id)
+    }
+
+    pub fn update_log_path_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        log_path: &str,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = transaction.execute(
+            "UPDATE agent_sessions
+             SET log_path = ?1
+             WHERE id = ?2 AND del = 0",
+            params![log_path, session_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, session_id)
+    }
+
+    pub fn update_log_path_and_latest_output_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        log_path: &str,
+        latest_output: Option<&str>,
+        updated_at: i64,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        let changed = transaction.execute(
+            "UPDATE agent_sessions
+             SET log_path = ?1,
+                 latest_output = ?2,
+                 last_active_at = MAX(last_active_at + 1, ?3)
+             WHERE id = ?4 AND del = 0",
+            params![log_path, latest_output, updated_at, session_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, session_id)
     }
 
     pub fn update_latest_output(
