@@ -1817,8 +1817,14 @@ describe("IssuesActivity", () => {
       targetBranch: "main",
       worktreeSetupCommand: "pnpm install",
     });
+    // 失败后 Run Dialog 重新显示并展示错误文案。
+    const restoredDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #20",
+    });
     expect(
-      within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
+      within(restoredDialog).getByText(
+        "Agent Session 启动将在 Story 2.3 接入。",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -2084,15 +2090,24 @@ describe("IssuesActivity", () => {
 
     await user.click(startButton);
 
-    expect(within(dialog).getByText("Agent 启动失败。")).toBeInTheDocument();
-    await waitFor(() => expect(startButton).toBeEnabled());
+    // 失败后 Run Dialog 重新显示（保留表单状态供重试），LoadingDialog 关闭。
+    const restoredDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #20",
+    });
+    expect(
+      within(restoredDialog).getByText("Agent 启动失败。"),
+    ).toBeInTheDocument();
+    const restoredStartButton = within(restoredDialog).getByRole("button", {
+      name: "Start",
+    });
+    await waitFor(() => expect(restoredStartButton).toBeEnabled());
 
-    await user.click(startButton);
+    await user.click(restoredStartButton);
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(2);
   });
 
-  it("shows an inline starting status while the session is starting and stays non-dismissible", async () => {
+  it("shows a blocking loading dialog while starting and hides the run dialog", async () => {
     const user = userEvent.setup();
     const pendingStart = createDeferred<StartAgentSessionResult>();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -2112,32 +2127,27 @@ describe("IssuesActivity", () => {
     await user.click(startButton);
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(startButton).toBeDisabled());
-    await user.click(startButton);
-    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
 
-    // 启动期间在 run dialog 内联显示“正在创建 Agent 会话…”状态，不再叠加
-    // 独立 Loading 弹窗，避免与 run dialog 的焦点管理冲突。
-    expect(within(dialog).getByRole("status")).toHaveTextContent(
-      "Starting agent session...",
-    );
-    expect(
-      within(dialog).getByRole("button", { name: "Close run dialog" }),
-    ).toBeDisabled();
-
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(within(dialog).getByRole("status")).toHaveTextContent(
-      "Starting agent session...",
-    );
-    expect(
-      screen.getByRole("dialog", { name: "Run Issue #20" }),
-    ).toBeInTheDocument();
-
-    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    // 启动期间 Run Dialog 被隐藏，改为显示阻塞式 LoadingDialog，避免两个 overlay
+    // 共存造成冲突（见 4df1948）。LoadingDialog 不可关闭（dismissible=false）。
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Run Issue #20" }),
       ).not.toBeInTheDocument(),
+    );
+    const loadingDialog = await screen.findByRole("dialog");
+    expect(loadingDialog).toHaveTextContent("Starting agent session...");
+    expect(
+      screen.queryByRole("button", { name: "Close run dialog" }),
+    ).not.toBeInTheDocument();
+
+    // 启动期间重复点击不会再次触发 startAgentSession。
+    await user.click(loadingDialog);
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+
+    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
   });
 
@@ -2576,7 +2586,7 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
   });
 
-  it("keeps the run dialog open and shows the failure message when start fails", async () => {
+  it("restores the run dialog and shows the failure message when start fails", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
@@ -2596,16 +2606,19 @@ describe("IssuesActivity", () => {
     const { dialog } = await openExistingIssueRunDialog(user);
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
 
+    // 失败后 Run Dialog 重新显示（保留表单状态），并展示错误文案。
+    const restoredDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #20",
+    });
     expect(
-      screen.getByRole("dialog", { name: "Run Issue #20" }),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("Agent Session 启动将在 Story 2.3 接入。"),
+      within(restoredDialog).getByText(
+        "Agent Session 启动将在 Story 2.3 接入。",
+      ),
     ).toBeInTheDocument();
     expect(updateIssueMock).not.toHaveBeenCalled();
   });
 
-  it("disables the run dialog submit button while starting the issue", async () => {
+  it("shows a non-dismissible loading dialog while starting the issue", async () => {
     const user = userEvent.setup();
     let resolveStart: (value: StartAgentSessionResult) => void = () => {};
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -2628,11 +2641,14 @@ describe("IssuesActivity", () => {
     const { dialog } = await openExistingIssueRunDialog(user);
     const startButton = within(dialog).getByRole("button", { name: "Start" });
     await user.click(startButton);
-    await user.click(startButton);
 
-    expect(startButton).toBeDisabled();
-    expect(startButton).toHaveTextContent("Starting...");
+    // 启动期间 Run Dialog 隐藏，LoadingDialog 接管；重复点击不会再次触发请求。
+    const loadingDialog = await screen.findByRole("dialog");
+    await user.click(loadingDialog);
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Close run dialog" }),
+    ).not.toBeInTheDocument();
 
     resolveStart({ issueId: existingIssue.id, sessionId: 301 });
   });
@@ -3246,8 +3262,12 @@ describe("IssuesActivity", () => {
     await user.click(within(dialog).getByRole("button", { name: "Start" }));
 
     expect(startAgentSessionMock).not.toHaveBeenCalled();
+    // worktree 占用检查失败后 Run Dialog 重新显示并提示用户。
+    const restoredDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #20",
+    });
     expect(
-      await within(dialog).findByText(
+      within(restoredDialog).getByText(
         "A same-name worktree already exists. Delete it before running.",
       ),
     ).toBeInTheDocument();

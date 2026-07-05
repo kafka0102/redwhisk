@@ -1,4 +1,3 @@
-import { LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,10 @@ import {
   type AgentSessionListItem,
   type WorkspaceMode as SessionWorkspaceMode,
 } from "../agents/agent-session-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import {
+  toCommandError,
+  type CommandError,
+} from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
@@ -46,7 +48,21 @@ interface IssueRunDialogProps {
   >;
   projectId: number;
   worktreeSetupCommand?: string;
+  /**
+   * 为 true 时隐藏 Run Dialog 的 overlay 与表单，但保留组件挂载以维持内部表单状态。
+   * 用于在父组件显示阻塞式 LoadingDialog 期间，避免两个 overlay 共存冲突。
+   */
+  hidden?: boolean;
   onClose: () => void;
+  /**
+   * 用户点击"开始运行"、通过前端预检查后立即触发，父组件据此显示阻塞式 loading
+   * 并隐藏 Run Dialog。启动请求尚未发出。
+   */
+  onStartAttempt?: () => void;
+  /**
+   * 启动失败时触发（已隐藏的 Run Dialog 将据此重新显示，保留表单状态供重试）。
+   */
+  onStartError?: (error: CommandError) => void;
   onStarted: (result: StartAgentSessionResult) => void | Promise<void>;
 }
 
@@ -59,7 +75,10 @@ export function IssueRunDialog({
   issue,
   projectId,
   worktreeSetupCommand = "",
+  hidden = false,
   onClose,
+  onStartAttempt,
+  onStartError,
   onStarted,
 }: IssueRunDialogProps) {
   const { messages } = useI18n();
@@ -308,6 +327,9 @@ export function IssueRunDialog({
     isStartingRef.current = true;
     setIsStarting(true);
     setStatusMessage(null);
+    // 通知父组件进入阻塞式 loading 并隐藏 Run Dialog，避免 Run Dialog overlay
+    // 与父组件 LoadingDialog 的 Radix overlay 同时挂载造成冲突（见 4df1948）。
+    onStartAttempt?.();
 
     try {
       // 前端预检查：worktree 模式下若已存在同名 worktree，直接禁止运行；
@@ -319,6 +341,9 @@ export function IssueRunDialog({
         });
         if (worktreeStatus.exists) {
           setStatusMessage(messages.issues.worktreeOccupiedMessage);
+          onStartError?.(
+            toCommandError(new Error(messages.issues.worktreeOccupiedMessage)),
+          );
           return;
         }
       }
@@ -344,10 +369,18 @@ export function IssueRunDialog({
       }
 
       setStatusMessage(commandError.message);
+      onStartError?.(commandError);
     } finally {
       isStartingRef.current = false;
       setIsStarting(false);
     }
+  }
+
+  // 父组件进入阻塞式 loading 时隐藏 Run Dialog（不卸载，保留内部表单状态）。
+  // 这样 Run Dialog 的自定义 overlay 与父组件 LoadingDialog 的 Radix overlay
+  // 不会同时挂载，避免历史冲突（见 4df1948）。
+  if (hidden) {
+    return null;
   }
 
   return (
@@ -575,17 +608,7 @@ export function IssueRunDialog({
           role="status"
           aria-label={messages.issues.runStatus}
         >
-          {isStarting ? (
-            <span className="inline-flex items-center gap-1.5">
-              <LoaderCircle
-                aria-hidden="true"
-                className="size-3.5 animate-spin"
-              />
-              {messages.issues.sessionStarting}
-            </span>
-          ) : (
-            statusMessage
-          )}
+          {statusMessage}
         </p>
         <div className="issue-dialog__footer issue-dialog__footer--end">
           <Button
@@ -594,10 +617,7 @@ export function IssueRunDialog({
             disabled={isStartDisabled}
             onClick={() => void handleStart()}
           >
-            {isStarting ? (
-              <LoaderCircle aria-hidden="true" className="animate-spin" />
-            ) : null}
-            {isStarting ? messages.issues.starting : messages.issues.start}
+            {messages.issues.start}
           </Button>
         </div>
       </div>
