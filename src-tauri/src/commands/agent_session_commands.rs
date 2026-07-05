@@ -308,7 +308,12 @@ pub fn inject_agent_session_prompt(
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
-    AgentSessionService::inject_session_prompt_in_data_dir(data_dir, input, &state.pty_sessions)
+    AgentSessionService::inject_session_prompt_in_data_dir(
+        data_dir,
+        input,
+        &state.pty_sessions,
+        &state.agent_sessions,
+    )
 }
 
 #[tauri::command]

@@ -3049,6 +3049,7 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
                 kind: AgentSessionPromptKind::FollowUp,
             },
             &manager,
+            &AgentSessionRegistry::new(),
         )
         .expect("inject prompt");
 
@@ -3144,6 +3145,7 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
                 kind: AgentSessionPromptKind::FollowUp,
             },
             &manager,
+            &AgentSessionRegistry::new(),
         )
         .expect("inject review prompt");
 
@@ -3204,6 +3206,169 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
     assert_eq!(issue_actions.len(), issue_action_count_before);
 
     manager.kill(session_id).expect("kill session");
+}
+
+#[test]
+fn inject_session_prompt_sends_message_via_agent_registry_for_structured_session() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "structured-prompt-project");
+    let issue_id = insert_issue(&database.connection, project_id, "review");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_628_600_000,
+        None,
+    );
+
+    // Structured session 不在 pty_sessions，只在 agent_registry 注册 handle。
+    let manager = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let handle: Arc<dyn AgentSessionHandle> = Arc::new(RecordingStructuredHandle::default());
+    registry.register(session_id, handle);
+
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .inject_session_prompt(
+            InjectAgentSessionPromptInput {
+                project_id,
+                session_id,
+                prompt: "resolve conflicts".to_string(),
+                kind: AgentSessionPromptKind::FollowUp,
+            },
+            &manager,
+            &registry,
+        )
+        .expect("inject structured prompt");
+
+    assert_eq!(result.session_id, session_id);
+
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event_type,
+        SessionEventType::SessionPromptInjected,
+    );
+
+    let payload: Value = serde_json::from_str(&events[0].payload_json).expect("parse payload");
+    assert_eq!(payload["prompt"].as_str(), Some("resolve conflicts"));
+}
+
+#[test]
+fn inject_session_prompt_returns_not_running_when_no_active_channel() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "idle-prompt-project");
+    let issue_id = insert_issue(&database.connection, project_id, "review");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Closed,
+        1_780_628_600_000,
+        None,
+    );
+
+    // 既无 pty 也无 registry handle：典型场景是 worktree session 已关闭。
+    let manager = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .inject_session_prompt(
+            InjectAgentSessionPromptInput {
+                project_id,
+                session_id,
+                prompt: "follow up".to_string(),
+                kind: AgentSessionPromptKind::FollowUp,
+            },
+            &manager,
+            &registry,
+        )
+        .expect_err("expected AgentSessionNotRunning");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
+
+    // 没有任何 prompt 注入事件被记录。
+    let events = EventRepository::new(&database.connection)
+        .list_session_events(session_id)
+        .expect("session events");
+    assert!(events.is_empty());
+}
+
+#[derive(Default, Clone)]
+struct RecordingStructuredHandle {
+    sent: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl AgentSessionHandle for RecordingStructuredHandle {
+    fn send_message(
+        &self,
+        text: String,
+        _attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), AgentSessionError> {
+        self.sent.lock().expect("lock").push(text);
+        Ok(())
+    }
+
+    fn cancel_turn(&self) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn respond_permission(
+        &self,
+        _request_id: &str,
+        _decision: AgentPermissionDecision,
+    ) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn set_model(&self, _model_id: String) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn set_effort(&self, _effort: Option<String>) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn set_mode(&self, _mode_id: &str) -> Result<(), AgentSessionError> {
+        Ok(())
+    }
+
+    fn list_models(&self) -> Result<Vec<AgentModel>, AgentSessionError> {
+        Ok(Vec::new())
+    }
+
+    fn list_modes(&self) -> Vec<AgentMode> {
+        Vec::new()
+    }
+
+    fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
+        Ok(Vec::new())
+    }
+
+    fn shutdown(&self) {}
+
+    fn thread_id(&self) -> Option<String> {
+        Some("thread-recording".to_string())
+    }
 }
 
 fn migrated_database(data_dir: &std::path::Path) -> redwhisk_lib::db::connection::Database {

@@ -12,6 +12,7 @@ import {
   injectAgentSessionPrompt,
   deleteAgentSession,
   listAgentSessions,
+  resumeStructuredAgentSession,
   setAgentSessionAttention,
   startStructuredAgentSession,
   updateAgentSessionTitle,
@@ -1193,6 +1194,15 @@ export function AgentsActivity({
     setIsSubmittingMergePrompt(true);
 
     try {
+      // worktree session 关闭后 handle 会从 agent_registry 移除，直接注入会报
+      // AgentSessionNotRunning。先 resume 重建 handle，再注入合并 prompt。
+      // resume 失败时继续尝试注入，让后端的 AgentSessionNotRunning 错误透传给用户。
+      await resumeStructuredAgentSession({
+        projectId,
+        sessionId: mergePromptSessionId,
+      }).catch(() => {
+        /* 忽略 resume 错误，交给 inject 阶段统一报错 */
+      });
       await injectAgentSessionPrompt({
         projectId,
         sessionId: mergePromptSessionId,

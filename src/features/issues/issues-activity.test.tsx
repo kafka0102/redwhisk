@@ -41,6 +41,7 @@ import {
 import {
   injectAgentSessionPrompt,
   listAgentSessions,
+  resumeStructuredAgentSession,
 } from "../agents/agent-session-commands";
 import {
   listAgentProfiles,
@@ -76,6 +77,7 @@ vi.mock("./issue-commands", () => ({
 vi.mock("../agents/agent-session-commands", () => ({
   injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
+  resumeStructuredAgentSession: vi.fn(),
 }));
 
 vi.mock("../settings/settings-commands", () => ({
@@ -211,6 +213,9 @@ const getIssueSummaryMock = vi.mocked(getIssueSummary);
 const getIssueWorktreeStatusMock = vi.mocked(getIssueWorktreeStatus);
 const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
+const resumeStructuredAgentSessionMock = vi.mocked(
+  resumeStructuredAgentSession,
+);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
@@ -426,6 +431,7 @@ describe("IssuesActivity", () => {
     getIssueWorktreeStatusMock.mockReset();
     getProjectGitBranchesMock.mockReset();
     injectAgentSessionPromptMock.mockReset();
+    resumeStructuredAgentSessionMock.mockReset();
     listAgentSessionsMock.mockReset();
     listIssuesMock.mockReset();
     markIssueReviewMock.mockReset();
@@ -493,6 +499,10 @@ describe("IssuesActivity", () => {
           : [],
     }));
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
+    resumeStructuredAgentSessionMock.mockResolvedValue({
+      sessionId: 1,
+      threadId: "thread-1",
+    });
     injectAgentSessionPromptMock.mockResolvedValue({
       sessionId: 1,
       codexSessionId: "thread-1",
@@ -3632,6 +3642,11 @@ describe("IssuesActivity", () => {
         ),
       }),
     );
+    // resume 必须在 inject 之前被调用，以保证 session 在 agent_registry 中有 handle。
+    expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 506,
+    });
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(506);
     expect(
       screen.queryByRole("dialog", { name: "Complete issue" }),
