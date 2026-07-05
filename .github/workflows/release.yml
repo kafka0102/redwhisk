@@ -13,6 +13,9 @@ on:
 permissions:
   contents: write
 
+env:
+  NODE_OPTIONS: --max-old-space-size=6144
+
 jobs:
   # PR 上的轻量构建验证：不产出 dmg，只确保前后端可编译
   check:
