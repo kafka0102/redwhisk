@@ -947,6 +947,24 @@ describe("IssuesActivity", () => {
     expect(screen.getByDisplayValue("draft local issue")).toBeInTheDocument();
   });
 
+  it("shows a field-level error under the title when submitting with an empty title", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.click(screen.getByRole("button", { name: "Create Issue" }));
+
+    const page = screen.getByRole("form", { name: "New Issue" });
+    expect(await within(page).findByRole("alert")).toHaveTextContent(
+      "Issue title is required.",
+    );
+    expect(createIssueMock).not.toHaveBeenCalled();
+  });
+
   it("keeps the create page open while a create request is pending", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [] });
