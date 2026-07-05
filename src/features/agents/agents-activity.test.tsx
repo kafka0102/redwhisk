@@ -257,6 +257,26 @@ async function findSessionList() {
   return screen.findByRole("list", { name: "Agent sessions" });
 }
 
+function getSessionRowByIssue(
+  sessionList: HTMLElement,
+  issueId: number,
+  issueTitle: string,
+) {
+  const row = within(sessionList)
+    .getAllByRole("button")
+    .find(
+      (button) =>
+        within(button).queryByText(issueTitle) !== null &&
+        within(button).queryByText(`#${issueId}`) !== null,
+    );
+
+  if (!row) {
+    throw new Error(`Unable to find session row for #${issueId} ${issueTitle}`);
+  }
+
+  return row;
+}
+
 const defaultProfiles = {
   project: [
     {
@@ -1488,17 +1508,17 @@ describe("AgentsActivity", () => {
     });
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
 
-    expect(within(sessionList).getAllByRole("button")[0]).toHaveTextContent(
-      "#20 First visible session",
-    );
+    const firstInitialRow = within(sessionList).getAllByRole("button")[0];
+    expect(firstInitialRow).toHaveTextContent("First visible session");
+    expect(firstInitialRow).toHaveTextContent("#20");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_500);
     });
 
-    expect(within(sessionList).getAllByRole("button")[0]).toHaveTextContent(
-      "#20 First visible session",
-    );
+    const firstRefreshedRow = within(sessionList).getAllByRole("button")[0];
+    expect(firstRefreshedRow).toHaveTextContent("First visible session");
+    expect(firstRefreshedRow).toHaveTextContent("#20");
   });
 
   it("shows the issue id and active branch in the session card meta row", async () => {
@@ -2719,18 +2739,14 @@ describe("AgentsActivity", () => {
       await Promise.resolve();
     });
     const sessionList = screen.getByRole("list", { name: "Agent sessions" });
-    const initialRow = within(sessionList).getByRole("button", {
-      name: /#21 Polling issue/i,
-    });
+    const initialRow = getSessionRowByIssue(sessionList, 21, "Polling issue");
     expect(
       within(initialRow).getByLabelText("Session status: Running"),
     ).toHaveClass("agents-session-row__status-dot--running");
 
     await emitSessionListChanged(1, 302);
 
-    const refreshedRow = within(sessionList).getByRole("button", {
-      name: /#21 Polling issue/i,
-    });
+    const refreshedRow = getSessionRowByIssue(sessionList, 21, "Polling issue");
     expect(
       within(refreshedRow).getByLabelText("Session status: Output complete"),
     ).toHaveClass("agents-session-row__status-dot--attention");
