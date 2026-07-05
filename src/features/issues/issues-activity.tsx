@@ -39,6 +39,7 @@ import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
 import { IssueSummaryDialog } from "./issue-summary-dialog";
+import { LoadingDialog } from "@/components/ui/loading-dialog";
 import {
   buildWorktreeMergeConflictPrompt,
   type WorktreeMergeDetail,
@@ -182,6 +183,9 @@ export function IssuesActivity({
     IssueRecord,
     "id" | "title" | "description" | "attachments" | "labels"
   > | null>(null);
+  // 启动 Agent Session 期间显示阻塞式 LoadingDialog 并隐藏 Run Dialog，
+  // 避免 Run Dialog overlay 与 Radix LoadingDialog overlay 同时挂载（见 4df1948）。
+  const [isStartingSession, setIsStartingSession] = useState(false);
   const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [attachmentPreview, setAttachmentPreview] =
     useState<AttachmentPreviewState | null>(null);
@@ -735,6 +739,8 @@ export function IssuesActivity({
     issueId: number;
     sessionId?: number | null;
   }) {
+    // 成功路径：关闭阻塞式 LoadingDialog 并卸载 Run Dialog。
+    setIsStartingSession(false);
     setRunDialogIssue(null);
     setDialogErrorMessage(null);
     setDialogMode(null);
@@ -1425,8 +1431,18 @@ export function IssuesActivity({
           issue={runDialogIssue}
           projectId={projectId}
           worktreeSetupCommand={worktreeSetupCommand}
+          hidden={isStartingSession}
           onClose={closeRunDialog}
+          onStartAttempt={() => setIsStartingSession(true)}
+          onStartError={() => setIsStartingSession(false)}
           onStarted={handleRunStarted}
+        />
+      ) : null}
+      {isStartingSession ? (
+        <LoadingDialog
+          open
+          dismissible={false}
+          message={messages.issues.sessionStarting}
         />
       ) : null}
       {summaryIssueId != null ? (
