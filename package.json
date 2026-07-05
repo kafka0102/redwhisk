@@ -12,7 +12,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
-    "ui:add": "shadcn add"
+    "ui:add": "shadcn add",
+    "build:macos": "bash scripts/build-macos.sh",
+    "bump-version": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
