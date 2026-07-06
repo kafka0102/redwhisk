@@ -91,17 +91,28 @@ Agents Activity SHALL provide a right Session side panel changes view backed by 
 - **AND** the right side of the row shows added and deleted line counts when applicable
 - **AND** spacing between the status label and the added line count is `4px`
 
-#### Scenario: Uncommitted changes refresh while panel is open
+#### Scenario: Uncommitted changes refresh while the panel is open
 
 - **WHEN** the `变更` tab is visible in an open Session side panel
 - **THEN** Agents Activity polls the repository changes about every `2s`
 - **AND** the changed file list refreshes when file count, status, metadata signature, or line statistics change
 - **AND** unchanged polling results do not reset the selected workspace tab or visible list unnecessarily
 
-#### Scenario: Committed changes are not implemented yet
+#### Scenario: Committed changes timeline
 
 - **WHEN** the user selects `已提交`
-- **THEN** the panel may show an explicit placeholder instead of committed file data
+- **THEN** the panel shows a vertical timeline of recent commits
+- **AND** each commit row shows the commit message and author name
+- **AND** each commit row expands to reveal its changed files
+- **AND** a pushed commit is marked with a purple timeline dot
+
+#### Scenario: Pushed branch tag appears only on the first pushed commit
+
+- **WHEN** the committed timeline contains one or more pushed commits
+- **THEN** only the topmost pushed commit renders a branch name tag with a cloud icon
+- **AND** every other pushed commit keeps the purple timeline dot without the branch name tag
+- **AND** the branch name tag is anchored to the right edge of its row with a 4px right gap
+- **AND** the branch name tag stacks above the author name so a long author name is covered by the tag instead of overflowing the row
 
 ### Requirement: Session side panel file tree view
 
@@ -229,3 +240,4 @@ Agents Activity 的 Session 主窗口 SHALL 将 Session 内容作为首个 Tab�
 - **WHEN** 用户在地址栏输入地址并按 Enter
 - **THEN** 嵌入式浏览区域访问该地址
 - **AND** 如果地址与当前地址相同，系统重新加载当前页面
+
