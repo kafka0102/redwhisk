@@ -325,6 +325,33 @@ describe("AgentComposer", () => {
     ).toHaveTextContent("GPT-5");
   });
 
+  it("当前模型未知时优先显示列表里的默认模型", async () => {
+    listAgentModelsMock.mockResolvedValueOnce({
+      models: [
+        {
+          modelId: "gpt-5.5",
+          displayName: "GPT-5.5",
+          isDefault: true,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+        {
+          modelId: "gpt-5",
+          displayName: "GPT-5",
+          isDefault: false,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+    });
+
+    await renderComposer();
+
+    expect(
+      screen.getByRole("combobox", { name: "Select model" }),
+    ).toHaveTextContent("GPT-5.5");
+  });
+
   it("Claude 也请求模型列表并展示模型选择器（Think 仍不展示）", async () => {
     await renderComposer({
       capabilities: getAgentCapabilities("claude"),

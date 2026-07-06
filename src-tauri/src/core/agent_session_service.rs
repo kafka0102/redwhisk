@@ -782,7 +782,7 @@ impl<'connection> AgentSessionService<'connection> {
             mode,
             broadcaster: broadcaster.clone(),
             resume_thread_id: None,
-            model: None,
+            model: read_codex_model_from_data_dir(data_dir.as_ref()),
             effort: read_codex_reasoning_effort_from_data_dir(data_dir.as_ref()),
         };
         let codex_handle = match CodexSessionHandle::start(config) {
@@ -1888,7 +1888,8 @@ impl<'connection> AgentSessionService<'connection> {
     /// 查询指定 session 的 agent 类型（经 profile 表反查）。
     ///
     /// 供 `list_agent_models` / `set_agent_model` 命令按 agent 类型分发：
-    /// Codex 走写死模型列表，Claude 走 `~/.claude/settings.json` 解析。
+    /// Codex 走本地配置驱动的固定 GPT 列表，Claude 走 `~/.claude/settings.json`
+    /// 解析。
     pub fn find_session_agent_type(
         &self,
         project_id: i64,
@@ -2299,7 +2300,10 @@ impl AgentSessionService<'_> {
                     mode,
                     broadcaster: broadcaster.clone(),
                     resume_thread_id: input.resume_from_codex_session_id.clone(),
-                    model: input.model.clone(),
+                    model: input
+                        .model
+                        .clone()
+                        .or_else(|| read_codex_model_from_data_dir(data_dir.as_ref())),
                     effort: input
                         .effort
                         .clone()
@@ -2535,7 +2539,7 @@ impl AgentSessionService<'_> {
                     mode,
                     broadcaster: broadcaster.clone(),
                     resume_thread_id: Some(thread_id.clone()),
-                    model: None,
+                    model: read_codex_model_from_data_dir(_data_dir),
                     effort: read_codex_reasoning_effort_from_data_dir(_data_dir),
                 };
                 let codex_handle = CodexSessionHandle::start(config)
@@ -3696,6 +3700,12 @@ fn read_codex_reasoning_effort_from_data_dir(data_dir: &Path) -> Option<String> 
     data_dir
         .parent()
         .and_then(codex_config::read_reasoning_effort_from_home)
+}
+
+fn read_codex_model_from_data_dir(data_dir: &Path) -> Option<String> {
+    data_dir
+        .parent()
+        .and_then(codex_config::read_model_from_home)
 }
 
 fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, CommandError> {

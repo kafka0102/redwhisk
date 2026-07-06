@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 
 use crate::agent::claude_config;
-use crate::agent::codex_app_server::session::default_codex_models;
+use crate::agent::codex_app_server::session::default_codex_models_with_selected;
 use crate::agent::codex_config;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::app_state::AppState;
@@ -607,17 +607,42 @@ pub fn set_agent_model(
     let service = build_agent_session_service(&database.connection);
     let agent_type = service.find_session_agent_type(input.project_id, input.session_id)?;
     let handle = require_structured_handle(&state, input.session_id)?;
-    // Claude 且为官方模型时，把 model 持久化到 ~/.claude/settings.json，
-    // 保证 claude CLI 下次 spawn（以及应用重启后）沿用该模型。
+    // 把用户切换后的模型持久化回 provider 配置，保证下次 spawn
+    // （以及应用重启后）沿用同一模型。
+    let home_dir = if matches!(agent_type, AgentType::Claude | AgentType::Codex) {
+        Some(app.path().home_dir().map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent 配置保存失败。",
+            )
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?)
+    } else {
+        None
+    };
     if matches!(agent_type, AgentType::Claude) {
-        let home_dir = app.path().home_dir().map_err(|error| {
+        claude_config::write_model_to_home(
+            home_dir
+                .as_deref()
+                .expect("Claude model persistence requires home dir"),
+            &input.model_id,
+        )
+        .map_err(|error| {
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent 配置保存失败。",
             )
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
-        claude_config::write_model_to_home(&home_dir, &input.model_id).map_err(|error| {
+    }
+    if matches!(agent_type, AgentType::Codex) {
+        codex_config::write_model_to_home(
+            home_dir
+                .as_deref()
+                .expect("Codex model persistence requires home dir"),
+            &input.model_id,
+        )
+        .map_err(|error| {
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent 配置保存失败。",
@@ -685,7 +710,18 @@ pub fn list_agent_models(
     let service = build_agent_session_service(&database.connection);
     let agent_type = service.find_session_agent_type(input.project_id, input.session_id)?;
     let models = match agent_type {
-        AgentType::Codex => default_codex_models(),
+        AgentType::Codex => {
+            let home_dir = app.path().home_dir().map_err(|error| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionPersistenceFailed,
+                    "读取 Codex 配置失败。",
+                )
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            })?;
+            default_codex_models_with_selected(
+                codex_config::read_model_from_home(&home_dir).as_deref(),
+            )
+        }
         AgentType::Claude => {
             let home_dir = app.path().home_dir().map_err(|error| {
                 CommandError::new(
