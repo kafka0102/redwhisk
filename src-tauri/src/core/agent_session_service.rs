@@ -773,6 +773,12 @@ impl<'connection> AgentSessionService<'connection> {
                 input.issue_id,
             )
         })?;
+        // DB 事务已 commit（session 为 running），但后续 handle 启动 + send_message
+        // 仍耗时。在此窗口内并发的 reconcile（轮询 list_agent_sessions 触发）会
+        // 把"running 但不在 registry"的 session 误判为重启遗留并标记 stopped。
+        // mark_starting 让 contains 返回 true，reconcile 据此跳过；register 真实
+        // handle 时自动清除该标记，失败路径需显式 unmark。
+        agent_registry.mark_starting(result.session_id);
         let mode = codex_mode_from_profile(&launch.profile)?;
         let config = CodexSessionConfig {
             project_id: input.project_id,
@@ -788,6 +794,7 @@ impl<'connection> AgentSessionService<'connection> {
         let codex_handle = match CodexSessionHandle::start(config) {
             Ok(handle) => handle,
             Err(error) => {
+                agent_registry.unmark_starting(result.session_id);
                 let _ = self.rollback_failed_structured_issue_session(
                     input.project_id,
                     input.issue_id,
@@ -797,6 +804,7 @@ impl<'connection> AgentSessionService<'connection> {
             }
         };
         let thread_id = codex_handle.thread_id().ok_or_else(|| {
+            agent_registry.unmark_starting(result.session_id);
             CommandError::new(
                 CommandErrorCode::AgentSessionStreamFailed,
                 "Agent 会话启动后未拿到 threadId。",
@@ -805,13 +813,19 @@ impl<'connection> AgentSessionService<'connection> {
                 ErrorDetail::new("AgentSession").with_value("sessionId", result.session_id),
             )
         })?;
-        self.agent_session_repository
+        if let Err(error) = self
+            .agent_session_repository
             .update_codex_session_id(result.session_id, &thread_id)
-            .map_err(agent_session_database_error)?;
+            .map_err(agent_session_database_error)
+        {
+            agent_registry.unmark_starting(result.session_id);
+            return Err(error);
+        }
 
         broadcaster.register_session(result.session_id);
         let handle: Arc<dyn AgentSessionHandle> = Arc::new(codex_handle);
         if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
+            agent_registry.unmark_starting(result.session_id);
             handle.shutdown();
             let _ = self.rollback_failed_structured_issue_session(
                 input.project_id,
@@ -991,6 +1005,9 @@ impl<'connection> AgentSessionService<'connection> {
                 input.issue_id,
             )
         })?;
+        // 同 codex 路径：DB 已 commit（running），后续 handle.start + send_message
+        // 期间需防并发 reconcile 误判，mark_starting 让 contains 返回 true。
+        agent_registry.mark_starting(result.session_id);
 
         let config = ClaudeSessionConfig {
             project_id: input.project_id,
@@ -1004,6 +1021,7 @@ impl<'connection> AgentSessionService<'connection> {
         let claude_handle = match ClaudeSessionHandle::start(config) {
             Ok(handle) => handle,
             Err(error) => {
+                agent_registry.unmark_starting(result.session_id);
                 let _ = self.rollback_failed_structured_issue_session(
                     input.project_id,
                     input.issue_id,
@@ -1016,6 +1034,7 @@ impl<'connection> AgentSessionService<'connection> {
         broadcaster.register_session(result.session_id);
         let handle: Arc<dyn AgentSessionHandle> = Arc::new(claude_handle);
         if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
+            agent_registry.unmark_starting(result.session_id);
             handle.shutdown();
             let _ = self.rollback_failed_structured_issue_session(
                 input.project_id,
@@ -2277,12 +2296,17 @@ impl AgentSessionService<'_> {
         .map_err(agent_session_database_error)?;
 
         let session_id = session.id;
+        // DB 已 commit（running），后续 handle 启动期间需防并发 reconcile 误判。
+        // mark_starting 让 contains 返回 true；register 真实 handle 时自动清除，
+        // 各失败路径需显式 unmark。
+        agent_registry.mark_starting(session_id);
 
         // 按 agent 类型分发：Codex / Claude 各自的 handle 启动 + 注册。
         let thread_id = match agent_type {
             AgentType::Codex => {
                 let mode =
                     codex_mode_from_structured_input(input.mode.as_deref()).ok_or_else(|| {
+                        agent_registry.unmark_starting(session_id);
                         CommandError::new(
                             CommandErrorCode::AgentSessionValidationFailed,
                             "不支持的协作模式。",
@@ -2312,6 +2336,7 @@ impl AgentSessionService<'_> {
                 let codex_handle = match CodexSessionHandle::start(config) {
                     Ok(handle) => handle,
                     Err(error) => {
+                        agent_registry.unmark_starting(session_id);
                         let _ = self.rollback_failed_structured_standalone_session(session_id);
                         return Err(agent_session_error_to_command_error(error.into()));
                     }
@@ -2319,6 +2344,7 @@ impl AgentSessionService<'_> {
                 let thread_id = match codex_handle.thread_id() {
                     Some(thread_id) => thread_id,
                     None => {
+                        agent_registry.unmark_starting(session_id);
                         codex_handle.shutdown();
                         let _ = self.rollback_failed_structured_standalone_session(session_id);
                         return Err(CommandError::new(
@@ -2336,6 +2362,7 @@ impl AgentSessionService<'_> {
                     .update_codex_session_id(session_id, &thread_id)
                     .map_err(agent_session_database_error)
                 {
+                    agent_registry.unmark_starting(session_id);
                     codex_handle.shutdown();
                     let _ = self.rollback_failed_structured_standalone_session(session_id);
                     return Err(error);
@@ -2357,6 +2384,7 @@ impl AgentSessionService<'_> {
                 let claude_handle = match ClaudeSessionHandle::start(config) {
                     Ok(handle) => handle,
                     Err(error) => {
+                        agent_registry.unmark_starting(session_id);
                         let _ = self.rollback_failed_structured_standalone_session(session_id);
                         return Err(agent_session_error_to_command_error(error.into()));
                     }
@@ -2369,6 +2397,7 @@ impl AgentSessionService<'_> {
                         .update_codex_session_id(session_id, claude_session_id)
                         .map_err(agent_session_database_error)
                     {
+                        agent_registry.unmark_starting(session_id);
                         claude_handle.shutdown();
                         let _ = self.rollback_failed_structured_standalone_session(session_id);
                         return Err(error);
@@ -2553,7 +2582,11 @@ impl AgentSessionService<'_> {
                         ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
                     )
                 })?;
+                // mark_resumed 即将把 DB 改为 running，需先 mark_starting 防并发 reconcile
+                // 误判（DB running 但 registry 未注册的窗口）。register 时自动清除。
+                agent_registry.mark_starting(session.id);
                 if let Err(error) = self.mark_structured_session_resumed(&session, &resumed) {
+                    agent_registry.unmark_starting(session.id);
                     codex_handle.shutdown();
                     return Err(error);
                 }
@@ -2576,7 +2609,11 @@ impl AgentSessionService<'_> {
                 let resumed = claude_handle
                     .thread_id()
                     .unwrap_or_else(|| thread_id.clone());
+                // mark_resumed 即将把 DB 改为 running，需先 mark_starting 防并发 reconcile
+                // 误判（DB running 但 registry 未注册的窗口）。register 时自动清除。
+                agent_registry.mark_starting(session.id);
                 if let Err(error) = self.mark_structured_session_resumed(&session, &resumed) {
+                    agent_registry.unmark_starting(session.id);
                     claude_handle.shutdown();
                     return Err(error);
                 }
@@ -6623,6 +6660,75 @@ mod tests {
         };
 
         assert_eq!(error.code, CommandErrorCode::IssueWorktreeOccupied);
+    }
+
+    #[test]
+    fn reconcile_marks_unrecoverable_running_session_stopped() {
+        // 回归基线：DB 中存在 running session，既不在 pty 也不在 agent_registry，
+        // reconcile 应将其标记为 stopped（模拟 app 重启后的遗留 session 清理）。
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            40,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            100,
+            None,
+        );
+        let service = test_agent_session_service(&connection);
+        let pty_sessions = crate::agent::pty_session_manager::PtySessionManager::new();
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+
+        service
+            .reconcile_unrecoverable_running_sessions(1, &pty_sessions, &registry)
+            .expect("reconcile");
+
+        let session = AgentSessionRepository::new(&connection)
+            .find_by_id(40)
+            .expect("query")
+            .expect("session exists");
+        assert_eq!(session.status, AgentSessionStatus::Stopped);
+    }
+
+    #[test]
+    fn reconcile_skips_session_marked_starting() {
+        // 核心回归：start/resume 路径在 DB 写入 running 之后、register 真实 handle 之前
+        // 调用 mark_starting。并发触发的 reconcile 此时 contains 返回 true，应跳过，
+        // 不把刚创建的session 误判为"重启遗留"而标记 stopped。
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            41,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            100,
+            None,
+        );
+        let service = test_agent_session_service(&connection);
+        let pty_sessions = crate::agent::pty_session_manager::PtySessionManager::new();
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        // 模拟 start 闭包内 DB commit 之后、handle 启动之前的窗口。
+        registry.mark_starting(41);
+        assert!(registry.contains(41));
+        assert!(registry.get(41).is_none()); // 尚无真实 handle
+
+        service
+            .reconcile_unrecoverable_running_sessions(1, &pty_sessions, &registry)
+            .expect("reconcile");
+
+        let session = AgentSessionRepository::new(&connection)
+            .find_by_id(41)
+            .expect("query")
+            .expect("session exists");
+        assert_eq!(
+            session.status,
+            AgentSessionStatus::Running,
+            "starting 标记的 session 不应被 reconcile 误杀"
+        );
     }
 
     fn branch_exists(repo_dir: &Path, branch: &str) -> bool {
