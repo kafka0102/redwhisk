@@ -905,6 +905,47 @@ describe("AgentsActivity", () => {
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
   });
 
+  it("hides stale uncommitted files when the workspace root becomes inaccessible", async () => {
+    vi.useFakeTimers();
+    getProjectWorktreeChangesMock
+      .mockResolvedValueOnce({
+        signature: "one",
+        files: [changedFile("src/one.ts", "modified")],
+      })
+      .mockRejectedValueOnce({
+        code: "AGENT_SESSION_VALIDATION_FAILED",
+        message: "仓库路径不可访问。",
+        details: [{ "@type": "WorkspaceRoot", path: "/tmp/worktrees/missing" }],
+      });
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await flushMicrotasks();
+    fireEvent.click(screen.getByLabelText("Open session side panel"));
+    await flushMicrotasks();
+
+    // 先成功加载过未提交文件，此时 one.ts 可见。
+    expect(
+      screen.getByRole("button", { name: /one.ts/ }),
+    ).toBeInTheDocument();
+
+    // worktree 被删除后刷新变为不可访问：错误信息显示，残留的旧文件行必须消失，
+    // 否则点击会打开已不存在的文件。
+    fireEvent.click(screen.getByRole("button", { name: "Refresh changes" }));
+    await flushMicrotasks();
+
+    expect(screen.getByText("仓库路径不可访问。")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /one.ts/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("loads committed branch history and expands changed files", async () => {
     const user = userEvent.setup();
     getProjectWorktreeCommitHistoryMock.mockResolvedValue({

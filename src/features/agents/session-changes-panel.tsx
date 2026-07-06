@@ -161,13 +161,15 @@ export function SessionChangesPanel({
                 : messages.agentsFeature.noUncommittedChanges}
             </p>
           ) : null}
-          {changes.map((file) => (
-            <ChangedFileRow
-              key={file.filePath}
-              file={file}
-              onOpenChangedFile={onOpenChangedFile}
-            />
-          ))}
+          {!errorMessage
+            ? changes.map((file) => (
+                <ChangedFileRow
+                  key={file.filePath}
+                  file={file}
+                  onOpenChangedFile={onOpenChangedFile}
+                />
+              ))
+            : null}
         </div>
       ) : (
         <CommittedChangesTimeline

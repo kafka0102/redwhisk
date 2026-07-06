@@ -48,7 +48,7 @@ export function SessionFileTreePanel({
             : messages.agentsFeature.noFiles}
         </p>
       ) : null}
-      {fileTree.length > 0 ? (
+      {fileTree.length > 0 && !errorMessage ? (
         <Tree<WorkspaceFileTreeNode>
           aria-label={messages.agentsFeature.fileTree}
           childrenAccessor="children"
