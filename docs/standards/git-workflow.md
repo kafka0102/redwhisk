@@ -76,6 +76,7 @@
 
 - `type` 使用英文小写：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`、`style`、`perf`、`build`、`ci`、`revert`
 - `描述` 使用简体中文，聚焦“做了什么”，避免空泛表述
+- 禁止使用 scope，即不要写 `type(scope):`，统一为 `type:`；模块/范围信息应体现在描述中
 
 好的例子：
 
@@ -91,6 +92,7 @@ chore: 调整本地开发脚本参数
 update code
 fix: 修复问题
 修改了一些东西
+fix(todo): 修复详情页状态回填错误
 ```
 
 ### 5. 正文按需补充
@@ -121,7 +123,7 @@ Refs: #<issue-id>
 示例：
 
 ```text
-fix(todo): 修复详情页状态回填错误
+fix: 修复详情页状态回填错误
 
 补齐状态映射逻辑并更新空值兜底。
 
