@@ -73,11 +73,10 @@ struct SessionState {
     /// 当前 turn 内 assistant message 的序号，用于派生跨 message 不冲突的 message_id。
     ///
     /// Claude 每个 message 的 content block index 都从 0 重置，若 message_id
-    /// 只用 block index（如 `claude-text-0`），多轮对话中 message 2 的 text block 0
+    /// 只用 block index（如 `claude-text-0`），同轮内 message 2 的 text block 0
     /// 会与 message 1 的 text block 0 共用同一 id，前端 reducer 按 messageId 幂等替换
     /// 时 message 2 的结论会覆盖 message 1。这里在每个 assistant message 开始时
-    /// 递增该计数器，message_id 派生为 `claude-text-{message_index}-{block_index}`，
-    /// 保证跨 message 唯一。
+    /// 递增该计数器，并叠加 turn_id 派生 message_id，保证跨 turn / message 唯一。
     message_index: usize,
     /// 流式文本增量累积：block_index → 累积文本。
     text_buffer: HashMap<usize, String>,
@@ -556,7 +555,7 @@ fn build_events(
                 events.push(event);
             }
             let message_index = state.lock().map(|guard| guard.message_index).unwrap_or(0);
-            let message_prefix = format!("claude-text-{message_index}-");
+            let message_prefix = claude_text_message_prefix(turn_id, message_index);
             let mut flushed_texts_for_message = previously_flushed_texts
                 .into_iter()
                 .chain(flushed_texts)
@@ -584,7 +583,7 @@ fn build_events(
                 }
             }
             // 注意：完整 assistant 消息与流式增量可能承载同一段文本。流式 flush
-            // 用 `claude-text-{message_index}-{block_index}` 作为 message_id
+            // 用带 turn_id 的稳定 id 作为 message_id
             // （见 try_flush_text_delta），这里必须使用与流式一致的 message_id，
             // 前后端两条去重路径（前端 reducer 按 messageId 幂等替换、后端
             // push_compacted_timeline_item 按 message_id 合并）才能正确归并，
@@ -596,7 +595,7 @@ fn build_events(
                 match block {
                     MappedBlock::AssistantText { text } => {
                         if !text.is_empty() {
-                            let message_id = format!("claude-text-{message_index}-{index}");
+                            let message_id = claude_text_message_id(turn_id, message_index, index);
                             if flushed_texts_for_message
                                 .get(&message_id)
                                 .is_some_and(|flushed| flushed == &text)
@@ -800,7 +799,7 @@ fn handle_stream_event(
                     guard.text_buffer.entry(index).or_default().push_str(&text);
                 }
                 // 尝试节流 flush。
-                if let Some(event) = try_flush_text_delta(state, index, false) {
+                if let Some(event) = try_flush_text_delta(state, turn_id, index, false) {
                     events.push(event);
                 }
             }
@@ -831,7 +830,7 @@ fn handle_stream_event(
         },
         AnthropicStreamEvent::ContentBlockStop { index } => {
             // block 结束时强制 flush 文本。
-            if let Some(event) = try_flush_text_delta(state, index, true) {
+            if let Some(event) = try_flush_text_delta(state, turn_id, index, true) {
                 events.push(event);
             }
             // thinking 块结束：强制 flush 完整 reasoning 文本，并带上 per-block 计时。
@@ -922,6 +921,7 @@ fn clear_block_state(state: &mut SessionState, index: usize) {
 /// `force=true` 时无视节流立即 flush（用于 block stop / turn 结束）。
 fn try_flush_text_delta(
     state: &Arc<Mutex<SessionState>>,
+    turn_id: &Option<String>,
     index: usize,
     force: bool,
 ) -> Option<AgentStreamEvent> {
@@ -945,21 +945,21 @@ fn try_flush_text_delta(
     }
     guard.text_last_flush_at.insert(index, now);
     guard.text_flushed_len.insert(index, text.len());
-    let turn_id = guard.current_turn_id.clone();
+    let event_turn_id = turn_id.clone().or_else(|| guard.current_turn_id.clone());
     let message_index = guard.message_index;
-    let message_id = format!("claude-text-{message_index}-{index}");
+    let message_id = claude_text_message_id(&event_turn_id, message_index, index);
     guard
         .flushed_text_messages
         .insert(message_id.clone(), text.clone());
     // 返回完整文本作为 AssistantMessage。message_id 派生为
-    // `claude-text-{message_index}-{block_index}`，跨 message 唯一，
-    // 避免多轮对话中 message 2 的 text 覆盖 message 1 的 text。
+    // message_id 带 turn_id + message_index + block_index，跨 turn / message 唯一，
+    // 避免第二轮回复覆盖第一轮同位置回复。
     Some(AgentStreamEvent::Timeline {
         item: AgentTimelineItem::AssistantMessage {
             text,
             message_id: Some(message_id),
         },
-        turn_id,
+        turn_id: event_turn_id,
         seq: 0,
         timestamp: now_ms(),
     })
@@ -968,7 +968,7 @@ fn try_flush_text_delta(
 /// 强制 flush 所有残留的 text 增量（turn 结束 / assistant 完整消息到来时）。
 fn flush_all_text_deltas(
     state: &Arc<Mutex<SessionState>>,
-    _turn_id: &Option<String>,
+    turn_id: &Option<String>,
 ) -> Vec<AgentStreamEvent> {
     let indices: Vec<usize> = state
         .lock()
@@ -977,7 +977,7 @@ fn flush_all_text_deltas(
         .unwrap_or_default();
     indices
         .into_iter()
-        .filter_map(|index| try_flush_text_delta(state, index, true))
+        .filter_map(|index| try_flush_text_delta(state, turn_id, index, true))
         .collect()
 }
 
@@ -1223,6 +1223,25 @@ fn user_message_timeline_item(turn_id: &Option<String>, text: String) -> AgentTi
     }
 }
 
+fn claude_text_message_prefix(turn_id: &Option<String>, message_index: usize) -> String {
+    match turn_id.as_deref().filter(|id| !id.is_empty()) {
+        Some(turn_id) => format!("claude-text-{turn_id}-{message_index}-"),
+        None => format!("claude-text-{message_index}-"),
+    }
+}
+
+fn claude_text_message_id(
+    turn_id: &Option<String>,
+    message_index: usize,
+    block_index: usize,
+) -> String {
+    format!(
+        "{}{}",
+        claude_text_message_prefix(turn_id, message_index),
+        block_index
+    )
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1383,7 +1402,7 @@ mod tests {
     #[test]
     fn assistant_message_text_carries_same_message_id_as_streaming_flush() {
         // 回归：完整 assistant 消息的 text block 必须使用与流式增量 flush 一致的
-        // message_id（claude-text-{message_index}-{block_index}），前后端两条去重路径
+        // message_id（claude-text-{turn_id}-{message_index}-{block_index}），前后端两条去重路径
         // （前端 reducer 按 messageId 幂等替换、后端 push_compacted_timeline_item 按
         // message_id 合并）才能把同一段结论文本归并为一条，避免重复展示与顺序错乱。
         // 该测试未触发 MessageStart 流事件，message_index 保持初始值 0。
@@ -1424,18 +1443,18 @@ mod tests {
             matches!(
                 assistant_texts[0],
                 AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
-                    if text == "first block" && id == "claude-text-0-0"
+                    if text == "first block" && id == "claude-text-t1-0-0"
             ),
-            "第一条 text block 应携带 claude-text-0-0，实际 {:?}",
+            "第一条 text block 应携带 claude-text-t1-0-0，实际 {:?}",
             assistant_texts[0]
         );
         assert!(
             matches!(
                 assistant_texts[1],
                 AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
-                    if text == "second block" && id == "claude-text-0-1"
+                    if text == "second block" && id == "claude-text-t1-0-1"
             ),
-            "第二条 text block 应携带 claude-text-0-1，实际 {:?}",
+            "第二条 text block 应携带 claude-text-t1-0-1，实际 {:?}",
             assistant_texts[1]
         );
     }
@@ -1445,8 +1464,8 @@ mod tests {
         // 回归（问题一）：Claude 每个 message 的 content block index 都从 0 重置，
         // 若 message_id 仅用 block_index（claude-text-{block}），message 2 的 text
         // block 0 会与 message 1 的共用 claude-text-0，前端 reducer 按 messageId
-        // 幂等替换时 message 2 的结论会覆盖 message 1。修复后 message_id 派生为
-        // claude-text-{message_index}-{block_index}，跨 message 唯一。
+        // 幂等替换时 message 2 的结论会覆盖 message 1。修复后 message_id 带
+        // message_index，跨 message 唯一。
         use super::super::message::{AssistantBlock, AssistantMessage};
         let state = test_state(Some("abc".into()));
         let config = test_config();
@@ -1509,14 +1528,95 @@ mod tests {
         let id1 = id_of(&events_msg1);
         let id2 = id_of(&events_msg2);
         assert_eq!(
-            id1, "claude-text-1-0",
-            "第一条 message 应为 claude-text-1-0"
+            id1, "claude-text-t1-1-0",
+            "第一条 message 应为 claude-text-t1-1-0"
         );
         assert_eq!(
-            id2, "claude-text-2-0",
-            "第二条 message 应为 claude-text-2-0"
+            id2, "claude-text-t1-2-0",
+            "第二条 message 应为 claude-text-t1-2-0"
         );
         assert_ne!(id1, id2, "两条 message 的 text block id 必须不同");
+    }
+
+    #[test]
+    fn assistant_text_message_id_includes_turn_id_to_avoid_cross_turn_collision() {
+        // 回归：Claude 每次 send_message 都会启动一个单轮 `claude -p` 进程，
+        // 并重置当前 turn 的 message_index。若 assistant message_id 不包含 turn_id，
+        // 第二轮第一条回复会再次落成 claude-text-1-0，前端 reducer 按 messageId
+        // upsert 时会覆盖第一轮回复，看起来像第二轮没有应答。
+        use super::super::message::{AssistantBlock, AssistantMessage};
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+
+        build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::MessageStart { usage: None }),
+        );
+        let turn_one_events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::Text {
+                        text: "turn one".into(),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        {
+            let mut guard = state.lock().unwrap();
+            guard.current_turn_id = Some("t2".into());
+            guard.message_index = 0;
+            guard.text_buffer.clear();
+            guard.text_last_flush_at.clear();
+            guard.text_flushed_len.clear();
+            guard.flushed_text_messages.clear();
+        }
+
+        build_events(
+            &state,
+            &config,
+            &Some("t2".into()),
+            ClaudeStreamMessage::StreamEvent(AnthropicStreamEvent::MessageStart { usage: None }),
+        );
+        let turn_two_events = build_events(
+            &state,
+            &config,
+            &Some("t2".into()),
+            ClaudeStreamMessage::Assistant {
+                message: AssistantMessage {
+                    blocks: vec![AssistantBlock::Text {
+                        text: "turn two".into(),
+                    }],
+                    usage: None,
+                },
+                session_id: None,
+            },
+        );
+
+        let id_of = |events: &Vec<AgentStreamEvent>| -> String {
+            events
+                .iter()
+                .find_map(|event| match event {
+                    AgentStreamEvent::Timeline {
+                        item: AgentTimelineItem::AssistantMessage { message_id, .. },
+                        ..
+                    } => message_id.clone(),
+                    _ => None,
+                })
+                .expect("应有 AssistantMessage")
+        };
+        let id1 = id_of(&turn_one_events);
+        let id2 = id_of(&turn_two_events);
+        assert_eq!(id1, "claude-text-t1-1-0");
+        assert_eq!(id2, "claude-text-t2-1-0");
+        assert_ne!(id1, id2, "跨 turn 的 assistant message id 必须不同");
     }
 
     #[test]
@@ -1736,7 +1836,7 @@ mod tests {
 
         assert_eq!(
             assistant_texts,
-            vec![("claude-text-1-0".into(), "重复结论".into())],
+            vec![("claude-text-t1-1-0".into(), "重复结论".into())],
             "同一 text block 在 delta 已 flush 完整文本后不应再被完整 assistant 消息重复写入"
         );
     }
@@ -1745,7 +1845,7 @@ mod tests {
     fn assistant_full_message_does_not_duplicate_text_when_stream_and_full_block_indexes_differ() {
         // 回归（issue 59）：stream_event 的 text 来自 block index=1，
         // 但完整 assistant message 因未携带前置 thinking block，只剩一个 text block，
-        // 最终落成不同 message_id（claude-text-1-1 / claude-text-1-0）却是同一结论。
+        // 最终落成不同 message_id（claude-text-t1-1-1 / claude-text-t1-1-0）却是同一结论。
         use super::super::message::{AssistantBlock, AssistantMessage};
         let state = test_state(Some("abc".into()));
         let config = test_config();
@@ -1811,7 +1911,7 @@ mod tests {
 
         assert_eq!(
             assistant_texts,
-            vec![("claude-text-1-1".into(), "索引错位的重复结论".into())],
+            vec![("claude-text-t1-1-1".into(), "索引错位的重复结论".into())],
             "stream block index 与完整 assistant block index 不一致时也不应重复写入"
         );
     }
