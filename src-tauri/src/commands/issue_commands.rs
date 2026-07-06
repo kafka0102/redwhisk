@@ -1,3 +1,5 @@
+use crate::agent::pty_session_manager::PtySessionManager;
+use crate::agent::session_registry::AgentSessionRegistry;
 use tauri::State;
 
 use crate::app_state::AppState;
@@ -19,7 +21,7 @@ use crate::types::issue::{
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 
 #[tauri::command]
-pub fn list_issues(
+pub async fn list_issues(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     project_id: i64,
@@ -29,251 +31,426 @@ pub fn list_issues(
     per_status_limit: Option<i64>,
 ) -> Result<IssueListResponse, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
-        &data_dir,
-        project_id,
-        &state.pty_sessions,
-        &state.agent_sessions,
-    )?;
-    // 首屏：四个状态各取前 N 条，单次返回扁平列表。
-    if let Some(per_status_limit) = per_status_limit {
-        return IssueService::list_issues_per_status_in_data_dir(
-            data_dir,
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
+            &data_dir,
             project_id,
-            per_status_limit,
-        );
-    }
-    // 滚动加载下一页：按状态 + limit/offset 取数。
-    if status.is_some() || limit.is_some() || offset.is_some() {
-        return IssueService::list_issues_page_in_data_dir(
-            data_dir, project_id, status, limit, offset,
-        );
-    }
-    IssueService::list_issues_in_data_dir(data_dir, project_id)
+            &pty_sessions,
+            &agent_sessions,
+        )?;
+        // 首屏：四个状态各取前 N 条，单次返回扁平列表。
+        if let Some(per_status_limit) = per_status_limit {
+            return IssueService::list_issues_per_status_in_data_dir(
+                data_dir,
+                project_id,
+                per_status_limit,
+            );
+        }
+        // 滚动加载下一页：按状态 + limit/offset 取数。
+        if status.is_some() || limit.is_some() || offset.is_some() {
+            return IssueService::list_issues_page_in_data_dir(
+                data_dir, project_id, status, limit, offset,
+            );
+        }
+        IssueService::list_issues_in_data_dir(data_dir, project_id)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 查询失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn create_issue(
+pub async fn create_issue(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: CreateIssueInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::create_issue_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::create_issue_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn update_issue(
+pub async fn update_issue(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: UpdateIssueInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::update_issue_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::update_issue_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn preview_issue_attachment(
+pub async fn preview_issue_attachment(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PreviewIssueAttachmentInput,
 ) -> Result<IssueAttachmentPreview, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::preview_issue_attachment_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::preview_issue_attachment_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 附件预览失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn export_issue_attachment(
+pub async fn export_issue_attachment(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: ExportIssueAttachmentInput,
 ) -> Result<(), CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::export_issue_attachment_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::export_issue_attachment_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 附件导出失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn save_issue_attachment_draft(
+pub async fn save_issue_attachment_draft(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: SaveIssueAttachmentDraftInput,
 ) -> Result<SaveIssueAttachmentDraftResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::save_issue_attachment_draft_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::save_issue_attachment_draft_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 附件草稿保存失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn mark_issue_review(
+pub async fn mark_issue_review(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: MarkIssueReviewInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::mark_issue_review_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::mark_issue_review_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 状态更新失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn advance_issue_status(
+pub async fn advance_issue_status(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: AdvanceIssueStatusInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let previous_issue = IssueService::list_issues_in_data_dir(&data_dir, input.project_id)?
-        .issues
-        .into_iter()
-        .find(|issue| issue.id == input.issue_id);
-    let issue = IssueService::advance_issue_status_in_data_dir(data_dir, input)?;
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let previous_issue = IssueService::list_issues_in_data_dir(&data_dir, input.project_id)?
+            .issues
+            .into_iter()
+            .find(|issue| issue.id == input.issue_id);
+        let issue = IssueService::advance_issue_status_in_data_dir(data_dir, input)?;
 
-    shutdown_issue_session_after_status_change(&state, previous_issue.as_ref(), &issue);
+        shutdown_issue_session_after_status_change(
+            &pty_sessions,
+            &agent_sessions,
+            previous_issue.as_ref(),
+            &issue,
+        );
 
-    Ok(issue)
+        Ok(issue)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 状态更新失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn complete_issue_manual(
+pub async fn complete_issue_manual(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: CompleteIssueManualInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let issue = AgentSessionService::complete_issue_manual_in_data_dir(
-        data_dir,
-        input,
-        &state.pty_sessions,
-    )?;
-    shutdown_closed_issue_session(&state, &issue);
-    Ok(issue)
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let issue =
+            AgentSessionService::complete_issue_manual_in_data_dir(data_dir, input, &pty_sessions)?;
+        shutdown_closed_issue_session(&pty_sessions, &agent_sessions, &issue);
+        Ok(issue)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn complete_issue_clean(
+pub async fn complete_issue_clean(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: CompleteIssueCleanInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let issue = AgentSessionService::complete_issue_clean_in_data_dir(
-        data_dir,
-        input,
-        &state.pty_sessions,
-    )?;
-    shutdown_closed_issue_session(&state, &issue);
-    Ok(issue)
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let issue =
+            AgentSessionService::complete_issue_clean_in_data_dir(data_dir, input, &pty_sessions)?;
+        shutdown_closed_issue_session(&pty_sessions, &agent_sessions, &issue);
+        Ok(issue)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn complete_issue_flow(
+pub async fn complete_issue_flow(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: CompleteIssueFlowInput,
 ) -> Result<CompleteIssueFlowResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let result = IssueService::complete_issue_flow_in_data_dir(
-        data_dir,
-        input,
-        &state.pty_sessions,
-        &state.agent_sessions,
-    )?;
-    if result.action == crate::types::issue_completion::CompleteIssueFlowAction::Completed {
-        shutdown_closed_issue_session(&state, &result.issue);
-    }
-    Ok(result)
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = IssueService::complete_issue_flow_in_data_dir(
+            data_dir,
+            input,
+            &pty_sessions,
+            &agent_sessions,
+        )?;
+        if result.action == crate::types::issue_completion::CompleteIssueFlowAction::Completed {
+            shutdown_closed_issue_session(&pty_sessions, &agent_sessions, &result.issue);
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn prepare_agent_commit_completion(
+pub async fn prepare_agent_commit_completion(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PrepareAgentCommitCompletionInput,
 ) -> Result<AgentCommitCompletionPreview, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::prepare_agent_commit_completion_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::prepare_agent_commit_completion_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 完成预检失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn send_agent_commit_prompt(
+pub async fn send_agent_commit_prompt(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: SendAgentCommitPromptInput,
 ) -> Result<SendAgentCommitPromptResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    IssueService::send_agent_commit_prompt_in_data_dir(
-        data_dir,
-        input,
-        &state.pty_sessions,
-        &state.agent_sessions,
-    )
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::send_agent_commit_prompt_in_data_dir(
+            data_dir,
+            input,
+            &pty_sessions,
+            &agent_sessions,
+        )
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 自动提交失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn detect_agent_commit_completion(
+pub async fn detect_agent_commit_completion(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: DetectAgentCommitCompletionInput,
 ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
-        &data_dir,
-        input.project_id,
-        &state.pty_sessions,
-        &state.agent_sessions,
-    )?;
-    IssueService::detect_agent_commit_completion_in_data_dir(data_dir, input)
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
+            &data_dir,
+            input.project_id,
+            &pty_sessions,
+            &agent_sessions,
+        )?;
+        IssueService::detect_agent_commit_completion_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 完成检测失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn get_issue_summary(
+pub async fn get_issue_summary(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: GetIssueSummaryInput,
 ) -> Result<IssueSummaryRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
-        &data_dir,
-        input.project_id,
-        &state.pty_sessions,
-        &state.agent_sessions,
-    )?;
-    IssueService::get_issue_summary_in_data_dir(data_dir, input)
+    let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
+            &data_dir,
+            input.project_id,
+            &pty_sessions,
+            &agent_sessions,
+        )?;
+        IssueService::get_issue_summary_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 摘要读取失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn delete_issue(
+pub async fn delete_issue(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: DeleteIssueInput,
 ) -> Result<DeleteIssueResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let result = IssueService::delete_issue_in_data_dir(data_dir, input)?;
+    let pty_sessions = state.pty_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = IssueService::delete_issue_in_data_dir(data_dir, input)?;
 
-    if let Some(session_id) = result.linked_session_id {
-        if state.pty_sessions.contains(session_id) {
-            let _ = state.pty_sessions.kill(session_id);
+        if let Some(session_id) = result.linked_session_id {
+            if pty_sessions.contains(session_id) {
+                let _ = pty_sessions.kill(session_id);
+            }
         }
-    }
 
-    Ok(result)
+        Ok(result)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 删除失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn get_issue_worktree_status(
+pub async fn get_issue_worktree_status(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: GetIssueWorktreeStatusInput,
 ) -> Result<IssueWorktreeStatusResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::get_issue_worktree_status_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        AgentSessionService::get_issue_worktree_status_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Worktree 状态查询失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]
-pub fn delete_issue_worktree(
+pub async fn delete_issue_worktree(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: DeleteIssueWorktreeInput,
 ) -> Result<DeleteIssueWorktreeResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)
+    tauri::async_runtime::spawn_blocking(move || {
+        AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Worktree 删除失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 fn prepare_issue_data_dir(
@@ -298,13 +475,14 @@ fn prepare_issue_data_dir(
 }
 
 fn shutdown_issue_session_after_status_change(
-    state: &State<'_, AppState>,
+    pty_sessions: &PtySessionManager,
+    agent_sessions: &AgentSessionRegistry,
     previous_issue: Option<&IssueRecord>,
     issue: &IssueRecord,
 ) {
     if issue.linked_session_status == Some(AgentSessionStatus::Closed) {
         if let Some(session_id) = issue.linked_session_id {
-            shutdown_runtime_session(state, session_id);
+            shutdown_runtime_session(pty_sessions, agent_sessions, session_id);
         }
         return;
     }
@@ -316,25 +494,33 @@ fn shutdown_issue_session_after_status_change(
         && issue.linked_session_id.is_none()
     {
         if let Some(session_id) = previous_issue.linked_session_id {
-            shutdown_runtime_session(state, session_id);
+            shutdown_runtime_session(pty_sessions, agent_sessions, session_id);
         }
     }
 }
 
-fn shutdown_closed_issue_session(state: &State<'_, AppState>, issue: &IssueRecord) {
+fn shutdown_closed_issue_session(
+    pty_sessions: &PtySessionManager,
+    agent_sessions: &AgentSessionRegistry,
+    issue: &IssueRecord,
+) {
     if issue.linked_session_status == Some(AgentSessionStatus::Closed) {
         if let Some(session_id) = issue.linked_session_id {
-            shutdown_runtime_session(state, session_id);
+            shutdown_runtime_session(pty_sessions, agent_sessions, session_id);
         }
     }
 }
 
-fn shutdown_runtime_session(state: &State<'_, AppState>, session_id: i64) {
-    if state.pty_sessions.contains(session_id) {
-        let _ = state.pty_sessions.kill(session_id);
+fn shutdown_runtime_session(
+    pty_sessions: &PtySessionManager,
+    agent_sessions: &AgentSessionRegistry,
+    session_id: i64,
+) {
+    if pty_sessions.contains(session_id) {
+        let _ = pty_sessions.kill(session_id);
     }
 
-    if let Some(handle) = state.agent_sessions.unregister(session_id) {
+    if let Some(handle) = agent_sessions.unregister(session_id) {
         handle.shutdown();
     }
 }
