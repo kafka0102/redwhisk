@@ -1856,7 +1856,49 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("enables target branch selection in worktree mode and submits remembered selections", async () => {
+  it("enables target branch selection in worktree mode and submits the chosen branch", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 301,
+      issueId: existingIssue.id,
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await selectShadcnOption(
+      user,
+      within(dialog),
+      "Development mode",
+      "Worktree",
+    );
+    await selectShadcnOption(user, within(dialog), "Target branch", "develop");
+    expect(
+      within(dialog).getByRole("combobox", { name: "Target branch" }),
+    ).toBeEnabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 20,
+      agentProfileId: 100,
+      promptSnapshot: existingIssueRunPrompt,
+      workspaceMode: "worktree",
+      targetBranch: "develop",
+      worktreeSetupCommand: "pnpm install",
+    });
+  }, 10_000);
+
+  it("resets the worktree target branch to the current branch on reopen instead of remembering the previous selection", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
@@ -1881,9 +1923,6 @@ describe("IssuesActivity", () => {
       "Worktree",
     );
     await selectShadcnOption(user, within(dialog), "Target branch", "develop");
-    expect(
-      within(dialog).getByRole("combobox", { name: "Target branch" }),
-    ).toBeEnabled();
 
     await user.click(
       within(dialog).getByRole("button", { name: "Close run dialog" }),
@@ -1894,21 +1933,9 @@ describe("IssuesActivity", () => {
       "Worktree",
     );
     expect(within(dialog).getByLabelText("Target branch")).toHaveTextContent(
-      "develop",
+      "main",
     );
-
-    await user.click(within(dialog).getByRole("button", { name: "Start" }));
-
-    expect(startAgentSessionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 20,
-      agentProfileId: 100,
-      promptSnapshot: existingIssueRunPrompt,
-      workspaceMode: "worktree",
-      targetBranch: "develop",
-      worktreeSetupCommand: "pnpm install",
-    });
-  }, 10_000);
+  });
 
   it("defaults master and main branches to worktree mode", async () => {
     const user = userEvent.setup();
@@ -2015,12 +2042,6 @@ describe("IssuesActivity", () => {
 
   it("keeps non-main branches on current branch without a previous issue session", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "redwhisk.issue-run.recent-workspace-selection",
-      JSON.stringify({
-        "1": { workspaceMode: "worktree", targetBranch: "develop" },
-      }),
-    );
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {

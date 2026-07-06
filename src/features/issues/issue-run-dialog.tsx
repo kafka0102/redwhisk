@@ -38,8 +38,6 @@ import { useI18n } from "../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
-const RECENT_WORKSPACE_SELECTION_STORAGE_KEY =
-  "redwhisk.issue-run.recent-workspace-selection";
 
 interface IssueRunDialogProps {
   issue: Pick<
@@ -64,11 +62,6 @@ interface IssueRunDialogProps {
    */
   onStartError?: (error: CommandError) => void;
   onStarted: (result: StartAgentSessionResult) => void | Promise<void>;
-}
-
-interface RecentWorkspaceSelection {
-  workspaceMode: WorkspaceMode;
-  targetBranch: string | null;
 }
 
 export function IssueRunDialog({
@@ -99,7 +92,6 @@ export function IssueRunDialog({
     localBranches: [],
   });
   const [isLoadingBranches, setIsLoadingBranches] = useState(true);
-  const [hasLoadedRunContext, setHasLoadedRunContext] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -150,8 +142,6 @@ export function IssueRunDialog({
           globalProfiles: globalProfilesResponse.profiles,
           sessions: sessionsResponse.sessions,
         });
-        const recentWorkspaceSelection =
-          readRecentWorkspaceSelection(projectId);
         const initialWorkspaceMode = resolveInitialWorkspaceMode({
           currentBranch: branchesResponse.currentBranch,
           recentWorkspaceMode: resolveMostRecentIssueWorkspaceMode(
@@ -161,7 +151,6 @@ export function IssueRunDialog({
         const resolvedTargetBranch = resolveInitialTargetBranch({
           currentBranch: branchesResponse.currentBranch,
           localBranches: branchesResponse.localBranches,
-          recentTargetBranch: recentWorkspaceSelection?.targetBranch ?? null,
         });
 
         setProfiles(mergedProfiles);
@@ -182,7 +171,6 @@ export function IssueRunDialog({
         setWorkspaceMode(initialWorkspaceMode);
         setTargetBranch(resolvedTargetBranch);
         setBranchState(branchesResponse);
-        setHasLoadedRunContext(true);
 
         if (mergedProfiles.length === 0) {
           setStatusMessage(messages.agentsFeature.noProfilesForAgentType);
@@ -215,17 +203,6 @@ export function IssueRunDialog({
 
     profileSelectRef.current?.focus();
   }, [isLoadingProfiles, profiles.length]);
-
-  useEffect(() => {
-    if (!hasLoadedRunContext) {
-      return;
-    }
-
-    saveRecentWorkspaceSelection(projectId, {
-      workspaceMode,
-      targetBranch: targetBranch.trim().length > 0 ? targetBranch : null,
-    });
-  }, [hasLoadedRunContext, projectId, targetBranch, workspaceMode]);
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
@@ -642,65 +619,6 @@ function resolveInitialWorkflowSkill({
   return null;
 }
 
-function readRecentWorkspaceSelection(
-  projectId: number,
-): RecentWorkspaceSelection | null {
-  try {
-    const rawValue = window.localStorage.getItem(
-      RECENT_WORKSPACE_SELECTION_STORAGE_KEY,
-    );
-    if (!rawValue) {
-      return null;
-    }
-
-    const records = JSON.parse(rawValue) as Record<
-      string,
-      RecentWorkspaceSelection | null
-    >;
-    const record = records[String(projectId)];
-    if (
-      record == null ||
-      (record.workspaceMode !== "current_branch" &&
-        record.workspaceMode !== "worktree")
-    ) {
-      return null;
-    }
-
-    return {
-      workspaceMode: record.workspaceMode,
-      targetBranch:
-        typeof record.targetBranch === "string" ? record.targetBranch : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function saveRecentWorkspaceSelection(
-  projectId: number,
-  selection: RecentWorkspaceSelection,
-) {
-  try {
-    const rawValue = window.localStorage.getItem(
-      RECENT_WORKSPACE_SELECTION_STORAGE_KEY,
-    );
-    const records =
-      rawValue === null
-        ? {}
-        : (JSON.parse(rawValue) as Record<
-            string,
-            RecentWorkspaceSelection | null
-          >);
-    records[String(projectId)] = selection;
-    window.localStorage.setItem(
-      RECENT_WORKSPACE_SELECTION_STORAGE_KEY,
-      JSON.stringify(records),
-    );
-  } catch {
-    // Ignore local storage failures and fall back to in-memory defaults.
-  }
-}
-
 function resolveInitialWorkspaceMode({
   currentBranch,
   recentWorkspaceMode,
@@ -733,20 +651,10 @@ function isMainlineBranch(branch: string): boolean {
 function resolveInitialTargetBranch({
   currentBranch,
   localBranches,
-  recentTargetBranch,
 }: {
   currentBranch: string;
   localBranches: string[];
-  recentTargetBranch: string | null;
 }): string {
-  if (
-    recentTargetBranch &&
-    localBranches.includes(recentTargetBranch.trim()) &&
-    recentTargetBranch.trim().length > 0
-  ) {
-    return recentTargetBranch.trim();
-  }
-
   if (currentBranch.trim().length > 0) {
     return currentBranch;
   }
