@@ -16,6 +16,10 @@ const quillInstances = vi.hoisted(() => {
     on: ReturnType<typeof vi.fn>;
     root: HTMLElement;
     setContents: ReturnType<typeof vi.fn>;
+    deleteText: ReturnType<typeof vi.fn>;
+    getSelection: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof vi.fn>;
+    setSelection: ReturnType<typeof vi.fn>;
   }> = [];
   return instances;
 });
@@ -81,6 +85,17 @@ const labels: RichTextEditorLabels = {
   removeAttachment: (displayName) => `Remove ${displayName}`,
   unorderedList: "Unordered list",
 };
+
+function createPasteEvent(plainText: string) {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      getData: (type: string) => (type === "text/plain" ? plainText : ""),
+    },
+    configurable: true,
+  });
+  return event;
+}
 
 describe("RichTextEditor", () => {
   beforeEach(() => {
@@ -341,5 +356,81 @@ describe("RichTextEditor", () => {
     );
 
     expect(quillInstances[0].setContents).toHaveBeenCalledTimes(1);
+  });
+
+  it("strips formatting and trims pasted plain text", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    const editorRoot = quillInstances[0].root;
+    const event = createPasteEvent("  hello world  ");
+    editorRoot.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(quillInstances[0].insertText).toHaveBeenCalledWith(
+      0,
+      "hello world",
+      "user",
+    );
+    expect(quillInstances[0].setSelection).toHaveBeenCalledWith(
+      "hello world".length,
+      0,
+      "user",
+    );
+  });
+
+  it("replaces the current selection with trimmed pasted text", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    quillInstances[0].getSelection.mockReturnValue({ index: 4, length: 3 });
+    const editorRoot = quillInstances[0].root;
+    const event = createPasteEvent("  new  ");
+    editorRoot.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(quillInstances[0].deleteText).toHaveBeenCalledWith(4, 3, "user");
+    expect(quillInstances[0].insertText).toHaveBeenCalledWith(4, "new", "user");
+    expect(quillInstances[0].setSelection).toHaveBeenCalledWith(
+      4 + "new".length,
+      0,
+      "user",
+    );
+  });
+
+  it("leaves image-only paste to the default pipeline", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    const editorRoot = quillInstances[0].root;
+    const event = createPasteEvent("");
+    editorRoot.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(quillInstances[0].insertText).not.toHaveBeenCalled();
   });
 });

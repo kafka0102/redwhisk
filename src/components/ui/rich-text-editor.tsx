@@ -323,12 +323,42 @@ export function RichTextEditor({
       isComposing = false;
       restorePlaceholderAfterInput();
     };
+    // 粘贴时只保留纯文本并去除首尾空白：丢弃 HTML/富文本格式，避免外部样式
+    // 污染编辑器。监听器挂在 quill.root 的父节点上并以捕获阶段先于 Quill 自带
+    // 的 onCapturePaste 执行，preventDefault 后 Quill 会在 defaultPrevented
+    // 检查处直接退出，不再走其 clipboard 转换链路。
+    const handlePaste = (event: ClipboardEvent) => {
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) {
+        return;
+      }
+      const rawText = clipboardData.getData("text/plain");
+      if (rawText.length === 0) {
+        // 没有纯文本（例如粘贴图片）时不拦截，交回默认链路处理。
+        return;
+      }
+      event.preventDefault();
+      const trimmedText = rawText.trim();
+      if (trimmedText.length === 0) {
+        return;
+      }
+      const selection = quill.getSelection();
+      const index = selection
+        ? selection.index
+        : Math.max(quill.getLength() - 1, 0);
+      if (selection && selection.length > 0) {
+        quill.deleteText(selection.index, selection.length, "user");
+      }
+      quill.insertText(index, trimmedText, "user");
+      quill.setSelection(index + trimmedText.length, 0, "user");
+    };
 
     quill.root.addEventListener("compositionstart", handleCompositionStart);
     quill.root.addEventListener("compositionend", handleCompositionEnd);
     quill.root.addEventListener("beforeinput", handleBeforeInput);
     quill.root.addEventListener("input", handleInput);
     quill.root.addEventListener("blur", handleBlur);
+    editorHostElement.addEventListener("paste", handlePaste, true);
 
     const handleTextChange = (
       _delta: unknown,
@@ -362,6 +392,7 @@ export function RichTextEditor({
       quill.root.removeEventListener("beforeinput", handleBeforeInput);
       quill.root.removeEventListener("input", handleInput);
       quill.root.removeEventListener("blur", handleBlur);
+      editorHostElement.removeEventListener("paste", handlePaste, true);
       quillRef.current = null;
     };
   }, [ariaLabel, placeholder]);
