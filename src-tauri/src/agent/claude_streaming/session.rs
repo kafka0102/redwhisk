@@ -36,6 +36,7 @@ use crate::types::agent_session_stream::{
 
 /// assistant 文本增量节流间隔，避免逐 token 广播。
 const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(80);
+const CLIENT_INITIATED_CLOSE_REASON: &str = "客户端主动关闭";
 
 /// claude `-p` 输出格式所需的固定参数。
 const STREAM_JSON_ARGS: &[&str] = &[
@@ -252,7 +253,7 @@ impl ClaudeSessionHandle {
         std::thread::spawn(move || {
             if let Ok(reason) = rx.recv() {
                 let finalized = handle_process_exit(&state_for_eof, &reason);
-                if !finalized {
+                if should_emit_turn_failed_on_process_exit(finalized, &reason) {
                     config_for_eof.broadcaster.emit_stream_event(
                         config_for_eof.project_id,
                         config_for_eof.session_id,
@@ -1141,6 +1142,10 @@ fn handle_process_exit(state: &Arc<Mutex<SessionState>>, _reason: &str) -> bool 
     } else {
         true
     }
+}
+
+fn should_emit_turn_failed_on_process_exit(finalized: bool, reason: &str) -> bool {
+    !finalized && reason != CLIENT_INITIATED_CLOSE_REASON
 }
 
 /// 由 tool_name 和 input 构造 ToolCallDetail（复用 event_mapper 的映射逻辑）。
@@ -2303,5 +2308,25 @@ mod tests {
             events.len(),
             session_id
         );
+    }
+
+    #[test]
+    fn should_not_emit_turn_failed_when_client_actively_closes_transport() {
+        assert!(!should_emit_turn_failed_on_process_exit(
+            false,
+            CLIENT_INITIATED_CLOSE_REASON,
+        ));
+    }
+
+    #[test]
+    fn should_still_emit_turn_failed_for_unexpected_process_exit() {
+        assert!(should_emit_turn_failed_on_process_exit(
+            false,
+            "claude exited with code 1",
+        ));
+        assert!(!should_emit_turn_failed_on_process_exit(
+            true,
+            "claude exited with code 1",
+        ));
     }
 }
