@@ -82,6 +82,7 @@ vi.mock("../project/project-commands", () => ({
 vi.mock("../../shared/toast", () => ({
   toast: {
     success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -98,6 +99,7 @@ const saveProjectLabelMock = vi.mocked(saveProjectLabel);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
 const toastSuccessMock = vi.mocked(toast.success);
+const toastErrorMock = vi.mocked(toast.error);
 const { open } = await import("@tauri-apps/plugin-dialog");
 const openDialogMock = vi.mocked(open);
 const onProjectUpdated = vi.fn();
@@ -171,6 +173,7 @@ describe("ProjectSettingsActivity", () => {
     updateProjectSettingsMock.mockReset();
     validateProjectRepoPathMock.mockReset();
     toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
     openDialogMock.mockReset();
     settingsEventMocks.listeners.length = 0;
     settingsEventMocks.unlisten.mockReset();
@@ -952,11 +955,7 @@ describe("ProjectSettingsActivity", () => {
     expect(testAgentCommandMock).toHaveBeenCalledWith({
       command: "/opt/codex/bin/codex",
     });
-    expect(
-      screen
-        .getByText("Command available: codex")
-        .closest(".agent-dialog__toast"),
-    ).not.toBeNull();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Command available: codex");
     expect(screen.getByLabelText("Agent command")).toHaveValue(
       "/opt/codex/bin/codex",
     );
@@ -970,36 +969,6 @@ describe("ProjectSettingsActivity", () => {
           command: "/opt/codex/bin/codex",
         }),
       ),
-    );
-  });
-
-  it("allows manually closing the command test toast", async () => {
-    const user = userEvent.setup();
-    listAgentProfilesMock.mockResolvedValue({ profiles: [] });
-    testAgentCommandMock.mockResolvedValue({
-      command: "/opt/codex/bin/codex",
-    });
-
-    render(
-      <ProjectSettingsActivity
-        onProjectUpdated={onProjectUpdated}
-        projectId={1}
-        projectName="RedWhisk"
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Agents" }));
-    await user.click(await screen.findByRole("button", { name: "New agent" }));
-    await user.click(screen.getByRole("button", { name: "Test" }));
-    expect(
-      await screen.findByText("Command available: codex"),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Close message" }));
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Command available: codex"),
-      ).not.toBeInTheDocument(),
     );
   });
 

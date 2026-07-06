@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   detectCodexCommand,
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { useI18n } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 
 interface AgentProfileFormProps {
   mode: "create" | "edit";
@@ -51,31 +52,9 @@ export function AgentProfileForm({
   const [dangerous] = useState(() => profile?.dangerous ?? true);
   const [promptTemplate] = useState(() => profile?.promptTemplate ?? "");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDetecting, setIsDetecting] = useState(mode === "create" && !profile);
-  const toastTimeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current !== null) {
-        window.clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const showToast = useCallback((message: string) => {
-    setToastMessage(message);
-    if (toastTimeoutRef.current !== null) {
-      window.clearTimeout(toastTimeoutRef.current);
-    }
-
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-      toastTimeoutRef.current = null;
-    }, 5000);
-  }, []);
 
   useEffect(() => {
     if (mode !== "create" || profile) return;
@@ -90,7 +69,7 @@ export function AgentProfileForm({
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
-        showToast(toCommandError(error).message);
+        toast.error(toCommandError(error).message);
       })
       .finally(() => {
         if (isMounted) setIsDetecting(false);
@@ -99,7 +78,7 @@ export function AgentProfileForm({
     return () => {
       isMounted = false;
     };
-  }, [mode, profile, showToast]);
+  }, [mode, profile]);
 
   useEffect(() => {
     if (!profile) return;
@@ -132,15 +111,14 @@ export function AgentProfileForm({
   async function handleTestCommand() {
     setIsTesting(true);
     setStatusMessage(null);
-    setToastMessage(null);
 
     try {
       const testedCommand = command.trim();
       const testedCommandName = toCommandName(testedCommand);
       await testAgentCommand({ command: testedCommand });
-      showToast(messages.settings.commandAvailable(testedCommandName));
+      toast.success(messages.settings.commandAvailable(testedCommandName));
     } catch (error: unknown) {
-      showToast(toCommandError(error).message);
+      toast.error(toCommandError(error).message);
     } finally {
       setIsTesting(false);
     }
@@ -150,7 +128,6 @@ export function AgentProfileForm({
     event.preventDefault();
     setIsSaving(true);
     setStatusMessage(null);
-    setToastMessage(null);
 
     try {
       const effectiveProjectId = scopeValue === "project" ? projectId : null;
@@ -317,26 +294,6 @@ export function AgentProfileForm({
             {isSaving ? messages.settings.saving : messages.settings.save}
           </button>
         </div>
-
-        {toastMessage ? (
-          <div className="agent-dialog__toast" role="status" aria-live="polite">
-            <span>{toastMessage}</span>
-            <button
-              aria-label={messages.settings.closeMessage}
-              className="agent-dialog__toast-close"
-              type="button"
-              onClick={() => {
-                if (toastTimeoutRef.current !== null) {
-                  window.clearTimeout(toastTimeoutRef.current);
-                  toastTimeoutRef.current = null;
-                }
-                setToastMessage(null);
-              }}
-            >
-              &times;
-            </button>
-          </div>
-        ) : null}
       </form>
     </div>
   );
