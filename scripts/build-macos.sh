@@ -33,9 +33,9 @@ echo "==> pnpm install --frozen-lockfile"
 pnpm install --frozen-lockfile
 
 # 5. 构建 Universal 包：Tauri 内部会编译两份并 lipo 合并
-#    bundle.targets 在 tauri.conf.json 中已配置为 ["app", "dmg"]
-echo "==> pnpm tauri build --target universal-apple-darwin"
-pnpm tauri build --target universal-apple-darwin
+#    tauri.conf.json 默认 bundle.targets 为 ["app"]，这里通过 --bundles app,dmg 显式产出 dmg
+echo "==> pnpm tauri build --target universal-apple-darwin --bundles app,dmg"
+pnpm tauri build --target universal-apple-darwin --bundles app,dmg
 
 # 6. 打印产物路径
 bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle"

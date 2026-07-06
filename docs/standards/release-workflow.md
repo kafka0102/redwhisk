@@ -13,7 +13,7 @@
 - `scripts/release-version.sh`：按版本号执行验证、构建、提交、tag 与推送。
 - `package.json` 暴露 `build:macos`、`bump-version` 与 `release:version` 根脚本入口。
 - `.github/workflows/release.yml`：tag 触发的自动发布工作流。
-- `src-tauri/tauri.conf.json` 的 `bundle.targets` 配置为 `["app", "dmg"]`。
+- `src-tauri/tauri.conf.json` 的 `bundle.targets` 默认配置为 `["app"]`，仅 `pnpm tauri build` 本地快速构建不打 dmg；`build:macos` 脚本与 CI 发布通过 `--bundles app,dmg` 显式产出 dmg。
 - `src-tauri/Cargo.toml` 配置了 `[profile.release]` 体积优化。
 
 ## 适用范围
@@ -83,7 +83,7 @@ pnpm build:macos
 
 1. `rustup target add aarch64-apple-darwin x86_64-apple-darwin`（幂等，已安装会跳过）
 2. `pnpm install --frozen-lockfile`
-3. `pnpm tauri build --target universal-apple-darwin`（Tauri 自动编译双架构并 `lipo` 合并）
+3. `pnpm tauri build --target universal-apple-darwin --bundles app,dmg`（Tauri 自动编译双架构并 `lipo` 合并；默认 `pnpm tauri build` 只产出 .app，发布流程需显式 `--bundles app,dmg` 才打 dmg）
 4. 打印产物路径
 
 任意步骤失败脚本立即退出。首次执行需要编译两份 Rust 产物，耗时较长（通常 15–25 分钟），后续增量构建会显著加快。
@@ -149,7 +149,7 @@ git push origin v0.1.0
 
 1. 安装 pnpm 9、Node 20、Rust stable 与两个 Apple target
 2. `pnpm install --frozen-lockfile`
-3. `pnpm tauri build --target universal-apple-darwin`
+3. `pnpm tauri build --target universal-apple-darwin --bundles app,dmg`
 4. 将 `.app` 打包为 `.app.zip`，便于作为 GitHub Release 单文件资源上传
 5. 上传构建产物为 workflow artifact（保留构建历史）
 6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.dmg` 与 `.app.zip`
