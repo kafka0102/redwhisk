@@ -178,3 +178,72 @@ export function deleteProjectTerminalConfig(
     { input },
   );
 }
+
+export interface ProjectTerminalShortcutCommandRecord {
+  id: number;
+  projectId: number;
+  command: string;
+  sortOrder: number;
+}
+
+export interface ListProjectTerminalShortcutCommandsInput {
+  projectId: number;
+}
+
+export interface ListProjectTerminalShortcutCommandsResult {
+  commands: ProjectTerminalShortcutCommandRecord[];
+}
+
+export interface SaveProjectTerminalShortcutCommandInput {
+  id?: number;
+  projectId: number;
+  command: string;
+  sortOrder: number;
+}
+
+export interface DeleteProjectTerminalShortcutCommandInput {
+  id: number;
+}
+
+export interface ReadProjectTerminalCwdInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface ReadProjectTerminalCwdResult {
+  sessionId: number;
+  cwd: string | null;
+}
+
+export function listProjectTerminalShortcutCommands(
+  input: ListProjectTerminalShortcutCommandsInput,
+): Promise<ListProjectTerminalShortcutCommandsResult> {
+  return invokeCommand<ListProjectTerminalShortcutCommandsResult>(
+    "list_project_terminal_shortcut_commands",
+    { input },
+  );
+}
+
+export function saveProjectTerminalShortcutCommand(
+  input: SaveProjectTerminalShortcutCommandInput,
+): Promise<ProjectTerminalShortcutCommandRecord> {
+  return invokeCommand<ProjectTerminalShortcutCommandRecord>(
+    "save_project_terminal_shortcut_command",
+    { input },
+  );
+}
+
+export function deleteProjectTerminalShortcutCommand(
+  input: DeleteProjectTerminalShortcutCommandInput,
+): Promise<void> {
+  return invokeCommand("delete_project_terminal_shortcut_command", { input });
+}
+
+export function readProjectTerminalCwd(
+  input: ReadProjectTerminalCwdInput,
+): Promise<ReadProjectTerminalCwdResult> {
+  return invokeCommand<ReadProjectTerminalCwdResult>(
+    "read_project_terminal_cwd",
+    { input },
+  );
+}

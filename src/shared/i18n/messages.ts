@@ -442,6 +442,20 @@ export interface I18nMessages {
     todoList: string;
     contextCompacted: string;
     workspaceLabel: string;
+    terminalStatusBar: string;
+    shortcutCommands: string;
+    shortcutCommandsManage: string;
+    shortcutCommandsEmpty: string;
+    shortcutCommandsDialogTitle: string;
+    shortcutCommandsAdd: string;
+    shortcutCommandsEdit: string;
+    shortcutCommandsDelete: string;
+    shortcutCommandsSave: string;
+    shortcutCommandsCancel: string;
+    shortcutCommandsCommandPlaceholder: string;
+    shortcutCommandsLimit: (limit: number) => string;
+    shortcutCommandsRun: (command: string) => string;
+    terminalCurrentPath: string;
     contextWindow: string;
     toolShell: string;
     toolEdit: string;
@@ -932,6 +946,20 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       todoList: "Todo list",
       contextCompacted: "Context compacted",
       workspaceLabel: "Project terminals workspace",
+      terminalStatusBar: "Terminal status bar",
+      shortcutCommands: "Quick commands",
+      shortcutCommandsManage: "Manage quick commands",
+      shortcutCommandsEmpty: "No quick commands yet.",
+      shortcutCommandsDialogTitle: "Quick commands",
+      shortcutCommandsAdd: "Add command",
+      shortcutCommandsEdit: "Edit",
+      shortcutCommandsDelete: "Delete",
+      shortcutCommandsSave: "Save",
+      shortcutCommandsCancel: "Cancel",
+      shortcutCommandsCommandPlaceholder: "Enter a command",
+      shortcutCommandsLimit: (limit) => `Up to ${limit} commands.`,
+      shortcutCommandsRun: (command) => `Run ${command}`,
+      terminalCurrentPath: "Current directory",
       contextWindow: "Context window",
       toolShell: "Shell",
       toolEdit: "Edit",
@@ -1418,6 +1446,20 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       todoList: "待办清单",
       contextCompacted: "上下文已压缩",
       workspaceLabel: "项目终端工作区",
+      terminalStatusBar: "终端状态栏",
+      shortcutCommands: "常用命令",
+      shortcutCommandsManage: "管理常用命令",
+      shortcutCommandsEmpty: "暂无常用命令。",
+      shortcutCommandsDialogTitle: "常用命令",
+      shortcutCommandsAdd: "添加命令",
+      shortcutCommandsEdit: "编辑",
+      shortcutCommandsDelete: "删除",
+      shortcutCommandsSave: "保存",
+      shortcutCommandsCancel: "取消",
+      shortcutCommandsCommandPlaceholder: "请输入命令",
+      shortcutCommandsLimit: (limit) => `最多 ${limit} 条命令。`,
+      shortcutCommandsRun: (command) => `执行 ${command}`,
+      terminalCurrentPath: "当前目录",
       contextWindow: "上下文窗口",
       toolShell: "命令行",
       toolEdit: "编辑",

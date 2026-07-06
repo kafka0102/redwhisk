@@ -2893,6 +2893,182 @@ button:focus-visible {
   min-height: 0;
 }
 
+.project-terminal-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.project-terminal-shell .terminal-surface-shell {
+  min-height: 0;
+}
+
+.project-terminal-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.project-terminal-status-bar__shortcut-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.project-terminal-status-bar__shortcut-trigger:hover,
+.project-terminal-status-bar__shortcut-trigger:focus-visible {
+  color: var(--color-text);
+  outline: none;
+}
+
+.project-terminal-status-bar__shortcut-trigger[data-popup-open],
+.project-terminal-status-bar__shortcut-trigger[aria-expanded="true"] {
+  color: var(--color-text);
+}
+
+.project-terminal-status-bar__menu {
+  min-width: 200px;
+}
+
+.project-terminal-status-bar__menu-command {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+}
+
+.project-terminal-status-bar__path {
+  flex: 1;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+  color: var(--color-text-muted);
+}
+
+.project-terminal-status-bar__error {
+  flex: 0 0 auto;
+  color: var(--color-danger);
+}
+
+.terminal-shortcut-commands-dialog {
+  width: min(500px, calc(100vw - 56px));
+  min-height: 0;
+  max-height: min(520px, calc(100vh - 56px));
+}
+
+.terminal-shortcut-commands-dialog__header {
+  padding: 12px;
+}
+
+.terminal-shortcut-commands-dialog__body {
+  padding: 0 12px;
+  min-height: 0;
+}
+
+.terminal-shortcut-commands-dialog__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.terminal-shortcut-commands-dialog__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 0;
+}
+
+.terminal-shortcut-commands-dialog__row--editing {
+  padding: 0;
+}
+
+.terminal-shortcut-commands-dialog__command {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family:
+    "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.terminal-shortcut-commands-dialog__edit-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.terminal-shortcut-commands-dialog__edit-form .input {
+  flex: 1;
+}
+
+.terminal-shortcut-commands-dialog__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.terminal-shortcut-commands-dialog__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.terminal-shortcut-commands-dialog__icon:hover:not(:disabled),
+.terminal-shortcut-commands-dialog__icon:focus-visible:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-text);
+  outline: none;
+}
+
+.terminal-shortcut-commands-dialog__icon:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.terminal-shortcut-commands-dialog__empty {
+  padding: 12px 0;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  text-align: center;
+}
+
 .agents-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

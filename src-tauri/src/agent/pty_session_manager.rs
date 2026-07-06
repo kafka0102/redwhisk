@@ -5,6 +5,7 @@ use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::Path;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -334,6 +335,28 @@ impl PtySessionManager {
         Ok(restore_buffer.snapshot(session_id))
     }
 
+    /// 查询 PTY 前台进程组 leader 的当前工作目录。
+    ///
+    /// 通过 `MasterPty::process_group_leader()` 获取前台进程 PID，再读取其 cwd。
+    /// macOS 用 `lsof -a -d cwd -p {pid} -Fn`，Linux 读 `/proc/{pid}/cwd` 符号链接。
+    /// 这是 best-effort：拿不到 PID 或读取失败时返回 `Ok(None)`，不阻断渲染。
+    pub fn current_cwd(&self, session_id: i64) -> Result<Option<String>, String> {
+        let session = self.lookup(session_id)?;
+        let master = session
+            .master
+            .lock()
+            .map_err(|_| "failed to lock PTY master".to_string())?;
+        let pid = master.process_group_leader();
+        drop(master);
+
+        let pid = match pid {
+            Some(pid) if pid > 0 => pid,
+            _ => return Ok(None),
+        };
+
+        Ok(read_cwd_for_pid(pid))
+    }
+
     fn lookup(&self, session_id: i64) -> Result<Arc<PtySessionHandle>, String> {
         self.store
             .sessions
@@ -427,6 +450,43 @@ pub fn read_terminal_snapshot(path: &Path, max_bytes: usize) -> Result<String, S
 
     let start = content.len().saturating_sub(max_bytes);
     Ok(String::from_utf8_lossy(&content[start..]).to_string())
+}
+
+/// 读取指定 PID 的当前工作目录。best-effort：失败返回 `None`。
+fn read_cwd_for_pid(pid: i32) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        return std::fs::read_link(format!("/proc/{pid}/cwd"))
+            .ok()
+            .and_then(|path| path.to_str().map(|s| s.to_string()));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("lsof")
+            .args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-Fn"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // lsof -Fn 输出每行以单个字符前缀开头，cwd 路径行前缀为 'n'。
+        for line in stdout.lines() {
+            if let Some(path) = line.strip_prefix('n') {
+                if !path.is_empty() {
+                    return Some(path.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = pid;
+        None
+    }
 }
 
 fn ensure_child_started(

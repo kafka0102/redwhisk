@@ -10,6 +10,7 @@ use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::db::project_terminal_shortcut_command_repository::ProjectTerminalShortcutCommandRepository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::ProjectSummary;
 use crate::types::project_terminal::{
@@ -22,12 +23,20 @@ use crate::types::project_terminal::{
     UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
 };
 use crate::types::project_terminal_config::ProjectTerminalConfig;
+use crate::types::project_terminal_shortcut_command::{
+    DeleteProjectTerminalShortcutCommandInput, ListProjectTerminalShortcutCommandsInput,
+    ListProjectTerminalShortcutCommandsResult, ProjectTerminalShortcutCommandRecord,
+    ReadProjectTerminalCwdInput, ReadProjectTerminalCwdResult,
+    SaveProjectTerminalShortcutCommandInput,
+};
 
 const DEFAULT_PROJECT_TERMINAL_NAME: &str = "New Terminal";
 const TEMPORARY_PROJECT_TERMINAL_CONFIG_ID: i64 = -1;
 const PROJECT_TERMINAL_LOG_DIR_NAME: &str = "project-terminal-logs";
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
+const PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT: i64 = 10;
+const PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_LENGTH: usize = 500;
 
 #[derive(Clone)]
 pub struct ProjectTerminalRegistry {
@@ -575,6 +584,30 @@ impl<'connection> ProjectTerminalService<'connection> {
         })
     }
 
+    pub fn read_terminal_cwd(
+        &self,
+        input: ReadProjectTerminalCwdInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ReadProjectTerminalCwdResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let session = registry.find(input.project_id, input.session_id)?;
+        if !session.is_active || !pty_sessions.contains(input.session_id) {
+            return Ok(ReadProjectTerminalCwdResult {
+                session_id: input.session_id,
+                cwd: None,
+            });
+        }
+
+        let cwd = pty_sessions
+            .current_cwd(input.session_id)
+            .map_err(project_terminal_inactive_error)?;
+        Ok(ReadProjectTerminalCwdResult {
+            session_id: input.session_id,
+            cwd,
+        })
+    }
+
     pub fn write_terminal_input(
         &self,
         input: WriteProjectTerminalInput,
@@ -717,6 +750,17 @@ impl<'connection> ProjectTerminalService<'connection> {
         )
     }
 
+    pub fn read_terminal_cwd_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ReadProjectTerminalCwdInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ReadProjectTerminalCwdResult, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).read_terminal_cwd(input, registry, pty_sessions)
+    }
+
     pub fn write_terminal_input_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: WriteProjectTerminalInput,
@@ -820,6 +864,155 @@ impl<'connection> ProjectTerminalService<'connection> {
             registry,
             pty_sessions,
         )
+    }
+
+    pub fn list_shortcut_commands(
+        &self,
+        input: ListProjectTerminalShortcutCommandsInput,
+    ) -> Result<ListProjectTerminalShortcutCommandsResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let repository = ProjectTerminalShortcutCommandRepository::new(
+            self.project_repository.connection(),
+        );
+        let commands = repository
+            .list_commands(input.project_id)
+            .map_err(project_terminal_database_error)?
+            .into_iter()
+            .map(shortcut_command_record_from_row)
+            .collect();
+
+        Ok(ListProjectTerminalShortcutCommandsResult { commands })
+    }
+
+    pub fn save_shortcut_command(
+        &self,
+        input: SaveProjectTerminalShortcutCommandInput,
+    ) -> Result<ProjectTerminalShortcutCommandRecord, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let command = validate_shortcut_command(&input.command)?;
+        let repository = ProjectTerminalShortcutCommandRepository::new(
+            self.project_repository.connection(),
+        );
+
+        match input.id {
+            Some(id) => {
+                let existing = repository
+                    .find_command_by_id(id)
+                    .map_err(project_terminal_database_error)?
+                    .ok_or_else(|| {
+                        CommandError::new(
+                            CommandErrorCode::ProjectTerminalValidationFailed,
+                            "常用命令不存在。",
+                        )
+                        .with_detail(
+                            ErrorDetail::new("ProjectTerminalShortcutCommand")
+                                .with_value("id", id),
+                        )
+                    })?;
+                if existing.project_id != input.project_id {
+                    return Err(CommandError::new(
+                        CommandErrorCode::ProjectTerminalValidationFailed,
+                        "常用命令不属于当前项目。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("ProjectTerminalShortcutCommand")
+                            .with_value("id", id)
+                            .with_value("projectId", input.project_id),
+                    ));
+                }
+
+                let row = repository
+                    .update_command(id, &command, input.sort_order)
+                    .map_err(project_terminal_database_error)?;
+                Ok(shortcut_command_record_from_row(row))
+            }
+            None => {
+                let count = repository
+                    .count_commands(input.project_id)
+                    .map_err(project_terminal_database_error)?;
+                if count >= PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT {
+                    return Err(CommandError::new(
+                        CommandErrorCode::ProjectTerminalValidationFailed,
+                        "常用命令最多 10 条。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("ProjectTerminalShortcutCommand")
+                            .with_value("projectId", input.project_id)
+                            .with_value("limit", PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT),
+                    ));
+                }
+
+                let row = repository
+                    .insert_command(input.project_id, &command, input.sort_order)
+                    .map_err(project_terminal_database_error)?;
+                Ok(shortcut_command_record_from_row(row))
+            }
+        }
+    }
+
+    pub fn delete_shortcut_command(
+        &self,
+        input: DeleteProjectTerminalShortcutCommandInput,
+    ) -> Result<(), CommandError> {
+        let repository = ProjectTerminalShortcutCommandRepository::new(
+            self.project_repository.connection(),
+        );
+        let existing = repository
+            .find_command_by_id(input.id)
+            .map_err(project_terminal_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::ProjectTerminalValidationFailed,
+                    "常用命令不存在或已删除。",
+                )
+                .with_detail(
+                    ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", input.id),
+                )
+            })?;
+
+        // 命令归属 project 在 command adapter 层无法直接校验（无 project_id 入参），
+        // 这里通过 find_command_by_id 拿到 project_id 后再校验项目存在，保证不泄露其他项目数据。
+        self.project_by_id(existing.project_id)?;
+        let deleted = repository
+            .delete_command(input.id)
+            .map_err(project_terminal_database_error)?;
+        if !deleted {
+            return Err(CommandError::new(
+                CommandErrorCode::ProjectTerminalValidationFailed,
+                "常用命令不存在或已删除。",
+            )
+            .with_detail(
+                ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", input.id),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn list_shortcut_commands_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: ListProjectTerminalShortcutCommandsInput,
+    ) -> Result<ListProjectTerminalShortcutCommandsResult, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).list_shortcut_commands(input)
+    }
+
+    pub fn save_shortcut_command_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SaveProjectTerminalShortcutCommandInput,
+    ) -> Result<ProjectTerminalShortcutCommandRecord, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).save_shortcut_command(input)
+    }
+
+    pub fn delete_shortcut_command_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: DeleteProjectTerminalShortcutCommandInput,
+    ) -> Result<(), CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).delete_shortcut_command(input)
     }
 
     fn project_by_id(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
@@ -1033,6 +1226,40 @@ fn project_terminal_delete_error(error: impl Into<String>) -> CommandError {
 
 fn project_terminal_persistence_error(message: &str) -> CommandError {
     CommandError::new(CommandErrorCode::ProjectTerminalPersistenceFailed, message)
+}
+
+fn shortcut_command_record_from_row(
+    row: crate::db::project_terminal_shortcut_command_repository::ProjectTerminalShortcutCommandRow,
+) -> ProjectTerminalShortcutCommandRecord {
+    ProjectTerminalShortcutCommandRecord {
+        id: row.id,
+        project_id: row.project_id,
+        command: row.command,
+        sort_order: row.sort_order,
+    }
+}
+
+fn validate_shortcut_command(command: &str) -> Result<String, CommandError> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::ProjectTerminalValidationFailed,
+            "常用命令不能为空。",
+        )
+        .with_detail(ErrorDetail::new("Field").with_value("name", "command")));
+    }
+    if trimmed.chars().count() > PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_LENGTH {
+        return Err(CommandError::new(
+            CommandErrorCode::ProjectTerminalValidationFailed,
+            "常用命令过长。",
+        )
+        .with_detail(
+            ErrorDetail::new("Field")
+                .with_value("name", "command")
+                .with_value("limit", PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_LENGTH),
+        ));
+    }
+    Ok(trimmed.to_string())
 }
 
 #[cfg(test)]

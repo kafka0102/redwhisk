@@ -11,6 +11,12 @@ use crate::types::project_terminal::{
     ResizeProjectTerminalInput, RestoreProjectTerminalInput, RestoreProjectTerminalResult,
     UpdateProjectTerminalConfigInput, UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
 };
+use crate::types::project_terminal_shortcut_command::{
+    DeleteProjectTerminalShortcutCommandInput, ListProjectTerminalShortcutCommandsInput,
+    ListProjectTerminalShortcutCommandsResult, ProjectTerminalShortcutCommandRecord,
+    ReadProjectTerminalCwdInput, ReadProjectTerminalCwdResult,
+    SaveProjectTerminalShortcutCommandInput,
+};
 
 #[tauri::command]
 pub fn create_project_terminal(
@@ -155,6 +161,51 @@ pub fn delete_project_terminal_config(
 ) -> Result<DeleteProjectTerminalConfigResult, CommandError> {
     let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
     ProjectTerminalService::delete_project_terminal_config_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn list_project_terminal_shortcut_commands(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ListProjectTerminalShortcutCommandsInput,
+) -> Result<ListProjectTerminalShortcutCommandsResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::list_shortcut_commands_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn save_project_terminal_shortcut_command(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SaveProjectTerminalShortcutCommandInput,
+) -> Result<ProjectTerminalShortcutCommandRecord, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::save_shortcut_command_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn delete_project_terminal_shortcut_command(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteProjectTerminalShortcutCommandInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::delete_shortcut_command_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn read_project_terminal_cwd(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ReadProjectTerminalCwdInput,
+) -> Result<ReadProjectTerminalCwdResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::read_terminal_cwd_in_data_dir(
         data_dir,
         input,
         &state.project_terminals,
