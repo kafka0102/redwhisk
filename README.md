@@ -3,7 +3,7 @@
 > **警告**
 > RedWhisk 目前仍处于开发阶段，功能、数据结构和工作流都可能发生变化。请勿将本软件用于正式环境或关键生产项目。
 
-RedWhisk 是一款以 Issue 为核心的 AI Coding 本地工作台。它支持通过 Git Worktree 并行执行多个开发任务，并可接入 Codex、Claude Code 等 AI Coding 工具，让不同 Issue 在隔离的工作区中同时推进，从而提升开发效率。
+RedWhisk(红拂) 是一款以 Issue 为核心的 AI Coding 本地工作台。它支持通过 Git Worktree 并行执行多个开发任务，并可接入 Codex、Claude Code 等 AI Coding 工具，让不同 Issue 在隔离的工作区中同时推进，从而提升开发效率。
 
 ## 系统支持
 
