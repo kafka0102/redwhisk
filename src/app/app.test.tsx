@@ -524,6 +524,9 @@ describe("App project entry", () => {
       screen.getByRole("button", { name: "项目设置" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("button", { name: "设计系统" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "全局设置" }),
     ).toBeInTheDocument();
   });

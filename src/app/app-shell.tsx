@@ -127,37 +127,38 @@ export function AppShell({
   return (
     <div className="app-shell">
       <nav className="activity-bar" aria-label={messages.app.activityBarLabel}>
-        {ACTIVITIES.map(({ key, Icon }) => {
-          const label =
-            key === "issues"
-              ? messages.app.issues
-              : key === "agents"
-                ? messages.app.agents
-                : key === "terminals"
-                  ? messages.app.terminals
-                  : key === "design-system"
-                    ? messages.app.designSystem
-                    : messages.app.settings;
-          const ariaLabel =
-            key === "settings" ? messages.app.projectSettings : label;
+        <div className="activity-bar__activities">
+          {ACTIVITIES.map(({ key, Icon }) => {
+            const label =
+              key === "issues"
+                ? messages.app.issues
+                : key === "agents"
+                  ? messages.app.agents
+                  : key === "terminals"
+                    ? messages.app.terminals
+                    : key === "design-system"
+                      ? messages.app.designSystem
+                      : messages.app.settings;
+            const ariaLabel =
+              key === "settings" ? messages.app.projectSettings : label;
 
-          return (
-            <button
-              className="activity-bar__button"
-              type="button"
-              key={key}
-              aria-label={ariaLabel}
-              aria-pressed={activeActivity === key}
-              onClick={() => {
-                setActiveActivity(key);
-                setIsGlobalSettingsOpen(false);
-              }}
-            >
-              <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
-            </button>
-          );
-        })}
-        <div className="activity-bar__spacer" aria-hidden="true" />
+            return (
+              <button
+                className="activity-bar__button"
+                type="button"
+                key={key}
+                aria-label={ariaLabel}
+                aria-pressed={activeActivity === key}
+                onClick={() => {
+                  setActiveActivity(key);
+                  setIsGlobalSettingsOpen(false);
+                }}
+              >
+                <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+              </button>
+            );
+          })}
+        </div>
         <button
           className="activity-bar__button activity-bar__button--icon-only"
           type="button"

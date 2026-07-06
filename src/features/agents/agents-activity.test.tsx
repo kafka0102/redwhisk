@@ -723,7 +723,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Agents" }),
+      screen.getByRole("heading", { level: 2, name: "Sessions" }),
     ).toBeInTheDocument();
 
     const sessionList = await screen.findByRole("list", {
