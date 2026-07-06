@@ -369,6 +369,8 @@ function commitRecord(
     authorName: "yujianjia",
     committedAt: 1_780_638_000_000,
     files,
+    isPushed: false,
+    pushedTo: null,
   };
 }
 

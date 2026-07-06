@@ -3832,6 +3832,10 @@ button:focus-visible {
   background: #5fa8ff;
 }
 
+.session-commit-timeline__dot--pushed {
+  background: #7c3aed;
+}
+
 .session-commit-row {
   display: flex;
   align-items: center;
@@ -3873,6 +3877,27 @@ button:focus-visible {
   color: var(--color-text-subtle);
   font-size: 12px;
   line-height: 1.25;
+}
+
+.session-commit-row__remote-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 160px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.session-commit-row__remote-tag > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-commit-files {

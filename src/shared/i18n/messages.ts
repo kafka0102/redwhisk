@@ -408,6 +408,7 @@ export interface I18nMessages {
     noCommittedChanges: string;
     committedTimeline: string;
     committedChangesNotImplemented: string;
+    pushedToRemote: string;
     loadingFileTree: string;
     noFiles: string;
     loadingFile: string;
@@ -931,6 +932,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       committedTimeline: "Committed changes timeline",
       committedChangesNotImplemented:
         "Committed changes are not implemented yet.",
+      pushedToRemote: "Pushed to remote",
       loadingFileTree: "Loading file tree...",
       noFiles: "No files.",
       loadingFile: "Loading file...",
@@ -1450,6 +1452,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       noCommittedChanges: "该分支没有新的提交记录。",
       committedTimeline: "已提交变更时间轴",
       committedChangesNotImplemented: "已提交变更暂未实现。",
+      pushedToRemote: "已推送到远端",
       loadingFileTree: "正在加载文件树...",
       noFiles: "暂无文件。",
       loadingFile: "正在加载文件...",

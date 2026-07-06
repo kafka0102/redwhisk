@@ -2,6 +2,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  Cloud,
   FileIcon,
   FilePenLine,
   FilePlus,
@@ -238,7 +239,9 @@ function CommittedChangesTimeline({
         return (
           <li className="session-commit-timeline__item" key={commit.hash}>
             <span className="session-commit-timeline__rail" aria-hidden="true">
-              <span className="session-commit-timeline__dot" />
+              <span
+                className={`session-commit-timeline__dot${commit.isPushed ? " session-commit-timeline__dot--pushed" : ""}`}
+              />
             </span>
             <button
               aria-expanded={isExpanded}
@@ -250,6 +253,16 @@ function CommittedChangesTimeline({
                 <span className="session-commit-row__message">
                   {commit.message || commit.shortHash}
                 </span>
+                {commit.isPushed && commit.pushedTo ? (
+                  <span
+                    aria-label={messages.agentsFeature.pushedToRemote}
+                    className="session-commit-row__remote-tag"
+                    title={messages.agentsFeature.pushedToRemote}
+                  >
+                    <Cloud aria-hidden="true" size={11} strokeWidth={1.8} />
+                    <span>{commit.pushedTo}</span>
+                  </span>
+                ) : null}
                 <span className="session-commit-row__author">
                   {commit.authorName}
                 </span>

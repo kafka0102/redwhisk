@@ -57,6 +57,8 @@ export interface WorkspaceCommitRecord {
   authorName: string;
   committedAt: number;
   files: WorkspaceCommitChangedFile[];
+  isPushed: boolean;
+  pushedTo?: string | null;
 }
 
 export interface ProjectWorktreeChangesResponse {

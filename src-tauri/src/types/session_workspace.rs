@@ -69,6 +69,9 @@ pub struct WorkspaceCommitRecord {
     pub author_name: String,
     pub committed_at: i64,
     pub files: Vec<WorkspaceCommitChangedFile>,
+    pub is_pushed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pushed_to: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

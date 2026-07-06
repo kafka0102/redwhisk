@@ -8,6 +8,7 @@ use std::time::UNIX_EPOCH;
 
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::worktree::is_additional_worktree;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
@@ -28,6 +29,7 @@ const IGNORED_DIRS: &[&str] = &[
     ".vite",
 ];
 const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
+const MAX_COMMIT_HISTORY_ENTRIES: usize = 50;
 const BASE_BRANCH_CANDIDATES: &[&str] = &[
     "origin/devlop",
     "devlop",
@@ -254,15 +256,26 @@ fn read_workspace_commit_history(
     root: &Path,
 ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
     let branch_name = current_branch_name(root)?;
-    let revision_range = match branch_name.as_deref() {
-        Some(branch) if PRIMARY_BRANCHES.contains(&branch) => None,
-        Some(branch) => find_branch_base(root, branch)?.map(|base| format!("{base}..HEAD")),
-        None => None,
+    let is_worktree = is_additional_worktree(root).unwrap_or(false);
+
+    // work tree 分支只展示该分支独有的提交（排除 base 分支内容）；非 work tree
+    // 分支展示该分支最近 50 条提交（含已 push 到远端的提交），不再用 base..HEAD
+    // 过滤——否则已 push 的提交会落在 base 及更早而被排除，无法显示紫色节点。
+    let revision_range = if is_worktree {
+        match branch_name.as_deref() {
+            Some(branch) if PRIMARY_BRANCHES.contains(&branch) => None,
+            Some(branch) => find_branch_base(root, branch)?.map(|base| format!("{base}..HEAD")),
+            None => None,
+        }
+    } else {
+        None
     };
 
+    let upstream = current_upstream(root)?;
     let mut args = vec![
         "log".to_string(),
         "--date-order".to_string(),
+        format!("--max-count={MAX_COMMIT_HISTORY_ENTRIES}"),
         "--format=%H%x00%h%x00%an%x00%ct%x00%s%x00".to_string(),
     ];
     if let Some(range) = revision_range {
@@ -282,6 +295,7 @@ fn read_workspace_commit_history(
             continue;
         }
 
+        let is_pushed = commit_is_pushed(root, hash, upstream.as_deref());
         commits.push(WorkspaceCommitRecord {
             hash: hash.to_string(),
             short_hash: short_hash.to_string(),
@@ -289,6 +303,8 @@ fn read_workspace_commit_history(
             author_name: author_name.to_string(),
             committed_at: committed_at_seconds.saturating_mul(1_000),
             files: read_commit_changed_files(root, hash)?,
+            pushed_to: if is_pushed { upstream.clone() } else { None },
+            is_pushed,
         });
     }
 
@@ -303,6 +319,43 @@ fn current_branch_name(root: &Path) -> Result<Option<String>, CommandError> {
         Ok(None)
     } else {
         Ok(Some(branch.to_string()))
+    }
+}
+
+// 取当前分支的 upstream 缩写名（如 `origin/dev`）。
+//
+// 没有 upstream（分支未设置跟踪、游离 HEAD 或仓库无远端）时 git 会以非零退出，
+// 这属于合法状态而非错误：此时所有提交都按本地未 push 处理。因此把任意 git
+// 失败都收敛为 None，不向上抛出，避免阻塞整个 commit history 读取。`--abbrev-ref`
+// 让结果以 `origin/dev` 而非完整 ref 路径呈现，直接作为远端 tag 文案。
+fn current_upstream(root: &Path) -> Result<Option<String>, CommandError> {
+    let upstream = match run_git(root, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+    let upstream = upstream.trim();
+    if upstream.is_empty() || upstream == "@{upstream}" || upstream.starts_with("HEAD") {
+        return Ok(None);
+    }
+    Ok(Some(upstream.to_string()))
+}
+
+// 判定单个 commit 是否已 push 到指定 upstream（即是否为 upstream 的祖先）。
+//
+// 基于 `git merge-base --is-ancestor <hash> <upstream>`：exit 0 表示是祖先（已
+// push），exit 1 表示否，其他非零视为未 push 且不阻塞整体读取。upstream 为 None
+// 时恒为 false。
+fn commit_is_pushed(root: &Path, commit_hash: &str, upstream: Option<&str>) -> bool {
+    let Some(upstream) = upstream else {
+        return false;
+    };
+    let status = Command::new("git")
+        .args(["merge-base", "--is-ancestor", commit_hash, upstream])
+        .current_dir(root)
+        .output();
+    match status {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
     }
 }
 
@@ -1135,7 +1188,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_history_lists_only_commits_after_branch_base() {
+    fn commit_history_lists_recent_commits_in_non_worktree_branch() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let root = temp_dir.path();
         init_git_repo(root);
@@ -1153,15 +1206,25 @@ mod tests {
 
         let history = read_workspace_commit_history(root).expect("read commit history");
 
-        assert_eq!(history.commits.len(), 2);
+        // 非 work tree 不再用 base..HEAD 过滤：返回最近 50 条全历史（base + 2 条
+        // feature，共 3 条），顺序为 date-order（新→旧）。
+        assert_eq!(history.commits.len(), 3);
         assert_eq!(history.commits[0].message, "feature two");
         assert_eq!(history.commits[1].message, "feature one");
-        assert_eq!(history.commits[1].files[0].status, "A");
-        assert_eq!(history.commits[1].files[0].file_path, "feature.txt");
+        assert_eq!(history.commits[2].message, "base");
+        // 该测试仓库无 upstream，所有提交视为本地未 push。
+        for commit in &history.commits {
+            assert!(!commit.is_pushed);
+            assert!(commit.pushed_to.is_none());
+        }
+        // feature one 引入 feature.txt，status 仍可正确解析。
+        let feature_one = &history.commits[1];
+        assert_eq!(feature_one.files[0].status, "A");
+        assert_eq!(feature_one.files[0].file_path, "feature.txt");
     }
 
     #[test]
-    fn commit_history_uses_current_branch_upstream_as_base() {
+    fn commit_history_marks_local_upstream_commits_as_pushed() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let root = temp_dir.path();
         init_git_repo(root);
@@ -1170,6 +1233,7 @@ mod tests {
         git(root, &["commit", "-m", "base"]);
         git(root, &["branch", "-M", "base-for-session"]);
         git(root, &["checkout", "-b", "session-worktree"]);
+        // 用本地分支模拟 upstream：base-for-session 当前指向 base commit。
         git(root, &["branch", "--set-upstream-to=base-for-session"]);
         fs::write(root.join("session.txt"), "session\n").expect("write session");
         git(root, &["add", "session.txt"]);
@@ -1177,8 +1241,17 @@ mod tests {
 
         let history = read_workspace_commit_history(root).expect("read commit history");
 
-        assert_eq!(history.commits.len(), 1);
+        // 非 work tree 不再过滤 base，返回最近 50 条全历史（base + session change）。
+        assert_eq!(history.commits.len(), 2);
         assert_eq!(history.commits[0].message, "session change");
+        assert_eq!(history.commits[1].message, "base");
+
+        // base commit 是 upstream (base-for-session) 的祖先 → 已 push；
+        // session change 在 upstream 之外 → 未 push。
+        assert!(!history.commits[0].is_pushed);
+        assert!(history.commits[0].pushed_to.is_none());
+        assert!(history.commits[1].is_pushed);
+        assert_eq!(history.commits[1].pushed_to.as_deref(), Some("base-for-session"));
     }
 
     #[test]
@@ -1201,6 +1274,77 @@ mod tests {
         assert_eq!(diff.kind, WorkspaceChangeKind::Modified);
         assert_eq!(diff.original_content, "const title = 'old';\n");
         assert_eq!(diff.modified_content, "const title = 'new';\n");
+    }
+
+    #[test]
+    fn commit_history_caps_at_fifty_entries() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        for index in 0..(MAX_COMMIT_HISTORY_ENTRIES + 2) {
+            let file_name = format!("file{index}.txt");
+            fs::write(root.join(&file_name), format!("content {index}\n"))
+                .expect("write file");
+            git(root, &["add", &file_name]);
+            git(root, &["commit", "-m", &format!("commit {index}")]);
+        }
+
+        let history = read_workspace_commit_history(root).expect("read commit history");
+
+        assert_eq!(history.commits.len(), MAX_COMMIT_HISTORY_ENTRIES);
+        // 最新提交排在最前。
+        assert_eq!(
+            history.commits[0].message,
+            format!("commit {}", MAX_COMMIT_HISTORY_ENTRIES + 1)
+        );
+    }
+
+    #[test]
+    fn commit_history_marks_origin_remote_pushed_commits() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("base.txt"), "base\n").expect("write base");
+        git(root, &["add", "base.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        git(root, &["branch", "-M", "main"]);
+        git(root, &["checkout", "-b", "dev"]);
+        fs::write(root.join("a.txt"), "a\n").expect("write a");
+        git(root, &["add", "a.txt"]);
+        git(root, &["commit", "-m", "pushed commit"]);
+        let pushed_hash = run_git(root, &["rev-parse", "HEAD"]).expect("read pushed head");
+        let pushed_hash = pushed_hash.trim();
+
+        // 构造本地领先的一个未 push commit。
+        fs::write(root.join("b.txt"), "b\n").expect("write b");
+        git(root, &["add", "b.txt"]);
+        git(root, &["commit", "-m", "local commit"]);
+
+        // 模拟远端 origin/dev 指向 pushed commit（等价于已 push 到 origin/dev），
+        // 并把本地 dev 分支跟踪该远端 ref。先加一个 origin remote（git 校验
+        // branch.<name>.remote 时要求 remote 存在），再 update-ref 写入远端 ref，
+        // 最后配置 branch.dev.remote/merge 让 `@{upstream}` 解析为 origin/dev。
+        git(root, &["remote", "add", "origin", "https://example.com/fake.git"]);
+        git(root, &["update-ref", "refs/remotes/origin/dev", pushed_hash]);
+        git(root, &["config", "branch.dev.remote", "origin"]);
+        git(root, &["config", "branch.dev.merge", "refs/heads/dev"]);
+
+        let history = read_workspace_commit_history(root).expect("read commit history");
+
+        // 非 work tree 的 dev 分支：返回最近 50 条全历史（base + pushed + local = 3）。
+        assert_eq!(history.commits.len(), 3);
+        assert_eq!(history.commits[0].message, "local commit");
+        assert_eq!(history.commits[1].message, "pushed commit");
+        assert_eq!(history.commits[2].message, "base");
+
+        // local commit 未 push（蓝色），pushed commit 与 base 已 push（紫色 +
+        // origin/dev tag）。
+        assert!(!history.commits[0].is_pushed);
+        assert!(history.commits[0].pushed_to.is_none());
+        assert!(history.commits[1].is_pushed);
+        assert_eq!(history.commits[1].pushed_to.as_deref(), Some("origin/dev"));
+        assert!(history.commits[2].is_pushed);
+        assert_eq!(history.commits[2].pushed_to.as_deref(), Some("origin/dev"));
     }
 
     fn init_git_repo(root: &Path) {
