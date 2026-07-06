@@ -6,7 +6,6 @@ export interface I18nMessages {
     activityBarLabel: string;
     agents: string;
     sessions: string;
-    designSystem: string;
     globalSettings: string;
     issues: string;
     localDataStatus: string;
@@ -467,39 +466,6 @@ export interface I18nMessages {
     head: (head: string) => string;
     completionOption: (option: string) => string;
   };
-  designSystem: {
-    title: string;
-    subtitle: string;
-    overview: string;
-    issuePrototype: string;
-    colors: string;
-    typography: string;
-    buttons: string;
-    inputs: string;
-    cards: string;
-    layouts: string;
-    spacing: string;
-    borderRadius: string;
-    save: string;
-    cancel: string;
-    close: string;
-    edit: string;
-    attach: string;
-    delete: string;
-    newIssue: string;
-    action: string;
-    primary: string;
-    confirm: string;
-    disabled: string;
-    check: string;
-    closeButton: string;
-    enterIssueTitle: string;
-    cannotEdit: string;
-    noIssues: string;
-    myPage: string;
-    subtitleHere: string;
-    pageContent: string;
-  };
 }
 
 export const LOCALE_STORAGE_KEY = "redwhisk.locale";
@@ -511,7 +477,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       activityBarLabel: "Activity Bar",
       agents: "Agents",
       sessions: "Sessions",
-      designSystem: "Design System",
       globalSettings: "Global Settings",
       issues: "Issues",
       localDataStatus: "Local data status",
@@ -1002,46 +967,12 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       head: (head) => `HEAD: ${head}`,
       completionOption: (option) => `Completion option: ${option}`,
     },
-    designSystem: {
-      title: "Design System",
-      subtitle: "RedWhisk UI Component Library",
-      overview: "Overview",
-      issuePrototype: "Issue prototype",
-      colors: "Colors",
-      typography: "Typography",
-      buttons: "Buttons",
-      inputs: "Inputs",
-      cards: "Cards",
-      layouts: "Layouts",
-      spacing: "Spacing",
-      borderRadius: "Border Radius",
-      save: "Save",
-      cancel: "Cancel",
-      close: "Close",
-      edit: "Edit",
-      attach: "Attach",
-      delete: "Delete",
-      newIssue: "New Issue",
-      action: "Action",
-      primary: "Primary",
-      confirm: "Confirm",
-      disabled: "Disabled",
-      check: "Check",
-      closeButton: "Close",
-      enterIssueTitle: "Enter issue title",
-      cannotEdit: "Cannot edit this",
-      noIssues: "No issues",
-      myPage: "My Page",
-      subtitleHere: "Subtitle here",
-      pageContent: "Page content goes here",
-    },
   },
   zh: {
     app: {
       activityBarLabel: "活动栏",
       agents: "智能体",
       sessions: "会话",
-      designSystem: "设计系统",
       globalSettings: "全局设置",
       issues: "Issues",
       localDataStatus: "本地数据状态",
@@ -1521,39 +1452,6 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       changedFilesCount: (count) => `变更文件：${count}`,
       head: (head) => `当前提交：${head}`,
       completionOption: (option) => `完成选项：${option}`,
-    },
-    designSystem: {
-      title: "设计系统",
-      subtitle: "RedWhisk 界面组件库",
-      overview: "概览",
-      issuePrototype: "Issue 原型",
-      colors: "色彩",
-      typography: "字体",
-      buttons: "按钮",
-      inputs: "输入框",
-      cards: "卡片",
-      layouts: "布局",
-      spacing: "间距",
-      borderRadius: "圆角",
-      save: "保存",
-      cancel: "取消",
-      close: "关闭",
-      edit: "编辑",
-      attach: "附加",
-      delete: "删除",
-      newIssue: "新建 Issue",
-      action: "操作",
-      primary: "主要",
-      confirm: "确认",
-      disabled: "已禁用",
-      check: "检查",
-      closeButton: "关闭",
-      enterIssueTitle: "输入 Issue 标题",
-      cannotEdit: "无法编辑此项",
-      noIssues: "暂无 Issues",
-      myPage: "我的页面",
-      subtitleHere: "副标题在这里",
-      pageContent: "页面内容在这里",
     },
   },
 };
