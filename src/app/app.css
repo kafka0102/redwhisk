@@ -3847,6 +3847,7 @@ button:focus-visible {
 }
 
 .session-commit-row {
+  position: relative;
   display: flex;
   align-items: center;
   width: 100%;
@@ -3869,6 +3870,7 @@ button:focus-visible {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .session-commit-row__message {
@@ -3890,10 +3892,14 @@ button:focus-visible {
 }
 
 .session-commit-row__remote-tag {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 0 0 auto;
   max-width: 160px;
   padding: 1px 6px;
   border-radius: 4px;

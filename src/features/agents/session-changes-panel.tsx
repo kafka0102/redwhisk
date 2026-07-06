@@ -231,13 +231,18 @@ function CommittedChangesTimeline({
     );
   }
 
+  const firstPushedIndex = commits.findIndex(
+    (commit) => commit.isPushed && commit.pushedTo,
+  );
+
   return (
     <ol
       aria-label={messages.agentsFeature.committedTimeline}
       className="session-commit-timeline"
     >
-      {commits.map((commit) => {
+      {commits.map((commit, index) => {
         const isExpanded = expandedCommitHashes.has(commit.hash);
+        const showPushedTag = index === firstPushedIndex;
         return (
           <li className="session-commit-timeline__item" key={commit.hash}>
             <span className="session-commit-timeline__rail" aria-hidden="true">
@@ -255,20 +260,20 @@ function CommittedChangesTimeline({
                 <span className="session-commit-row__message">
                   {commit.message || commit.shortHash}
                 </span>
-                {commit.isPushed && commit.pushedTo ? (
-                  <span
-                    aria-label={messages.agentsFeature.pushedToRemote}
-                    className="session-commit-row__remote-tag"
-                    title={messages.agentsFeature.pushedToRemote}
-                  >
-                    <Cloud aria-hidden="true" size={11} strokeWidth={1.8} />
-                    <span>{commit.pushedTo}</span>
-                  </span>
-                ) : null}
                 <span className="session-commit-row__author">
                   {commit.authorName}
                 </span>
               </span>
+              {showPushedTag ? (
+                <span
+                  aria-label={messages.agentsFeature.pushedToRemote}
+                  className="session-commit-row__remote-tag"
+                  title={messages.agentsFeature.pushedToRemote}
+                >
+                  <Cloud aria-hidden="true" size={11} strokeWidth={1.8} />
+                  <span>{commit.pushedTo}</span>
+                </span>
+              ) : null}
             </button>
             {isExpanded ? (
               <ul className="session-commit-files">

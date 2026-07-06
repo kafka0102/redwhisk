@@ -1,0 +1,22 @@
+version: 1
+change: reposition-pushed-branch-tag
+phase: review
+ambiguity: low
+complexity: unknown
+implementation_path: openspec-apply
+execution_method: native
+workspace: current-branch
+origin_branch: issue-55
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk.worktrees/issue-55
+origin_workspace_mode: current-branch
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/reposition-pushed-branch-tag/.onespec.yaml
+handoff_purpose: review
+handoff_summary: review handoff from 3 file(s); primary artifact: openspec/changes/reposition-pushed-branch-tag/proposal.md
+handoff_hash: de792aed65eeebd013dfc083c42a24c3b16a5fe66ef5d7723863ab62dc0e7253
+touched_files_b64: c3JjL2ZlYXR1cmVzL2FnZW50cy9zZXNzaW9uLWNoYW5nZXMtcGFuZWwudHN4CnNyYy9hcHAvYXBwLmNzcwpvcGVuc3BlYy9zcGVjcy9hZ2VudHMtdWkvc3BlYy5tZAo=
+review_result: pending
+archive: pending
+created_at: 2026-07-06
+updated_at: 2026-07-06T12:30:17Z
