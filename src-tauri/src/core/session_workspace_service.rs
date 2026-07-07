@@ -1251,7 +1251,10 @@ mod tests {
         assert!(!history.commits[0].is_pushed);
         assert!(history.commits[0].pushed_to.is_none());
         assert!(history.commits[1].is_pushed);
-        assert_eq!(history.commits[1].pushed_to.as_deref(), Some("base-for-session"));
+        assert_eq!(
+            history.commits[1].pushed_to.as_deref(),
+            Some("base-for-session")
+        );
     }
 
     #[test]
@@ -1283,8 +1286,7 @@ mod tests {
         init_git_repo(root);
         for index in 0..(MAX_COMMIT_HISTORY_ENTRIES + 2) {
             let file_name = format!("file{index}.txt");
-            fs::write(root.join(&file_name), format!("content {index}\n"))
-                .expect("write file");
+            fs::write(root.join(&file_name), format!("content {index}\n")).expect("write file");
             git(root, &["add", &file_name]);
             git(root, &["commit", "-m", &format!("commit {index}")]);
         }
@@ -1324,8 +1326,14 @@ mod tests {
         // 并把本地 dev 分支跟踪该远端 ref。先加一个 origin remote（git 校验
         // branch.<name>.remote 时要求 remote 存在），再 update-ref 写入远端 ref，
         // 最后配置 branch.dev.remote/merge 让 `@{upstream}` 解析为 origin/dev。
-        git(root, &["remote", "add", "origin", "https://example.com/fake.git"]);
-        git(root, &["update-ref", "refs/remotes/origin/dev", pushed_hash]);
+        git(
+            root,
+            &["remote", "add", "origin", "https://example.com/fake.git"],
+        );
+        git(
+            root,
+            &["update-ref", "refs/remotes/origin/dev", pushed_hash],
+        );
         git(root, &["config", "branch.dev.remote", "origin"]);
         git(root, &["config", "branch.dev.merge", "refs/heads/dev"]);
 

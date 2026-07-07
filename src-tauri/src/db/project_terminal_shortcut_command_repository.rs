@@ -9,7 +9,10 @@ impl<'connection> ProjectTerminalShortcutCommandRepository<'connection> {
         Self { connection }
     }
 
-    pub fn list_commands(&self, project_id: i64) -> rusqlite::Result<Vec<ProjectTerminalShortcutCommandRow>> {
+    pub fn list_commands(
+        &self,
+        project_id: i64,
+    ) -> rusqlite::Result<Vec<ProjectTerminalShortcutCommandRow>> {
         let mut statement = self.connection.prepare(
             "SELECT id, project_id, command, sort_order
              FROM project_terminal_shortcut_commands
@@ -23,13 +26,12 @@ impl<'connection> ProjectTerminalShortcutCommandRepository<'connection> {
     }
 
     pub fn count_commands(&self, project_id: i64) -> rusqlite::Result<i64> {
-        self.connection
-            .query_row(
-                "SELECT COUNT(*) FROM project_terminal_shortcut_commands
+        self.connection.query_row(
+            "SELECT COUNT(*) FROM project_terminal_shortcut_commands
                  WHERE project_id = ?1",
-                params![project_id],
-                |row| row.get(0),
-            )
+            params![project_id],
+            |row| row.get(0),
+        )
     }
 
     pub fn find_command_by_id(
@@ -208,10 +210,7 @@ mod tests {
         assert_eq!(updated.command, "git diff --staged");
         assert_eq!(updated.sort_order, 5);
 
-        let reloaded = repository
-            .find_command_by_id(inserted.id)
-            .unwrap()
-            .unwrap();
+        let reloaded = repository.find_command_by_id(inserted.id).unwrap().unwrap();
         assert_eq!(reloaded, updated);
     }
 

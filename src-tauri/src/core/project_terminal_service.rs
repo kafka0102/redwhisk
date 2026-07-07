@@ -871,9 +871,8 @@ impl<'connection> ProjectTerminalService<'connection> {
         input: ListProjectTerminalShortcutCommandsInput,
     ) -> Result<ListProjectTerminalShortcutCommandsResult, CommandError> {
         self.project_by_id(input.project_id)?;
-        let repository = ProjectTerminalShortcutCommandRepository::new(
-            self.project_repository.connection(),
-        );
+        let repository =
+            ProjectTerminalShortcutCommandRepository::new(self.project_repository.connection());
         let commands = repository
             .list_commands(input.project_id)
             .map_err(project_terminal_database_error)?
@@ -890,9 +889,8 @@ impl<'connection> ProjectTerminalService<'connection> {
     ) -> Result<ProjectTerminalShortcutCommandRecord, CommandError> {
         self.project_by_id(input.project_id)?;
         let command = validate_shortcut_command(&input.command)?;
-        let repository = ProjectTerminalShortcutCommandRepository::new(
-            self.project_repository.connection(),
-        );
+        let repository =
+            ProjectTerminalShortcutCommandRepository::new(self.project_repository.connection());
 
         match input.id {
             Some(id) => {
@@ -905,8 +903,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                             "常用命令不存在。",
                         )
                         .with_detail(
-                            ErrorDetail::new("ProjectTerminalShortcutCommand")
-                                .with_value("id", id),
+                            ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", id),
                         )
                     })?;
                 if existing.project_id != input.project_id {
@@ -954,9 +951,8 @@ impl<'connection> ProjectTerminalService<'connection> {
         &self,
         input: DeleteProjectTerminalShortcutCommandInput,
     ) -> Result<(), CommandError> {
-        let repository = ProjectTerminalShortcutCommandRepository::new(
-            self.project_repository.connection(),
-        );
+        let repository =
+            ProjectTerminalShortcutCommandRepository::new(self.project_repository.connection());
         let existing = repository
             .find_command_by_id(input.id)
             .map_err(project_terminal_database_error)?
