@@ -33,6 +33,7 @@ interface LabelsSettingsPanelProps {
   onDeleteLabel: (label: ProjectLabelRecord) => void;
   onEditingLabelChange: (state: EditingLabelState | null) => void;
   onLabelSaved: (label: ProjectLabelRecord) => void;
+  onOpenSkillsMenu: () => void;
 }
 
 export function LabelsSettingsPanel({
@@ -47,6 +48,7 @@ export function LabelsSettingsPanel({
   onDeleteLabel,
   onEditingLabelChange,
   onLabelSaved,
+  onOpenSkillsMenu,
 }: LabelsSettingsPanelProps) {
   const { messages } = useI18n();
 
@@ -159,6 +161,7 @@ export function LabelsSettingsPanel({
           mode="create"
           projectId={addForm.projectId}
           onCancel={() => onAddFormChange(null)}
+          onOpenSkillsMenu={onOpenSkillsMenu}
           onSaved={onLabelSaved}
         />
       ) : null}
@@ -170,6 +173,7 @@ export function LabelsSettingsPanel({
           mode="edit"
           projectId={projectId}
           onCancel={() => onEditingLabelChange(null)}
+          onOpenSkillsMenu={onOpenSkillsMenu}
           onSaved={onLabelSaved}
         />
       ) : null}

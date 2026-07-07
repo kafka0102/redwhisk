@@ -287,6 +287,11 @@ describe("ProjectSettingsActivity", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Labels" })).toBeInTheDocument();
     expect(
+      within(screen.getByRole("navigation", { name: "Settings menu" }))
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["General", "Agents", "Skills", "Labels"]);
+    expect(
       screen.getByRole("heading", { name: "General" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
@@ -518,6 +523,41 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.queryByRole("option", { name: "codex-project" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Manage skills" }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="select-separator"]'),
+    ).not.toBeNull();
+  });
+
+  it("navigates to skills settings from the label workflow skill menu", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    await user.click(screen.getByRole("button", { name: "New label" }));
+    await openShadcnSelect(user, screen, "Workflow Skill");
+    await user.click(
+      await screen.findByRole("option", { name: "Manage skills" }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "New label" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Skills" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("opens edit label dialog when clicking a label name and deletes labels", async () => {

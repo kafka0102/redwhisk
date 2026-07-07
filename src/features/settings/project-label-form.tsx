@@ -6,6 +6,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
@@ -32,10 +33,13 @@ const PRESET_COLORS = [
   "#EC4899",
 ];
 
+const MANAGE_SKILLS_OPTION_VALUE = "__manage-skills__";
+
 interface ProjectLabelFormProps {
   label?: ProjectLabelRecord;
   mode: "create" | "edit";
   onCancel: () => void;
+  onOpenSkillsMenu: () => void;
   onSaved: (label: ProjectLabelRecord) => void;
   projectId: number;
 }
@@ -44,6 +48,7 @@ export function ProjectLabelForm({
   label,
   mode,
   onCancel,
+  onOpenSkillsMenu,
   onSaved,
   projectId,
 }: ProjectLabelFormProps) {
@@ -89,6 +94,25 @@ export function ProjectLabelForm({
     });
   }, [savedSkills]);
 
+  const workflowSkillSelectItems = useMemo(
+    () => [
+      { value: "", label: messages.settings.none },
+      ...workflowSkillOptions.map((skill) => ({
+        value: skill.name,
+        label: skill.name,
+      })),
+      {
+        value: MANAGE_SKILLS_OPTION_VALUE,
+        label: messages.settings.manageSkills,
+      },
+    ],
+    [
+      messages.settings.manageSkills,
+      messages.settings.none,
+      workflowSkillOptions,
+    ],
+  );
+
   function validateName(nextName: string) {
     const trimmed = nextName.trim();
     if (trimmed.length === 0) {
@@ -132,6 +156,16 @@ export function ProjectLabelForm({
     mode === "create"
       ? messages.settings.newLabel
       : messages.settings.editLabel;
+
+  function handleWorkflowSkillChange(value: string) {
+    if (value === MANAGE_SKILLS_OPTION_VALUE) {
+      onOpenSkillsMenu();
+      onCancel();
+      return;
+    }
+
+    setWorkflowSkill(value);
+  }
 
   return (
     <div
@@ -263,15 +297,11 @@ export function ProjectLabelForm({
               {messages.settings.workflowSkillSingle}
             </Label>
             <Select
-              items={[
-                { value: "", label: messages.settings.none },
-                ...workflowSkillOptions.map((skill) => ({
-                  value: skill.name,
-                  label: skill.name,
-                })),
-              ]}
+              items={workflowSkillSelectItems}
               value={workflowSkill}
-              onValueChange={(value) => setWorkflowSkill(value as string)}
+              onValueChange={(value) =>
+                handleWorkflowSkillChange(value as string)
+              }
             >
               <SelectTrigger
                 id="label-workflow-skill"
@@ -287,6 +317,10 @@ export function ProjectLabelForm({
                     {skill.name}
                   </SelectItem>
                 ))}
+                <SelectSeparator />
+                <SelectItem value={MANAGE_SKILLS_OPTION_VALUE}>
+                  {messages.settings.manageSkills}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

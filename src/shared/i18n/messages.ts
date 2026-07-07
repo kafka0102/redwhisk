@@ -131,6 +131,7 @@ export interface I18nMessages {
     newSkill: string;
     noSkillsSaved: string;
     editSkill: string;
+    manageSkills: string;
     skillPaths: string;
     selectSkillName: string;
     searchSkillName: string;
@@ -628,6 +629,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newSkill: "New skill",
       noSkillsSaved: "No skills saved",
       editSkill: "Edit skill",
+      manageSkills: "Manage skills",
       skillPaths: "Skill paths",
       selectSkillName: "Select skill name",
       searchSkillName: "Search skill name...",
@@ -1142,6 +1144,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newSkill: "新建技能",
       noSkillsSaved: "暂无技能配置",
       editSkill: "编辑技能",
+      manageSkills: "管理技能",
       skillPaths: "技能路径",
       selectSkillName: "选择技能名称",
       searchSkillName: "搜索技能名称...",

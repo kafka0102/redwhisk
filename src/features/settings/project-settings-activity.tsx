@@ -84,14 +84,14 @@ const SETTINGS_MENU_ITEMS: {
     MenuIcon: Bot,
   },
   {
-    iconTestId: "settings-menu-icon-labels",
-    key: "labels",
-    MenuIcon: Tag,
-  },
-  {
     iconTestId: "settings-menu-icon-skills",
     key: "skills",
     MenuIcon: Wrench,
+  },
+  {
+    iconTestId: "settings-menu-icon-labels",
+    key: "labels",
+    MenuIcon: Tag,
   },
 ];
 
@@ -499,6 +499,13 @@ export function ProjectSettingsActivity({
     setEditingSkill(state);
   }
 
+  function handleOpenSkillsMenu() {
+    if (!onMenuChange) {
+      setInternalActiveMenu("skills");
+    }
+    onMenuChange?.("skills");
+  }
+
   return (
     <main
       className="activity-surface activity-surface--settings"
@@ -671,6 +678,7 @@ export function ProjectSettingsActivity({
                 onDeleteLabel={handleDeleteLabel}
                 onEditingLabelChange={handleEditingLabelChange}
                 onLabelSaved={handleLabelSaved}
+                onOpenSkillsMenu={handleOpenSkillsMenu}
               />
             ) : null}
 
