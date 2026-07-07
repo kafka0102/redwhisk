@@ -59,7 +59,8 @@ describe("TerminalShortcutCommandsDialog", () => {
     await user.click(screen.getByRole("button", { name: "Add command" }));
 
     const input = await screen.findByPlaceholderText("Enter a command");
-    setCommandInputValue(input, "ls -la");
+    await user.type(input, "ls -la");
+    expect(input).toHaveValue("ls -la");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {

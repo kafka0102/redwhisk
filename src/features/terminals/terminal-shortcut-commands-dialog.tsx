@@ -45,13 +45,16 @@ export function TerminalShortcutCommandsDialog({
     null,
   );
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const editingRowKey = editingDraft
+    ? `draft-${editingDraft.id ?? "new"}`
+    : null;
 
   useEffect(() => {
-    if (editingDraft && editInputRef.current) {
+    if (editingRowKey && editInputRef.current) {
       editInputRef.current.focus();
       editInputRef.current.select();
     }
-  }, [editingDraft]);
+  }, [editingRowKey]);
 
   function startAddCommand() {
     if (commands.length >= SHORTCUT_COMMAND_MAX_COUNT) {

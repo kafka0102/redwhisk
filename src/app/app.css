@@ -3052,7 +3052,7 @@ button:focus-visible {
 
 .terminal-shortcut-commands-dialog__icon:hover:not(:disabled),
 .terminal-shortcut-commands-dialog__icon:focus-visible:not(:disabled) {
-  background: var(--color-accent);
+  background: var(--color-surface-muted);
   color: var(--color-text);
   outline: none;
 }
