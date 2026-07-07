@@ -38,13 +38,15 @@ export function TerminalSurface({
   transport,
   transportKey,
 }: TerminalSurfaceProps) {
-  const { theme } = useI18n();
+  const { theme, contentFontSize } = useI18n();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
   const transportRef = useRef(transport);
   const latestSequenceRef = useRef(0);
   const statusSourceRef = useRef<TerminalStatusSource | null>(null);
   const themeRef = useRef(theme);
+  const contentFontSizeRef = useRef(contentFontSize);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const canBootXterm = supportsXtermRuntime();
 
@@ -61,6 +63,18 @@ export function TerminalSurface({
 
     terminal.options.theme = getTerminalTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    contentFontSizeRef.current = contentFontSize;
+    const terminal = terminalRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!terminal || !fitAddon) {
+      return;
+    }
+
+    terminal.options.fontSize = contentFontSize;
+    fitAddon.fit();
+  }, [contentFontSize]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -97,7 +111,7 @@ export function TerminalSurface({
         disableStdin: false,
         fontFamily:
           '"SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace',
-        fontSize: 13,
+        fontSize: contentFontSizeRef.current,
         fontWeight: "normal",
         fontWeightBold: "bold",
         letterSpacing: 0,
@@ -126,6 +140,7 @@ export function TerminalSurface({
     }
 
     terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
     latestSequenceRef.current = 0;
 
     const syncSize = () => {
@@ -381,6 +396,7 @@ export function TerminalSurface({
       disposeData.dispose();
       terminal.dispose();
       terminalRef.current = null;
+      fitAddonRef.current = null;
       latestSequenceRef.current = 0;
       statusSourceRef.current = null;
     };

@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { GlobalSettingsActivity } from "./global-settings-activity";
+import { selectShadcnOption } from "../../test/select-helpers";
 
 function renderGlobalSettings() {
   return render(
@@ -17,7 +18,12 @@ describe("GlobalSettingsActivity", () => {
   beforeEach(() => {
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
+    document.documentElement.style.removeProperty("--content-font-size");
     vi.stubGlobal("matchMedia", createMatchMedia(false));
+  });
+
+  afterEach(() => {
+    document.documentElement.style.removeProperty("--content-font-size");
   });
 
   it("renders Preferences in Chinese with Light theme by default", () => {
@@ -101,6 +107,37 @@ describe("GlobalSettingsActivity", () => {
     expect(splitter).toHaveAttribute("aria-valuemin", "180");
     expect(splitter).toHaveAttribute("aria-valuemax", "420");
     expect(splitter).toHaveAttribute("aria-valuenow", "230");
+  });
+
+  it("renders the content font size select with the default size", () => {
+    renderGlobalSettings();
+
+    expect(
+      screen.getByRole("heading", { name: "内容字号" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "内容字号" }),
+    ).toHaveTextContent("14");
+    expect(
+      document.documentElement.style.getPropertyValue("--content-font-size"),
+    ).toBe("14px");
+  });
+
+  it("persists the selected content font size and applies it to the document root", async () => {
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await selectShadcnOption(user, screen, "内容字号", "16");
+
+    expect(
+      screen.getByRole("combobox", { name: "内容字号" }),
+    ).toHaveTextContent("16");
+    expect(window.localStorage.getItem("redwhisk.content-font-size")).toBe(
+      "16",
+    );
+    expect(
+      document.documentElement.style.getPropertyValue("--content-font-size"),
+    ).toBe("16px");
   });
 });
 

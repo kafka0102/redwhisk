@@ -9,7 +9,7 @@ interface SessionDiffViewerProps {
 }
 
 export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
-  const { messages } = useI18n();
+  const { messages, contentFontSize } = useI18n();
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -64,7 +64,7 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
         modified={tab.diff.modifiedContent}
         original={tab.diff.originalContent}
         options={{
-          fontSize: 12,
+          fontSize: contentFontSize,
           minimap: { enabled: false },
           readOnly: true,
           renderSideBySide:

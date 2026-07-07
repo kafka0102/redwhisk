@@ -1623,7 +1623,7 @@ button:focus-visible {
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--content-font-size);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -1732,7 +1732,7 @@ button:focus-visible {
   overflow: auto;
   color: var(--color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--content-font-size);
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.45;
@@ -1786,7 +1786,7 @@ button:focus-visible {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--content-font-size);
 }
 
 .rich-text-editor__surface .ql-editor .ql-code-block-container {
@@ -1802,7 +1802,7 @@ button:focus-visible {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--content-font-size);
   line-height: 1.45;
   white-space: pre-wrap;
 }
@@ -5984,7 +5984,7 @@ button:focus-visible {
   padding: 0;
   border: 0;
   border-radius: 0;
-  font-size: 13px;
+  font-size: var(--content-font-size);
   line-height: 1.45;
   word-break: break-word;
 }
@@ -6008,7 +6008,7 @@ button:focus-visible {
 
 /* Markdown 容器 */
 .agents-message__markdown {
-  font-size: 13px;
+  font-size: var(--content-font-size);
   line-height: 1.58;
 }
 
@@ -6053,7 +6053,7 @@ button:focus-visible {
   border-radius: var(--radius-control);
   background: var(--color-surface-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--content-font-size);
 }
 
 .agents-message__code-block {
@@ -6064,7 +6064,7 @@ button:focus-visible {
   background: var(--color-surface-panel);
   overflow-x: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--content-font-size);
   line-height: 1.45;
 }
 
@@ -6085,7 +6085,7 @@ button:focus-visible {
   width: fit-content;
   padding: 2px 0;
   color: var(--color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--content-font-size);
   cursor: pointer;
   list-style: none;
 }
@@ -6099,7 +6099,7 @@ button:focus-visible {
   padding: 6px 0 0 19px;
   border-left: 1px solid var(--color-border);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--content-font-size);
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -6232,7 +6232,7 @@ details[open] > summary .agents-message__summary-chevron {
   background: transparent;
   color: var(--color-text-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--content-font-size);
   line-height: 1.5;
   word-break: break-all;
 }
@@ -6250,7 +6250,7 @@ details[open] > summary .agents-message__summary-chevron {
   background: var(--color-surface-panel);
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--content-font-size);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -6577,14 +6577,14 @@ details[open] > summary .agents-message__summary-chevron {
 }
 
 .agents-composer__textarea {
-  min-height: calc(13px * 1.5 * 3 + 14px);
+  min-height: calc(var(--content-font-size) * 1.5 * 3 + 14px);
   max-height: 160px;
   padding: 7px 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--content-font-size);
   line-height: 1.5;
   resize: none;
   overflow-y: auto;

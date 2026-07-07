@@ -1,5 +1,6 @@
 export type Locale = "en" | "zh";
 export type ThemePreference = "light" | "dark" | "system";
+export type ContentFontSize = 13 | 14 | 15 | 16 | 18 | 20 | 22;
 
 export interface I18nMessages {
   app: {
@@ -18,6 +19,7 @@ export interface I18nMessages {
   };
   globalSettings: {
     chinese: string;
+    contentFontSize: string;
     dark: string;
     english: string;
     enableNotificationFloatingWindow: string;
@@ -484,6 +486,9 @@ export interface I18nMessages {
 
 export const LOCALE_STORAGE_KEY = "redwhisk.locale";
 export const THEME_STORAGE_KEY = "redwhisk.theme";
+export const CONTENT_FONT_SIZE_STORAGE_KEY = "redwhisk.content-font-size";
+export const CONTENT_FONT_SIZE_OPTIONS = [13, 14, 15, 16, 18, 20, 22] as const;
+export const DEFAULT_CONTENT_FONT_SIZE: ContentFontSize = 14;
 
 export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
   en: {
@@ -503,6 +508,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     globalSettings: {
       chinese: "Chinese",
+      contentFontSize: "Content font size",
       dark: "Dark",
       english: "English",
       enableNotificationFloatingWindow: "Enable notification floating window",
@@ -1013,6 +1019,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
     },
     globalSettings: {
       chinese: "中文",
+      contentFontSize: "内容字号",
       dark: "深色",
       english: "English",
       enableNotificationFloatingWindow: "启用通知浮窗",
@@ -1513,4 +1520,20 @@ export function getInitialThemePreference(): ThemePreference {
 
 function isThemePreference(value: string | null): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
+}
+
+export function getInitialContentFontSize(): ContentFontSize {
+  try {
+    const storedValue = window.localStorage.getItem(
+      CONTENT_FONT_SIZE_STORAGE_KEY,
+    );
+    const parsed = storedValue === null ? NaN : Number(storedValue);
+    return isContentFontSize(parsed) ? parsed : DEFAULT_CONTENT_FONT_SIZE;
+  } catch {
+    return DEFAULT_CONTENT_FONT_SIZE;
+  }
+}
+
+function isContentFontSize(value: number): value is ContentFontSize {
+  return (CONTENT_FONT_SIZE_OPTIONS as readonly number[]).includes(value);
 }

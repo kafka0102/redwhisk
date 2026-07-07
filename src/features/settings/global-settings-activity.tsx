@@ -7,10 +7,23 @@ import {
   type CSSProperties,
 } from "react";
 
-import { Button, Card, CardContent } from "@/components/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useI18n } from "../../shared/i18n/i18n";
-import type { ThemePreference } from "../../shared/i18n/messages";
+import {
+  CONTENT_FONT_SIZE_OPTIONS,
+  type ContentFontSize,
+  type ThemePreference,
+} from "../../shared/i18n/messages";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
@@ -20,9 +33,19 @@ const SETTINGS_MENU_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const SETTINGS_MENU_MIN_WIDTH = 180;
 const SETTINGS_MENU_MAX_WIDTH = 420;
 const THEME_OPTIONS: ThemePreference[] = ["light", "dark", "system"];
+const CONTENT_FONT_SIZE_ITEMS = CONTENT_FONT_SIZE_OPTIONS.map((size) => ({
+  value: String(size),
+  label: String(size),
+}));
 
 export function GlobalSettingsActivity() {
-  const { messages, setThemePreference, themePreference } = useI18n();
+  const {
+    messages,
+    setThemePreference,
+    themePreference,
+    contentFontSize,
+    setContentFontSize,
+  } = useI18n();
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
@@ -172,6 +195,32 @@ export function GlobalSettingsActivity() {
                         </Button>
                       ))}
                     </div>
+                  </section>
+                  <section className="grid min-w-0 gap-3.5">
+                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                      {messages.globalSettings.contentFontSize}
+                    </h4>
+                    <Select
+                      items={CONTENT_FONT_SIZE_ITEMS}
+                      value={String(contentFontSize)}
+                      onValueChange={(value) => {
+                        setContentFontSize(Number(value) as ContentFontSize);
+                      }}
+                    >
+                      <SelectTrigger
+                        aria-label={messages.globalSettings.contentFontSize}
+                        className="w-[120px]"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONTENT_FONT_SIZE_OPTIONS.map((size) => (
+                          <SelectItem key={size} value={String(size)}>
+                            {size}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </section>
                 </CardContent>
               </Card>

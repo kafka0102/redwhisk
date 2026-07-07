@@ -8,7 +8,7 @@ interface SessionFileViewerProps {
 }
 
 export function SessionFileViewer({ tab }: SessionFileViewerProps) {
-  const { messages } = useI18n();
+  const { messages, contentFontSize } = useI18n();
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -62,7 +62,7 @@ export function SessionFileViewer({ tab }: SessionFileViewerProps) {
           readOnly: true,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
-          fontSize: 12,
+          fontSize: contentFontSize,
         }}
         value={tab.content.content}
       />

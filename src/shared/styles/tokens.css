@@ -40,6 +40,8 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
 
+  --content-font-size: 14px;
+
   --color-app: #ffffff;
   --color-surface: #ffffff;
   --color-surface-muted: #f1f2f4;

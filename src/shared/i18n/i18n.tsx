@@ -10,8 +10,12 @@ import {
 import {
   I18N_MESSAGES,
   THEME_STORAGE_KEY,
+  CONTENT_FONT_SIZE_STORAGE_KEY,
+  DEFAULT_CONTENT_FONT_SIZE,
+  getInitialContentFontSize,
   getInitialLocale,
   getInitialThemePreference,
+  type ContentFontSize,
   type I18nMessages,
   type Locale,
   type ThemePreference,
@@ -24,6 +28,8 @@ interface I18nContextValue {
   setThemePreference: (themePreference: ThemePreference) => void;
   theme: "light" | "dark";
   themePreference: ThemePreference;
+  contentFontSize: ContentFontSize;
+  setContentFontSize: (size: ContentFontSize) => void;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -39,6 +45,10 @@ const DEFAULT_I18N_CONTEXT: I18nContextValue = {
   },
   theme: "light",
   themePreference: "light",
+  contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
+  setContentFontSize() {
+    // Components rendered in isolated tests use the default content font size without a provider.
+  },
 };
 
 export function I18nProvider({
@@ -58,6 +68,9 @@ export function I18nProvider({
   );
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(
     getSystemTheme,
+  );
+  const [contentFontSize, setContentFontSizeState] = useState<ContentFontSize>(
+    getInitialContentFontSize,
   );
   const activeLocale = fixedLocale ?? locale;
   const theme = themePreference === "system" ? systemTheme : themePreference;
@@ -83,6 +96,13 @@ export function I18nProvider({
     window.document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  useEffect(() => {
+    window.document.documentElement.style.setProperty(
+      "--content-font-size",
+      `${contentFontSize}px`,
+    );
+  }, [contentFontSize]);
+
   const value = useMemo<I18nContextValue>(
     () => ({
       locale: activeLocale,
@@ -103,8 +123,20 @@ export function I18nProvider({
       },
       theme,
       themePreference,
+      contentFontSize,
+      setContentFontSize(nextContentFontSize) {
+        setContentFontSizeState(nextContentFontSize);
+        try {
+          window.localStorage.setItem(
+            CONTENT_FONT_SIZE_STORAGE_KEY,
+            String(nextContentFontSize),
+          );
+        } catch {
+          // Ignore persistence failures; runtime state still updates.
+        }
+      },
     }),
-    [activeLocale, fixedLocale, theme, themePreference],
+    [activeLocale, fixedLocale, theme, themePreference, contentFontSize],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
