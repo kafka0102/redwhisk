@@ -220,7 +220,14 @@ fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
 }
 
 fn read_workspace_changes(root: &Path) -> Result<ProjectWorktreeChangesResponse, CommandError> {
-    let status_output = run_git_bytes(root, &["status", "--porcelain=v1", "-z"])?;
+    // `--untracked-files=all` 让 git 递归展开未跟踪目录，逐个列出叶子文件，
+    // 而不是把整个新增目录折叠成单条 `?? newdir/`。这样未提交变更面板才能
+    // 展示新增目录下的全部文件（含多层级叶子文件），且点击单文件 diff 时
+    // 能在变更列表中按 file_path 命中。
+    let status_output = run_git_bytes(
+        root,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )?;
     let entries = parse_status_entries(&status_output)?;
     let mut files = Vec::new();
 
@@ -1147,6 +1154,48 @@ mod tests {
             linked.metadata_signature,
             file_metadata_signature_for_test(&outside)
         );
+    }
+
+    #[test]
+    fn changes_expand_untracked_directory_into_leaf_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("tracked.txt"), "base\n").expect("write tracked");
+        git(root, &["add", "tracked.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        fs::create_dir_all(root.join("newdir/sub")).expect("create nested dir");
+        fs::write(root.join("newdir/a.txt"), "a\n").expect("write a");
+        fs::write(root.join("newdir/sub/b.txt"), "b\n").expect("write b");
+
+        let changes = read_workspace_changes(root).expect("read changes");
+        let paths: Vec<&str> = changes
+            .files
+            .iter()
+            .map(|file| file.file_path.as_str())
+            .collect();
+
+        assert!(
+            paths.iter().any(|path| *path == "newdir/a.txt"),
+            "expected leaf file newdir/a.txt, got {paths:?}"
+        );
+        assert!(
+            paths.iter().any(|path| *path == "newdir/sub/b.txt"),
+            "expected nested leaf file newdir/sub/b.txt, got {paths:?}"
+        );
+        assert!(
+            !paths
+                .iter()
+                .any(|path| *path == "newdir" || *path == "newdir/"),
+            "untracked directory should not appear as a collapsed entry, got {paths:?}"
+        );
+
+        let leaf = changes
+            .files
+            .iter()
+            .find(|file| file.file_path == "newdir/sub/b.txt")
+            .expect("leaf change");
+        assert_eq!(leaf.kind, WorkspaceChangeKind::Untracked);
     }
 
     #[test]

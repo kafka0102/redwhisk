@@ -14,10 +14,15 @@ import {
   SquareCode,
 } from "lucide-react";
 import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Tree, type NodeRendererProps } from "react-arborist";
 
 import type { WorkspaceFileTreeNode } from "./session-workspace-commands";
 import { useI18n } from "../../shared/i18n/i18n";
+
+// react-arborist 的 Tree 需要数值高度做虚拟化。当无法测得真实高度时
+// （如 jsdom 无布局、或视口尚未布局完成），回退到该高度保证 Tree 可渲染。
+const FILE_TREE_FALLBACK_HEIGHT = 600;
 
 interface SessionFileTreePanelProps {
   errorMessage: string | null;
@@ -33,6 +38,37 @@ export function SessionFileTreePanel({
   onOpenFile,
 }: SessionFileTreePanelProps) {
   const { messages } = useI18n();
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportHeight, setViewportHeight] = useState(
+    FILE_TREE_FALLBACK_HEIGHT,
+  );
+
+  // react-arborist 的 Tree 需要数值高度做虚拟化，无法直接用 `height: 100%`。
+  // 这里测量视口容器的实际高度并随容器尺寸变化更新，让文件树填满侧栏可用高度，
+  // 而不是写死固定像素（此前为 600px）。useLayoutEffect 在首帧绘制前完成首次
+  // 测量，避免高度跳变闪烁。
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const updateHeight = () => {
+      const measured = viewport.clientHeight;
+      setViewportHeight(measured > 0 ? measured : FILE_TREE_FALLBACK_HEIGHT);
+    };
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  const hasFileTree = fileTree.length > 0 && !errorMessage;
+
   return (
     <div
       className="session-file-tree"
@@ -48,25 +84,27 @@ export function SessionFileTreePanel({
             : messages.agentsFeature.noFiles}
         </p>
       ) : null}
-      {fileTree.length > 0 && !errorMessage ? (
-        <Tree<WorkspaceFileTreeNode>
-          aria-label={messages.agentsFeature.fileTree}
-          childrenAccessor="children"
-          className="session-file-tree__arborist"
-          data={fileTree}
-          disableDrag
-          disableDrop
-          disableEdit
-          height={600}
-          idAccessor="id"
-          indent={12}
-          openByDefault={false}
-          overscanCount={8}
-          rowHeight={28}
-          width="100%"
-        >
-          {(props) => <FileTreeRow {...props} onOpenFile={onOpenFile} />}
-        </Tree>
+      {hasFileTree ? (
+        <div className="session-file-tree__viewport" ref={viewportRef}>
+          <Tree<WorkspaceFileTreeNode>
+            aria-label={messages.agentsFeature.fileTree}
+            childrenAccessor="children"
+            className="session-file-tree__arborist"
+            data={fileTree}
+            disableDrag
+            disableDrop
+            disableEdit
+            height={viewportHeight}
+            idAccessor="id"
+            indent={12}
+            openByDefault={false}
+            overscanCount={8}
+            rowHeight={28}
+            width="100%"
+          >
+            {(props) => <FileTreeRow {...props} onOpenFile={onOpenFile} />}
+          </Tree>
+        </div>
       ) : null}
     </div>
   );

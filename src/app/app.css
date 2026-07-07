@@ -4187,7 +4187,19 @@ button:focus-visible {
 }
 
 .session-file-tree {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  /* react-arborist 内部已虚拟化滚动，容器层覆盖 grouped 规则的 `overflow: auto`，
+     避免出现双层滚动条；空态/错误态文案较短，不需要外层滚动。 */
+  overflow: hidden;
   padding: 6px 0 18px;
+}
+
+.session-file-tree__viewport {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .session-file-tree__arborist {
