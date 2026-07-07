@@ -12,6 +12,7 @@ dist
 dist-ssr
 .worktrees/
 .superpowers/
+graphify-out/
 *.local
 
 # Editor directories and files
