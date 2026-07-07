@@ -786,6 +786,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
     fireEvent.click(screen.getByLabelText("Open session side panel"));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
     await flushMicrotasks();
     expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
@@ -812,6 +813,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
     fireEvent.click(screen.getByLabelText("Open session side panel"));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -862,6 +864,7 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Changes" }));
     expect(
       await screen.findByRole("button", { name: /one.ts/ }),
     ).toBeInTheDocument();
@@ -892,6 +895,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
     fireEvent.click(screen.getByLabelText("Open session side panel"));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
     await flushMicrotasks();
 
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
@@ -928,6 +932,7 @@ describe("AgentsActivity", () => {
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await flushMicrotasks();
     fireEvent.click(screen.getByLabelText("Open session side panel"));
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
     await flushMicrotasks();
 
     // 先成功加载过未提交文件，此时 one.ts 可见。
@@ -968,6 +973,7 @@ describe("AgentsActivity", () => {
     const panel = await screen.findByRole("complementary", {
       name: "Session side panel",
     });
+    await user.click(within(panel).getByRole("tab", { name: "Changes" }));
 
     await user.click(
       within(panel).getByRole("button", { name: "Uncommitted" }),
@@ -1282,6 +1288,7 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Changes" }));
     await user.click(await screen.findByRole("button", { name: /a.ts/ }));
     expect(
       await screen.findByRole("tab", { name: "a.ts" }),
@@ -1315,6 +1322,7 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Changes" }));
     await user.click(await screen.findByRole("button", { name: /a.ts/ }));
 
     expect(await screen.findByTestId("monaco-diff")).toHaveAttribute(
@@ -1384,6 +1392,7 @@ describe("AgentsActivity", () => {
     await userEvent.click(
       await screen.findByLabelText("Open session side panel"),
     );
+    await userEvent.click(screen.getByRole("tab", { name: "Changes" }));
 
     for (const { fileName, status, className } of expectations) {
       const row = await screen.findByRole("button", {
@@ -1418,6 +1427,7 @@ describe("AgentsActivity", () => {
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
     await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Changes" }));
     await user.click(await screen.findByRole("button", { name: /image.png/ }));
 
     expect(
@@ -4520,10 +4530,17 @@ describe("AgentsActivity", () => {
       name: "Session side panel",
     });
     expect(
+      within(panel).getByRole("tab", { name: "Issue" }),
+    ).toBeInTheDocument();
+    expect(
       within(panel).getByRole("tab", { name: "Changes" }),
     ).toBeInTheDocument();
     expect(
       within(panel).getByRole("tab", { name: "Files" }),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText("Existing issue")).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "View issue" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize session side panel" }),
@@ -4651,6 +4668,7 @@ describe("AgentsActivity", () => {
     const panel = await screen.findByRole("complementary", {
       name: "Session side panel",
     });
+    await user.click(within(panel).getByRole("tab", { name: "Changes" }));
     expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
     expect(
       within(panel).getByRole("button", { name: "Uncommitted" }),
@@ -4764,6 +4782,61 @@ describe("AgentsActivity", () => {
       "data-read-only",
       "true",
     );
+  });
+
+  it("opens the linked issue in Issues Activity from the issue tab", async () => {
+    const user = userEvent.setup();
+    const onOpenIssue = vi.fn();
+
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          id: 20,
+          projectId: 1,
+          title: "Existing issue",
+          description: "Existing description",
+          status: "running",
+          labels: [
+            {
+              id: 1,
+              name: "bug",
+              scope: "project",
+              projectId: 1,
+              color: "#b42318",
+              workflowSkill: null,
+            },
+          ],
+          linkedSessionId: 301,
+          linkedSessionStatus: "running",
+          linkedSessionAttention: "none",
+          createdAt: 1_780_637_000_000,
+          updatedAt: 1_780_637_000_000,
+        },
+      ],
+    });
+
+    render(
+      <AgentsActivity
+        activeSessionId={301}
+        onOpenIssue={onOpenIssue}
+        projectId={1}
+      />,
+    );
+
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    const panel = await screen.findByRole("complementary", {
+      name: "Session side panel",
+    });
+
+    expect(within(panel).getByText("Existing description")).toBeInTheDocument();
+    expect(within(panel).getByText("bug")).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "View issue" }));
+
+    expect(onOpenIssue).toHaveBeenCalledWith(20);
   });
 
   it("keeps the terminal visible after linked issue header actions", async () => {

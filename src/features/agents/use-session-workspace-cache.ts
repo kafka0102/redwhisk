@@ -310,6 +310,16 @@ export function useSessionWorkspaceCache({
     [updateCurrentCache],
   );
 
+  const setSidePanelTabForSession = useCallback(
+    (targetSessionId: number, tab: SessionSidePanelTab) => {
+      updateSessionCache(targetSessionId, (cache) => ({
+        ...cache,
+        sidePanelTab: tab,
+      }));
+    },
+    [updateSessionCache],
+  );
+
   // 切换任意 sessionId 的 activeWorkspaceTab。供实例池中非当前 session 的
   // `SessionWorkspacePane` 操作自己 tab 选中态（虽然 hidden 时无法交互，但保持
   // 回调身份稳定，避免触发 memo 化的 pane 不必要重渲染）。
@@ -620,6 +630,7 @@ export function useSessionWorkspaceCache({
     selectWorkspaceTab,
     selectWorkspaceTabForSession,
     setSidePanelTab,
+    setSidePanelTabForSession,
     sidePanelTab: currentCache.sidePanelTab,
   };
 }

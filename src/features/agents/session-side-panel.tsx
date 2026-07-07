@@ -1,5 +1,7 @@
 import { SessionChangesPanel } from "./session-changes-panel";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
+import { SessionIssuePanel } from "./session-issue-panel";
+import type { LinkedSessionIssue } from "./agents-session-pane";
 import { useI18n } from "../../shared/i18n/i18n";
 import type {
   WorkspaceCommitChangedFile,
@@ -20,15 +22,18 @@ interface SessionSidePanelProps {
   isChangesLoading: boolean;
   isCommitHistoryLoading: boolean;
   isFileTreeLoading: boolean;
+  linkedIssue: LinkedSessionIssue | null;
   onActiveTabChange: (tab: SessionSidePanelTab) => void;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
   onOpenCommittedChangedFile: (
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  onOpenIssue: (issueId: number) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onRefreshCommitHistory: () => void;
   onRefreshChanges: () => void;
+  projectId: number;
 }
 
 export function SessionSidePanel({
@@ -42,12 +47,15 @@ export function SessionSidePanel({
   isChangesLoading,
   isCommitHistoryLoading,
   isFileTreeLoading,
+  linkedIssue,
   onActiveTabChange,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  onOpenIssue,
   onOpenFile,
   onRefreshCommitHistory,
   onRefreshChanges,
+  projectId,
 }: SessionSidePanelProps) {
   const { messages } = useI18n();
   return (
@@ -56,6 +64,17 @@ export function SessionSidePanel({
       aria-label={messages.agentsFeature.sessionSidePanel}
     >
       <div className="session-side-panel__tabs" role="tablist">
+        {linkedIssue ? (
+          <button
+            aria-selected={activeTab === "issue"}
+            className="session-side-panel__tab"
+            role="tab"
+            type="button"
+            onClick={() => onActiveTabChange("issue")}
+          >
+            {messages.agentsFeature.issueTab}
+          </button>
+        ) : null}
         <button
           aria-selected={activeTab === "changes"}
           className="session-side-panel__tab"
@@ -76,7 +95,14 @@ export function SessionSidePanel({
         </button>
       </div>
       <div className="session-side-panel__content" role="tabpanel">
-        {activeTab === "changes" ? (
+        {activeTab === "issue" && linkedIssue ? (
+          <SessionIssuePanel
+            issueId={linkedIssue.issueId}
+            issueTitle={linkedIssue.issueTitle}
+            projectId={projectId}
+            onOpenIssue={onOpenIssue}
+          />
+        ) : activeTab === "changes" || activeTab === "issue" ? (
           <SessionChangesPanel
             changes={changes}
             commitHistory={commitHistory}

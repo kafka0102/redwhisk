@@ -71,6 +71,11 @@ export function AppShell({
     setActiveActivity("agents");
     setIsGlobalSettingsOpen(false);
   }, []);
+  const openIssue = useCallback((issueId: number) => {
+    setRequestedIssueId(issueId);
+    setActiveActivity("issues");
+    setIsGlobalSettingsOpen(false);
+  }, []);
 
   useEffect(() => {
     if (openAgentSessionRequest?.projectId !== project.id) {
@@ -196,6 +201,7 @@ export function AppShell({
               onOpenAgentsActivity={(sessionId) => {
                 openAgentSession(sessionId);
               }}
+              onOpenIssue={openIssue}
               onOpenProjectSettingsLabels={() => {
                 setActiveProjectSettingsMenu("labels");
                 setActiveActivity("settings");

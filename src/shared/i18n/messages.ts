@@ -310,6 +310,7 @@ export interface I18nMessages {
     gitSummary: string;
     inProgress: string;
     issueDetails: string;
+    issueTab: string;
     issueEyebrow: string;
     issueNotFound: string;
     noDetailsProvided: string;
@@ -357,6 +358,7 @@ export interface I18nMessages {
     temporarySessionDefaultPrompt: string;
     temporarySessionDefaultTitle: string;
     titleField: string;
+    viewIssue: string;
     detailsField: string;
     promptField: string;
     currentModelType: string;
@@ -814,6 +816,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       gitSummary: "Git summary",
       inProgress: "In Progress",
       issueDetails: "Issue details",
+      issueTab: "Issue",
       issueEyebrow: "Issue",
       issueNotFound: "Linked issue no longer exists.",
       noDetailsProvided: "No details provided.",
@@ -864,6 +867,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
         "Ask Codex to help with the current project without linking an issue.",
       temporarySessionDefaultTitle: "Untitled Session",
       titleField: "Title",
+      viewIssue: "View issue",
       detailsField: "Details",
       promptField: "Prompt",
       currentModelType: "Current model type",
@@ -1318,6 +1322,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       gitSummary: "Git 摘要",
       inProgress: "进行中",
       issueDetails: "Issue 详情",
+      issueTab: "Issue",
       issueEyebrow: "Issue",
       issueNotFound: "关联的 Issue 已不存在。",
       noDetailsProvided: "暂无详情。",
@@ -1367,6 +1372,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
         "请 Codex 在当前项目中协助处理任务，不关联具体 Issue。",
       temporarySessionDefaultTitle: "未命名会话",
       titleField: "标题",
+      viewIssue: "查看 issue",
       detailsField: "详情",
       promptField: "提示词",
       currentModelType: "当前模型类型",

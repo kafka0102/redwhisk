@@ -3799,6 +3799,28 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.session-issue-panel {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.session-issue-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-issue-panel__link {
+  height: auto;
+  padding: 0;
+}
+
 .session-changes-panel {
   display: grid;
   grid-template-rows: 36px minmax(0, 1fr);

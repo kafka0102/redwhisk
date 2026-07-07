@@ -17,6 +17,7 @@ interface ActivityRouterProps {
   activeAgentSessionId: number | null;
   activeProjectSettingsMenu: SettingsMenu;
   onOpenAgentsActivity: (sessionId: number) => void;
+  onOpenIssue: (issueId: number) => void;
   onOpenProjectSettingsLabels: () => void;
   onProjectSettingsMenuChange: (menu: SettingsMenu) => void;
   onProjectUpdated: (project: ProjectSummary) => void;
@@ -38,6 +39,7 @@ export function ActivityRouter({
   activeAgentSessionId,
   activeProjectSettingsMenu,
   onOpenAgentsActivity,
+  onOpenIssue,
   onOpenProjectSettingsLabels,
   onProjectSettingsMenuChange,
   onProjectUpdated,
@@ -55,6 +57,7 @@ export function ActivityRouter({
     return (
       <AgentsActivity
         activeSessionId={activeAgentSessionId}
+        onOpenIssue={onOpenIssue}
         onSelectSession={onSelectAgentSession}
         projectId={projectId}
       />

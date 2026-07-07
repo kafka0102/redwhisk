@@ -94,12 +94,14 @@ interface SessionBrowserToolTab {
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
+  onOpenIssue?: (issueId: number) => void;
   onSelectSession?: (sessionId: number) => void;
   projectId: number;
 }
 
 export function AgentsActivity({
   activeSessionId,
+  onOpenIssue,
   onSelectSession,
   projectId,
 }: AgentsActivityProps) {
@@ -411,6 +413,8 @@ export function AgentsActivity({
     sessionId: currentSessionId,
     isSidePanelOpen: isSessionSidePanelOpen && selectedSession !== null,
   });
+  const { setSidePanelTab, setSidePanelTabForSession, sidePanelTab } =
+    workspaceCache;
   // 判断某个 session 是否处于 open（运行中）状态：实例池据此跳过淘汰，
   // 避免 running session 的 handle 被 drop 导致 agent 进程被 kill
   //（典型场景：claude code 单轮进程被 shutdown 后报「客户端主动关闭」）。
@@ -604,11 +608,32 @@ export function AgentsActivity({
 
   function handleSelectSession(sessionId: number) {
     setIsTransitionMenuOpen(false);
+    if (isSessionSidePanelOpen) {
+      const nextSession =
+        visibleSessions.find((session) => session.sessionId === sessionId) ??
+        null;
+      setSidePanelTabForSession(
+        sessionId,
+        nextSession?.issueId != null && nextSession.issueTitle
+          ? "issue"
+          : "changes",
+      );
+    }
     // 立即更新 selectedSessionId，确保 UI 立即响应
     setSelectedSessionId(sessionId);
     onSelectSession?.(sessionId);
     // 异步处理 attention 确认，不阻塞 UI
     void acknowledgeSessionAttention(sessionId);
+  }
+
+  function handleToggleSessionSidePanel() {
+    if (!isSessionSidePanelOpen) {
+      setSidePanelTab(linkedIssue ? "issue" : "changes");
+    }
+
+    setIsSessionSidePanelOpen(
+      (currentIsSessionSidePanelOpen) => !currentIsSessionSidePanelOpen,
+    );
   }
 
   async function markLinkedIssueReview(issue: NonNullable<typeof linkedIssue>) {
@@ -1507,11 +1532,7 @@ export function AgentsActivity({
           }}
           onRenameSessionTitle={handleRenameSessionTitle}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTabForSession}
-          onToggleSidePanel={() =>
-            setIsSessionSidePanelOpen(
-              (currentIsSessionSidePanelOpen) => !currentIsSessionSidePanelOpen,
-            )
-          }
+          onToggleSidePanel={handleToggleSessionSidePanel}
           onToggleTransitionMenu={() =>
             setIsTransitionMenuOpen(
               (currentIsTransitionMenuOpen) => !currentIsTransitionMenuOpen,
@@ -1570,7 +1591,7 @@ export function AgentsActivity({
               }}
             />
             <SessionSidePanel
-              activeTab={workspaceCache.sidePanelTab}
+              activeTab={sidePanelTab}
               changes={workspaceCache.changes}
               changesErrorMessage={workspaceCache.changesErrorMessage}
               commitHistory={workspaceCache.commitHistory}
@@ -1582,12 +1603,16 @@ export function AgentsActivity({
               isCommitHistoryLoading={workspaceCache.isCommitHistoryLoading}
               isChangesLoading={workspaceCache.isChangesLoading}
               isFileTreeLoading={workspaceCache.isFileTreeLoading}
+              linkedIssue={linkedIssue}
               onActiveTabChange={workspaceCache.setSidePanelTab}
               onOpenChangedFile={(file) => {
                 void workspaceCache.openChange(file);
               }}
               onOpenCommittedChangedFile={(commitHash, file) => {
                 void workspaceCache.openCommittedChange(commitHash, file);
+              }}
+              onOpenIssue={(issueId) => {
+                onOpenIssue?.(issueId);
               }}
               onOpenFile={(file) => {
                 void workspaceCache.openFile(file);
@@ -1598,6 +1623,7 @@ export function AgentsActivity({
               onRefreshChanges={() => {
                 void workspaceCache.refreshChanges();
               }}
+              projectId={projectId}
             />
           </>
         ) : null}

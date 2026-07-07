@@ -32,4 +32,4 @@ export type SessionWorkspaceTabKind =
   | "file"
   | "changes"
   | SessionWorkspaceToolTabKind;
-export type SessionSidePanelTab = "changes" | "files";
+export type SessionSidePanelTab = "issue" | "changes" | "files";

@@ -187,12 +187,13 @@ export function IssuesActivity({
 }: IssuesActivityProps) {
   const { locale, messages } = useI18n();
   const cachedPageState = issuePageStateCache.get(projectId) ?? null;
+  const hasRequestedIssue = requestedIssueId != null;
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
-    cachedPageState?.selectedIssueId ?? requestedIssueId,
+    requestedIssueId ?? cachedPageState?.selectedIssueId ?? null,
   );
   const [dialogMode, setDialogMode] = useState<DialogMode | null>(
-    cachedPageState?.dialogMode ?? null,
+    hasRequestedIssue ? "edit" : (cachedPageState?.dialogMode ?? null),
   );
   const [isReadOnlyEditRequested, setIsReadOnlyEditRequested] = useState(false);
   const [runDialogIssue, setRunDialogIssue] = useState<Pick<
@@ -283,8 +284,14 @@ export function IssuesActivity({
       setLaneLoadState(INITIAL_LANE_LOAD_STATE);
       setLaneTotals(INITIAL_LANE_TOTALS);
       loadingMoreRef.current.clear();
-      setSelectedIssueId(cachedState?.selectedIssueId ?? null);
-      setDialogMode(cachedState?.dialogMode ?? null);
+      setSelectedIssueId(
+        hasRequestedIssue
+          ? requestedIssueId
+          : (cachedState?.selectedIssueId ?? null),
+      );
+      setDialogMode(
+        hasRequestedIssue ? "edit" : (cachedState?.dialogMode ?? null),
+      );
       setIsReadOnlyEditRequested(false);
       setRunDialogIssue(null);
       setForm(cachedState?.form ?? EMPTY_FORM);
@@ -316,7 +323,14 @@ export function IssuesActivity({
         setIssues(sortedIssues);
         setLaneLoadState(computeLaneLoadState(sortedIssues));
         setLaneTotals(deriveLaneTotals(response.statusTotals, sortedIssues));
-        if (nextCachedState && cachedIssueExists) {
+        if (hasRequestedIssue) {
+          const requestedIssue =
+            sortedIssues.find((issue) => issue.id === requestedIssueId) ?? null;
+          setSelectedIssueId(requestedIssue?.id ?? sortedIssues[0]?.id ?? null);
+          setDialogMode(requestedIssue ? "edit" : null);
+          setForm(requestedIssue ? issueToForm(requestedIssue) : EMPTY_FORM);
+          previousSelectedIssueIdRef.current = null;
+        } else if (nextCachedState && cachedIssueExists) {
           setSelectedIssueId(nextCachedState.selectedIssueId);
           setDialogMode(nextCachedState.dialogMode);
           setForm(nextCachedState.form);
@@ -349,7 +363,7 @@ export function IssuesActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId, requestedIssueId]);
+  }, [hasRequestedIssue, projectId, requestedIssueId]);
 
   useEffect(() => {
     let isMounted = true;
