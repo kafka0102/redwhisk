@@ -1,10 +1,10 @@
 # agents-ui Specification Delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Session side panel changes view
+### Requirement: Session side panel issue view
 
-Agents Activity SHALL provide a right Session side panel that can show linked Issue details alongside workspace views.
+Agents Activity SHALL provide a right Session side panel issue view for linked Issues without replacing the existing workspace tabs.
 
 #### Scenario: Side panel opens with a linked Issue
 

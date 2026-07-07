@@ -114,6 +114,41 @@ Agents Activity SHALL provide a right Session side panel changes view backed by 
 - **AND** the branch name tag is anchored to the right edge of its row with a 4px right gap
 - **AND** the branch name tag stacks above the author name so a long author name is covered by the tag instead of overflowing the row
 
+### Requirement: Session side panel issue view
+
+Agents Activity SHALL provide a right Session side panel issue view for linked Issues without replacing the existing workspace tabs.
+
+#### Scenario: Side panel opens with a linked Issue
+
+- **WHEN** the selected Session has a linked Issue
+- **AND** the user opens the right Session side panel
+- **THEN** the top panel tabs include `Issue`, `变更`, and `文件`
+- **AND** the `Issue` tab is rendered in the first position
+- **AND** the `Issue` tab is active immediately after opening the panel
+
+#### Scenario: Issue tab shows linked Issue details
+
+- **WHEN** the `Issue` tab is active
+- **THEN** the panel shows the linked Issue title
+- **AND** the title row shows a `查看 issue` link button aligned to the right
+- **AND** the panel shows a divider below the title row
+- **AND** the panel shows the Issue description below that divider
+- **AND** if the Issue has labels, the panel shows another divider and renders the labels inline using the existing label chip style
+
+#### Scenario: Open linked Issue from the side panel
+
+- **WHEN** the user clicks `查看 issue` in the side panel `Issue` tab
+- **THEN** the app switches to the Issues Activity
+- **AND** the linked Issue is selected
+- **AND** the Issue detail view is opened for that Issue
+
+#### Scenario: Side panel opens for a standalone Session
+
+- **WHEN** the selected Session has no linked Issue
+- **AND** the user opens the right Session side panel
+- **THEN** the top panel keeps the existing `变更` and `文件` tabs
+- **AND** the panel does not add a standalone-only empty `Issue` primary flow
+
 ### Requirement: Session side panel file tree view
 
 Agents Activity SHALL provide a right Session side panel file tree view backed by the current project repository.
@@ -240,4 +275,3 @@ Agents Activity 的 Session 主窗口 SHALL 将 Session 内容作为首个 Tab�
 - **WHEN** 用户在地址栏输入地址并按 Enter
 - **THEN** 嵌入式浏览区域访问该地址
 - **AND** 如果地址与当前地址相同，系统重新加载当前页面
-
