@@ -230,7 +230,7 @@ function IssueCard({
             <span id={metaId} className="issue-card__meta-row">
               <span className="issue-card__id">#{issue.id}</span>
               <span className="issue-card__updated">
-                {formatTimestamp(issue.updatedAt)}
+                {formatTimestamp(issue.createdAt)}
               </span>
             </span>
             <span className="issue-card__title">{issue.title}</span>

@@ -160,7 +160,14 @@ function mergeIssues(
   next: IssueRecord[],
 ): IssueRecord[] {
   const existingIds = new Set(current.map((issue) => issue.id));
-  return [...current, ...next.filter((issue) => !existingIds.has(issue.id))];
+  return sortIssuesByIdDesc([
+    ...current,
+    ...next.filter((issue) => !existingIds.has(issue.id)),
+  ]);
+}
+
+function sortIssuesByIdDesc(issues: IssueRecord[]): IssueRecord[] {
+  return [...issues].sort((left, right) => right.id - left.id);
 }
 
 interface IssuesActivityProps {
@@ -304,9 +311,11 @@ export function IssuesActivity({
             (issue) => issue.id === nextCachedState?.selectedIssueId,
           );
 
-        setIssues(response.issues);
-        setLaneLoadState(computeLaneLoadState(response.issues));
-        setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
+        const sortedIssues = sortIssuesByIdDesc(response.issues);
+
+        setIssues(sortedIssues);
+        setLaneLoadState(computeLaneLoadState(sortedIssues));
+        setLaneTotals(deriveLaneTotals(response.statusTotals, sortedIssues));
         if (nextCachedState && cachedIssueExists) {
           setSelectedIssueId(nextCachedState.selectedIssueId);
           setDialogMode(nextCachedState.dialogMode);
@@ -316,9 +325,8 @@ export function IssuesActivity({
         } else {
           issuePageStateCache.delete(projectId);
           setSelectedIssueId(
-            response.issues.find((issue) => issue.id === requestedIssueId)
-              ?.id ??
-              response.issues[0]?.id ??
+            sortedIssues.find((issue) => issue.id === requestedIssueId)?.id ??
+              sortedIssues[0]?.id ??
               null,
           );
           setDialogMode(null);
@@ -1682,7 +1690,7 @@ function mergeIssue(
     (issue) => issue.id !== nextIssue.id,
   );
 
-  return [nextIssue, ...remainingIssues];
+  return sortIssuesByIdDesc([nextIssue, ...remainingIssues]);
 }
 
 function formatLocalTimestamp(epochMilliseconds: number): string {

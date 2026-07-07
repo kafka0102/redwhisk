@@ -748,7 +748,31 @@ describe("IssuesActivity", () => {
     expect(completedLane).toHaveTextContent("no issues");
   });
 
-  it("shows issue id, updated time, full title, and a single-line description excerpt", async () => {
+  it("sorts issues by id descending within the same lane", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        { ...existingIssue, id: 3, title: "Issue 3" },
+        { ...existingIssue, id: 9, title: "Issue 9" },
+        { ...existingIssue, id: 5, title: "Issue 5" },
+      ],
+    });
+
+    renderIssuesActivity();
+
+    const backlogLane = await screen.findByRole("region", { name: "Backlog" });
+    const issue9 = within(backlogLane).getByRole("button", { name: "Issue 9" });
+    const issue5 = within(backlogLane).getByRole("button", { name: "Issue 5" });
+    const issue3 = within(backlogLane).getByRole("button", { name: "Issue 3" });
+
+    expect(issue9.compareDocumentPosition(issue5)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(issue5.compareDocumentPosition(issue3)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("shows issue id, created time, full title, and a single-line description excerpt", async () => {
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
     renderIssuesActivity();
@@ -760,7 +784,7 @@ describe("IssuesActivity", () => {
     expect(card).toHaveTextContent("Existing issue");
     expect(card).toHaveTextContent("#20");
     expect(card).toHaveTextContent(
-      formatTestTimestamp(existingIssue.updatedAt),
+      formatTestTimestamp(existingIssue.createdAt),
     );
     expect(card).toHaveTextContent("Existing description");
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
