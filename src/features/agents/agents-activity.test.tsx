@@ -1782,8 +1782,11 @@ describe("AgentsActivity", () => {
     expect(claudeRow).not.toHaveTextContent("Claude");
   });
 
-  it("creates a new session immediately when only one agent type is configured", async () => {
+  it("creates a new session immediately when only one agent profile is configured", async () => {
     const user = userEvent.setup();
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
+      profiles: scope === "project" ? defaultProfiles.project : [],
+    }));
     listAgentSessionsMock
       .mockResolvedValueOnce({
         sessions: [
@@ -2108,7 +2111,9 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a factual message when no agent profiles are available", async () => {
+  it("prompts to open agent settings when no agent profiles are available", async () => {
+    const user = userEvent.setup();
+    const handleOpenProjectAgentSettings = vi.fn();
     listAgentProfilesMock.mockImplementation(async () => ({ profiles: [] }));
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
@@ -2127,17 +2132,33 @@ describe("AgentsActivity", () => {
       ],
     });
 
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New session" }),
-      ).toBeDisabled(),
+    render(
+      <AgentsActivity
+        activeSessionId={301}
+        onOpenProjectAgentSettings={handleOpenProjectAgentSettings}
+        projectId={1}
+      />,
     );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "New session",
+      }),
+    );
+
+    const confirmation = await screen.findByRole("dialog", {
+      name: "No Agent is available. Create one now?",
+    });
+    expect(
+      within(confirmation).getByText("No Agent is available. Create one now?"),
+    ).toBeInTheDocument();
+    await user.click(within(confirmation).getByRole("button", { name: "Yes" }));
+
+    expect(handleOpenProjectAgentSettings).toHaveBeenCalledTimes(1);
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
-  it("shows an agent type picker when multiple agent types are configured", async () => {
+  it("shows all configured agent profiles by name when multiple agents are configured", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
@@ -2147,6 +2168,11 @@ describe("AgentsActivity", () => {
             {
               ...defaultProfiles.project[0],
               id: 102,
+              name: "Second Codex Agent",
+            },
+            {
+              ...defaultProfiles.project[0],
+              id: 103,
               name: "Claude Agent",
               agentType: "claude",
               command: "claude",
@@ -2155,7 +2181,9 @@ describe("AgentsActivity", () => {
         };
       }
 
-      return { profiles: [] };
+      return {
+        profiles: [defaultProfiles.global[0]],
+      };
     });
     listAgentSessionsMock.mockResolvedValueOnce({
       sessions: [
@@ -2184,15 +2212,21 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("button", { name: "New session" }));
 
     expect(
-      await screen.findByRole("menuitem", { name: "Codex" }),
+      await screen.findByRole("menuitem", { name: "Project Agent" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("menuitem", { name: "Claude" }),
+      screen.getByRole("menuitem", { name: "Second Codex Agent" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Claude Agent" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Global Agent" }),
     ).toBeInTheDocument();
     expect(startStructuredAgentSessionMock).not.toHaveBeenCalled();
   });
 
-  it("creates a session for the selected agent type from the picker", async () => {
+  it("creates a session for the selected agent profile from the picker", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
@@ -2202,6 +2236,11 @@ describe("AgentsActivity", () => {
             {
               ...defaultProfiles.project[0],
               id: 102,
+              name: "Second Codex Agent",
+            },
+            {
+              ...defaultProfiles.project[0],
+              id: 103,
               name: "Claude Agent",
               agentType: "claude",
               command: "claude",
@@ -2210,7 +2249,9 @@ describe("AgentsActivity", () => {
         };
       }
 
-      return { profiles: [] };
+      return {
+        profiles: [defaultProfiles.global[0]],
+      };
     });
     listAgentSessionsMock
       .mockResolvedValueOnce({
@@ -2236,7 +2277,7 @@ describe("AgentsActivity", () => {
             issueId: null,
             issueTitle: null,
             title: "Untitled Session",
-            agentType: "claude",
+            agentType: "codex",
             status: "running",
             attention: "none",
             lastActiveAt: 1_780_638_500_000,
@@ -2264,7 +2305,7 @@ describe("AgentsActivity", () => {
             issueId: null,
             issueTitle: null,
             title: "Untitled Session",
-            agentType: "claude",
+            agentType: "codex",
             status: "running",
             attention: "none",
             lastActiveAt: 1_780_638_500_000,
@@ -2294,14 +2335,16 @@ describe("AgentsActivity", () => {
       ).not.toBeDisabled(),
     );
     await user.click(screen.getByRole("button", { name: "New session" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Claude" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Global Agent" }),
+    );
 
     await waitFor(() =>
       expect(startStructuredAgentSessionMock).toHaveBeenCalledWith({
         projectId: 1,
         title: "Untitled Session",
-        agentType: "claude",
-        agentProfileId: 102,
+        agentType: "codex",
+        agentProfileId: 201,
       }),
     );
     await waitFor(() =>
@@ -2319,6 +2362,9 @@ describe("AgentsActivity", () => {
 
   it("shows the start failure reason inline when session creation fails", async () => {
     const user = userEvent.setup();
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
+      profiles: scope === "project" ? defaultProfiles.project : [],
+    }));
     listAgentSessionsMock.mockResolvedValue({
       sessions: [
         {

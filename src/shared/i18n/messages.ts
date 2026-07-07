@@ -327,10 +327,13 @@ export interface I18nMessages {
     newSession: string;
     noChangedFiles: string;
     noDoneSessions: string;
+    noAvailableAgentPrompt: string;
     noInProgressSessions: string;
     noProfilesForAgentType: string;
     noReviewSessions: string;
     noSessions: string;
+    openAgentSettingsNo: string;
+    openAgentSettingsYes: string;
     openSessionActions: string;
     openSessionSidePanel: string;
     openStatusOptions: string;
@@ -837,11 +840,14 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newSession: "New session",
       noChangedFiles: "No changed files.",
       noDoneSessions: "No done sessions.",
+      noAvailableAgentPrompt: "No Agent is available. Create one now?",
       noInProgressSessions: "No in-progress sessions.",
       noProfilesForAgentType:
         "No Agent Profile is available for the current agent type.",
       noReviewSessions: "No review sessions.",
       noSessions: "No sessions.",
+      openAgentSettingsNo: "No",
+      openAgentSettingsYes: "Yes",
       openSessionActions: "More session actions",
       openSessionSidePanel: "Open session side panel",
       openStatusOptions: "Open status options",
@@ -1346,10 +1352,13 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       newSession: "新建会话",
       noChangedFiles: "暂无变更文件。",
       noDoneSessions: "暂无已完成的会话。",
+      noAvailableAgentPrompt: "没有可用的 Agent，是否去新建 Agent？",
       noInProgressSessions: "暂无进行中的会话。",
       noProfilesForAgentType: "未找到可用于当前 Agent 类型的 Agent 配置。",
       noReviewSessions: "暂无待验收的会话。",
       noSessions: "暂无会话。",
+      openAgentSettingsNo: "否",
+      openAgentSettingsYes: "是",
       openSessionActions: "更多会话操作",
       openSessionSidePanel: "打开会话侧边栏",
       openStatusOptions: "打开状态选项",

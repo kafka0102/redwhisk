@@ -42,9 +42,18 @@ vi.mock("../features/issues/issues-activity", () => ({
 vi.mock("../features/agents/agents-activity", () => ({
   AgentsActivity: ({
     activeSessionId,
+    onOpenProjectAgentSettings,
   }: {
     activeSessionId?: number | null;
-  }) => <div>agents activity {activeSessionId}</div>,
+    onOpenProjectAgentSettings?: () => void;
+  }) => (
+    <div>
+      <div>agents activity {activeSessionId}</div>
+      <button type="button" onClick={onOpenProjectAgentSettings}>
+        open agents settings
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock(
@@ -221,6 +230,40 @@ describe("AppShell terminals activity persistence", () => {
 
     expect(
       screen.getByText("project settings activity labels"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Project Settings" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens project settings on the agents tab when requested from agents", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppShell
+        onCreateProject={() => {}}
+        onProjectUpdated={() => {}}
+        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
+        project={{
+          id: 1,
+          name: "RedWhisk",
+          path: "/tmp/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          recentOpenedAt: "2026-06-15T00:00:00.000Z",
+          status: "available",
+        }}
+        projects={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(
+      screen.getByRole("button", { name: "open agents settings" }),
+    );
+
+    expect(
+      screen.getByText("project settings activity agents"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Project Settings" }),

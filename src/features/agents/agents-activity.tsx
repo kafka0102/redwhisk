@@ -40,7 +40,6 @@ import { AgentsSessionList } from "./agents-session-list";
 import {
   listAgentProfiles,
   type AgentProfileRecord,
-  type AgentType,
 } from "../settings/settings-commands";
 import {
   AgentsSessionPane,
@@ -95,6 +94,7 @@ interface SessionBrowserToolTab {
 interface AgentsActivityProps {
   activeSessionId: number | null;
   onOpenIssue?: (issueId: number) => void;
+  onOpenProjectAgentSettings?: () => void;
   onSelectSession?: (sessionId: number) => void;
   projectId: number;
 }
@@ -102,6 +102,7 @@ interface AgentsActivityProps {
 export function AgentsActivity({
   activeSessionId,
   onOpenIssue,
+  onOpenProjectAgentSettings,
   onSelectSession,
   projectId,
 }: AgentsActivityProps) {
@@ -136,14 +137,12 @@ export function AgentsActivity({
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [isRenamingSessionTitle, setIsRenamingSessionTitle] = useState(false);
-  const [isLoadingAgentTypes, setIsLoadingAgentTypes] = useState(true);
+  const [isLoadingAgentProfiles, setIsLoadingAgentProfiles] = useState(true);
+  const [hasAgentProfilesLoadError, setHasAgentProfilesLoadError] =
+    useState(false);
   const [availableAgentProfiles, setAvailableAgentProfiles] = useState<
     AgentProfileRecord[]
   >([]);
-  const [availableAgentTypes, setAvailableAgentTypes] = useState<AgentType[]>(
-    [],
-  );
-  const [isNewSessionMenuOpen, setIsNewSessionMenuOpen] = useState(false);
   const [agentCommitPreview, setAgentCommitPreview] =
     useState<AgentCommitCompletionPreview | null>(null);
   const [mergePromptSessionId, setMergePromptSessionId] = useState<
@@ -181,7 +180,6 @@ export function AgentsActivity({
     startX: number;
   } | null>(null);
   const nextBrowserTabIdRef = useRef(1);
-  const newSessionButtonRef = useRef<HTMLButtonElement | null>(null);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
   const completedIssueIdsRef = useRef<Set<number>>(new Set());
   const closedSessionIdsRef = useRef<Set<number>>(new Set());
@@ -305,8 +303,9 @@ export function AgentsActivity({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadAgentTypes() {
-      setIsLoadingAgentTypes(true);
+    async function loadAgentProfiles() {
+      setIsLoadingAgentProfiles(true);
+      setHasAgentProfilesLoadError(false);
 
       try {
         const [projectResponse, globalResponse] = await Promise.all([
@@ -323,60 +322,27 @@ export function AgentsActivity({
           ...globalResponse.profiles,
         ];
         setAvailableAgentProfiles(mergedProfiles);
-        const nextAgentTypes = Array.from(
-          new Set(mergedProfiles.map((profile) => profile.agentType)),
-        );
-        setAvailableAgentTypes(nextAgentTypes);
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
         setAvailableAgentProfiles([]);
-        setAvailableAgentTypes([]);
+        setHasAgentProfilesLoadError(true);
         toast.error(toCommandError(error).message);
       } finally {
         if (isMounted) {
-          setIsLoadingAgentTypes(false);
+          setIsLoadingAgentProfiles(false);
         }
       }
     }
 
-    void loadAgentTypes();
+    void loadAgentProfiles();
 
     return () => {
       isMounted = false;
     };
   }, [projectId]);
-
-  useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      if (!isNewSessionMenuOpen) {
-        return;
-      }
-
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-
-      if (newSessionButtonRef.current?.contains(target)) {
-        return;
-      }
-
-      const menu = document.querySelector(".agents-session-create-menu");
-      if (menu?.contains(target)) {
-        return;
-      }
-
-      setIsNewSessionMenuOpen(false);
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [isNewSessionMenuOpen]);
 
   const currentSessionId = shouldLoadDeferredContent
     ? ((visibleSessions.some(
@@ -1398,37 +1364,25 @@ export function AgentsActivity({
     onSelectSession?.(result.sessionId);
   }
 
-  async function createSession(agentType: AgentType) {
+  async function createSession(profile: AgentProfileRecord) {
     if (isCreatingSession) {
       return;
     }
 
-    const selectedProfile = availableAgentProfiles.find(
-      (profile) => profile.agentType === agentType,
-    );
-    if (selectedProfile == null) {
-      toast.error(messages.agentsFeature.noProfilesForAgentType);
-      return;
-    }
-
     setIsCreatingSession(true);
-    setIsNewSessionMenuOpen(false);
 
     try {
       const result = await startStructuredAgentSession({
         projectId,
         title: messages.agentsFeature.temporarySessionDefaultTitle,
-        agentType,
-        agentProfileId: selectedProfile.id,
+        agentType: profile.agentType,
+        agentProfileId: profile.id,
       });
       await handleTemporarySessionStarted(result);
     } catch (error) {
       toast.error(toCommandError(error).message);
     } finally {
       setIsCreatingSession(false);
-      window.requestAnimationFrame(() => {
-        newSessionButtonRef.current?.focus();
-      });
     }
   }
 
@@ -1443,20 +1397,16 @@ export function AgentsActivity({
       }
     >
       <AgentsSessionList
-        availableAgentTypes={availableAgentTypes}
+        availableAgentProfiles={availableAgentProfiles}
         errorMessage={errorMessage}
+        hasAgentProfilesLoadError={hasAgentProfilesLoadError}
         isLoading={isLoading}
-        isNewSessionMenuOpen={isNewSessionMenuOpen}
-        isNewSessionDisabled={
-          isLoadingAgentTypes ||
-          isCreatingSession ||
-          availableAgentTypes.length === 0
-        }
-        newSessionButtonRef={newSessionButtonRef}
-        onCreateSession={(agentType) => {
-          void createSession(agentType);
+        isCreatingSession={isCreatingSession}
+        isLoadingAgentProfiles={isLoadingAgentProfiles}
+        onCreateSession={(profile) => {
+          void createSession(profile);
         }}
-        onNewSessionMenuOpenChange={setIsNewSessionMenuOpen}
+        onOpenProjectAgentSettings={onOpenProjectAgentSettings}
         onSelectSession={handleSelectSession}
         selectedSessionId={selectedSession?.sessionId ?? null}
         sessions={visibleSessions}

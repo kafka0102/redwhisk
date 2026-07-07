@@ -209,6 +209,11 @@ export function AppShell({
                 openAgentSession(sessionId);
               }}
               onOpenIssue={openIssue}
+              onOpenProjectSettingsAgents={() => {
+                setActiveProjectSettingsMenu("agents");
+                setActiveActivity("settings");
+                setIsGlobalSettingsOpen(false);
+              }}
               onOpenProjectSettingsLabels={() => {
                 setActiveProjectSettingsMenu("labels");
                 setActiveActivity("settings");

@@ -1,24 +1,25 @@
-import { GitBranch, LoaderCircle, Plus } from "lucide-react";
-import { memo, useMemo, type RefObject } from "react";
+import { GitBranch, LoaderCircle } from "lucide-react";
+import { memo, useMemo } from "react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
-import type { AgentType } from "../settings/settings-commands";
+import { AgentsNewSessionButton } from "./agents-new-session-button";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "./agent-visuals";
 import {
   formatSessionStatusLabel,
   formatSessionTitle,
 } from "./agent-session-formatters";
 import { useI18n } from "../../shared/i18n/i18n";
+import type { AgentProfileRecord } from "../settings/settings-commands";
 
 interface AgentsSessionListProps {
-  availableAgentTypes: AgentType[];
+  availableAgentProfiles: AgentProfileRecord[];
   errorMessage: string | null;
+  hasAgentProfilesLoadError: boolean;
   isLoading: boolean;
-  isNewSessionMenuOpen: boolean;
-  isNewSessionDisabled: boolean;
-  newSessionButtonRef: RefObject<HTMLButtonElement | null>;
-  onCreateSession: (agentType: AgentType) => void;
-  onNewSessionMenuOpenChange: (open: boolean) => void;
+  isCreatingSession: boolean;
+  isLoadingAgentProfiles: boolean;
+  onCreateSession: (profile: AgentProfileRecord) => Promise<void> | void;
+  onOpenProjectAgentSettings?: () => void;
   onSelectSession: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
@@ -26,21 +27,20 @@ interface AgentsSessionListProps {
 }
 
 export function AgentsSessionList({
-  availableAgentTypes,
+  availableAgentProfiles,
   errorMessage,
+  hasAgentProfilesLoadError,
   isLoading,
-  isNewSessionMenuOpen,
-  isNewSessionDisabled,
-  newSessionButtonRef,
+  isCreatingSession,
+  isLoadingAgentProfiles,
   onCreateSession,
-  onNewSessionMenuOpenChange,
+  onOpenProjectAgentSettings,
   onSelectSession,
   selectedSessionId,
   sessions,
   title,
 }: AgentsSessionListProps) {
   const { messages } = useI18n();
-  const shouldShowAgentTypePicker = availableAgentTypes.length > 1;
 
   return (
     <aside
@@ -55,55 +55,14 @@ export function AgentsSessionList({
           className="agents-sidebar__toolbar"
           aria-label={messages.agentsFeature.sessionListControls}
         >
-          {shouldShowAgentTypePicker ? (
-            <div className="agents-session-create-menu">
-              <button
-                aria-expanded={isNewSessionMenuOpen}
-                aria-haspopup="menu"
-                aria-label={messages.agentsFeature.newSession}
-                className="agents-toolbar-button"
-                disabled={isNewSessionDisabled}
-                ref={newSessionButtonRef}
-                type="button"
-                onClick={() =>
-                  onNewSessionMenuOpenChange(!isNewSessionMenuOpen)
-                }
-              >
-                <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
-              </button>
-              {isNewSessionMenuOpen ? (
-                <div className="agents-session-toolbar__menu" role="menu">
-                  {availableAgentTypes.map((agentType) => (
-                    <button
-                      key={agentType}
-                      className="agents-session-toolbar__menu-item"
-                      role="menuitem"
-                      type="button"
-                      onClick={() => onCreateSession(agentType)}
-                    >
-                      {formatAgentTypeLabel(agentType)}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <button
-              aria-label={messages.agentsFeature.newSession}
-              className="agents-toolbar-button"
-              disabled={isNewSessionDisabled}
-              ref={newSessionButtonRef}
-              type="button"
-              onClick={() => {
-                const [agentType] = availableAgentTypes;
-                if (agentType) {
-                  onCreateSession(agentType);
-                }
-              }}
-            >
-              <Plus aria-hidden="true" size={16} strokeWidth={1.8} />
-            </button>
-          )}
+          <AgentsNewSessionButton
+            availableAgentProfiles={availableAgentProfiles}
+            hasAgentProfilesLoadError={hasAgentProfilesLoadError}
+            isCreatingSession={isCreatingSession}
+            isLoadingAgentProfiles={isLoadingAgentProfiles}
+            onCreateSession={onCreateSession}
+            onOpenProjectAgentSettings={onOpenProjectAgentSettings}
+          />
         </div>
       </div>
 
