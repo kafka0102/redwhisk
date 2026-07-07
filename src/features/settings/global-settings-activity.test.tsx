@@ -45,9 +45,15 @@ describe("GlobalSettingsActivity", () => {
       "aria-pressed",
       "true",
     );
+    expect(screen.getByRole("button", { name: "浅色" })).toHaveClass(
+      "bg-[var(--color-accent-muted)]",
+    );
     expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute(
       "aria-pressed",
       "false",
+    );
+    expect(screen.getByRole("button", { name: "深色" })).not.toHaveClass(
+      "bg-[var(--color-accent-muted)]",
     );
     expect(screen.getByRole("button", { name: "跟随系统" })).toHaveAttribute(
       "aria-pressed",
@@ -118,6 +124,9 @@ describe("GlobalSettingsActivity", () => {
     expect(
       screen.getByRole("combobox", { name: "内容字号" }),
     ).toHaveTextContent("14");
+    expect(screen.getByRole("combobox", { name: "内容字号" })).toHaveClass(
+      "w-[200px]",
+    );
     expect(
       document.documentElement.style.getPropertyValue("--content-font-size"),
     ).toBe("14px");

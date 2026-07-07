@@ -170,12 +170,12 @@ export function GlobalSettingsActivity() {
             </div>
             <div className="settings-section__body">
               <Card>
-                <CardContent className="grid gap-[26px] p-7">
-                  <section className="grid min-w-0 gap-3.5">
-                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                <CardContent className="grid gap-5 p-7">
+                  <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-start gap-x-6 gap-y-3">
+                    <h4 className="m-0 pt-3 text-[15px] font-bold leading-[1.3]">
                       {messages.globalSettings.theme}
                     </h4>
-                    <div className="grid min-w-0 grid-cols-3 gap-4">
+                    <div className="grid min-w-0 grid-cols-3 gap-3">
                       {THEME_OPTIONS.map((themeOption) => (
                         <Button
                           key={themeOption}
@@ -183,9 +183,9 @@ export function GlobalSettingsActivity() {
                           aria-pressed={themePreference === themeOption}
                           onClick={() => setThemePreference(themeOption)}
                           className={cn(
-                            "grid h-auto gap-2.5 px-0 py-0 text-center font-normal text-muted-foreground hover:bg-transparent",
+                            "grid h-auto min-w-0 gap-3 rounded-[var(--radius-card)] border border-border bg-background px-4 py-4 text-center font-normal text-muted-foreground hover:bg-[var(--color-surface-muted)]",
                             themePreference === themeOption &&
-                              "font-bold text-foreground hover:bg-transparent",
+                              "border-[var(--color-border-strong)] bg-[var(--color-accent-muted)] font-medium text-foreground hover:bg-[var(--color-accent-muted)]",
                           )}
                         >
                           <ThemePreview theme={themeOption} />
@@ -196,31 +196,33 @@ export function GlobalSettingsActivity() {
                       ))}
                     </div>
                   </section>
-                  <section className="grid min-w-0 gap-3.5">
+                  <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
                     <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
                       {messages.globalSettings.contentFontSize}
                     </h4>
-                    <Select
-                      items={CONTENT_FONT_SIZE_ITEMS}
-                      value={String(contentFontSize)}
-                      onValueChange={(value) => {
-                        setContentFontSize(Number(value) as ContentFontSize);
-                      }}
-                    >
-                      <SelectTrigger
-                        aria-label={messages.globalSettings.contentFontSize}
-                        className="w-[120px]"
+                    <div className="min-w-0">
+                      <Select
+                        items={CONTENT_FONT_SIZE_ITEMS}
+                        value={String(contentFontSize)}
+                        onValueChange={(value) => {
+                          setContentFontSize(Number(value) as ContentFontSize);
+                        }}
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONTENT_FONT_SIZE_OPTIONS.map((size) => (
-                          <SelectItem key={size} value={String(size)}>
-                            {size}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        <SelectTrigger
+                          aria-label={messages.globalSettings.contentFontSize}
+                          className="w-[200px]"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONTENT_FONT_SIZE_OPTIONS.map((size) => (
+                            <SelectItem key={size} value={String(size)}>
+                              {size}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </section>
                 </CardContent>
               </Card>
@@ -258,9 +260,8 @@ function ThemePreview({ theme }: { theme: ThemePreference }) {
     <span
       aria-hidden="true"
       className={cn(
-        "grid h-[clamp(108px,12vw,126px)] grid-rows-[28px_minmax(0,1fr)] overflow-hidden rounded-[var(--radius-dialog)] border bg-background",
-        theme === "dark" &&
-          "border-ring shadow-[0_0_0_2px_var(--ring)] [background:#0c0d10]",
+        "grid h-[112px] w-full max-w-[148px] justify-self-center grid-rows-[28px_minmax(0,1fr)] overflow-hidden rounded-[var(--radius-dialog)] border bg-background",
+        theme === "dark" && "[background:#0c0d10]",
       )}
       style={previewThemeStyle(theme)}
     >
