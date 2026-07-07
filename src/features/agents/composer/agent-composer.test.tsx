@@ -154,6 +154,40 @@ describe("AgentComposer", () => {
     expect(textarea).toHaveValue("");
   });
 
+  it("点击发送后按钮立即禁用，重复点击不会重复发送", async () => {
+    let resolveSend: (() => void) | null = null;
+    const releaseSend = () => {
+      if (resolveSend === null) {
+        throw new Error("send promise was not initialized");
+      }
+      resolveSend();
+    };
+    sendAgentMessageMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    await renderComposer();
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
+    await user.type(textarea, "你好");
+
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    await user.click(sendButton);
+
+    await waitFor(() => {
+      expect(sendButton).toBeDisabled();
+    });
+
+    await user.click(sendButton);
+    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+
+    releaseSend();
+    await waitFor(() => {
+      expect(textarea).toHaveValue("");
+    });
+  });
+
   it("Enter 不发送消息，插入换行", async () => {
     const user = userEvent.setup();
     await renderComposer();

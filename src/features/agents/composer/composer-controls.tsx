@@ -26,6 +26,7 @@ interface ComposerControlsProps {
   thinkOptions: string[];
   onSelectEffort: (effort: ComposerEffort) => void;
   isSending: boolean;
+  isSubmitting: boolean;
   /** 取消请求进行中：按钮禁用 + spinner，防止重复点击并给用户反馈。 */
   isCancelling: boolean;
   canSend: boolean;
@@ -55,6 +56,7 @@ export function ComposerControls({
   thinkOptions,
   onSelectEffort,
   isSending,
+  isSubmitting,
   isCancelling,
   canSend,
   isReadOnly,
@@ -206,7 +208,7 @@ export function ComposerControls({
             type="button"
             className="agents-composer__send"
             aria-label={messages.agentsFeature.sendMessage}
-            disabled={!canSend}
+            disabled={!canSend || isSubmitting}
             onClick={onSubmit}
           >
             <ArrowUp aria-hidden="true" size={13} strokeWidth={2} />

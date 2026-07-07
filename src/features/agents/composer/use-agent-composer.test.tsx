@@ -188,6 +188,53 @@ describe("useAgentComposer", () => {
     expect(onMessageSent).toHaveBeenCalledWith("你好");
   });
 
+  it("发送进行中时立即进入 isSubmitting，重复提交只发送一次", async () => {
+    let resolveSend: (() => void) | null = null;
+    const releaseSend = () => {
+      if (resolveSend === null) {
+        throw new Error("send promise was not initialized");
+      }
+      resolveSend();
+    };
+    sendAgentMessageMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "idle",
+    });
+
+    await act(async () => {
+      getState()!.setText("你好");
+    });
+
+    act(() => {
+      void getState()!.handleSubmit();
+    });
+
+    await waitFor(() => {
+      expect(getState()!.isSubmitting).toBe(true);
+    });
+
+    await act(async () => {
+      await getState()!.handleSubmit();
+    });
+
+    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseSend();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(getState()!.isSubmitting).toBe(false);
+    });
+  });
+
   it("发送失败：设置 submitError 且保留文本", async () => {
     sendAgentMessageMock.mockRejectedValueOnce(new Error("网络错误"));
     const { getState } = await renderProbe({

@@ -62,6 +62,7 @@ export function AgentComposer({
     submitError,
     cancelToastMessage,
     isSending,
+    isSubmitting,
     isCancelling,
     handleSubmit,
     handleCancel,
@@ -91,7 +92,7 @@ export function AgentComposer({
     return ["low", "medium", "high", "xhigh"];
   }, [models, selectedModelId]);
 
-  const canSend = text.trim() !== "" && !isSending && !isReadOnly;
+  const canSend = text.trim() !== "" && !isReadOnly;
 
   return (
     <form
@@ -156,6 +157,7 @@ export function AgentComposer({
           void handleSetEffort(nextEffort);
         }}
         isSending={isSending}
+        isSubmitting={isSubmitting}
         isCancelling={isCancelling}
         canSend={canSend}
         isReadOnly={isReadOnly}

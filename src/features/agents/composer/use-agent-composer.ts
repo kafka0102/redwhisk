@@ -1,8 +1,9 @@
 // composer 核心 hook：管理文本、附件、Think effort、提交错误，并暴露
 // 提交/取消/附件增删/effort 切换动作。
 //
-// `isSending` 直接派生自父组件下传的 `turnStatus === "running"`，不本地维护，
-// 避免与 message-stream 形成双数据源。
+// `isSending` 仍直接派生自父组件下传的 `turnStatus === "running"`，不本地维护，
+// 避免与 message-stream 形成双数据源；同时补一个本地 `isSubmitting` 锁住
+// “点击发送 → running 事件回流”之间的空窗，防止重复点击重复发送。
 //
 // 附件流程：
 //   open({ directory:false, multiple:false }) → sourcePath
@@ -46,6 +47,8 @@ export interface UseAgentComposerResult {
   cancelToastMessage: string | null;
   /** 派生自 turnStatus，供组件切换发送/取消按钮。 */
   isSending: boolean;
+  /** 本地提交进行中：用于点击后立即禁用发送按钮，防止重复提交。 */
+  isSubmitting: boolean;
   /** 是否正在请求取消当前 turn（防重复点击，给按钮 loading 态）。 */
   isCancelling: boolean;
   /** 提交当前文本；空文本（trim 后）不发。 */
@@ -111,11 +114,13 @@ export function useAgentComposer({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelToastMessage, setCancelToastMessage] = useState<string | null>(
     null,
   );
   const cancelToastTimeoutRef = useRef<number | null>(null);
+  const submitLockRef = useRef(false);
 
   const isSending = turnStatus === "running";
 
@@ -144,7 +149,7 @@ export function useAgentComposer({
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (isReadOnly) {
+    if (isReadOnly || isSending || submitLockRef.current) {
       return;
     }
     const message = text.trim();
@@ -164,6 +169,8 @@ export function useAgentComposer({
         kind: attachment.kind,
       }));
     setSubmitError(null);
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     try {
       await onBeforeSend?.();
       await sendAgentMessage({
@@ -177,8 +184,12 @@ export function useAgentComposer({
       onMessageSent?.(message);
     } catch (error) {
       setSubmitError(toCommandError(error).message);
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
   }, [
+    isSending,
     isReadOnly,
     text,
     attachments,
@@ -294,6 +305,7 @@ export function useAgentComposer({
     submitError,
     cancelToastMessage,
     isSending,
+    isSubmitting,
     isCancelling,
     handleSubmit,
     handleCancel,
