@@ -3854,7 +3854,7 @@ pub(crate) fn build_issue_archive_log_path(
 ) -> Result<String, CommandError> {
     let logs_dir = archive_session_log_project_dir(data_dir, project_id)?;
     let path = logs_dir.join(format!(
-        "归档-项目{project_id}-issue{issue_id}-session{session_id}.log"
+        "archive-project-{project_id}-issue-{issue_id}-session-{session_id}.log"
     ));
     Ok(path.to_string_lossy().to_string())
 }
@@ -5112,7 +5112,7 @@ mod tests {
         assert!(runtime_path
             .ends_with("session-logs/runtime/project-3/project-3-issue-16-session-48.jsonl"));
         assert!(archive_path
-            .ends_with("session-logs/archive/project-3/归档-项目3-issue16-session48.log"));
+            .ends_with("session-logs/archive/project-3/archive-project-3-issue-16-session-48.log"));
     }
 
     #[test]
