@@ -308,6 +308,7 @@ function CommittedFileRow({
   file,
   onOpenCommittedChangedFile,
 }: CommittedFileRowProps) {
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const parentPath = getParentPath(file.filePath);
   return (
     <li>
@@ -315,7 +316,11 @@ function CommittedFileRow({
         aria-label={`${file.fileName} ${parentPath} ${file.status}`}
         className="session-commit-file"
         type="button"
+        onBlur={() => setIsTooltipVisible(false)}
         onClick={() => onOpenCommittedChangedFile(commitHash, file)}
+        onFocus={() => setIsTooltipVisible(true)}
+        onMouseEnter={() => setIsTooltipVisible(true)}
+        onMouseLeave={() => setIsTooltipVisible(false)}
       >
         {renderCommitFileIcon(file.status)}
         <span className="session-commit-file__identity">
@@ -329,6 +334,11 @@ function CommittedFileRow({
         >
           {file.status}
         </span>
+        {isTooltipVisible ? (
+          <span className="session-commit-file__tooltip" role="tooltip">
+            {file.filePath}
+          </span>
+        ) : null}
       </button>
     </li>
   );

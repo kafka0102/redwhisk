@@ -4101,6 +4101,7 @@ button:focus-visible {
 }
 
 .session-commit-file {
+  position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 22px;
   align-items: center;
@@ -4134,7 +4135,7 @@ button:focus-visible {
 
 .session-commit-file__name {
   flex: 0 0 auto;
-  max-width: 42%;
+  max-width: calc(42% + 20px);
   overflow: hidden;
   font-size: 13px;
   line-height: 1.25;
@@ -4147,6 +4148,23 @@ button:focus-visible {
   overflow: hidden;
   color: var(--color-text-subtle);
   font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-file__tooltip {
+  position: absolute;
+  left: 12px;
+  bottom: -26px;
+  z-index: 5;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  padding: 4px 7px;
+  border-radius: var(--radius-control);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 11px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
