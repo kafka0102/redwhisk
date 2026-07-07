@@ -3637,6 +3637,57 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows dismissible loading dialog while completing from the issue detail page", async () => {
+    const user = userEvent.setup();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 517,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    const completion =
+      createDeferred<Awaited<ReturnType<typeof completeIssueFlow>>>();
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    completeIssueFlowMock.mockReturnValueOnce(completion.promise);
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Submitting..." }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Close completion progress" }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Submitting..." }),
+    ).not.toBeInTheDocument();
+
+    completion.resolve(
+      completedFlowResult({
+        ...reviewWithSession,
+        status: "completed",
+        linkedSessionStatus: "closed",
+        updatedAt: reviewWithSession.updatedAt + 1_000,
+      }),
+    );
+
+    await openIssueMoreMenu(user);
+    expect(
+      await screen.findByRole("menuitem", { name: "View Summary" }),
+    ).toBeInTheDocument();
+  });
+
   it("hands off worktree merge conflicts to the linked agent session", async () => {
     const user = userEvent.setup();
     const onOpenAgentsActivity = vi.fn();

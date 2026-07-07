@@ -221,8 +221,11 @@ export function IssuesActivity({
     null,
   );
   const [titleError, setTitleError] = useState<string | null>(null);
-  const [completionProgress, setCompletionProgress] =
-    useState<CompletionProgressState | null>(null);
+  const [isCompletionLoading, setIsCompletionLoading] = useState(false);
+  const [
+    isCompletionLoadingDialogDismissed,
+    setIsCompletionLoadingDialogDismissed,
+  ] = useState(false);
   const [dirtyWorkspaceDialog, setDirtyWorkspaceDialog] =
     useState<DirtyWorkspaceDialogState | null>(null);
   const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>(
@@ -254,6 +257,16 @@ export function IssuesActivity({
   const showCommandErrorAlert = (error: unknown) => {
     showAlert({ message: toCommandError(error).message, type: "error" });
   };
+
+  function showCompletionLoadingDialog() {
+    setIsCompletionLoadingDialogDismissed(false);
+    setIsCompletionLoading(true);
+  }
+
+  function hideCompletionLoadingDialog() {
+    setIsCompletionLoading(false);
+    setIsCompletionLoadingDialogDismissed(false);
+  }
 
   useEffect(() => {
     activeProjectIdRef.current = projectId;
@@ -300,7 +313,7 @@ export function IssuesActivity({
       setIsSaving(false);
       setDialogErrorMessage(null);
       setTitleError(null);
-      setCompletionProgress(null);
+      hideCompletionLoadingDialog();
 
       try {
         const response = await listIssues({
@@ -555,7 +568,7 @@ export function IssuesActivity({
     setRunDialogIssue(null);
     setSummaryIssueId(null);
     setAttachmentPreview(null);
-    setCompletionProgress(null);
+    hideCompletionLoadingDialog();
     const closingMode = dialogMode;
     const previousSelectedIssue =
       issues.find((issue) => issue.id === previousSelectedIssueIdRef.current) ??
@@ -1104,7 +1117,7 @@ export function IssuesActivity({
         shiftLaneTotals(prev, totalsAnchor, updatedIssue),
       );
       setSelectedIssueId(updatedIssue.id);
-      setCompletionProgress(null);
+      hideCompletionLoadingDialog();
 
       if (targetStatus === "backlog") {
         // 退回待办后直接回到看板：避免 status 变为 backlog 时只读页翻转为编辑页。
@@ -1127,7 +1140,7 @@ export function IssuesActivity({
             error.detail,
           );
         } else {
-          setCompletionProgress(null);
+          hideCompletionLoadingDialog();
           showCommandErrorAlert(error);
         }
       }
@@ -1149,10 +1162,7 @@ export function IssuesActivity({
     let worktreeCleanupDecision: boolean | null = null;
 
     while (true) {
-      setCompletionProgress({
-        title: getCompletionProgressTitle(locale),
-        steps: buildCompletionProgressSteps(locale, "checking_commit"),
-      });
+      showCompletionLoadingDialog();
 
       const result = await completeIssueFlow({
         projectId: requestProjectId,
@@ -1171,19 +1181,17 @@ export function IssuesActivity({
       worktreeCleanupDecision = null;
 
       if (result.action === "completed") {
-        setCompletionProgress({
-          title: getCompletionProgressTitle(locale),
-          steps: buildCompletionProgressSteps(locale, "completed"),
-        });
+        hideCompletionLoadingDialog();
         return result.issue;
       }
 
       if (result.action === "cancelled") {
+        hideCompletionLoadingDialog();
         throw new CompletionCancelledError();
       }
 
       if (result.action === "blocked") {
-        setCompletionProgress(null);
+        hideCompletionLoadingDialog();
         if (
           result.mergeBlockReason &&
           result.mergeBlockReason !== "merge_conflict"
@@ -1200,7 +1208,7 @@ export function IssuesActivity({
       }
 
       if (result.action === "prompt_dirty_decision") {
-        setCompletionProgress(null);
+        hideCompletionLoadingDialog();
         const decision = await requestDirtyWorkspaceDecision(result);
         dirtyDecision = decision.decision;
         branchName = decision.branchName;
@@ -1212,19 +1220,17 @@ export function IssuesActivity({
       }
 
       if (result.action === "waiting_auto_commit") {
-        setCompletionProgress({
-          title: getCompletionProgressTitle(locale),
-          steps: buildCompletionProgressSteps(locale, "waiting_commit"),
-        });
         const outcome = await waitForAgentCommit(requestProjectId, issueId);
         if (outcome === "blocked") {
+          hideCompletionLoadingDialog();
           throw new Error(messages.issues.completionGitOperationBlocked);
         }
         if (outcome === "no_commit_detected") {
+          hideCompletionLoadingDialog();
           throw new Error(messages.issues.completionNoCommitDetected);
         }
         // commit_detected → 弹「代码已提交成功。确定继续标记完成吗？」
-        setCompletionProgress(null);
+        hideCompletionLoadingDialog();
         const proceed = await confirm({
           title: messages.issues.completionContinueAfterCommitTitle,
           message: messages.issues.completionContinueAfterCommitMessage,
@@ -1237,7 +1243,7 @@ export function IssuesActivity({
       }
 
       if (result.action === "confirm_worktree_cleanup") {
-        setCompletionProgress(null);
+        hideCompletionLoadingDialog();
         const del = await confirm({
           title: messages.issues.completionWorktreeCleanupTitle,
           message: messages.issues.completionWorktreeCleanupMessage(
@@ -1530,9 +1536,16 @@ export function IssuesActivity({
           onClose={() => setAttachmentPreview(null)}
         />
       ) : null}
-      {completionProgress ? (
-        <IssueCompletionProgressDialog progress={completionProgress} />
-      ) : null}
+      <LoadingDialog
+        closeLabel={messages.issues.closeCompletionLoading}
+        message={messages.issues.completionSubmitting}
+        open={isCompletionLoading && !isCompletionLoadingDialogDismissed}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setIsCompletionLoadingDialogDismissed(true);
+          }
+        }}
+      />
       {dirtyWorkspaceDialog ? (
         <IssueCompletionDirtyWorkspaceDialog
           title={messages.issues.completionDirtyTitle}
@@ -1550,26 +1563,6 @@ export function IssuesActivity({
       {confirmationDialog}
     </main>
   );
-}
-
-type CompletionProgressStepId =
-  | "checking_commit"
-  | "waiting_commit"
-  | "checking_worktree"
-  | "rebasing"
-  | "applying"
-  | "cleaning"
-  | "completed";
-
-interface CompletionProgressStep {
-  id: CompletionProgressStepId;
-  label: string;
-  status: "pending" | "active" | "done";
-}
-
-interface CompletionProgressState {
-  title: string;
-  steps: CompletionProgressStep[];
 }
 
 interface DirtyWorkspaceDialogState {
@@ -1596,91 +1589,6 @@ class WorktreeMergeConflictError extends Error {
 
 interface WorktreeMergeConflictSessionDetail extends WorktreeMergeDetail {
   sessionId?: number | null;
-}
-
-function getCompletionProgressTitle(locale: string): string {
-  return locale === "zh" ? "完成 issue" : "Complete issue";
-}
-
-function buildCompletionProgressSteps(
-  locale: string,
-  activeStep: CompletionProgressStepId,
-): CompletionProgressStep[] {
-  const labels =
-    locale === "zh"
-      ? {
-          checking_commit: "检查未提交改动",
-          waiting_commit: "等待并检测新 commit",
-          checking_worktree: "检查 worktree 是否存在",
-          rebasing: "将工作分支 rebase 到目标分支",
-          applying: "快进应用到目标分支",
-          cleaning: "清理 worktree 与临时分支",
-          completed: "完成",
-        }
-      : {
-          checking_commit: "Check uncommitted changes",
-          waiting_commit: "Wait for and detect a new commit",
-          checking_worktree: "Check whether the worktree still exists",
-          rebasing: "Rebase the workspace branch onto target",
-          applying: "Fast-forward the target branch",
-          cleaning: "Clean up worktree and temporary branch",
-          completed: "Done",
-        };
-  const ids: CompletionProgressStepId[] = [
-    "checking_commit",
-    "waiting_commit",
-    "checking_worktree",
-    "rebasing",
-    "applying",
-    "cleaning",
-    "completed",
-  ];
-  const activeIndex = ids.indexOf(activeStep);
-
-  return ids.map((id, index) => ({
-    id,
-    label: labels[id],
-    status:
-      index < activeIndex
-        ? "done"
-        : index === activeIndex
-          ? "active"
-          : "pending",
-  }));
-}
-
-function IssueCompletionProgressDialog({
-  progress,
-}: {
-  progress: CompletionProgressState;
-}) {
-  return (
-    <div className="issue-dialog-overlay">
-      <div
-        aria-label={progress.title}
-        aria-modal="true"
-        className="issue-dialog issue-dialog--progress"
-        role="dialog"
-      >
-        <div className="issue-dialog__header">
-          <h3>{progress.title}</h3>
-        </div>
-        <div className="issue-dialog__body issue-dialog__body--single">
-          <ol className="issue-completion-progress" role="status">
-            {progress.steps.map((step) => (
-              <li
-                className={`issue-completion-progress__step issue-completion-progress__step--${step.status}`}
-                key={step.id}
-              >
-                <span className="issue-completion-progress__marker" />
-                <span>{step.label}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function issueToForm(issue: IssueRecord): IssueFormState {

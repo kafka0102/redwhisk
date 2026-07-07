@@ -260,6 +260,8 @@ export interface I18nMessages {
     completionAutoCommit: string;
     completionSkipDirty: string;
     completionCancel: string;
+    closeCompletionLoading: string;
+    completionSubmitting: string;
     completionContinueAfterCommitTitle: string;
     completionContinueAfterCommitMessage: string;
     completionContinueLabel: string;
@@ -763,6 +765,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       completionAutoCommit: "Auto commit",
       completionSkipDirty: "Complete without commit",
       completionCancel: "Cancel",
+      closeCompletionLoading: "Close completion progress",
+      completionSubmitting: "Submitting...",
       completionContinueAfterCommitTitle: "Commit detected",
       completionContinueAfterCommitMessage:
         "Code has been committed successfully. Continue marking this Issue complete?",
@@ -1270,6 +1274,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       completionAutoCommit: "自动提交",
       completionSkipDirty: "不提交直接完成",
       completionCancel: "取消",
+      closeCompletionLoading: "关闭完成进度",
+      completionSubmitting: "提交中...",
       completionContinueAfterCommitTitle: "已检测到提交",
       completionContinueAfterCommitMessage:
         "代码已提交成功。是否继续标记完成？",
