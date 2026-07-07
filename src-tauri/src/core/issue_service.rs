@@ -1071,7 +1071,7 @@ impl<'connection> IssueService<'connection> {
         option: CompletionAttemptOption,
         pending_commit: Option<(i64, String)>,
         actual: &ActualExecutionPath,
-        agent_registry: &AgentSessionRegistry,
+        _agent_registry: &AgentSessionRegistry,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
         let project = self.require_project(input.project_id)?;
         let dirty_already_skipped = input.ignore_dirty == Some(true)
@@ -1131,11 +1131,8 @@ impl<'connection> IssueService<'connection> {
                     if let Err(error) =
                         rebase_fast_forward_and_cleanup(&project.repo_path, &session)
                     {
-                        notify_rebase_conflict_to_session(
-                            agent_registry,
-                            &session,
-                            &error.to_string(),
-                        );
+                        // 合并冲突 prompt 的注入交给前端用户在「自动合并」弹窗确认后触发，
+                        // 后端只记录 Blocked 状态，避免用户选「取消」时 prompt 已被发送。
                         let merge_block = describe_worktree_merge_block(&error);
                         let flow = self.upsert_completion_flow(
                             issue.id,
@@ -1208,11 +1205,6 @@ impl<'connection> IssueService<'connection> {
                         if let Err(error) =
                             rebase_fast_forward_and_cleanup(&project.repo_path, &session)
                         {
-                            notify_rebase_conflict_to_session(
-                                agent_registry,
-                                &session,
-                                &error.to_string(),
-                            );
                             let merge_block = describe_worktree_merge_block(&error);
                             let flow = self.upsert_completion_flow(
                                 issue.id,
@@ -2684,22 +2676,6 @@ fn rebase_fast_forward_and_cleanup(
 struct WorktreeMergeBlockDescription {
     reason: String,
     message: String,
-}
-
-/// rebase/合并失败后向活跃 session 注入「代码合并冲突」提示，引导 agent 解决。
-///
-/// 活跃 session（registry 中存在 handle）→ `send_message` 注入冲突说明；发送失败仅记录，
-/// 不阻塞完成流程返回 Blocked。session 关闭（无 handle）→ 暂不在此新建 session
-///（Impl-D 后续：在 worktree 路径新建 session 携带改动上下文），仅由 flow.failure_reason 承载。
-fn notify_rebase_conflict_to_session(
-    agent_registry: &AgentSessionRegistry,
-    session: &AgentSessionRecord,
-    error: &str,
-) {
-    if let Some(handle) = agent_registry.get(session.id) {
-        let prompt = format!("代码合并冲突，请根据本次修改合并代码。\n\n冲突详情：{error}");
-        let _ = handle.send_message(prompt, Vec::new());
-    }
 }
 
 fn describe_worktree_merge_block(error: &GitWorktreeError) -> WorktreeMergeBlockDescription {

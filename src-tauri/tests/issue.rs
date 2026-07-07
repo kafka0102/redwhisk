@@ -2665,7 +2665,7 @@ fn complete_issue_flow_rebase_conflict_persists_merge_block_and_keeps_worktree()
 }
 
 #[test]
-fn complete_issue_flow_rebase_conflict_notifies_active_session_with_conflict_prompt() {
+fn complete_issue_flow_rebase_conflict_does_not_inject_prompt_before_user_confirmation() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-rebase-notify-repo");
     init_repo(&repo_dir);
@@ -2713,7 +2713,7 @@ fn complete_issue_flow_rebase_conflict_notifies_active_session_with_conflict_pro
     write_file(&repo_dir, "tracked.txt", "main side\n");
     git(&repo_dir, &["commit", "-am", "main side"]);
 
-    // 注册活跃 session 句柄，捕获完成流程注入的提示。
+    // 注册活跃 session 句柄，用于断言 rebase 冲突时后端不会自动注入合并 prompt。
     let registry = AgentSessionRegistry::new();
     let (handle, sent) = RecordingHandle::new();
     registry.register(session_id, Arc::new(handle));
@@ -2738,11 +2738,10 @@ fn complete_issue_flow_rebase_conflict_notifies_active_session_with_conflict_pro
 
     assert_eq!(result.action, CompleteIssueFlowAction::Blocked);
     let sent = sent.lock().expect("recorder lock");
-    assert_eq!(sent.len(), 1, "活跃 session 应收到一条冲突提示");
     assert!(
-        sent[0].contains("代码合并冲突"),
-        "冲突提示应包含「代码合并冲突」，实际：{}",
-        sent[0]
+        sent.is_empty(),
+        "rebase 冲突时后端不应自动注入 prompt；合并提示应交给前端用户在「自动合并」弹窗确认后再注入。实际注入：{:?}",
+        *sent
     );
 }
 
