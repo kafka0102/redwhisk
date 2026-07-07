@@ -187,7 +187,10 @@ Completion Policy 只有 `manual` 和 `agent_auto_commit`。
 
 - 应用不得执行 `git add .`，不得静默提交全部改动。
 - `agent_auto_commit` 只能向当前 Codex Session 注入 completion prompt，然后由 Rust Core 检测 Git HEAD/status/changed files。
+- completion prompt 不能只写成“提交当前 Issue 相关改动”这类概括要求；必须显式要求 Agent 运行本任务所需验证命令，并在验证后执行 `git status --short` 检查 format / lint / typecheck / test 带出的额外文件
+- 若验证命令改写了当前 Issue 相关文件，这些文件必须在同一次提交中一并处理；若改写了无关文件，必须先回退再允许提交
 - 检测到新 commit 后，记录 `commit_hash` 并完成 Issue。
+- “检测到新 commit”只是必要条件，不是充分条件；自动提交成功前还必须确认工作区中没有残留当前任务相关的未提交改动，尤其不能遗漏由格式化或验证命令带出的文件
 - 未检测到新 commit 时，记录 `no_commit_detected`，Issue 保持 `review`。
 - 检测到 merge/rebase/cherry-pick 等 Git operation 进行中时，记录 `git_operation_blocked`，提示用户手动处理，不自动完成。
 - 每次完成尝试必须写入 `completion_attempts`。
