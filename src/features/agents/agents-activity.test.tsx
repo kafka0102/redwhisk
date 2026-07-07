@@ -931,9 +931,7 @@ describe("AgentsActivity", () => {
     await flushMicrotasks();
 
     // 先成功加载过未提交文件，此时 one.ts 可见。
-    expect(
-      screen.getByRole("button", { name: /one.ts/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
     // worktree 被删除后刷新变为不可访问：错误信息显示，残留的旧文件行必须消失，
     // 否则点击会打开已不存在的文件。

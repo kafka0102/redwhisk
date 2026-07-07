@@ -10,11 +10,7 @@ import type { ProjectWorktreeLocation } from "../features/project/project-comman
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 
-export type ActivityKey =
-  | "issues"
-  | "agents"
-  | "terminals"
-  | "settings";
+export type ActivityKey = "issues" | "agents" | "terminals" | "settings";
 
 interface ActivityRouterProps {
   activeActivity: ActivityKey;
