@@ -78,7 +78,32 @@ impl<'connection> SessionWorkspaceService<'connection> {
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
         let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
-        read_workspace_commit_history(&root)
+        let base_branch = self.resolve_session_base_branch(input.project_id, input.session_id);
+        read_workspace_commit_history(&root, base_branch.as_deref())
+    }
+
+    // 读取 session 创建 worktree 时记录的 target_branch，作为 commit history 的精确
+    // 分叉基，避免 find_branch_base 落到固定候选列表里更旧的分支。session 不存在、不
+    // 属于本 project、未记录 target_branch，或读取失败时返回 None，交由调用方回退到
+    // 启发式。
+    fn resolve_session_base_branch(
+        &self,
+        project_id: i64,
+        session_id: Option<i64>,
+    ) -> Option<String> {
+        let session_id = session_id?;
+        let session = self
+            .agent_session_repository
+            .find_by_id(session_id)
+            .ok()
+            .flatten()?;
+        if session.project_id != project_id {
+            return None;
+        }
+        session
+            .target_branch
+            .map(|branch| branch.trim().to_string())
+            .filter(|branch| !branch.is_empty())
     }
 
     pub fn read_file(
@@ -261,6 +286,7 @@ fn read_workspace_changes(root: &Path) -> Result<ProjectWorktreeChangesResponse,
 
 fn read_workspace_commit_history(
     root: &Path,
+    base_branch: Option<&str>,
 ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
     let branch_name = current_branch_name(root)?;
     let is_worktree = is_additional_worktree(root).unwrap_or(false);
@@ -268,10 +294,14 @@ fn read_workspace_commit_history(
     // work tree 分支只展示该分支独有的提交（排除 base 分支内容）；非 work tree
     // 分支展示该分支最近 50 条提交（含已 push 到远端的提交），不再用 base..HEAD
     // 过滤——否则已 push 的提交会落在 base 及更早而被排除，无法显示紫色节点。
+    // base_branch 来自 session 记录的 target_branch（worktree 创建时的真实基分支），
+    // 缺失时回退到 find_branch_base 的启发式。
     let revision_range = if is_worktree {
         match branch_name.as_deref() {
             Some(branch) if PRIMARY_BRANCHES.contains(&branch) => None,
-            Some(branch) => find_branch_base(root, branch)?.map(|base| format!("{base}..HEAD")),
+            Some(branch) => {
+                find_branch_base(root, branch, base_branch)?.map(|base| format!("{base}..HEAD"))
+            }
             None => None,
         }
     } else {
@@ -366,15 +396,59 @@ fn commit_is_pushed(root: &Path, commit_hash: &str, upstream: Option<&str>) -> b
     }
 }
 
-fn find_branch_base(root: &Path, current_branch: &str) -> Result<Option<String>, CommandError> {
+// 计算当前 HEAD 相对某个 ref 的 merge-base。
+//
+// ref 不存在（`rev-parse --verify` 失败）或与 HEAD 没有共同历史（`merge-base` 失败）
+// 时返回 None，不阻断调用方：base 解析是尽力而为，任一候选失败都应继续尝试下一个，
+// 而不是让整条 commit history 读取失败。
+fn merge_base_against(root: &Path, ref_name: &str) -> Result<Option<String>, CommandError> {
+    if run_git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{ref_name}^{{commit}}"),
+        ],
+    )
+    .is_err()
+    {
+        return Ok(None);
+    }
+
+    let Ok(base) = run_git(root, &["merge-base", "HEAD", ref_name]) else {
+        return Ok(None);
+    };
+    let base = base.trim();
+    if base.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(base.to_string()))
+    }
+}
+
+fn find_branch_base(
+    root: &Path,
+    current_branch: &str,
+    preferred_base: Option<&str>,
+) -> Result<Option<String>, CommandError> {
+    // 优先使用调用方指定的 base（worktree 创建时记录的 target_branch）。它是该 worktree
+    // 分支真正的分叉点，避免落到固定候选列表里更旧的分支——例如仓库里存在落后于 main
+    // 的 devlop 时，按候选顺序会先命中 devlop，导致 base 过旧、把 main 上继承下来的
+    // 提交全部计入 worktree 自身历史。
+    if let Some(preferred) = preferred_base {
+        if preferred != current_branch {
+            if let Some(base) = merge_base_against(root, preferred)? {
+                return Ok(Some(base));
+            }
+        }
+    }
+
     if let Ok(upstream) = run_git(root, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
         let upstream = upstream.trim();
         if !upstream.is_empty() {
-            if let Ok(base) = run_git(root, &["merge-base", "HEAD", upstream]) {
-                let base = base.trim();
-                if !base.is_empty() {
-                    return Ok(Some(base.to_string()));
-                }
+            if let Some(base) = merge_base_against(root, upstream)? {
+                return Ok(Some(base));
             }
         }
     }
@@ -383,25 +457,8 @@ fn find_branch_base(root: &Path, current_branch: &str) -> Result<Option<String>,
         if *candidate == current_branch {
             continue;
         }
-        if run_git(
-            root,
-            &[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                &format!("{candidate}^{{commit}}"),
-            ],
-        )
-        .is_err()
-        {
-            continue;
-        }
-
-        if let Ok(base) = run_git(root, &["merge-base", "HEAD", candidate]) {
-            let base = base.trim();
-            if !base.is_empty() {
-                return Ok(Some(base.to_string()));
-            }
+        if let Some(base) = merge_base_against(root, candidate)? {
+            return Ok(Some(base));
         }
     }
 
@@ -1253,7 +1310,7 @@ mod tests {
         git(root, &["add", "feature.txt"]);
         git(root, &["commit", "-m", "feature two"]);
 
-        let history = read_workspace_commit_history(root).expect("read commit history");
+        let history = read_workspace_commit_history(root, None).expect("read commit history");
 
         // 非 work tree 不再用 base..HEAD 过滤：返回最近 50 条全历史（base + 2 条
         // feature，共 3 条），顺序为 date-order（新→旧）。
@@ -1288,7 +1345,7 @@ mod tests {
         git(root, &["add", "session.txt"]);
         git(root, &["commit", "-m", "session change"]);
 
-        let history = read_workspace_commit_history(root).expect("read commit history");
+        let history = read_workspace_commit_history(root, None).expect("read commit history");
 
         // 非 work tree 不再过滤 base，返回最近 50 条全历史（base + session change）。
         assert_eq!(history.commits.len(), 2);
@@ -1340,7 +1397,7 @@ mod tests {
             git(root, &["commit", "-m", &format!("commit {index}")]);
         }
 
-        let history = read_workspace_commit_history(root).expect("read commit history");
+        let history = read_workspace_commit_history(root, None).expect("read commit history");
 
         assert_eq!(history.commits.len(), MAX_COMMIT_HISTORY_ENTRIES);
         // 最新提交排在最前。
@@ -1386,7 +1443,7 @@ mod tests {
         git(root, &["config", "branch.dev.remote", "origin"]);
         git(root, &["config", "branch.dev.merge", "refs/heads/dev"]);
 
-        let history = read_workspace_commit_history(root).expect("read commit history");
+        let history = read_workspace_commit_history(root, None).expect("read commit history");
 
         // 非 work tree 的 dev 分支：返回最近 50 条全历史（base + pushed + local = 3）。
         assert_eq!(history.commits.len(), 3);
@@ -1402,6 +1459,53 @@ mod tests {
         assert_eq!(history.commits[1].pushed_to.as_deref(), Some("origin/dev"));
         assert!(history.commits[2].is_pushed);
         assert_eq!(history.commits[2].pushed_to.as_deref(), Some("origin/dev"));
+    }
+
+    #[test]
+    fn commit_history_in_worktree_filters_to_target_branch_base() {
+        // 模拟真实仓库场景：worktree 从 main 创建，但本地还存在落后于 main 的 devlop
+        // 分支。固定候选列表里 devlop 排在 main 之前，若不传入 target_branch，会误选
+        // devlop 作为 base，把 main 相对 devlop 的历史全部计入 worktree 历史。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_root = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-7");
+        fs::create_dir_all(&repo_root).expect("create repo dir");
+        init_git_repo(&repo_root);
+
+        // main 上先放一个提交，随后基于该提交创建更旧的 devlop 分支。
+        fs::write(repo_root.join("main.txt"), "m1\n").expect("write main one");
+        git(&repo_root, &["add", "main.txt"]);
+        git(&repo_root, &["commit", "-m", "main one"]);
+        git(&repo_root, &["branch", "-M", "main"]);
+        git(&repo_root, &["branch", "devlop"]);
+
+        // main 继续前进，使 devlop 落后于 main。
+        fs::write(repo_root.join("main2.txt"), "m2\n").expect("write main two");
+        git(&repo_root, &["add", "main2.txt"]);
+        git(&repo_root, &["commit", "-m", "main two"]);
+
+        // 以 main 为基创建 issue worktree，并在其上提交自己的改动。
+        git(
+            &repo_root,
+            &[
+                "worktree",
+                "add",
+                "-B",
+                "issue-7",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+        fs::write(worktree_path.join("feature.txt"), "f\n").expect("write feature");
+        git(&worktree_path, &["add", "feature.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue seven change"]);
+
+        // 传入 target_branch=main：merge-base(issue-7, main) = main tip，应只返回
+        // worktree 自身的 1 条提交，排除从 main 继承下来的 main one / main two。
+        let history = read_workspace_commit_history(&worktree_path, Some("main"))
+            .expect("read commit history");
+        assert_eq!(history.commits.len(), 1);
+        assert_eq!(history.commits[0].message, "issue seven change");
     }
 
     fn init_git_repo(root: &Path) {
