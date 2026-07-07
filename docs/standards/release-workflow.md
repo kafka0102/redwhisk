@@ -13,7 +13,7 @@
 - `scripts/release-version.sh`：按版本号执行验证、构建、提交、tag 与推送。
 - `package.json` 暴露 `build:macos`、`bump-version` 与 `release:version` 根脚本入口。
 - `.github/workflows/release.yml`：tag 触发的自动发布工作流。
-- `src-tauri/tauri.conf.json` 的 `bundle.targets` 默认配置为 `["app"]`，仅 `pnpm tauri build` 本地快速构建不打 dmg；`build:macos` 脚本与 CI 发布通过 `--bundles app,dmg` 显式产出 dmg。
+- `src-tauri/tauri.conf.json` 的 `bundle.targets` 默认配置为 `["app"]`，仅 `pnpm tauri build` 本地快速构建不打 dmg；`build:macos` 脚本与 CI 发布先显式产出 `.app`，再通过仓库脚本手工产出 dmg。
 - `src-tauri/Cargo.toml` 配置了 `[profile.release]` 体积优化。
 
 ## 适用范围
@@ -83,8 +83,9 @@ pnpm build:macos
 
 1. `rustup target add aarch64-apple-darwin x86_64-apple-darwin`（幂等，已安装会跳过）
 2. `pnpm install --frozen-lockfile`
-3. `pnpm tauri build --target universal-apple-darwin --bundles app,dmg`（Tauri 自动编译双架构并 `lipo` 合并；默认 `pnpm tauri build` 只产出 .app，发布流程需显式 `--bundles app,dmg` 才打 dmg）
-4. 打印产物路径
+3. `pnpm tauri build --target universal-apple-darwin --bundles app`（Tauri 自动编译双架构并 `lipo` 合并；默认 `pnpm tauri build` 只产出 .app）
+4. `bash scripts/build-dmg.sh`（基于已生成的 `.app` 手工创建 dmg，绕过 macOS 26 上 `hdiutil` / create-dmg 的只读回归）
+5. 打印产物路径
 
 任意步骤失败脚本立即退出。首次执行需要编译两份 Rust 产物，耗时较长（通常 15–25 分钟），后续增量构建会显著加快。
 
@@ -149,7 +150,7 @@ git push origin v0.1.0
 
 1. 安装 pnpm 9、Node 20、Rust stable 与两个 Apple target
 2. `pnpm install --frozen-lockfile`
-3. `pnpm tauri build --target universal-apple-darwin --bundles app,dmg`
+3. `pnpm build:macos`
 4. 将 `.app` 打包为 `.app.zip`，便于作为 GitHub Release 单文件资源上传
 5. 上传构建产物为 workflow artifact（保留构建历史）
 6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.dmg` 与 `.app.zip`
@@ -170,6 +171,18 @@ git push origin v0.1.0
 - `cd src-tauri && cargo check --all-targets`
 
 PR 检查不产出 dmg，主要用于防止发版前出现基础构建回归。
+
+## macOS 26 DMG 兼容说明
+
+在 macOS 26.4.1 上，Tauri 当前依赖的 create-dmg / `hdiutil create -srcfolder` 链路会触发 `create failed - 只读文件系统`，即使目标目录本身可写。当前仓库的规避策略是：
+
+1. 继续让 Tauri 负责 Universal `.app` 构建；
+2. 使用 `scripts/build-dmg.sh` 创建空白 UDRW HFS+ 镜像；
+3. 通过 `diskutil image attach --noMount` 附加镜像；
+4. 手工以 `mount -t hfs -o rw` 挂载分区；
+5. 拷贝 `.app` 与 `/Applications` 链接后再压缩为最终 `.dmg`。
+
+如未来 Tauri 或 create-dmg 官方修复该回归，可再评估是否回切到原生 `--bundles dmg`。
 
 ## 核心原则
 

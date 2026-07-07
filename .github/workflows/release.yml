@@ -95,7 +95,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 构建 Universal Mac 包（.app + .dmg）
-        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+        run: pnpm build:macos
 
       - name: 打包 .app 为 Release 资源
         shell: bash

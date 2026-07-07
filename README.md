@@ -38,6 +38,8 @@ src-tauri/target/universal-apple-darwin/release/bundle/macos/
 
 其中 `dmg/` 目录包含可分发的 DMG 安装包，`macos/` 目录包含构建出的 `RedWhisk.app`。
 
+当前仓库在 macOS 26 上会绕过 Tauri 内置的 `dmg` bundler，改为在生成 `.app` 后手工创建 DMG，以规避系统 `hdiutil` 的只读挂载回归。
+
 ## Release 安装提示
 
 从 Release 下载的安装包目前未进行 Apple 开发者签名。首次打开时，macOS 可能会拦截直接双击启动；请在 Finder 中右键点击应用或安装包，选择“打开”，再在系统提示中确认打开。

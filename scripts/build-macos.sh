@@ -32,12 +32,16 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 echo "==> pnpm install --frozen-lockfile"
 pnpm install --frozen-lockfile
 
-# 5. 构建 Universal 包：Tauri 内部会编译两份并 lipo 合并
-#    tauri.conf.json 默认 bundle.targets 为 ["app"]，这里通过 --bundles app,dmg 显式产出 dmg
-echo "==> pnpm tauri build --target universal-apple-darwin --bundles app,dmg"
-pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+# 5. 构建 Universal .app：Tauri 内部会编译两份并 lipo 合并
+#    DMG 改由 scripts/build-dmg.sh 手工生成，绕过 macOS 26 上 hdiutil 的只读回归
+echo "==> pnpm tauri build --target universal-apple-darwin --bundles app"
+pnpm tauri build --target universal-apple-darwin --bundles app
 
-# 6. 打印产物路径
+# 6. 基于已生成的 .app 手工打包 DMG
+echo "==> bash scripts/build-dmg.sh"
+bash scripts/build-dmg.sh
+
+# 7. 打印产物路径
 bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle"
 echo
 echo "✅ 构建完成"
