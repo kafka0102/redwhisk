@@ -6,6 +6,7 @@ pub mod core;
 pub mod db;
 pub mod git;
 pub mod local_data_path;
+pub mod logging;
 pub mod types;
 
 use agent::latest_output_writer::LatestOutputWriter;
@@ -13,6 +14,7 @@ use app_state::AppState;
 use commands::agent_skill_commands::trigger_global_skill_refresh;
 use core::local_data_service::LocalDataService;
 use local_data_path::redwhisk_data_dir;
+use logging::Logger;
 use tauri::{Emitter, Manager};
 
 const AGENT_SESSION_TERMINAL_OUTPUT_EVENT: &str = "agent-session-terminal-output";
@@ -25,8 +27,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::new(LocalDataService::new()))
         .setup(|app| {
+            let data_dir = redwhisk_data_dir(app.handle())?;
+            // 先初始化全局 Logger，后续启动流程即可记录关键操作与错误日志。
+            Logger::init(data_dir.clone());
             let app_handle = app.handle().clone();
-            let latest_output_writer = LatestOutputWriter::new(redwhisk_data_dir(app.handle())?);
+            let latest_output_writer = LatestOutputWriter::new(data_dir);
             let state = app.state::<AppState>();
             state.pty_sessions.set_output_sink(move |event| {
                 latest_output_writer.record_terminal_output(&event);

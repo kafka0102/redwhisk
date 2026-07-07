@@ -29,6 +29,7 @@ use crate::git::worktree::{
     cleanup_worktree, current_branch, is_additional_worktree, is_branch_merged,
     rebase_and_fast_forward, GitWorktreeDirtyRole, GitWorktreeError,
 };
+use crate::logging::{info_kv, CommandResultExt};
 use crate::types::agent_session::{
     AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
 };
@@ -528,6 +529,15 @@ impl<'connection> IssueService<'connection> {
         &self,
         input: AdvanceIssueStatusInput,
     ) -> Result<IssueRecord, CommandError> {
+        info_kv(
+            "advance_issue_status",
+            "issue status change requested",
+            &[
+                ("projectId", &input.project_id.to_string()),
+                ("issueId", &input.issue_id.to_string()),
+                ("targetStatus", issue_status_to_str(&input.target_status)),
+            ],
+        );
         self.ensure_project_exists(input.project_id)?;
         let issue = self
             .issue_repository
@@ -712,6 +722,18 @@ impl<'connection> IssueService<'connection> {
             })
             .collect::<Vec<_>>();
 
+        info_kv(
+            "prepare_agent_commit_completion",
+            "agent commit completion prepared",
+            &[
+                ("projectId", &input.project_id.to_string()),
+                ("issueId", &context.issue.id.to_string()),
+                ("sessionId", &context.linked_session_id.to_string()),
+                ("head", &context.snapshot.head),
+                ("changedFilesCount", &changed_files.len().to_string()),
+            ],
+        );
+
         Ok(AgentCommitCompletionPreview {
             issue_id: context.issue.id,
             session_id: context.linked_session_id,
@@ -757,6 +779,14 @@ impl<'connection> IssueService<'connection> {
         agent_registry: &AgentSessionRegistry,
         forced_option: Option<CompletionAttemptOption>,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
+        info_kv(
+            "complete_issue_flow",
+            "completion flow started",
+            &[
+                ("projectId", &input.project_id.to_string()),
+                ("issueId", &input.issue_id.to_string()),
+            ],
+        );
         let project = self.require_project(input.project_id)?;
         let issue = self
             .issue_repository
@@ -1006,6 +1036,15 @@ impl<'connection> IssueService<'connection> {
                     )
                     .map_err(issue_database_error)?;
                     transaction.commit().map_err(issue_database_error)?;
+                    info_kv(
+                        "complete_issue_flow",
+                        "agent auto-commit prompt sent",
+                        &[
+                            ("issueId", &issue.id.to_string()),
+                            ("sessionId", &session.id.to_string()),
+                            ("headBefore", &snapshot.head),
+                        ],
+                    );
                     let flow = self.upsert_completion_flow(
                         issue.id,
                         Some(session.id),
@@ -1405,6 +1444,17 @@ impl<'connection> IssueService<'connection> {
             return Err(issue_database_error(error));
         }
 
+        info_kv(
+            "complete_issue_flow",
+            "issue completed",
+            &[
+                ("issueId", &completed_issue.id.to_string()),
+                ("sessionId", &session.id.to_string()),
+                ("option", option.as_str()),
+                ("commitHash", commit_hash.unwrap_or("")),
+            ],
+        );
+
         cleanup_runtime_issue_log(issue_archive.as_ref());
         let completed_issue = self
             .issue_repository
@@ -1587,6 +1637,16 @@ impl<'connection> IssueService<'connection> {
             )
             .map_err(issue_database_error)?;
             transaction.commit().map_err(issue_database_error)?;
+            info_kv(
+                "detect_agent_commit_completion",
+                "agent commit detected",
+                &[
+                    ("issueId", &issue.id.to_string()),
+                    ("sessionId", &session.id.to_string()),
+                    ("headBefore", &pending.head_before),
+                    ("headAfter", &snapshot.head),
+                ],
+            );
             self.upsert_completion_flow(
                 issue.id,
                 Some(session.id),
@@ -1711,7 +1771,9 @@ impl<'connection> IssueService<'connection> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
-        IssueService::new(issue_repository, project_repository).advance_issue_status(input)
+        IssueService::new(issue_repository, project_repository)
+            .advance_issue_status(input)
+            .log_if_error("advance_issue_status")
     }
 
     pub fn complete_issue_manual_in_data_dir(
@@ -1721,7 +1783,9 @@ impl<'connection> IssueService<'connection> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
-        IssueService::new(issue_repository, project_repository).complete_issue_manual(input)
+        IssueService::new(issue_repository, project_repository)
+            .complete_issue_manual(input)
+            .log_if_error("complete_issue_manual")
     }
 
     pub fn complete_issue_clean_in_data_dir(
@@ -1731,7 +1795,9 @@ impl<'connection> IssueService<'connection> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
-        IssueService::new(issue_repository, project_repository).complete_issue_clean(input)
+        IssueService::new(issue_repository, project_repository)
+            .complete_issue_clean(input)
+            .log_if_error("complete_issue_clean")
     }
 
     pub fn prepare_agent_commit_completion_in_data_dir(
@@ -1743,6 +1809,7 @@ impl<'connection> IssueService<'connection> {
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository)
             .prepare_agent_commit_completion(input)
+            .log_if_error("prepare_agent_commit_completion")
     }
 
     pub fn send_agent_commit_prompt_in_data_dir(
@@ -1754,12 +1821,9 @@ impl<'connection> IssueService<'connection> {
         let database = open_issue_database(&data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
-        IssueService::new(issue_repository, project_repository).send_agent_commit_prompt(
-            input,
-            data_dir,
-            pty_sessions,
-            agent_registry,
-        )
+        IssueService::new(issue_repository, project_repository)
+            .send_agent_commit_prompt(input, data_dir, pty_sessions, agent_registry)
+            .log_if_error("send_agent_commit_prompt")
     }
 
     pub fn complete_issue_flow_in_data_dir(
@@ -1771,12 +1835,9 @@ impl<'connection> IssueService<'connection> {
         let database = open_issue_database(&data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
-        IssueService::new(issue_repository, project_repository).complete_issue_flow(
-            input,
-            data_dir,
-            pty_sessions,
-            agent_registry,
-        )
+        IssueService::new(issue_repository, project_repository)
+            .complete_issue_flow(input, data_dir, pty_sessions, agent_registry)
+            .log_if_error("complete_issue_flow")
     }
 
     pub fn detect_agent_commit_completion_in_data_dir(
@@ -1788,6 +1849,7 @@ impl<'connection> IssueService<'connection> {
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository)
             .detect_agent_commit_completion(input)
+            .log_if_error("detect_agent_commit_completion")
     }
 
     pub fn get_issue_summary_in_data_dir(

@@ -2856,6 +2856,7 @@ dependencies = [
 name = "redwhisk"
 version = "0.0.2"
 dependencies = [
+ "chrono",
  "portable-pty",
  "rusqlite",
  "serde",
