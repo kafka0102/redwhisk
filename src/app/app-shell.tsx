@@ -1,4 +1,11 @@
-import { Bot, CircleDot, Settings, Terminal } from "lucide-react";
+import {
+  Bolt,
+  Bot,
+  Kanban,
+  Terminal,
+  UserRoundCog,
+  type LucideIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -29,12 +36,12 @@ interface AppShellProps {
 
 const ACTIVITIES: Array<{
   key: ActivityKey;
-  Icon: typeof CircleDot;
+  Icon: LucideIcon;
 }> = [
-  { key: "issues", Icon: CircleDot },
+  { key: "issues", Icon: Kanban },
   { key: "agents", Icon: Bot },
   { key: "terminals", Icon: Terminal },
-  { key: "settings", Icon: Settings },
+  { key: "settings", Icon: Bolt },
 ];
 
 export function AppShell({
@@ -150,7 +157,7 @@ export function AppShell({
                 type="button"
                 key={key}
                 aria-label={ariaLabel}
-                aria-pressed={activeActivity === key}
+                aria-pressed={!isGlobalSettingsOpen && activeActivity === key}
                 onClick={() => {
                   setActiveActivity(key);
                   setIsGlobalSettingsOpen(false);
@@ -170,7 +177,7 @@ export function AppShell({
             setIsGlobalSettingsOpen(true);
           }}
         >
-          <Settings aria-hidden="true" size={18} strokeWidth={1.8} />
+          <UserRoundCog aria-hidden="true" size={18} strokeWidth={1.8} />
         </button>
       </nav>
       <section

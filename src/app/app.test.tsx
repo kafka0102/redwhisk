@@ -612,6 +612,11 @@ describe("App project entry", () => {
       "aria-pressed",
       "false",
     );
+    // 全局设置打开时，之前选中的活动按钮（智能体）应变为未选中态
+    expect(screen.getByRole("button", { name: "智能体" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
     await user.click(screen.getByRole("button", { name: "Issues" }));
     expect(screen.getByRole("button", { name: "Issues" })).toHaveAttribute(
