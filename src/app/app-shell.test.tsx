@@ -26,12 +26,15 @@ vi.mock("../features/project/project-switcher", () => ({
 
 vi.mock("../features/issues/issues-activity", () => ({
   IssuesActivity: ({
+    issuesReturnSignal,
     onOpenProjectSettingsLabels,
   }: {
+    issuesReturnSignal?: number;
     onOpenProjectSettingsLabels?: () => void;
   }) => (
     <div>
       <div>issues activity</div>
+      <div>issues signal:{issuesReturnSignal ?? 0}</div>
       <button type="button" onClick={onOpenProjectSettingsLabels}>
         open labels settings
       </button>
@@ -302,5 +305,32 @@ describe("AppShell terminals activity persistence", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("increments the issues return signal when the Issues icon is clicked while already on Issues", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell
+        onCreateProject={() => {}}
+        onProjectUpdated={() => {}}
+        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
+        project={{
+          id: 1,
+          name: "RedWhisk",
+          path: "/tmp/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          recentOpenedAt: "2026-06-15T00:00:00.000Z",
+          status: "available",
+        }}
+        projects={[]}
+      />,
+    );
+
+    expect(screen.getByText("issues signal:0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Issues" }));
+
+    expect(screen.getByText("issues signal:1")).toBeInTheDocument();
   });
 });

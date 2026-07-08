@@ -72,6 +72,7 @@ export function AppShell({
   const [requestedIssue, setRequestedIssue] = useState<IssueOpenRequest | null>(
     null,
   );
+  const [issuesReturnSignal, setIssuesReturnSignal] = useState(0);
   const projectTerminalsState =
     projectTerminalsStateByProjectId[project.id] ??
     getDefaultProjectTerminalsActivityState();
@@ -162,6 +163,14 @@ export function AppShell({
                 aria-label={ariaLabel}
                 aria-pressed={!isGlobalSettingsOpen && activeActivity === key}
                 onClick={() => {
+                  if (
+                    key === "issues" &&
+                    activeActivity === "issues" &&
+                    !isGlobalSettingsOpen
+                  ) {
+                    setIssuesReturnSignal((value) => value + 1);
+                    return;
+                  }
                   setActiveActivity(key);
                   setIsGlobalSettingsOpen(false);
                 }}
@@ -208,6 +217,7 @@ export function AppShell({
             <ActivityRouter
               activeActivity={activeActivity}
               activeAgentSessionId={activeAgentSessionId}
+              issuesReturnSignal={issuesReturnSignal}
               onOpenAgentsActivity={(sessionId) => {
                 openAgentSession(sessionId);
               }}
