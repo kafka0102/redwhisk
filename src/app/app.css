@@ -3846,61 +3846,38 @@ button:focus-visible {
 }
 
 .session-change-filter {
-  position: relative;
+  min-width: 0;
 }
 
-.session-change-filter__trigger,
-.session-change-filter__item {
+.session-change-filter__list {
   display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0;
+}
+
+.session-change-filter__tab {
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
   height: 28px;
-  border: 0;
-  background: transparent;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
   color: var(--color-text-muted);
   font-size: 13px;
 }
 
-.session-change-filter__trigger {
-  padding: 0 7px;
-  border-radius: var(--radius-control);
-}
-
-.session-change-filter__trigger:hover,
-.session-change-filter__trigger:focus-visible,
-.session-change-filter__trigger[aria-expanded="true"] {
+.session-change-filter__tab:hover,
+.session-change-filter__tab:focus-visible {
   background: var(--color-surface-muted);
-  outline: none;
-}
-
-.session-change-filter__menu {
-  position: absolute;
-  top: 31px;
-  left: 0;
-  z-index: 4;
-  display: grid;
-  min-width: 118px;
-  padding: 4px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-surface);
-  box-shadow: 0 8px 20px var(--color-popover-shadow);
-}
-
-.session-change-filter__item {
-  justify-content: flex-start;
-  width: 100%;
-  padding: 0 8px;
-  border-radius: var(--radius-control);
   color: var(--color-text);
-  text-align: left;
+  outline: none;
 }
 
-.session-change-filter__item:hover,
-.session-change-filter__item:focus-visible,
-.session-change-filter__item[aria-current="true"] {
-  background: var(--color-surface-muted);
-  outline: none;
+.session-change-filter__tab[data-active] {
+  color: var(--color-text);
 }
 
 .session-side-panel__refresh {
@@ -3971,7 +3948,7 @@ button:focus-visible {
   grid-template-columns: minmax(0, auto) 22px;
   justify-content: flex-end;
   column-gap: 6px;
-  min-width: 102px;
+  min-width: 82px;
 }
 
 .session-change-row--deleted .session-change-row__name > span:first-child {
@@ -3980,7 +3957,7 @@ button:focus-visible {
 
 .session-change-row__stats {
   display: inline-flex;
-  min-width: 72px;
+  min-width: 52px;
   justify-content: flex-end;
   gap: 4px;
   font-size: 12px;
@@ -4003,7 +3980,8 @@ button:focus-visible {
   left: 12px;
   bottom: -26px;
   z-index: 5;
-  max-width: calc(100% - 24px);
+  width: max-content;
+  max-width: 80vw;
   overflow: hidden;
   padding: 4px 7px;
   border-radius: var(--radius-control);
@@ -4186,7 +4164,8 @@ button:focus-visible {
   left: 12px;
   bottom: -26px;
   z-index: 5;
-  max-width: calc(100% - 24px);
+  width: max-content;
+  max-width: 80vw;
   overflow: hidden;
   padding: 4px 7px;
   border-radius: var(--radius-control);

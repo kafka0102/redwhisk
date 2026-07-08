@@ -1,6 +1,5 @@
 import {
   Check,
-  ChevronDown,
   Circle,
   Cloud,
   FileIcon,
@@ -10,8 +9,9 @@ import {
   Files,
   RefreshCw,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
+import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import type {
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
@@ -56,88 +56,36 @@ export function SessionChangesPanel({
   const [expandedCommitHashes, setExpandedCommitHashes] = useState<Set<string>>(
     () => new Set(),
   );
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
 
-  const filterLabel =
-    filter === "uncommitted"
-      ? messages.agentsFeature.uncommitted
-      : messages.agentsFeature.committed;
-
-  useEffect(() => {
-    if (!isFilterOpen) {
-      return;
+  function handleFilterChange(next: ChangeFilter) {
+    setFilter(next);
+    if (next === "committed") {
+      onRefreshCommitHistory();
     }
-
-    function handleDocumentMouseDown(event: MouseEvent) {
-      if (
-        event.target instanceof Node &&
-        filterRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-
-      setIsFilterOpen(false);
-    }
-
-    document.addEventListener("mousedown", handleDocumentMouseDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handleDocumentMouseDown);
-    };
-  }, [isFilterOpen]);
+  }
 
   return (
     <div className="session-changes-panel">
       <div className="session-side-panel__filter-row">
-        <div className="session-change-filter" ref={filterRef}>
-          <button
-            aria-expanded={isFilterOpen}
-            aria-haspopup="menu"
-            className="session-change-filter__trigger"
-            type="button"
-            onClick={() => setIsFilterOpen((current) => !current)}
-          >
-            {filter === "uncommitted" ? (
+        <Tabs
+          className="session-change-filter"
+          value={filter}
+          onValueChange={(value) => handleFilterChange(value as ChangeFilter)}
+        >
+          <TabsList className="session-change-filter__list" variant="line">
+            <TabsTrigger
+              className="session-change-filter__tab"
+              value="uncommitted"
+            >
               <Circle aria-hidden="true" size={13} strokeWidth={1.8} />
-            ) : (
+              {messages.agentsFeature.uncommitted}
+            </TabsTrigger>
+            <TabsTrigger className="session-change-filter__tab" value="committed">
               <Check aria-hidden="true" size={13} strokeWidth={1.8} />
-            )}
-            <span>{filterLabel}</span>
-            <ChevronDown aria-hidden="true" size={13} strokeWidth={1.8} />
-          </button>
-          {isFilterOpen ? (
-            <div className="session-change-filter__menu" role="menu">
-              <button
-                aria-current={filter === "uncommitted" ? "true" : undefined}
-                className="session-change-filter__item"
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  setFilter("uncommitted");
-                  setIsFilterOpen(false);
-                }}
-              >
-                <Circle aria-hidden="true" size={13} strokeWidth={1.8} />
-                {messages.agentsFeature.uncommitted}
-              </button>
-              <button
-                aria-current={filter === "committed" ? "true" : undefined}
-                className="session-change-filter__item"
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  setFilter("committed");
-                  setIsFilterOpen(false);
-                  onRefreshCommitHistory();
-                }}
-              >
-                <Check aria-hidden="true" size={13} strokeWidth={1.8} />
-                {messages.agentsFeature.committed}
-              </button>
-            </div>
-          ) : null}
-        </div>
+              {messages.agentsFeature.committed}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <button
           aria-label={messages.agentsFeature.refreshChanges}
           className="session-side-panel__refresh"
