@@ -29,6 +29,8 @@ use crate::agent::command_detector::{run_command_lookup_with_path, CommandLookup
 
 /// stderr 缓冲上限，避免内存膨胀；保留尾部用于诊断。
 const STDERR_BUFFER_LIMIT: usize = 8192;
+const CLAUDE_CODE_ENTRYPOINT_ENV: &str = "CLAUDE_CODE_ENTRYPOINT";
+const CLAUDE_CODE_CLI_ENTRYPOINT: &str = "cli";
 
 /// 传输层错误。
 #[derive(Debug, thiserror::Error)]
@@ -98,6 +100,7 @@ impl ClaudeTransport {
             );
             command
         };
+        apply_claude_process_environment(&mut command);
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -378,6 +381,14 @@ fn apply_spawn_environment(
     }
 }
 
+fn apply_claude_process_environment(command: &mut Command) {
+    // `claude -p` 在当前环境继承到 `sdk-cli` 时，会把 User-Agent 写成
+    // `claude-cli/<version> (external, sdk-cli)`；部分第三方网关会据此走
+    // 特殊分支。这里显式固定为 `cli`，让 RedWhisk 启动的 Claude 子进程
+    // 与交互式 Claude Code CLI 保持同一入口标识。
+    command.env(CLAUDE_CODE_ENTRYPOINT_ENV, CLAUDE_CODE_CLI_ENTRYPOINT);
+}
+
 fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> Option<OsString> {
     let mut paths: Vec<PathBuf> = path_entries.to_vec();
     if let Some(current_path) = current_path {
@@ -547,6 +558,22 @@ mod tests {
                             PathBuf::from("/bin"),
                         ]
                 })
+        }));
+    }
+
+    #[test]
+    fn apply_claude_process_environment_forces_cli_entrypoint() {
+        let mut command = Command::new("/usr/bin/env");
+        apply_claude_process_environment(&mut command);
+
+        let envs: Vec<_> = command
+            .get_envs()
+            .map(|(key, value)| (key.to_os_string(), value.map(|entry| entry.to_os_string())))
+            .collect();
+
+        assert!(envs.iter().any(|(key, value)| {
+            key == &OsString::from(CLAUDE_CODE_ENTRYPOINT_ENV)
+                && value.as_ref() == Some(&OsString::from(CLAUDE_CODE_CLI_ENTRYPOINT))
         }));
     }
 
