@@ -132,6 +132,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "worktree_owner",
             "is_turn_running",
             "turn_ended_at",
+            "workflow_skill_name",
         ]
     );
 
@@ -288,6 +289,7 @@ fn start_agent_session_rejects_blank_prompt_snapshot() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "   ".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -322,6 +324,7 @@ fn start_agent_session_rejects_non_backlog_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -360,6 +363,7 @@ fn start_agent_session_rejects_project_profile_from_another_project() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -397,6 +401,7 @@ fn start_agent_session_rejects_deleted_agent_profile() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -435,6 +440,7 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: Some("bmad-dev-story".to_string()),
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -461,6 +467,10 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
         redwhisk_lib::types::agent_session::AgentSessionAttention::None
     );
     assert_eq!(session.prompt_snapshot, "Use this snapshot");
+    assert_eq!(
+        session.workflow_skill_name.as_deref(),
+        Some("bmad-dev-story")
+    );
     assert_eq!(session.origin_branch.as_deref(), Some("main"));
     assert_eq!(session.worktree_owner, WorktreeOwner::External);
     assert!(session.log_path.contains("session-logs"));
@@ -670,6 +680,7 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -685,6 +696,7 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Retry snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -751,6 +763,7 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -911,6 +924,7 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
             project_id,
             issue_id,
             profile_id,
+            None,
             temp_dir.path().to_string_lossy().as_ref(),
             "codex",
             "Use this snapshot",
@@ -954,6 +968,7 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -999,6 +1014,7 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
             project_id,
             issue_id,
             profile_id,
+            None,
             temp_dir.path().to_string_lossy().as_ref(),
             "codex",
             "Old prompt",
@@ -1038,6 +1054,7 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -1100,6 +1117,7 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "please start working".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -1259,6 +1277,7 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: Some("printf run-setup > run-setup.txt".to_string()),
@@ -1338,6 +1357,7 @@ fn start_agent_session_in_worktree_mode_runs_setup_command_before_agent_start() 
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: None,
@@ -1401,6 +1421,7 @@ fn start_agent_session_in_worktree_mode_rejects_failed_setup_command_without_ses
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: None,
@@ -1478,6 +1499,7 @@ fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_ove
                 issue_id,
                 agent_profile_id: profile.id,
                 prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("main".to_string()),
                 worktree_setup_command: None,
@@ -1540,6 +1562,7 @@ fn complete_issue_manual_with_pty_terminates_tracked_session() {
                 issue_id,
                 agent_profile_id: profile_id,
                 prompt_snapshot: "ready to complete".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: None,
                 target_branch: None,
                 worktree_setup_command: None,
@@ -1682,6 +1705,8 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
         Some("Running pnpm test -- --run agents-activity.test.tsx")
     );
     assert_eq!(response.sessions[0].agent_profile_id, profile_id);
+    assert_eq!(response.sessions[0].agent_profile_name, "Codex");
+    assert_eq!(response.sessions[0].workflow_skill_name, None);
     assert_eq!(
         response.sessions[0].workspace_mode,
         WorkspaceMode::CurrentBranch
@@ -1736,6 +1761,53 @@ fn list_agent_sessions_groups_and_sorts_sessions_for_the_current_project() {
         .sessions
         .iter()
         .all(|session| session.agent_type == AgentType::Codex));
+}
+
+#[test]
+fn list_agent_sessions_returns_workflow_skill_name_when_present() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "workflow-skill-list-project");
+    let issue_id = insert_issue_with_title(
+        &database.connection,
+        project_id,
+        "running",
+        "Workflow skill issue",
+    );
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        1_780_638_900_000,
+        None,
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET workflow_skill_name = ?1 WHERE id = ?2",
+            rusqlite::params!["bmad-dev-story", session_id],
+        )
+        .expect("persist workflow skill name");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let response = service
+        .list_agent_sessions(project_id)
+        .expect("list agent sessions");
+
+    assert_eq!(response.sessions.len(), 1);
+    assert_eq!(response.sessions[0].session_id, session_id);
+    assert_eq!(response.sessions[0].agent_profile_name, "Codex");
+    assert_eq!(
+        response.sessions[0].workflow_skill_name.as_deref(),
+        Some("bmad-dev-story")
+    );
 }
 
 #[test]

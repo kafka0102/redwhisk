@@ -475,6 +475,7 @@ impl<'connection> AgentSessionService<'connection> {
                 input.project_id,
                 issue.id,
                 input.agent_profile_id,
+                input.workflow_skill_name.as_deref(),
                 &launch.working_dir,
                 &launch.command_snapshot,
                 &prompt_snapshot,
@@ -690,6 +691,7 @@ impl<'connection> AgentSessionService<'connection> {
                 input.project_id,
                 issue.id,
                 input.agent_profile_id,
+                input.workflow_skill_name.as_deref(),
                 &launch.working_dir,
                 &launch.command_snapshot,
                 &prompt_snapshot,
@@ -922,6 +924,7 @@ impl<'connection> AgentSessionService<'connection> {
                 input.project_id,
                 issue.id,
                 input.agent_profile_id,
+                input.workflow_skill_name.as_deref(),
                 &launch.working_dir,
                 &launch.command_snapshot,
                 &prompt_snapshot,
@@ -1503,6 +1506,7 @@ impl<'connection> AgentSessionService<'connection> {
                     issue_title: row.issue_title,
                     issue_status: row.issue_status,
                     agent_profile_id: row.agent_profile_id,
+                    agent_profile_name: row.agent_profile_name,
                     can_complete_clean,
                     can_complete_agent_commit,
                     title: row.title,
@@ -1520,6 +1524,7 @@ impl<'connection> AgentSessionService<'connection> {
                     worktree_owner: row.worktree_owner,
                     log_path: row.log_path,
                     latest_output,
+                    workflow_skill_name: row.workflow_skill_name,
                     last_active_at: row.last_active_at,
                     started_at: row.started_at,
                     closed_at: row.closed_at,
@@ -6129,7 +6134,9 @@ mod tests {
         );
         // 模拟 broadcaster 对空 error turn_failed 的处理：写 turn_ended_at，不置 0。
         let repository = AgentSessionRepository::new(&database);
-        repository.update_turn_running(601, true, 40).expect("start");
+        repository
+            .update_turn_running(601, true, 40)
+            .expect("start");
         repository
             .update_turn_ended_at(601, current_millis() - 1_000)
             .expect("empty fail");
@@ -6141,7 +6148,10 @@ mod tests {
             .iter()
             .find(|s| s.session_id == 601)
             .expect("session");
-        assert!(session.is_turn_running, "空 error turn_failed 在 grace 内应仍运行");
+        assert!(
+            session.is_turn_running,
+            "空 error turn_failed 在 grace 内应仍运行"
+        );
     }
 
     #[test]
@@ -6158,7 +6168,9 @@ mod tests {
             None,
         );
         let repository = AgentSessionRepository::new(&database);
-        repository.update_turn_running(602, true, 41).expect("start");
+        repository
+            .update_turn_running(602, true, 41)
+            .expect("start");
         // 多个并发 sub turn 陆续 completed：每次刷新 turn_ended_at。
         repository
             .update_turn_ended_at(602, current_millis() - 2_500)
@@ -6174,7 +6186,10 @@ mod tests {
             .iter()
             .find(|s| s.session_id == 602)
             .expect("session");
-        assert!(session.is_turn_running, "最近一次 completed 在 grace 内应仍运行");
+        assert!(
+            session.is_turn_running,
+            "最近一次 completed 在 grace 内应仍运行"
+        );
     }
 
     #[test]
@@ -6191,7 +6206,9 @@ mod tests {
             None,
         );
         let repository = AgentSessionRepository::new(&database);
-        repository.update_turn_running(603, true, 42).expect("start");
+        repository
+            .update_turn_running(603, true, 42)
+            .expect("start");
         // 模拟 EndedImmediately：置 is_turn_running=0 + 清 turn_ended_at。
         repository
             .update_turn_running(603, false, 42)
@@ -6475,6 +6492,7 @@ mod tests {
             issue_id: None,
             title: Some("test".to_string()),
             agent_profile_id: 0,
+            workflow_skill_name: None,
             codex_session_id: None,
             status: AgentSessionStatus::Stopped,
             attention: AgentSessionAttention::None,
@@ -6504,6 +6522,7 @@ mod tests {
             issue_id: Some(16),
             title: None,
             agent_profile_id: 101,
+            workflow_skill_name: None,
             codex_session_id: Some("thread-16".to_string()),
             status: AgentSessionStatus::Stopped,
             attention: AgentSessionAttention::None,
@@ -6977,6 +6996,7 @@ mod tests {
                 issue_id: 16,
                 agent_profile_id: 101,
                 prompt_snapshot: "do something".to_string(),
+                workflow_skill_name: None,
                 workspace_mode: Some(WorkspaceMode::Worktree),
                 target_branch: Some("devlop".to_string()),
                 worktree_setup_command: None,

@@ -109,6 +109,12 @@ const PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_SQL: &str =
 const AGENT_SESSION_TURN_ENDED_AT_MIGRATION_VERSION: &str = "0034_agent_session_turn_ended_at";
 const AGENT_SESSION_TURN_ENDED_AT_MIGRATION_SQL: &str =
     include_str!("../../migrations/0034_agent_session_turn_ended_at.sql");
+const LEGACY_AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION: &str =
+    "0034_agent_sessions_workflow_skill_name";
+const AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION: &str =
+    "0035_agent_sessions_workflow_skill_name";
+const AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0035_agent_sessions_workflow_skill_name.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -315,6 +321,10 @@ impl MigrationRunner {
                     version: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_VERSION,
                     sql: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_SQL,
                 },
+                Migration {
+                    version: AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION,
+                    sql: AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_SQL,
+                },
             ];
         }
 
@@ -329,6 +339,15 @@ struct Migration {
 }
 
 fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite::Result<()> {
+    if migration.version == AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION
+        && (has_migration(
+            connection,
+            LEGACY_AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION,
+        )? || table_has_column(connection, "agent_sessions", "workflow_skill_name")?)
+    {
+        return Ok(());
+    }
+
     if migration.version != ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION {
         return connection.execute_batch(migration.sql);
     }
@@ -354,6 +373,25 @@ fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite
     restore_result?;
     restore_defensive_result?;
     Ok(())
+}
+
+fn table_has_column(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> rusqlite::Result<bool> {
+    let pragma = format!("PRAGMA table_info({table_name})");
+    let mut statement = connection.prepare(&pragma)?;
+    let mut rows = statement.query([])?;
+
+    while let Some(row) = rows.next()? {
+        let existing_column_name: String = row.get(1)?;
+        if existing_column_name == column_name {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 fn has_migration(connection: &Connection, version: &str) -> rusqlite::Result<bool> {

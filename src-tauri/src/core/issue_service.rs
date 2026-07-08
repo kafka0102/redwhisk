@@ -4206,6 +4206,7 @@ mod tests {
             issue_id: None,
             title: None,
             agent_profile_id: 1,
+            workflow_skill_name: None,
             codex_session_id: None,
             status: AgentSessionStatus::Running,
             attention: AgentSessionAttention::None,
