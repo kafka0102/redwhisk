@@ -1,0 +1,36 @@
+# Tasks: 会话运行态 grace period
+
+## 1. 数据层：migration + repository
+
+- [ ] 1.1 新增 migration `src-tauri/migrations/0034_agent_session_turn_ended_at.sql`：`ALTER TABLE agent_sessions ADD COLUMN turn_ended_at INTEGER NULL;`
+- [ ] 1.2 `AgentSessionRow` struct 加 `turn_ended_at: Option<i64>`（`agent_session_repository.rs:21` 附近）；list 查询列（:124）与读取（:690）补齐
+- [ ] 1.3 新增 `update_turn_ended_at(session_id, now)` 与 `clear_turn_ended_at(session_id)`
+- [ ] 1.4 `mark_terminated_in_transaction`（:404）/ `mark_terminated_without_fetch_in_transaction`（:431）顺带 `turn_ended_at = NULL`
+- [ ] 1.5 repository 单测：`turn_ended_at` 读写、`mark_terminated` 清理、list 查询返回字段
+
+## 2. broadcaster 三态改造
+
+- [ ] 2.1 新增 `TurnRunningDecision` 枚举，`turn_running_from_stream_event`（`agent_event_broadcaster.rs:293`）返回改为该枚举
+- [ ] 2.2 `turn_failed` 空判断 `error.trim().is_empty()` → `EndedWithGrace`；带 error → `EndedImmediately`
+- [ ] 2.3 `persist_stream_event`（:155-210）按决策分支调 `update_turn_running` / `update_turn_ended_at` / `clear_turn_ended_at`；早退逻辑（:185）按 `None` 判断
+- [ ] 2.4 broadcaster 单测：四种 turn 事件的决策映射、空 / 带 error `turn_failed` 分支
+
+## 3. service list grace 计算
+
+- [ ] 3.1 新增 `GRACE_MS` 常量与 `turn_still_running_by_grace(turn_ended_at, now)` 函数（`agent_session_service.rs`）
+- [ ] 3.2 list 合成 `is_turn_running`（:1510）加入 grace 判断；`now` 在遍历前取一次
+- [ ] 3.3 service 单测：grace 边界（`ended_at=NULL` / 期内 / 期外）、`is_session_running` 守卫
+
+## 4. 前端 composer 改造
+
+- [ ] 4.1 `use-agent-composer.ts:125` `isSending` 改从 `isTurnRunning` 派生
+- [ ] 4.2 `agent-session-view.tsx` 把 `isTurnRunning` 下传 composer；`effectiveTurnStatus`（:60-65）以 `isTurnRunning` 为主
+- [ ] 4.3 reducer `turnStatus` 保留，不再驱动发送按钮；`isSubmitting` 本地锁保留
+- [ ] 4.4 前端测试：`isSending` 随 `isTurnRunning` 切换、cancel / `isCancelling` 联动
+
+## 5. 端到端验证
+
+- [ ] 5.1 模拟 codex 空 error `turn_failed` 序列：grace 期内不误判完成
+- [ ] 5.2 模拟 claude code 多 turn 并发：sub turn 陆续 `completed` 不误判完成
+- [ ] 5.3 `turn_canceled` / 带 error `turn_failed` 立即非运行
+- [ ] 5.4 `pnpm lint` + `pnpm typecheck` + `pnpm test`；`cd src-tauri && cargo test`
