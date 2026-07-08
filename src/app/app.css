@@ -3004,6 +3004,12 @@ button:focus-visible {
   padding: 4px 0;
 }
 
+/* 命令之间的浅灰分割线：相邻行才出现，首行无、末行不留多余底线。 */
+.terminal-shortcut-commands-dialog__row
+  + .terminal-shortcut-commands-dialog__row {
+  border-top: 1px solid var(--color-border);
+}
+
 .terminal-shortcut-commands-dialog__row--editing {
   padding: 0;
 }
