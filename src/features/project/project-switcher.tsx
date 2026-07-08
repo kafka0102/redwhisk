@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { ProjectSummary } from "../../app/app";
 import { openProjectWindow } from "./project-commands";
+import { getProjectIconColor } from "./project-icon-color";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -12,15 +13,6 @@ interface ProjectSwitcherProps {
   projects: ProjectSummary[];
   onProjectsRefresh: () => Promise<void>;
 }
-
-const ICON_COLORS = [
-  "var(--color-accent)",
-  "#2563eb",
-  "#16a34a",
-  "#7c3aed",
-  "#475569",
-  "#65a30d",
-];
 
 export function ProjectSwitcher({
   currentProject,
@@ -161,7 +153,7 @@ export function ProjectSwitcher({
               >
                 <span
                   className="project-switcher__icon"
-                  style={{ background: projectIconColor(project) }}
+                  style={{ background: getProjectIconColor(project) }}
                   aria-hidden="true"
                 >
                   {projectInitial(project.name)}
@@ -207,15 +199,4 @@ export function ProjectSwitcher({
 
 function projectInitial(name: string): string {
   return name.trim().charAt(0).toUpperCase() || "P";
-}
-
-function projectIconColor(project: ProjectSummary): string {
-  const source = project.id > 0 ? String(project.id) : project.name;
-  let hash = 0;
-
-  for (const character of source) {
-    hash = (hash + character.charCodeAt(0)) % ICON_COLORS.length;
-  }
-
-  return ICON_COLORS[hash];
 }

@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { useI18n } from "../../shared/i18n/i18n";
 import { formatHomePathForDisplay } from "../../shared/paths/home-path";
+import { getProjectIconColor } from "./project-icon-color";
 
 interface ProjectListProps {
   isCreatingProject: boolean;
@@ -14,29 +15,10 @@ interface ProjectListProps {
   onProjectOpen: (project: ProjectSummary) => void;
 }
 
-const PROJECT_ICON_COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#7c3aed",
-  "#475569",
-  "#65a30d",
-] as const;
-
 function getProjectInitial(name: string) {
   const trimmedName = name.trim();
 
   return (trimmedName[0] ?? "?").toLocaleUpperCase();
-}
-
-function getProjectColor(project: ProjectSummary) {
-  const source = `${project.id}:${project.name}:${project.path}`;
-  let hash = 0;
-
-  for (const character of source) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  }
-
-  return PROJECT_ICON_COLORS[hash % PROJECT_ICON_COLORS.length];
 }
 
 export function ProjectList({
@@ -110,7 +92,7 @@ export function ProjectList({
             >
               <span
                 className="project-list__icon"
-                style={{ backgroundColor: getProjectColor(project) }}
+                style={{ backgroundColor: getProjectIconColor(project) }}
                 aria-hidden="true"
               >
                 {getProjectInitial(project.name)}
