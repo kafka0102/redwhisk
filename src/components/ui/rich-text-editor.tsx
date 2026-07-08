@@ -13,6 +13,14 @@ import Quill from "quill";
 import "quill/dist/quill.snow.css";
 
 import { activateBlockFormat, type QuillLine } from "./rich-text-editor-blocks";
+import {
+  deltaToMarkdown,
+  getAttachmentInsert,
+  markdownToDelta,
+  mergeMarkdownAttachments,
+  normalizeMarkdown,
+  type DeltaOperation,
+} from "./rich-text-editor-markdown";
 
 // Quill 内置 image blot 的 sanitize 只允许 http/https/data 协议，会把
 // `asset://localhost/...`（Tauri 在 macOS/Linux 上 convertFileSrc 的产物）
@@ -100,11 +108,6 @@ interface RichTextEditorProps {
   onRemoveAttachment?: (attachment: RichTextAttachment) => void;
   onUploadAttachment?: () => Promise<RichTextAttachment | null>;
   onUploadImage?: () => Promise<RichTextAttachment | null>;
-}
-
-interface DeltaOperation {
-  insert?: string | Record<string, unknown>;
-  attributes?: Record<string, unknown>;
 }
 
 export function RichTextEditor({
@@ -561,166 +564,9 @@ export function RichTextEditor({
   );
 }
 
-function markdownToDelta(
-  markdown: string,
-  attachments: RichTextAttachment[],
-): { ops: DeltaOperation[] } {
-  const ops: DeltaOperation[] = [];
-  const usedTokens = new Set<string>();
-  const attachmentsByToken = new Map(
-    attachments.map((attachment) => [attachment.markdownToken, attachment]),
-  );
-  const lines = normalizeLineEndings(markdown).split("\n");
-  const imageLinePattern = /^!\[([^\]]*)\]\(([^)]+)\)$/;
-  let isReadingCodeBlock = false;
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (trimmedLine.startsWith("```")) {
-      isReadingCodeBlock = !isReadingCodeBlock;
-      continue;
-    }
-
-    if (isReadingCodeBlock) {
-      ops.push({ insert: line });
-      ops.push({ insert: "\n", attributes: { "code-block": true } });
-      continue;
-    }
-
-    // 优先识别 Markdown 图片占位符 ![alt](token)：若 URL 是某个图片附件的
-    // markdownToken，则还原为图片 embed；否则按普通文本行处理。
-    const imageMatch = imageLinePattern.exec(trimmedLine);
-    if (imageMatch) {
-      const imageAttachment = attachmentsByToken.get(imageMatch[2]);
-      if (imageAttachment && imageAttachment.kind === "image") {
-        pushAttachmentDelta(ops, imageAttachment);
-        ops.push({ insert: "\n" });
-        usedTokens.add(imageAttachment.markdownToken);
-        continue;
-      }
-    }
-
-    const attachment = attachmentsByToken.get(trimmedLine);
-    if (attachment) {
-      pushAttachmentDelta(ops, attachment);
-      ops.push({ insert: "\n" });
-      usedTokens.add(attachment.markdownToken);
-      continue;
-    }
-
-    const parsedLine = parseMarkdownLine(line);
-    ops.push(...parseInlineMarkdown(parsedLine.text));
-    ops.push({ insert: "\n", attributes: parsedLine.attributes });
-  }
-
-  for (const attachment of attachments) {
-    if (usedTokens.has(attachment.markdownToken)) {
-      continue;
-    }
-    pushAttachmentDelta(ops, attachment);
-    ops.push({ insert: "\n" });
-  }
-
-  return { ops: ops.length > 0 ? ops : [{ insert: "\n" }] };
-}
-
-function pushAttachmentDelta(
-  operations: DeltaOperation[],
-  attachment: RichTextAttachment,
-) {
-  if (attachment.kind === "image" && attachment.imageSrc) {
-    operations.push({
-      insert: { image: attachment.imageSrc },
-      attributes: { alt: attachment.displayName },
-    });
-    return;
-  }
-
-  // 非图片附件不进入编辑器正文（仅在底部卡片区展示）。这里不 push 任何
-  // 文本 token，避免 token 字符串泄漏成可见正文。
-}
-
-function deltaToMarkdown(
-  operations: DeltaOperation[],
-  attachments: RichTextAttachment[],
-): string {
-  const lines: string[] = [];
-  let currentLine = "";
-  let orderedIndex = 1;
-  let isWritingCodeBlock = false;
-
-  const finishCodeBlock = () => {
-    if (isWritingCodeBlock) {
-      lines.push("```");
-      isWritingCodeBlock = false;
-    }
-  };
-
-  const pushLine = (
-    line: string,
-    attributes: Record<string, unknown> | undefined,
-  ) => {
-    if (isCodeBlockAttributes(attributes)) {
-      if (!isWritingCodeBlock) {
-        lines.push("```");
-        isWritingCodeBlock = true;
-      }
-      lines.push(line);
-      orderedIndex = 1;
-      return;
-    }
-
-    finishCodeBlock();
-    const formattedLine = formatBlockMarkdown(line, attributes, orderedIndex);
-    if (attributes?.list === "ordered" && line.length > 0) {
-      orderedIndex += 1;
-    } else if (attributes?.list !== "ordered") {
-      orderedIndex = 1;
-    }
-    lines.push(formattedLine);
-  };
-
-  for (const operation of operations) {
-    const attachment = getAttachmentInsert(operation, attachments);
-    if (attachment) {
-      if (currentLine.length > 0) {
-        pushLine(currentLine, undefined);
-        currentLine = "";
-      }
-      finishCodeBlock();
-      // 图片附件序列化为 Markdown 图片语法，URL 用其 markdownToken 占位
-      // （draft 为 {{issue-attachment-temp:token}}，保存后由 Rust 重写为
-      // {{issue-attachment:id}}）。非图片附件理论上不会出现在正文 ops 中
-      // （pushAttachmentDelta 不再写入），这里兜底按裸 token 行处理。
-      if (attachment.kind === "image" && attachment.imageSrc) {
-        lines.push(`![${attachment.displayName}](${attachment.markdownToken})`);
-      } else {
-        lines.push(attachment.markdownToken);
-      }
-      orderedIndex = 1;
-      continue;
-    }
-
-    if (typeof operation.insert !== "string") {
-      continue;
-    }
-
-    const segments = operation.insert.split("\n");
-    segments.forEach((segment, index) => {
-      currentLine += formatInlineMarkdown(segment, operation.attributes);
-      if (index < segments.length - 1) {
-        pushLine(currentLine, operation.attributes);
-        currentLine = "";
-      }
-    });
-  }
-
-  if (currentLine.length > 0) {
-    pushLine(currentLine, undefined);
-  }
-  finishCodeBlock();
-
-  return normalizeMarkdown(lines.join("\n"));
+function getQuillOperations(quill: Quill): DeltaOperation[] {
+  const contents = quill.getContents() as { ops?: DeltaOperation[] };
+  return contents.ops ?? [];
 }
 
 function applyMarkdownShortcuts(quill: Quill) {
@@ -760,6 +606,25 @@ function applyMarkdownShortcuts(quill: Quill) {
   quill.setSelection(startIndex + innerText.length, 0, "api");
 }
 
+function getBlockShortcut(
+  lineText: string,
+  offset: number,
+): { markerLength: number; format: string; value: unknown } | null {
+  if (offset === 2 && lineText.startsWith("# ")) {
+    return { markerLength: 2, format: "header", value: 1 };
+  }
+  if (offset === 3 && lineText.startsWith("## ")) {
+    return { markerLength: 3, format: "header", value: 2 };
+  }
+  if (offset === 2 && /^[-*]\s/.test(lineText)) {
+    return { markerLength: 2, format: "list", value: "bullet" };
+  }
+  if (offset === 3 && /^1\.\s/.test(lineText)) {
+    return { markerLength: 3, format: "list", value: "ordered" };
+  }
+  return null;
+}
+
 function deleteAttachmentFromEditor(
   quill: Quill,
   targetAttachment: RichTextAttachment,
@@ -781,224 +646,6 @@ function deleteAttachmentFromEditor(
   }
 }
 
-function mergeMarkdownAttachments(
-  markdown: string,
-  attachments: RichTextAttachment[],
-): string {
-  const visibleMarkdown = removeHiddenAttachmentTokenLines(
-    normalizeMarkdown(markdown),
-    attachments,
-  );
-  const missingAttachments = attachments.filter(
-    (attachment) =>
-      attachment.kind === "image" &&
-      attachment.imageSrc &&
-      !visibleMarkdown.includes(attachment.markdownToken),
-  );
-
-  if (missingAttachments.length === 0) {
-    return visibleMarkdown;
-  }
-
-  // 只有图片附件需要进入 Quill 正文；非图片附件 token 是隐藏持久化数据，
-  // 由 issue 提交流程补齐，不能参与可见编辑器内容同步。
-  const missingLines = missingAttachments.map(
-    (attachment) => `![${attachment.displayName}](${attachment.markdownToken})`,
-  );
-
-  if (visibleMarkdown.length === 0) {
-    return missingLines.join("\n");
-  }
-
-  return `${visibleMarkdown}\n\n${missingLines.join("\n")}`;
-}
-
-function removeHiddenAttachmentTokenLines(
-  markdown: string,
-  attachments: RichTextAttachment[],
-): string {
-  const hiddenTokens = new Set(
-    attachments
-      .filter(
-        (attachment) =>
-          attachment.kind !== "image" || attachment.imageSrc == null,
-      )
-      .map((attachment) => attachment.markdownToken),
-  );
-
-  if (hiddenTokens.size === 0) {
-    return markdown;
-  }
-
-  return normalizeMarkdown(
-    markdown
-      .split("\n")
-      .filter((line) => !hiddenTokens.has(line.trim()))
-      .join("\n")
-      .replace(/\n{3,}/g, "\n\n"),
-  );
-}
-
-function getQuillOperations(quill: Quill): DeltaOperation[] {
-  const contents = quill.getContents() as { ops?: DeltaOperation[] };
-  return contents.ops ?? [];
-}
-
-function getAttachmentInsert(
-  operation: DeltaOperation,
-  attachments: RichTextAttachment[],
-): RichTextAttachment | null {
-  if (typeof operation.insert === "string") {
-    return (
-      attachments.find(
-        (attachment) => attachment.markdownToken === operation.insert,
-      ) ?? null
-    );
-  }
-
-  const imageSrc =
-    operation.insert &&
-    typeof operation.insert === "object" &&
-    typeof operation.insert.image === "string"
-      ? operation.insert.image
-      : null;
-  if (imageSrc) {
-    return (
-      attachments.find((attachment) => attachment.imageSrc === imageSrc) ?? null
-    );
-  }
-
-  return null;
-}
-
-function parseMarkdownLine(line: string): {
-  text: string;
-  attributes?: Record<string, unknown>;
-} {
-  if (line.startsWith(">")) {
-    return {
-      text: line.replace(/^>\s?/, ""),
-      attributes: { blockquote: true },
-    };
-  }
-  if (line.startsWith("## ")) {
-    return { text: line.slice(3), attributes: { header: 2 } };
-  }
-  if (line.startsWith("# ")) {
-    return { text: line.slice(2), attributes: { header: 1 } };
-  }
-  if (/^\s*[-*]\s+/.test(line)) {
-    return {
-      text: line.replace(/^\s*[-*]\s+/, ""),
-      attributes: { list: "bullet" },
-    };
-  }
-  if (/^\s*\d+\.\s+/.test(line)) {
-    return {
-      text: line.replace(/^\s*\d+\.\s+/, ""),
-      attributes: { list: "ordered" },
-    };
-  }
-  return { text: line };
-}
-
-function parseInlineMarkdown(text: string): DeltaOperation[] {
-  const operations: DeltaOperation[] = [];
-  const inlinePattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = inlinePattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      operations.push({ insert: text.slice(cursor, match.index) });
-    }
-    if (match[1] !== undefined) {
-      operations.push({ insert: match[1], attributes: { code: true } });
-    } else {
-      operations.push({ insert: match[2], attributes: { bold: true } });
-    }
-    cursor = match.index + match[0].length;
-  }
-
-  if (cursor < text.length) {
-    operations.push({ insert: text.slice(cursor) });
-  }
-
-  return operations;
-}
-
-function formatInlineMarkdown(
-  text: string,
-  attributes?: Record<string, unknown>,
-): string {
-  if (text.length === 0) {
-    return "";
-  }
-
-  let formattedText = text;
-  if (attributes?.code === true) {
-    formattedText = `\`${formattedText}\``;
-  }
-  if (attributes?.bold === true) {
-    formattedText = `**${formattedText}**`;
-  }
-  return formattedText;
-}
-
-function formatBlockMarkdown(
-  line: string,
-  attributes: Record<string, unknown> | undefined,
-  orderedIndex: number,
-): string {
-  if (line.length === 0) {
-    return "";
-  }
-  if (attributes?.blockquote) {
-    return `> ${line}`;
-  }
-  if (attributes?.header === 1) {
-    return `# ${line}`;
-  }
-  if (attributes?.header === 2) {
-    return `## ${line}`;
-  }
-  if (attributes?.list === "bullet") {
-    return `- ${line}`;
-  }
-  if (attributes?.list === "ordered") {
-    return `${orderedIndex}. ${line}`;
-  }
-  return line;
-}
-
-function isCodeBlockAttributes(
-  attributes: Record<string, unknown> | undefined,
-): boolean {
-  return (
-    attributes?.["code-block"] !== undefined &&
-    attributes["code-block"] !== false
-  );
-}
-
-function getBlockShortcut(
-  lineText: string,
-  offset: number,
-): { markerLength: number; format: string; value: unknown } | null {
-  if (offset === 2 && lineText.startsWith("# ")) {
-    return { markerLength: 2, format: "header", value: 1 };
-  }
-  if (offset === 3 && lineText.startsWith("## ")) {
-    return { markerLength: 3, format: "header", value: 2 };
-  }
-  if (offset === 2 && /^[-*]\s/.test(lineText)) {
-    return { markerLength: 2, format: "list", value: "bullet" };
-  }
-  if (offset === 3 && /^1\.\s/.test(lineText)) {
-    return { markerLength: 3, format: "list", value: "ordered" };
-  }
-  return null;
-}
-
 function getAttachmentIconText(kind: RichTextAttachmentKind): string {
   switch (kind) {
     case "image":
@@ -1012,14 +659,4 @@ function getAttachmentIconText(kind: RichTextAttachmentKind): string {
     default:
       return "FILE";
   }
-}
-
-function normalizeMarkdown(markdown: string): string {
-  return normalizeLineEndings(markdown)
-    .replace(/\n{4,}/g, "\n\n\n")
-    .trimEnd();
-}
-
-function normalizeLineEndings(value: string): string {
-  return value.replace(/\r\n/g, "\n");
 }
