@@ -1,6 +1,6 @@
 version: 1
 change: session-running-state-grace
-phase: plan-ready
+phase: implementing
 ambiguity: low
 complexity: medium
 implementation_path: superpowers
@@ -19,4 +19,4 @@ touched_files_b64: b3BlbnNwZWMvY2hhbmdlcy9zZXNzaW9uLXJ1bm5pbmctc3RhdGUtZ3JhY2Uvc
 review_result: pending
 archive: pending
 created_at: 2026-07-08
-updated_at: 2026-07-08T15:24:35Z
+updated_at: 2026-07-08T15:44:21Z
