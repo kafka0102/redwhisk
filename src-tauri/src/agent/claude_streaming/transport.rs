@@ -134,14 +134,14 @@ impl ClaudeTransport {
             eof_sender: Mutex::new(None),
             stdin: Mutex::new(Some(stdin)),
         });
+        let child = Arc::new(Mutex::new(Some(child)));
 
-        spawn_stdout_reader(stdout, Arc::clone(&state));
+        // child 也交给 stdout reader：进程自然退出（stdout EOF）时由 reader
+        // 线程 take + wait 回收，避免父进程未及时 reap 而残留僵尸。
+        spawn_stdout_reader(stdout, Arc::clone(&state), Arc::clone(&child));
         spawn_stderr_reader(stderr, Arc::clone(&state));
 
-        Ok(Self {
-            state,
-            child: Arc::new(Mutex::new(Some(child))),
-        })
+        Ok(Self { state, child })
     }
 
     /// 注册 SDKMessage 回调。覆盖式设置，整个 turn 只有一个消费者。
@@ -220,7 +220,9 @@ impl ClaudeTransport {
 
 impl Drop for ClaudeTransport {
     fn drop(&mut self) {
-        // 仅当最后一个 Arc 引用释放时执行关闭。
+        // 仅当最后一个 Arc 引用释放时执行关闭。stdout reader 线程也持有 child
+        // 的 Arc clone，但它读到 EOF（并 reap 子进程）后即退出，引用随之回落，
+        // 因此 struct 释放时这里仍能按预期 kill 仍存活的进程。
         if Arc::strong_count(&self.child) == 1 {
             self.shutdown();
         }
@@ -396,7 +398,11 @@ fn is_shell_runtime_variable(key: &OsStr) -> bool {
     )
 }
 
-fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {
+fn spawn_stdout_reader(
+    stdout: ChildStdout,
+    state: Arc<TransportState>,
+    child: Arc<Mutex<Option<Child>>>,
+) {
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
@@ -430,7 +436,20 @@ fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {
                 let _ = sender.send(reason);
             }
         }
+        // 进程已关闭 stdout（通常即将或已经退出）。此处 wait 回收子进程，避免
+        // 父进程未及时 reap 而残留僵尸。若 child 已被显式 shutdown 取走，此处
+        // take 到 None，跳过。
+        reap_child(&child);
     });
+}
+
+/// 回收子进程（take + wait），避免僵尸。
+fn reap_child(child: &Arc<Mutex<Option<Child>>>) {
+    if let Ok(mut guard) = child.lock() {
+        if let Some(mut child) = guard.take() {
+            let _ = child.wait();
+        }
+    }
 }
 
 fn spawn_stderr_reader(stderr: ChildStderr, state: Arc<TransportState>) {
@@ -554,5 +573,41 @@ mod tests {
         let captured = captured.lock().unwrap();
         assert_eq!(captured.len(), 1);
         assert_eq!(captured[0]["type"], "result");
+    }
+
+    #[test]
+    fn stdout_eof_reaps_child_to_avoid_zombie() {
+        // 找一个会立即退出、stdout 随即 EOF 的命令（true）；reader 线程应 take +
+        // wait 回收 child，否则子进程退出但父进程未 wait，残留僵尸。
+        // 不同系统 true 路径不同（macOS 多在 /usr/bin/true），找不到则跳过。
+        let true_path = ["/usr/bin/true", "/bin/true"]
+            .into_iter()
+            .find(|path| std::path::Path::new(path).exists());
+        let Some(true_path) = true_path else {
+            eprintln!("跳过：未找到 true 命令");
+            return;
+        };
+
+        let transport = ClaudeTransport::spawn(true_path, &[], None).expect("spawn true");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let reaped = transport
+                .child
+                .lock()
+                .map(|guard| guard.is_none())
+                .unwrap_or(false);
+            if reaped || std::time::Instant::now() > deadline {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+
+        let reaped = transport
+            .child
+            .lock()
+            .map(|guard| guard.is_none())
+            .unwrap_or(false);
+        assert!(reaped, "进程退出后 child 应被 reap，避免僵尸");
     }
 }

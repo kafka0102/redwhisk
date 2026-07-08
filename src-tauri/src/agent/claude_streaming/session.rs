@@ -248,17 +248,19 @@ impl ClaudeSessionHandle {
         let state_for_eof = Arc::clone(&self.state);
         let config_for_eof = self.config.clone();
         let turn_id_for_eof = turn_id.clone();
+        let transport_for_eof = transport.clone();
         let rx = transport.subscribe_eof();
         std::thread::spawn(move || {
             if let Ok(reason) = rx.recv() {
                 let finalized = handle_process_exit(&state_for_eof, &reason);
                 if should_emit_turn_failed_on_process_exit(finalized, &reason) {
+                    let stderr = transport_for_eof.stderr_tail();
                     config_for_eof.broadcaster.emit_stream_event(
                         config_for_eof.project_id,
                         config_for_eof.session_id,
                         AgentStreamEvent::TurnFailed {
                             turn_id: turn_id_for_eof,
-                            error: format!("claude 进程退出：{reason}"),
+                            error: format_unexpected_exit_error(&reason, &stderr),
                             code: None,
                         },
                     );
@@ -695,7 +697,9 @@ fn build_events(
             is_error,
             usage,
             session_id,
+            result_text,
             errors,
+            subtype,
             ..
         } => {
             // flush 残留文本与 reasoning（turn 结束前确保所有增量都已广播）。
@@ -734,7 +738,7 @@ fn build_events(
             } else {
                 events.push(AgentStreamEvent::TurnFailed {
                     turn_id: turn_id.clone(),
-                    error: errors.join("; "),
+                    error: format_turn_failure(errors, result_text, subtype),
                     code: None,
                 });
             }
@@ -1242,6 +1246,37 @@ fn claude_text_message_id(
     )
 }
 
+/// 把 turn 失败信息格式化为可读 error 文本。
+///
+/// claude CLI 在模型网关错误（如 529 限流）时，常把错误描述写进 assistant 文本
+/// 与 `result` 字段，而 `errors` 数组为空。这里按 errors → result → subtype 顺序
+/// 兜底，保证 `TurnFailed.error` 始终有可读内容，避免前端拿到空失败原因。
+fn format_turn_failure(
+    errors: Vec<String>,
+    result_text: Option<String>,
+    subtype: String,
+) -> String {
+    if !errors.is_empty() {
+        return errors.join("; ");
+    }
+    if let Some(text) = result_text.filter(|text| !text.trim().is_empty()) {
+        return text;
+    }
+    if !subtype.trim().is_empty() && subtype != "success" {
+        return format!("claude 返回错误：{subtype}");
+    }
+    "claude 返回错误".to_string()
+}
+
+/// 格式化进程异常退出的失败信息，附带 stderr 尾部用于诊断。
+fn format_unexpected_exit_error(reason: &str, stderr_tail: &str) -> String {
+    let stderr = stderr_tail.trim();
+    if stderr.is_empty() {
+        return format!("claude 进程退出：{reason}");
+    }
+    format!("claude 进程退出：{reason}\nstderr:\n{stderr}")
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1355,6 +1390,81 @@ mod tests {
             e,
             AgentStreamEvent::TurnFailed { error, .. } if error == "超过最大轮次"
         )));
+    }
+
+    #[test]
+    fn result_error_falls_back_to_result_text_when_errors_empty() {
+        // 回归（issue 32 实测）：模型网关 529 限流时，claude 把错误描述写进
+        // result.result，errors 数组为空。TurnFailed.error 应回退到 result 文本，
+        // 不能是空字符串，否则前端拿不到失败原因。
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+        let events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Result {
+                subtype: "error".into(),
+                is_error: true,
+                result_text: Some(
+                    "API Error: 529 [1305][该模型当前访问量过大，请您稍后再试]".into(),
+                ),
+                session_id: None,
+                usage: None,
+                errors: vec![],
+                stop_reason: None,
+            },
+        );
+        let failure = events
+            .iter()
+            .find_map(|event| match event {
+                AgentStreamEvent::TurnFailed { error, .. } => Some(error.clone()),
+                _ => None,
+            })
+            .expect("应广播 TurnFailed");
+        assert!(!failure.is_empty(), "TurnFailed.error 不应为空");
+        assert!(
+            failure.contains("529"),
+            "TurnFailed.error 应包含错误详情，实际：{failure}"
+        );
+    }
+
+    #[test]
+    fn format_turn_failure_prefers_errors_then_result_then_subtype() {
+        // errors 非空：优先 errors。
+        assert_eq!(
+            format_turn_failure(vec!["超过最大轮次".into()], None, "error_max_turns".into()),
+            "超过最大轮次"
+        );
+        // errors 空但有 result：回退 result 文本。
+        assert_eq!(
+            format_turn_failure(vec![], Some("API Error: 529".into()), "error".into()),
+            "API Error: 529"
+        );
+        // 均空但有非 success subtype：回退 subtype。
+        assert_eq!(
+            format_turn_failure(vec![], None, "error_max_turns".into()),
+            "claude 返回错误：error_max_turns"
+        );
+        // 全空或 success：通用兜底。
+        assert_eq!(
+            format_turn_failure(vec![], None, "success".into()),
+            "claude 返回错误"
+        );
+    }
+
+    #[test]
+    fn format_unexpected_exit_error_includes_stderr_tail() {
+        let with_stderr = format_unexpected_exit_error("stdout EOF", "some stderr noise");
+        assert!(with_stderr.contains("stdout EOF"));
+        assert!(with_stderr.contains("some stderr noise"));
+
+        let without_stderr = format_unexpected_exit_error("stdout EOF", "   ");
+        assert!(without_stderr.contains("stdout EOF"));
+        assert!(
+            !without_stderr.contains("stderr"),
+            "stderr 为空时不应拼接 stderr 段，实际：{without_stderr}"
+        );
     }
 
     #[test]
