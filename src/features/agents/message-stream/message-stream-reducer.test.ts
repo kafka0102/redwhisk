@@ -337,6 +337,29 @@ describe("messageStreamReducer", () => {
 
       expect(state.entries).toHaveLength(1);
     });
+
+    it("后端回显先于乐观插入到达时不产生重复", () => {
+      // 竞态：后端 timeline 事件经 requestAnimationFrame 异步 flush，而
+      // sendAgentMessage 的 invoke 响应可能更慢，后端 user_message 回显可能先于
+      // 乐观插入到达并被追加。此时 OPTIMISTIC_USER_MESSAGE 需识别已存在的后端回显
+      // 并跳过，否则同一消息会显示两次。
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "继续修复",
+          messageId: "u1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "OPTIMISTIC_USER_MESSAGE",
+        text: "继续修复",
+      });
+
+      expect(state.entries).toHaveLength(1);
+      expect(state.entries[0].id).toBe("u1");
+    });
   });
 
   describe("reasoning 增量", () => {

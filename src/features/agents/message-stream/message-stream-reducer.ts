@@ -88,6 +88,24 @@ export function messageStreamReducer(
     case "OPTIMISTIC_USER_MESSAGE": {
       // 乐观插入用户消息：发送成功后立即展示，不等后端 timeline 回显。
       // 后端回显到达后通过文本匹配替换该乐观条目，避免重复展示。
+      //
+      // 竞态保护：后端 timeline 事件经 requestAnimationFrame 异步 flush，而
+      // sendAgentMessage 的 invoke 响应可能更慢——后端 user_message 回显可能先于
+      // 乐观插入到达并被追加。此时乐观条目若再无条件追加会导致同一消息显示两次。
+      // 若已存在同文本的后端 user_message 条目（非 optimistic- 前缀），直接跳过：
+      // 后端条目携带 messageId，本就是更权威的最终态。
+      const echoedIndex = findLastIndex(
+        state.entries,
+        (entry) =>
+          entry.kind === "user_message" &&
+          !entry.id.startsWith("optimistic-") &&
+          entry.item.type === "user_message" &&
+          normalizeMessageText(entry.item.text) ===
+            normalizeMessageText(action.text),
+      );
+      if (echoedIndex >= 0) {
+        return state;
+      }
       const localId = nextLocalId(state.entries);
       const item: AgentTimelineItem = {
         type: "user_message",
