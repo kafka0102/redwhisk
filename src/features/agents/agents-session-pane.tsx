@@ -453,6 +453,7 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
             sessionStatus={workspace.sessionStatus}
             issueStatus={workspace.issueStatus}
             isTurnRunning={workspace.isTurnRunning}
+            isActive={isCurrent}
           />
         }
         onCloseTab={(tab) => onCloseWorkspaceTab(workspace.sessionId, tab)}

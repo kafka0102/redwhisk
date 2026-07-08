@@ -10,7 +10,15 @@
 //   统一订阅后下传，避免双订阅。
 
 import { ArrowDown, ArrowUp, LoaderCircle } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type UIEvent,
+} from "react";
 
 import type { AgentTimelineItem } from "../agent-stream-types";
 import type { AgentType } from "../agent-session-commands";
@@ -50,6 +58,12 @@ interface AgentMessageStreamViewProps {
   isTurnRunning?: boolean;
   /** 当前 session 的 agent 类型，用于区分 Claude / Codex 的渲染策略。 */
   agentType?: AgentType;
+  /** 本 session 是否为当前选中（实例池模式下未被 hidden 遮蔽）。
+   * 由 false 变 true 表示用户切换到了本 session。 */
+  isActive?: boolean;
+  /** 切换到本 session（isActive 由 false 变 true）时是否自动定位到底部。
+   * 完成态 session 传 false 以保持原样。 */
+  autoScrollOnActivate?: boolean;
 }
 
 /**
@@ -65,6 +79,8 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   state,
   isTurnRunning = false,
   agentType,
+  isActive = true,
+  autoScrollOnActivate = false,
 }: AgentMessageStreamViewProps) {
   const { messages } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +117,26 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     shouldShowThinking,
     hasClaudeOutput,
   ]);
+  // 切换到本 session（isActive 由 false 变 true）时，若非完成态且消息流可见，
+  // 定位到底部，便于查看正在执行的输出或待确认项。
+  // - 完成态（autoScrollOnActivate=false）保持原样，不强行改写滚动位置；
+  // - 消息流被其他子 tab 遮蔽（clientHeight 为 0，等价 display:none）时跳过，
+  //   避免在隐藏状态下因 scrollHeight 为 0 把 scrollTop 置 0 反而破坏位置。
+  // 用 useLayoutEffect 在 paint 前定位，避免切回时先闪现旧位置再跳底。
+  const prevIsActiveRef = useRef(isActive);
+  useLayoutEffect(() => {
+    const wasActive = prevIsActiveRef.current;
+    prevIsActiveRef.current = isActive;
+    if (!isActive || wasActive || !autoScrollOnActivate) {
+      return;
+    }
+    const node = scrollRef.current;
+    if (!node || node.clientHeight === 0) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+    isPinnedRef.current = true;
+  }, [isActive, autoScrollOnActivate]);
   // 计算长内容跳转按钮方向：仅当内容超过两屏且贴顶/贴底时显示，中间位置隐藏。
   const measureNav = useCallback(() => {
     const node = scrollRef.current;

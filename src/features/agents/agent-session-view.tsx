@@ -36,6 +36,9 @@ interface AgentSessionViewProps {
   sessionStatus?: AgentSessionStatus;
   issueStatus?: IssueStatus | null;
   isTurnRunning?: boolean;
+  /** 本 session 是否为当前选中的 session（实例池模式下未被 hidden 遮蔽）。
+   * 透传给消息流，用于在切换到本 session 时定位到底部。 */
+  isActive?: boolean;
 }
 
 // memo 化：props 均为 primitive（projectId/sessionId/agentType/sessionStatus/
@@ -49,6 +52,7 @@ export const AgentSessionView = memo(function AgentSessionView({
   sessionStatus = "running",
   issueStatus = null,
   isTurnRunning = false,
+  isActive = true,
 }: AgentSessionViewProps) {
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
@@ -87,6 +91,8 @@ export const AgentSessionView = memo(function AgentSessionView({
         state={state}
         isTurnRunning={canUseExternalTurnRunning && isTurnRunning}
         agentType={agentType}
+        isActive={isActive}
+        autoScrollOnActivate={!isReadOnly}
       />
 
       <div className="agents-session-view__permissions">

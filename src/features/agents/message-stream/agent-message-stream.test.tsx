@@ -555,3 +555,115 @@ describe("AgentMessageStream", () => {
     expect(screen.getByText("我先读取文件")).toBeInTheDocument();
   });
 });
+
+describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
+  function mockScrollMetrics(
+    el: HTMLElement,
+    metrics: { clientHeight?: number; scrollHeight?: number },
+  ) {
+    if (metrics.clientHeight !== undefined) {
+      Object.defineProperty(el, "clientHeight", {
+        configurable: true,
+        get: () => metrics.clientHeight as number,
+      });
+    }
+    if (metrics.scrollHeight !== undefined) {
+      Object.defineProperty(el, "scrollHeight", {
+        configurable: true,
+        get: () => metrics.scrollHeight as number,
+      });
+    }
+  }
+
+  function createStateWithMessages() {
+    return createMessageStreamState({
+      entries: [
+        {
+          id: "u1",
+          kind: "user_message",
+          item: { type: "user_message", text: "开始", messageId: "u1" },
+        },
+        {
+          id: "a1",
+          kind: "assistant_message",
+          item: {
+            type: "assistant_message",
+            text: "处理中",
+            messageId: "a1",
+          },
+        },
+      ],
+    });
+  }
+
+  it("切换到非完成态 session 时将消息流定位到底部", () => {
+    const state = createStateWithMessages();
+    const { container, rerender } = render(
+      <AgentMessageStreamView
+        state={state}
+        isActive={false}
+        autoScrollOnActivate
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollMetrics(scroll, { clientHeight: 100, scrollHeight: 500 });
+    scroll.scrollTop = 0;
+
+    rerender(
+      <AgentMessageStreamView state={state} isActive autoScrollOnActivate />,
+    );
+
+    expect(scroll.scrollTop).toBe(500);
+  });
+
+  it("完成态 session 切换时保持原滚动位置", () => {
+    const state = createStateWithMessages();
+    const { container, rerender } = render(
+      <AgentMessageStreamView
+        state={state}
+        isActive={false}
+        autoScrollOnActivate={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollMetrics(scroll, { clientHeight: 100, scrollHeight: 500 });
+    scroll.scrollTop = 123;
+
+    rerender(
+      <AgentMessageStreamView
+        state={state}
+        isActive
+        autoScrollOnActivate={false}
+      />,
+    );
+
+    expect(scroll.scrollTop).toBe(123);
+  });
+
+  it("消息流被其他子 tab 遮蔽时不改写滚动位置", () => {
+    const state = createStateWithMessages();
+    const { container, rerender } = render(
+      <AgentMessageStreamView
+        state={state}
+        isActive={false}
+        autoScrollOnActivate
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    // clientHeight 保持 0，模拟被 hidden（其他子 tab 激活）时的 display:none
+    mockScrollMetrics(scroll, { scrollHeight: 500 });
+    scroll.scrollTop = 42;
+
+    rerender(
+      <AgentMessageStreamView state={state} isActive autoScrollOnActivate />,
+    );
+
+    expect(scroll.scrollTop).toBe(42);
+  });
+});
