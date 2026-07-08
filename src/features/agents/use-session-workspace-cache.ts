@@ -50,6 +50,7 @@ interface SessionWorkspaceCache {
   changesErrorMessage: string | null;
   changesRequestSequence: number;
   commitHistory: WorkspaceCommitRecord[];
+  isCommitFromWorktree: boolean;
   commitHistoryErrorMessage: string | null;
   commitHistoryRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
@@ -73,6 +74,7 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   changesErrorMessage: null,
   changesRequestSequence: 0,
   commitHistory: [],
+  isCommitFromWorktree: false,
   commitHistoryErrorMessage: null,
   commitHistoryRequestSequence: 0,
   fileTab: null,
@@ -284,6 +286,7 @@ export function useSessionWorkspaceCache({
                 cache.lastCommitHistorySignature === response.signature
                   ? cache.commitHistory
                   : response.commits,
+              isCommitFromWorktree: response.isWorktree,
               isCommitHistoryLoading: false,
               commitHistoryErrorMessage: null,
               lastCommitHistorySignature: response.signature,
@@ -614,6 +617,7 @@ export function useSessionWorkspaceCache({
     closeWorkspaceTab,
     closeWorkspaceTabForSession,
     commitHistory: currentCache.commitHistory,
+    isCommitFromWorktree: currentCache.isCommitFromWorktree,
     commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,

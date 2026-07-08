@@ -59,6 +59,7 @@ export interface WorkspaceCommitRecord {
   files: WorkspaceCommitChangedFile[];
   isPushed: boolean;
   pushedTo?: string | null;
+  isCreatedInWorktree: boolean;
 }
 
 export interface ProjectWorktreeChangesResponse {
@@ -69,6 +70,7 @@ export interface ProjectWorktreeChangesResponse {
 export interface ProjectWorktreeCommitHistoryResponse {
   commits: WorkspaceCommitRecord[];
   signature: string;
+  isWorktree: boolean;
 }
 
 export interface WorkspaceFileTreeNode {

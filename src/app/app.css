@@ -4028,6 +4028,10 @@ button:focus-visible {
   background: #7c3aed;
 }
 
+.session-commit-timeline__dot--other-worktree {
+  background: #f59e0b;
+}
+
 .session-commit-row {
   position: relative;
   display: flex;

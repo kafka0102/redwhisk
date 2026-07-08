@@ -371,6 +371,7 @@ function commitRecord(
     files,
     isPushed: false,
     pushedTo: null,
+    isCreatedInWorktree: false,
   };
 }
 
@@ -626,6 +627,7 @@ describe("AgentsActivity", () => {
     getProjectWorktreeCommitHistoryMock.mockResolvedValue({
       signature: "default-commits",
       commits: [],
+      isWorktree: false,
     });
     getProjectWorktreeFileTreeMock.mockResolvedValue({
       signature: "default-tree",
@@ -963,6 +965,7 @@ describe("AgentsActivity", () => {
           committedFile("apps/web/src/pages/problem/index/index.tsx", "A"),
         ]),
       ],
+      isWorktree: false,
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],

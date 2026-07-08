@@ -72,6 +72,10 @@ pub struct WorkspaceCommitRecord {
     pub is_pushed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pushed_to: Option<String>,
+    // 是否由当前 worktree 创建（即落在 worktree 分叉基 base..HEAD 范围内）。
+    // 仅在 worktree 场景有意义：前端用它把 worktree 自身提交（蓝）与从 base 继承
+    // 下来的历史提交（橘黄）区分开。非 worktree 场景恒为 false，前端不使用。
+    pub is_created_in_worktree: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -79,6 +83,10 @@ pub struct WorkspaceCommitRecord {
 pub struct ProjectWorktreeCommitHistoryResponse {
     pub commits: Vec<WorkspaceCommitRecord>,
     pub signature: String,
+    // 当前 workspace root 是否为额外 worktree。前端据此切换圆点着色规则：
+    // worktree 场景按 is_created_in_worktree 区分蓝/橘黄；非 worktree 场景按
+    // is_pushed 区分紫/蓝。
+    pub is_worktree: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

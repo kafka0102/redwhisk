@@ -26,6 +26,7 @@ type ChangeFilter = "committed" | "uncommitted";
 interface SessionChangesPanelProps {
   changes: WorkspaceChangedFile[];
   commitHistory: WorkspaceCommitRecord[];
+  isWorktree: boolean;
   commitHistoryErrorMessage: string | null;
   errorMessage: string | null;
   isCommitHistoryLoading: boolean;
@@ -42,6 +43,7 @@ interface SessionChangesPanelProps {
 export function SessionChangesPanel({
   changes,
   commitHistory,
+  isWorktree,
   commitHistoryErrorMessage,
   errorMessage,
   isCommitHistoryLoading,
@@ -124,6 +126,7 @@ export function SessionChangesPanel({
           commits={commitHistory}
           errorMessage={commitHistoryErrorMessage}
           expandedCommitHashes={expandedCommitHashes}
+          isWorktree={isWorktree}
           isLoading={isCommitHistoryLoading}
           onOpenCommittedChangedFile={onOpenCommittedChangedFile}
           onToggleCommit={(hash) => {
@@ -147,6 +150,7 @@ interface CommittedChangesTimelineProps {
   commits: WorkspaceCommitRecord[];
   errorMessage: string | null;
   expandedCommitHashes: Set<string>;
+  isWorktree: boolean;
   isLoading: boolean;
   onOpenCommittedChangedFile: (
     commitHash: string,
@@ -159,6 +163,7 @@ function CommittedChangesTimeline({
   commits,
   errorMessage,
   expandedCommitHashes,
+  isWorktree,
   isLoading,
   onOpenCommittedChangedFile,
   onToggleCommit,
@@ -195,7 +200,7 @@ function CommittedChangesTimeline({
           <li className="session-commit-timeline__item" key={commit.hash}>
             <span className="session-commit-timeline__rail" aria-hidden="true">
               <span
-                className={`session-commit-timeline__dot${commit.isPushed ? " session-commit-timeline__dot--pushed" : ""}`}
+                className={`session-commit-timeline__dot${getCommitTimelineDotModifier(commit, isWorktree)}`}
               />
             </span>
             <button
@@ -240,6 +245,20 @@ function CommittedChangesTimeline({
       })}
     </ol>
   );
+}
+
+// timeline 圆点着色修饰类：worktree 场景按是否当前 worktree 创建区分蓝/橘黄；
+// 非 worktree 场景按是否已 push 到远端区分紫/蓝。
+function getCommitTimelineDotModifier(
+  commit: WorkspaceCommitRecord,
+  isWorktree: boolean,
+): string {
+  if (isWorktree) {
+    return commit.isCreatedInWorktree
+      ? ""
+      : " session-commit-timeline__dot--other-worktree";
+  }
+  return commit.isPushed ? " session-commit-timeline__dot--pushed" : "";
 }
 
 interface CommittedFileRowProps {

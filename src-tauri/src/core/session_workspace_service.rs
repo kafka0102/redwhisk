@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
@@ -291,33 +292,33 @@ fn read_workspace_commit_history(
     let branch_name = current_branch_name(root)?;
     let is_worktree = is_additional_worktree(root).unwrap_or(false);
 
-    // work tree 分支只展示该分支独有的提交（排除 base 分支内容）；非 work tree
-    // 分支展示该分支最近 50 条提交（含已 push 到远端的提交），不再用 base..HEAD
-    // 过滤——否则已 push 的提交会落在 base 及更早而被排除，无法显示紫色节点。
-    // base_branch 来自 session 记录的 target_branch（worktree 创建时的真实基分支），
-    // 缺失时回退到 find_branch_base 的启发式。
-    let revision_range = if is_worktree {
+    // worktree 与非 worktree 都展示该分支最近 50 条全历史，不再用 base..HEAD 过滤。
+    // worktree 场景下，落在分叉基 base..HEAD 范围内的提交属于“当前 worktree 创建”，
+    // 通过 is_created_in_worktree 标记给前端做蓝/橘黄区分，其余为从 base 继承的历史。
+    // 仅当 worktree 处于非主分支且能解出 base 时才计算该集合；主分支或 base 解析失败
+    // 时全部视为 worktree 自身（保持主分支不过滤的现状，避免主分支历史被误判为他处
+    // 提交）。base_branch 来自 session 记录的 target_branch（worktree 创建时的真实基
+    // 分支），缺失时回退到 find_branch_base 的启发式。非 worktree 不计算该集合，
+    // is_created_in_worktree 恒为 false。
+    let worktree_own_commits: Option<HashSet<String>> = if is_worktree {
         match branch_name.as_deref() {
-            Some(branch) if PRIMARY_BRANCHES.contains(&branch) => None,
-            Some(branch) => {
-                find_branch_base(root, branch, base_branch)?.map(|base| format!("{base}..HEAD"))
+            Some(branch) if !PRIMARY_BRANCHES.contains(&branch) => {
+                find_branch_base(root, branch, base_branch)?
+                    .and_then(|base| rev_list_range(root, &format!("{base}..HEAD")).ok())
             }
-            None => None,
+            _ => None,
         }
     } else {
         None
     };
 
     let upstream = current_upstream(root)?;
-    let mut args = vec![
+    let args = vec![
         "log".to_string(),
         "--date-order".to_string(),
         format!("--max-count={MAX_COMMIT_HISTORY_ENTRIES}"),
         "--format=%H%x00%h%x00%an%x00%ct%x00%s%x00".to_string(),
     ];
-    if let Some(range) = revision_range {
-        args.push(range);
-    }
 
     let output = run_git_owned(root, &args)?;
     let mut commits = Vec::new();
@@ -333,6 +334,12 @@ fn read_workspace_commit_history(
         }
 
         let is_pushed = commit_is_pushed(root, hash, upstream.as_deref());
+        // 有 own 集合时按成员判定；无集合时 worktree 场景（主分支 / base 解析失败）
+        // 视为全部自身（true），非 worktree 恒为 false。
+        let is_created_in_worktree = match &worktree_own_commits {
+            Some(own) => own.contains(hash),
+            None => is_worktree,
+        };
         commits.push(WorkspaceCommitRecord {
             hash: hash.to_string(),
             short_hash: short_hash.to_string(),
@@ -342,11 +349,16 @@ fn read_workspace_commit_history(
             files: read_commit_changed_files(root, hash)?,
             pushed_to: if is_pushed { upstream.clone() } else { None },
             is_pushed,
+            is_created_in_worktree,
         });
     }
 
     let signature = hash_string(&format!("{commits:?}"));
-    Ok(ProjectWorktreeCommitHistoryResponse { commits, signature })
+    Ok(ProjectWorktreeCommitHistoryResponse {
+        commits,
+        signature,
+        is_worktree,
+    })
 }
 
 fn current_branch_name(root: &Path) -> Result<Option<String>, CommandError> {
@@ -394,6 +406,17 @@ fn commit_is_pushed(root: &Path, commit_hash: &str, upstream: Option<&str>) -> b
         Ok(output) => output.status.success(),
         Err(_) => false,
     }
+}
+
+// 列出某个 revision 范围（如 `base..HEAD`）内的全部 commit hash，用于标记 worktree
+// 自身创建的提交。范围解析失败或无提交时返回空集合，不阻断整体读取。
+fn rev_list_range(root: &Path, range: &str) -> Result<HashSet<String>, CommandError> {
+    let output = run_git_owned(root, &["rev-list".to_string(), range.to_string()])?;
+    Ok(output
+        .lines()
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty())
+        .collect())
 }
 
 // 计算当前 HEAD 相对某个 ref 的 merge-base。
@@ -1314,6 +1337,7 @@ mod tests {
 
         // 非 work tree 不再用 base..HEAD 过滤：返回最近 50 条全历史（base + 2 条
         // feature，共 3 条），顺序为 date-order（新→旧）。
+        assert!(!history.is_worktree);
         assert_eq!(history.commits.len(), 3);
         assert_eq!(history.commits[0].message, "feature two");
         assert_eq!(history.commits[1].message, "feature one");
@@ -1462,7 +1486,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_history_in_worktree_filters_to_target_branch_base() {
+    fn commit_history_in_worktree_marks_own_commits_via_target_branch_base() {
         // 模拟真实仓库场景：worktree 从 main 创建，但本地还存在落后于 main 的 devlop
         // 分支。固定候选列表里 devlop 排在 main 之前，若不传入 target_branch，会误选
         // devlop 作为 base，把 main 相对 devlop 的历史全部计入 worktree 历史。
@@ -1500,12 +1524,20 @@ mod tests {
         git(&worktree_path, &["add", "feature.txt"]);
         git(&worktree_path, &["commit", "-m", "issue seven change"]);
 
-        // 传入 target_branch=main：merge-base(issue-7, main) = main tip，应只返回
-        // worktree 自身的 1 条提交，排除从 main 继承下来的 main one / main two。
+        // 传入 target_branch=main：worktree 现在展示该分支最近 50 条全历史（main
+        // one / main two / issue seven change 共 3 条，date-order 新→旧），不再用
+        // base..HEAD 过滤。其中只有 issue seven change 落在 base..HEAD 范围内，标记
+        // 为当前 worktree 自身提交；从 main 继承下来的两条标记为他处提交。
         let history = read_workspace_commit_history(&worktree_path, Some("main"))
             .expect("read commit history");
-        assert_eq!(history.commits.len(), 1);
+        assert!(history.is_worktree);
+        assert_eq!(history.commits.len(), 3);
         assert_eq!(history.commits[0].message, "issue seven change");
+        assert!(history.commits[0].is_created_in_worktree);
+        assert_eq!(history.commits[1].message, "main two");
+        assert!(!history.commits[1].is_created_in_worktree);
+        assert_eq!(history.commits[2].message, "main one");
+        assert!(!history.commits[2].is_created_in_worktree);
     }
 
     fn init_git_repo(root: &Path) {

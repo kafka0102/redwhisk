@@ -16,6 +16,7 @@ interface SessionSidePanelProps {
   changes: WorkspaceChangedFile[];
   changesErrorMessage: string | null;
   commitHistory: WorkspaceCommitRecord[];
+  isCommitFromWorktree: boolean;
   commitHistoryErrorMessage: string | null;
   fileTree: WorkspaceFileTreeNode[];
   fileTreeErrorMessage: string | null;
@@ -41,6 +42,7 @@ export function SessionSidePanel({
   changes,
   changesErrorMessage,
   commitHistory,
+  isCommitFromWorktree,
   commitHistoryErrorMessage,
   fileTree,
   fileTreeErrorMessage,
@@ -106,6 +108,7 @@ export function SessionSidePanel({
           <SessionChangesPanel
             changes={changes}
             commitHistory={commitHistory}
+            isWorktree={isCommitFromWorktree}
             commitHistoryErrorMessage={commitHistoryErrorMessage}
             errorMessage={changesErrorMessage}
             isCommitHistoryLoading={isCommitHistoryLoading}
