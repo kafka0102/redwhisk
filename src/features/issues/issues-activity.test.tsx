@@ -4063,6 +4063,182 @@ describe("IssuesActivity", () => {
       within(summary).getByText("Log path: /tmp/completed.log"),
     ).toBeInTheDocument();
   });
+
+  it("returns to the board from a read-only detail when the activity icon signal fires", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [runningIssue] });
+    const { rerender } = renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: runningIssue.title }),
+    );
+    expect(screen.getByRole("region", { name: "Issue Detail" })).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Issue Detail" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: runningIssue.title }),
+    ).toBeInTheDocument();
+  });
+
+  it("returns from an unchanged edit page when the activity icon signal fires", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    const { rerender } = renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    expect(screen.getByRole("form", { name: "Edit Issue" })).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("form", { name: "Edit Issue" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps the edit page when the signal fires but the form has changes", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    const { rerender } = renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Changed title");
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("form", { name: "Edit Issue" }),
+    ).toBeInTheDocument();
+  });
+
+  it("returns from an unchanged create page when the signal fires", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    const { rerender } = renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("form", { name: "New Issue" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps the create page when the signal fires but the form has changes", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    const { rerender } = renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.type(screen.getByLabelText("Title"), "Draft title");
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("form", { name: "New Issue" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does nothing when the signal fires on the kanban board", async () => {
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    const { rerender } = renderIssuesActivity();
+
+    await screen.findByRole("button", { name: "Existing issue" });
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Existing issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores the activity icon signal while a save is in progress", async () => {
+    const user = userEvent.setup();
+    let resolveSave: (issue: IssueRecord) => void = () => {};
+    updateIssueMock.mockImplementation(
+      () =>
+        new Promise<IssueRecord>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    const { rerender } = renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    rerender(
+      <I18nProvider>
+        <IssuesActivity projectId={1} issuesReturnSignal={1} />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("form", { name: "Edit Issue" }),
+    ).toBeInTheDocument();
+    resolveSave({ ...existingIssue, updatedAt: 1_780_640_000_000 });
+  });
+
+  it("does not trigger return on mount when the initial signal is non-zero", async () => {
+    listIssuesMock.mockResolvedValue({ issues: [runningIssue] });
+    renderIssuesActivity({
+      requestedIssueId: runningIssue.id,
+      issuesReturnSignal: 3,
+    });
+
+    expect(
+      await screen.findByRole("region", { name: "Issue Detail" }),
+    ).toBeInTheDocument();
+  });
 });
 
 function renderIssuesActivity(

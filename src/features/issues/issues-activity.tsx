@@ -40,6 +40,7 @@ import {
   type IssueFormState,
 } from "./issue-activity-types";
 import { IssueEditablePage } from "./issue-editable-page";
+import { isIssueFormDirty } from "./issue-form-dirty";
 import { IssueReadOnlyPage } from "./issue-read-only-page";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
@@ -181,6 +182,7 @@ interface IssuesActivityProps {
   requestedIssue?: IssueOpenRequest | number | null;
   requestedIssueId?: number | null;
   worktreeSetupCommand?: string;
+  issuesReturnSignal?: number;
 }
 
 export function IssuesActivity({
@@ -190,6 +192,7 @@ export function IssuesActivity({
   requestedIssue = null,
   requestedIssueId: legacyRequestedIssueId = null,
   worktreeSetupCommand = "",
+  issuesReturnSignal = 0,
 }: IssuesActivityProps) {
   const { locale, messages } = useI18n();
   const cachedPageState = issuePageStateCache.get(projectId) ?? null;
@@ -897,6 +900,37 @@ export function IssuesActivity({
   const isEditablePageOpen = Boolean(
     dialogMode && (isBacklogDialog || isReadOnlyEditRequested),
   );
+
+  function isFormDirty(): boolean {
+    if (dialogMode === "create") {
+      return isIssueFormDirty(form, EMPTY_FORM);
+    }
+    if (selectedIssue) {
+      return isIssueFormDirty(form, issueToForm(selectedIssue));
+    }
+    return false;
+  }
+
+  // 活动栏 Issue 图标在已处于 Issues Activity 时被点击：按当前详情态返回看板。
+  // 只读详情直接返回；编辑/创建态有未保存改动则保留，无改动才返回；保存中不响应。
+  const previousReturnSignalRef = useRef(issuesReturnSignal);
+  useEffect(() => {
+    if (previousReturnSignalRef.current === issuesReturnSignal) {
+      return;
+    }
+    previousReturnSignalRef.current = issuesReturnSignal;
+
+    if (!dialogMode || isSaving) {
+      return;
+    }
+    if (isEditablePageOpen && isFormDirty()) {
+      return;
+    }
+    // 活动栏返回信号是外部输入：按当前详情态做一次性返回，effect 仅依赖信号值，不会触发级联渲染。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    closeDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issuesReturnSignal]);
 
   async function handleSelectAttachment(
     filter?: "image" | "file",
