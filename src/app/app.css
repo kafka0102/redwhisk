@@ -5871,6 +5871,7 @@ button:focus-visible {
    =========================================================================== */
 
 .agents-message-stream {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -5974,6 +5975,43 @@ button:focus-visible {
   .agents-message__spinner,
   .agents-message-stream__running span {
     animation: none;
+  }
+}
+
+/* 长内容跳转按钮：浮在消息流右下角、composer 上方，半透明圆形。 */
+.agents-message-stream__nav {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-muted);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.agents-message-stream__nav:hover {
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  color: var(--color-text);
+}
+
+.agents-message-stream__nav:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agents-message-stream__nav {
+    transition: none;
   }
 }
 

@@ -383,6 +383,10 @@ export interface I18nMessages {
     messageStream: string;
     emptyMessageStream: string;
     thinking: string;
+    /** 长内容时回到底部的导航按钮 aria-label。 */
+    scrollToBottom: string;
+    /** 长内容时回到顶部的导航按钮 aria-label。 */
+    scrollToTop: string;
     reasoningTitle: string;
     /** 已完成 reasoning 块的标题文案，入参为持续秒数。 */
     reasoningDuration: (seconds: number) => string;
@@ -899,6 +903,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       messageStream: "Agent session message stream",
       emptyMessageStream: "Send a message to start the conversation.",
       thinking: "Thinking...",
+      scrollToBottom: "Scroll to bottom",
+      scrollToTop: "Scroll to top",
       reasoningTitle: "Thinking",
       reasoningDuration: (seconds) => `Thought process (${seconds}s)`,
       structuredSessionView: "Agent structured session view",
@@ -1409,6 +1415,8 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       messageStream: "Agent 会话消息流",
       emptyMessageStream: "发送一条消息开始对话。",
       thinking: "正在思考…",
+      scrollToBottom: "回到底部",
+      scrollToTop: "回到顶部",
       reasoningTitle: "正在思考…",
       reasoningDuration: (seconds) => `思考过程（共进行了 ${seconds} 秒）`,
       structuredSessionView: "Agent 结构化会话视图",

@@ -2,15 +2,15 @@
 //
 // 负责滚动容器、空态文案、轮次运行指示器与自动滚动到底部。自动滚动策略：
 // 用户停留在底部附近时跟随新内容滚动；手动上滚后停止跟随（避免抢夺滚动位置）。
-// "滚动到底部"按钮留到任务 6。
+// 长内容（超过两屏）时在右下角显示跳转按钮：贴顶显示向下、贴底显示向上，中间隐藏。
 //
 // 拆分为两层：
 // - `AgentMessageStream`：自包含，内部调 `useAgentMessageStream` 订阅，用于独立场景/测试。
 // - `AgentMessageStreamView`：纯渲染，接收外部 `state`，供 `AgentSessionView` 父组件
 //   统一订阅后下传，避免双订阅。
 
-import { LoaderCircle } from "lucide-react";
-import { memo, useEffect, useRef, type UIEvent } from "react";
+import { ArrowDown, ArrowUp, LoaderCircle } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState, type UIEvent } from "react";
 
 import type { AgentTimelineItem } from "../agent-stream-types";
 import type { AgentType } from "../agent-session-commands";
@@ -29,6 +29,12 @@ interface AgentMessageStreamProps {
 
 /** 距底部阈值（px），小于此值视为"贴底"，新内容自动跟随滚动。 */
 const PIN_TO_BOTTOM_THRESHOLD_PX = 80;
+
+/** 距顶部阈值（px），小于此值视为"贴顶"，显示回到底部按钮。 */
+const SCROLL_TOP_THRESHOLD_PX = 4;
+
+/** 长内容跳转按钮的方向；hidden 时不渲染按钮。 */
+type ScrollNavTarget = "hidden" | "to-bottom" | "to-top";
 
 /** 自包含变体：内部订阅事件流，用于独立场景与测试。 */
 export function AgentMessageStream({
@@ -63,6 +69,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   const { messages } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
+  const [navTarget, setNavTarget] = useState<ScrollNavTarget>("hidden");
   const { entries, turnStatus, isInitialized, lastError } = state;
   const isClaude = agentType === "claude" || agentType === "claude_code";
   const isTurnActive = turnStatus === "running" || isTurnRunning;
@@ -94,11 +101,43 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     shouldShowThinking,
     hasClaudeOutput,
   ]);
+  // 计算长内容跳转按钮方向：仅当内容超过两屏且贴顶/贴底时显示，中间位置隐藏。
+  const measureNav = useCallback(() => {
+    const node = scrollRef.current;
+    if (!node) {
+      return;
+    }
+    const { scrollHeight, clientHeight, scrollTop } = node;
+    const longEnough = scrollHeight > clientHeight * 2;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    let next: ScrollNavTarget = "hidden";
+    if (longEnough) {
+      if (scrollTop <= SCROLL_TOP_THRESHOLD_PX) {
+        next = "to-bottom";
+      } else if (distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX) {
+        next = "to-top";
+      }
+    }
+    setNavTarget((prev) => (prev === next ? prev : next));
+  }, []);
+  // 内容变化（消息条目 / 思考占位）后等 DOM 提交再重测，覆盖流式增长场景。
+  useEffect(() => {
+    const id = requestAnimationFrame(measureNav);
+    return () => cancelAnimationFrame(id);
+  }, [
+    entries.length,
+    lastSignature,
+    turnStatus,
+    shouldShowThinking,
+    hasClaudeOutput,
+    measureNav,
+  ]);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
     const distanceFromBottom =
       node.scrollHeight - node.scrollTop - node.clientHeight;
     isPinnedRef.current = distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX;
+    measureNav();
   }
 
   return (
@@ -152,6 +191,37 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
           </div>
         ) : null}
       </div>
+      {navTarget !== "hidden" ? (
+        <button
+          type="button"
+          className="agents-message-stream__nav"
+          aria-label={
+            navTarget === "to-bottom"
+              ? messages.agentsFeature.scrollToBottom
+              : messages.agentsFeature.scrollToTop
+          }
+          onClick={() => {
+            const node = scrollRef.current;
+            if (!node) {
+              return;
+            }
+            const toTop = navTarget === "to-top";
+            const reduceMotion = window.matchMedia(
+              "(prefers-reduced-motion: reduce)",
+            ).matches;
+            node.scrollTo({
+              top: toTop ? 0 : node.scrollHeight,
+              behavior: reduceMotion ? "auto" : "smooth",
+            });
+          }}
+        >
+          {navTarget === "to-bottom" ? (
+            <ArrowDown aria-hidden="true" size={16} strokeWidth={2} />
+          ) : (
+            <ArrowUp aria-hidden="true" size={16} strokeWidth={2} />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 });
