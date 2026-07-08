@@ -880,6 +880,25 @@ export function AgentsActivity({
     await handleMarkDone();
   }
 
+  // 直接点击状态转换主按钮（非下拉菜单）时走此入口：仅「待验收」需要二次确认，
+  // 「完成」直接执行；下拉菜单选项仍走 handleTransitionAction，不弹确认。
+  async function handleTransitionMainAction(action: SessionIssueTransition) {
+    setIsTransitionMenuOpen(false);
+
+    if (action === "review") {
+      const confirmed = await confirm({
+        cancelLabel: messages.agentsFeature.confirmMarkReviewNo,
+        confirmLabel: messages.agentsFeature.confirmMarkReviewYes,
+        message: messages.agentsFeature.confirmMarkReview,
+      });
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    await handleTransitionAction(action);
+  }
+
   function handleCloseAgentCommitPreview() {
     if (isAgentCommitPreviewPending) {
       return;
@@ -1490,6 +1509,9 @@ export function AgentsActivity({
           }
           onTransitionAction={(action) => {
             void handleTransitionAction(action);
+          }}
+          onTransitionMainAction={(action) => {
+            void handleTransitionMainAction(action);
           }}
           projectId={projectId}
           selectedSession={selectedSession}

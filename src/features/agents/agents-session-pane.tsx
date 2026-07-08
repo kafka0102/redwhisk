@@ -74,6 +74,7 @@ interface AgentsSessionPaneProps {
   onToggleSidePanel: () => void;
   onToggleTransitionMenu: () => void;
   onTransitionAction: (action: SessionIssueTransition) => void;
+  onTransitionMainAction: (action: SessionIssueTransition) => void;
   projectId: number;
   selectedSession: AgentSessionListItem | null;
   // 实例池中所有已缓存 session 的 id 列表（LRU 顺序，末尾为最近访问）。
@@ -108,6 +109,7 @@ export function AgentsSessionPane({
   onToggleSidePanel,
   onToggleTransitionMenu,
   onTransitionAction,
+  onTransitionMainAction,
   projectId,
   selectedSession,
   cachedSessionIds,
@@ -242,7 +244,7 @@ export function AgentsSessionPane({
                   disabled={isTransitionPending}
                   type="button"
                   onClick={() =>
-                    onTransitionAction(
+                    onTransitionMainAction(
                       transitionPhase === "running" ? "review" : "done",
                     )
                   }

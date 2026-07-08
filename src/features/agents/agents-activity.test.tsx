@@ -3039,6 +3039,7 @@ describe("AgentsActivity", () => {
       name: "Mark review",
     });
     await user.click(markReviewButton);
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
 
     expect(markIssueReviewMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -3083,6 +3084,7 @@ describe("AgentsActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Mark review" }),
     );
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
 
     expect(
       await screen.findByRole("dialog", { name: errorMessage }),
@@ -3133,6 +3135,7 @@ describe("AgentsActivity", () => {
         name: "Mark review",
       }),
     );
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
 
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
@@ -3199,7 +3202,9 @@ describe("AgentsActivity", () => {
     expect(listAgentSessionsMock).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Mark review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
     await act(async () => {
+      await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -3283,6 +3288,7 @@ describe("AgentsActivity", () => {
         name: "Mark review",
       }),
     );
+    await user.click(await screen.findByRole("button", { name: "Yes" }));
 
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(screen.getByText("already review")).toBeInTheDocument();

@@ -307,6 +307,9 @@ export interface I18nMessages {
     completionSubmitCode: string;
     completionSubmitting: string;
     confirmDeleteSession: string;
+    confirmMarkReview: string;
+    confirmMarkReviewNo: string;
+    confirmMarkReviewYes: string;
     deleteSession: string;
     deleteSessionAction: string;
     done: string;
@@ -827,6 +830,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       completionSubmitCode: "Submit code",
       completionSubmitting: "Submitting...",
       confirmDeleteSession: "Delete this Session?",
+      confirmMarkReview: "Mark this issue for review?",
+      confirmMarkReviewNo: "No",
+      confirmMarkReviewYes: "Yes",
       deleteSession: "Delete",
       deleteSessionAction: "Delete session",
       done: "Done",
@@ -1345,6 +1351,9 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       completionSubmitCode: "提交代码",
       completionSubmitting: "正在提交....",
       confirmDeleteSession: "确认删除该会话？",
+      confirmMarkReview: "确定要标记为待验收吗？",
+      confirmMarkReviewNo: "否",
+      confirmMarkReviewYes: "是",
       deleteSession: "删除",
       deleteSessionAction: "删除会话",
       done: "已完成",
