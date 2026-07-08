@@ -1575,6 +1575,7 @@ export function AgentsActivity({
                 void workspaceCache.refreshChanges();
               }}
               projectId={projectId}
+              workspacePath={selectedSession.workspacePath}
             />
           </>
         ) : null}

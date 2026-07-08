@@ -83,6 +83,12 @@ export {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "./dropdown-menu";
+export {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "./context-menu";
 export { ScrollArea, ScrollBar } from "./scroll-area";
 export {
   Tooltip,

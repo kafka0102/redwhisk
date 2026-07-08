@@ -14,10 +14,16 @@ import {
   SquareCode,
 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Tree, type NodeRendererProps } from "react-arborist";
 
 import type { WorkspaceFileTreeNode } from "./session-workspace-commands";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "../../components/ui/context-menu";
+import { toast } from "../../shared/toast";
 import { useI18n } from "../../shared/i18n/i18n";
 
 // react-arborist 的 Tree 需要数值高度做虚拟化。当无法测得真实高度时
@@ -29,6 +35,15 @@ interface SessionFileTreePanelProps {
   fileTree: WorkspaceFileTreeNode[];
   isLoading: boolean;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  // session worktree 根的绝对路径，用于拼接「复制绝对路径」。非 worktree
+  // session 等场景下可能为空，此时隐藏绝对路径菜单项。
+  workspacePath?: string | null;
+}
+
+interface FileTreeContextMenuState {
+  node: WorkspaceFileTreeNode;
+  x: number;
+  y: number;
 }
 
 export function SessionFileTreePanel({
@@ -36,12 +51,14 @@ export function SessionFileTreePanel({
   fileTree,
   isLoading,
   onOpenFile,
+  workspacePath,
 }: SessionFileTreePanelProps) {
   const { messages } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportHeight, setViewportHeight] = useState(
     FILE_TREE_FALLBACK_HEIGHT,
   );
+  const [menu, setMenu] = useState<FileTreeContextMenuState | null>(null);
 
   // react-arborist 的 Tree 需要数值高度做虚拟化，无法直接用 `height: 100%`。
   // 这里测量视口容器的实际高度并随容器尺寸变化更新，让文件树填满侧栏可用高度，
@@ -66,6 +83,25 @@ export function SessionFileTreePanel({
     observer.observe(viewport);
     return () => observer.disconnect();
   }, []);
+
+  const handleContextMenuNode = useCallback(
+    (node: WorkspaceFileTreeNode, x: number, y: number) => {
+      setMenu({ node, x, y });
+    },
+    [],
+  );
+
+  const handleCopy = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard?.writeText(text);
+        toast.success(messages.agentsFeature.copiedToClipboard);
+      } catch {
+        // 剪贴板写入失败时静默忽略，与 terminal 的既有处理保持一致。
+      }
+    },
+    [messages.agentsFeature.copiedToClipboard],
+  );
 
   const hasFileTree = fileTree.length > 0 && !errorMessage;
 
@@ -102,19 +138,77 @@ export function SessionFileTreePanel({
             rowHeight={28}
             width="100%"
           >
-            {(props) => <FileTreeRow {...props} onOpenFile={onOpenFile} />}
+            {(props) => (
+              <FileTreeRow
+                {...props}
+                onOpenFile={onOpenFile}
+                onContextMenuNode={handleContextMenuNode}
+              />
+            )}
           </Tree>
         </div>
       ) : null}
+      <ContextMenu
+        open={menu !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMenu(null);
+          }
+        }}
+      >
+        <ContextMenuContent anchor={menu ? { x: menu.x, y: menu.y } : null}>
+          <ContextMenuItem
+            onClick={() => {
+              if (menu) {
+                void handleCopy(menu.node.name);
+              }
+            }}
+          >
+            {messages.agentsFeature.copyFileName}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              if (menu) {
+                void handleCopy(menu.node.path);
+              }
+            }}
+          >
+            {messages.agentsFeature.copyRelativePath}
+          </ContextMenuItem>
+          {workspacePath ? (
+            <ContextMenuItem
+              onClick={() => {
+                if (menu) {
+                  void handleCopy(
+                    joinWorkspacePath(workspacePath, menu.node.path),
+                  );
+                }
+              }}
+            >
+              {messages.agentsFeature.copyAbsolutePath}
+            </ContextMenuItem>
+          ) : null}
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   );
 }
 
 interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  onContextMenuNode: (
+    node: WorkspaceFileTreeNode,
+    x: number,
+    y: number,
+  ) => void;
 }
 
-function FileTreeRow({ node, onOpenFile, style }: FileTreeRowProps) {
+function FileTreeRow({
+  node,
+  onOpenFile,
+  onContextMenuNode,
+  style,
+}: FileTreeRowProps) {
   const treeDepthStyle = {
     ...style,
     "--tree-depth": node.level,
@@ -128,6 +222,10 @@ function FileTreeRow({ node, onOpenFile, style }: FileTreeRowProps) {
         style={treeDepthStyle}
         type="button"
         onClick={() => node.toggle()}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onContextMenuNode(node.data, event.clientX, event.clientY);
+        }}
       >
         {node.isOpen ? (
           <ChevronDown
@@ -156,6 +254,10 @@ function FileTreeRow({ node, onOpenFile, style }: FileTreeRowProps) {
       style={treeDepthStyle}
       type="button"
       onClick={() => onOpenFile(node.data)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenuNode(node.data, event.clientX, event.clientY);
+      }}
     >
       <span
         aria-hidden="true"
@@ -165,6 +267,14 @@ function FileTreeRow({ node, onOpenFile, style }: FileTreeRowProps) {
       <span>{node.data.name}</span>
     </button>
   );
+}
+
+// 拼接 worktree 根的绝对路径与相对路径，去掉根末尾的多余分隔符避免出现 `//`。
+function joinWorkspacePath(
+  workspacePath: string,
+  relativePath: string,
+): string {
+  return `${workspacePath.replace(/\/+$/, "")}/${relativePath}`;
 }
 
 interface FileTypeIconProps {

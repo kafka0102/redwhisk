@@ -424,6 +424,10 @@ export interface I18nMessages {
     pushedToRemote: string;
     loadingFileTree: string;
     noFiles: string;
+    copyFileName: string;
+    copyRelativePath: string;
+    copyAbsolutePath: string;
+    copiedToClipboard: string;
     loadingFile: string;
     loadingDiff: string;
     selectFile: string;
@@ -942,6 +946,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       pushedToRemote: "Pushed to remote",
       loadingFileTree: "Loading file tree...",
       noFiles: "No files.",
+      copyFileName: "Copy file name",
+      copyRelativePath: "Copy relative path",
+      copyAbsolutePath: "Copy absolute path",
+      copiedToClipboard: "Copied to clipboard",
       loadingFile: "Loading file...",
       loadingDiff: "Loading diff...",
       selectFile: "Select a file.",
@@ -1453,6 +1461,10 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       pushedToRemote: "已推送到远端",
       loadingFileTree: "正在加载文件树...",
       noFiles: "暂无文件。",
+      copyFileName: "复制文件名",
+      copyRelativePath: "复制相对路径",
+      copyAbsolutePath: "复制绝对路径",
+      copiedToClipboard: "已复制到剪贴板",
       loadingFile: "正在加载文件...",
       loadingDiff: "正在加载差异...",
       selectFile: "请选择文件。",

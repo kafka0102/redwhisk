@@ -35,6 +35,7 @@ interface SessionSidePanelProps {
   onRefreshCommitHistory: () => void;
   onRefreshChanges: () => void;
   projectId: number;
+  workspacePath?: string | null;
 }
 
 export function SessionSidePanel({
@@ -58,6 +59,7 @@ export function SessionSidePanel({
   onRefreshCommitHistory,
   onRefreshChanges,
   projectId,
+  workspacePath,
 }: SessionSidePanelProps) {
   const { messages } = useI18n();
   return (
@@ -124,6 +126,7 @@ export function SessionSidePanel({
             fileTree={fileTree}
             isLoading={isFileTreeLoading}
             onOpenFile={onOpenFile}
+            workspacePath={workspacePath}
           />
         )}
       </div>
