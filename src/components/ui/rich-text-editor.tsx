@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef } from "react";
 import {
   Bold,
-  Code,
-  Paintbrush,
   Image as ImageIcon,
   List,
   ListOrdered,
+  Paintbrush,
   Paperclip,
+  Quote,
   SquareCode,
 } from "lucide-react";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
+
+import { activateBlockFormat, type QuillLine } from "./rich-text-editor-blocks";
 
 // Quill 内置 image blot 的 sanitize 只允许 http/https/data 协议，会把
 // `asset://localhost/...`（Tauri 在 macOS/Linux 上 convertFileSrc 的产物）
@@ -73,7 +75,7 @@ export interface RichTextEditorLabels {
   bold: string;
   clearFormatting: string;
   codeBlock: string;
-  codeQuote: string;
+  quote: string;
   heading: string;
   image: string;
   normalText: string;
@@ -103,10 +105,6 @@ interface RichTextEditorProps {
 interface DeltaOperation {
   insert?: string | Record<string, unknown>;
   attributes?: Record<string, unknown>;
-}
-
-interface QuillLine {
-  domNode?: Node;
 }
 
 export function RichTextEditor({
@@ -276,6 +274,18 @@ export function RichTextEditor({
             image: () => {
               void uploadImageAtSelection();
             },
+            blockquote: () => {
+              const quill = quillRef.current;
+              if (quill) {
+                activateBlockFormat(quill, "blockquote");
+              }
+            },
+            "code-block": () => {
+              const quill = quillRef.current;
+              if (quill) {
+                activateBlockFormat(quill, "code-block");
+              }
+            },
           },
         },
       },
@@ -437,8 +447,12 @@ export function RichTextEditor({
         <button aria-label={labels.bold} className="ql-bold" type="button">
           <Bold aria-hidden="true" size={15} strokeWidth={2} />
         </button>
-        <button aria-label={labels.codeQuote} className="ql-code" type="button">
-          <Code aria-hidden="true" size={15} strokeWidth={2} />
+        <button
+          aria-label={labels.quote}
+          className="ql-blockquote"
+          type="button"
+        >
+          <Quote aria-hidden="true" size={15} strokeWidth={2} />
         </button>
         <button
           aria-label={labels.codeBlock}
@@ -861,6 +875,12 @@ function parseMarkdownLine(line: string): {
   text: string;
   attributes?: Record<string, unknown>;
 } {
+  if (line.startsWith(">")) {
+    return {
+      text: line.replace(/^>\s?/, ""),
+      attributes: { blockquote: true },
+    };
+  }
   if (line.startsWith("## ")) {
     return { text: line.slice(3), attributes: { header: 2 } };
   }
@@ -932,6 +952,9 @@ function formatBlockMarkdown(
 ): string {
   if (line.length === 0) {
     return "";
+  }
+  if (attributes?.blockquote) {
+    return `> ${line}`;
   }
   if (attributes?.header === 1) {
     return `# ${line}`;

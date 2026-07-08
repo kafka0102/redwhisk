@@ -12,7 +12,7 @@ const labels: RichTextEditorLabels = {
   bold: "Bold",
   clearFormatting: "Clear formatting",
   codeBlock: "Code block",
-  codeQuote: "Inline code",
+  quote: "Quote",
   heading: "Heading",
   image: "Insert image",
   normalText: "Normal text",

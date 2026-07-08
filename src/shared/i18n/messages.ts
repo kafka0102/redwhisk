@@ -43,7 +43,7 @@ export interface I18nMessages {
     bold: string;
     clearFormatting: string;
     codeBlock: string;
-    codeQuote: string;
+    quote: string;
     heading: string;
     headingOne: string;
     headingTwo: string;
@@ -540,7 +540,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       bold: "Bold",
       clearFormatting: "Clear formatting",
       codeBlock: "Code block",
-      codeQuote: "Inline code",
+      quote: "Quote",
       heading: "Text style",
       headingOne: "Heading 1",
       headingTwo: "Heading 2",
@@ -1059,7 +1059,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       bold: "加粗",
       clearFormatting: "清除格式",
       codeBlock: "代码块",
-      codeQuote: "代码引用",
+      quote: "引用",
       heading: "文本样式",
       headingOne: "一级标题",
       headingTwo: "二级标题",

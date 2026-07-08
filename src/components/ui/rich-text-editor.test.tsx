@@ -1,12 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type Quill from "quill";
 
 import {
   RichTextEditor,
   type RichTextAttachment,
   type RichTextEditorLabels,
 } from "./rich-text-editor";
+import { activateBlockFormat } from "./rich-text-editor-blocks";
 
 const quillInstances = vi.hoisted(() => {
   const instances: Array<{
@@ -73,7 +75,7 @@ const labels: RichTextEditorLabels = {
   bold: "Bold",
   clearFormatting: "Clear formatting",
   codeBlock: "Code block",
-  codeQuote: "Inline code",
+  quote: "Quote",
   heading: "Heading",
   image: "Insert image",
   normalText: "Normal text",
@@ -113,9 +115,7 @@ describe("RichTextEditor", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Inline code" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quote" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Code block" }),
     ).toBeInTheDocument();
@@ -193,6 +193,43 @@ describe("RichTextEditor", () => {
     expect(handleChange).toHaveBeenLastCalledWith(
       "Use `pnpm test`\n```\nconst x = 1;\n```",
     );
+  });
+
+  it("round-trips blockquote lines as markdown", async () => {
+    const handleChange = vi.fn();
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value={"> quoted text"}
+        onChange={handleChange}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(quillInstances[0]?.setContents).toHaveBeenCalled(),
+    );
+    const setContentsCalls = quillInstances[0].setContents.mock.calls;
+    const setContentsPayload =
+      setContentsCalls[setContentsCalls.length - 1]?.[0];
+    expect(setContentsPayload).toContainEqual({
+      insert: "\n",
+      attributes: { blockquote: true },
+    });
+
+    quillInstances[0].getContents.mockReturnValue({
+      ops: [
+        { insert: "quoted text" },
+        { insert: "\n", attributes: { blockquote: true } },
+      ],
+    });
+    const textChangeHandler = quillInstances[0].on.mock.calls.find(
+      ([eventName]) => eventName === "text-change",
+    )?.[1];
+    textChangeHandler?.({}, {}, "user");
+
+    expect(handleChange).toHaveBeenLastCalledWith("> quoted text");
   });
 
   it("uses Quill image embeds and React attachment actions", async () => {
@@ -432,5 +469,121 @@ describe("RichTextEditor", () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(quillInstances[0].insertText).not.toHaveBeenCalled();
+  });
+});
+
+interface FakeBlockQuillOptions {
+  selection?: { index: number; length: number } | null;
+  formats?: Record<string, unknown>;
+  lineLength?: number;
+  lineOffset?: number;
+}
+
+function createFakeBlockQuill(options: FakeBlockQuillOptions) {
+  return {
+    getSelection: vi.fn(() => options.selection ?? null),
+    getFormat: vi.fn(() => options.formats ?? {}),
+    formatLine: vi.fn(),
+    insertText: vi.fn(),
+    setSelection: vi.fn(),
+    getLine: vi.fn(() => [
+      { length: () => options.lineLength ?? 1 },
+      options.lineOffset ?? 0,
+    ]),
+  };
+}
+
+describe("activateBlockFormat", () => {
+  it("inserts an exit line below when activating blockquote with no selection", () => {
+    const fake = createFakeBlockQuill({
+      selection: { index: 0, length: 0 },
+      formats: {},
+      lineLength: 1,
+      lineOffset: 0,
+    });
+
+    activateBlockFormat(fake as unknown as Quill, "blockquote");
+
+    expect(fake.formatLine).toHaveBeenCalledWith(
+      0,
+      1,
+      "blockquote",
+      true,
+      "user",
+    );
+    expect(fake.insertText).toHaveBeenCalledWith(1, "\n", "user");
+    expect(fake.formatLine).toHaveBeenCalledWith(
+      1,
+      1,
+      "blockquote",
+      false,
+      "user",
+    );
+    expect(fake.setSelection).toHaveBeenCalledWith(0, 0, "user");
+  });
+
+  it("inserts an exit line below when activating code-block on a non-empty line", () => {
+    const fake = createFakeBlockQuill({
+      selection: { index: 2, length: 0 },
+      formats: {},
+      lineLength: 6,
+      lineOffset: 2,
+    });
+
+    activateBlockFormat(fake as unknown as Quill, "code-block");
+
+    expect(fake.formatLine).toHaveBeenCalledWith(
+      2,
+      1,
+      "code-block",
+      true,
+      "user",
+    );
+    expect(fake.insertText).toHaveBeenCalledWith(6, "\n", "user");
+    expect(fake.formatLine).toHaveBeenCalledWith(
+      6,
+      1,
+      "code-block",
+      false,
+      "user",
+    );
+    expect(fake.setSelection).toHaveBeenCalledWith(2, 0, "user");
+  });
+
+  it("toggles the format off without an exit line when already active", () => {
+    const fake = createFakeBlockQuill({
+      selection: { index: 0, length: 0 },
+      formats: { blockquote: true },
+    });
+
+    activateBlockFormat(fake as unknown as Quill, "blockquote");
+
+    expect(fake.formatLine).toHaveBeenCalledWith(
+      0,
+      1,
+      "blockquote",
+      false,
+      "user",
+    );
+    expect(fake.insertText).not.toHaveBeenCalled();
+    expect(fake.setSelection).not.toHaveBeenCalled();
+  });
+
+  it("does not insert an exit line when a selection is present", () => {
+    const fake = createFakeBlockQuill({
+      selection: { index: 0, length: 5 },
+      formats: {},
+    });
+
+    activateBlockFormat(fake as unknown as Quill, "blockquote");
+
+    expect(fake.formatLine).toHaveBeenCalledWith(
+      0,
+      5,
+      "blockquote",
+      true,
+      "user",
+    );
+    expect(fake.insertText).not.toHaveBeenCalled();
   });
 });
