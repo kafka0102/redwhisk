@@ -21,12 +21,13 @@
 - [ ] 3.2 list 合成 `is_turn_running`（:1510）加入 grace 判断；`now` 在遍历前取一次
 - [ ] 3.3 service 单测：grace 边界（`ended_at=NULL` / 期内 / 期外）、`is_session_running` 守卫
 
-## 4. 前端 composer 改造
+## 4. 前端验证（无需改 isSending 派生）
 
-- [ ] 4.1 `use-agent-composer.ts:125` `isSending` 改从 `isTurnRunning` 派生
-- [ ] 4.2 `agent-session-view.tsx` 把 `isTurnRunning` 下传 composer；`effectiveTurnStatus`（:60-65）以 `isTurnRunning` 为主
-- [ ] 4.3 reducer `turnStatus` 保留，不再驱动发送按钮；`isSubmitting` 本地锁保留
-- [ ] 4.4 前端测试：`isSending` 随 `isTurnRunning` 切换、cancel / `isCancelling` 联动
+> `effectiveTurnStatus`（`agent-session-view.tsx:60-65`）已合并 `isTurnRunning`，grace 改造后 composer `isSending` 自动维持运行态，无需改派生。
+
+- [ ] 4.1 前端测试：`effectiveTurnStatus` 在 `isTurnRunning=true`（grace 内）时维持 `"running"`，即使 reducer `turnStatus=idle`
+- [ ] 4.2 前端测试：`isTurnRunning=false`（grace 过期）且 `turnStatus=idle` 时 `effectiveTurnStatus=idle`
+- [ ] 4.3 `pnpm lint` + `pnpm typecheck` + `pnpm test`
 
 ## 5. 端到端验证
 

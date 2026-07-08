@@ -61,22 +61,27 @@
 - **THEN** 系统置 `is_turn_running=0`
 - **AND** 系统清空 `turn_ended_at`
 
-### Requirement: Composer 运行态派生
+### Requirement: Composer 运行态在 grace 期内维持
 
-Composer 发送按钮的运行态 SHALL 从 session 级 `is_turn_running`（已带 grace）派生，不再从消息流 reducer 的 `turnStatus` 派生。
+Composer 发送按钮的运行态 SHALL 通过 `effectiveTurnStatus` 维持，`effectiveTurnStatus` SHALL 合并 session 级 `is_turn_running`（已带 grace）。turn 终结事件使消息流 reducer 的 `turnStatus` 离开 `running` 后，只要 `is_turn_running` 仍处于 grace 期内，Composer SHALL 保持运行态。
 
-#### Scenario: 发送按钮随 isTurnRunning 切换
+#### Scenario: turn 终结后 grace 期内 Composer 保持运行态
 
-- **WHEN** `isTurnRunning=true`
-- **THEN** Composer 显示取消按钮
-- **AND** 提交按钮处于运行态
+- **WHEN** Agent Session 收到 `turn_completed` 或空 error 的 `turn_failed`
+- **AND** 消息流 reducer 的 `turnStatus` 变为 `idle`
+- **AND** `is_turn_running` 仍在 grace 期内（list 查询返回 true）
+- **THEN** Composer 发送按钮保持运行态（取消按钮）
+- **AND** Composer 不闪现「完成」
 
-- **WHEN** `isTurnRunning=false`
+#### Scenario: grace 过期后 Composer 离开运行态
+
+- **WHEN** `is_turn_running` 超过 grace 期（list 查询返回 false）
+- **AND** 消息流 reducer 的 `turnStatus` 为 `idle`
 - **THEN** Composer 显示发送按钮
 
 #### Scenario: 本地提交锁保留
 
 - **WHEN** 用户点击发送
 - **THEN** 本地 `isSubmitting` 锁置 true
-- **AND** 在 `isTurnRunning` 回流为 true 之前，提交按钮保持运行态
-- **AND** `isTurnRunning` 回流后由 `isTurnRunning` 接管运行态
+- **AND** 在 `is_turn_running` 回流为 true 之前，提交按钮保持运行态
+- **AND** `is_turn_running` 回流后由 `effectiveTurnStatus` 接管运行态

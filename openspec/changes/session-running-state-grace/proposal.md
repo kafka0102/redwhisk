@@ -42,5 +42,5 @@
 
 - migration `0034`：`agent_sessions` 加 `turn_ended_at INTEGER NULL`。
 - 后端：broadcaster 三态决策（`turn_running_from_stream_event` 返回扩展）、repository `turn_ended_at` 读写、service list grace 计算（`agent_session_service.rs:1510`）。
-- 前端：composer `isSending` 改从 `isTurnRunning`（已带 grace）派生（`use-agent-composer.ts:125`）。
+- 前端：无需改 composer `isSending` 派生（`effectiveTurnStatus` 已合并 `isTurnRunning`，grace 改造后自动维持运行态）。
 - 验证：Rust `cd src-tauri && cargo test`；TS `pnpm lint` + `pnpm typecheck` + `pnpm test`。

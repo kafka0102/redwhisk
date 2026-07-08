@@ -17,13 +17,13 @@ ALTER TABLE agent_sessions ADD COLUMN turn_ended_at INTEGER NULL;
 
 ### repository（`src-tauri/src/db/agent_session_repository.rs`）
 
-- struct `AgentSessionRow` 加 `turn_ended_at: Option<i64>`（:21 附近）。
-- list 查询列补 `agent_sessions.turn_ended_at`（:124 附近），读取（:690 附近）。
+- struct `AgentSessionListRow` 加 `turn_ended_at: Option<i64>`（:21 附近）。
+- list 查询列补 `agent_sessions.turn_ended_at`（:124 附近，紧跟 `is_turn_running`），读取（`agent_session_list_row_from_row` :690 附近，按列索引补一行，后续列索引顺移）。
 - 新增独立方法，避免一个 SQL 承载两种语义：
-  - `update_turn_ended_at(session_id, now)`：`SET turn_ended_at = ?1, updated_at = ?2 WHERE id = ?3`
+  - `update_turn_ended_at(session_id, now)`：`SET turn_ended_at = ?1, last_active_at = MAX(last_active_at + 1, ?2) WHERE id = ?3 AND status = 'running' AND del = 0`
   - `clear_turn_ended_at(session_id)`：`SET turn_ended_at = NULL WHERE id = ?3`
 - `mark_terminated_in_transaction`（:404）/ `mark_terminated_without_fetch_in_transaction`（:431）：在现有 `is_turn_running = 0` 基础上顺带 `turn_ended_at = NULL`。
-- `update_turn_running`（:597）签名不变；保持现状 SQL（`WHERE id = ?`，无 `status='running'` 守卫），grace 改造不改此行为。
+- `update_turn_running`（:597）签名不变；保持现状 SQL（`WHERE id = ?3 AND status = 'running' AND del = 0`，已带守卫），grace 改造不改此行为。
 
 ## broadcaster 三态改造（`src-tauri/src/agent/agent_event_broadcaster.rs`）
 
@@ -80,21 +80,23 @@ fn turn_still_running_by_grace(turn_ended_at: Option<i64>, now: i64) -> bool {
 - `GRACE_MS` 放 service 层常量（与 list 合成同模块，便于单测）。
 - `now` 取 list 查询时刻的 `current_epoch_millis()`（list 遍历前取一次，避免逐行漂移）。
 
-## 前端 composer 改造（`src/features/agents/composer/use-agent-composer.ts:125`）
+## 前端 composer 运行态（无需改造）
 
-```ts
-const isSending = isTurnRunning; // 替代 turnStatus === "running"
-```
+`agent-session-view.tsx:60-65` 的 `effectiveTurnStatus` 已是 `state.turnStatus === "running" || (canUseExternalTurnRunning && isTurnRunning)`——已合并 `isTurnRunning`。composer 的 `isSending = turnStatus === "running"`（`turnStatus` 即 `effectiveTurnStatus`）已间接靠 `isTurnRunning`。
 
-- `isTurnRunning` 由父组件 `agent-session-view.tsx` 从 workspace 传入，已带 grace（DB 计算结果）。
-- `isSubmitting` 本地锁保留（点击发送 → `isTurnRunning` 回流间隙防双击）。
-- reducer `turnStatus`（`message-stream-reducer.ts`）保留给消息流内部状态（错误条目等），**不再驱动发送按钮**。
-- `effectiveTurnStatus`（`agent-session-view.tsx:60-65`）：以 `isTurnRunning` 为主；`turnStatus` 仅保留 `failed` / `canceled` 供消息流内部消费，不驱动 composer。
+grace 改造后，`isTurnRunning`（list 查询返回，带 grace）在 grace 期内保持 true → `effectiveTurnStatus` 自动维持 `"running"` → composer `isSending` 自动保持 true。**无需改 `isSending` 派生**。
+
+- `isTurnRunning` 链路：`agents-session-pane.tsx:453` 传 `workspace.isTurnRunning`（list `is_turn_running`）→ `AgentSessionView` → `effectiveTurnStatus` → composer `turnStatus`。
+- `isSubmitting` 本地锁保留（点击发送 → `isTurnRunning` 回流间隙防双击），现状不变。
+- reducer `turnStatus`（`message-stream-reducer.ts`）保留 `failed` / `canceled` 供消息流错误条目消费，现状不变。
+- turn 事件回流瞬间：reducer `state.turnStatus` 立即变 `idle`，但 `isTurnRunning`（list 旧值或 grace 后新值）仍 true → `effectiveTurnStatus` 维持 `"running"`，不闪现完成。
+
+> 修正说明：交接文档第六节第 5 点原述「composer `isSending` 改从 `isTurnRunning` 派生」基于对 `effectiveTurnStatus` 合并逻辑的遗漏；实际代码已合并，前端无需改派生。
 
 ## 覆盖范围
 
 - session card（DB `is_turn_running`，已带 grace）✅
-- composer 发送按钮（`isSending` ← `isTurnRunning`）✅
+- composer 发送按钮（`effectiveTurnStatus` 已合并 `isTurnRunning`，grace 期内自动维持运行态）✅
 - 非活跃 session（list 查询计算）✅
 - 无定时器竞态（纯查询时计算）✅
 
@@ -104,7 +106,7 @@ const isSending = isTurnRunning; // 替代 turnStatus === "running"
 |---|---|
 | migration 列名 / 默认值 | `turn_ended_at INTEGER NULL`，默认 NULL |
 | session resume / 应用重启恢复 | 重启后 status 转 stopped/crashed，`mark_terminated_*` 清 `turn_ended_at`；list 合成受 `is_session_running` 守卫，重启后 `is_session_running=false` → `is_turn_running=false`，grace 不再生效 |
-| composer 改用 isTurnRunning 后 cancel / isCancelling 联动 | `isCancelling` 本地态保留，cancel 请求发出后置 true，turn 终结回流后清；`isSending` 不再阻塞 cancel |
+| composer cancel / isCancelling 联动 | `isCancelling` 本地态保留，cancel 请求发出后置 true，turn 终结回流后清；现状不变 |
 | `GRACE_MS` 位置 | service 层常量（`agent_session_service.rs`） |
 | 前端 `turnStatus=failed/canceled` 提示 | 保留 reducer `turnStatus`，composer 不消费；session card 不展示 failed/canceled 文案（止血范围不做，留 Q1.3） |
 
@@ -112,4 +114,5 @@ const isSending = isTurnRunning; // 替代 turnStatus === "running"
 
 - grace 3 秒为经验值，sub turn 间隔 > 3 秒仍可能短暂误判（已知局限，non-goal，根治留 Q1.3 三态化）。
 - claude code turn 漏终结（如 `session-154` turn B 无 `completed`）：`turn_ended_at` 由后续 turn 覆盖，不影响 session 级运行态；session 真正结束时由 `mark_terminated` 清理。
-- `update_turn_running` 现状 SQL 无 `status='running'` 守卫（仅 `WHERE id=?`），grace 改造不改此行为，保持现状。
+- `update_turn_running` 现状 SQL 已带 `status='running' AND del=0` 守卫（`agent_session_repository.rs:607`），grace 改造不改此行为，保持现状。
+- list 轮询存在间隔，turn 终结瞬间 `isTurnRunning` 可能仍为旧值 true；这正是 grace 想要的「维持运行态」效果，不构成误判。
