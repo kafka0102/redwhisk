@@ -978,12 +978,8 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(panel).getByRole("tab", { name: "Changes" }));
 
-    await user.click(
-      within(panel).getByRole("button", { name: "Uncommitted" }),
-    );
-    await user.click(
-      within(panel).getByRole("menuitem", { name: "Committed" }),
-    );
+    await user.click(within(panel).getByRole("tab", { name: "Uncommitted" }));
+    await user.click(within(panel).getByRole("tab", { name: "Committed" }));
 
     const commitButton = await within(panel).findByRole("button", {
       name: /fix\(web\): 补齐列表标题宽度限制/,
@@ -4726,25 +4722,23 @@ describe("AgentsActivity", () => {
     await user.click(within(panel).getByRole("tab", { name: "Changes" }));
     expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
     expect(
-      within(panel).getByRole("button", { name: "Uncommitted" }),
+      within(panel).getByRole("tab", { name: "Uncommitted" }),
     ).toBeInTheDocument();
     expect(
       within(panel).getByRole("button", { name: "Refresh changes" }),
     ).toBeInTheDocument();
 
-    await user.click(
-      within(panel).getByRole("button", { name: "Uncommitted" }),
-    );
+    await user.click(within(panel).getByRole("tab", { name: "Uncommitted" }));
     expect(
-      within(panel).getByRole("menuitem", { name: "Committed" }),
+      within(panel).getByRole("tab", { name: "Committed" }),
     ).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("heading", { name: "#20 Existing issue" }),
     );
     expect(
-      within(panel).queryByRole("menuitem", { name: "Committed" }),
-    ).not.toBeInTheDocument();
+      within(panel).getByRole("tab", { name: "Committed" }),
+    ).toBeInTheDocument();
 
     await user.hover(
       within(panel).getByRole("button", { name: /agents-activity\.tsx/ }),
@@ -4891,7 +4885,13 @@ describe("AgentsActivity", () => {
 
     await user.click(within(panel).getByRole("button", { name: "View issue" }));
 
-    expect(onOpenIssue).toHaveBeenCalledWith(20);
+    expect(onOpenIssue).toHaveBeenCalledWith({
+      issueId: 20,
+      source: "session",
+      sessionId: 301,
+      restoreSidePanel: true,
+      sidePanelTab: "issue",
+    });
   });
 
   it("keeps the terminal visible after linked issue header actions", async () => {

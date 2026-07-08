@@ -20,6 +20,8 @@ export interface AgentSessionListItem {
   issueTitle: string | null;
   issueStatus?: IssueStatus | null;
   agentProfileId?: number;
+  agentProfileName?: string | null;
+  workflowSkillName?: string | null;
   canCompleteClean?: boolean;
   canCompleteAgentCommit?: boolean;
   title: string | null;

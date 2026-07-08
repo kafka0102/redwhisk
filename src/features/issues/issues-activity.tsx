@@ -65,6 +65,10 @@ import {
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+import {
+  getIssueOpenRequestId,
+  type IssueOpenRequest,
+} from "./issue-open-request";
 
 const ISSUE_STATUSES: readonly IssueStatus[] = [
   "backlog",
@@ -174,6 +178,7 @@ interface IssuesActivityProps {
   projectId: number;
   onOpenAgentsActivity?: (sessionId: number) => void;
   onOpenProjectSettingsLabels?: () => void;
+  requestedIssue?: IssueOpenRequest | number | null;
   requestedIssueId?: number | null;
   worktreeSetupCommand?: string;
 }
@@ -182,11 +187,14 @@ export function IssuesActivity({
   projectId,
   onOpenAgentsActivity,
   onOpenProjectSettingsLabels,
-  requestedIssueId = null,
+  requestedIssue = null,
+  requestedIssueId: legacyRequestedIssueId = null,
   worktreeSetupCommand = "",
 }: IssuesActivityProps) {
   const { locale, messages } = useI18n();
   const cachedPageState = issuePageStateCache.get(projectId) ?? null;
+  const requestedIssueId =
+    getIssueOpenRequestId(requestedIssue) ?? legacyRequestedIssueId;
   const hasRequestedIssue = requestedIssueId != null;
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
@@ -587,6 +595,29 @@ export function IssuesActivity({
     setForm(EMPTY_FORM);
     setIsSaving(false);
     restoreDialogTriggerFocus(previousSelectedIssue);
+  }
+
+  function handleBackFromReadOnlyIssue() {
+    if (
+      typeof requestedIssue === "object" &&
+      requestedIssue?.source === "session" &&
+      typeof requestedIssue.sessionId === "number"
+    ) {
+      setDialogErrorMessage(null);
+      setTitleError(null);
+      setRunDialogIssue(null);
+      setSummaryIssueId(null);
+      setAttachmentPreview(null);
+      hideCompletionLoadingDialog();
+      setDialogMode(null);
+      setIsReadOnlyEditRequested(false);
+      setForm(EMPTY_FORM);
+      issuePageStateCache.delete(projectId);
+      onOpenAgentsActivity?.(requestedIssue.sessionId);
+      return;
+    }
+
+    closeDialog();
   }
 
   function handleFormChange(updater: SetStateAction<IssueFormState>) {
@@ -1487,7 +1518,7 @@ export function IssuesActivity({
           hasLinkedSession={hasLinkedSession}
           canViewSummary={canViewSummary}
           canOpenAgentsActivity={canOpenLinkedSession}
-          onBack={closeDialog}
+          onBack={handleBackFromReadOnlyIssue}
           onPreviewAttachment={(attachment) =>
             void handlePreviewAttachment(attachment)
           }

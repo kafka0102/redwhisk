@@ -321,6 +321,17 @@ export interface I18nMessages {
     issueNotFound: string;
     noDetailsProvided: string;
     loadingIssue: string;
+    issueInfo: string;
+    runParameters: string;
+    sessionInfo: string;
+    sessionLog: string;
+    agent: string;
+    workflowSkill: string;
+    developmentMode: string;
+    endedAt: string;
+    runtimeLogPath: string;
+    archivedLogPath: string;
+    none: string;
     loadingSessions: string;
     markDone: string;
     markReview: string;
@@ -844,6 +855,17 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       issueNotFound: "Linked issue no longer exists.",
       noDetailsProvided: "No details provided.",
       loadingIssue: "Loading issue...",
+      issueInfo: "Issue info",
+      runParameters: "Run parameters",
+      sessionInfo: "Session info",
+      sessionLog: "Session log",
+      agent: "Agent",
+      workflowSkill: "Workflow skill",
+      developmentMode: "Development mode",
+      endedAt: "Ended",
+      runtimeLogPath: "Runtime log path",
+      archivedLogPath: "Archived log path",
+      none: "None",
       loadingSessions: "Loading sessions...",
       markDone: "Mark done",
       markReview: "Mark review",
@@ -1365,6 +1387,17 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       issueNotFound: "关联的 Issue 已不存在。",
       noDetailsProvided: "暂无详情。",
       loadingIssue: "正在加载 Issue...",
+      issueInfo: "Issue信息",
+      runParameters: "运行参数",
+      sessionInfo: "Session信息",
+      sessionLog: "Session日志",
+      agent: "Agent",
+      workflowSkill: "工作流技能",
+      developmentMode: "开发模式",
+      endedAt: "结束时间",
+      runtimeLogPath: "运行时日志",
+      archivedLogPath: "归档日志",
+      none: "无",
       loadingSessions: "正在加载会话...",
       markDone: "完成",
       markReview: "待验收",

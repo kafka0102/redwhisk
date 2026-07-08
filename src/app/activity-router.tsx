@@ -4,6 +4,7 @@ import {
   ProjectSettingsActivity,
   type SettingsMenu,
 } from "../features/settings/project-settings-activity";
+import type { IssueOpenRequest } from "../features/issues/issue-open-request";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
 import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
 import type { ProjectWorktreeLocation } from "../features/project/project-commands";
@@ -17,7 +18,7 @@ interface ActivityRouterProps {
   activeAgentSessionId: number | null;
   activeProjectSettingsMenu: SettingsMenu;
   onOpenAgentsActivity: (sessionId: number) => void;
-  onOpenIssue: (issueId: number) => void;
+  onOpenIssue: (request: IssueOpenRequest) => void;
   onOpenProjectSettingsAgents: () => void;
   onOpenProjectSettingsLabels: () => void;
   onProjectSettingsMenuChange: (menu: SettingsMenu) => void;
@@ -32,7 +33,7 @@ interface ActivityRouterProps {
   projectWorktreeLocation: ProjectWorktreeLocation;
   projectWorktreeSetupCommand: string;
   projectTerminalsState: ProjectTerminalsActivityState;
-  requestedIssueId: number | null;
+  requestedIssue: IssueOpenRequest | null;
 }
 
 export function ActivityRouter({
@@ -53,7 +54,7 @@ export function ActivityRouter({
   projectWorktreeLocation,
   projectWorktreeSetupCommand,
   projectTerminalsState,
-  requestedIssueId,
+  requestedIssue,
 }: ActivityRouterProps) {
   if (activeActivity === "agents") {
     return (
@@ -102,7 +103,7 @@ export function ActivityRouter({
       onOpenAgentsActivity={onOpenAgentsActivity}
       onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
       projectId={projectId}
-      requestedIssueId={requestedIssueId}
+      requestedIssue={requestedIssue}
       worktreeSetupCommand={projectWorktreeSetupCommand}
     />
   );

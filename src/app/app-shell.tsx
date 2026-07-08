@@ -13,6 +13,7 @@ import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
+import type { IssueOpenRequest } from "../features/issues/issue-open-request";
 import { useAgentSessionNotifications } from "../features/agents/session-notifications/use-agent-session-notifications";
 import type { SettingsMenu } from "../features/settings/project-settings-activity";
 import {
@@ -68,18 +69,20 @@ export function AppShell({
     projectTerminalsStateByProjectId,
     setProjectTerminalsStateByProjectId,
   ] = useState<Record<number, ProjectTerminalsActivityState>>({});
-  const [requestedIssueId, setRequestedIssueId] = useState<number | null>(null);
+  const [requestedIssue, setRequestedIssue] = useState<IssueOpenRequest | null>(
+    null,
+  );
   const projectTerminalsState =
     projectTerminalsStateByProjectId[project.id] ??
     getDefaultProjectTerminalsActivityState();
   const openAgentSession = useCallback((sessionId: number) => {
     setActiveAgentSessionId(sessionId);
-    setRequestedIssueId(null);
+    setRequestedIssue(null);
     setActiveActivity("agents");
     setIsGlobalSettingsOpen(false);
   }, []);
-  const openIssue = useCallback((issueId: number) => {
-    setRequestedIssueId(issueId);
+  const openIssue = useCallback((request: IssueOpenRequest) => {
+    setRequestedIssue(request);
     setActiveActivity("issues");
     setIsGlobalSettingsOpen(false);
   }, []);
@@ -230,7 +233,7 @@ export function AppShell({
               projectPath={project.path}
               projectWorktreeLocation={project.worktreeLocation}
               projectTerminalsState={projectTerminalsState}
-              requestedIssueId={requestedIssueId}
+              requestedIssue={requestedIssue}
             />
           )}
         </div>

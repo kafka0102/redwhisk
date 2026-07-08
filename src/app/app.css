@@ -3808,11 +3808,22 @@ button:focus-visible {
 .session-issue-panel {
   display: grid;
   align-content: start;
+  gap: 12px;
   min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: auto;
   padding: 12px;
+}
+
+.session-issue-panel__card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
 }
 
 .session-issue-panel__header {
@@ -3822,9 +3833,56 @@ button:focus-visible {
   gap: 12px;
 }
 
-.session-issue-panel__link {
-  height: auto;
-  padding: 0;
+.session-issue-panel__action {
+  flex: none;
+}
+
+.session-issue-panel__issue-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.32;
+}
+
+.session-issue-panel__meta-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.session-issue-panel__meta-row {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.session-issue-panel__meta-row dt,
+.session-issue-panel__meta-row span {
+  margin: 0;
+  color: var(--color-text-subtle);
+}
+
+.session-issue-panel__meta-row dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.session-issue-panel__log-path {
+  display: block;
+  min-width: 0;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
 }
 
 .session-changes-panel {
@@ -6000,7 +6058,9 @@ button:focus-visible {
   color: var(--color-text-muted);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .agents-message-stream__nav:hover {

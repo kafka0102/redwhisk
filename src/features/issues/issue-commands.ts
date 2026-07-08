@@ -339,6 +339,7 @@ export interface StartAgentSessionInput {
   issueId: number;
   agentProfileId: number;
   promptSnapshot: string;
+  workflowSkillName?: string | null;
   workspaceMode?: WorkspaceMode;
   targetBranch?: string | null;
   worktreeSetupCommand?: string | null;

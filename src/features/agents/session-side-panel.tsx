@@ -2,6 +2,7 @@ import { SessionChangesPanel } from "./session-changes-panel";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
 import { SessionIssuePanel } from "./session-issue-panel";
 import type { LinkedSessionIssue } from "./agents-session-pane";
+import type { AgentSessionListItem } from "./agent-session-commands";
 import { useI18n } from "../../shared/i18n/i18n";
 import type {
   WorkspaceCommitChangedFile,
@@ -24,6 +25,7 @@ interface SessionSidePanelProps {
   isCommitHistoryLoading: boolean;
   isFileTreeLoading: boolean;
   linkedIssue: LinkedSessionIssue | null;
+  session: AgentSessionListItem | null;
   onActiveTabChange: (tab: SessionSidePanelTab) => void;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
   onOpenCommittedChangedFile: (
@@ -51,6 +53,7 @@ export function SessionSidePanel({
   isCommitHistoryLoading,
   isFileTreeLoading,
   linkedIssue,
+  session,
   onActiveTabChange,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
@@ -104,6 +107,7 @@ export function SessionSidePanel({
             issueId={linkedIssue.issueId}
             issueTitle={linkedIssue.issueTitle}
             projectId={projectId}
+            session={session}
             onOpenIssue={onOpenIssue}
           />
         ) : activeTab === "changes" || activeTab === "issue" ? (

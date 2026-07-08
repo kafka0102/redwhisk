@@ -31,6 +31,7 @@ import {
   type CompleteIssueFlowResult,
   type IssueRecord,
 } from "../issues/issue-commands";
+import type { IssueOpenRequest } from "../issues/issue-open-request";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
@@ -74,6 +75,10 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion-helpers";
+import {
+  getSessionReturnState,
+  setSessionReturnState,
+} from "./session-return-cache";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -93,7 +98,7 @@ interface SessionBrowserToolTab {
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
-  onOpenIssue?: (issueId: number) => void;
+  onOpenIssue?: (request: IssueOpenRequest) => void;
   onOpenProjectAgentSettings?: () => void;
   onSelectSession?: (sessionId: number) => void;
   projectId: number;
@@ -381,6 +386,22 @@ export function AgentsActivity({
   });
   const { setSidePanelTab, setSidePanelTabForSession, sidePanelTab } =
     workspaceCache;
+
+  useEffect(() => {
+    const cachedReturnState = getSessionReturnState(projectId);
+    if (!cachedReturnState) {
+      return;
+    }
+
+    if (activeSessionId == null) {
+      setSelectedSessionId(cachedReturnState.selectedSessionId);
+    }
+    setIsSessionSidePanelOpen(cachedReturnState.isSidePanelOpen);
+    setSidePanelTabForSession(
+      cachedReturnState.selectedSessionId,
+      cachedReturnState.sidePanelTab,
+    );
+  }, [activeSessionId, projectId, setSidePanelTabForSession]);
   // 判断某个 session 是否处于 open（运行中）状态：实例池据此跳过淘汰，
   // 避免 running session 的 handle 被 drop 导致 agent 进程被 kill
   //（典型场景：claude code 单轮进程被 shutdown 后报「客户端主动关闭」）。
@@ -1577,6 +1598,7 @@ export function AgentsActivity({
               isChangesLoading={workspaceCache.isChangesLoading}
               isFileTreeLoading={workspaceCache.isFileTreeLoading}
               linkedIssue={linkedIssue}
+              session={selectedSession}
               onActiveTabChange={workspaceCache.setSidePanelTab}
               onOpenChangedFile={(file) => {
                 void workspaceCache.openChange(file);
@@ -1585,7 +1607,20 @@ export function AgentsActivity({
                 void workspaceCache.openCommittedChange(commitHash, file);
               }}
               onOpenIssue={(issueId) => {
-                onOpenIssue?.(issueId);
+                if (selectedSession) {
+                  setSessionReturnState(projectId, {
+                    selectedSessionId: selectedSession.sessionId,
+                    isSidePanelOpen: isSessionSidePanelOpen,
+                    sidePanelTab,
+                  });
+                }
+                onOpenIssue?.({
+                  issueId,
+                  source: "session",
+                  sessionId: selectedSession?.sessionId,
+                  restoreSidePanel: isSessionSidePanelOpen,
+                  sidePanelTab,
+                });
               }}
               onOpenFile={(file) => {
                 void workspaceCache.openFile(file);
