@@ -835,7 +835,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(agent_session_error_to_command_error(error));
         }
         agent_registry.register(result.session_id, handle);
-        remove_issue_archive_log(previous_archive_path.as_deref());
+        remove_session_log_file(previous_archive_path.as_deref());
 
         Ok(result)
     }
@@ -1044,7 +1044,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(agent_session_error_to_command_error(error));
         }
         agent_registry.register(result.session_id, handle);
-        remove_issue_archive_log(previous_archive_path.as_deref());
+        remove_session_log_file(previous_archive_path.as_deref());
 
         // Claude 首轮 send_message 在后台异步产生 session_id，此处无法同步回填。
         // 会话标识由 broadcaster 在 `ThreadStarted` 事件回流时统一写入
@@ -1983,6 +1983,9 @@ impl<'connection> AgentSessionService<'connection> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
         }
+
+        // 自定义 session 被删除后，同步删除磁盘上的 session log 文件。
+        remove_session_log_file(Some(session.log_path.as_str()));
 
         Ok(crate::types::agent_session::DeleteAgentSessionResult { session_id })
     }
@@ -3915,7 +3918,9 @@ pub(crate) fn build_issue_session_archive(
     })
 }
 
-fn remove_issue_archive_log(log_path: Option<&str>) {
+/// 删除 session 日志文件（运行态结构化日志或 issue 归档日志）。
+/// 路径为空或文件不存在时静默跳过；删除失败不向上抛错，避免阻塞 session 软删流程。
+pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
     let Some(log_path) = log_path else {
         return;
     };
@@ -5970,6 +5975,42 @@ mod tests {
         assert!(result.is_err());
         let response = service.list_agent_sessions(1).expect("list sessions");
         assert!(session_ids(&response.sessions).contains(&306));
+    }
+
+    #[test]
+    fn delete_standalone_session_removes_session_log_file() {
+        let database = setup_session_list_database();
+        let temp_dir = tempdir().expect("temp dir");
+        let log_file = temp_dir.path().join("standalone-308.jsonl");
+        fs::write(&log_file, b"{}").expect("write session log file");
+        assert!(log_file.exists());
+
+        insert_session_list_row(
+            &database,
+            308,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = ?2",
+                params![log_file.to_string_lossy().to_string(), 308],
+            )
+            .expect("point session log_path at temp file");
+
+        let service = test_agent_session_service(&database);
+        service
+            .delete_standalone_session(1, 308)
+            .expect("delete standalone session");
+
+        assert!(
+            !log_file.exists(),
+            "自定义 session 删除后应同步删除磁盘上的 session log 文件"
+        );
     }
 
     #[test]

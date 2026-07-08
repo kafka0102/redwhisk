@@ -9,7 +9,8 @@ use serde_json::json;
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::core::agent_session_service::{
-    build_issue_session_archive, is_archived_issue_log_path, IssueSessionArchive,
+    build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
+    IssueSessionArchive,
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -2458,6 +2459,12 @@ impl<'connection> IssueService<'connection> {
                 .ok_or_else(|| issue_not_found(input.issue_id))?;
 
         transaction.commit().map_err(issue_database_error)?;
+
+        // 关联 Agent Session 被软删后，同步删除磁盘上的 session log 文件。
+        if issue.linked_session_id.is_some() {
+            remove_session_log_file(issue.linked_session_log_path.as_deref());
+        }
+
         self.hydrate_issue(backlog_issue)
     }
 
@@ -3592,13 +3599,90 @@ mod tests {
         AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
         ToolCallStatus,
     };
-    use crate::types::issue::IssueStatus;
+    use crate::types::issue::{AdvanceIssueStatusInput, IssueStatus};
     use crate::types::issue_completion::{CompleteIssueFlowAction, CompleteIssueFlowInput};
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
     use std::process::Command;
     use tempfile::tempdir;
+
+    #[test]
+    fn rollback_running_issue_to_backlog_removes_linked_session_log_file() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1)",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'Issue 16', '', 'running', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert running issue");
+
+        let log_file = temp_dir.path().join("linked-session.log");
+        fs::write(&log_file, b"{}").expect("write linked session log file");
+        assert!(log_file.exists());
+
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   status, attention, working_dir, command_snapshot, prompt_snapshot,
+                   workspace_mode, target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, log_path,
+                   list_inserted_at, last_active_at, started_at, closed_at, del
+                 ) VALUES (
+                   30, 1, 16, NULL, 101, 'thread-16',
+                   'running', 'none', ?1, 'codex', '',
+                   'current_branch', NULL, NULL, NULL,
+                   NULL, 'external', ?2,
+                   1, 2, 1, NULL, 0
+                 )",
+                params![
+                    repo_dir.to_string_lossy().to_string(),
+                    log_file.to_string_lossy().to_string(),
+                ],
+            )
+            .expect("insert linked running session");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        let result = service
+            .advance_issue_status(AdvanceIssueStatusInput {
+                project_id: 1,
+                issue_id: 16,
+                target_status: IssueStatus::Backlog,
+            })
+            .expect("rollback issue to backlog");
+
+        assert_eq!(result.status, IssueStatus::Backlog);
+        assert!(
+            !log_file.exists(),
+            "关联 Session 软删后应同步删除磁盘上的 session log 文件"
+        );
+    }
 
     #[test]
     fn complete_issue_flow_completes_review_issue_with_closed_session_without_agent_commit_check() {
