@@ -4202,6 +4202,7 @@ mod tests {
     fn resolver_session(working_dir: String, workspace_path: Option<String>) -> AgentSessionRecord {
         AgentSessionRecord {
             id: 1,
+            number: 0,
             project_id: 1,
             issue_id: None,
             title: None,

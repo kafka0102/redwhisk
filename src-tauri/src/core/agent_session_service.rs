@@ -1501,8 +1501,10 @@ impl<'connection> AgentSessionService<'connection> {
 
                 AgentSessionListItem {
                     session_id: row.session_id,
+                    number: row.number,
                     project_id: row.project_id,
                     issue_id: row.issue_id,
+                    issue_number: row.issue_number,
                     issue_title: row.issue_title,
                     issue_status: row.issue_status,
                     agent_profile_id: row.agent_profile_id,
@@ -3340,9 +3342,15 @@ fn insert_structured_session_in_transaction(
     log_path: &str,
     started_at: i64,
 ) -> rusqlite::Result<crate::types::agent_session::AgentSessionRecord> {
+    let number: i64 = transaction.query_row(
+        "SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = ?1",
+        params![project_id],
+        |row| row.get(0),
+    )?;
     transaction.execute(
         "INSERT INTO agent_sessions (
            project_id,
+           number,
            issue_id,
            title,
            agent_profile_id,
@@ -3360,9 +3368,10 @@ fn insert_structured_session_in_transaction(
            list_inserted_at,
            last_active_at,
            started_at
-         ) VALUES (?1, NULL, ?2, ?3, 'running', 'none', ?4, ?5, '', 'current_branch', NULL, NULL, ?4, NULL, ?6, ?7, ?7, ?7)",
+         ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, '', 'current_branch', NULL, NULL, ?5, NULL, ?7, ?8, ?8, ?8)",
         params![
             project_id,
+            number,
             title,
             agent_profile_id,
             working_dir,
@@ -6488,6 +6497,7 @@ mod tests {
     fn test_session_record(log_path: &str) -> AgentSessionRecord {
         AgentSessionRecord {
             id: 7,
+            number: 0,
             project_id: 1,
             issue_id: None,
             title: Some("test".to_string()),
@@ -6518,6 +6528,7 @@ mod tests {
     fn test_worktree_session(worktree_path: &str) -> AgentSessionRecord {
         AgentSessionRecord {
             id: 30,
+            number: 0,
             project_id: 1,
             issue_id: Some(16),
             title: None,
@@ -6631,13 +6642,15 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, status, attention,
+                   id, project_id, number, issue_id, title, agent_profile_id, status, attention,
                    working_dir, command_snapshot, prompt_snapshot, workspace_mode,
                    target_branch, workspace_branch, workspace_path,
                    worktree_root_path, log_path, list_inserted_at, last_active_at, started_at,
                    closed_at, del
                  ) VALUES (
-                   ?1, 1, ?2, NULL, 101, ?3, 'none',
+                   ?1, 1,
+                   (SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = 1),
+                   ?2, NULL, 101, ?3, 'none',
                    ?4, '', '', 'current_branch',
                    NULL, NULL, ?4,
                    NULL, ?5, ?6, ?6, ?7, ?8, 0
@@ -6734,13 +6747,15 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, status, attention,
+                   id, project_id, number, issue_id, title, agent_profile_id, status, attention,
                    working_dir, command_snapshot, prompt_snapshot, workspace_mode,
                    target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, worktree_root_path, worktree_setup_command,
                    log_path, list_inserted_at, last_active_at, started_at, closed_at, del
                  ) VALUES (
-                   ?1, 1, ?2, NULL, 101, 'closed', 'none',
+                   ?1, 1,
+                   (SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = 1),
+                   ?2, NULL, 101, 'closed', 'none',
                    ?3, '', '', 'worktree',
                    'devlop', ?4, ?3,
                    'devlop', ?5, NULL, NULL,

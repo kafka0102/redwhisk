@@ -566,19 +566,21 @@ fn issue_status_to_str(value: &IssueStatus) -> &'static str {
 mod tests {
     use super::*;
     use crate::db::migrations::{
+        AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
         ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
         ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION, MigrationRunner,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
     };
 
-    // 跑到 0035（跳过 0036 与依赖它的 0037），用于验证 0036 的回填增量语义：先插入无
-    // number 列的旧数据，再单独执行 0036 SQL，断言回填结果。0037 依赖 number 列，必须一并跳过。
+    // 跑到 0035（跳过 0036 与依赖它的 0037/0038），用于验证 0036 的回填增量语义：先插入无
+    // number 列的旧数据，再单独执行 0036 SQL，断言回填结果。0037/0038 依赖 number 列，必须一并跳过。
     fn connection_before_project_scoped_numbers() -> Connection {
         let connection = Connection::open_in_memory().expect("open in-memory database");
         MigrationRunner::runner_skipping(&[
             PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
             ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+            AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
         ])
         .run(&connection)
         .expect("run migrations up to 0035");

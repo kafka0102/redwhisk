@@ -3549,6 +3549,7 @@ fn insert_agent_session_row_with_details(
         .execute(
             "INSERT INTO agent_sessions (
                 project_id,
+                number,
                 issue_id,
                 agent_profile_id,
                 status,
@@ -3560,7 +3561,7 @@ fn insert_agent_session_row_with_details(
                 last_active_at,
                 started_at,
                 closed_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, '/tmp/repo', 'codex', 'prompt', ?6, ?7, ?7, ?8)",
+            ) VALUES (?1, (SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = ?1), ?2, ?3, ?4, ?5, '/tmp/repo', 'codex', 'prompt', ?6, ?7, ?7, ?8)",
             rusqlite::params![
                 project_id,
                 issue_id,
@@ -3590,6 +3591,7 @@ fn insert_standalone_agent_session_row(
         .execute(
             "INSERT INTO agent_sessions (
                 project_id,
+                number,
                 issue_id,
                 title,
                 agent_profile_id,
@@ -3607,7 +3609,7 @@ fn insert_standalone_agent_session_row(
                 last_active_at,
                 started_at,
                 closed_at
-            ) VALUES (?1, NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', 'current_branch', NULL, NULL, '/tmp/repo', NULL, ?5, ?6, ?6, ?7)",
+            ) VALUES (?1, (SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = ?1), NULL, 'Standalone Session', ?2, ?3, ?4, '/tmp/repo', 'codex', 'prompt', 'current_branch', NULL, NULL, '/tmp/repo', NULL, ?5, ?6, ?6, ?7)",
             rusqlite::params![
                 project_id,
                 agent_profile_id,

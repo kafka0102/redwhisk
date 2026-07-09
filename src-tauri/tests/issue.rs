@@ -4122,6 +4122,7 @@ fn insert_agent_session_for_issue(
         .execute(
             "INSERT INTO agent_sessions (
                 project_id,
+                number,
                 issue_id,
                 agent_profile_id,
                 status,
@@ -4132,7 +4133,7 @@ fn insert_agent_session_for_issue(
                 log_path,
                 last_active_at,
                 started_at
-            ) VALUES (?1, ?2, ?3, ?4, 'none', ?5, 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
+            ) VALUES (?1, (SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = ?1), ?2, ?3, ?4, 'none', ?5, 'codex', 'prompt', '/tmp/log', 1780628400000, 1780628400000)",
             rusqlite::params![project_id, issue_id, agent_profile_id, status, repo_path],
         )
         .expect("insert agent session");

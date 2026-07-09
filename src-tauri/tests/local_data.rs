@@ -56,11 +56,12 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0035_agent_sessions_workflow_skill_name",
             "0036_project_scoped_issue_session_numbers",
             "0037_issues_project_scoped_number_unique",
+            "0038_agent_sessions_project_scoped_number_unique",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0037_issues_project_scoped_number_unique".to_string())
+        Some("0038_agent_sessions_project_scoped_number_unique".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -125,12 +126,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0035_agent_sessions_workflow_skill_name",
             "0036_project_scoped_issue_session_numbers",
             "0037_issues_project_scoped_number_unique",
+            "0038_agent_sessions_project_scoped_number_unique",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0037_issues_project_scoped_number_unique".to_string())
+        Some("0038_agent_sessions_project_scoped_number_unique".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -139,7 +141,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 37);
+    assert_eq!(schema_migrations_count, 38);
 }
 
 #[test]
