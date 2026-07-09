@@ -209,6 +209,7 @@ describe("App project entry", () => {
       async ({ projectId, title, description }) => {
         const createdIssue = {
           id: 10,
+          number: 10,
           projectId,
           title,
           description,
@@ -224,6 +225,7 @@ describe("App project entry", () => {
       async ({ projectId, issueId, title, description }) => {
         const updatedIssue = {
           id: issueId,
+          number: issueId,
           projectId,
           title,
           description,
@@ -660,6 +662,7 @@ describe("App project entry", () => {
     currentIssues = [
       {
         id: 20,
+        number: 20,
         projectId: 1,
         title: "Existing issue",
         description: "Existing description",

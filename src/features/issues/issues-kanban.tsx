@@ -33,6 +33,7 @@ interface IssuesKanbanProps {
     issue: Pick<
       IssueRecord,
       | "id"
+      | "number"
       | "title"
       | "description"
       | "attachments"
@@ -182,6 +183,7 @@ function IssueCard({
     issue: Pick<
       IssueRecord,
       | "id"
+      | "number"
       | "title"
       | "description"
       | "attachments"
@@ -228,7 +230,7 @@ function IssueCard({
             onClick={(event) => onOpenIssue(issue, event.currentTarget)}
           >
             <span id={metaId} className="issue-card__meta-row">
-              <span className="issue-card__id">#{issue.id}</span>
+              <span className="issue-card__id">#{issue.number}</span>
               <span className="issue-card__updated">
                 {formatTimestamp(issue.createdAt)}
               </span>

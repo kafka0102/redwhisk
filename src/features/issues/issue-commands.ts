@@ -46,6 +46,8 @@ export interface IssueAttachmentPreviewRecord {
 
 export interface IssueRecord {
   id: number;
+  /** 项目内自增编号（展示给人看）；与全局 id 区分。 */
+  number: number;
   projectId: number;
   title: string;
   description: string;

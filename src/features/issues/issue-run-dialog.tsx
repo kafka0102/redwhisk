@@ -42,7 +42,7 @@ const NO_WORKFLOW_SKILL_VALUE = "__none__";
 interface IssueRunDialogProps {
   issue: Pick<
     IssueRecord,
-    "id" | "title" | "description" | "attachments" | "labels"
+    "id" | "number" | "title" | "description" | "attachments" | "labels"
   >;
   projectId: number;
   worktreeSetupCommand?: string;
@@ -371,14 +371,14 @@ export function IssueRunDialog({
     >
       <div
         ref={dialogRef}
-        aria-label={messages.issues.runIssue(issue.id)}
+        aria-label={messages.issues.runIssue(issue.number)}
         aria-modal="true"
         className="issue-dialog issue-dialog--compact"
         role="dialog"
         onKeyDown={handleKeyDown}
       >
         <div className="issue-dialog__header">
-          <h3>{messages.issues.runIssue(issue.id)}</h3>
+          <h3>{messages.issues.runIssue(issue.number)}</h3>
           <button
             ref={closeButtonRef}
             aria-label={messages.issues.runDialogClose}

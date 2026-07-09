@@ -79,7 +79,7 @@ export function IssueReadOnlyPage({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const labels = selectedIssue?.labels ?? [];
   const title = selectedIssue
-    ? messages.issues.detailTitle(selectedIssue.id)
+    ? messages.issues.detailTitle(selectedIssue.number)
     : messages.issues.detailFallbackTitle;
   const rawDescription = selectedIssue?.description ?? form.description;
 

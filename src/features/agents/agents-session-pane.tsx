@@ -18,6 +18,8 @@ import type {
 
 export interface LinkedSessionIssue {
   issueId: number;
+  /** 关联 Issue 的项目内编号（展示用）。 */
+  issueNumber: number;
   issueStatus: string | null;
   issueTitle: string;
 }
@@ -231,7 +233,7 @@ export function AgentsSessionPane({
                 </button>
               </div>
             ) : linkedIssue ? (
-              <h3 className="agents-session-toolbar__issue-heading">{`#${linkedIssue.issueId} ${linkedIssue.issueTitle}`}</h3>
+              <h3 className="agents-session-toolbar__issue-heading">{`#${linkedIssue.issueNumber} ${linkedIssue.issueTitle}`}</h3>
             ) : (
               <h3>{formatSessionTitle(selectedSession)}</h3>
             )}

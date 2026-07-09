@@ -232,6 +232,7 @@ function completedFlowResult(issueId: number, projectId = 1) {
     action: "completed" as const,
     issue: {
       id: issueId,
+      number: issueId,
       projectId,
       title: "Review issue",
       description: "",
@@ -313,7 +314,9 @@ const defaultProfiles = {
 function runningSession(sessionId: number, issueTitle = "Existing issue") {
   return {
     sessionId,
+    number: sessionId - 280,
     issueId: sessionId - 281,
+    issueNumber: sessionId - 281,
     issueTitle,
     title: null,
     agentType: "codex" as const,
@@ -507,6 +510,7 @@ describe("AgentsActivity", () => {
       issues: [
         {
           id: 20,
+          number: 20,
           projectId: 1,
           title: "Existing issue",
           description: "Existing description",
@@ -519,6 +523,7 @@ describe("AgentsActivity", () => {
         },
         {
           id: 21,
+          number: 21,
           projectId: 1,
           title: "Running issue",
           description: "Running description",
@@ -533,6 +538,7 @@ describe("AgentsActivity", () => {
     });
     markIssueReviewMock.mockResolvedValue({
       id: 20,
+      number: 20,
       projectId: 1,
       title: "Existing issue",
       description: "",
@@ -545,6 +551,7 @@ describe("AgentsActivity", () => {
     });
     completeIssueManualMock.mockResolvedValue({
       id: 22,
+      number: 22,
       projectId: 1,
       title: "Review issue",
       description: "Review description",
@@ -557,6 +564,7 @@ describe("AgentsActivity", () => {
     });
     completeIssueCleanMock.mockResolvedValue({
       id: 22,
+      number: 22,
       projectId: 1,
       title: "Review issue",
       description: "Review description",
@@ -571,6 +579,7 @@ describe("AgentsActivity", () => {
       outcome: "completed",
       issue: {
         id: 22,
+        number: 22,
         projectId: 1,
         title: "Review issue",
         description: "Review description",
@@ -598,6 +607,7 @@ describe("AgentsActivity", () => {
     });
     updateIssueMock.mockImplementation(async (input) => ({
       id: input.issueId,
+      number: input.issueId,
       projectId: input.projectId,
       title: input.title,
       description: input.description,
@@ -684,7 +694,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Running issue",
           title: null,
           agentType: "codex",
@@ -697,7 +709,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -709,7 +723,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 401,
+          number: 401,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Closed issue",
           title: null,
           agentType: "codex",
@@ -1440,7 +1456,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -1494,7 +1512,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "First visible session",
             issueStatus: "running",
             title: null,
@@ -1507,7 +1527,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Second visible session",
             issueStatus: "running",
             title: null,
@@ -1524,7 +1546,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "First visible session",
             issueStatus: "review",
             title: null,
@@ -1537,7 +1561,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Second visible session",
             issueStatus: "running",
             title: null,
@@ -1576,7 +1602,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 502,
+          number: 502,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Current branch issue",
           issueStatus: "running",
           title: null,
@@ -1591,7 +1619,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 503,
+          number: 503,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Worktree issue",
           issueStatus: "review",
           title: null,
@@ -1629,7 +1659,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 501,
+          number: 501,
           issueId: 24,
+          issueNumber: 24,
           issueTitle: "Review waiting issue",
           issueStatus: "review",
           title: null,
@@ -1665,7 +1697,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 502,
+          number: 502,
           issueId: 25,
+          issueNumber: 25,
           issueTitle: "In progress waiting issue",
           issueStatus: "running",
           isTurnRunning: false,
@@ -1702,7 +1736,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 503,
+          number: 503,
           issueId: 26,
+          issueNumber: 26,
           issueTitle: "Active turn issue",
           issueStatus: "running",
           isTurnRunning: true,
@@ -1736,7 +1772,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Blue agent issue",
           title: null,
           agentType: "codex",
@@ -1748,7 +1786,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 303,
+          number: 303,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Orange agent issue",
           title: null,
           agentType: "claude_code",
@@ -1791,7 +1831,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "Existing issue",
             title: null,
             agentType: "codex",
@@ -1807,7 +1849,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Untitled Session",
             agentType: "codex",
@@ -1819,7 +1863,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "Existing issue",
             title: null,
             agentType: "codex",
@@ -1835,7 +1881,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Untitled Session",
             agentType: "codex",
@@ -1847,7 +1895,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "Existing issue",
             title: null,
             agentType: "codex",
@@ -1891,7 +1941,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 701,
+          number: 701,
           issueId: null,
+          issueNumber: null,
           issueTitle: null,
           title: "Untitled Session",
           agentType: "codex",
@@ -1942,7 +1994,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Untitled Session",
             agentType: "codex",
@@ -2004,7 +2058,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Untitled Session",
             agentType: "codex",
@@ -2020,7 +2076,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Renamed Session",
             agentType: "codex",
@@ -2074,7 +2132,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 701,
+          number: 701,
           issueId: null,
+          issueNumber: null,
           issueTitle: null,
           title: "Untitled Session",
           agentType: "codex",
@@ -2118,7 +2178,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -2188,7 +2250,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -2257,7 +2321,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "Existing issue",
             title: null,
             agentType: "codex",
@@ -2273,7 +2339,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Untitled Session",
             agentType: "codex",
@@ -2285,7 +2353,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "Existing issue",
             title: null,
             agentType: "codex",
@@ -2301,7 +2371,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 701,
+            number: 701,
             issueId: null,
+            issueNumber: null,
             issueTitle: null,
             title: "Untitled Session",
             agentType: "codex",
@@ -2313,7 +2385,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 301,
+            number: 301,
             issueId: 20,
+            issueNumber: 20,
             issueTitle: "Existing issue",
             title: null,
             agentType: "codex",
@@ -2368,7 +2442,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -2403,7 +2479,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Running issue",
           issueStatus: "running",
           title: null,
@@ -2416,7 +2494,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 303,
+          number: 303,
           issueId: 25,
+          issueNumber: 25,
           issueTitle: "Review issue",
           issueStatus: "review",
           title: null,
@@ -2429,7 +2509,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 401,
+          number: 401,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Closed issue",
           issueStatus: "completed",
           title: null,
@@ -2442,7 +2524,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 402,
+          number: 402,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Crashed issue",
           issueStatus: "running",
           title: null,
@@ -2455,7 +2539,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 403,
+          number: 403,
           issueId: 24,
+          issueNumber: 24,
           issueTitle: "Stopped issue",
           issueStatus: "review",
           title: null,
@@ -2468,7 +2554,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 404,
+          number: 404,
           issueId: 26,
+          issueNumber: 26,
           issueTitle: "Backlog issue",
           issueStatus: "backlog",
           title: null,
@@ -2481,7 +2569,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 405,
+          number: 405,
           issueId: null,
+          issueNumber: null,
           issueTitle: null,
           issueStatus: null,
           title: "Finished scratch session",
@@ -2529,7 +2619,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Running issue",
           title: null,
           agentType: "codex",
@@ -2541,7 +2633,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -2583,7 +2677,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Needs attention issue",
           title: null,
           agentType: "codex",
@@ -2595,7 +2691,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 303,
+          number: 303,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Quiet issue",
           title: null,
           agentType: "codex",
@@ -2607,7 +2705,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 304,
+          number: 304,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Selected issue",
           title: null,
           agentType: "codex",
@@ -2660,7 +2760,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 401,
+          number: 401,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Closed issue",
           title: null,
           agentType: "codex",
@@ -2692,7 +2794,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 402,
+          number: 402,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Crashed issue",
           issueStatus: "running",
           title: null,
@@ -2733,7 +2837,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 403,
+          number: 403,
           issueId: 24,
+          issueNumber: 24,
           issueTitle: "Stopped issue",
           issueStatus: "running",
           title: null,
@@ -2776,7 +2882,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Polling issue",
             title: null,
             agentType: "codex",
@@ -2788,7 +2896,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 303,
+            number: 303,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Selected polling issue",
             title: null,
             agentType: "codex",
@@ -2804,7 +2914,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Polling issue",
             title: null,
             agentType: "codex",
@@ -2816,7 +2928,9 @@ describe("AgentsActivity", () => {
           },
           {
             sessionId: 303,
+            number: 303,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Selected polling issue",
             title: null,
             agentType: "codex",
@@ -2857,7 +2971,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 303,
+          number: 303,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Initially selected issue",
           title: null,
           agentType: "codex",
@@ -2869,7 +2985,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Viewed session issue",
           title: null,
           agentType: "codex",
@@ -2914,7 +3032,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Viewed polling issue",
             title: null,
             agentType: "codex",
@@ -2930,7 +3050,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Viewed polling issue",
             title: null,
             agentType: "codex",
@@ -2979,7 +3101,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "running",
             title: null,
@@ -2996,7 +3120,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "review",
             title: null,
@@ -3011,6 +3137,7 @@ describe("AgentsActivity", () => {
       });
     markIssueReviewMock.mockResolvedValue({
       id: 21,
+      number: 21,
       projectId: 1,
       title: "Review candidate",
       description: "",
@@ -3057,7 +3184,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Review candidate",
           issueStatus: "running",
           title: null,
@@ -3097,7 +3226,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "running",
             title: null,
@@ -3113,6 +3244,7 @@ describe("AgentsActivity", () => {
       .mockRejectedValueOnce(new Error("refresh failed"));
     markIssueReviewMock.mockResolvedValue({
       id: 21,
+      number: 21,
       projectId: 1,
       title: "Review candidate",
       description: "",
@@ -3158,7 +3290,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "running",
             title: null,
@@ -3175,6 +3309,7 @@ describe("AgentsActivity", () => {
       .mockRejectedValueOnce(new Error("refresh failed"));
     markIssueReviewMock.mockResolvedValue({
       id: 21,
+      number: 21,
       projectId: 1,
       title: "Review candidate",
       description: "",
@@ -3214,7 +3349,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "running",
             title: null,
@@ -3245,7 +3382,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "running",
             title: null,
@@ -3262,7 +3401,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "review",
             title: null,
@@ -3302,7 +3443,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 501,
+          number: 501,
           issueId: null,
+          issueNumber: null,
           issueTitle: null,
           issueStatus: null,
           title: "Temporary session",
@@ -3315,7 +3458,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 502,
+          number: 502,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Review issue",
           issueStatus: "review",
           title: null,
@@ -3328,7 +3473,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 503,
+          number: 503,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Completed issue",
           issueStatus: "completed",
           title: null,
@@ -3385,7 +3532,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 502,
+          number: 502,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Review issue",
           issueStatus: "review",
           title: null,
@@ -3398,7 +3547,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 503,
+          number: 503,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Another running issue",
           issueStatus: "running",
           title: null,
@@ -3452,7 +3603,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 502,
+          number: 502,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Review issue",
           issueStatus: "review",
           title: null,
@@ -3500,7 +3653,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 502,
+          number: 502,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Review issue",
           issueStatus: "review",
           canCompleteClean: false,
@@ -3588,7 +3743,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "review",
             canCompleteClean: false,
@@ -3607,7 +3764,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "completed",
             canCompleteClean: false,
@@ -3651,7 +3810,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "review",
             canCompleteClean: false,
@@ -3670,7 +3831,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "completed",
             canCompleteClean: false,
@@ -3720,7 +3883,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 502,
+          number: 502,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Review issue",
           issueStatus: "review",
           canCompleteClean: false,
@@ -3770,7 +3935,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "review",
             canCompleteClean: false,
@@ -3789,7 +3956,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "completed",
             canCompleteClean: false,
@@ -3839,7 +4008,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "review",
             title: null,
@@ -3856,7 +4027,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "completed",
             title: null,
@@ -3900,7 +4073,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 502,
+            number: 502,
             issueId: 22,
+            issueNumber: 22,
             issueTitle: "Review issue",
             issueStatus: "review",
             title: null,
@@ -3936,7 +4111,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "running",
             title: null,
@@ -3953,7 +4130,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Review candidate",
             issueStatus: "completed",
             title: null,
@@ -4000,6 +4179,7 @@ describe("AgentsActivity", () => {
       action: "blocked",
       issue: {
         id: 21,
+        number: 21,
         projectId: 1,
         title: "Review candidate",
         description: "",
@@ -4025,7 +4205,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Review candidate",
           issueStatus: "running",
           workspaceMode: "worktree",
@@ -4078,6 +4260,7 @@ describe("AgentsActivity", () => {
       action: "blocked",
       issue: {
         id: 21,
+        number: 21,
         projectId: 1,
         title: "Review candidate",
         description: "",
@@ -4102,7 +4285,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Review candidate",
           issueStatus: "running",
           workspaceMode: "worktree",
@@ -4188,7 +4373,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Manual attention issue",
             title: null,
             agentType: "codex",
@@ -4204,7 +4391,9 @@ describe("AgentsActivity", () => {
         sessions: [
           {
             sessionId: 302,
+            number: 302,
             issueId: 21,
+            issueNumber: 21,
             issueTitle: "Manual attention issue",
             title: null,
             agentType: "codex",
@@ -4256,7 +4445,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Running issue",
           title: null,
           agentType: "codex",
@@ -4288,7 +4479,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Running issue",
           title: null,
           agentType: "codex",
@@ -4320,7 +4513,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 302,
+          number: 302,
           issueId: 21,
+          issueNumber: 21,
           issueTitle: "Newest running issue",
           title: null,
           agentType: "codex",
@@ -4332,7 +4527,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Older running issue",
           title: null,
           agentType: "codex",
@@ -4363,7 +4560,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 402,
+          number: 402,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Newest completed issue",
           title: null,
           agentType: "codex",
@@ -4375,7 +4574,9 @@ describe("AgentsActivity", () => {
         },
         {
           sessionId: 401,
+          number: 401,
           issueId: 22,
+          issueNumber: 22,
           issueTitle: "Older completed issue",
           title: null,
           agentType: "codex",
@@ -4406,7 +4607,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 501,
+          number: 501,
           issueId: null,
+          issueNumber: null,
           issueTitle: null,
           title: "Temporary session",
           agentType: "codex",
@@ -4442,7 +4645,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 601,
+          number: 601,
           issueId: null,
+          issueNumber: null,
           issueTitle: null,
           title: "Finished scratch session",
           agentType: "codex",
@@ -4478,7 +4683,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -4512,7 +4719,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           title: null,
           agentType: "codex",
@@ -4543,7 +4752,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4607,7 +4818,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4652,7 +4865,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4695,7 +4910,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4779,7 +4996,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4844,6 +5063,7 @@ describe("AgentsActivity", () => {
       issues: [
         {
           id: 20,
+          number: 20,
           projectId: 1,
           title: "Existing issue",
           description: "Existing description",
@@ -4900,7 +5120,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4935,7 +5157,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -4999,7 +5223,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -5110,7 +5336,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -5150,7 +5378,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 20,
+          issueNumber: 20,
           issueTitle: "Existing issue",
           issueStatus: "running",
           title: null,
@@ -5185,7 +5415,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 601,
+          number: 601,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Newest completed issue",
           issueStatus: "completed",
           title: null,
@@ -5221,7 +5453,9 @@ describe("AgentsActivity", () => {
       sessions: [
         {
           sessionId: 601,
+          number: 601,
           issueId: 23,
+          issueNumber: 23,
           issueTitle: "Newest completed issue",
           issueStatus: "completed",
           title: null,

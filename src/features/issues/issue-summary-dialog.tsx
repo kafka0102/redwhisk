@@ -130,7 +130,7 @@ export function IssueSummaryDialog({
               <>
                 <section className="issue-dialog__panel">
                   <h4>{messages.issueSummary.issue}</h4>
-                  <p>{`#${summary.issue.id} ${summary.issue.title}`}</p>
+                  <p>{`#${summary.issue.number} ${summary.issue.title}`}</p>
                   <p>{`${messages.issueSummary.status}: ${summary.issue.status}`}</p>
                   <p>
                     {`${messages.issueSummary.updatedAt}: ${formatLocalTimestamp(summary.issue.updatedAt)}`}

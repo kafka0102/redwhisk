@@ -237,6 +237,7 @@ const toastSuccessMock = vi.mocked(toast.success);
 
 const existingIssue: IssueRecord = {
   id: 20,
+  number: 1,
   projectId: 1,
   title: "Existing issue",
   description: "Existing description",
@@ -257,6 +258,7 @@ const existingIssue: IssueRecord = {
 
 const runningIssue: IssueRecord = {
   id: 21,
+  number: 21,
   projectId: 1,
   title: "Running issue",
   description: "Running description",
@@ -267,6 +269,7 @@ const runningIssue: IssueRecord = {
 
 const reviewIssue: IssueRecord = {
   id: 22,
+  number: 22,
   projectId: 1,
   title: "Review issue",
   description: "Review description",
@@ -277,6 +280,7 @@ const reviewIssue: IssueRecord = {
 
 const completedIssue: IssueRecord = {
   id: 23,
+  number: 23,
   projectId: 1,
   title: "Completed issue",
   description: "Completed description",
@@ -287,6 +291,7 @@ const completedIssue: IssueRecord = {
 
 const linkedSessionIssue: IssueRecord = {
   id: 24,
+  number: 24,
   projectId: 1,
   title: "Linked session issue",
   description: "Resume from the existing session",
@@ -300,6 +305,7 @@ const linkedSessionIssue: IssueRecord = {
 
 const completedLinkedSessionIssue: IssueRecord = {
   id: 25,
+  number: 25,
   projectId: 1,
   title: "Completed linked session issue",
   description: "Already completed",
@@ -313,6 +319,7 @@ const completedLinkedSessionIssue: IssueRecord = {
 
 const crashedRunningIssue: IssueRecord = {
   id: 26,
+  number: 26,
   projectId: 1,
   title: "Crashed running issue",
   description: "Need log path later",
@@ -326,6 +333,7 @@ const crashedRunningIssue: IssueRecord = {
 
 const attentionIssue: IssueRecord = {
   id: 27,
+  number: 27,
   projectId: 1,
   title: "Attention issue",
   description: "Need a quick review in Codex",
@@ -393,6 +401,7 @@ const existingIssueRunPromptWithoutSkill = "Existing description";
 function completedFlowResult(issue: Partial<IssueRecord> & { id: number }) {
   const completedIssue: IssueRecord = {
     id: issue.id,
+    number: issue.number ?? issue.id,
     projectId: issue.projectId ?? 1,
     title: issue.title ?? "Completed issue",
     description: issue.description ?? "",
@@ -602,6 +611,7 @@ describe("IssuesActivity", () => {
     });
     createIssueMock.mockResolvedValue({
       id: 25,
+      number: 25,
       projectId: 1,
       title: "Brand new issue",
       description: "",
@@ -772,7 +782,9 @@ describe("IssuesActivity", () => {
     );
   });
 
-  it("shows issue id, created time, full title, and a single-line description excerpt", async () => {
+  it("shows issue project number (not global id), created time, full title, and a single-line description excerpt", async () => {
+    // existingIssue.id = 20 但 number = 1；卡片展示必须用 number。
+    expect(existingIssue.id).not.toBe(existingIssue.number);
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
 
     renderIssuesActivity();
@@ -782,7 +794,8 @@ describe("IssuesActivity", () => {
     });
 
     expect(card).toHaveTextContent("Existing issue");
-    expect(card).toHaveTextContent("#20");
+    expect(card).toHaveTextContent("#1");
+    expect(card).not.toHaveTextContent("#20");
     expect(card).toHaveTextContent(
       formatTestTimestamp(existingIssue.createdAt),
     );
@@ -1025,6 +1038,7 @@ describe("IssuesActivity", () => {
     listIssuesMock.mockResolvedValue({ issues: [] });
     createIssueMock.mockResolvedValue({
       id: 24,
+      number: 24,
       projectId: 1,
       title: "draft local issue",
       description: "small task shape",
@@ -1071,6 +1085,7 @@ describe("IssuesActivity", () => {
     openDialogMock.mockResolvedValue("/tmp/tsconfig.json");
     createIssueMock.mockResolvedValue({
       id: 24,
+      number: 24,
       projectId: 1,
       title: "draft local issue",
       description: "Read the config.",
@@ -1128,6 +1143,7 @@ describe("IssuesActivity", () => {
     });
     createIssueMock.mockResolvedValue({
       id: 25,
+      number: 25,
       projectId: 1,
       title: "",
       description: "",
@@ -1178,6 +1194,7 @@ describe("IssuesActivity", () => {
     });
     createIssueMock.mockResolvedValue({
       id: 26,
+      number: 26,
       projectId: 1,
       title: "image race",
       description: "",
@@ -1457,6 +1474,7 @@ describe("IssuesActivity", () => {
     rerender(<IssuesActivity projectId={2} />);
     resolveCreate({
       id: 24,
+      number: 24,
       projectId: 1,
       title: "Late issue",
       description: "",
@@ -1482,6 +1500,7 @@ describe("IssuesActivity", () => {
     });
     createIssueMock.mockResolvedValue({
       id: 24,
+      number: 24,
       projectId: 1,
       title: "Label issue",
       description: "Needs a label",
@@ -1681,7 +1700,7 @@ describe("IssuesActivity", () => {
     const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Agent profile")).toHaveFocus();
     expect(
-      within(dialog).getByRole("heading", { name: "Run Issue #20" }),
+      within(dialog).getByRole("heading", { name: "Run Issue #1" }),
     ).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
       "Project Codex (Project)",
@@ -1871,7 +1890,7 @@ describe("IssuesActivity", () => {
     });
     // 失败后 Run Dialog 重新显示并展示错误文案。
     const restoredDialog = await screen.findByRole("dialog", {
-      name: "Run Issue #20",
+      name: "Run Issue #1",
     });
     expect(
       within(restoredDialog).getByText(
@@ -2015,7 +2034,9 @@ describe("IssuesActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: existingIssue.id,
+          issueNumber: existingIssue.number,
           issueTitle: existingIssue.title,
           issueStatus: "completed",
           agentProfileId: projectProfile.id,
@@ -2165,7 +2186,7 @@ describe("IssuesActivity", () => {
 
     // 失败后 Run Dialog 重新显示（保留表单状态供重试），LoadingDialog 关闭。
     const restoredDialog = await screen.findByRole("dialog", {
-      name: "Run Issue #20",
+      name: "Run Issue #1",
     });
     expect(
       within(restoredDialog).getByText("Agent 启动失败。"),
@@ -2205,7 +2226,7 @@ describe("IssuesActivity", () => {
     // 共存造成冲突（见 4df1948）。LoadingDialog 不可关闭（dismissible=false）。
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Run Issue #20" }),
+        screen.queryByRole("dialog", { name: "Run Issue #1" }),
       ).not.toBeInTheDocument(),
     );
     const loadingDialog = await screen.findByRole("dialog");
@@ -2258,7 +2279,7 @@ describe("IssuesActivity", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Run Issue #20" }),
+        screen.queryByRole("dialog", { name: "Run Issue #1" }),
       ).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
@@ -2310,7 +2331,7 @@ describe("IssuesActivity", () => {
     );
     await user.click(
       within(
-        await screen.findByRole("dialog", { name: "Run Issue #20" }),
+        await screen.findByRole("dialog", { name: "Run Issue #1" }),
       ).getByRole("button", { name: "Start" }),
     );
 
@@ -2378,7 +2399,7 @@ describe("IssuesActivity", () => {
       }),
     );
     const runDialog = await screen.findByRole("dialog", {
-      name: "Run Issue #20",
+      name: "Run Issue #1",
     });
     expect(within(runDialog).getByLabelText("Final prompt")).toHaveValue(
       ["using skill bmad-dev-story for task:", "Updated description"].join(
@@ -2423,7 +2444,7 @@ describe("IssuesActivity", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Run Issue #20" }),
+        screen.queryByRole("dialog", { name: "Run Issue #1" }),
       ).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
@@ -2466,7 +2487,9 @@ describe("IssuesActivity", () => {
       sessions: [
         {
           sessionId: 301,
+          number: 301,
           issueId: 19,
+          issueNumber: 19,
           issueTitle: "Previous issue",
           issueStatus: "running",
           agentProfileId: 200,
@@ -2653,7 +2676,7 @@ describe("IssuesActivity", () => {
     );
 
     expect(
-      screen.queryByRole("dialog", { name: "Run Issue #20" }),
+      screen.queryByRole("dialog", { name: "Run Issue #1" }),
     ).not.toBeInTheDocument();
     expect(runButton).toHaveFocus();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
@@ -2681,7 +2704,7 @@ describe("IssuesActivity", () => {
 
     // 失败后 Run Dialog 重新显示（保留表单状态），并展示错误文案。
     const restoredDialog = await screen.findByRole("dialog", {
-      name: "Run Issue #20",
+      name: "Run Issue #1",
     });
     expect(
       within(restoredDialog).getByText(
@@ -2758,7 +2781,7 @@ describe("IssuesActivity", () => {
 
     await openExistingIssueRunDialog(user);
     await user.click(
-      within(screen.getByRole("dialog", { name: "Run Issue #20" })).getByRole(
+      within(screen.getByRole("dialog", { name: "Run Issue #1" })).getByRole(
         "button",
         { name: "Start" },
       ),
@@ -2766,7 +2789,7 @@ describe("IssuesActivity", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Run Issue #20" }),
+        screen.queryByRole("dialog", { name: "Run Issue #1" }),
       ).not.toBeInTheDocument(),
     );
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
@@ -2792,7 +2815,7 @@ describe("IssuesActivity", () => {
     );
 
     const runDialog = await screen.findByRole("dialog", {
-      name: "Run Issue #20",
+      name: "Run Issue #1",
     });
     expect(
       within(runDialog).getByText(
@@ -2835,7 +2858,7 @@ describe("IssuesActivity", () => {
       within(confirmation).getByText("确定要执行吗？"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("dialog", { name: "Run Issue #20" }),
+      screen.queryByRole("dialog", { name: "Run Issue #1" }),
     ).not.toBeInTheDocument();
 
     await user.click(
@@ -2843,7 +2866,7 @@ describe("IssuesActivity", () => {
     );
 
     expect(
-      await screen.findByRole("dialog", { name: "Run Issue #20" }),
+      await screen.findByRole("dialog", { name: "Run Issue #1" }),
     ).toBeInTheDocument();
   });
 
@@ -3337,7 +3360,7 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     // worktree 占用检查失败后 Run Dialog 重新显示并提示用户。
     const restoredDialog = await screen.findByRole("dialog", {
-      name: "Run Issue #20",
+      name: "Run Issue #1",
     });
     expect(
       within(restoredDialog).getByText(
@@ -4297,7 +4320,7 @@ async function openExistingIssueRunDialog(
   await user.click(runButton);
 
   return {
-    dialog: screen.getByRole("dialog", { name: "Run Issue #20" }),
+    dialog: screen.getByRole("dialog", { name: "Run Issue #1" }),
     runButton,
   };
 }

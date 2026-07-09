@@ -15,8 +15,12 @@ export type WorkspaceMode = "current_branch" | "worktree";
 
 export interface AgentSessionListItem {
   sessionId: number;
+  /** 项目内 session 自增编号（用于日志命名等，不在 UI 展示）。 */
+  number: number;
   projectId?: number;
   issueId: number | null;
+  /** 关联 Issue 的项目内编号（展示用）；与全局 issueId 区分。无关联 Issue 时为 null。 */
+  issueNumber: number | null;
   issueTitle: string | null;
   issueStatus?: IssueStatus | null;
   agentProfileId?: number;

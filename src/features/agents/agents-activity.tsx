@@ -373,6 +373,7 @@ export function AgentsActivity({
       selectedSession?.issueId != null && selectedSession.issueTitle
         ? {
             issueId: selectedSession.issueId,
+            issueNumber: selectedSession.issueNumber ?? 0,
             issueTitle: selectedSession.issueTitle,
             issueStatus: selectedSession.issueStatus ?? null,
           }

@@ -190,7 +190,7 @@ export interface I18nMessages {
     describeTask: string;
     detailFallbackTitle: string;
     detailRegionLabel: string;
-    detailTitle: (issueId: number) => string;
+    detailTitle: (issueNumber: number) => string;
     imageFilterName: string;
     done: string;
     edit: string;
@@ -218,7 +218,7 @@ export interface I18nMessages {
     prompt: string;
     review: string;
     run: string;
-    runIssue: (issueId: number) => string;
+    runIssue: (issueNumber: number) => string;
     runStatus: string;
     save: string;
     session: string;
@@ -714,7 +714,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       describeTask: "Describe the task",
       detailFallbackTitle: "Issue Detail",
       detailRegionLabel: "Issue Detail",
-      detailTitle: (issueId) => `Issue #${issueId}`,
+      detailTitle: (issueNumber) => `Issue #${issueNumber}`,
       done: "Done",
       edit: "Edit Issue",
       editLabels: "Edit labels",
@@ -742,7 +742,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       prompt: "Prompt",
       review: "Review",
       run: "Run",
-      runIssue: (issueId) => `Run Issue #${issueId}`,
+      runIssue: (issueNumber) => `Run Issue #${issueNumber}`,
       runStatus: "Run status",
       save: "Save",
       session: "Session",
@@ -1251,7 +1251,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       describeTask: "描述任务内容",
       detailFallbackTitle: "Issue 详情",
       detailRegionLabel: "Issue 详情",
-      detailTitle: (issueId) => `Issue #${issueId}`,
+      detailTitle: (issueNumber) => `Issue #${issueNumber}`,
       done: "已完成",
       edit: "编辑 Issue",
       editLabels: "编辑标签",
@@ -1279,7 +1279,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       prompt: "提示词",
       review: "待验收",
       run: "运行",
-      runIssue: (issueId) => `运行 Issue #${issueId}`,
+      runIssue: (issueNumber) => `运行 Issue #${issueNumber}`,
       runStatus: "运行状态",
       save: "保存",
       session: "会话",

@@ -209,7 +209,7 @@ export function IssuesActivity({
   const [isReadOnlyEditRequested, setIsReadOnlyEditRequested] = useState(false);
   const [runDialogIssue, setRunDialogIssue] = useState<Pick<
     IssueRecord,
-    "id" | "title" | "description" | "attachments" | "labels"
+    "id" | "number" | "title" | "description" | "attachments" | "labels"
   > | null>(null);
   // 启动 Agent Session 期间显示阻塞式 LoadingDialog 并隐藏 Run Dialog，
   // 避免 Run Dialog overlay 与 Radix LoadingDialog overlay 同时挂载（见 4df1948）。
@@ -744,6 +744,7 @@ export function IssuesActivity({
     issue: Pick<
       IssueRecord,
       | "id"
+      | "number"
       | "title"
       | "description"
       | "attachments"

@@ -155,9 +155,9 @@ const SessionRow = memo(function SessionRow({
             className="agents-session-row__agent-logo"
             src={getAgentLogoSrc(session.agentType)}
           />
-          {session.issueId != null ? (
+          {session.issueNumber != null ? (
             <span className="agents-session-row__meta-issue">
-              {`#${session.issueId}`}
+              {`#${session.issueNumber}`}
             </span>
           ) : null}
           {branchName ? (
