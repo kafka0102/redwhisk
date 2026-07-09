@@ -1,6 +1,6 @@
 version: 1
 change: project-scoped-issue-session-number
-phase: implementing
+phase: review
 ambiguity: high
 complexity: high
 implementation_path: superpowers
@@ -12,11 +12,11 @@ origin_workspace_mode: current-branch
 implementation_workspace_path: unknown
 plan: docs/superpowers/plans/2026-07-09-project-scoped-issue-session-number.md
 handoff_context: openspec/changes/project-scoped-issue-session-number/.onespec.yaml
-handoff_purpose: plan
-handoff_summary: 'plan handoff from 4 file(s); primary artifact: openspec/changes/project-scoped-issue-session-number/proposal.md'
-handoff_hash: 6f8dd712e6ead374b1f197c704a34360a6358b6c755436efc9235ffcb432a9d1
+handoff_purpose: review
+handoff_summary: 'review handoff from 4 file(s); primary artifact: openspec/changes/project-scoped-issue-session-number/proposal.md'
+handoff_hash: ecb67058e0c34eff443af57f84698c18990cccaf076d216e7d859d9ddef248e3
 touched_files_b64: null
 review_result: pending
 archive: pending
 created_at: 2026-07-09
-updated_at: 2026-07-09T04:26:58Z
+updated_at: 2026-07-09T14:55:20Z
