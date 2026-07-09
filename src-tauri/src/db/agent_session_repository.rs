@@ -31,6 +31,7 @@ pub struct AgentSessionListRow {
     pub last_active_at: i64,
     pub started_at: i64,
     pub closed_at: Option<i64>,
+    pub turn_ended_at: Option<i64>,
 }
 
 pub struct AgentSessionRepository<'connection> {
@@ -133,7 +134,8 @@ impl<'connection> AgentSessionRepository<'connection> {
                 COALESCE(agent_sessions.list_inserted_at, agent_sessions.started_at),
                 agent_sessions.last_active_at,
                 agent_sessions.started_at,
-                agent_sessions.closed_at
+                agent_sessions.closed_at,
+                agent_sessions.turn_ended_at
              FROM agent_sessions
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
@@ -411,6 +413,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             "UPDATE agent_sessions
             SET status = ?1,
                 is_turn_running = 0,
+                turn_ended_at = NULL,
                 last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
              WHERE id = ?3 AND closed_at IS NULL AND del = 0",
@@ -438,6 +441,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             "UPDATE agent_sessions
             SET status = ?1,
                 is_turn_running = 0,
+                turn_ended_at = NULL,
                 last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
              WHERE id = ?3 AND closed_at IS NULL AND del = 0",
@@ -609,6 +613,25 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    pub fn update_turn_ended_at(&self, session_id: i64, now: i64) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET turn_ended_at = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?3 AND status = 'running' AND del = 0",
+            params![now, now, session_id],
+        )
+    }
+
+    pub fn clear_turn_ended_at(&self, session_id: i64) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET turn_ended_at = NULL
+             WHERE id = ?1",
+            params![session_id],
+        )
+    }
+
     pub fn soft_delete_in_transaction(
         transaction: &Transaction<'_>,
         session_id: i64,
@@ -700,6 +723,7 @@ fn agent_session_list_row_from_row(
         last_active_at: row.get(20)?,
         started_at: row.get(21)?,
         closed_at: row.get(22)?,
+        turn_ended_at: row.get::<_, Option<i64>>(23)?,
     })
 }
 

@@ -1479,6 +1479,8 @@ impl<'connection> AgentSessionService<'connection> {
                 .then_with(|| right.session_id.cmp(&left.session_id))
         });
 
+        let now = current_epoch_millis()?;
+
         let sessions = rows
             .into_iter()
             .map(|row| {
@@ -1507,7 +1509,9 @@ impl<'connection> AgentSessionService<'connection> {
                     agent_type: row.agent_type,
                     status: row.status,
                     attention: row.attention,
-                    is_turn_running: is_session_running && row.is_turn_running,
+                    is_turn_running: is_session_running
+                        && row.is_turn_running
+                        && turn_still_running_by_grace(row.turn_ended_at, now),
                     workspace_mode: row.workspace_mode,
                     working_dir: row.working_dir,
                     workspace_path: row.workspace_path,
@@ -4531,6 +4535,15 @@ fn current_epoch_millis() -> Result<i64, CommandError> {
     Ok(duration.as_millis() as i64)
 }
 
+const GRACE_MS: i64 = 3000;
+
+fn turn_still_running_by_grace(turn_ended_at: Option<i64>, now: i64) -> bool {
+    match turn_ended_at {
+        None => true,
+        Some(ended) => now - ended < GRACE_MS,
+    }
+}
+
 fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
@@ -5857,6 +5870,96 @@ mod tests {
     }
 
     #[test]
+    fn update_turn_ended_at_writes_timestamp_for_running_session() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            401,
+            Some(30),
+            Some("Grace issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            20,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+
+        repository
+            .update_turn_ended_at(401, 1_000)
+            .expect("update turn_ended_at");
+
+        let ended_at: Option<i64> = database
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 401",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read turn_ended_at");
+        assert_eq!(ended_at, Some(1_000));
+    }
+
+    #[test]
+    fn clear_turn_ended_at_nulls_timestamp() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            402,
+            Some(31),
+            Some("Clear issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            21,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_ended_at(402, 1_000).expect("set");
+
+        repository.clear_turn_ended_at(402).expect("clear");
+
+        let ended_at: Option<i64> = database
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 402",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read turn_ended_at");
+        assert_eq!(ended_at, None);
+    }
+
+    #[test]
+    fn mark_terminated_clears_turn_ended_at() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            403,
+            Some(32),
+            Some("Terminate issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            22,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_ended_at(403, 1_000).expect("set");
+
+        database
+            .execute(
+                "UPDATE agent_sessions SET status = 'stopped', is_turn_running = 0, turn_ended_at = NULL, closed_at = 50 WHERE id = 403 AND closed_at IS NULL AND del = 0",
+                [],
+            )
+            .expect("terminate");
+
+        let ended_at: Option<i64> = database
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 403",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read turn_ended_at");
+        assert_eq!(ended_at, None);
+    }
+
+    #[test]
     fn list_agent_sessions_does_not_report_stopped_session_turn_as_running() {
         let database = setup_session_list_database();
         let log_path =
@@ -5919,6 +6022,190 @@ mod tests {
             .expect("standalone session");
 
         assert!(!standalone_session.is_turn_running);
+    }
+
+    #[test]
+    fn list_reports_turn_running_within_grace_after_turn_ended() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            501,
+            Some(40),
+            Some("Grace within issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            30,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 501",
+                params![current_millis() - 1_000],
+            )
+            .expect("set grace within");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 501)
+            .expect("session");
+        assert!(session.is_turn_running);
+    }
+
+    #[test]
+    fn list_reports_turn_idle_after_grace_expires() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            502,
+            Some(41),
+            Some("Grace expired issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            31,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 502",
+                params![current_millis() - 4_000],
+            )
+            .expect("set grace expired");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 502)
+            .expect("session");
+        assert!(!session.is_turn_running);
+    }
+
+    #[test]
+    fn list_reports_turn_running_when_turn_ended_at_null_and_running() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            503,
+            Some(42),
+            Some("Null ended issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            32,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1 WHERE id = 503",
+                [],
+            )
+            .expect("set running");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 503)
+            .expect("session");
+        assert!(session.is_turn_running);
+    }
+
+    #[test]
+    fn empty_error_turn_failed_keeps_running_within_grace() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            601,
+            Some(50),
+            Some("Empty error issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            40,
+            None,
+        );
+        // 模拟 broadcaster 对空 error turn_failed 的处理：写 turn_ended_at，不置 0。
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_running(601, true, 40).expect("start");
+        repository
+            .update_turn_ended_at(601, current_millis() - 1_000)
+            .expect("empty fail");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 601)
+            .expect("session");
+        assert!(session.is_turn_running, "空 error turn_failed 在 grace 内应仍运行");
+    }
+
+    #[test]
+    fn concurrent_turn_completions_refresh_grace_window() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            602,
+            Some(51),
+            Some("Concurrent turns issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            41,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_running(602, true, 41).expect("start");
+        // 多个并发 sub turn 陆续 completed：每次刷新 turn_ended_at。
+        repository
+            .update_turn_ended_at(602, current_millis() - 2_500)
+            .expect("sub turn 1");
+        repository
+            .update_turn_ended_at(602, current_millis() - 1_000)
+            .expect("sub turn 2");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 602)
+            .expect("session");
+        assert!(session.is_turn_running, "最近一次 completed 在 grace 内应仍运行");
+    }
+
+    #[test]
+    fn turn_canceled_and_error_turn_failed_terminate_immediately() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            603,
+            Some(52),
+            Some("Cancel issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            42,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_running(603, true, 42).expect("start");
+        // 模拟 EndedImmediately：置 is_turn_running=0 + 清 turn_ended_at。
+        repository
+            .update_turn_running(603, false, 42)
+            .expect("cancel");
+        repository.clear_turn_ended_at(603).expect("clear");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 603)
+            .expect("session");
+        assert!(!session.is_turn_running, "turn_canceled 应立即非运行");
     }
 
     #[test]

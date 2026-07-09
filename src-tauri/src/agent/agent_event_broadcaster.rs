@@ -161,7 +161,7 @@ impl AgentEventBroadcaster {
             .as_ref()
             .map(|_| self.should_update_latest_output(envelope.session_id, &envelope.event))
             .unwrap_or(false);
-        let turn_running = turn_running_from_stream_event(&envelope.event);
+        let decision = turn_running_from_stream_event(&envelope.event);
         // ThreadStarted 携带 agent 会话标识（Codex threadId / Claude session_id）。
         // Claude 首轮 send_message 在后台异步产生 session_id，无法在启动路径同步
         // 回填 DB；此处作为统一回流入口，把会话标识写入 codex_session_id 列，
@@ -182,7 +182,7 @@ impl AgentEventBroadcaster {
             }
         }
 
-        if !should_update_latest_output && turn_running.is_none() && resume_session_id.is_none() {
+        if !should_update_latest_output && decision == TurnRunningDecision::None && resume_session_id.is_none() {
             return false;
         }
         let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
@@ -199,9 +199,19 @@ impl AgentEventBroadcaster {
                     repository.update_latest_output(envelope.session_id, latest_output, updated_at);
             }
         }
-        if let Some(is_turn_running) = turn_running {
-            let _ =
-                repository.update_turn_running(envelope.session_id, is_turn_running, updated_at);
+        match decision {
+            TurnRunningDecision::Running => {
+                let _ = repository.update_turn_running(envelope.session_id, true, updated_at);
+                let _ = repository.clear_turn_ended_at(envelope.session_id);
+            }
+            TurnRunningDecision::EndedWithGrace => {
+                let _ = repository.update_turn_ended_at(envelope.session_id, updated_at);
+            }
+            TurnRunningDecision::EndedImmediately => {
+                let _ = repository.update_turn_running(envelope.session_id, false, updated_at);
+                let _ = repository.clear_turn_ended_at(envelope.session_id);
+            }
+            TurnRunningDecision::None => {}
         }
         if let Some(session_id) = resume_session_id {
             let _ = repository.update_codex_session_id(envelope.session_id, session_id);
@@ -290,13 +300,35 @@ fn should_refresh_session_list_for_stream_event(event: &AgentStreamEvent) -> boo
     !matches!(event, AgentStreamEvent::Timeline { .. })
 }
 
-fn turn_running_from_stream_event(event: &AgentStreamEvent) -> Option<bool> {
+/// turn 运行态的三态决策，供 `persist_stream_event` 决定如何写 DB。
+///
+/// - `Running`：turn 开始，置 `is_turn_running=1` 并清 `turn_ended_at`。
+/// - `EndedWithGrace`：turn 正常结束或 codex 瞬态空错误，进入 grace period：
+///   只写 `turn_ended_at`，不置 `is_turn_running=0`，由后续 grace 扫描收尾。
+/// - `EndedImmediately`：turn 真失败或被取消，立即置 `is_turn_running=0` 并清
+///   `turn_ended_at`。
+/// - `None`：非 turn 事件，不动 turn 相关字段。
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TurnRunningDecision {
+    Running,
+    EndedWithGrace,
+    EndedImmediately,
+    None,
+}
+
+fn turn_running_from_stream_event(event: &AgentStreamEvent) -> TurnRunningDecision {
     match event {
-        AgentStreamEvent::TurnStarted { .. } => Some(true),
-        AgentStreamEvent::TurnCompleted { .. }
-        | AgentStreamEvent::TurnFailed { .. }
-        | AgentStreamEvent::TurnCanceled { .. } => Some(false),
-        _ => None,
+        AgentStreamEvent::TurnStarted { .. } => TurnRunningDecision::Running,
+        AgentStreamEvent::TurnCompleted { .. } => TurnRunningDecision::EndedWithGrace,
+        AgentStreamEvent::TurnFailed { error, .. } => {
+            if error.trim().is_empty() {
+                TurnRunningDecision::EndedWithGrace
+            } else {
+                TurnRunningDecision::EndedImmediately
+            }
+        }
+        AgentStreamEvent::TurnCanceled { .. } => TurnRunningDecision::EndedImmediately,
+        _ => TurnRunningDecision::None,
     }
 }
 
@@ -414,16 +446,17 @@ mod tests {
 
     #[test]
     fn turn_running_state_is_derived_from_turn_events() {
+        use TurnRunningDecision as D;
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::TurnStarted { turn_id: None }),
-            Some(true)
+            D::Running
         );
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::TurnCompleted {
                 turn_id: None,
                 usage: None,
             }),
-            Some(false)
+            D::EndedWithGrace
         );
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::TurnFailed {
@@ -431,20 +464,75 @@ mod tests {
                 error: "failed".to_string(),
                 code: None,
             }),
-            Some(false)
+            D::EndedImmediately
         );
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::TurnCanceled {
                 turn_id: None,
                 reason: "canceled".to_string(),
             }),
-            Some(false)
+            D::EndedImmediately
         );
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::ModelChanged {
                 model_id: "gpt-5".to_string(),
             }),
-            None
+            D::None
+        );
+    }
+
+    #[test]
+    fn turn_decision_maps_turn_events() {
+        use TurnRunningDecision as D;
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnStarted { turn_id: None }),
+            D::Running
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnCompleted {
+                turn_id: None,
+                usage: None,
+            }),
+            D::EndedWithGrace
+        );
+        // 空 error 的 turn_failed → grace（codex 瞬态空错误）
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnFailed {
+                turn_id: None,
+                error: "".to_string(),
+                code: None,
+            }),
+            D::EndedWithGrace
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnFailed {
+                turn_id: None,
+                error: "   ".to_string(),
+                code: None,
+            }),
+            D::EndedWithGrace
+        );
+        // 带 error 的 turn_failed → 立即终止（真失败）
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnFailed {
+                turn_id: None,
+                error: "boom".to_string(),
+                code: None,
+            }),
+            D::EndedImmediately
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::TurnCanceled {
+                turn_id: None,
+                reason: "user".to_string(),
+            }),
+            D::EndedImmediately
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::ModelChanged {
+                model_id: "gpt-5".to_string(),
+            }),
+            D::None
         );
     }
 

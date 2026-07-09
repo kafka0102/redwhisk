@@ -28,6 +28,22 @@ import {
   type AgentType,
   type IssueStatus,
 } from "./agent-session-commands";
+import type { TurnStatus } from "./message-stream/message-stream-types";
+
+// 计算 effective turnStatus：reducer 已 running 直接 running；否则在
+// canUseExternalTurnRunning 生效时用外部 isTurnRunning 维持 running（grace 期），
+// 其余情况回落 reducer turnStatus。抽成纯函数以便单测覆盖 grace 边界。
+// eslint-disable-next-line react-refresh/only-export-components -- 纯函数与组件同文件以便单测，参照 i18n.tsx 先例
+export function computeEffectiveTurnStatus(
+  turnStatus: TurnStatus,
+  isTurnRunning: boolean,
+  canUseExternalTurnRunning: boolean,
+): TurnStatus {
+  return turnStatus === "running" ||
+    (canUseExternalTurnRunning && isTurnRunning)
+    ? "running"
+    : turnStatus;
+}
 
 interface AgentSessionViewProps {
   projectId: number;
@@ -61,12 +77,15 @@ export const AgentSessionView = memo(function AgentSessionView({
     sessionStatus === "running" && issueStatus !== "completed";
 
   // 使用 useMemo 避免不必要的重新计算
-  const effectiveTurnStatus = useMemo(() => {
-    return state.turnStatus === "running" ||
-      (canUseExternalTurnRunning && isTurnRunning)
-      ? "running"
-      : state.turnStatus;
-  }, [canUseExternalTurnRunning, isTurnRunning, state.turnStatus]);
+  const effectiveTurnStatus = useMemo(
+    () =>
+      computeEffectiveTurnStatus(
+        state.turnStatus,
+        isTurnRunning,
+        canUseExternalTurnRunning,
+      ),
+    [canUseExternalTurnRunning, isTurnRunning, state.turnStatus],
+  );
 
   const isReadOnly = issueStatus === "completed";
   const readOnlyReason = isReadOnly
