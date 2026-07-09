@@ -106,6 +106,9 @@ const PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_VERSION: &str =
     "0033_project_terminal_shortcut_commands";
 const PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0033_project_terminal_shortcut_commands.sql");
+const AGENT_SESSION_TURN_ENDED_AT_MIGRATION_VERSION: &str = "0034_agent_session_turn_ended_at";
+const AGENT_SESSION_TURN_ENDED_AT_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0034_agent_session_turn_ended_at.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -307,6 +310,10 @@ impl MigrationRunner {
                 Migration {
                     version: PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_VERSION,
                     sql: PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_SQL,
+                },
+                Migration {
+                    version: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_VERSION,
+                    sql: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_SQL,
                 },
             ];
         }

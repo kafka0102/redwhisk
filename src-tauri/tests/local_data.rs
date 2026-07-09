@@ -52,11 +52,12 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0031_drop_completion_policy",
             "0032_issue_completion_flows_unified",
             "0033_project_terminal_shortcut_commands",
+            "0034_agent_session_turn_ended_at",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0033_project_terminal_shortcut_commands".to_string())
+        Some("0034_agent_session_turn_ended_at".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -117,12 +118,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0031_drop_completion_policy",
             "0032_issue_completion_flows_unified",
             "0033_project_terminal_shortcut_commands",
+            "0034_agent_session_turn_ended_at",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0033_project_terminal_shortcut_commands".to_string())
+        Some("0034_agent_session_turn_ended_at".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -131,7 +133,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 33);
+    assert_eq!(schema_migrations_count, 34);
 }
 
 #[test]

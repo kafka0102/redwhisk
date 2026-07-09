@@ -5857,6 +5857,96 @@ mod tests {
     }
 
     #[test]
+    fn update_turn_ended_at_writes_timestamp_for_running_session() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            401,
+            Some(30),
+            Some("Grace issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            20,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+
+        repository
+            .update_turn_ended_at(401, 1_000)
+            .expect("update turn_ended_at");
+
+        let ended_at: Option<i64> = database
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 401",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read turn_ended_at");
+        assert_eq!(ended_at, Some(1_000));
+    }
+
+    #[test]
+    fn clear_turn_ended_at_nulls_timestamp() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            402,
+            Some(31),
+            Some("Clear issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            21,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_ended_at(402, 1_000).expect("set");
+
+        repository.clear_turn_ended_at(402).expect("clear");
+
+        let ended_at: Option<i64> = database
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 402",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read turn_ended_at");
+        assert_eq!(ended_at, None);
+    }
+
+    #[test]
+    fn mark_terminated_clears_turn_ended_at() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            403,
+            Some(32),
+            Some("Terminate issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            22,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_ended_at(403, 1_000).expect("set");
+
+        database
+            .execute(
+                "UPDATE agent_sessions SET status = 'stopped', is_turn_running = 0, turn_ended_at = NULL, closed_at = 50 WHERE id = 403 AND closed_at IS NULL AND del = 0",
+                [],
+            )
+            .expect("terminate");
+
+        let ended_at: Option<i64> = database
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 403",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read turn_ended_at");
+        assert_eq!(ended_at, None);
+    }
+
+    #[test]
     fn list_agent_sessions_does_not_report_stopped_session_turn_as_running() {
         let database = setup_session_list_database();
         let log_path =
