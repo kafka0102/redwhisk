@@ -1,6 +1,6 @@
 version: 1
 change: project-scoped-issue-session-number
-phase: approved
+phase: implementing
 ambiguity: high
 complexity: high
 implementation_path: superpowers
@@ -10,13 +10,13 @@ origin_branch: main
 origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
 origin_workspace_mode: current-branch
 implementation_workspace_path: unknown
-plan: null
+plan: docs/superpowers/plans/2026-07-09-project-scoped-issue-session-number.md
 handoff_context: openspec/changes/project-scoped-issue-session-number/.onespec.yaml
-handoff_purpose: proposal
-handoff_summary: 'proposal handoff from 4 file(s); primary artifact: openspec/changes/project-scoped-issue-session-number/proposal.md'
-handoff_hash: b95478829213f48b288ad1da199eabc130ce4ee2cbba00d50cb6920658e24c43
+handoff_purpose: plan
+handoff_summary: 'plan handoff from 4 file(s); primary artifact: openspec/changes/project-scoped-issue-session-number/proposal.md'
+handoff_hash: 6f8dd712e6ead374b1f197c704a34360a6358b6c755436efc9235ffcb432a9d1
 touched_files_b64: null
 review_result: pending
 archive: pending
 created_at: 2026-07-09
-updated_at: 2026-07-09T04:17:39Z
+updated_at: 2026-07-09T04:26:58Z
