@@ -115,6 +115,10 @@ const AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION: &str =
     "0035_agent_sessions_workflow_skill_name";
 const AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_SQL: &str =
     include_str!("../../migrations/0035_agent_sessions_workflow_skill_name.sql");
+pub(crate) const PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION: &str =
+    "0036_project_scoped_issue_session_numbers";
+pub(crate) const PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0036_project_scoped_issue_session_numbers.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -184,151 +188,173 @@ impl MigrationRunner {
 
     fn migrations(&self) -> Vec<Migration> {
         if self.migrations.is_empty() {
-            return vec![
-                Migration {
-                    version: CORE_MIGRATION_VERSION,
-                    sql: CORE_MIGRATION_SQL,
-                },
-                Migration {
-                    version: PROJECTS_MIGRATION_VERSION,
-                    sql: PROJECTS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: PROJECT_INTEGER_IDS_MIGRATION_VERSION,
-                    sql: PROJECT_INTEGER_IDS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUES_MIGRATION_VERSION,
-                    sql: ISSUES_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUE_ACTIONS_MIGRATION_VERSION,
-                    sql: ISSUE_ACTIONS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_VERSION,
-                    sql: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_SQL,
-                },
-                Migration {
-                    version: RESTRUCTURE_AGENT_PROFILES_MIGRATION_VERSION,
-                    sql: RESTRUCTURE_AGENT_PROFILES_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_VERSION,
-                    sql: AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSIONS_PROJECT_ID_MIGRATION_VERSION,
-                    sql: AGENT_SESSIONS_PROJECT_ID_MIGRATION_SQL,
-                },
-                Migration {
-                    version: PROJECT_COMPLETION_POLICY_MIGRATION_VERSION,
-                    sql: PROJECT_COMPLETION_POLICY_MIGRATION_SQL,
-                },
-                Migration {
-                    version: COMPLETION_ATTEMPTS_MIGRATION_VERSION,
-                    sql: COMPLETION_ATTEMPTS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_VERSION,
-                    sql: AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_VERSION,
-                    sql: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_SQL,
-                },
-                Migration {
-                    version: COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_VERSION,
-                    sql: COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_SQL,
-                },
-                Migration {
-                    version: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_VERSION,
-                    sql: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSION_LATEST_OUTPUT_MIGRATION_VERSION,
-                    sql: AGENT_SESSION_LATEST_OUTPUT_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION,
-                    sql: ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUE_ATTACHMENTS_MIGRATION_VERSION,
-                    sql: ISSUE_ATTACHMENTS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_PROFILES_DEL_MIGRATION_VERSION,
-                    sql: AGENT_PROFILES_DEL_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_VERSION,
-                    sql: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL,
-                },
-                Migration {
-                    version: PROJECT_TERMINAL_CONFIGS_MIGRATION_VERSION,
-                    sql: PROJECT_TERMINAL_CONFIGS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_WORKTREE_EXECUTION_MIGRATION_VERSION,
-                    sql: AGENT_WORKTREE_EXECUTION_MIGRATION_SQL,
-                },
-                Migration {
-                    version: PROJECT_LABELS_MIGRATION_VERSION,
-                    sql: PROJECT_LABELS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUE_LABELS_MIGRATION_VERSION,
-                    sql: ISSUE_LABELS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSION_LIST_ORDER_MIGRATION_VERSION,
-                    sql: AGENT_SESSION_LIST_ORDER_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_VERSION,
-                    sql: AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUE_COMPLETION_FLOWS_MIGRATION_VERSION,
-                    sql: ISSUE_COMPLETION_FLOWS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSION_TURN_STATE_MIGRATION_VERSION,
-                    sql: AGENT_SESSION_TURN_STATE_MIGRATION_SQL,
-                },
-                Migration {
-                    version: SAVED_AGENT_SKILLS_MIGRATION_VERSION,
-                    sql: SAVED_AGENT_SKILLS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: DROP_LABEL_AGENT_PROFILE_MIGRATION_VERSION,
-                    sql: DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL,
-                },
-                Migration {
-                    version: DROP_COMPLETION_POLICY_MIGRATION_VERSION,
-                    sql: DROP_COMPLETION_POLICY_MIGRATION_SQL,
-                },
-                Migration {
-                    version: ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_VERSION,
-                    sql: ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_SQL,
-                },
-                Migration {
-                    version: PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_VERSION,
-                    sql: PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_VERSION,
-                    sql: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_SQL,
-                },
-                Migration {
-                    version: AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION,
-                    sql: AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_SQL,
-                },
-            ];
+            return default_migrations();
         }
 
         self.migrations.clone()
+    }
+}
+
+fn default_migrations() -> Vec<Migration> {
+    vec![
+        Migration {
+            version: CORE_MIGRATION_VERSION,
+            sql: CORE_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECTS_MIGRATION_VERSION,
+            sql: PROJECTS_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_INTEGER_IDS_MIGRATION_VERSION,
+            sql: PROJECT_INTEGER_IDS_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUES_MIGRATION_VERSION,
+            sql: ISSUES_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUE_ACTIONS_MIGRATION_VERSION,
+            sql: ISSUE_ACTIONS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_VERSION,
+            sql: AGENT_PROFILES_AND_PROJECT_OVERRIDES_MIGRATION_SQL,
+        },
+        Migration {
+            version: RESTRUCTURE_AGENT_PROFILES_MIGRATION_VERSION,
+            sql: RESTRUCTURE_AGENT_PROFILES_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_AND_SESSION_EVENTS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_PROJECT_ID_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_PROJECT_ID_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_COMPLETION_POLICY_MIGRATION_VERSION,
+            sql: PROJECT_COMPLETION_POLICY_MIGRATION_SQL,
+        },
+        Migration {
+            version: COMPLETION_ATTEMPTS_MIGRATION_VERSION,
+            sql: COMPLETION_ATTEMPTS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_VERSION,
+            sql: AGENT_COMMIT_COMPLETION_ATTEMPTS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_VERSION,
+            sql: AGENT_COMMIT_COMPLETION_RESULT_MIGRATION_SQL,
+        },
+        Migration {
+            version: COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_VERSION,
+            sql: COMPLETION_ATTEMPT_FAILURE_REASON_MIGRATION_SQL,
+        },
+        Migration {
+            version: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_VERSION,
+            sql: COMPLETION_ATTEMPT_GIT_OPERATION_BLOCKED_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSION_LATEST_OUTPUT_MIGRATION_VERSION,
+            sql: AGENT_SESSION_LATEST_OUTPUT_MIGRATION_SQL,
+        },
+        Migration {
+            version: ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION,
+            sql: ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUE_ATTACHMENTS_MIGRATION_VERSION,
+            sql: ISSUE_ATTACHMENTS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_PROFILES_DEL_MIGRATION_VERSION,
+            sql: AGENT_PROFILES_DEL_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_VERSION,
+            sql: ISSUES_AND_AGENT_SESSIONS_DEL_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_TERMINAL_CONFIGS_MIGRATION_VERSION,
+            sql: PROJECT_TERMINAL_CONFIGS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_WORKTREE_EXECUTION_MIGRATION_VERSION,
+            sql: AGENT_WORKTREE_EXECUTION_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_LABELS_MIGRATION_VERSION,
+            sql: PROJECT_LABELS_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUE_LABELS_MIGRATION_VERSION,
+            sql: ISSUE_LABELS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSION_LIST_ORDER_MIGRATION_VERSION,
+            sql: AGENT_SESSION_LIST_ORDER_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_ACTIVE_ISSUE_UNIQUE_INDEX_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUE_COMPLETION_FLOWS_MIGRATION_VERSION,
+            sql: ISSUE_COMPLETION_FLOWS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSION_TURN_STATE_MIGRATION_VERSION,
+            sql: AGENT_SESSION_TURN_STATE_MIGRATION_SQL,
+        },
+        Migration {
+            version: SAVED_AGENT_SKILLS_MIGRATION_VERSION,
+            sql: SAVED_AGENT_SKILLS_MIGRATION_SQL,
+        },
+        Migration {
+            version: DROP_LABEL_AGENT_PROFILE_MIGRATION_VERSION,
+            sql: DROP_LABEL_AGENT_PROFILE_MIGRATION_SQL,
+        },
+        Migration {
+            version: DROP_COMPLETION_POLICY_MIGRATION_VERSION,
+            sql: DROP_COMPLETION_POLICY_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_VERSION,
+            sql: ISSUE_COMPLETION_FLOWS_UNIFIED_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_VERSION,
+            sql: PROJECT_TERMINAL_SHORTCUT_COMMANDS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_VERSION,
+            sql: AGENT_SESSION_TURN_ENDED_AT_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
+            sql: PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
+        },
+    ]
+}
+
+#[cfg(test)]
+impl MigrationRunner {
+    /// 构造一个跳过指定版本集合的 runner，用于测试单个 migration 的增量语义
+    /// （例如：先跑到 N-1、插入旧数据、再单独执行第 N 个 migration 验证回填）。
+    pub fn runner_skipping(skipped: &[&str]) -> Self {
+        let pairs: Vec<(&'static str, &'static str)> = default_migrations()
+            .into_iter()
+            .filter(|migration| !skipped.contains(&migration.version))
+            .map(|migration| (migration.version, migration.sql))
+            .collect();
+        Self::from_static_migrations(pairs)
     }
 }
 

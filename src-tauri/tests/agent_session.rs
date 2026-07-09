@@ -133,6 +133,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "is_turn_running",
             "turn_ended_at",
             "workflow_skill_name",
+            "number",
         ]
     );
 

@@ -547,3 +547,219 @@ fn issue_status_to_str(value: &IssueStatus) -> &'static str {
         IssueStatus::Completed => "completed",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::migrations::{
+        MigrationRunner, PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
+        PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
+    };
+
+    // 跑到 0035（跳过 0036），用于验证 0036 的回填增量语义：先插入无 number 列的旧数据，
+    // 再单独执行 0036 SQL，断言回填结果。
+    fn connection_before_project_scoped_numbers() -> Connection {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+        MigrationRunner::runner_skipping(&[PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION])
+            .run(&connection)
+            .expect("run migrations up to 0035");
+        connection
+    }
+
+    // 全量 migration（含 0036），用于校验 schema 产物（列与唯一索引）。
+    fn connection_with_all_migrations() -> Connection {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run all migrations");
+        connection
+    }
+
+    fn insert_project(connection: &Connection, id: i64, name: &str) {
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (?1, ?2, ?3, 0, 0)",
+                params![id, name, format!("/tmp/{name}")],
+            )
+            .expect("insert project");
+    }
+
+    fn insert_agent_profile(connection: &Connection, id: i64) {
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (?1, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                params![id],
+            )
+            .expect("insert agent profile");
+    }
+
+    // 模拟 0036 之前的旧数据：显式不写 number（该列尚不存在）。
+    fn insert_issue_raw(
+        connection: &Connection,
+        project_id: i64,
+        title: &str,
+        created_at: i64,
+    ) -> i64 {
+        connection
+            .execute(
+                "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+                 VALUES (?1, ?2, '', 'backlog', ?3, ?3)",
+                params![project_id, title, created_at],
+            )
+            .expect("insert raw issue");
+        connection.last_insert_rowid()
+    }
+
+    fn insert_session_raw(connection: &Connection, id: i64, project_id: i64, started_at: i64) {
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   last_active_at, started_at, del
+                 ) VALUES (
+                   ?1, ?2, 100, 'closed', 'none',
+                   '/tmp/repo', 'codex', '', '/tmp/s.log',
+                   ?3, ?3, 0
+                 )",
+                params![id, project_id, started_at],
+            )
+            .expect("insert raw agent session");
+    }
+
+    fn issue_number(connection: &Connection, issue_id: i64) -> i64 {
+        connection
+            .query_row(
+                "SELECT number FROM issues WHERE id = ?1",
+                params![issue_id],
+                |row| row.get(0),
+            )
+            .expect("read issue number")
+    }
+
+    fn session_number(connection: &Connection, session_id: i64) -> i64 {
+        connection
+            .query_row(
+                "SELECT number FROM agent_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .expect("read session number")
+    }
+
+    fn run_project_scoped_migration(connection: &Connection) {
+        connection
+            .execute_batch(PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL)
+            .expect("run 0036 migration sql");
+    }
+
+    #[test]
+    fn backfill_issues_assigns_continuous_numbers_by_created_at() {
+        let connection = connection_before_project_scoped_numbers();
+        insert_project(&connection, 1, "p1");
+        let first = insert_issue_raw(&connection, 1, "first", 100);
+        let second = insert_issue_raw(&connection, 1, "second", 200);
+        let third = insert_issue_raw(&connection, 1, "third", 300);
+
+        run_project_scoped_migration(&connection);
+
+        assert_eq!(issue_number(&connection, first), 1);
+        assert_eq!(issue_number(&connection, second), 2);
+        assert_eq!(issue_number(&connection, third), 3);
+    }
+
+    #[test]
+    fn backfill_issues_tiebreaks_equal_created_at_by_id() {
+        let connection = connection_before_project_scoped_numbers();
+        insert_project(&connection, 1, "p1");
+        // 同 created_at，id 由插入顺序决定（先插入者 id 更小）。
+        let earlier_id = insert_issue_raw(&connection, 1, "earlier", 500);
+        let later_id = insert_issue_raw(&connection, 1, "later", 500);
+
+        run_project_scoped_migration(&connection);
+
+        assert_eq!(issue_number(&connection, earlier_id), 1);
+        assert_eq!(issue_number(&connection, later_id), 2);
+    }
+
+    #[test]
+    fn backfill_issues_isolates_numbering_per_project() {
+        let connection = connection_before_project_scoped_numbers();
+        insert_project(&connection, 1, "p1");
+        insert_project(&connection, 2, "p2");
+        let p1_a = insert_issue_raw(&connection, 1, "p1-a", 100);
+        let p2_a = insert_issue_raw(&connection, 2, "p2-a", 50);
+        let p1_b = insert_issue_raw(&connection, 1, "p1-b", 200);
+        let p2_b = insert_issue_raw(&connection, 2, "p2-b", 60);
+
+        run_project_scoped_migration(&connection);
+
+        assert_eq!(issue_number(&connection, p1_a), 1);
+        assert_eq!(issue_number(&connection, p1_b), 2);
+        assert_eq!(issue_number(&connection, p2_a), 1);
+        assert_eq!(issue_number(&connection, p2_b), 2);
+    }
+
+    #[test]
+    fn backfill_agent_sessions_assigns_continuous_numbers_by_started_at() {
+        let connection = connection_before_project_scoped_numbers();
+        insert_project(&connection, 1, "p1");
+        insert_agent_profile(&connection, 100);
+        insert_session_raw(&connection, 10, 1, 1_000);
+        insert_session_raw(&connection, 20, 1, 2_000);
+        insert_session_raw(&connection, 30, 1, 3_000);
+
+        run_project_scoped_migration(&connection);
+
+        assert_eq!(session_number(&connection, 10), 1);
+        assert_eq!(session_number(&connection, 20), 2);
+        assert_eq!(session_number(&connection, 30), 3);
+    }
+
+    #[test]
+    fn migration_adds_project_scoped_number_columns() {
+        let connection = connection_with_all_migrations();
+
+        let issues_has_number = column_exists(&connection, "issues", "number");
+        let sessions_has_number = column_exists(&connection, "agent_sessions", "number");
+
+        assert!(issues_has_number, "issues.number column should exist");
+        assert!(
+            sessions_has_number,
+            "agent_sessions.number column should exist"
+        );
+
+        // DEFAULT 0：不指定 number 插入应成功，值默认为 0。
+        insert_project(&connection, 1, "p1");
+        connection
+            .execute(
+                "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+                 VALUES (1, 'one', '', 'backlog', 1, 1)",
+                [],
+            )
+            .expect("insert issue without number");
+        let default_number: i64 = connection
+            .query_row(
+                "SELECT number FROM issues WHERE project_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read default number");
+        assert_eq!(default_number, 0);
+    }
+
+    fn column_exists(connection: &Connection, table: &str, column: &str) -> bool {
+        let pragma = format!("PRAGMA table_info({table})");
+        let mut statement = connection.prepare(&pragma).expect("prepare pragma");
+        let mut rows = statement.query([]).expect("query pragma");
+        while let Some(row) = rows.next().expect("next row") {
+            let name: String = row.get(1).expect("read column name");
+            if name == column {
+                return true;
+            }
+        }
+        false
+    }
+}

@@ -67,6 +67,7 @@ fn issue_migration_creates_issues_schema_with_project_index() {
             "updated_at",
             "del",
             "label_ids",
+            "number",
         ],
     );
     assert_eq!(
