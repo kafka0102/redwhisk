@@ -6617,8 +6617,12 @@ mod tests {
         {
             connection
                 .execute(
-                    "INSERT INTO issues (id, project_id, title, description, status, created_at, updated_at, del)
-                     VALUES (?1, 1, ?2, '', ?3, ?4, ?4, 0)",
+                    "INSERT INTO issues (id, project_id, number, title, description, status, created_at, updated_at, del)
+                     VALUES (
+                       ?1, 1,
+                       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = 1),
+                       ?2, '', ?3, ?4, ?4, 0
+                     )",
                     params![issue_id, issue_title, issue_status, started_at],
                 )
                 .expect("insert issue");

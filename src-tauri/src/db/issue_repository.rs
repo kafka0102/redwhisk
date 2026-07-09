@@ -48,7 +48,8 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
     ) AS linked_session_latest_output,
     issues.label_ids,
     issues.created_at,
-    issues.updated_at
+    issues.updated_at,
+    issues.number
  FROM issues";
 
 pub struct IssueRepository<'connection> {
@@ -194,18 +195,24 @@ impl<'connection> IssueRepository<'connection> {
         description: &str,
         label_ids_json: &str,
     ) -> rusqlite::Result<IssueRecord> {
+        let number: i64 = self.connection.query_row(
+            "SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )?;
         self.connection.execute(
-            "INSERT INTO issues (project_id, title, description, label_ids, status, created_at, updated_at)
+            "INSERT INTO issues (project_id, number, title, description, label_ids, status, created_at, updated_at)
              VALUES (
                ?1,
                ?2,
                ?3,
                ?4,
+               ?5,
                'backlog',
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )",
-            params![project_id, title, description, label_ids_json],
+            params![project_id, number, title, description, label_ids_json],
         )?;
 
         let id = self.connection.last_insert_rowid();
@@ -220,18 +227,24 @@ impl<'connection> IssueRepository<'connection> {
         description: &str,
         label_ids_json: &str,
     ) -> rusqlite::Result<IssueRecord> {
+        let number: i64 = transaction.query_row(
+            "SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )?;
         transaction.execute(
-            "INSERT INTO issues (project_id, title, description, label_ids, status, created_at, updated_at)
+            "INSERT INTO issues (project_id, number, title, description, label_ids, status, created_at, updated_at)
              VALUES (
                ?1,
                ?2,
                ?3,
                ?4,
+               ?5,
                'backlog',
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )",
-            params![project_id, title, description, label_ids_json],
+            params![project_id, number, title, description, label_ids_json],
         )?;
 
         let id = transaction.last_insert_rowid();
@@ -502,6 +515,7 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
         linked_session_latest_output: row.get(9)?,
         created_at: row.get(11)?,
         updated_at: row.get(12)?,
+        number: row.get(13)?,
     })
 }
 
@@ -552,17 +566,32 @@ fn issue_status_to_str(value: &IssueStatus) -> &'static str {
 mod tests {
     use super::*;
     use crate::db::migrations::{
-        MigrationRunner, PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
+        ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
+        ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION, MigrationRunner,
+        PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
     };
 
-    // 跑到 0035（跳过 0036），用于验证 0036 的回填增量语义：先插入无 number 列的旧数据，
-    // 再单独执行 0036 SQL，断言回填结果。
+    // 跑到 0035（跳过 0036 与依赖它的 0037），用于验证 0036 的回填增量语义：先插入无
+    // number 列的旧数据，再单独执行 0036 SQL，断言回填结果。0037 依赖 number 列，必须一并跳过。
     fn connection_before_project_scoped_numbers() -> Connection {
         let connection = Connection::open_in_memory().expect("open in-memory database");
-        MigrationRunner::runner_skipping(&[PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION])
+        MigrationRunner::runner_skipping(&[
+            PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
+            ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+        ])
+        .run(&connection)
+        .expect("run migrations up to 0035");
+        connection
+    }
+
+    // 跑到 0036（跳过 0037），用于验证 0037 的回填增量语义：number 列已存在且历史行已由
+    // 0036 回填为正编号；再插入过渡期 number=0 行，单独执行 0037 SQL，断言回填与唯一索引。
+    fn connection_before_issues_unique_index() -> Connection {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+        MigrationRunner::runner_skipping(&[ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION])
             .run(&connection)
-            .expect("run migrations up to 0035");
+            .expect("run migrations up to 0036");
         connection
     }
 
@@ -653,6 +682,68 @@ mod tests {
         connection
             .execute_batch(PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL)
             .expect("run 0036 migration sql");
+    }
+
+    fn run_issues_unique_migration(connection: &Connection) {
+        connection
+            .execute_batch(ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL)
+            .expect("run 0037 migration sql");
+    }
+
+    // 插入一条显式指定 number 的 issue，用于构造 0036 已回填的历史行（number > 0）。
+    fn insert_issue_with_number(
+        connection: &Connection,
+        project_id: i64,
+        number: i64,
+        title: &str,
+        created_at: i64,
+    ) -> i64 {
+        connection
+            .execute(
+                "INSERT INTO issues (project_id, number, title, description, status, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, '', 'backlog', ?4, ?4)",
+                params![project_id, number, title, created_at],
+            )
+            .expect("insert issue with number");
+        connection.last_insert_rowid()
+    }
+
+    // 插入一条过渡期 number=0 的 issue（模拟 0036 之后、0037 之前走旧路径的新建行）。
+    fn insert_issue_unassigned(
+        connection: &Connection,
+        project_id: i64,
+        title: &str,
+        created_at: i64,
+    ) -> i64 {
+        connection
+            .execute(
+                "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+                 VALUES (?1, ?2, '', 'backlog', ?3, ?3)",
+                params![project_id, title, created_at],
+            )
+            .expect("insert unassigned issue");
+        connection.last_insert_rowid()
+    }
+
+    fn soft_delete_issue(connection: &Connection, issue_id: i64, deleted_at: i64) {
+        connection
+            .execute(
+                "UPDATE issues SET del = 1, updated_at = ?2 WHERE id = ?1 AND del = 0",
+                params![issue_id, deleted_at],
+            )
+            .expect("soft delete issue");
+    }
+
+    fn unique_index_exists(connection: &Connection, table: &str, index: &str) -> bool {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'index' AND tbl_name = ?1 AND name = ?2",
+                params![table, index],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count > 0)
+            .expect("query index existence")
     }
 
     #[test]
@@ -748,6 +839,177 @@ mod tests {
             )
             .expect("read default number");
         assert_eq!(default_number, 0);
+    }
+
+    #[test]
+    fn insert_assigns_project_scoped_sequential_numbers() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        let repo = IssueRepository::new(&connection);
+
+        let first = repo.insert(1, "a", "", "[]").expect("insert first");
+        let second = repo.insert(1, "b", "", "[]").expect("insert second");
+        let third = repo.insert(1, "c", "", "[]").expect("insert third");
+
+        assert_eq!(first.number, 1);
+        assert_eq!(second.number, 2);
+        assert_eq!(third.number, 3);
+        // 返回的 IssueRecord 透传真实 number（非 0 占位）。
+        assert_eq!(issue_number(&connection, first.id), 1);
+        assert_eq!(issue_number(&connection, second.id), 2);
+        assert_eq!(issue_number(&connection, third.id), 3);
+    }
+
+    #[test]
+    fn insert_in_transaction_assigns_project_scoped_number() {
+        let mut connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        // 预置一个已分配 number=1 的行，验证事务内分配从 MAX+1 开始。
+        insert_issue_with_number(&connection, 1, 1, "seed", 100);
+
+        let tx_issue = connection
+            .transaction()
+            .and_then(|transaction| {
+                let issue = IssueRepository::insert_in_transaction(
+                    &transaction,
+                    1,
+                    "via-tx",
+                    "",
+                    "[]",
+                )?;
+                transaction.commit()?;
+                Ok(issue)
+            })
+            .expect("insert in transaction");
+
+        assert_eq!(tx_issue.number, 2);
+        assert_eq!(issue_number(&connection, tx_issue.id), 2);
+    }
+
+    #[test]
+    fn insert_isolates_numbering_per_project() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        insert_project(&connection, 2, "p2");
+        let repo = IssueRepository::new(&connection);
+
+        let p1_first = repo.insert(1, "p1-a", "", "[]").expect("p1 first");
+        let p2_first = repo.insert(2, "p2-a", "", "[]").expect("p2 first");
+        let p1_second = repo.insert(1, "p1-b", "", "[]").expect("p1 second");
+
+        assert_eq!(p1_first.number, 1);
+        assert_eq!(p2_first.number, 1);
+        assert_eq!(p1_second.number, 2);
+    }
+
+    #[test]
+    fn insert_does_not_reuse_number_after_soft_delete() {
+        // 分配 SQL 不过滤 del：软删除行保留 number 且计入 MAX，新建不复用已删除编号。
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        let repo = IssueRepository::new(&connection);
+
+        let first = repo.insert(1, "a", "", "[]").expect("insert first");
+        let second = repo.insert(1, "b", "", "[]").expect("insert second");
+        soft_delete_issue(&connection, second.id, second.updated_at);
+
+        let third = repo.insert(1, "c", "", "[]").expect("insert after delete");
+
+        assert_eq!(first.number, 1);
+        assert_eq!(second.number, 2);
+        assert_eq!(third.number, 3);
+        // 软删除行仍持有原 number（del=1 但 number 不变）。
+        assert_eq!(issue_number(&connection, second.id), 2);
+    }
+
+    #[test]
+    fn migration_0037_backfills_zero_numbered_rows_without_changing_existing() {
+        let connection = connection_before_issues_unique_index();
+        insert_project(&connection, 1, "p1");
+        // 历史行：0036 已回填为正编号 1..3。
+        let h1 = insert_issue_with_number(&connection, 1, 1, "hist-1", 100);
+        let h2 = insert_issue_with_number(&connection, 1, 2, "hist-2", 200);
+        let h3 = insert_issue_with_number(&connection, 1, 3, "hist-3", 300);
+        // 过渡期 number=0 行（0036 之后、0037 之前新建，走旧路径默认 0）。
+        let t1 = insert_issue_unassigned(&connection, 1, "trans-1", 400);
+        let t2 = insert_issue_unassigned(&connection, 1, "trans-2", 500);
+
+        run_issues_unique_migration(&connection);
+
+        // 已分配(>0)的 number 不变。
+        assert_eq!(issue_number(&connection, h1), 1);
+        assert_eq!(issue_number(&connection, h2), 2);
+        assert_eq!(issue_number(&connection, h3), 3);
+        // 过渡期行按 (created_at, id) 接续到 4、5。
+        assert_eq!(issue_number(&connection, t1), 4);
+        assert_eq!(issue_number(&connection, t2), 5);
+
+        // 项目内无重复 number。
+        let duplicate_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM (
+                   SELECT project_id, number, COUNT(*) AS c
+                   FROM issues WHERE project_id = 1
+                   GROUP BY project_id, number HAVING c > 1
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("duplicate count");
+        assert_eq!(duplicate_count, 0);
+
+        assert!(unique_index_exists(
+            &connection,
+            "issues",
+            "uidx_issues_project_id_number"
+        ));
+    }
+
+    #[test]
+    fn migration_0037_tiebreaks_zero_rows_by_created_at_then_id() {
+        // 同 created_at 的过渡期行按 id 升序接续；验证回填与扫描顺序无关。
+        let connection = connection_before_issues_unique_index();
+        insert_project(&connection, 1, "p1");
+        insert_issue_with_number(&connection, 1, 1, "hist", 100);
+        let t_earlier = insert_issue_unassigned(&connection, 1, "earlier", 500);
+        let t_later = insert_issue_unassigned(&connection, 1, "later", 500);
+
+        run_issues_unique_migration(&connection);
+
+        assert_eq!(issue_number(&connection, t_earlier), 2);
+        assert_eq!(issue_number(&connection, t_later), 3);
+    }
+
+    #[test]
+    fn migration_0037_isolates_backfill_per_project() {
+        let connection = connection_before_issues_unique_index();
+        insert_project(&connection, 1, "p1");
+        insert_project(&connection, 2, "p2");
+        insert_issue_with_number(&connection, 1, 1, "p1-hist", 100);
+        insert_issue_with_number(&connection, 2, 1, "p2-hist", 100);
+        let p1_trans = insert_issue_unassigned(&connection, 1, "p1-trans", 200);
+        let p2_trans = insert_issue_unassigned(&connection, 2, "p2-trans", 200);
+
+        run_issues_unique_migration(&connection);
+
+        assert_eq!(issue_number(&connection, p1_trans), 2);
+        assert_eq!(issue_number(&connection, p2_trans), 2);
+    }
+
+    #[test]
+    fn migration_0037_is_noop_when_no_zero_numbered_rows() {
+        let connection = connection_before_issues_unique_index();
+        insert_project(&connection, 1, "p1");
+        let only = insert_issue_with_number(&connection, 1, 1, "only", 100);
+
+        run_issues_unique_migration(&connection);
+
+        assert_eq!(issue_number(&connection, only), 1);
+        assert!(unique_index_exists(
+            &connection,
+            "issues",
+            "uidx_issues_project_id_number"
+        ));
     }
 
     fn column_exists(connection: &Connection, table: &str, column: &str) -> bool {

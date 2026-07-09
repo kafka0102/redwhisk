@@ -119,6 +119,10 @@ pub(crate) const PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION: &str =
     "0036_project_scoped_issue_session_numbers";
 pub(crate) const PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0036_project_scoped_issue_session_numbers.sql");
+pub(crate) const ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION: &str =
+    "0037_issues_project_scoped_number_unique";
+pub(crate) const ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0037_issues_project_scoped_number_unique.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -340,6 +344,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
             sql: PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+            sql: ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
         },
     ]
 }

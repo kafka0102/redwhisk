@@ -275,6 +275,8 @@ pub struct IssueStatusTotals {
 #[serde(rename_all = "camelCase")]
 pub struct IssueRecord {
     pub id: i64,
+    /// 项目内不可逆递增编号，由 repository 在创建事务内分配（MAX(number)+1）。
+    pub number: i64,
     pub project_id: i64,
     pub title: String,
     pub description: String,
