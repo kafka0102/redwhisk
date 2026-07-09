@@ -1406,10 +1406,21 @@ impl<'connection> AgentSessionService<'connection> {
                 let target_branch =
                     resolve_target_branch(&branch_info, input.target_branch.as_deref())?;
                 let worktree_root_path = resolve_worktree_root_path(&project)?;
+                let issue_number = self
+                    .issue_repository
+                    .find_by_id(input.issue_id)
+                    .map_err(agent_session_database_error)?
+                    .ok_or_else(|| {
+                        CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                            .with_detail(
+                                ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
+                            )
+                    })?
+                    .number;
                 let created = create_worktree_for_issue(
                     &project.repo_path,
                     &worktree_root_path,
-                    input.issue_id,
+                    issue_number,
                     &target_branch,
                 )
                 .map_err(agent_session_start_error)?;

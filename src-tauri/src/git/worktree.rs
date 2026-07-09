@@ -79,13 +79,13 @@ pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo,
 pub fn create_worktree_for_issue(
     repo_path: impl AsRef<Path>,
     worktree_root_path: impl AsRef<Path>,
-    issue_id: i64,
+    issue_number: i64,
     target_branch: &str,
 ) -> Result<CreatedWorktree, GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     let worktree_root_path = prepare_worktree_root(worktree_root_path.as_ref())?;
-    let workspace_branch = format!("issue-{}", issue_id);
-    let workspace_path = unique_worktree_path(&worktree_root_path, issue_id);
+    let workspace_branch = format!("issue-{}", issue_number);
+    let workspace_path = unique_worktree_path(&worktree_root_path, issue_number);
 
     run_git(
         &repo_path,
@@ -338,20 +338,20 @@ fn format_status_line_path(line: &str) -> String {
     line.get(3..).unwrap_or(line).trim().to_string()
 }
 
-fn unique_worktree_path(root: &Path, issue_id: i64) -> PathBuf {
-    let primary = root.join(format!("issue-{issue_id}"));
+fn unique_worktree_path(root: &Path, issue_number: i64) -> PathBuf {
+    let primary = root.join(format!("issue-{issue_number}"));
     if !primary.exists() {
         return primary;
     }
 
     for suffix in 1..1000 {
-        let candidate = root.join(format!("issue-{issue_id}-{suffix}"));
+        let candidate = root.join(format!("issue-{issue_number}-{suffix}"));
         if !candidate.exists() {
             return candidate;
         }
     }
 
-    root.join(format!("issue-{issue_id}-overflow"))
+    root.join(format!("issue-{issue_number}-overflow"))
 }
 
 fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitWorktreeError> {
@@ -471,6 +471,30 @@ mod tests {
             Err(GitWorktreeError::GitCommandFailed { .. })
         ));
         assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn create_worktree_for_issue_names_branch_and_dir_after_issue_number() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_root = temp_dir.path().join("worktrees");
+
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+
+        // issue_number 与全局 id 无关：这里传 3 只代表项目内编号。
+        let created = create_worktree_for_issue(&repo_dir, &worktree_root, 3, "main")
+            .expect("create worktree for issue");
+
+        assert_eq!(created.workspace_branch, "issue-3");
+        assert!(
+            created.workspace_path.replace('\\', "/").ends_with("issue-3"),
+            "workspace path should end with issue-3, got: {}",
+            created.workspace_path
+        );
+        assert_eq!(current_branch(&created.workspace_path).unwrap(), "issue-3");
     }
 
     #[test]

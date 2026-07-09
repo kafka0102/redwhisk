@@ -1436,10 +1436,23 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
     let workspace_path = session.workspace_path.expect("workspace path");
     assert!(std::path::Path::new(&workspace_path).is_dir());
     assert_ne!(workspace_path, repo_path.to_string_lossy());
-    assert!(session
-        .workspace_branch
-        .as_deref()
-        .is_some_and(|value| value.starts_with("issue-")));
+    let issue_number: i64 = database
+        .connection
+        .query_row(
+            "SELECT number FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("read issue number");
+    // workspace_branch 必须用 issue 的项目内编号，而不是全局 id。
+    assert_eq!(
+        session.workspace_branch.as_deref(),
+        Some(format!("issue-{issue_number}").as_str())
+    );
+    assert!(
+        workspace_path.replace('\\', "/").ends_with(&format!("issue-{issue_number}")),
+        "workspace path should end with issue-{{{issue_number}}}, got: {workspace_path}"
+    );
     assert_eq!(session.working_dir, workspace_path);
 }
 
