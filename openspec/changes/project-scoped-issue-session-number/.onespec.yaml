@@ -1,0 +1,22 @@
+version: 1
+change: project-scoped-issue-session-number
+phase: approved
+ambiguity: high
+complexity: high
+implementation_path: superpowers
+execution_method: subagent
+workspace: worktree
+origin_branch: main
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
+origin_workspace_mode: current-branch
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/project-scoped-issue-session-number/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: 'proposal handoff from 4 file(s); primary artifact: openspec/changes/project-scoped-issue-session-number/proposal.md'
+handoff_hash: b95478829213f48b288ad1da199eabc130ce4ee2cbba00d50cb6920658e24c43
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-07-09
+updated_at: 2026-07-09T04:17:39Z
