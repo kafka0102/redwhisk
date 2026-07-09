@@ -6115,6 +6115,100 @@ mod tests {
     }
 
     #[test]
+    fn empty_error_turn_failed_keeps_running_within_grace() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            601,
+            Some(50),
+            Some("Empty error issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            40,
+            None,
+        );
+        // 模拟 broadcaster 对空 error turn_failed 的处理：写 turn_ended_at，不置 0。
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_running(601, true, 40).expect("start");
+        repository
+            .update_turn_ended_at(601, current_millis() - 1_000)
+            .expect("empty fail");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 601)
+            .expect("session");
+        assert!(session.is_turn_running, "空 error turn_failed 在 grace 内应仍运行");
+    }
+
+    #[test]
+    fn concurrent_turn_completions_refresh_grace_window() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            602,
+            Some(51),
+            Some("Concurrent turns issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            41,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_running(602, true, 41).expect("start");
+        // 多个并发 sub turn 陆续 completed：每次刷新 turn_ended_at。
+        repository
+            .update_turn_ended_at(602, current_millis() - 2_500)
+            .expect("sub turn 1");
+        repository
+            .update_turn_ended_at(602, current_millis() - 1_000)
+            .expect("sub turn 2");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 602)
+            .expect("session");
+        assert!(session.is_turn_running, "最近一次 completed 在 grace 内应仍运行");
+    }
+
+    #[test]
+    fn turn_canceled_and_error_turn_failed_terminate_immediately() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            603,
+            Some(52),
+            Some("Cancel issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            42,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository.update_turn_running(603, true, 42).expect("start");
+        // 模拟 EndedImmediately：置 is_turn_running=0 + 清 turn_ended_at。
+        repository
+            .update_turn_running(603, false, 42)
+            .expect("cancel");
+        repository.clear_turn_ended_at(603).expect("clear");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 603)
+            .expect("session");
+        assert!(!session.is_turn_running, "turn_canceled 应立即非运行");
+    }
+
+    #[test]
     fn delete_standalone_session_soft_deletes_session() {
         let database = setup_session_list_database();
         insert_session_list_row(
