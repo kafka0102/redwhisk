@@ -2643,7 +2643,8 @@ impl<'connection> IssueService<'connection> {
         let archive = build_issue_session_archive(
             &self.data_dir,
             issue.project_id,
-            issue.id,
+            issue.number,
+            session.number,
             session.id,
             &session.log_path,
         )?;
@@ -3858,7 +3859,7 @@ mod tests {
             )
             .expect("query latest output");
         let expected_archive_path =
-            build_issue_archive_log_path(&data_dir, 1, 16, 30).expect("archive path");
+            build_issue_archive_log_path(&data_dir, 1, 4, 7).expect("archive path");
 
         assert_eq!(
             fs::canonicalize(&archived_log_path).expect("canonical archived log path"),
@@ -3973,21 +3974,21 @@ mod tests {
             .expect("insert profile");
         connection
             .execute(
-                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
-                 VALUES (16, 1, 'Issue 16', '', 'review', '[]', 1, 1, 0)",
+                "INSERT INTO issues (id, project_id, number, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 4, 'Issue 16', '', 'review', '[]', 1, 1, 0)",
                 [],
             )
             .expect("insert issue");
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, number, issue_id, title, agent_profile_id, codex_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
                    list_inserted_at, last_active_at, started_at, closed_at, del
                  ) VALUES (
-                   30, 1, 16, NULL, 101, 'thread-16',
+                   30, 1, 7, 16, NULL, 101, 'thread-16',
                    'stopped', 'none', ?1, 'codex', '',
                    'current_branch', NULL, NULL, NULL,
                    NULL, 'external', ?2,
@@ -4025,21 +4026,21 @@ mod tests {
             .expect("insert profile");
         connection
             .execute(
-                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
-                 VALUES (16, 1, 'Issue 16', '', 'review', '[]', 1, 1, 0)",
+                "INSERT INTO issues (id, project_id, number, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 4, 'Issue 16', '', 'review', '[]', 1, 1, 0)",
                 [],
             )
             .expect("insert issue");
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, number, issue_id, title, agent_profile_id, codex_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
                    list_inserted_at, last_active_at, started_at, closed_at, del
                  ) VALUES (
-                   30, 1, 16, NULL, 101, 'thread-16',
+                   30, 1, 7, 16, NULL, 101, 'thread-16',
                    'stopped', 'none', ?1, 'codex', '',
                    'current_branch', NULL, NULL, NULL,
                    NULL, 'external', ?2,

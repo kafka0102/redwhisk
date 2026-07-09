@@ -709,8 +709,8 @@ impl<'connection> AgentSessionService<'connection> {
             let structured_log_path = build_issue_runtime_structured_log_path(
                 data_dir,
                 input.project_id,
-                issue.id,
-                session.id,
+                issue.number,
+                session.number,
             )
             .map_err(command_error_to_sqlite)?;
             let session = AgentSessionRepository::update_log_path_in_transaction(
@@ -942,8 +942,8 @@ impl<'connection> AgentSessionService<'connection> {
             let structured_log_path = build_issue_runtime_structured_log_path(
                 data_dir,
                 input.project_id,
-                issue.id,
-                session.id,
+                issue.number,
+                session.number,
             )
             .map_err(command_error_to_sqlite)?;
             let session = AgentSessionRepository::update_log_path_in_transaction(
@@ -2278,7 +2278,7 @@ impl AgentSessionService<'_> {
             let log_path = build_standalone_runtime_structured_log_path(
                 data_dir,
                 input.project_id,
-                session.id,
+                session.number,
             )
             .map_err(command_error_to_sqlite)?;
             let session = AgentSessionRepository::update_log_path_in_transaction(
@@ -3845,12 +3845,12 @@ fn build_pending_structured_log_path(
 fn build_issue_runtime_structured_log_path(
     data_dir: &Path,
     project_id: i64,
-    issue_id: i64,
-    session_id: i64,
+    issue_number: i64,
+    session_number: i64,
 ) -> Result<String, CommandError> {
     let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
     let path = logs_dir.join(format!(
-        "project-{project_id}-issue-{issue_id}-session-{session_id}.jsonl"
+        "project-{project_id}-issue-{issue_number}-session-{session_number}.jsonl"
     ));
     Ok(path.to_string_lossy().to_string())
 }
@@ -3858,11 +3858,11 @@ fn build_issue_runtime_structured_log_path(
 fn build_standalone_runtime_structured_log_path(
     data_dir: &Path,
     project_id: i64,
-    session_id: i64,
+    session_number: i64,
 ) -> Result<String, CommandError> {
     let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
     let path = logs_dir.join(format!(
-        "project-{project_id}-standalone-session-{session_id}.jsonl"
+        "project-{project_id}-standalone-session-{session_number}.jsonl"
     ));
     Ok(path.to_string_lossy().to_string())
 }
@@ -3870,12 +3870,12 @@ fn build_standalone_runtime_structured_log_path(
 pub(crate) fn build_issue_archive_log_path(
     data_dir: &Path,
     project_id: i64,
-    issue_id: i64,
-    session_id: i64,
+    issue_number: i64,
+    session_number: i64,
 ) -> Result<String, CommandError> {
     let logs_dir = archive_session_log_project_dir(data_dir, project_id)?;
     let path = logs_dir.join(format!(
-        "archive-project-{project_id}-issue-{issue_id}-session-{session_id}.log"
+        "archive-project-{project_id}-issue-{issue_number}-session-{session_number}.log"
     ));
     Ok(path.to_string_lossy().to_string())
 }
@@ -3888,7 +3888,8 @@ pub(crate) fn is_archived_issue_log_path(data_dir: &Path, log_path: &str) -> boo
 pub(crate) fn build_issue_session_archive(
     data_dir: &Path,
     project_id: i64,
-    issue_id: i64,
+    issue_number: i64,
+    session_number: i64,
     session_id: i64,
     runtime_log_path: &str,
 ) -> Result<IssueSessionArchive, CommandError> {
@@ -3898,7 +3899,8 @@ pub(crate) fn build_issue_session_archive(
         .into_iter()
         .filter(should_archive_timeline_item)
         .collect::<Vec<_>>();
-    let archive_path = build_issue_archive_log_path(data_dir, project_id, issue_id, session_id)?;
+    let archive_path =
+        build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
     let payload = items
         .iter()
         .enumerate()
@@ -5244,6 +5246,7 @@ mod tests {
             temp_dir.path(),
             1,
             16,
+            30,
             30,
             runtime_log_path.to_string_lossy().as_ref(),
         )
