@@ -904,6 +904,136 @@ fn start_structured_agent_session_rolls_back_when_command_cannot_start() {
 }
 
 #[test]
+fn start_structured_claude_issue_session_log_path_uses_number_segments() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    // 预占其它 project 的 issue/session 把全局自增 id 顶高，使目标 project 内首个
+    // issue/session 的 id 与项目内 number 拉开差距；这样若创建侧误传 .id 而非 .number，
+    // log_path 文件名段会偏离 number 形式，下方断言可捕获回退。
+    let seed_project_id = insert_project(&database.connection, "number-seed-project");
+    let project_id = insert_project(&database.connection, "log-path-number-project");
+    let seed_issue_id = insert_issue(&database.connection, seed_project_id, "backlog");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+
+    let profile_id = {
+        let repository = AgentProfileRepository::new(&database.connection);
+        let profile = repository
+            .save_profile(
+                None,
+                "Claude",
+                AgentType::Claude,
+                success_command(temp_dir.path())
+                    .to_string_lossy()
+                    .as_ref(),
+                &AgentScope::Global,
+                None,
+                "full-auto",
+                true,
+                "",
+                "",
+            )
+            .expect("save claude profile");
+        profile.id
+    };
+
+    // 预占一条 session（其它 project），把全局 session id 顶高。
+    {
+        let transaction = database
+            .connection
+            .unchecked_transaction()
+            .expect("seed session transaction");
+        AgentSessionRepository::insert_in_transaction(
+            &transaction,
+            seed_project_id,
+            seed_issue_id,
+            profile_id,
+            None,
+            temp_dir.path().to_string_lossy().as_ref(),
+            "claude",
+            "",
+            &WorkspaceMode::CurrentBranch,
+            None,
+            None,
+            None,
+            Some("main"),
+            WorktreeOwner::External,
+            None,
+            None,
+            "/tmp/redwhisk-log-path-number-seed.log",
+            1_780_000_000_000,
+        )
+        .expect("seed session");
+        transaction.commit().expect("commit seed session");
+    }
+
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+    let manager = PtySessionManager::new();
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let result = service
+        .start_agent_session_with_runtime(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "请开始".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: None,
+                target_branch: None,
+                worktree_setup_command: None,
+            },
+            &manager,
+            &registry,
+            &broadcaster,
+        )
+        .expect("structured claude issue session should start");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session should exist");
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue should exist");
+
+    // 前置校验：number 与 id 必须不同，否则本用例无法识别 .number→.id 回退。
+    assert_ne!(issue.number, issue.id, "issue number should differ from id");
+    assert_ne!(
+        session.number, session.id,
+        "session number should differ from id"
+    );
+
+    let expected_file = format!(
+        "project-{}-issue-{}-session-{}.jsonl",
+        project_id, issue.number, session.number
+    );
+    assert!(
+        session.log_path.ends_with(&expected_file),
+        "log_path should end with number-based filename; got {}",
+        session.log_path
+    );
+    let id_form = format!("issue-{}-session-{}", issue.id, session.id);
+    assert!(
+        !session.log_path.contains(&id_form),
+        "log_path should not contain id-based segments; got {}",
+        session.log_path
+    );
+
+    // 清理后台 claude 子进程。
+    if let Some(handle) = registry.unregister(result.session_id) {
+        handle.shutdown();
+    }
+}
+
+#[test]
 fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_error() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

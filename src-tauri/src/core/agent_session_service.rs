@@ -5246,7 +5246,7 @@ mod tests {
             temp_dir.path(),
             1,
             16,
-            30,
+            7,
             30,
             runtime_log_path.to_string_lossy().as_ref(),
         )
