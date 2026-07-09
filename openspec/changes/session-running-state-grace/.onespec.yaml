@@ -1,6 +1,6 @@
 version: 1
 change: session-running-state-grace
-phase: implementing
+phase: review
 ambiguity: low
 complexity: medium
 implementation_path: superpowers
@@ -12,11 +12,11 @@ origin_workspace_mode: worktree
 implementation_workspace_path: unknown
 plan: docs/superpowers/plans/2026-07-08-session-running-state-grace.md
 handoff_context: openspec/changes/session-running-state-grace/.onespec.yaml
-handoff_purpose: plan
-handoff_summary: 'plan handoff from 4 file(s); primary artifact: openspec/changes/session-running-state-grace/proposal.md'
-handoff_hash: 67b6ce0592ee13046127d281b143af72b80a1dfc6d019d63c9c5a3d800a0107d
+handoff_purpose: review
+handoff_summary: 'review handoff from 4 file(s); primary artifact: openspec/changes/session-running-state-grace/proposal.md'
+handoff_hash: 0f5e146d5f6a74c546c9c1d7e39235b966d8512bdb3d001a85566682503a1f5c
 touched_files_b64: b3BlbnNwZWMvY2hhbmdlcy9zZXNzaW9uLXJ1bm5pbmctc3RhdGUtZ3JhY2UvcHJvcG9zYWwubWQKb3BlbnNwZWMvY2hhbmdlcy9zZXNzaW9uLXJ1bm5pbmctc3RhdGUtZ3JhY2UvZGVzaWduLm1kCm9wZW5zcGVjL2NoYW5nZXMvc2Vzc2lvbi1ydW5uaW5nLXN0YXRlLWdyYWNlL3Rhc2tzLm1kCm9wZW5zcGVjL2NoYW5nZXMvc2Vzc2lvbi1ydW5uaW5nLXN0YXRlLWdyYWNlL3NwZWNzL2FnZW50LXNlc3Npb24tcnVudGltZS9zcGVjLm1kCmRvY3Mvc3VwZXJwb3dlcnMvcGxhbnMvMjAyNi0wNy0wOC1zZXNzaW9uLXJ1bm5pbmctc3RhdGUtZ3JhY2UubWQK
 review_result: pending
 archive: pending
 created_at: 2026-07-08
-updated_at: 2026-07-08T15:44:21Z
+updated_at: 2026-07-09T02:02:00Z
