@@ -518,12 +518,12 @@ fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
         issue.attachments[0].relative_path,
         format!(
             ".redwhisk/issues/{}/attachments/{}",
-            issue.id, issue.attachments[0].stored_name
+            issue.number, issue.attachments[0].stored_name
         )
     );
     let expected_absolute_path = data_dir
         .join("issues")
-        .join(issue.id.to_string())
+        .join(issue.number.to_string())
         .join("attachments")
         .join(&issue.attachments[0].stored_name);
     assert_eq!(
@@ -542,6 +542,96 @@ fn create_issue_persists_attachment_metadata_and_rewrites_tokens() {
         .expect("load attachments");
     assert_eq!(attachments.len(), 1);
     assert_eq!(attachments[0].display_name, "draft-note.md");
+}
+
+#[test]
+fn create_issue_persists_attachment_under_project_scoped_number_path() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let data_dir = temp_dir.path().join(".redwhisk");
+    let database = migrated_database(&data_dir);
+    let padding_project = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-number-padding",
+        &temp_dir.path().join("attachment-number-padding"),
+    );
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "attachment-number-target",
+        &temp_dir.path().join("attachment-number-target"),
+    );
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    // 在另一个项目插入一条 issue，使全局自增 id 领先于项目内编号。
+    service
+        .create_issue(CreateIssueInput {
+            project_id: padding_project,
+            title: "Padding issue".to_string(),
+            description: String::new(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("create padding issue");
+    // 在目标项目前两条 issue 占用 number=1/2，使带附件的目标 issue number=3。
+    for index in 1..=2 {
+        service
+            .create_issue(CreateIssueInput {
+                project_id,
+                title: format!("Seed issue {index}"),
+                description: String::new(),
+                attachments: Vec::new(),
+                label_ids: Vec::new(),
+            })
+            .expect("create seed issue");
+    }
+
+    let source_path = temp_dir.path().join("number-note.md");
+    fs::write(&source_path, "number scoped\n").expect("write attachment");
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Issue with number scoped attachment".to_string(),
+            description: "See {{issue-attachment-temp:draft-1}}".to_string(),
+            attachments: vec![IssueAttachmentInput {
+                attachment_id: None,
+                temp_token: Some("draft-1".to_string()),
+                source_path: Some(source_path.to_string_lossy().to_string()),
+                display_name: "number-note.md".to_string(),
+                mime_type: Some("text/markdown".to_string()),
+            }],
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+
+    assert_eq!(issue.number, 3);
+    assert_ne!(issue.number, issue.id);
+    assert_eq!(
+        issue.attachments[0].relative_path,
+        format!(
+            ".redwhisk/issues/{}/attachments/{}",
+            issue.number, issue.attachments[0].stored_name
+        )
+    );
+    let expected_absolute_path = data_dir
+        .join("issues")
+        .join(issue.number.to_string())
+        .join("attachments")
+        .join(&issue.attachments[0].stored_name);
+    assert_eq!(
+        fs::canonicalize(&issue.attachments[0].absolute_path).expect("canonical saved attachment"),
+        fs::canonicalize(&expected_absolute_path).expect("canonical expected attachment")
+    );
+    assert!(Path::new(&issue.attachments[0].absolute_path).exists());
+    // 旧的全局 id 目录不应被创建。
+    let legacy_absolute_path = data_dir
+        .join("issues")
+        .join(issue.id.to_string())
+        .join("attachments")
+        .join(&issue.attachments[0].stored_name);
+    assert!(!legacy_absolute_path.exists());
+    // token 仍以 attachment_id 寻址，渲染保持正确。
+    assert!(issue.description.contains("{{issue-attachment:"));
 }
 
 #[test]

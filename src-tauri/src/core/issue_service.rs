@@ -268,6 +268,7 @@ impl<'connection> IssueService<'connection> {
             &transaction,
             &self.data_dir,
             issue.id,
+            issue.number,
             &input.attachments,
         ) {
             Ok((attachments, files)) => {
@@ -342,8 +343,13 @@ impl<'connection> IssueService<'connection> {
             IssueAttachmentRepository::new(self.issue_repository.connection())
                 .list_by_issue_id(issue.id)
                 .map_err(issue_database_error)?;
-        let (new_attachments, created_files) =
-            persist_new_attachments(&transaction, &self.data_dir, issue.id, &input.attachments)?;
+        let (new_attachments, created_files) = persist_new_attachments(
+            &transaction,
+            &self.data_dir,
+            issue.id,
+            issue.number,
+            &input.attachments,
+        )?;
         let rewritten_description = rewrite_attachment_tokens(&description, &new_attachments)?;
         let referenced_attachment_ids = parse_attachment_ids(&rewritten_description);
         let removed_attachments = existing_attachments
@@ -3257,6 +3263,7 @@ fn persist_new_attachments(
     transaction: &rusqlite::Transaction<'_>,
     data_dir: &Path,
     issue_id: i64,
+    issue_number: i64,
     attachments: &[IssueAttachmentInput],
 ) -> Result<(Vec<NewAttachmentPersistence>, Vec<PathBuf>), CommandError> {
     let mut persisted = Vec::new();
@@ -3295,10 +3302,11 @@ fn persist_new_attachments(
             created_at,
             sanitize_attachment_file_name(&display_name)
         );
-        let relative_path = format!(".redwhisk/issues/{issue_id}/attachments/{placeholder_name}");
+        let relative_path =
+            format!(".redwhisk/issues/{issue_number}/attachments/{placeholder_name}");
         let absolute_path = data_dir
             .join("issues")
-            .join(issue_id.to_string())
+            .join(issue_number.to_string())
             .join("attachments")
             .join(&placeholder_name);
         if let Some(parent) = absolute_path.parent() {
