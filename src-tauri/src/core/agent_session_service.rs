@@ -1479,6 +1479,8 @@ impl<'connection> AgentSessionService<'connection> {
                 .then_with(|| right.session_id.cmp(&left.session_id))
         });
 
+        let now = current_epoch_millis()?;
+
         let sessions = rows
             .into_iter()
             .map(|row| {
@@ -1507,7 +1509,9 @@ impl<'connection> AgentSessionService<'connection> {
                     agent_type: row.agent_type,
                     status: row.status,
                     attention: row.attention,
-                    is_turn_running: is_session_running && row.is_turn_running,
+                    is_turn_running: is_session_running
+                        && row.is_turn_running
+                        && turn_still_running_by_grace(row.turn_ended_at, now),
                     workspace_mode: row.workspace_mode,
                     working_dir: row.working_dir,
                     workspace_path: row.workspace_path,
@@ -4531,6 +4535,15 @@ fn current_epoch_millis() -> Result<i64, CommandError> {
     Ok(duration.as_millis() as i64)
 }
 
+const GRACE_MS: i64 = 3000;
+
+fn turn_still_running_by_grace(turn_ended_at: Option<i64>, now: i64) -> bool {
+    match turn_ended_at {
+        None => true,
+        Some(ended) => now - ended < GRACE_MS,
+    }
+}
+
 fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
@@ -6009,6 +6022,96 @@ mod tests {
             .expect("standalone session");
 
         assert!(!standalone_session.is_turn_running);
+    }
+
+    #[test]
+    fn list_reports_turn_running_within_grace_after_turn_ended() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            501,
+            Some(40),
+            Some("Grace within issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            30,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 501",
+                params![current_millis() - 1_000],
+            )
+            .expect("set grace within");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 501)
+            .expect("session");
+        assert!(session.is_turn_running);
+    }
+
+    #[test]
+    fn list_reports_turn_idle_after_grace_expires() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            502,
+            Some(41),
+            Some("Grace expired issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            31,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 502",
+                params![current_millis() - 4_000],
+            )
+            .expect("set grace expired");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 502)
+            .expect("session");
+        assert!(!session.is_turn_running);
+    }
+
+    #[test]
+    fn list_reports_turn_running_when_turn_ended_at_null_and_running() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            503,
+            Some(42),
+            Some("Null ended issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            32,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1 WHERE id = 503",
+                [],
+            )
+            .expect("set running");
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list");
+        let session = response
+            .sessions
+            .iter()
+            .find(|s| s.session_id == 503)
+            .expect("session");
+        assert!(session.is_turn_running);
     }
 
     #[test]
