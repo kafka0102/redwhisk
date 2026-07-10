@@ -41,13 +41,14 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     AdvanceIssueStatusInput, AgentCommitChangedFileSummary, AgentCommitCompletionPreview,
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput,
-    DeleteIssueResult, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionOutcome,
-    DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
-    IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord,
-    IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo,
-    IssueSummaryRecord, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
-    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
+    DeleteIssueResult, DeleteIssueWorktreeCleanup, DetectAgentCommitCompletionInput,
+    DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind,
+    IssueAttachmentPreview, IssueAttachmentRecord, IssueLabelRecord, IssueListResponse,
+    IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
+    SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
+    SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::IssueActionType;
 use crate::types::issue_completion::{
@@ -593,7 +594,12 @@ impl<'connection> IssueService<'connection> {
     }
 
     pub fn delete_issue(&self, input: DeleteIssueInput) -> Result<DeleteIssueResult, CommandError> {
-        self.ensure_project_exists(input.project_id)?;
+        let project = self.require_project(input.project_id)?;
+        // 事务前读取 latest worktree session，避免在未提交事务上复用 connection。
+        let latest_worktree_session = AgentSessionRepository::new(self.issue_repository.connection())
+            .find_latest_worktree_session_by_issue_id(input.issue_id)
+            .map_err(issue_database_error)?;
+
         let transaction = self
             .issue_repository
             .connection()
@@ -605,7 +611,21 @@ impl<'connection> IssueService<'connection> {
             .ok_or_else(|| issue_not_found(input.issue_id))?;
         let deleted_at = current_epoch_millis()?;
 
+        // soft-delete 前收集清理上下文（session log / worktree），事务外 best-effort 执行。
+        let mut linked_session_log_path = issue.linked_session_log_path.clone();
+        let mut worktree_cleanup: Option<DeleteIssueWorktreeCleanup> = None;
+
         if let Some(session_id) = issue.linked_session_id {
+            if let Ok(Some(session)) =
+                AgentSessionRepository::find_by_id_in_transaction(&transaction, session_id)
+            {
+                if linked_session_log_path.is_none() && !session.log_path.is_empty() {
+                    linked_session_log_path = Some(session.log_path.clone());
+                }
+                worktree_cleanup =
+                    redwhisk_worktree_cleanup_from_session(&project.repo_path, &session);
+            }
+
             if issue.linked_session_status == Some(AgentSessionStatus::Running) {
                 let closed = AgentSessionRepository::mark_terminated_without_fetch_in_transaction(
                     &transaction,
@@ -629,7 +649,7 @@ impl<'connection> IssueService<'connection> {
                     "issueId": issue.id,
                     "status": "closed",
                     "reason": "issue_deleted",
-                    "logPath": issue.linked_session_log_path,
+                    "logPath": linked_session_log_path,
                 })
                 .to_string();
                 EventRepository::insert_session_event_in_transaction(
@@ -648,6 +668,13 @@ impl<'connection> IssueService<'connection> {
                 deleted_at,
             )
             .map_err(issue_database_error)?;
+        }
+
+        if worktree_cleanup.is_none() {
+            if let Some(session) = latest_worktree_session.as_ref() {
+                worktree_cleanup =
+                    redwhisk_worktree_cleanup_from_session(&project.repo_path, session);
+            }
         }
 
         let deleted = IssueRepository::soft_delete_in_transaction(
@@ -681,6 +708,8 @@ impl<'connection> IssueService<'connection> {
         Ok(DeleteIssueResult {
             issue_id: issue.id,
             linked_session_id: issue.linked_session_id,
+            linked_session_log_path,
+            worktree_cleanup,
         })
     }
 
@@ -2699,6 +2728,26 @@ fn remove_issue_log_file(path: &str) {
     }
 }
 
+/// 仅当 session 为 RedWhisk 管理且具备完整 worktree 路径/分支信息时返回清理上下文。
+fn redwhisk_worktree_cleanup_from_session(
+    repo_path: &str,
+    session: &AgentSessionRecord,
+) -> Option<DeleteIssueWorktreeCleanup> {
+    if session.worktree_owner != WorktreeOwner::Redwhisk {
+        return None;
+    }
+    let workspace_path = session.workspace_path.as_deref()?.trim();
+    let workspace_branch = session.workspace_branch.as_deref()?.trim();
+    if workspace_path.is_empty() || workspace_branch.is_empty() {
+        return None;
+    }
+    Some(DeleteIssueWorktreeCleanup {
+        repo_path: repo_path.to_string(),
+        workspace_path: workspace_path.to_string(),
+        workspace_branch: workspace_branch.to_string(),
+    })
+}
+
 fn infer_data_dir_from_connection(connection: &rusqlite::Connection) -> PathBuf {
     connection
         .path()
@@ -3691,6 +3740,190 @@ mod tests {
             !log_file.exists(),
             "关联 Session 软删后应同步删除磁盘上的 session log 文件"
         );
+    }
+
+    #[test]
+    fn delete_issue_returns_session_log_and_worktree_cleanup_context() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        let worktree_path = temp_dir.path().join("issue-99-worktree");
+        fs::create_dir_all(&worktree_path).expect("create worktree dir");
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-99-branch",
+                worktree_path.to_string_lossy().as_ref(),
+            ],
+        );
+
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1)",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (99, 1, 'Issue 99', '', 'running', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert running issue");
+
+        let log_file = temp_dir.path().join("issue-99-session.log");
+        fs::write(&log_file, b"{}").expect("write session log");
+
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   status, attention, working_dir, command_snapshot, prompt_snapshot,
+                   workspace_mode, target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, log_path,
+                   list_inserted_at, last_active_at, started_at, closed_at, del
+                 ) VALUES (
+                   990, 1, 99, NULL, 101, 'thread-99',
+                   'running', 'none', ?1, 'codex', '',
+                   'worktree', 'main', 'issue-99-branch', ?1,
+                   'main', 'redwhisk', ?2,
+                   1, 2, 1, NULL, 0
+                 )",
+                params![
+                    worktree_path.to_string_lossy().to_string(),
+                    log_file.to_string_lossy().to_string(),
+                ],
+            )
+            .expect("insert linked worktree session");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        let result = service
+            .delete_issue(crate::types::issue::DeleteIssueInput {
+                project_id: 1,
+                issue_id: 99,
+            })
+            .expect("delete issue");
+
+        assert_eq!(result.issue_id, 99);
+        assert_eq!(result.linked_session_id, Some(990));
+        assert_eq!(
+            result.linked_session_log_path.as_deref(),
+            Some(log_file.to_string_lossy().as_ref())
+        );
+        let cleanup = result
+            .worktree_cleanup
+            .expect("should return redwhisk worktree cleanup");
+        assert_eq!(cleanup.repo_path, repo_dir.to_string_lossy());
+        assert_eq!(cleanup.workspace_path, worktree_path.to_string_lossy());
+        assert_eq!(cleanup.workspace_branch, "issue-99-branch");
+
+        // service 层不删磁盘副作用；command 层负责。
+        assert!(log_file.exists());
+        assert!(worktree_path.exists());
+
+        // soft-delete 后 issue / session 不可见
+        let remaining = connection
+            .query_row(
+                "SELECT COUNT(*) FROM issues WHERE id = 99 AND del = 0",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count issues");
+        assert_eq!(remaining, 0);
+        let remaining_sessions = connection
+            .query_row(
+                "SELECT COUNT(*) FROM agent_sessions WHERE id = 990 AND del = 0",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count sessions");
+        assert_eq!(remaining_sessions, 0);
+    }
+
+    #[test]
+    fn delete_issue_skips_external_worktree_cleanup_context() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        let worktree_path = temp_dir.path().join("external-worktree");
+        fs::create_dir_all(&worktree_path).expect("create external worktree dir");
+
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', ?1, 1, 1)",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (100, 1, 'Issue 100', '', 'review', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   status, attention, working_dir, command_snapshot, prompt_snapshot,
+                   workspace_mode, target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, log_path,
+                   list_inserted_at, last_active_at, started_at, closed_at, del
+                 ) VALUES (
+                   1000, 1, 100, NULL, 101, 'thread-100',
+                   'closed', 'none', ?1, 'codex', '',
+                   'worktree', 'main', 'external-branch', ?1,
+                   'main', 'external', '',
+                   1, 2, 1, 3, 0
+                 )",
+                params![worktree_path.to_string_lossy().to_string()],
+            )
+            .expect("insert external worktree session");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        let result = service
+            .delete_issue(crate::types::issue::DeleteIssueInput {
+                project_id: 1,
+                issue_id: 100,
+            })
+            .expect("delete issue");
+
+        assert_eq!(result.linked_session_id, Some(1000));
+        assert!(result.worktree_cleanup.is_none());
+        assert!(worktree_path.exists());
     }
 
     #[test]

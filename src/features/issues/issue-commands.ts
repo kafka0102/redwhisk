@@ -151,9 +151,17 @@ export interface DeleteIssueInput {
   issueId: number;
 }
 
+export interface DeleteIssueWorktreeCleanup {
+  repoPath: string;
+  workspacePath: string;
+  workspaceBranch: string;
+}
+
 export interface DeleteIssueResult {
   issueId: number;
   linkedSessionId?: number | null;
+  linkedSessionLogPath?: string | null;
+  worktreeCleanup?: DeleteIssueWorktreeCleanup | null;
 }
 
 export interface GetIssueWorktreeStatusInput {

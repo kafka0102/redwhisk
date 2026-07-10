@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -507,7 +508,11 @@ impl<'connection> ProjectTerminalService<'connection> {
             self.project_repository
                 .delete_project_terminal_config(input.project_id, input.config_id)
                 .map_err(project_terminal_database_error)?;
-            let _ = registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
+            let removed =
+                registry.remove_sessions_by_config_id(input.project_id, input.config_id)?;
+            for (_, session) in removed {
+                remove_terminal_log_file(&session.log_path);
+            }
 
             Ok(DeleteProjectTerminalConfigResult {
                 config_id: input.config_id,
@@ -699,6 +704,8 @@ impl<'connection> ProjectTerminalService<'connection> {
         if session.is_active {
             let _ = pty_sessions.kill(input.session_id);
         }
+
+        remove_terminal_log_file(&session.log_path);
 
         Ok(())
     }
@@ -1188,6 +1195,18 @@ fn terminal_log_path(
     )))
 }
 
+/// 删除 Project Terminal 日志文件。路径为空、不存在或删除失败时静默跳过。
+fn remove_terminal_log_file(log_path: &str) {
+    if log_path.is_empty() {
+        return;
+    }
+    let path = Path::new(log_path);
+    if !path.exists() {
+        return;
+    }
+    let _ = fs::remove_file(path);
+}
+
 fn project_terminal_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalPersistenceFailed,
@@ -1616,6 +1635,73 @@ mod tests {
                 &manager,
             )
             .expect("close temporary terminal");
+    }
+
+    #[test]
+    fn close_terminal_removes_session_log_file() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("log-repo");
+        std::fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "log-repo".to_string(),
+                repo_path: repo_dir.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        let log_path = temp_dir.path().join("project-terminal-logs").join(format!(
+            "project-{}-terminal-{}.log",
+            project.id,
+            created.session_id.abs()
+        ));
+        assert!(
+            log_path.exists(),
+            "创建终端后应生成日志文件: {}",
+            log_path.display()
+        );
+
+        service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: project.id,
+                    session_id: created.session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("close terminal");
+
+        assert!(
+            !log_path.exists(),
+            "关闭终端后应删除日志文件: {}",
+            log_path.display()
+        );
     }
 
     #[test]

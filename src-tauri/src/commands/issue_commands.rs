@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use tauri::State;
@@ -395,12 +397,25 @@ pub async fn delete_issue(
 ) -> Result<DeleteIssueResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     let pty_sessions = state.pty_sessions.clone();
+    let agent_sessions = state.agent_sessions.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let result = IssueService::delete_issue_in_data_dir(data_dir, input)?;
 
         if let Some(session_id) = result.linked_session_id {
-            if pty_sessions.contains(session_id) {
-                let _ = pty_sessions.kill(session_id);
+            shutdown_runtime_session(&pty_sessions, &agent_sessions, session_id);
+        }
+
+        crate::core::agent_session_service::remove_session_log_file(
+            result.linked_session_log_path.as_deref(),
+        );
+
+        if let Some(cleanup) = result.worktree_cleanup.as_ref() {
+            if Path::new(&cleanup.workspace_path).exists() {
+                let _ = crate::git::worktree::cleanup_worktree(
+                    &cleanup.repo_path,
+                    &cleanup.workspace_path,
+                    &cleanup.workspace_branch,
+                );
             }
         }
 

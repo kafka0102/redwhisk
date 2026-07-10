@@ -144,6 +144,21 @@ pub struct DeleteIssueInput {
 pub struct DeleteIssueResult {
     pub issue_id: i64,
     pub linked_session_id: Option<i64>,
+    /// Linked session 的 log 路径，供 command 层在 soft-delete 后删除磁盘日志。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linked_session_log_path: Option<String>,
+    /// RedWhisk 管理的 worktree 清理上下文；非 RedWhisk 或不存在时为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_cleanup: Option<DeleteIssueWorktreeCleanup>,
+}
+
+/// 删除 Issue 后用于 best-effort 清理 worktree 的上下文。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteIssueWorktreeCleanup {
+    pub repo_path: String,
+    pub workspace_path: String,
+    pub workspace_branch: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
