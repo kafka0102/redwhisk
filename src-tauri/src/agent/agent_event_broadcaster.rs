@@ -22,6 +22,10 @@ use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvel
 pub const AGENT_SESSION_STREAM_EVENT: &str = "agent-session-stream-event";
 pub const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
 const LATEST_OUTPUT_UPDATE_INTERVAL: Duration = Duration::from_millis(750);
+/// turn 正常完成后保留 "running" 展示的 grace 时长；过期后由延迟任务收尾。
+pub const TURN_GRACE_MS: i64 = 3000;
+/// grace 收尾延迟任务的额外缓冲，确保越过 grace 边界后再执行 CAS。
+const TURN_GRACE_FINALIZE_BUFFER_MS: u64 = 1000;
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -139,6 +143,40 @@ impl AgentEventBroadcaster {
         }
     }
 
+    /// grace 收尾：turn 正常完成进入 grace 后，由延迟任务在 GRACE_MS 过后调用。
+    /// 用 CAS 仅在 turn 仍是预期结束态时置 `is_turn_running=0`，命中则广播
+    /// list 刷新，让前端拿到 `is_turn_running=false`（解锁 composer / 停止 card 转圈）。
+    fn finalize_turn_after_grace(
+        &self,
+        project_id: i64,
+        session_id: i64,
+        expected_turn_ended_at: i64,
+    ) {
+        let Some(app_handle) = self.app_handle.get() else {
+            return;
+        };
+        let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
+            return;
+        };
+        let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
+            return;
+        };
+        let repository = AgentSessionRepository::new(&database.connection);
+        let finalized = repository
+            .finalize_turn_after_grace(session_id, expected_turn_ended_at)
+            .unwrap_or(false);
+        if finalized {
+            let _ = app_handle.emit(
+                AGENT_SESSION_LIST_CHANGED_EVENT,
+                AgentSessionListChangedPayload {
+                    project_id,
+                    session_id: Some(session_id),
+                    reason: "turn_grace_finalized",
+                },
+            );
+        }
+    }
+
     fn advance_cursor(&self, session_id: i64) -> (u64, String) {
         let mut cursors = match self.cursors.lock() {
             Ok(cursors) => cursors,
@@ -207,6 +245,23 @@ impl AgentEventBroadcaster {
             }
             TurnRunningDecision::EndedWithGrace => {
                 let _ = repository.record_turn_completed(envelope.session_id, updated_at);
+                // 安排 grace 收尾：GRACE_MS 过后若 turn 未被新 turn 抢占，原子置
+                // is_turn_running=0 并广播 list 刷新，避免前端单次刷新落在 grace
+                // 窗口内导致 is_turn_running 永久卡 true。
+                let broadcaster = self.clone();
+                let project_id = envelope.project_id;
+                let session_id = envelope.session_id;
+                let expected_turn_ended_at = updated_at;
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(
+                        (TURN_GRACE_MS as u64) + TURN_GRACE_FINALIZE_BUFFER_MS,
+                    ));
+                    broadcaster.finalize_turn_after_grace(
+                        project_id,
+                        session_id,
+                        expected_turn_ended_at,
+                    );
+                });
             }
             TurnRunningDecision::EndedImmediately => {
                 let _ = repository.update_turn_running(envelope.session_id, false, updated_at);

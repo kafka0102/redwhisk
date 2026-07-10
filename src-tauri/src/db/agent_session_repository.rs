@@ -691,6 +691,25 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    /// grace 收尾：仅在 turn 仍是预期结束态时，原子置 `is_turn_running=0`
+    /// 并清 `turn_ended_at`，使终态与 `EndedImmediately` 一致。CAS 守卫
+    /// `turn_ended_at = expected` 保证被新 turn 抢占、sub-turn 刷新、取消、
+    /// 删除或停止时不误改。返回是否实际收尾（据此决定是否广播 list 刷新）。
+    pub fn finalize_turn_after_grace(
+        &self,
+        session_id: i64,
+        expected_turn_ended_at: i64,
+    ) -> rusqlite::Result<bool> {
+        let changed = self.connection.execute(
+            "UPDATE agent_sessions
+             SET is_turn_running = 0, turn_ended_at = NULL
+             WHERE id = ?1 AND status = 'running' AND del = 0
+               AND is_turn_running = 1 AND turn_ended_at = ?2",
+            params![session_id, expected_turn_ended_at],
+        )?;
+        Ok(changed > 0)
+    }
+
     pub fn soft_delete_in_transaction(
         transaction: &Transaction<'_>,
         session_id: i64,

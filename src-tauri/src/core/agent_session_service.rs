@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 
 use rusqlite::{params, Transaction};
 
-use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
+use crate::agent::agent_event_broadcaster::{AgentEventBroadcaster, TURN_GRACE_MS};
 use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
@@ -4564,12 +4564,10 @@ fn current_epoch_millis() -> Result<i64, CommandError> {
     Ok(duration.as_millis() as i64)
 }
 
-const GRACE_MS: i64 = 3000;
-
 fn turn_still_running_by_grace(turn_ended_at: Option<i64>, now: i64) -> bool {
     match turn_ended_at {
         None => true,
-        Some(ended) => now - ended < GRACE_MS,
+        Some(ended) => now - ended < TURN_GRACE_MS,
     }
 }
 
@@ -6263,6 +6261,167 @@ mod tests {
             .find(|s| s.session_id == 502)
             .expect("session");
         assert!(!session.is_turn_running);
+    }
+
+    #[test]
+    fn finalize_turn_after_grace_clears_flag_when_unpreempted() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            604,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+        let ended_at = current_millis();
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 604",
+                params![ended_at],
+            )
+            .expect("set grace ended");
+
+        let repository = AgentSessionRepository::new(&connection);
+        let finalized = repository
+            .finalize_turn_after_grace(604, ended_at)
+            .expect("finalize");
+        assert!(finalized);
+
+        let (is_turn_running, turn_ended_at): (i64, Option<i64>) = connection
+            .query_row(
+                "SELECT is_turn_running, turn_ended_at FROM agent_sessions WHERE id = 604",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read row");
+        assert_eq!(is_turn_running, 0);
+        assert!(turn_ended_at.is_none());
+    }
+
+    #[test]
+    fn finalize_turn_after_grace_noop_when_turn_ended_at_refreshed() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            605,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+        let first_ended_at = current_millis();
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 605",
+                params![first_ended_at],
+            )
+            .expect("set first ended");
+        // 并发 sub-turn 刷新 turn_ended_at 为更新的值（自身延迟任务接管收尾）。
+        let refreshed_ended_at = first_ended_at + 1_000;
+        connection
+            .execute(
+                "UPDATE agent_sessions SET turn_ended_at = ?1 WHERE id = 605",
+                params![refreshed_ended_at],
+            )
+            .expect("refresh ended");
+
+        let finalized = AgentSessionRepository::new(&connection)
+            .finalize_turn_after_grace(605, first_ended_at)
+            .expect("finalize");
+        assert!(!finalized, "turn_ended_at 已被刷新，旧值的收尾应为 no-op");
+
+        let turn_ended_at: Option<i64> = connection
+            .query_row(
+                "SELECT turn_ended_at FROM agent_sessions WHERE id = 605",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read row");
+        assert_eq!(turn_ended_at, Some(refreshed_ended_at));
+    }
+
+    #[test]
+    fn finalize_turn_after_grace_noop_after_turn_started() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            606,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+        let ended_at = current_millis();
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1 WHERE id = 606",
+                params![ended_at],
+            )
+            .expect("set ended");
+        // 新 turn 开始：clear turn_ended_at（CAS 守卫不再命中旧值）。
+        AgentSessionRepository::new(&connection)
+            .clear_turn_ended_at(606)
+            .expect("clear");
+
+        let finalized = AgentSessionRepository::new(&connection)
+            .finalize_turn_after_grace(606, ended_at)
+            .expect("finalize");
+        assert!(!finalized, "新 turn 已抢占，收尾应为 no-op");
+    }
+
+    #[test]
+    fn finalize_turn_after_grace_noop_when_deleted_or_stopped() {
+        let connection = setup_session_list_database();
+        let ended_at = current_millis();
+
+        insert_session_list_row(
+            &connection,
+            607,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1, del = 1 WHERE id = 607",
+                params![ended_at],
+            )
+            .expect("set deleted");
+        let finalized_deleted = AgentSessionRepository::new(&connection)
+            .finalize_turn_after_grace(607, ended_at)
+            .expect("finalize deleted");
+        assert!(!finalized_deleted, "已删除 session 不应被收尾");
+
+        insert_session_list_row(
+            &connection,
+            608,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            current_millis(),
+            None,
+        );
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = ?1, status = 'stopped' WHERE id = 608",
+                params![ended_at],
+            )
+            .expect("set stopped");
+        let finalized_stopped = AgentSessionRepository::new(&connection)
+            .finalize_turn_after_grace(608, ended_at)
+            .expect("finalize stopped");
+        assert!(!finalized_stopped, "已停止 session 不应被收尾");
     }
 
     #[test]
