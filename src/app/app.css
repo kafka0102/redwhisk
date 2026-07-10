@@ -4838,7 +4838,7 @@ button:focus-visible {
 
 .issue-detail__divider {
   height: 1px;
-  margin: 12px 0;
+  margin: 4px 0;
   background: var(--color-border);
 }
 
