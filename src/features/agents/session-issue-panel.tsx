@@ -140,7 +140,7 @@ export function SessionIssuePanel({
           </h3>
           <Button
             className="session-issue-panel__action"
-            size="xs"
+            size="sm"
             type="button"
             variant="secondary"
             onClick={() => onOpenIssue(issueId)}
