@@ -82,7 +82,10 @@ export function SessionChangesPanel({
               <Circle aria-hidden="true" size={13} strokeWidth={1.8} />
               {messages.agentsFeature.uncommitted}
             </TabsTrigger>
-            <TabsTrigger className="session-change-filter__tab" value="committed">
+            <TabsTrigger
+              className="session-change-filter__tab"
+              value="committed"
+            >
               <Check aria-hidden="true" size={13} strokeWidth={1.8} />
               {messages.agentsFeature.committed}
             </TabsTrigger>

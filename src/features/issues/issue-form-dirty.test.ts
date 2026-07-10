@@ -53,15 +53,18 @@ describe("isIssueFormDirty", () => {
 
   it("returns true when an attachment is added", () => {
     const baseline = form({ attachments: [] });
-    expect(isIssueFormDirty(form({ attachments: [savedImage] }), baseline)).toBe(
-      true,
-    );
+    expect(
+      isIssueFormDirty(form({ attachments: [savedImage] }), baseline),
+    ).toBe(true);
   });
 
   it("treats attachments as equal regardless of order", () => {
     const baseline = form({ attachments: [savedImage, savedText] });
     expect(
-      isIssueFormDirty(form({ attachments: [savedText, savedImage] }), baseline),
+      isIssueFormDirty(
+        form({ attachments: [savedText, savedImage] }),
+        baseline,
+      ),
     ).toBe(false);
   });
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  PROJECT_ICON_COLORS,
-  getProjectIconColor,
-} from "./project-icon-color";
+import { PROJECT_ICON_COLORS, getProjectIconColor } from "./project-icon-color";
 
 const PALETTE = PROJECT_ICON_COLORS as readonly string[];
 
