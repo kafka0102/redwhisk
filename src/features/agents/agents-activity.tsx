@@ -902,19 +902,31 @@ export function AgentsActivity({
     await handleMarkDone();
   }
 
-  // 直接点击状态转换主按钮（非下拉菜单）时走此入口：仅「待验收」需要二次确认，
-  // 「完成」直接执行；下拉菜单选项仍走 handleTransitionAction，不弹确认。
+  // 直接点击状态转换主按钮（非下拉菜单）时走此入口：
+  // - 「待验收」：仅当前 Session 仍在运行中时二次确认；Session 已结束则直接标记。
+  // - 「完成」：直接执行。
+  // 下拉菜单选项仍走 handleTransitionAction，不弹确认。
   async function handleTransitionMainAction(action: SessionIssueTransition) {
     setIsTransitionMenuOpen(false);
 
     if (action === "review") {
-      const confirmed = await confirm({
-        cancelLabel: messages.agentsFeature.confirmMarkReviewNo,
-        confirmLabel: messages.agentsFeature.confirmMarkReviewYes,
-        message: messages.agentsFeature.confirmMarkReview,
-      });
-      if (!confirmed) {
-        return;
+      const currentSession = selectedSession
+        ? (allSessions.find(
+            (session: AgentSessionListItem) =>
+              session.sessionId === selectedSession.sessionId,
+          ) ?? selectedSession)
+        : null;
+      const isSessionRunning = currentSession?.status === "running";
+
+      if (isSessionRunning) {
+        const confirmed = await confirm({
+          cancelLabel: messages.agentsFeature.confirmMarkReviewNo,
+          confirmLabel: messages.agentsFeature.confirmMarkReviewYes,
+          message: messages.agentsFeature.confirmMarkReview,
+        });
+        if (!confirmed) {
+          return;
+        }
       }
     }
 

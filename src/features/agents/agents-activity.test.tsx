@@ -3177,6 +3177,85 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks review without confirmation when the linked session is already finished", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            number: 302,
+            issueId: 21,
+            issueNumber: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "running",
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_638_000_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: 1_780_638_000_500,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessions: [
+          {
+            sessionId: 302,
+            number: 302,
+            issueId: 21,
+            issueNumber: 21,
+            issueTitle: "Review candidate",
+            issueStatus: "review",
+            title: null,
+            agentType: "codex",
+            status: "closed",
+            attention: "none",
+            lastActiveAt: 1_780_638_001_000,
+            startedAt: 1_780_638_000_000,
+            closedAt: 1_780_638_000_500,
+          },
+        ],
+      });
+    markIssueReviewMock.mockResolvedValue({
+      id: 21,
+      number: 21,
+      projectId: 1,
+      title: "Review candidate",
+      description: "",
+      status: "review",
+      linkedSessionId: 302,
+      linkedSessionStatus: "closed",
+      linkedSessionAttention: "none",
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_638_001_000,
+    });
+
+    render(<AgentsActivity activeSessionId={302} projectId={1} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 3,
+        name: "#21 Review candidate",
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mark review" }));
+
+    expect(
+      screen.queryByRole("button", { name: "Yes" }),
+    ).not.toBeInTheDocument();
+    expect(markIssueReviewMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: 21,
+    });
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Mark review" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows mark review command failures in alert dialog", async () => {
     const user = userEvent.setup();
     const errorMessage = "只有运行中的 Issue 可以标记待验收。";
