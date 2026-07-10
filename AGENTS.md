@@ -10,13 +10,12 @@
 - 前端：React 19 + TypeScript + Vite + Vitest + ESLint + Prettier + Tailwind CSS 4。
 - 桌面核心：Rust 2021 + `rusqlite` + `portable-pty`，经 Tauri command / event 与前端通信，不引入 HTTP REST / GraphQL。
 - 数据：SQLite 是业务状态唯一事实源，前端不直接读写。
-- 包管理：`pnpm`（当前不在默认 PATH，命令前需 `export PATH="$HOME/.nvm/versions/node/v24.4.1/bin:$PATH"`）。
+- 包管理：`pnpm`（若不在 PATH，先加载 node 版本管理器，如 `nvm use` / `fnm use`）。
 
 ## 2. 常用命令
 
 | 场景 | 命令 |
 | --- | --- |
-| 加载 pnpm | `export PATH="$HOME/.nvm/versions/node/v24.4.1/bin:$PATH"` |
 | 格式化 | `pnpm format` |
 | Lint | `pnpm lint` |
 | 类型检查 | `pnpm typecheck` |
