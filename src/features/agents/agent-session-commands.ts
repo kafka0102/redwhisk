@@ -43,6 +43,8 @@ export interface AgentSessionListItem {
   lastActiveAt: number;
   startedAt: number;
   closedAt: number | null;
+  processingMs?: number;
+  lastOutputAt?: number | null;
 }
 
 export interface AgentSessionListResponse {

@@ -36,6 +36,9 @@ pub struct AgentSessionListRow {
     pub started_at: i64,
     pub closed_at: Option<i64>,
     pub turn_ended_at: Option<i64>,
+    pub turn_started_at: Option<i64>,
+    pub processing_ms: i64,
+    pub last_output_at: Option<i64>,
 }
 
 pub struct AgentSessionRepository<'connection> {
@@ -143,7 +146,10 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.last_active_at,
                 agent_sessions.started_at,
                 agent_sessions.closed_at,
-                agent_sessions.turn_ended_at
+                agent_sessions.turn_ended_at,
+                agent_sessions.turn_started_at,
+                agent_sessions.processing_ms,
+                agent_sessions.last_output_at
              FROM agent_sessions
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
@@ -439,6 +445,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             SET status = ?1,
                 is_turn_running = 0,
                 turn_ended_at = NULL,
+                turn_started_at = NULL,
                 last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
              WHERE id = ?3 AND closed_at IS NULL AND del = 0",
@@ -467,6 +474,7 @@ impl<'connection> AgentSessionRepository<'connection> {
             SET status = ?1,
                 is_turn_running = 0,
                 turn_ended_at = NULL,
+                turn_started_at = NULL,
                 last_active_at = MAX(last_active_at + 1, ?2),
                  closed_at = COALESCE(closed_at, ?2)
              WHERE id = ?3 AND closed_at IS NULL AND del = 0",
@@ -657,6 +665,32 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    /// turn 开始：记录 turn_started_at，供 turn 正常结束时累加处理时长。
+    pub fn update_turn_started_at(&self, session_id: i64, now: i64) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET turn_started_at = ?1,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?3 AND status = 'running' AND del = 0",
+            params![now, now, session_id],
+        )
+    }
+
+    /// turn 正常完成：写结束时间与最后输出时间，并按 turn_started_at 原子累加
+    /// processing_ms。漏记 turn_started_at 时本次不计（COALESCE 兜底为 0 增量），
+    /// 避免负值或异常值污染累计处理时长。
+    pub fn record_turn_completed(&self, session_id: i64, now: i64) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET turn_ended_at = ?1,
+                 last_output_at = ?1,
+                 processing_ms = processing_ms + MAX(0, ?1 - COALESCE(turn_started_at, ?1)),
+                 last_active_at = MAX(last_active_at + 1, ?1)
+             WHERE id = ?2 AND status = 'running' AND del = 0",
+            params![now, session_id],
+        )
+    }
+
     pub fn soft_delete_in_transaction(
         transaction: &Transaction<'_>,
         session_id: i64,
@@ -755,6 +789,9 @@ fn agent_session_list_row_from_row(
         started_at: row.get(25)?,
         closed_at: row.get(26)?,
         turn_ended_at: row.get::<_, Option<i64>>(27)?,
+        turn_started_at: row.get::<_, Option<i64>>(28)?,
+        processing_ms: row.get(29)?,
+        last_output_at: row.get::<_, Option<i64>>(30)?,
     })
 }
 

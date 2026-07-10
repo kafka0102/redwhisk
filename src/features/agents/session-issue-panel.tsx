@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { formatProcessingDuration } from "./agent-session-formatters";
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { listIssues, type IssueRecord } from "../issues/issue-commands";
 import { toCommandError } from "../../shared/commands/command-error";
@@ -96,14 +97,18 @@ export function SessionIssuePanel({
       },
       {
         label: messages.agentsFeature.endedAt,
-        value: formatTimestamp(session?.closedAt ?? null, locale),
+        value: formatTimestamp(session?.lastOutputAt ?? null, locale),
+      },
+      {
+        label: messages.agentsFeature.totalDuration,
+        value: formatProcessingDuration(session, locale),
       },
       {
         label: messages.issueSummary.status,
         value: formatSessionStatus(session?.status, messages),
       },
     ],
-    [locale, messages, session?.closedAt, session?.startedAt, session?.status],
+    [locale, messages, session],
   );
   const logPathLabel =
     session?.status === "running"

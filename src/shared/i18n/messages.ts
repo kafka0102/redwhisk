@@ -329,6 +329,7 @@ export interface I18nMessages {
     workflowSkill: string;
     developmentMode: string;
     endedAt: string;
+    totalDuration: string;
     runtimeLogPath: string;
     archivedLogPath: string;
     none: string;
@@ -863,6 +864,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       workflowSkill: "Workflow skill",
       developmentMode: "Development mode",
       endedAt: "Ended",
+      totalDuration: "Total time",
       runtimeLogPath: "Runtime log path",
       archivedLogPath: "Archived log path",
       none: "None",
@@ -1395,6 +1397,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       workflowSkill: "工作流技能",
       developmentMode: "开发模式",
       endedAt: "结束时间",
+      totalDuration: "总耗时",
       runtimeLogPath: "运行时日志",
       archivedLogPath: "归档日志",
       none: "无",

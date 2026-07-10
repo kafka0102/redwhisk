@@ -203,9 +203,10 @@ impl AgentEventBroadcaster {
             TurnRunningDecision::Running => {
                 let _ = repository.update_turn_running(envelope.session_id, true, updated_at);
                 let _ = repository.clear_turn_ended_at(envelope.session_id);
+                let _ = repository.update_turn_started_at(envelope.session_id, updated_at);
             }
             TurnRunningDecision::EndedWithGrace => {
-                let _ = repository.update_turn_ended_at(envelope.session_id, updated_at);
+                let _ = repository.record_turn_completed(envelope.session_id, updated_at);
             }
             TurnRunningDecision::EndedImmediately => {
                 let _ = repository.update_turn_running(envelope.session_id, false, updated_at);

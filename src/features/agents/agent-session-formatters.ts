@@ -73,3 +73,41 @@ export function shouldShowExplicitSessionStatus(
 ): boolean {
   return session.status === "crashed" || session.status === "stopped";
 }
+
+// 将毫秒处理时长格式化为秒级本地化字符串。不足 1 秒返回 "-"。
+export function formatDuration(ms: number, locale: string): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds <= 0) {
+    return "-";
+  }
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const isZh = locale === "zh";
+  if (hours > 0) {
+    return isZh
+      ? `${hours}小时${minutes}分${seconds}秒`
+      : `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return isZh ? `${minutes}分${seconds}秒` : `${minutes}m ${seconds}s`;
+  }
+  return isZh ? `${seconds}秒` : `${seconds}s`;
+}
+
+// 详情区总耗时展示：crashed/stopped 或无有效处理时长时返回 "-"。
+export function formatProcessingDuration(
+  session: AgentSessionListItem | null,
+  locale: string,
+): string {
+  if (
+    !session ||
+    session.processingMs == null ||
+    session.processingMs <= 0 ||
+    session.status === "crashed" ||
+    session.status === "stopped"
+  ) {
+    return "-";
+  }
+  return formatDuration(session.processingMs, locale);
+}

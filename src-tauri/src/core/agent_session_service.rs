@@ -1541,6 +1541,8 @@ impl<'connection> AgentSessionService<'connection> {
                     last_active_at: row.last_active_at,
                     started_at: row.started_at,
                     closed_at: row.closed_at,
+                    processing_ms: row.processing_ms,
+                    last_output_at: row.last_output_at,
                 }
             })
             .collect();
@@ -5985,6 +5987,157 @@ mod tests {
             )
             .expect("read turn_ended_at");
         assert_eq!(ended_at, None);
+    }
+
+    #[test]
+    fn record_turn_completed_accumulates_processing_ms_and_writes_last_output_at() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            410,
+            Some(40),
+            Some("Processing issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            30,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository
+            .update_turn_started_at(410, 1_000)
+            .expect("set turn_started_at");
+        repository
+            .record_turn_completed(410, 4_200)
+            .expect("complete turn");
+
+        let (processing_ms, last_output_at, turn_ended_at): (i64, Option<i64>, Option<i64>) =
+            database
+                .query_row(
+                    "SELECT processing_ms, last_output_at, turn_ended_at FROM agent_sessions WHERE id = 410",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .expect("read duration columns");
+        assert_eq!(processing_ms, 3_200);
+        assert_eq!(last_output_at, Some(4_200));
+        assert_eq!(turn_ended_at, Some(4_200));
+
+        let service = test_agent_session_service(&database);
+        let response = service.list_agent_sessions(1).expect("list sessions");
+        let session = response
+            .sessions
+            .iter()
+            .find(|session| session.session_id == 410)
+            .expect("find session");
+        assert_eq!(session.processing_ms, 3_200);
+        assert_eq!(session.last_output_at, Some(4_200));
+    }
+
+    #[test]
+    fn record_turn_completed_accumulates_across_multiple_turns() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            411,
+            Some(41),
+            Some("Multi turn issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            30,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository
+            .update_turn_started_at(411, 1_000)
+            .expect("turn1 start");
+        repository
+            .record_turn_completed(411, 4_200)
+            .expect("turn1 end");
+        repository
+            .update_turn_started_at(411, 10_000)
+            .expect("turn2 start");
+        repository
+            .record_turn_completed(411, 12_000)
+            .expect("turn2 end");
+
+        let processing_ms: i64 = database
+            .query_row(
+                "SELECT processing_ms FROM agent_sessions WHERE id = 411",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read processing_ms");
+        assert_eq!(processing_ms, 5_200);
+    }
+
+    #[test]
+    fn record_turn_completed_skips_accumulation_when_started_at_missing() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            412,
+            Some(42),
+            Some("Missing start issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            30,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        // 漏记 turn_started_at 直接完成：COALESCE 兜底，本次不计入，避免负值。
+        repository
+            .record_turn_completed(412, 4_200)
+            .expect("complete turn");
+
+        let (processing_ms, last_output_at): (i64, Option<i64>) = database
+            .query_row(
+                "SELECT processing_ms, last_output_at FROM agent_sessions WHERE id = 412",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read columns");
+        assert_eq!(processing_ms, 0);
+        assert_eq!(last_output_at, Some(4_200));
+    }
+
+    #[test]
+    fn mark_terminated_clears_turn_started_at_but_keeps_processing_ms() {
+        let database = setup_session_list_database();
+        insert_session_list_row(
+            &database,
+            413,
+            Some(43),
+            Some("Crash issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            30,
+            None,
+        );
+        let repository = AgentSessionRepository::new(&database);
+        repository
+            .update_turn_started_at(413, 1_000)
+            .expect("set started");
+        repository
+            .record_turn_completed(413, 4_200)
+            .expect("complete turn");
+
+        // 模拟 crashed 收尾（mark_terminated SQL）：清 turn_started_at，processing_ms 保留。
+        database
+            .execute(
+                "UPDATE agent_sessions SET status = 'crashed', is_turn_running = 0, turn_ended_at = NULL, turn_started_at = NULL, last_active_at = MAX(last_active_at + 1, 5000), closed_at = COALESCE(closed_at, 5000) WHERE id = 413 AND closed_at IS NULL AND del = 0",
+                [],
+            )
+            .expect("terminate");
+
+        let (turn_started_at, processing_ms): (Option<i64>, i64) = database
+            .query_row(
+                "SELECT turn_started_at, processing_ms FROM agent_sessions WHERE id = 413",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read columns");
+        assert_eq!(turn_started_at, None);
+        assert_eq!(processing_ms, 3_200);
     }
 
     #[test]

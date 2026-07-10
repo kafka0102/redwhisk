@@ -5,6 +5,7 @@ import {
   listAgentSessions,
   type AgentSessionListItem,
 } from "../agents/agent-session-commands";
+import { formatProcessingDuration } from "../agents/agent-session-formatters";
 import { toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -102,14 +103,18 @@ export function IssueReadonlySessionPanel({
       },
       {
         label: messages.agentsFeature.endedAt,
-        value: formatTimestamp(session?.closedAt ?? null, locale),
+        value: formatTimestamp(session?.lastOutputAt ?? null, locale),
+      },
+      {
+        label: messages.agentsFeature.totalDuration,
+        value: formatProcessingDuration(session, locale),
       },
       {
         label: messages.issueSummary.status,
         value: formatSessionStatus(session?.status, messages),
       },
     ],
-    [locale, messages, session?.closedAt, session?.startedAt, session?.status],
+    [locale, messages, session],
   );
 
   const logPathLabel =

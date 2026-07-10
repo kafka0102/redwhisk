@@ -134,6 +134,9 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "turn_ended_at",
             "workflow_skill_name",
             "number",
+            "turn_started_at",
+            "processing_ms",
+            "last_output_at",
         ]
     );
 

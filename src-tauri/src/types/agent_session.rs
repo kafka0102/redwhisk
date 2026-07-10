@@ -208,6 +208,8 @@ pub struct AgentSessionListItem {
     pub last_active_at: i64,
     pub started_at: i64,
     pub closed_at: Option<i64>,
+    pub processing_ms: i64,
+    pub last_output_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
