@@ -56,7 +56,7 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
       className="session-diff-viewer"
     >
       <div className="session-diff-viewer__status">
-        {formatDiffStatus(tab.diff.kind)}
+        {formatDiffStatus(tab.diff.kind)} {tab.filePath}
       </div>
       <DiffEditor
         height="100%"
