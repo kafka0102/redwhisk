@@ -1,0 +1,22 @@
+version: 1
+change: issue-readonly-dual-column-session-panel
+phase: review
+ambiguity: low
+complexity: unknown
+implementation_path: openspec-apply
+execution_method: native
+workspace: current-branch
+origin_branch: issue-57
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk.worktrees/issue-57
+origin_workspace_mode: current-branch
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/issue-readonly-dual-column-session-panel/.onespec.yaml
+handoff_purpose: review
+handoff_summary: 'review handoff from 3 file(s); primary artifact: openspec/changes/issue-readonly-dual-column-session-panel/proposal.md'
+handoff_hash: 5fd5356c6d15f3d03f9c2fa9aa4dd71680c98bac1b5b5b2c3679261da7e15ec7
+touched_files_b64: b3BlbnNwZWMvY2hhbmdlcy9pc3N1ZS1yZWFkb25seS1kdWFsLWNvbHVtbi1zZXNzaW9uLXBhbmVsL3Byb3Bvc2FsLm1kCm9wZW5zcGVjL2NoYW5nZXMvaXNzdWUtcmVhZG9ubHktZHVhbC1jb2x1bW4tc2Vzc2lvbi1wYW5lbC90YXNrcy5tZApvcGVuc3BlYy9jaGFuZ2VzL2lzc3VlLXJlYWRvbmx5LWR1YWwtY29sdW1uLXNlc3Npb24tcGFuZWwvc3BlY3MvaXNzdWVzLXVpL3NwZWMubWQKc3JjL2ZlYXR1cmVzL2lzc3Vlcy9pc3N1ZS1yZWFkLW9ubHktcGFnZS50c3gKc3JjL2ZlYXR1cmVzL2lzc3Vlcy9pc3N1ZS1yZWFkb25seS1zZXNzaW9uLXBhbmVsLnRzeApzcmMvZmVhdHVyZXMvaXNzdWVzL2lzc3Vlcy1hY3Rpdml0eS50c3gKc3JjL2ZlYXR1cmVzL2lzc3Vlcy9pc3N1ZXMtYWN0aXZpdHkudGVzdC50c3gKc3JjL2FwcC9hcHAuY3NzCnNyYy9zaGFyZWQvaTE4bi9tZXNzYWdlcy50cwo=
+review_result: pending
+archive: pending
+created_at: 2026-07-10
+updated_at: 2026-07-10T08:23:09Z

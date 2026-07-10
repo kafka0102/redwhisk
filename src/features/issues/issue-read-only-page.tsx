@@ -33,6 +33,7 @@ import type {
 } from "./issue-commands";
 import type { IssueFormState } from "./issue-activity-types";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
+import { IssueReadonlySessionPanel } from "./issue-readonly-session-panel";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -82,6 +83,8 @@ export function IssueReadOnlyPage({
     ? messages.issues.detailTitle(selectedIssue.number)
     : messages.issues.detailFallbackTitle;
   const rawDescription = selectedIssue?.description ?? form.description;
+  const linkedSessionId = selectedIssue?.linkedSessionId ?? null;
+  const projectId = selectedIssue?.projectId ?? 0;
 
   return (
     <section
@@ -123,7 +126,7 @@ export function IssueReadOnlyPage({
       />
 
       <div className="issue-page__body issue-page__body--readonly-fullscreen">
-        <div className="issue-page__content-shell">
+        <div className="issue-page__content-shell issue-page__content-shell--readonly">
           <IssueReadOnlyDetails
             attachments={form.attachments}
             description={rawDescription}
@@ -133,6 +136,17 @@ export function IssueReadOnlyPage({
             onPreviewAttachment={onPreviewAttachment}
           />
         </div>
+        <aside
+          aria-label={messages.agentsFeature.sessionInfo}
+          className="issue-page__side issue-page__side--readonly"
+        >
+          <IssueReadonlySessionPanel
+            canOpenSession={hasLinkedSession && canOpenAgentsActivity}
+            linkedSessionId={linkedSessionId}
+            projectId={projectId}
+            onOpenSession={onOpenLinkedSession}
+          />
+        </aside>
       </div>
 
       <p

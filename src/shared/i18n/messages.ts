@@ -1389,7 +1389,7 @@ export const I18N_MESSAGES: Record<Locale, I18nMessages> = {
       loadingIssue: "正在加载 Issue...",
       issueInfo: "Issue信息",
       runParameters: "运行参数",
-      sessionInfo: "Session信息",
+      sessionInfo: "会话信息",
       sessionLog: "Session日志",
       agent: "Agent",
       workflowSkill: "工作流技能",

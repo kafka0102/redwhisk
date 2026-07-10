@@ -4006,6 +4006,76 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders dual-column read-only detail with session info and run parameters", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 401,
+          number: 401,
+          issueId: completedLinkedSessionIssue.id,
+          issueNumber: completedLinkedSessionIssue.number,
+          issueTitle: completedLinkedSessionIssue.title,
+          issueStatus: "completed",
+          agentProfileId: projectProfile.id,
+          agentProfileName: projectProfile.name,
+          workflowSkillName: "bmad-dev-story",
+          canCompleteClean: false,
+          canCompleteAgentCommit: false,
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          isTurnRunning: false,
+          workspaceMode: "worktree",
+          workingDir: "/tmp/worktrees/issue-25",
+          workspacePath: "/tmp/worktrees/issue-25",
+          originBranch: "main",
+          workspaceBranch: "issue-25",
+          logPath: "/tmp/completed.log",
+          latestOutput: null,
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_636_000_000,
+          closedAt: 1_780_637_000_000,
+        },
+      ],
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+
+    const dialog = await screen.findByRole("region", { name: "Issue Detail" });
+    const sessionPanel = within(dialog).getByRole("complementary", {
+      name: "Session info",
+    });
+
+    expect(
+      within(sessionPanel).getByRole("heading", { name: "Session info" }),
+    ).toBeInTheDocument();
+    expect(
+      within(sessionPanel).getByRole("heading", { name: "Run parameters" }),
+    ).toBeInTheDocument();
+    expect(within(sessionPanel).getByText("Project Codex")).toBeInTheDocument();
+    expect(
+      within(sessionPanel).getByText("bmad-dev-story"),
+    ).toBeInTheDocument();
+    expect(
+      within(sessionPanel).getByText(/Worktree \(issue-25\) issue-25/),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(sessionPanel).getByRole("button", { name: "View Session" }),
+    );
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
+  });
+
   it("keeps the linked session entry available for crashed sessions without open log", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({
@@ -4095,7 +4165,9 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: runningIssue.title }),
     );
-    expect(screen.getByRole("region", { name: "Issue Detail" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Issue Detail" }),
+    ).toBeInTheDocument();
 
     rerender(
       <I18nProvider>
@@ -4121,7 +4193,9 @@ describe("IssuesActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    expect(screen.getByRole("form", { name: "Edit Issue" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("form", { name: "Edit Issue" }),
+    ).toBeInTheDocument();
 
     rerender(
       <I18nProvider>
@@ -4197,9 +4271,7 @@ describe("IssuesActivity", () => {
       </I18nProvider>,
     );
 
-    expect(
-      screen.getByRole("form", { name: "New Issue" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
   });
 
   it("does nothing when the signal fires on the kanban board", async () => {
