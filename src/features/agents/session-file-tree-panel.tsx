@@ -59,12 +59,20 @@ export function SessionFileTreePanel({
     FILE_TREE_FALLBACK_HEIGHT,
   );
   const [menu, setMenu] = useState<FileTreeContextMenuState | null>(null);
+  // 文件树数据异步到达前 viewport 不挂载；必须在 hasFileTree 变为 true 后
+  // 再测量，否则首次 useLayoutEffect 会在 ref 仍为 null 时空跑并卡住 fallback 高度。
+  const hasFileTree = fileTree.length > 0 && !errorMessage;
 
   // react-arborist 的 Tree 需要数值高度做虚拟化，无法直接用 `height: 100%`。
   // 这里测量视口容器的实际高度并随容器尺寸变化更新，让文件树填满侧栏可用高度，
   // 而不是写死固定像素（此前为 600px）。useLayoutEffect 在首帧绘制前完成首次
-  // 测量，避免高度跳变闪烁。
+  // 测量，避免高度跳变闪烁。依赖 hasFileTree：从 loading/空态切到有数据时
+  // viewport 才首次挂载，必须重新绑定 ResizeObserver。
   useLayoutEffect(() => {
+    if (!hasFileTree) {
+      return;
+    }
+
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
@@ -82,7 +90,7 @@ export function SessionFileTreePanel({
     const observer = new ResizeObserver(updateHeight);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, []);
+  }, [hasFileTree]);
 
   const handleContextMenuNode = useCallback(
     (node: WorkspaceFileTreeNode, x: number, y: number) => {
@@ -102,8 +110,6 @@ export function SessionFileTreePanel({
     },
     [messages.agentsFeature.copiedToClipboard],
   );
-
-  const hasFileTree = fileTree.length > 0 && !errorMessage;
 
   return (
     <div
