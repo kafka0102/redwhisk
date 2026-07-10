@@ -199,7 +199,6 @@ export function SessionIssuePanel({
             </div>
           ))}
         </dl>
-        <div className="issue-detail__divider" aria-hidden="true" />
         <div className="session-issue-panel__meta-row">
           <span>{logPathLabel}</span>
           <code className="session-issue-panel__log-path">{logPathValue}</code>
