@@ -4,9 +4,11 @@ baseline_commit: c0c09f39ceba751fb4e04c96412173a0c3afb07e
 
 # Story 6.1: 稳定 Agent Session 终端渲染
 
-Status: in-progress
+Status: done
 
 <!-- 说明：本 story 来自 2026-06-09 用户反馈，不是原 sprint backlog 中的既有 story。它用于修复已交付 Agent Session 终端体验中的高优先级稳定性问题。 -->
+
+<!-- 归档说明（2026-07-10）：Agent Session 的 PTY 原生终端视图（CodexTerminal 及 read/write/resize/restore_agent_session_terminal 命令）已随架构迁移到结构化 JSON-RPC 消息流而整体废弃删除，本 story 直接服务的 CodexTerminal 渲染稳定化目标不再适用，故收口为 done。其推进的 PTY 实时输出广播能力（subscribeAgentSessionTerminalOutput + pty_sessions.set_output_sink + LatestOutputWriter）已落地，并被项目终端（project terminal）复用保留。 -->
 
 ## Story
 

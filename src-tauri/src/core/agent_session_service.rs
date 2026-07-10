@@ -39,14 +39,11 @@ use crate::types::agent_profile::{AgentScope, AgentType};
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentSessionTerminalResult,
-    ReadAgentTimelineResult, ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalResult, ResumeStructuredAgentSessionInput,
-    ResumeStructuredAgentSessionResult, SetAgentSessionAttentionInput,
-    SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
-    StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
-    StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
-    UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner, WriteAgentSessionTerminalInput,
+    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineResult,
+    ResumeStructuredAgentSessionInput, ResumeStructuredAgentSessionResult,
+    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
+    StartAgentSessionResult, StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
+    UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
@@ -178,23 +175,6 @@ impl<'connection> AgentSessionService<'connection> {
                 broadcaster,
             ),
         }
-    }
-
-    pub fn start_standalone_agent_session(
-        &self,
-        data_dir: impl AsRef<Path>,
-        input: StartStandaloneAgentSessionInput,
-    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
-        self.start_standalone_agent_session_internal(data_dir, input, None)
-    }
-
-    pub fn start_standalone_agent_session_with_pty(
-        &self,
-        data_dir: impl AsRef<Path>,
-        input: StartStandaloneAgentSessionInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
-        self.start_standalone_agent_session_internal(data_dir, input, Some(pty_sessions))
     }
 
     /// 查询 Issue 最近一次 worktree 模式 session 的残留状态。
@@ -1084,234 +1064,6 @@ impl<'connection> AgentSessionService<'connection> {
         Ok(())
     }
 
-    fn start_standalone_agent_session_internal(
-        &self,
-        data_dir: impl AsRef<Path>,
-        input: StartStandaloneAgentSessionInput,
-        pty_sessions: Option<&PtySessionManager>,
-    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
-        let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
-        let title = validate_session_title(&input.title)?;
-        let (profile, working_dir, log_path, command_snapshot, started_at) = self
-            .prepare_session_launch(
-                data_dir.as_ref(),
-                input.project_id,
-                input.agent_profile_id,
-                &format!("project-{}-standalone", input.project_id),
-            )?;
-
-        let command_accepts_prompt_argument = command_supports_prompt_argument(&command_snapshot);
-        let initial_prompt_argument =
-            command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
-
-        let pending_pty = if let Some(pty_sessions) = pty_sessions {
-            Some(
-                pty_sessions
-                    .spawn_pending(&PtySpawnRequest {
-                        command: command_snapshot.clone(),
-                        working_dir: working_dir.clone(),
-                        log_path: log_path.clone(),
-                        initial_prompt: initial_prompt_argument.clone(),
-                        rows: 32,
-                        cols: 120,
-                        startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
-                        startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
-                    })
-                    .map_err(agent_session_start_error)?,
-            )
-        } else {
-            None
-        };
-        let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
-        let mut child = if pending_pty.is_none() {
-            let mut child = spawn_agent_process(
-                &profile,
-                &working_dir,
-                &log_path,
-                initial_prompt_argument.as_deref(),
-            )?;
-            ensure_process_started(&mut child, &command_snapshot)?;
-            Some(child)
-        } else {
-            None
-        };
-        let mut pending_pty = pending_pty;
-        if !command_accepts_prompt_argument {
-            if let Some(pending_pty) = pending_pty.as_mut() {
-                pending_pty
-                    .write_input(&normalized_prompt)
-                    .map_err(agent_session_start_error)?;
-            }
-        }
-
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(agent_session_database_error)?;
-
-        let transaction_result: Result<StartStandaloneAgentSessionResult, rusqlite::Error> =
-            (|| {
-                let session = AgentSessionRepository::insert_standalone_in_transaction(
-                    &transaction,
-                    input.project_id,
-                    &title,
-                    input.agent_profile_id,
-                    &working_dir,
-                    &command_snapshot,
-                    &prompt_snapshot,
-                    &WorkspaceMode::CurrentBranch,
-                    None,
-                    None,
-                    Some(working_dir.as_str()),
-                    None,
-                    None,
-                    &log_path,
-                    started_at,
-                )?;
-
-                let session_event_payload = json!({
-                    "sessionId": session.id,
-                    "projectId": input.project_id,
-                    "issueId": Value::Null,
-                    "agentProfileId": input.agent_profile_id,
-                    "title": title,
-                    "status": "running",
-                    "logPath": log_path,
-                })
-                .to_string();
-                EventRepository::insert_session_event_in_transaction(
-                    &transaction,
-                    session.id,
-                    SessionEventType::SessionStarted,
-                    &session_event_payload,
-                    started_at,
-                )?;
-
-                transaction.commit()?;
-
-                Ok(StartStandaloneAgentSessionResult {
-                    session_id: session.id,
-                })
-            })();
-
-        match transaction_result {
-            Ok(result) => {
-                if should_attempt_codex_session_capture(&command_snapshot) {
-                    let data_dir = data_dir.as_ref().to_path_buf();
-                    let working_dir = working_dir.clone();
-                    let session_id = result.session_id;
-                    thread::spawn(move || {
-                        refresh_codex_session_id_in_data_dir(
-                            &data_dir,
-                            session_id,
-                            &working_dir,
-                            started_at,
-                        );
-                    });
-                }
-
-                if let Some(pty_sessions) = pty_sessions {
-                    if let Some(pending_pty) = pending_pty {
-                        let data_dir = data_dir.as_ref().to_path_buf();
-                        let data_dir_for_exit = data_dir.clone();
-                        if let Err(error) = pty_sessions.register_for_project(
-                            input.project_id,
-                            result.session_id,
-                            pending_pty,
-                            move |exit_status| {
-                                let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                    &data_dir_for_exit,
-                                    result.session_id,
-                                    exit_status,
-                                );
-                            },
-                        ) {
-                            error.pending.terminate();
-                            let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                &data_dir,
-                                result.session_id,
-                                PtyExitStatus { exit_code: None },
-                            );
-                        }
-                    }
-                } else if let Some(child) = child.take() {
-                    let data_dir = data_dir.as_ref().to_path_buf();
-                    let session_id = result.session_id;
-                    thread::spawn(move || {
-                        let mut child = child;
-                        let exit_status = child
-                            .wait()
-                            .ok()
-                            .map(|status| PtyExitStatus {
-                                exit_code: status.code(),
-                            })
-                            .unwrap_or(PtyExitStatus { exit_code: None });
-                        let _ = AgentSessionService::record_session_termination_in_data_dir(
-                            &data_dir,
-                            session_id,
-                            exit_status,
-                        );
-                    });
-                }
-
-                Ok(result)
-            }
-            Err(error) => {
-                if let Some(pending_pty) = pending_pty {
-                    pending_pty.terminate();
-                }
-                if let Some(mut child) = child.take() {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-                Err(agent_session_database_error(error))
-            }
-        }
-    }
-
-    fn prepare_session_launch(
-        &self,
-        data_dir: &Path,
-        project_id: i64,
-        agent_profile_id: i64,
-        log_name: &str,
-    ) -> Result<(AgentProfileRow, String, String, String, i64), CommandError> {
-        let project = self
-            .project_repository
-            .find_by_id(project_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
-                    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
-            })?;
-
-        let profile = self
-            .agent_profile_repository
-            .find_profile_by_id(agent_profile_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentProfileValidationFailed,
-                    "Agent Profile 不存在。",
-                )
-                .with_detail(
-                    ErrorDetail::new("AgentProfile").with_value("agentProfileId", agent_profile_id),
-                )
-            })?;
-
-        validate_profile_not_deleted(&profile)?;
-        validate_profile_scope(&profile, project_id)?;
-
-        let started_at = current_epoch_millis()?;
-        let working_dir = validate_working_dir(&project.repo_path)?;
-        let log_path =
-            build_log_path(data_dir, project_id, log_name, agent_profile_id, started_at)?;
-        let command_snapshot = build_command_snapshot(&profile);
-
-        Ok((profile, working_dir, log_path, command_snapshot, started_at))
-    }
-
     fn prepare_issue_session_launch(
         &self,
         data_dir: &Path,
@@ -1616,73 +1368,6 @@ impl<'connection> AgentSessionService<'connection> {
             })
     }
 
-    pub fn read_terminal_snapshot(
-        &self,
-        project_id: i64,
-        session_id: i64,
-        max_bytes: usize,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<ReadAgentSessionTerminalResult, CommandError> {
-        let session = self.find_project_session(project_id, session_id)?;
-        let snapshot = read_terminal_snapshot(Path::new(&session.log_path), max_bytes)
-            .map_err(agent_session_start_error)?;
-        self.reconcile_running_session_attention(session_id, Some(snapshot.as_str()))?;
-
-        Ok(ReadAgentSessionTerminalResult {
-            session_id,
-            snapshot,
-            // attention is persisted above; the terminal bridge only needs liveness here.
-            is_active: pty_sessions.contains(session_id),
-        })
-    }
-
-    pub fn write_terminal_input(
-        &self,
-        input: WriteAgentSessionTerminalInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<(), CommandError> {
-        self.find_project_session(input.project_id, input.session_id)?;
-        if input.data.is_empty() {
-            return Ok(());
-        }
-
-        pty_sessions
-            .write_input(input.session_id, &input.data)
-            .map_err(inactive_terminal_error)?;
-
-        self.clear_attention_after_successful_input(input.session_id)?;
-        Ok(())
-    }
-
-    pub fn restore_terminal(
-        &self,
-        input: RestoreAgentSessionTerminalInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
-        self.find_project_session(input.project_id, input.session_id)?;
-        let snapshot = match pty_sessions.restore_snapshot(input.session_id) {
-            Ok(snapshot) => snapshot,
-            Err(error) if error == "session not found" => {
-                return Ok(RestoreAgentSessionTerminalResult {
-                    session_id: input.session_id,
-                    sequence: 0,
-                    chunks: Vec::new(),
-                    is_complete: false,
-                    is_active: false,
-                });
-            }
-            Err(error) => return Err(inactive_terminal_error(error)),
-        };
-
-        Ok(RestoreAgentSessionTerminalResult {
-            session_id: snapshot.session_id,
-            sequence: snapshot.sequence,
-            chunks: snapshot.chunks,
-            is_complete: snapshot.is_complete,
-            is_active: true,
-        })
-    }
-
     pub fn set_session_attention(
         &self,
         input: SetAgentSessionAttentionInput,
@@ -1814,17 +1499,6 @@ impl<'connection> AgentSessionService<'connection> {
             session_id: session.id,
             codex_session_id,
         })
-    }
-
-    pub fn resize_terminal(
-        &self,
-        input: ResizeAgentSessionTerminalInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<(), CommandError> {
-        self.find_project_session(input.project_id, input.session_id)?;
-        pty_sessions
-            .resize(input.session_id, input.rows, input.cols)
-            .map_err(inactive_terminal_error)
     }
 
     fn reconcile_running_session_attention(
@@ -2121,26 +1795,6 @@ impl AgentSessionService<'_> {
             AgentSessionRepository::new(&database.connection),
         )
         .start_agent_session(data_dir, input)
-    }
-
-    pub fn start_standalone_agent_session_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: StartStandaloneAgentSessionInput,
-    ) -> Result<StartStandaloneAgentSessionResult, CommandError> {
-        let database = DatabaseConfig::new(&data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(agent_session_database_error)?;
-
-        AgentSessionService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-            AgentProfileRepository::new(&database.connection),
-            AgentSessionRepository::new(&database.connection),
-        )
-        .start_standalone_agent_session(data_dir, input)
     }
 
     /// 启动结构化 Agent Session（codex app-server JSON-RPC 路径）。
@@ -2930,71 +2584,6 @@ impl AgentSessionService<'_> {
         Ok(completed_issue)
     }
 
-    pub fn read_terminal_snapshot_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        project_id: i64,
-        session_id: i64,
-        max_bytes: usize,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<ReadAgentSessionTerminalResult, CommandError> {
-        let database = DatabaseConfig::new(data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(agent_session_database_error)?;
-
-        AgentSessionService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-            AgentProfileRepository::new(&database.connection),
-            AgentSessionRepository::new(&database.connection),
-        )
-        .read_terminal_snapshot(project_id, session_id, max_bytes, pty_sessions)
-    }
-
-    pub fn write_terminal_input_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: WriteAgentSessionTerminalInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<(), CommandError> {
-        let database = DatabaseConfig::new(data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(agent_session_database_error)?;
-
-        AgentSessionService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-            AgentProfileRepository::new(&database.connection),
-            AgentSessionRepository::new(&database.connection),
-        )
-        .write_terminal_input(input, pty_sessions)
-    }
-
-    pub fn restore_terminal_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: RestoreAgentSessionTerminalInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
-        let database = DatabaseConfig::new(data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(agent_session_database_error)?;
-
-        AgentSessionService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-            AgentProfileRepository::new(&database.connection),
-            AgentSessionRepository::new(&database.connection),
-        )
-        .restore_terminal(input, pty_sessions)
-    }
-
     pub fn set_session_attention_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: SetAgentSessionAttentionInput,
@@ -3052,27 +2641,6 @@ impl AgentSessionService<'_> {
             result.codex_session_id = refreshed_codex_session_id;
         }
         Ok(result)
-    }
-
-    pub fn resize_terminal_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: ResizeAgentSessionTerminalInput,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<(), CommandError> {
-        let database = DatabaseConfig::new(data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(agent_session_database_error)?;
-
-        AgentSessionService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-            AgentProfileRepository::new(&database.connection),
-            AgentSessionRepository::new(&database.connection),
-        )
-        .resize_terminal(input, pty_sessions)
     }
 
     pub fn record_session_termination_in_data_dir(

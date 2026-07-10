@@ -265,7 +265,7 @@ Issue lane 是常驻列，使用细微 tint background 和小型 status dot。Is
 
 - **Do** 使用黑、白、灰、边线和紧凑 spacing，让界面像桌面开发工具。
 - **Do** 只把颜色用于 focus、attention、success、danger、Project identity 或 lane state。
-- **Do** 在实现 Agent workflow 时保留 Codex Native Session View 作为主工作面。
+- **Do** 在实现 Agent workflow 时保留结构化消息流与 composer 作为主工作面。
 - **Do** 一致使用 lucide icon，并给 Activity Bar 40px target 和事实化 accessible label。
 - **Do** 让状态文本化：missing path、error、attention、crashed、stopped、no commit detected 和 completed 不能只靠颜色表达。
 - **Do** 让 Project、Issue、Agent Session、Project Settings 和 Global Settings 在视觉上保持清楚边界。

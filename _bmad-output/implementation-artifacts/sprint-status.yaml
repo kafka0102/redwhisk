@@ -100,6 +100,6 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-1-stabilize-agent-session-terminal-rendering: in-progress
+  6-1-stabilize-agent-session-terminal-rendering: done
   6-2-unify-settings-page-two-column-layout: done
   epic-6-retrospective: optional

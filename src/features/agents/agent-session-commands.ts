@@ -51,37 +51,6 @@ export interface AgentSessionListResponse {
   sessions: AgentSessionListItem[];
 }
 
-export interface ReadAgentSessionTerminalInput {
-  projectId: number;
-  sessionId: number;
-  maxBytes?: number;
-}
-
-export interface ReadAgentSessionTerminalResult {
-  sessionId: number;
-  snapshot: string;
-  isActive: boolean;
-}
-
-export interface RestoreAgentSessionTerminalInput {
-  projectId: number;
-  sessionId: number;
-}
-
-export interface RestoreAgentSessionTerminalResult {
-  sessionId: number;
-  sequence: number;
-  chunks: number[][];
-  isComplete: boolean;
-  isActive: boolean;
-}
-
-export interface WriteAgentSessionTerminalInput {
-  projectId: number;
-  sessionId: number;
-  data: string;
-}
-
 export interface SetAgentSessionAttentionInput {
   projectId: number;
   sessionId: number;
@@ -105,24 +74,6 @@ export interface InjectAgentSessionPromptInput {
 export interface InjectAgentSessionPromptResult {
   sessionId: number;
   codexSessionId: string | null;
-}
-
-export interface ResizeAgentSessionTerminalInput {
-  projectId: number;
-  sessionId: number;
-  rows: number;
-  cols: number;
-}
-
-export interface StartStandaloneAgentSessionInput {
-  projectId: number;
-  title: string;
-  agentProfileId: number;
-  promptSnapshot: string;
-}
-
-export interface StartStandaloneAgentSessionResult {
-  sessionId: number;
 }
 
 export interface DeleteAgentSessionInput {
@@ -153,30 +104,6 @@ export function listAgentSessions(
   });
 }
 
-export function readAgentSessionTerminal(
-  input: ReadAgentSessionTerminalInput,
-): Promise<ReadAgentSessionTerminalResult> {
-  return invokeCommand<ReadAgentSessionTerminalResult>(
-    "read_agent_session_terminal",
-    { input },
-  );
-}
-
-export function writeAgentSessionTerminal(
-  input: WriteAgentSessionTerminalInput,
-): Promise<void> {
-  return invokeCommand("write_agent_session_terminal", { input });
-}
-
-export function restoreAgentSessionTerminal(
-  input: RestoreAgentSessionTerminalInput,
-): Promise<RestoreAgentSessionTerminalResult> {
-  return invokeCommand<RestoreAgentSessionTerminalResult>(
-    "restore_agent_session_terminal",
-    { input },
-  );
-}
-
 export function setAgentSessionAttention(
   input: SetAgentSessionAttentionInput,
 ): Promise<SetAgentSessionAttentionResult> {
@@ -192,23 +119,6 @@ export function injectAgentSessionPrompt(
   return invokeCommand<InjectAgentSessionPromptResult>(
     "inject_agent_session_prompt",
     { input },
-  );
-}
-
-export function resizeAgentSessionTerminal(
-  input: ResizeAgentSessionTerminalInput,
-): Promise<void> {
-  return invokeCommand("resize_agent_session_terminal", { input });
-}
-
-export function startStandaloneAgentSession(
-  input: StartStandaloneAgentSessionInput,
-): Promise<StartStandaloneAgentSessionResult> {
-  return invokeCommand<StartStandaloneAgentSessionResult>(
-    "start_standalone_agent_session",
-    {
-      input,
-    },
   );
 }
 

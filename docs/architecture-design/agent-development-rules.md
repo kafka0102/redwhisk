@@ -24,7 +24,7 @@
 - `src/app/`：应用入口、Activity 路由、Workbench shell、全局壳层样式。
 - `src/features/project/`：Project Home、Project card、Project Switcher、Project command wrapper。
 - `src/features/issues/`：Issues Activity、Issue Dialog、Run Prompt、Completion、Summary。
-- `src/features/agents/`：Agents Activity、Session list、Codex 结构化消息流、composer 输入框、Issue Inspector、临时 Session。
+- `src/features/agents/`：Agents Activity、Session list、Codex 结构化消息流、composer 输入框、Issue Inspector。
 - `src/features/settings/`：Project Settings、Agent Profile 表单和 Settings command wrapper。
 - `src/shared/commands/`：Tauri command client、统一 command error 处理。
 - `src/components/ui/`：基础 UI primitive。

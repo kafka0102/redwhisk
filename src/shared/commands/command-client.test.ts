@@ -13,10 +13,6 @@ import {
 import {
   injectAgentSessionPrompt,
   listAgentSessions,
-  readAgentSessionTerminal,
-  resizeAgentSessionTerminal,
-  startStandaloneAgentSession,
-  writeAgentSessionTerminal,
 } from "../../features/agents/agent-session-commands";
 import {
   advanceIssueStatus,
@@ -467,52 +463,6 @@ describe("command client", () => {
     });
   });
 
-  it("invokes Rust Core through the read agent session terminal command", async () => {
-    invokeMock.mockResolvedValue({
-      sessionId: 301,
-      snapshot: "codex> ready",
-      isActive: true,
-    });
-
-    await expect(
-      readAgentSessionTerminal({
-        projectId: 1,
-        sessionId: 301,
-        maxBytes: 4096,
-      }),
-    ).resolves.toEqual({
-      sessionId: 301,
-      snapshot: "codex> ready",
-      isActive: true,
-    });
-    expect(invokeMock).toHaveBeenCalledWith("read_agent_session_terminal", {
-      input: {
-        projectId: 1,
-        sessionId: 301,
-        maxBytes: 4096,
-      },
-    });
-  });
-
-  it("invokes Rust Core through the write agent session terminal command", async () => {
-    invokeMock.mockResolvedValue(undefined);
-
-    await expect(
-      writeAgentSessionTerminal({
-        projectId: 1,
-        sessionId: 301,
-        data: "status\r",
-      }),
-    ).resolves.toBeUndefined();
-    expect(invokeMock).toHaveBeenCalledWith("write_agent_session_terminal", {
-      input: {
-        projectId: 1,
-        sessionId: 301,
-        data: "status\r",
-      },
-    });
-  });
-
   it("invokes Rust Core through the inject agent session prompt command", async () => {
     invokeMock.mockResolvedValue({
       sessionId: 301,
@@ -536,52 +486,6 @@ describe("command client", () => {
         sessionId: 301,
         prompt: "please continue",
         kind: "follow_up",
-      },
-    });
-  });
-
-  it("invokes Rust Core through the resize agent session terminal command", async () => {
-    invokeMock.mockResolvedValue(undefined);
-
-    await expect(
-      resizeAgentSessionTerminal({
-        projectId: 1,
-        sessionId: 301,
-        rows: 38,
-        cols: 120,
-      }),
-    ).resolves.toBeUndefined();
-    expect(invokeMock).toHaveBeenCalledWith("resize_agent_session_terminal", {
-      input: {
-        projectId: 1,
-        sessionId: 301,
-        rows: 38,
-        cols: 120,
-      },
-    });
-  });
-
-  it("invokes Rust Core through the start standalone agent session command", async () => {
-    invokeMock.mockResolvedValue({
-      sessionId: 11,
-    });
-
-    await expect(
-      startStandaloneAgentSession({
-        projectId: 1,
-        title: "Scratch Session",
-        agentProfileId: 9,
-        promptSnapshot: "Help me inspect the current repo",
-      }),
-    ).resolves.toEqual({
-      sessionId: 11,
-    });
-    expect(invokeMock).toHaveBeenCalledWith("start_standalone_agent_session", {
-      input: {
-        projectId: 1,
-        title: "Scratch Session",
-        agentProfileId: 9,
-        promptSnapshot: "Help me inspect the current repo",
       },
     });
   });

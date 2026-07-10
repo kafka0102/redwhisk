@@ -31,7 +31,7 @@ RedWhisk 的语气像认真打磨过的本地开发工具：短、直接、可�
 ## Design Principles
 
 1. 状态可信优先：所有改变 Issue 状态、Agent Session 状态和完成结果的动作都要能解释、能复盘、能审计。
-2. 保护原生交互：Codex Native Session View 是核心工作区，Inspector、Dialog 和 Header 操作不能卸载或中断终端。
+2. 保护原生交互：结构化消息流与 composer 是 Agent Session 的核心工作区，Inspector、Dialog 和 Header 操作不能中断消息流或丢失会话上下文。
 3. 桌面工具密度：界面应像本地工作台，依靠面板、边线、对齐、稳定尺寸和键盘路径组织信息，而不是网页式大区块。
 4. 克制表达：黑白灰建立结构，颜色只用于 focus、attention、success、danger 等必要状态。
 5. 明确边界：Project、Issue、Agent Session、Project Settings 和 Global Settings 的边界要清楚，避免把本地开发闭环扩展成通用项目管理工具。

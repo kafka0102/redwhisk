@@ -20,16 +20,13 @@ use crate::types::agent_session::{
     DeleteAgentSessionInput, DeleteAgentSessionResult, InjectAgentSessionPromptInput,
     InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
     ListAgentModesInput, ListAgentModesResult, ProjectGitBranchListInput,
-    ProjectGitBranchListResult, ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
-    ReadAgentTimelineInput, ReadAgentTimelineResult, ResizeAgentSessionTerminalInput,
-    RespondAgentPermissionInput, RestoreAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalResult, ResumeStructuredAgentSessionInput,
+    ProjectGitBranchListResult, ReadAgentTimelineInput, ReadAgentTimelineResult,
+    RespondAgentPermissionInput, ResumeStructuredAgentSessionInput,
     ResumeStructuredAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
     SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
-    StartAgentSessionResult, StartStandaloneAgentSessionInput, StartStandaloneAgentSessionResult,
-    StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
-    UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult, WriteAgentSessionTerminalInput,
+    StartAgentSessionResult, StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
+    UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -145,133 +142,6 @@ pub async fn get_project_git_branches(
 }
 
 #[tauri::command]
-pub async fn start_standalone_agent_session(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: StartStandaloneAgentSessionInput,
-) -> Result<StartStandaloneAgentSessionResult, CommandError> {
-    let data_dir = prepare_agent_session_data_dir(&app, &state)?;
-    let pty_sessions = state.pty_sessions.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let database = crate::db::connection::DatabaseConfig::new(&data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        crate::db::migrations::MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(|error| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionPersistenceFailed,
-                    "Agent Session 启动失败。",
-                )
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            })?;
-
-        AgentSessionService::new(
-            crate::db::issue_repository::IssueRepository::new(&database.connection),
-            crate::db::project_repository::ProjectRepository::new(&database.connection),
-            crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
-            crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
-        )
-        .start_standalone_agent_session_with_pty(data_dir, input, &pty_sessions)
-    })
-    .await
-    .map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 启动失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?
-}
-
-#[tauri::command]
-pub async fn read_agent_session_terminal(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: ReadAgentSessionTerminalInput,
-) -> Result<ReadAgentSessionTerminalResult, CommandError> {
-    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端读取失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?;
-    let pty_sessions = state.pty_sessions.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        AgentSessionService::read_terminal_snapshot_in_data_dir(
-            data_dir,
-            input.project_id,
-            input.session_id,
-            input.max_bytes.unwrap_or(32_768),
-            &pty_sessions,
-        )
-    })
-    .await
-    .map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端读取失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?
-}
-
-#[tauri::command]
-pub async fn write_agent_session_terminal(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: WriteAgentSessionTerminalInput,
-) -> Result<(), CommandError> {
-    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端写入失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?;
-    let pty_sessions = state.pty_sessions.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        AgentSessionService::write_terminal_input_in_data_dir(data_dir, input, &pty_sessions)
-    })
-    .await
-    .map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端写入失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?
-}
-
-#[tauri::command]
-pub async fn restore_agent_session_terminal(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: RestoreAgentSessionTerminalInput,
-) -> Result<RestoreAgentSessionTerminalResult, CommandError> {
-    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端恢复失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?;
-    let pty_sessions = state.pty_sessions.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        AgentSessionService::restore_terminal_in_data_dir(data_dir, input, &pty_sessions)
-    })
-    .await
-    .map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端恢复失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?
-}
-
-#[tauri::command]
 pub async fn set_agent_session_attention(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -319,33 +189,6 @@ pub async fn inject_agent_session_prompt(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session prompt 注入失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?
-}
-
-#[tauri::command]
-pub async fn resize_agent_session_terminal(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: ResizeAgentSessionTerminalInput,
-) -> Result<(), CommandError> {
-    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端调整失败。",
-        )
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?;
-    let pty_sessions = state.pty_sessions.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        AgentSessionService::resize_terminal_in_data_dir(data_dir, input, &pty_sessions)
-    })
-    .await
-    .map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 终端调整失败。",
         )
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
