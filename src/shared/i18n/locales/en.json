@@ -539,5 +539,233 @@
     "permissionKindOther": "Permission request",
     "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}",
     "agentTypeAlt": "Agent type: {{label}}"
+  },
+  "errors": {
+    "AGENT_COMMAND_UNAVAILABLE": {
+      "default": "Agent command is unavailable."
+    },
+    "AGENT_PROFILE_VALIDATION_FAILED": {
+      "commandRequired": "Agent command is required.",
+      "labelColorInvalid": "Label color must be in #RRGGBB format.",
+      "labelNameNotUnique": "Global Label name must be unique across all projects and globally.",
+      "labelNameRequired": "Label name is required.",
+      "labelNameTooLong": "Label name is limited to 15 characters.",
+      "labelNotFound": "Label not found or already deleted.",
+      "nameRequired": "Agent Profile name is required.",
+      "noProfileForAgentType": "No Agent Profile available for the current Agent type.",
+      "profileDeleted": "Agent Profile has been deleted.",
+      "profileNotFound": "Agent Profile not found or already deleted.",
+      "projectAgentRequiresProjectId": "Project-level Agent requires a project_id.",
+      "projectLabelRequiresProjectId": "Project-level Label requires a project_id.",
+      "projectSkillRequiresProjectId": "Project-level Skill requires a project_id.",
+      "skillNameNotUnique": "Global Skill name must be unique.",
+      "skillNameRequired": "Skill name is required.",
+      "skillNotFound": "Skill not found or already deleted."
+    },
+    "AGENT_SESSION_ALREADY_EXISTS": {
+      "default": "An Agent Session is already linked to this Issue."
+    },
+    "AGENT_SESSION_NOT_RUNNING": {
+      "noStructuredSession": "The Session has no running structured session.",
+      "notRunningForInject": "The Session is not running. Resume it before injecting.",
+      "sessionNotRunning": "Agent session call failed."
+    },
+    "AGENT_SESSION_PERSISTENCE_FAILED": {
+      "attachmentCopyFailed": "Failed to copy attachment.",
+      "attachmentDataDirUnavailable": "Failed to save attachment: data directory is unavailable.",
+      "attachmentDirCreateFailed": "Failed to create attachment directory.",
+      "attachmentSaveFailed": "Failed to save attachment.",
+      "cancelFailed": "Failed to cancel Agent.",
+      "claudeConfigReadFailed": "Failed to read Claude config.",
+      "closeFailed": "Failed to close Agent Session.",
+      "codexConfigReadFailed": "Failed to read Codex config.",
+      "configSaveFailed": "Failed to save Agent config.",
+      "dataDirUnavailable": "Agent Session data directory is unavailable.",
+      "deleteFailed": "Failed to delete Agent Session.",
+      "followStatusUpdateFailed": "Failed to update Agent Session follow status.",
+      "gitBranchQueryFailed": "Failed to query Git branch.",
+      "historyReadFailed": "Failed to read Agent Session history.",
+      "messageSendFailed": "Failed to send Agent message.",
+      "migrationFailed": "Agent Session database migration failed.",
+      "modeListReadFailed": "Failed to read Agent mode list.",
+      "modeSwitchFailed": "Failed to switch Agent mode.",
+      "modelListReadFailed": "Failed to read Agent model list.",
+      "permissionResponseFailed": "Failed to respond to Agent permission.",
+      "promptInjectFailed": "Failed to inject Agent Session prompt.",
+      "queryFailed": "Failed to query Agent Session.",
+      "restoreFailed": "Failed to restore Agent Session.",
+      "startFailed": "Failed to start Agent Session.",
+      "titleUpdateFailed": "Failed to update Agent Session title.",
+      "workspaceQueryFailed": "Failed to query workspace.",
+      "workspaceReadFailed": "Failed to read workspace."
+    },
+    "AGENT_SESSION_START_FAILED": {
+      "commandRequired": "Agent command is required.",
+      "processStartFailed": "Failed to start Agent process.",
+      "projectWorkdirInaccessible": "Project working directory is inaccessible.",
+      "worktreeDeleteFailed": "Failed to delete worktree.",
+      "worktreeInitCommandFailed": "Worktree initialization command failed.",
+      "worktreeInitDirInaccessible": "Worktree initialization directory is inaccessible."
+    },
+    "AGENT_SESSION_STREAM_FAILED": {
+      "default": "Agent session error."
+    },
+    "AGENT_SESSION_VALIDATION_FAILED": {
+      "commitHashInvalid": "Commit hash format is invalid.",
+      "commitNotFound": "Commit not found.",
+      "completedIssueSessionCannotRun": "Sessions of completed Issues cannot continue running.",
+      "fileNoUncommittedChanges": "File has no uncommitted changes.",
+      "fileNotInCommit": "File does not belong to the commit.",
+      "filePathInaccessible": "File path is inaccessible.",
+      "filePathOutsideRepo": "File path cannot leave the repository directory.",
+      "fileTreeReadFailed": "Failed to read file tree.",
+      "finalPromptRequired": "Final prompt is required.",
+      "gitBlobSizeUnparseable": "Git blob size could not be parsed.",
+      "gitCommandFailed": "Git command execution failed.",
+      "gitOutputNotUtf8": "Git output is not UTF-8.",
+      "gitStatusUnparseable": "Git status output could not be parsed.",
+      "homeDirUnresolved": "Failed to resolve user home directory.",
+      "injectedPromptRequired": "Injected prompt is required.",
+      "issueNotInProject": "Issue does not belong to the current Project.",
+      "linkedSessionCannotDelete": "Agent Sessions linked to an Issue cannot be deleted from the Sessions view.",
+      "linkedSessionCannotRename": "Agent Sessions linked to an Issue cannot be renamed from the Sessions view.",
+      "missingResumeSessionId": "The current Session is missing a resumable session identifier.",
+      "mustBeRunningToUpdateFollow": "Only running Agent Sessions can update follow status.",
+      "noActiveTerminal": "The current Session has no active terminal.",
+      "onlyBacklogCanStart": "Only backlog Issues can start an Agent Session.",
+      "pathCannotBeSymlink": "Path cannot be a symbolic link.",
+      "pathMustBeRelative": "Path must be a relative path within the repository.",
+      "pathNotFile": "Path is not a file.",
+      "profileNotFound": "The Agent Profile linked to this Agent Session does not exist.",
+      "profileNotInProject": "The project-level Agent Profile does not belong to the current Project.",
+      "projectPathInvalid": "Project path is invalid.",
+      "repoPathInaccessible": "Repository path is inaccessible.",
+      "repoPathNotDir": "Repository path is not a directory.",
+      "sessionNotInProject": "Agent Session does not belong to the current Project.",
+      "targetBranchNotFound": "Target branch not found.",
+      "titleRequired": "Session title is required.",
+      "unsupportedCodexMode": "Unsupported Codex collaboration mode.",
+      "unsupportedCollaborationMode": "Unsupported collaboration mode.",
+      "unsupportedPermissionDecision": "Unsupported permission decision.",
+      "workspaceFileReadFailed": "Failed to read workspace file.",
+      "workspaceMissingForModelList": "Agent Session workspace does not exist; model list is unavailable.",
+      "workspaceMissingForResume": "Agent Session workspace does not exist; cannot resume."
+    },
+    "ISSUE_NOT_FOUND": {
+      "attachmentNotFound": "Attachment not found.",
+      "issueNotFound": "Issue not found.",
+      "sessionNotFound": "Agent Session not found."
+    },
+    "ISSUE_PERSISTENCE_FAILED": {
+      "archiveSessionNotFound": "Failed to archive Issue: linked session not found.",
+      "attachmentDraftSaveFailed": "Failed to save Issue attachment draft.",
+      "attachmentExportFailed": "Failed to export Issue attachment.",
+      "attachmentPreviewFailed": "Failed to preview Issue attachment.",
+      "auditSaveFailed": "Failed to save Agent Commit audit.",
+      "autoCommitFailed": "Failed to auto-commit Issue.",
+      "completeDetectionFailed": "Issue completion detection failed.",
+      "completeFailed": "Failed to complete Issue.",
+      "completePrecheckFailed": "Issue completion precheck failed.",
+      "completionAttemptSaveFailed": "Failed to save CompletionAttempt.",
+      "completionAttemptUpdateFailed": "Failed to update CompletionAttempt.",
+      "deleteFailed": "Failed to delete Issue.",
+      "queryFailed": "Failed to query Issue.",
+      "saveFailed": "Failed to save Issue.",
+      "statusUpdateFailed": "Failed to update Issue status.",
+      "summaryParseFailed": "Failed to parse Issue Summary.",
+      "summaryReadFailed": "Failed to read Issue summary.",
+      "worktreeDeleteFailed": "Failed to delete Worktree.",
+      "worktreeStatusQueryFailed": "Failed to query Worktree status."
+    },
+    "ISSUE_VALIDATION_FAILED": {
+      "alreadyCompleted": "Completed Issues cannot be completed again.",
+      "attachmentParamsInvalid": "Attachment preview or export parameters are invalid.",
+      "attachmentPreviewUnsupported": "The selected attachment is not previewable.",
+      "attachmentSourceNotFound": "Attachment source file not found.",
+      "attachmentTooLarge": "Attachment is too large to preview.",
+      "autoCommitDisabled": "Agent auto-commit is disabled, pending new flow.",
+      "backlogCloseSessionFailed": "Failed to close linked Agent Session when moving back to Backlog.",
+      "backlogRemoveSessionFailed": "Failed to remove linked Agent Session when moving back to Backlog.",
+      "deleteCloseSessionFailed": "Failed to close linked Session when deleting Issue.",
+      "descriptionMissingAttachmentMarker": "Issue description is missing an attachment marker.",
+      "draftAttachmentUnreadable": "Draft attachment path is not readable.",
+      "gitOperationBlockingCommit": "An in-progress Git operation blocks Agent Commit. Resolve the Git state first.",
+      "gitStatusUnavailable": "Git status is unavailable for the current Project.",
+      "labelsInvalid": "Issue labels configuration is invalid.",
+      "mustBeAcceptableToPrepareCommit": "Only acceptance-pending Issues can prepare Agent Commit.",
+      "mustBeAcceptableWithSessionToCommit": "Only acceptance-pending Issues with a linked Agent Session can use Agent Commit.",
+      "mustBeAcceptableWithSessionToComplete": "Only acceptance-pending Issues with a linked Agent Session can be completed manually.",
+      "mustBeCompletedToViewSummary": "Only completed Issues can view Summary.",
+      "mustBeRunningToAccept": "Only running Issues can be marked for acceptance.",
+      "mustHaveSessionToAccept": "Only Issues with a linked Agent Session can be marked for acceptance.",
+      "mustUseCompletionFlow": "Issue completion must go through complete_issue_flow.",
+      "noChangesUseComplete": "No uncommitted changes in the repository. Use Complete directly.",
+      "notInAutoCommitFlow": "The Issue is not in the auto-commit flow.",
+      "sessionNotInProject": "The linked Agent Session does not belong to the current Project.",
+      "sessionRequiredToComplete": "Issue completion requires a linked Agent Session.",
+      "titleRequired": "Issue title is required.",
+      "worktreeMissingBranch": "The linked worktree is missing working branch info and cannot be deleted.",
+      "worktreeMissingWorkDir": "The linked worktree is missing working directory info and cannot be deleted.",
+      "worktreeNotFound": "No linked worktree found; nothing to delete.",
+      "worktreeNotManaged": "The current worktree is not managed by RedWhisk and cannot be deleted."
+    },
+    "ISSUE_WORKTREE_OCCUPIED": {
+      "default": "A worktree with the same name is already occupied. Remove it before running."
+    },
+    "LOCAL_DATA_INITIALIZATION_FAILED": {
+      "default": "Local data initialization failed."
+    },
+    "PROJECT_NOT_FOUND": {
+      "default": "Project not found."
+    },
+    "PROJECT_PERSISTENCE_FAILED": {
+      "loadFailed": "Failed to load Project.",
+      "saveFailed": "Failed to save Project.",
+      "targetWindowEmitFailed": "Failed to emit event to target project window.",
+      "targetWindowFocusFailed": "Failed to focus target project window.",
+      "targetWindowNotFound": "Target project window not found.",
+      "targetWindowRestoreFailed": "Failed to restore target project window.",
+      "targetWindowShowFailed": "Failed to show target project window.",
+      "windowCloseFailed": "Failed to close session monitor window.",
+      "windowFocusFailed": "Failed to focus Project window.",
+      "windowOpenFailed": "Failed to open window.",
+      "windowShowFailed": "Failed to show window."
+    },
+    "PROJECT_REPO_NOT_GIT_REPOSITORY": {
+      "default": "The selected directory is not a Git repository."
+    },
+    "PROJECT_REPO_PATH_INVALID": {
+      "nameRequired": "Project name is required.",
+      "pathInvalid": "Project path is invalid.",
+      "worktreesMustBeIgnored": ".gitignore must ignore .worktrees/ when selecting the .worktrees directory inside the repository.",
+      "worktreesRequiresGitignore": "The repository must contain a .gitignore file when selecting the .worktrees directory inside the repository."
+    },
+    "PROJECT_REPO_PATH_UNAVAILABLE": {
+      "default": "Project path does not exist or is inaccessible."
+    },
+    "PROJECT_TERMINAL_PERSISTENCE_FAILED": {
+      "deleteFailed": "Failed to delete Project Terminal.",
+      "queryFailed": "Failed to query Project Terminal.",
+      "saveFailed": "Failed to save Project Terminal."
+    },
+    "PROJECT_TERMINAL_START_FAILED": {
+      "default": "Failed to start Project Terminal."
+    },
+    "PROJECT_TERMINAL_VALIDATION_FAILED": {
+      "sessionNotFound": "Agent Session not found.",
+      "sessionNotInProject": "Agent Session does not belong to the current Project.",
+      "shortcutLimitExceeded": "Shortcuts are limited to 10 entries.",
+      "shortcutNotFound": "Shortcut not found.",
+      "shortcutNotFoundOrDeleted": "Shortcut not found or already deleted.",
+      "shortcutNotInProject": "Shortcut does not belong to the current project.",
+      "shortcutRequired": "Shortcut is required.",
+      "shortcutTooLong": "Shortcut is too long.",
+      "terminalNotFound": "Project Terminal not found.",
+      "terminalNotInProject": "Project Terminal does not belong to the current Project.",
+      "terminalUnavailable": "Project Terminal is unavailable."
+    },
+    "SETTINGS_PERSISTENCE_FAILED": {
+      "default": "Failed to save settings."
+    }
   }
 }

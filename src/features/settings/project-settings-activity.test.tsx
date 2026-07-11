@@ -1339,7 +1339,7 @@ describe("ProjectSettingsActivity", () => {
 
     expect(
       await screen.findByRole("status", { name: "General Settings status" }),
-    ).toHaveTextContent("所选目录不是 Git Repository。");
+    ).toHaveTextContent("The selected directory is not a Git repository.");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(updateProjectSettingsMock).not.toHaveBeenCalled();
   });

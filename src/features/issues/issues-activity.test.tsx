@@ -1445,7 +1445,7 @@ describe("IssuesActivity", () => {
 
     expect(
       await screen.findByRole("status", { name: "Issues status" }),
-    ).toHaveTextContent("Project 不存在。");
+    ).toHaveTextContent("Project not found.");
     expect(
       screen.queryByRole("button", { name: "Existing issue" }),
     ).not.toBeInTheDocument();

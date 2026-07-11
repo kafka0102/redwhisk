@@ -539,5 +539,233 @@
     "permissionKindOther": "权限请求",
     "permissionActionUnrecognized": "无法识别的审批动作：{{actionId}}",
     "agentTypeAlt": "智能体类型：{{label}}"
+  },
+  "errors": {
+    "AGENT_COMMAND_UNAVAILABLE": {
+      "default": "Agent command 不可用。"
+    },
+    "AGENT_PROFILE_VALIDATION_FAILED": {
+      "commandRequired": "Agent command 不能为空。",
+      "labelColorInvalid": "Label 颜色必须是 #RRGGBB 格式。",
+      "labelNameNotUnique": "全局 Label 名称必须在所有项目和全局范围内唯一。",
+      "labelNameRequired": "Label 名称不能为空。",
+      "labelNameTooLong": "Label 名称最多 15 个字符。",
+      "labelNotFound": "Label 不存在或已删除。",
+      "nameRequired": "Agent Profile 名称不能为空。",
+      "noProfileForAgentType": "未找到可用于当前 Agent 类型的 Agent Profile。",
+      "profileDeleted": "Agent Profile 已删除。",
+      "profileNotFound": "Agent Profile 不存在或已删除。",
+      "projectAgentRequiresProjectId": "项目级 Agent 必须指定 project_id。",
+      "projectLabelRequiresProjectId": "项目级 Label 必须指定 project_id。",
+      "projectSkillRequiresProjectId": "项目级 Skill 必须指定 project_id。",
+      "skillNameNotUnique": "全局 Skill 名称必须唯一。",
+      "skillNameRequired": "Skill 名称不能为空。",
+      "skillNotFound": "Skill 不存在或已删除。"
+    },
+    "AGENT_SESSION_ALREADY_EXISTS": {
+      "default": "当前 Issue 已存在关联 Agent Session。"
+    },
+    "AGENT_SESSION_NOT_RUNNING": {
+      "noStructuredSession": "当前 Session 没有运行中的结构化会话。",
+      "notRunningForInject": "当前 Session 未运行，请先恢复会话后再注入。",
+      "sessionNotRunning": "Agent 会话调用失败。"
+    },
+    "AGENT_SESSION_PERSISTENCE_FAILED": {
+      "attachmentCopyFailed": "附件复制失败。",
+      "attachmentDataDirUnavailable": "附件保存失败：数据目录不可用。",
+      "attachmentDirCreateFailed": "附件目录创建失败。",
+      "attachmentSaveFailed": "附件保存失败。",
+      "cancelFailed": "Agent 取消失败。",
+      "claudeConfigReadFailed": "读取 Claude 配置失败。",
+      "closeFailed": "Agent Session 关闭失败。",
+      "codexConfigReadFailed": "读取 Codex 配置失败。",
+      "configSaveFailed": "Agent 配置保存失败。",
+      "dataDirUnavailable": "Agent Session 数据目录不可用。",
+      "deleteFailed": "Agent Session 删除失败。",
+      "followStatusUpdateFailed": "Agent Session 关注状态更新失败。",
+      "gitBranchQueryFailed": "Git 分支查询失败。",
+      "historyReadFailed": "Agent Session 历史读取失败。",
+      "messageSendFailed": "Agent 消息发送失败。",
+      "migrationFailed": "Agent Session 数据库迁移失败。",
+      "modeListReadFailed": "Agent 模式列表读取失败。",
+      "modeSwitchFailed": "Agent 模式切换失败。",
+      "modelListReadFailed": "Agent 模型列表读取失败。",
+      "permissionResponseFailed": "Agent 权限响应失败。",
+      "promptInjectFailed": "Agent Session prompt 注入失败。",
+      "queryFailed": "Agent Session 查询失败。",
+      "restoreFailed": "Agent Session 恢复失败。",
+      "startFailed": "Agent Session 启动失败。",
+      "titleUpdateFailed": "Agent Session 标题更新失败。",
+      "workspaceQueryFailed": "工作区查询失败。",
+      "workspaceReadFailed": "工作区读取失败。"
+    },
+    "AGENT_SESSION_START_FAILED": {
+      "commandRequired": "Agent command 不能为空。",
+      "processStartFailed": "Agent 进程启动失败。",
+      "projectWorkdirInaccessible": "Project 工作目录不可访问。",
+      "worktreeDeleteFailed": "删除 worktree 失败。",
+      "worktreeInitCommandFailed": "Worktree 初始化命令执行失败。",
+      "worktreeInitDirInaccessible": "Worktree 初始化目录不可访问。"
+    },
+    "AGENT_SESSION_STREAM_FAILED": {
+      "default": "Agent 会话出错。"
+    },
+    "AGENT_SESSION_VALIDATION_FAILED": {
+      "commitHashInvalid": "提交哈希格式无效。",
+      "commitNotFound": "提交不存在。",
+      "completedIssueSessionCannotRun": "已完成 Issue 的 Session 不能继续运行。",
+      "fileNoUncommittedChanges": "文件没有未提交变更。",
+      "fileNotInCommit": "文件不属于该提交。",
+      "filePathInaccessible": "文件路径不可访问。",
+      "filePathOutsideRepo": "文件路径不能离开仓库目录。",
+      "fileTreeReadFailed": "文件树读取失败。",
+      "finalPromptRequired": "最终 prompt 不能为空。",
+      "gitBlobSizeUnparseable": "Git blob 大小无法解析。",
+      "gitCommandFailed": "Git 命令执行失败。",
+      "gitOutputNotUtf8": "Git 输出不是 UTF-8。",
+      "gitStatusUnparseable": "Git status 输出无法解析。",
+      "homeDirUnresolved": "无法解析用户 Home 目录。",
+      "injectedPromptRequired": "注入的 prompt 不能为空。",
+      "issueNotInProject": "Issue 不属于当前 Project。",
+      "linkedSessionCannotDelete": "关联 Issue 的 Agent Session 不能从 Sessions 视图删除。",
+      "linkedSessionCannotRename": "关联 Issue 的 Agent Session 不能从 Sessions 视图修改标题。",
+      "missingResumeSessionId": "当前 Session 缺少可续接的会话标识。",
+      "mustBeRunningToUpdateFollow": "只有运行中的 Agent Session 可以更新关注状态。",
+      "noActiveTerminal": "当前 Session 没有活跃终端。",
+      "onlyBacklogCanStart": "只有 backlog Issue 可以启动 Agent Session。",
+      "pathCannotBeSymlink": "路径不能是符号链接。",
+      "pathMustBeRelative": "路径必须是仓库内相对路径。",
+      "pathNotFile": "路径不是文件。",
+      "profileNotFound": "Agent Session 关联的 Agent Profile 不存在。",
+      "profileNotInProject": "项目级 Agent Profile 不属于当前 Project。",
+      "projectPathInvalid": "Project 路径无效。",
+      "repoPathInaccessible": "仓库路径不可访问。",
+      "repoPathNotDir": "仓库路径不是目录。",
+      "sessionNotInProject": "Agent Session 不属于当前 Project。",
+      "targetBranchNotFound": "目标分支不存在。",
+      "titleRequired": "Session title 不能为空。",
+      "unsupportedCodexMode": "不支持的 Codex 协作模式。",
+      "unsupportedCollaborationMode": "不支持的协作模式。",
+      "unsupportedPermissionDecision": "不支持的权限决策。",
+      "workspaceFileReadFailed": "工作区文件读取失败。",
+      "workspaceMissingForModelList": "Agent Session 工作区不存在，模型列表不可用。",
+      "workspaceMissingForResume": "Agent Session 工作区不存在，无法恢复。"
+    },
+    "ISSUE_NOT_FOUND": {
+      "attachmentNotFound": "附件不存在。",
+      "issueNotFound": "Issue 不存在。",
+      "sessionNotFound": "Agent Session 不存在。"
+    },
+    "ISSUE_PERSISTENCE_FAILED": {
+      "archiveSessionNotFound": "Issue 归档失败，关联会话不存在。",
+      "attachmentDraftSaveFailed": "Issue 附件草稿保存失败。",
+      "attachmentExportFailed": "Issue 附件导出失败。",
+      "attachmentPreviewFailed": "Issue 附件预览失败。",
+      "auditSaveFailed": "Agent Commit 审计保存失败。",
+      "autoCommitFailed": "Issue 自动提交失败。",
+      "completeDetectionFailed": "Issue 完成检测失败。",
+      "completeFailed": "Issue 完成失败。",
+      "completePrecheckFailed": "Issue 完成预检失败。",
+      "completionAttemptSaveFailed": "CompletionAttempt 保存失败。",
+      "completionAttemptUpdateFailed": "CompletionAttempt 更新失败。",
+      "deleteFailed": "Issue 删除失败。",
+      "queryFailed": "Issue 查询失败。",
+      "saveFailed": "Issue 保存失败。",
+      "statusUpdateFailed": "Issue 状态更新失败。",
+      "summaryParseFailed": "Issue Summary 解析失败。",
+      "summaryReadFailed": "Issue 摘要读取失败。",
+      "worktreeDeleteFailed": "Worktree 删除失败。",
+      "worktreeStatusQueryFailed": "Worktree 状态查询失败。"
+    },
+    "ISSUE_VALIDATION_FAILED": {
+      "alreadyCompleted": "已完成 Issue 不能重复完成。",
+      "attachmentParamsInvalid": "附件预览或导出参数无效。",
+      "attachmentPreviewUnsupported": "当前附件不支持预览。",
+      "attachmentSourceNotFound": "附件源文件不存在。",
+      "attachmentTooLarge": "附件过大，暂不支持预览。",
+      "autoCommitDisabled": "Agent 自动提交路径已停用，等待新流程重写。",
+      "backlogCloseSessionFailed": "退回 Backlog 时关闭关联 Agent Session 失败。",
+      "backlogRemoveSessionFailed": "退回 Backlog 时移除关联 Agent Session 失败。",
+      "deleteCloseSessionFailed": "删除 Issue 时关闭关联 Session 失败。",
+      "descriptionMissingAttachmentMarker": "Issue description 缺少附件标记。",
+      "draftAttachmentUnreadable": "Draft 附件路径不可读取。",
+      "gitOperationBlockingCommit": "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。",
+      "gitStatusUnavailable": "当前 Project 的 Git 状态不可用。",
+      "labelsInvalid": "Issue labels 配置无效。",
+      "mustBeAcceptableToPrepareCommit": "只有待验收 Issue 可以准备 Agent Commit。",
+      "mustBeAcceptableWithSessionToCommit": "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
+      "mustBeAcceptableWithSessionToComplete": "只有存在关联 Agent Session 的待验收 Issue 可以手动完成。",
+      "mustBeCompletedToViewSummary": "只有已完成 Issue 可以查看 Summary。",
+      "mustBeRunningToAccept": "只有运行中的 Issue 可以标记待验收。",
+      "mustHaveSessionToAccept": "只有存在关联 Agent Session 的 Issue 可以标记待验收。",
+      "mustUseCompletionFlow": "Issue 完成必须通过 complete_issue_flow 执行。",
+      "noChangesUseComplete": "当前仓库无未提交改动，请直接使用 Complete。",
+      "notInAutoCommitFlow": "当前 Issue 不在自动提交流程中。",
+      "sessionNotInProject": "关联 Agent Session 不属于当前 Project。",
+      "sessionRequiredToComplete": "Issue 完成必须存在关联 Agent Session。",
+      "titleRequired": "Issue title 不能为空。",
+      "worktreeMissingBranch": "关联 worktree 缺少工作分支信息，无法删除。",
+      "worktreeMissingWorkDir": "关联 worktree 缺少工作目录信息，无法删除。",
+      "worktreeNotFound": "未找到关联的 worktree，无需删除。",
+      "worktreeNotManaged": "当前 worktree 非 RedWhisk 管理，无法删除。"
+    },
+    "ISSUE_WORKTREE_OCCUPIED": {
+      "default": "同名 worktree 已被占用，请删除后再运行。"
+    },
+    "LOCAL_DATA_INITIALIZATION_FAILED": {
+      "default": "本地数据初始化失败。"
+    },
+    "PROJECT_NOT_FOUND": {
+      "default": "Project 不存在。"
+    },
+    "PROJECT_PERSISTENCE_FAILED": {
+      "loadFailed": "Project 读取失败。",
+      "saveFailed": "Project 保存失败。",
+      "targetWindowEmitFailed": "目标项目窗口事件发送失败。",
+      "targetWindowFocusFailed": "目标项目窗口聚焦失败。",
+      "targetWindowNotFound": "目标项目窗口不存在。",
+      "targetWindowRestoreFailed": "目标项目窗口恢复失败。",
+      "targetWindowShowFailed": "目标项目窗口显示失败。",
+      "windowCloseFailed": "会话监控窗口关闭失败。",
+      "windowFocusFailed": "Project 窗口聚焦失败。",
+      "windowOpenFailed": "窗口打开失败。",
+      "windowShowFailed": "窗口显示失败。"
+    },
+    "PROJECT_REPO_NOT_GIT_REPOSITORY": {
+      "default": "所选目录不是 Git Repository。"
+    },
+    "PROJECT_REPO_PATH_INVALID": {
+      "nameRequired": "Project 名称不能为空。",
+      "pathInvalid": "Project 路径无效。",
+      "worktreesMustBeIgnored": "选择仓库内 .worktrees 目录时，.gitignore 必须忽略 .worktrees/。",
+      "worktreesRequiresGitignore": "选择仓库内 .worktrees 目录时，仓库必须包含 .gitignore。"
+    },
+    "PROJECT_REPO_PATH_UNAVAILABLE": {
+      "default": "Project 路径不存在或不可访问。"
+    },
+    "PROJECT_TERMINAL_PERSISTENCE_FAILED": {
+      "deleteFailed": "Project Terminal 删除失败。",
+      "queryFailed": "Project Terminal 查询失败。",
+      "saveFailed": "Project Terminal 保存失败。"
+    },
+    "PROJECT_TERMINAL_START_FAILED": {
+      "default": "Project Terminal 启动失败。"
+    },
+    "PROJECT_TERMINAL_VALIDATION_FAILED": {
+      "sessionNotFound": "Agent Session 不存在。",
+      "sessionNotInProject": "Agent Session 不属于当前 Project。",
+      "shortcutLimitExceeded": "常用命令最多 10 条。",
+      "shortcutNotFound": "常用命令不存在。",
+      "shortcutNotFoundOrDeleted": "常用命令不存在或已删除。",
+      "shortcutNotInProject": "常用命令不属于当前项目。",
+      "shortcutRequired": "常用命令不能为空。",
+      "shortcutTooLong": "常用命令过长。",
+      "terminalNotFound": "Project Terminal 不存在。",
+      "terminalNotInProject": "Project Terminal 不属于当前 Project。",
+      "terminalUnavailable": "Project Terminal 不可用。"
+    },
+    "SETTINGS_PERSISTENCE_FAILED": {
+      "default": "设置保存失败。"
+    }
   }
 }
