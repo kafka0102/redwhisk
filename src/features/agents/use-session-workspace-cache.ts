@@ -212,7 +212,7 @@ export function useSessionWorkspaceCache({
           : cache,
       );
     }
-  }, [projectId, sessionId, updateCurrentCache]);
+  }, [projectId, sessionId, updateCurrentCache, t]);
 
   const refreshFileTree = useCallback(async () => {
     if (sessionId == null) {
@@ -259,7 +259,7 @@ export function useSessionWorkspaceCache({
           : cache,
       );
     }
-  }, [projectId, sessionId, updateCurrentCache]);
+  }, [projectId, sessionId, updateCurrentCache, t]);
 
   const refreshCommitHistory = useCallback(async () => {
     if (sessionId == null) {
@@ -307,7 +307,7 @@ export function useSessionWorkspaceCache({
           : cache,
       );
     }
-  }, [projectId, sessionId, updateCurrentCache]);
+  }, [projectId, sessionId, updateCurrentCache, t]);
 
   const setSidePanelTab = useCallback(
     (tab: SessionSidePanelTab) => {
@@ -445,7 +445,7 @@ export function useSessionWorkspaceCache({
         }));
       }
     },
-    [projectId, sessionId, updateCurrentCache],
+    [projectId, sessionId, updateCurrentCache, t],
   );
 
   const openCommittedChange = useCallback(
@@ -508,7 +508,7 @@ export function useSessionWorkspaceCache({
         }));
       }
     },
-    [projectId, sessionId, updateCurrentCache],
+    [projectId, sessionId, updateCurrentCache, t],
   );
 
   const openFile = useCallback(
@@ -565,7 +565,7 @@ export function useSessionWorkspaceCache({
         }));
       }
     },
-    [projectId, sessionId, updateCurrentCache],
+    [projectId, sessionId, updateCurrentCache, t],
   );
 
   useEffect(() => {

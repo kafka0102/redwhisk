@@ -215,7 +215,7 @@ export function useAgentComposer({
     } finally {
       setIsCancelling(false);
     }
-  }, [isCancelling, projectId, sessionId, showCancelToast]);
+  }, [isCancelling, projectId, sessionId, showCancelToast, t]);
 
   const handleAddAttachment = useCallback(async () => {
     if (isReadOnly) {
@@ -297,7 +297,7 @@ export function useAgentComposer({
         setSubmitError(getCommandErrorMessage(error, t));
       }
     },
-    [effort, onBeforeSetEffort, projectId, sessionId],
+    [effort, onBeforeSetEffort, projectId, sessionId, t],
   );
 
   return {

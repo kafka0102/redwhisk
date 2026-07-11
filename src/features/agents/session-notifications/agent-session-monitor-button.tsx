@@ -86,7 +86,7 @@ export function AgentSessionMonitorButton({
         }
       }
     },
-    [projectId],
+    [projectId, t],
   );
 
   useEffect(

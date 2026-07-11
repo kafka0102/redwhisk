@@ -98,7 +98,7 @@ export function TemporarySessionDialog({
     return () => {
       isMounted = false;
     };
-  }, [messages.agentsFeature.noProfilesForAgentType, projectId]);
+  }, [messages.agentsFeature.noProfilesForAgentType, projectId, t]);
 
   useEffect(() => {
     titleInputRef.current?.focus();

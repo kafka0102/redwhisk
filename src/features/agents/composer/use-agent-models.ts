@@ -104,7 +104,7 @@ export function useAgentModels({
     return () => {
       isDisposed = true;
     };
-  }, [enabled, projectId, sessionId]);
+  }, [enabled, projectId, sessionId, t]);
 
   // 选中值优先级：数据源 currentModelId > 列表默认。纯渲染期派生，无 setState。
   const selectedModelId = currentModelId ?? deriveDefaultModelId(models);
@@ -120,7 +120,7 @@ export function useAgentModels({
         setError(getCommandErrorMessage(selectError, t));
       }
     },
-    [onBeforeSelectModel, projectId, sessionId],
+    [onBeforeSelectModel, projectId, sessionId, t],
   );
 
   return {

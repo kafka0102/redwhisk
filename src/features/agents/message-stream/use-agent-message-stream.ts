@@ -338,7 +338,7 @@ export function useAgentMessageStream({
       deferredEvents = [];
       unlisten?.();
     };
-  }, [projectId, sessionId]);
+  }, [projectId, sessionId, t]);
 
   return { state, dispatch };
 }

@@ -126,7 +126,7 @@ function ProjectApp() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [translate]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -191,7 +191,7 @@ function ProjectApp() {
       isDisposed = true;
       unlisten?.();
     };
-  }, [selectedProject?.id]);
+  }, [selectedProject?.id, translate]);
 
   const startCreateProject = useCallback(
     async (openInNewWindow: boolean) => {

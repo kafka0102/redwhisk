@@ -74,7 +74,7 @@ export function IssueReadonlySessionPanel({
     return () => {
       isMounted = false;
     };
-  }, [linkedSessionId, messages.agentsFeature.issueNotFound, projectId]);
+  }, [linkedSessionId, messages.agentsFeature.issueNotFound, projectId, t]);
 
   const runtimeParameters = useMemo(() => {
     const workflowSkillName =

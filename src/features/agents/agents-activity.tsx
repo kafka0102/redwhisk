@@ -303,7 +303,7 @@ export function AgentsActivity({
       }
       unlisten?.();
     };
-  }, [applySessionListOverlays, projectId]);
+  }, [applySessionListOverlays, projectId, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -347,7 +347,7 @@ export function AgentsActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   const currentSessionId = shouldLoadDeferredContent
     ? ((visibleSessions.some(

@@ -65,7 +65,7 @@ export function SessionIssuePanel({
     return () => {
       isMounted = false;
     };
-  }, [issueId, messages.agentsFeature.issueNotFound, projectId]);
+  }, [issueId, messages.agentsFeature.issueNotFound, projectId, t]);
 
   const description = issue?.description?.trim().length
     ? issue.description
