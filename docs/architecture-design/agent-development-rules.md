@@ -15,7 +15,7 @@
 - 包管理：`pnpm`，当前不使用 Turbo 或多 package workspace。
 - 数据库：SQLite migrations 位于 `src-tauri/migrations/`，结构化业务状态由 Rust Core 读写。
 - 前后端边界：Tauri command + Tauri event；不引入 HTTP REST/GraphQL。
-- Agent 终端：Codex session 走 `codex app-server` 结构化事件流（NDJSON over stdio），Rust Core 负责 spawn、握手与事件归一化，前端用结构化消息流组件渲染并经底部 composer 输入。PTY + xterm.js 仅保留给 project terminal 等真正交互式终端。
+- Agent 会话：Codex 走 `codex app-server` JSON-RPC，Claude 走 `claude -p --output-format stream-json`；两者均由 Rust Core 归一化为结构化事件流，前端用同一消息流组件和底部 composer 输入。PTY + xterm.js 仅保留给 project terminal 等真正交互式终端。
 
 ## 目录边界
 
@@ -26,9 +26,10 @@
 - `src/features/issues/`：Issues Activity、Issue Dialog、Run Prompt、Completion、Summary。
 - `src/features/agents/`：Agents Activity、Session list、Codex 结构化消息流、composer 输入框、Issue Inspector。
 - `src/features/settings/`：Project Settings、Agent Profile 表单和 Settings command wrapper。
+- `src/features/terminals/`：Project Terminal、终端配置和快捷命令。
 - `src/shared/commands/`：Tauri command client、统一 command error 处理。
 - `src/components/ui/`：基础 UI primitive。
-- `src/shared/styles/`：全局 token。
+- `src/shared/{i18n,layout,paths,styles}/`：国际化、布局状态、路径与全局 token。
 
 Rust 按 command adapter、core service、repository、类型和外部能力分层：
 
@@ -36,8 +37,10 @@ Rust 按 command adapter、core service、repository、类型和外部能力分�
 - `src-tauri/src/core/`：业务 service、状态流转、事务编排。
 - `src-tauri/src/db/`：连接、migration、repository 和 SQL 映射。
 - `src-tauri/src/types/`：跨边界 DTO、状态枚举和 command error。
-- `src-tauri/src/agent/`：Codex command 检测、PTY session 管理、终端输出广播、结构化事件广播。
+- `src-tauri/src/agent/`：Codex/Claude provider、command 检测、PTY session 管理和结构化事件广播。
+- `src-tauri/src/agent_skill/`：全局与项目级 skill 扫描、索引和刷新。
 - `src-tauri/src/git/`：Git status、HEAD、operation state 检测。
+- `src-tauri/src/logging/`：后端关键操作日志。
 
 不得把领域逻辑塞进泛化 `utils`。当前已有 `src/lib/utils.ts` 仅作为轻量 class 合并工具使用，新增共享逻辑必须放入有明确领域语义的模块。
 
@@ -85,13 +88,11 @@ SQLite 是核心业务状态的事实来源，React 不直接读写 SQLite。
 - Issue：`backlog`、`running`、`review`、`completed`。
 - Agent Session：`running`、`closed`、`crashed`、`stopped`。
 - Attention：`none`、`requested`。
-- Completion Policy：`manual`、`agent_auto_commit`。
-- CompletionAttempt option：`complete_manual`、`complete_clean`、`agent_auto_commit`。
-- CompletionAttempt result：`completed`、`prompt_sent`、`no_commit_detected`、`git_operation_blocked`。
 - Agent Profile scope：`project`、`global`。
-- Agent type：当前只有 `codex`。
+- Agent type：`codex`、`claude`。
+- Issue Completion Phase：`detecting_workspace`、`prompting_dirty_decision`、`auto_committing`、`confirming_continue_after_commit`、`reconciling_worktree`、`confirming_worktree_cleanup`、`completed`、`cancelled`、`blocked`。
 
-`review` 是 Issue 状态，不是 Agent Session 状态，也不是 Agents list 分组。`stopped` 表示应用重启后无法恢复原运行中 PTY；`crashed` 表示 Codex/PTY 进程异常退出。
+`review` 是 Issue 状态，不是 Agent Session 状态，也不是 Agents list 分组。`stopped` 表示应用重启后无法恢复原运行中会话；`crashed` 表示 provider/PTY 进程异常退出。完成流程不再使用 `Completion Policy`，详见 [Worktree 与 Git 生命周期](./worktree-git-lifecycle.md)。
 
 ## Command 与错误约定
 
@@ -141,15 +142,15 @@ Tauri event 只表示事实发生或终端输出，不发起业务写入。事�
 当前存在两条并列通道，按 session 类型分流：
 
 - `agent-session-terminal-output`：承载 PTY 原始字节流，仅用于 project terminal 等真正交互式终端。
-- `agent-session-stream-event`：承载 Codex session 的结构化 Agent 事件流（`AgentStreamEvent`），由 Rust Core 归一化 `codex app-server` 输出后广播。
+- `agent-session-stream-event`：承载 Codex 或 Claude session 的结构化 Agent 事件流（`AgentStreamEvent`），由 Rust Core 归一化 provider 输出后广播。
 
 终端输出规则：
 
 - PTY 原始输出继续写入 session log 文件。
 - project terminal 的 xterm 主渲染使用实时输出事件与 restore 结果，不再以轮询日志尾部作为主路径。
-- `read_agent_session_terminal` 只适合作为非活跃 PTY Session、Open Log 或诊断降级路径；Codex session 改用 `read_agent_timeline` 拉结构化历史。
+- `read_agent_session_terminal` 只适合作为非活跃 PTY Session、Open Log 或诊断降级路径；结构化 Agent session 改用 `read_agent_timeline` 拉结构化历史。
 - 前端不得重放截断 ANSI 日志作为 Codex TUI 恢复方案。
-- Codex session 不得使用 PTY/xterm 链路；其输入走 `send_agent_message`，输出走 `agent-session-stream-event`。
+- 结构化 Agent session 不得使用 PTY/xterm 链路；其输入走 `send_agent_message`，输出走 `agent-session-stream-event`。
 - Inspector、Dialog、Header 操作不得卸载当前 xterm 或结构化消息流。
 
 ## Issue 与 Agent Session 流程规则
@@ -158,7 +159,7 @@ Tauri event 只表示事实发生或终端输出，不发起业务写入。事�
 
 - 只能从 `backlog` Issue 启动。
 - 一个 Issue 最多关联一个 Agent Session。
-- 只有进程/PTY 成功启动后，Rust Core 才创建 Agent Session，并把 Issue 改为 `running`。
+- 只有 provider 进程/PTY 成功启动后，Rust Core 才创建 Agent Session，并把 Issue 改为 `running`。
 - 启动失败时 Issue 保持 `backlog`，不得创建有效 Agent Session。
 
 Review 阶段：
@@ -169,8 +170,8 @@ Review 阶段：
 
 异常状态：
 
-- Codex/PTY 异常退出时 Agent Session 进入 `crashed`。
-- 应用重启后无法恢复原运行中 PTY 时进入 `stopped`。
+- provider/PTY 异常退出时 Agent Session 进入 `crashed`。
+- 应用重启后无法恢复原运行中会话时进入 `stopped`。
 - `crashed` / `stopped` 不会让关联 Issue 自动完成，UI 必须提供事实性提示和日志/诊断入口。
 
 Completed：
@@ -181,19 +182,15 @@ Completed：
 
 ## Completion 与 Git 安全边界
 
-Completion Policy 只有 `manual` 和 `agent_auto_commit`。
-
-必须遵守：
+完成流程统一以实际执行路径、未提交改动与 worktree 所有权决策，不再使用旧的 `manual` / `agent_auto_commit` policy。必须遵守：
 
 - 应用不得执行 `git add .`，不得静默提交全部改动。
-- `agent_auto_commit` 只能向当前 Codex Session 注入 completion prompt，然后由 Rust Core 检测 Git HEAD/status/changed files。
-- completion prompt 不能只写成“提交当前 Issue 相关改动”这类概括要求；必须显式要求 Agent 运行本任务所需验证命令，并在验证后执行 `git status --short` 检查 format / lint / typecheck / test 带出的额外文件
-- 若验证命令改写了当前 Issue 相关文件，这些文件必须在同一次提交中一并处理；若改写了无关文件，必须先回退再允许提交
-- 检测到新 commit 后，记录 `commit_hash` 并完成 Issue。
-- “检测到新 commit”只是必要条件，不是充分条件；自动提交成功前还必须确认工作区中没有残留当前任务相关的未提交改动，尤其不能遗漏由格式化或验证命令带出的文件
-- 未检测到新 commit 时，记录 `no_commit_detected`，Issue 保持 `review`。
-- 检测到 merge/rebase/cherry-pick 等 Git operation 进行中时，记录 `git_operation_blocked`，提示用户手动处理，不自动完成。
-- 每次完成尝试必须写入 `completion_attempts`。
+- 自动提交只能向关联 Agent 注入明确 completion prompt，再由 Rust Core 检测 Git 结果；prompt 必须要求验证及验证后的 `git status --short` 检查。
+- 若验证命令改写了当前 Issue 相关文件，必须在同一次提交中处理；无关文件必须先回退。
+- 检测到 Git operation、dirty workspace、外部 worktree 或 rebase/合并失败时，必须进入对应的确认或阻断流程，不得静默完成。
+- 仅 RedWhisk 所有的 worktree 可被应用自动清理。
+
+阶段和用户动作详见 [Worktree 与 Git 生命周期](./worktree-git-lifecycle.md) 与 [领域状态机](../domain/state-machine.md)。
 
 ## UI 与 UX 规则
 
@@ -205,7 +202,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Project 工作台 Activity Bar 只包含 `Issues`、`Agents`、`Settings`。
 - Project Switcher 属于窗口顶部 chrome，不属于内容 Header。
 - Activity Bar 主分组里的 `Settings` 是 Project Settings；Global Settings 是左侧菜单底部的仅图标 shell action，不属于 Project Activity 列表。
-- Agents Activity 使用左右两栏：左侧 Session list，右侧 Codex Session View。Codex Session View 由结构化消息流与底部固定 composer 输入框组成，不再使用 xterm。
+- Agents Activity 使用左右两栏：左侧 Session list，右侧结构化 Agent Session View。该视图由结构化消息流与底部固定 composer 输入框组成，不再使用 xterm。
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。
 - 前端交互控件默认使用 `src/components/ui/` 下的 shadcn 组件；除非存在明确的语义、可访问性或第三方集成需要，不新增手写基础按钮、输入框、选择器、菜单、对话框等控件。
@@ -223,21 +220,19 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 
 - 新增营销式 hero、渐变装饰、大圆角卡片墙、彩色阶段柱或管理后台式重型组件库。
 - 在 feature 页面中绕过 shadcn 组件，直接用原生标签和散落 class 重做通用控件。
-- 在 Codex 结构化消息流之外另起 xterm 或独立输入框；Codex session 的输入必须经底部 composer 与 `send_agent_message`。
+- 在结构化 Agent 消息流之外另起 xterm 或独立输入框；结构化 session 的输入必须经底部 composer 与 `send_agent_message`。
 - Header 无关联 Issue 时显示 `No linked issue`。
 - Inspector/Dialog 打开关闭导致 xterm 或结构化消息流重建。
 
-## Codex app-server 接入边界
+## Agent provider 接入边界
 
-Codex session 通过 `codex app-server` 子进程接入，不走 PTY。职责边界如下：
+Codex 与 Claude session 均走结构化 provider，不走 PTY。职责边界如下：
 
-- Rust Core 负责 spawn `codex app-server`、NDJSON over stdio 握手、JSON-RPC 请求/响应/通知分发，并把 Codex 私有输出归一化为 `AgentStreamEvent` 结构化事件后广播。
-- Rust Core 维护单 session 状态机：`threadId`、`currentTurnId`、待审批权限请求、事件 `seq`/`epoch` 游标。
-- 切换模型经 `turn/start` 的 `model` 字段；Think 模式经 `turn/start` 的 `effort` 字段（即 reasoning effort）。两者均由 Rust Core 透传，前端只发 command。
-- 上下文窗口用量来自 `thread/tokenUsage/updated` 通知，由 Rust Core 解析为 `AgentUsage` 后随 `usage_updated` 事件广播。
-- 工具调用权限（命令执行、文件改动、用户输入）由 app-server 发起 server→client request，Rust Core 转为 `permission_requested` 事件广播，前端审批后经 `respond_agent_permission` 回复。
-- 附件（图片/文件）落盘到 app data dir 后，以本地路径形式随 `turn/start` 的 `input` 传入，由 agent 自行读取，不内联文件字节。
-- 非 Codex agent（如未来引入的 claude）在未实现对应 provider 适配前，可临时降级走 PTY 链路；Codex session 不允许降级到 PTY。
+- Rust Core 负责 spawn provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播。
+- Codex 通过 `codex app-server` 的 NDJSON JSON-RPC 接入，维护 `threadId`、`currentTurnId`、待审批权限请求和 `seq`/`epoch` 游标；模型与 effort 经 `turn/start` 透传，token 用量来自 `thread/tokenUsage/updated`。
+- Claude 通过 `claude -p --output-format stream-json` 的单向 NDJSON 接入，每轮进程结束后以 session ID 恢复；它没有等价的 JSON-RPC 审批请求。
+- 附件（图片/文件）先落盘到 app data dir，再以本地路径随 provider 输入传递；不内联文件字节。
+- 前端只发统一 command，不能把 Codex 私有字段或权限模型当成所有 provider 的契约。详情见 [Agent Provider 协议](./agent-provider-protocol.md)。
 
 ## Agent Profile 与 Settings 规则
 
@@ -250,7 +245,7 @@ Codex session 通过 `codex app-server` 子进程接入，不走 PTY。职责边
 
 后续 Agent 不应继续按早期规划文档中的 `ProjectAgentOverride` 表实现新功能；涉及 Settings 数据模型时，以 `src-tauri/migrations/0007_restructure_agent_profiles.sql`、`src-tauri/src/types/agent_profile.rs` 和当前 repository/service 为准。
 
-Codex command 检测和测试由 Rust Core 完成，React 不直接执行 shell。command 不可用时，不得保存或启用会在启动时失败的 Agent Profile。
+Agent command 检测和测试由 Rust Core 完成，React 不直接执行 shell。command 不可用时，不得保存或启用会在启动时失败的 Agent Profile。
 
 Agent command 检测必须考虑桌面应用启动环境与用户终端环境的差异。macOS 上从 Finder、Dock 或 Tauri 启动的进程通常不会继承交互终端中的 `PATH`、`nvm`、`rbenv` 等初始化结果；Rust Core 做 `command -v` 时不得只依赖当前进程环境。检测裸命令名（例如 `codex`）时，应优先保持非交互登录 shell 查询，并在失败时补充交互登录 shell 查询，以覆盖用户在 `.zshrc` 等交互 shell 启动脚本中配置的命令路径。
 
