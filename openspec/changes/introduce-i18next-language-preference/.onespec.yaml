@@ -1,0 +1,22 @@
+version: 1
+change: introduce-i18next-language-preference
+phase: implementing
+ambiguity: high
+complexity: high
+implementation_path: superpowers
+execution_method: subagent
+workspace: worktree
+origin_branch: main
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk
+origin_workspace_mode: current-branch
+implementation_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk/.claude/worktrees/introduce-i18next-language-preference
+plan: docs/superpowers/plans/2026-07-11-introduce-i18next-language-preference.md
+handoff_context: openspec/changes/introduce-i18next-language-preference/.onespec.yaml
+handoff_purpose: plan
+handoff_summary: 'plan handoff from 5 file(s); primary artifact: openspec/changes/introduce-i18next-language-preference/proposal.md'
+handoff_hash: fd3d0bb6429aad6c256caf6ab9f6f8cc34786f4a6694eecd9abbc5c98394d524
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-07-11
+updated_at: 2026-07-11T03:33:33Z
