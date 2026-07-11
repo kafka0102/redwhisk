@@ -115,7 +115,7 @@ fn prepare_agent_skill_data_dir(
         CommandError::new(
             CommandErrorCode::ProjectPersistenceFailed,
             "Project 读取失败。",
-        )
+        ).with_reason("loadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -124,7 +124,7 @@ fn prepare_agent_skill_data_dir(
             CommandError::new(
                 CommandErrorCode::ProjectPersistenceFailed,
                 "Project 读取失败。",
-            )
+            ).with_reason("loadFailed")
         })?;
         local_data
             .initialize(&data_dir)

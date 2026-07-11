@@ -237,7 +237,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "未找到关联的 worktree，无需删除。",
-                )
+                ).with_reason("worktreeNotFound")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -245,7 +245,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前 worktree 非 RedWhisk 管理，无法删除。",
-            )
+            ).with_reason("worktreeNotManaged")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
         }
 
@@ -253,7 +253,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "关联 worktree 缺少工作目录信息，无法删除。",
-            )
+            ).with_reason("worktreeMissingWorkDir")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
         };
 
@@ -269,7 +269,7 @@ impl<'connection> AgentSessionService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "关联 worktree 缺少工作分支信息，无法删除。",
-            )
+            ).with_reason("worktreeMissingBranch")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
         })?;
 
@@ -278,7 +278,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionStartFailed,
                     "删除 worktree 失败。",
-                )
+                ).with_reason("worktreeDeleteFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             },
         )?;
@@ -353,7 +353,7 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(input.issue_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -361,7 +361,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Issue 不属于当前 Project。",
-            )
+            ).with_reason("issueNotInProject")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
         }
@@ -390,7 +390,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有 backlog Issue 可以启动 Agent Session。",
-            )
+            ).with_reason("onlyBacklogCanStart")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(
                 ErrorDetail::new("IssueStatus")
@@ -610,7 +610,7 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(input.issue_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -618,7 +618,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Issue 不属于当前 Project。",
-            )
+            ).with_reason("issueNotInProject")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
         }
@@ -647,7 +647,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有 backlog Issue 可以启动 Agent Session。",
-            )
+            ).with_reason("onlyBacklogCanStart")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(
                 ErrorDetail::new("IssueStatus")
@@ -843,7 +843,7 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(input.issue_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -851,7 +851,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Issue 不属于当前 Project。",
-            )
+            ).with_reason("issueNotInProject")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
         }
@@ -880,7 +880,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有 backlog Issue 可以启动 Agent Session。",
-            )
+            ).with_reason("onlyBacklogCanStart")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(
                 ErrorDetail::new("IssueStatus")
@@ -1078,7 +1078,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "Agent Profile 不存在。",
-                )
+                ).with_reason("profileNotFound")
                 .with_detail(
                     ErrorDetail::new("AgentProfile")
                         .with_value("agentProfileId", input.agent_profile_id),
@@ -1163,7 +1163,7 @@ impl<'connection> AgentSessionService<'connection> {
                     .find_by_id(input.issue_id)
                     .map_err(agent_session_database_error)?
                     .ok_or_else(|| {
-                        CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                        CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
                             .with_detail(
                                 ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
                             )
@@ -1377,7 +1377,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有运行中的 Agent Session 可以更新关注状态。",
-            )
+            ).with_reason("mustBeRunningToUpdateFollow")
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
             ));
@@ -1399,7 +1399,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent Session 关注状态更新失败。",
-                )
+                ).with_reason("followStatusUpdateFailed")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
                 )
@@ -1463,7 +1463,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionNotRunning,
                 "当前 Session 未运行，请先恢复会话后再注入。",
-            )
+            ).with_reason("notRunningForInject")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
         self.clear_attention_after_successful_input(input.session_id)?;
@@ -1511,7 +1511,7 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(session_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。").with_reason("sessionNotFound")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                     )
@@ -1571,7 +1571,7 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(session_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。").with_reason("sessionNotFound")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                     )
@@ -1581,7 +1581,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Agent Session 不属于当前 Project。",
-            )
+            ).with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id)));
         }
@@ -1621,7 +1621,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "Agent Session 关联的 Agent Profile 不存在。",
-                )
+                ).with_reason("profileNotFound")
                 .with_detail(
                     ErrorDetail::new("AgentProfile")
                         .with_value("profileId", session.agent_profile_id),
@@ -1640,7 +1640,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "关联 Issue 的 Agent Session 不能从 Sessions 视图删除。",
-            )
+            ).with_reason("linkedSessionCannotDelete")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
         }
 
@@ -1678,7 +1678,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 删除失败。",
-            )
+            ).with_reason("deleteFailed")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
         }
 
@@ -1697,7 +1697,7 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "关联 Issue 的 Agent Session 不能从 Sessions 视图修改标题。",
-            )
+            ).with_reason("linkedSessionCannotRename")
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
             ));
@@ -1713,7 +1713,7 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent Session 标题更新失败。",
-                )
+                ).with_reason("titleUpdateFailed")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
                 )
@@ -1860,7 +1860,7 @@ impl AgentSessionService<'_> {
                     CommandError::new(
                         CommandErrorCode::AgentProfileValidationFailed,
                         "Agent Profile 不存在。",
-                    )
+                    ).with_reason("profileNotFound")
                     .with_detail(
                         ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile_id),
                     )
@@ -1905,7 +1905,7 @@ impl AgentSessionService<'_> {
                 return Err(CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "未找到可用于当前 Agent 类型的 Agent Profile。",
-                )
+                ).with_reason("noProfileForAgentType")
                 .with_detail(
                     ErrorDetail::new("AgentType")
                         .with_value("agentType", requested_agent_type_literal),
@@ -1991,7 +1991,7 @@ impl AgentSessionService<'_> {
                         CommandError::new(
                             CommandErrorCode::AgentSessionValidationFailed,
                             "不支持的协作模式。",
-                        )
+                        ).with_reason("unsupportedCollaborationMode")
                         .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
                         .with_detail(
                             ErrorDetail::new("Value").with_value("mode", input.mode.clone()),
@@ -2174,14 +2174,14 @@ impl AgentSessionService<'_> {
                 .find_by_id(issue_id)
                 .map_err(agent_session_database_error)?
                 .ok_or_else(|| {
-                    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
                         .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
                 })?;
             if issue.status == IssueStatus::Completed {
                 return Err(CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "已完成 Issue 的 Session 不能继续运行。",
-                )
+                ).with_reason("completedIssueSessionCannotRun")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
@@ -2197,7 +2197,7 @@ impl AgentSessionService<'_> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "当前 Session 缺少可续接的会话标识。",
-                )
+                ).with_reason("missingResumeSessionId")
                 .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
             })?;
 
@@ -2226,7 +2226,7 @@ impl AgentSessionService<'_> {
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "Agent Profile 不存在。",
-                )
+                ).with_reason("profileNotFound")
                 .with_detail(
                     ErrorDetail::new("AgentProfile")
                         .with_value("agentProfileId", session.agent_profile_id),
@@ -2238,7 +2238,7 @@ impl AgentSessionService<'_> {
                     CommandError::new(
                         CommandErrorCode::AgentSessionValidationFailed,
                         "不支持的协作模式。",
-                    )
+                    ).with_reason("unsupportedCollaborationMode")
                     .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
                 })?;
                 let config = CodexSessionConfig {
@@ -2328,7 +2328,7 @@ impl AgentSessionService<'_> {
             session,
             &cwd,
             "Agent Session 工作区不存在，模型列表不可用。",
-        ))
+        ).with_reason("workspaceMissingForModelList"))
     }
 
     fn resolve_session_cwd_for_resume(
@@ -2356,7 +2356,7 @@ impl AgentSessionService<'_> {
             session,
             &cwd,
             "Agent Session 工作区不存在，无法恢复。",
-        ))
+        ).with_reason("workspaceMissingForResume"))
     }
 
     fn find_project_summary(
@@ -2395,7 +2395,7 @@ impl AgentSessionService<'_> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 恢复失败。",
-            )
+            ).with_reason("restoreFailed")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
 
@@ -2544,7 +2544,7 @@ impl AgentSessionService<'_> {
                         return Err(CommandError::new(
                             CommandErrorCode::AgentSessionPersistenceFailed,
                             "Agent Session 关闭失败。",
-                        )
+                        ).with_reason("closeFailed")
                         .with_detail(
                             ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                         )
@@ -2571,7 +2571,7 @@ impl AgentSessionService<'_> {
                         return Err(CommandError::new(
                             CommandErrorCode::AgentSessionPersistenceFailed,
                             "Agent Session 关闭失败。",
-                        )
+                        ).with_reason("closeFailed")
                         .with_detail(
                             ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                         )
@@ -2795,7 +2795,7 @@ fn validate_profile_scope(profile: &AgentProfileRow, project_id: i64) -> Result<
                 Err(CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "项目级 Agent Profile 不属于当前 Project。",
-                )
+                ).with_reason("profileNotInProject")
                 .with_detail(
                     ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile.id),
                 )
@@ -2813,7 +2813,7 @@ fn validate_profile_not_deleted(profile: &AgentProfileRow) -> Result<(), Command
     Err(CommandError::new(
         CommandErrorCode::AgentProfileValidationFailed,
         "Agent Profile 已删除。",
-    )
+    ).with_reason("profileDeleted")
     .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile.id)))
 }
 
@@ -2885,7 +2885,7 @@ fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandErro
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "最终 prompt 不能为空。",
-        )
+        ).with_reason("finalPromptRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "promptSnapshot")));
     }
 
@@ -2905,8 +2905,12 @@ pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> 
         | AgentSessionError::UnsupportedMode(_)
         | AgentSessionError::Other(_) => CommandErrorCode::AgentSessionStreamFailed,
     };
-    CommandError::new(code, "Agent 会话调用失败。")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", message))
+    let mut command_error = CommandError::new(code, "Agent 会话调用失败。")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message));
+    if matches!(error, AgentSessionError::NotRunning(_)) {
+        command_error = command_error.with_reason("sessionNotRunning");
+    }
+    command_error
 }
 
 /// 在事务中插入一条结构化 session 行。
@@ -2973,7 +2977,7 @@ fn validate_session_title(title: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Session title 不能为空。",
-        )
+        ).with_reason("titleRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "title")));
     }
 
@@ -2985,7 +2989,7 @@ fn validate_injected_prompt(prompt: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "注入的 prompt 不能为空。",
-        )
+        ).with_reason("injectedPromptRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "prompt")));
     }
 
@@ -2998,7 +3002,7 @@ fn validate_working_dir(repo_path: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Project 工作目录不可访问。",
-        )
+        ).with_reason("projectWorkdirInaccessible")
         .with_detail(ErrorDetail::new("WorkingDir").with_value("path", repo_path)));
     }
 
@@ -3025,7 +3029,7 @@ fn resolve_target_branch(
     Err(CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "目标分支不存在。",
-    )
+    ).with_reason("targetBranchNotFound")
     .with_detail(ErrorDetail::new("GitBranch").with_value("targetBranch", target_branch)))
 }
 
@@ -3039,7 +3043,7 @@ fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, Comman
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Project 路径无效。",
-            )
+            ).with_reason("projectPathInvalid")
         })?;
 
     let path = match project.worktree_location {
@@ -3053,7 +3057,7 @@ fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, Comman
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "无法解析用户 Home 目录。",
-                )
+                ).with_reason("homeDirUnresolved")
             })?;
             Path::new(&home_dir)
                 .join(".redwhisk")
@@ -3081,7 +3085,7 @@ fn run_worktree_setup_command(
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Worktree 初始化目录不可访问。",
-        )
+        ).with_reason("worktreeInitDirInaccessible")
         .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path)));
     }
 
@@ -3089,7 +3093,7 @@ fn run_worktree_setup_command(
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Worktree 初始化命令执行失败。",
-        )
+        ).with_reason("worktreeInitCommandFailed")
         .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path))
         .with_detail(ErrorDetail::new("Command").with_value("command", setup_command))
         .with_detail(ErrorDetail::new("Shell").with_value("shell", failure.shell))
@@ -3362,7 +3366,7 @@ fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, Comma
         _ => Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "不支持的 Codex 协作模式。",
-        )
+        ).with_reason("unsupportedCodexMode")
         .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
         .with_detail(ErrorDetail::new("Value").with_value("mode", profile.mode.clone()))),
     }
@@ -4095,7 +4099,7 @@ fn split_agent_command_line(command: &str) -> Result<(&str, Vec<&str>), CommandE
         CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Agent command 不能为空。",
-        )
+        ).with_reason("commandRequired")
         .with_detail(ErrorDetail::new("Command").with_value("command", command))
     })?;
     Ok((program, parts.collect()))
@@ -4109,7 +4113,7 @@ fn ensure_process_started(child: &mut Child, command: &str) -> Result<(), Comman
             let mut error = CommandError::new(
                 CommandErrorCode::AgentSessionStartFailed,
                 "Agent 进程启动失败。",
-            )
+            ).with_reason("processStartFailed")
             .with_detail(ErrorDetail::new("Command").with_value("command", command));
 
             if let Some(code) = status.code() {
@@ -4143,7 +4147,7 @@ fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
         "Agent Session 启动失败。",
-    )
+    ).with_reason("startFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -4185,7 +4189,7 @@ fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionStartFailed,
         "Agent 进程启动失败。",
-    )
+    ).with_reason("processStartFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -4193,7 +4197,7 @@ fn inactive_terminal_error(error: String) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "当前 Session 没有活跃终端。",
-    )
+    ).with_reason("noActiveTerminal")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error))
 }
 

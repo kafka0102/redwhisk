@@ -83,7 +83,7 @@ impl ProjectTerminalRegistry {
     fn insert(&self, session_id: i64, session: ProjectTerminalSession) -> Result<(), CommandError> {
         self.sessions
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。").with_reason("saveFailed"))?
             .insert(session_id, session);
         Ok(())
     }
@@ -95,7 +95,7 @@ impl ProjectTerminalRegistry {
     ) -> Result<ProjectTerminalSession, CommandError> {
         self.sessions
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 查询失败。"))?
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 查询失败。").with_reason("queryFailed"))?
             .get(&session_id)
             .filter(|session| session.project_id == project_id)
             .cloned()
@@ -103,7 +103,7 @@ impl ProjectTerminalRegistry {
                 CommandError::new(
                     CommandErrorCode::ProjectTerminalValidationFailed,
                     "Project Terminal 不存在。",
-                )
+                ).with_reason("terminalNotFound")
                 .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
                 .with_detail(
                     ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id),
@@ -119,7 +119,7 @@ impl ProjectTerminalRegistry {
         let session = self
             .sessions
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 查询失败。"))?
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 查询失败。").with_reason("queryFailed"))?
             .iter()
             .filter(|(_, session)| {
                 session.project_id == project_id && session.config_id == config_id
@@ -139,7 +139,7 @@ impl ProjectTerminalRegistry {
         let mut sessions = self
             .sessions
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。").with_reason("saveFailed"))?;
         for (_, session) in sessions.iter_mut().filter(|(_, session)| {
             session.project_id == project_id && session.config_id == config_id
         }) {
@@ -157,7 +157,7 @@ impl ProjectTerminalRegistry {
         let mut sessions = self
             .sessions
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 删除失败。"))?;
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 删除失败。").with_reason("deleteFailed"))?;
         let session_ids = sessions
             .iter()
             .filter(|(_, session)| {
@@ -193,12 +193,12 @@ impl ProjectTerminalRegistry {
         let mut sessions = self
             .sessions
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 删除失败。"))?;
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 删除失败。").with_reason("deleteFailed"))?;
         let session = sessions.get(&session_id).cloned().ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "Project Terminal 不存在。",
-            )
+            ).with_reason("terminalNotFound")
             .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             .with_detail(ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id))
         })?;
@@ -207,7 +207,7 @@ impl ProjectTerminalRegistry {
             return Err(CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "Project Terminal 不属于当前 Project。",
-            )
+            ).with_reason("terminalNotInProject")
             .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             .with_detail(ErrorDetail::new("ProjectTerminal").with_value("sessionId", session_id)));
         }
@@ -227,7 +227,7 @@ impl ProjectTerminalRegistry {
             let mut config_locks = self
                 .config_locks
                 .lock()
-                .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+                .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。").with_reason("saveFailed"))?;
             config_locks
                 .entry((project_id, config_id))
                 .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -236,7 +236,7 @@ impl ProjectTerminalRegistry {
 
         let _guard = lock
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。").with_reason("saveFailed"))?;
         action()
     }
 
@@ -249,7 +249,7 @@ impl ProjectTerminalRegistry {
             let mut project_locks = self
                 .project_locks
                 .lock()
-                .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+                .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。").with_reason("saveFailed"))?;
             project_locks
                 .entry(project_id)
                 .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -258,7 +258,7 @@ impl ProjectTerminalRegistry {
 
         let _guard = lock
             .lock()
-            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。"))?;
+            .map_err(|_| project_terminal_persistence_error("Project Terminal 保存失败。").with_reason("saveFailed"))?;
         action()
     }
 }
@@ -386,7 +386,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                 CommandError::new(
                     CommandErrorCode::ProjectTerminalValidationFailed,
                     "Agent Session 不存在。",
-                )
+                ).with_reason("sessionNotFound")
                 .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id))
                 .with_detail(
                     ErrorDetail::new("AgentSession")
@@ -398,7 +398,7 @@ impl<'connection> ProjectTerminalService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "Agent Session 不属于当前 Project。",
-            )
+            ).with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id))
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", input.agent_session_id),
@@ -908,7 +908,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                         CommandError::new(
                             CommandErrorCode::ProjectTerminalValidationFailed,
                             "常用命令不存在。",
-                        )
+                        ).with_reason("shortcutNotFound")
                         .with_detail(
                             ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", id),
                         )
@@ -917,7 +917,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::ProjectTerminalValidationFailed,
                         "常用命令不属于当前项目。",
-                    )
+                    ).with_reason("shortcutNotInProject")
                     .with_detail(
                         ErrorDetail::new("ProjectTerminalShortcutCommand")
                             .with_value("id", id)
@@ -938,7 +938,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::ProjectTerminalValidationFailed,
                         "常用命令最多 10 条。",
-                    )
+                    ).with_reason("shortcutLimitExceeded")
                     .with_detail(
                         ErrorDetail::new("ProjectTerminalShortcutCommand")
                             .with_value("projectId", input.project_id)
@@ -967,7 +967,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                 CommandError::new(
                     CommandErrorCode::ProjectTerminalValidationFailed,
                     "常用命令不存在或已删除。",
-                )
+                ).with_reason("shortcutNotFoundOrDeleted")
                 .with_detail(
                     ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", input.id),
                 )
@@ -983,7 +983,7 @@ impl<'connection> ProjectTerminalService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "常用命令不存在或已删除。",
-            )
+            ).with_reason("shortcutNotFoundOrDeleted")
             .with_detail(
                 ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", input.id),
             ));
@@ -1165,7 +1165,7 @@ fn open_project_database(
             CommandError::new(
                 CommandErrorCode::ProjectTerminalPersistenceFailed,
                 "Project Terminal 保存失败。",
-            )
+            ).with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 
@@ -1182,7 +1182,7 @@ fn terminal_log_path(
         CommandError::new(
             CommandErrorCode::ProjectTerminalPersistenceFailed,
             "Project Terminal 保存失败。",
-        )
+        ).with_reason("saveFailed")
         .with_detail(
             ErrorDetail::new("Path").with_value("path", log_dir.to_string_lossy().to_string()),
         )
@@ -1211,7 +1211,7 @@ fn project_terminal_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalPersistenceFailed,
         "Project Terminal 保存失败。",
-    )
+    ).with_reason("saveFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -1227,7 +1227,7 @@ fn project_terminal_inactive_error(error: impl Into<String>) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalValidationFailed,
         "Project Terminal 不可用。",
-    )
+    ).with_reason("terminalUnavailable")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.into()))
 }
 
@@ -1235,7 +1235,7 @@ fn project_terminal_delete_error(error: impl Into<String>) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalPersistenceFailed,
         "Project Terminal 删除失败。",
-    )
+    ).with_reason("deleteFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.into()))
 }
 
@@ -1260,14 +1260,14 @@ fn validate_shortcut_command(command: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::ProjectTerminalValidationFailed,
             "常用命令不能为空。",
-        )
+        ).with_reason("shortcutRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "command")));
     }
     if trimmed.chars().count() > PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_LENGTH {
         return Err(CommandError::new(
             CommandErrorCode::ProjectTerminalValidationFailed,
             "常用命令过长。",
-        )
+        ).with_reason("shortcutTooLong")
         .with_detail(
             ErrorDetail::new("Field")
                 .with_value("name", "command")

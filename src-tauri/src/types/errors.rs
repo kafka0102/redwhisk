@@ -41,6 +41,8 @@ pub struct CommandError {
     pub code: CommandErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Vec<ErrorDetail>>,
 }
 
@@ -49,12 +51,18 @@ impl CommandError {
         Self {
             code,
             message: message.into(),
+            reason: None,
             details: None,
         }
     }
 
     pub fn with_detail(mut self, detail: ErrorDetail) -> Self {
         self.details.get_or_insert_with(Vec::new).push(detail);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = Some(reason.into());
         self
     }
 }

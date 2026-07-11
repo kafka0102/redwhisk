@@ -63,7 +63,7 @@ fn with_session_workspace_service<T>(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "工作区读取失败。",
-        )
+        ).with_reason("workspaceReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -72,7 +72,7 @@ fn with_session_workspace_service<T>(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "工作区读取失败。",
-            )
+            ).with_reason("workspaceReadFailed")
         })?;
         local_data
             .initialize(&data_dir)
@@ -88,7 +88,7 @@ fn with_session_workspace_service<T>(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "工作区读取失败。",
-            )
+            ).with_reason("workspaceReadFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 

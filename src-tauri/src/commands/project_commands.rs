@@ -92,10 +92,10 @@ pub async fn open_project_window(
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {
         existing_window.show().map_err(|error| {
-            project_window_error(project.id, "Project 窗口显示失败。", error.to_string())
+            project_window_error(project.id, "Project 窗口显示失败。", error.to_string()).with_reason("windowShowFailed")
         })?;
         existing_window.set_focus().map_err(|error| {
-            project_window_error(project.id, "Project 窗口聚焦失败。", error.to_string())
+            project_window_error(project.id, "Project 窗口聚焦失败。", error.to_string()).with_reason("windowFocusFailed")
         })?;
     } else {
         tauri::WebviewWindowBuilder::new(
@@ -110,7 +110,7 @@ pub async fn open_project_window(
         .traffic_light_position(tauri::LogicalPosition::new(16.0, 22.0))
         .build()
         .map_err(|error| {
-            project_window_error(project.id, "Project 窗口打开失败。", error.to_string())
+            project_window_error(project.id, "Project 窗口打开失败。", error.to_string()).with_reason("windowOpenFailed")
         })?;
     }
 
@@ -136,7 +136,7 @@ fn prepare_project_data_dir(
         CommandError::new(
             CommandErrorCode::ProjectPersistenceFailed,
             "Project 保存失败。",
-        )
+        ).with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -145,7 +145,7 @@ fn prepare_project_data_dir(
             CommandError::new(
                 CommandErrorCode::ProjectPersistenceFailed,
                 "Project 保存失败。",
-            )
+            ).with_reason("saveFailed")
         })?;
         local_data
             .initialize(&data_dir)

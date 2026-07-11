@@ -167,7 +167,7 @@ pub fn resolve_workspace_relative_path(
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "仓库路径不可访问。",
-        )
+        ).with_reason("repoPathInaccessible")
         .with_detail(
             ErrorDetail::new("WorkspaceRoot")
                 .with_value("path", root.to_string_lossy().to_string()),
@@ -179,25 +179,25 @@ pub fn resolve_workspace_relative_path(
     let joined_path = root.join(relative_path);
     let parent = joined_path.parent().unwrap_or(root);
     let canonical_parent = parent.canonicalize().map_err(|error| {
-        workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path)
+        workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path).with_reason("filePathInaccessible")
     })?;
 
     if !canonical_parent.starts_with(&canonical_root) {
         return Err(workspace_validation_error(
             "文件路径不能离开仓库目录。",
             file_path,
-        ));
+        ).with_reason("filePathOutsideRepo"));
     }
 
     if joined_path.exists() {
         let canonical_path = joined_path.canonicalize().map_err(|error| {
-            workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path)
+            workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path).with_reason("filePathInaccessible")
         })?;
         if !canonical_path.starts_with(&canonical_root) {
             return Err(workspace_validation_error(
                 "文件路径不能离开仓库目录。",
                 file_path,
-            ));
+            ).with_reason("filePathOutsideRepo"));
         }
     }
 
@@ -218,7 +218,7 @@ fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandErr
         return Err(workspace_validation_error(
             "路径必须是仓库内相对路径。",
             file_path,
-        ));
+        ).with_reason("pathMustBeRelative"));
     }
 
     Ok(relative_path)
@@ -229,7 +229,7 @@ fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "仓库路径不可访问。",
-        )
+        ).with_reason("repoPathInaccessible")
         .with_detail(ErrorDetail::new("WorkspaceRoot").with_value("path", path.to_string()))
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
@@ -238,7 +238,7 @@ fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "仓库路径不是目录。",
-        )
+        ).with_reason("repoPathNotDir")
         .with_detail(ErrorDetail::new("WorkspaceRoot").with_value("path", path.to_string())));
     }
 
@@ -566,7 +566,7 @@ fn parse_status_entries(output: &[u8]) -> Result<Vec<StatusEntry>, CommandError>
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Git status 输出无法解析。",
-            ));
+            ).with_reason("gitStatusUnparseable"));
         }
 
         let status = String::from_utf8_lossy(&record[..2]).to_string();
@@ -659,7 +659,7 @@ fn read_directory_nodes(
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "文件树读取失败。",
-        )
+        ).with_reason("fileTreeReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -756,7 +756,7 @@ fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffCont
         .files
         .into_iter()
         .find(|file| file.file_path == file_path)
-        .ok_or_else(|| workspace_validation_error("文件没有未提交变更。", file_path))?;
+        .ok_or_else(|| workspace_validation_error("文件没有未提交变更。", file_path).with_reason("fileNoUncommittedChanges"))?;
 
     if change.is_binary {
         return Ok(WorkspaceDiffContent {
@@ -846,7 +846,7 @@ fn read_workspace_commit_diff(
     let change = read_commit_changed_files(root, &commit_hash)?
         .into_iter()
         .find(|file| file.file_path == file_path)
-        .ok_or_else(|| workspace_validation_error("文件不属于该提交。", file_path))?;
+        .ok_or_else(|| workspace_validation_error("文件不属于该提交。", file_path).with_reason("fileNotInCommit"))?;
     validate_workspace_relative_path(&change.file_path)?;
     if let Some(old_path) = &change.old_path {
         validate_workspace_relative_path(old_path)?;
@@ -954,10 +954,10 @@ fn resolve_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFile,
         return Err(workspace_validation_error(
             "路径不能是符号链接。",
             file_path,
-        ));
+        ).with_reason("pathCannotBeSymlink"));
     }
     if !metadata.is_file() {
-        return Err(workspace_validation_error("路径不是文件。", file_path));
+        return Err(workspace_validation_error("路径不是文件。", file_path).with_reason("pathNotFile"));
     }
 
     Ok(WorkspaceFile {
@@ -987,7 +987,7 @@ fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead,
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git blob 大小无法解析。",
-        )
+        ).with_reason("gitBlobSizeUnparseable")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
     if size > MAX_TEXT_FILE_BYTES {
@@ -1005,7 +1005,7 @@ fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead,
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Git 输出不是 UTF-8。",
-            )
+            ).with_reason("gitOutputNotUtf8")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })
 }
@@ -1021,7 +1021,7 @@ fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, Command
         return Err(workspace_validation_error(
             "提交哈希格式无效。",
             commit_hash,
-        ));
+        ).with_reason("commitHashInvalid"));
     }
 
     let output = run_git(
@@ -1035,7 +1035,7 @@ fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, Command
     )?;
     let resolved_hash = output.trim();
     if resolved_hash.is_empty() {
-        return Err(workspace_validation_error("提交不存在。", commit_hash));
+        return Err(workspace_validation_error("提交不存在。", commit_hash).with_reason("commitNotFound"));
     }
 
     Ok(resolved_hash.to_string())
@@ -1051,7 +1051,7 @@ fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git 输出不是 UTF-8。",
-        )
+        ).with_reason("gitOutputNotUtf8")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
 }
@@ -1070,14 +1070,14 @@ fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Git 命令执行失败。",
-            )
+            ).with_reason("gitCommandFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
     if !output.status.success() {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git 命令执行失败。",
-        )
+        ).with_reason("gitCommandFailed")
         .with_detail(ErrorDetail::new("Cause").with_value(
             "message",
             String::from_utf8_lossy(&output.stderr).to_string(),
@@ -1090,7 +1090,7 @@ fn workspace_persistence_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
         "工作区查询失败。",
-    )
+    ).with_reason("workspaceQueryFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -1098,7 +1098,7 @@ fn workspace_io_error(error: std::io::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "工作区文件读取失败。",
-    )
+    ).with_reason("workspaceFileReadFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 

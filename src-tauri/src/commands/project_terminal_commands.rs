@@ -221,7 +221,7 @@ fn prepare_project_terminal_data_dir(
         CommandError::new(
             CommandErrorCode::ProjectTerminalPersistenceFailed,
             "Project Terminal 保存失败。",
-        )
+        ).with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -230,7 +230,7 @@ fn prepare_project_terminal_data_dir(
             CommandError::new(
                 CommandErrorCode::ProjectTerminalPersistenceFailed,
                 "Project Terminal 保存失败。",
-            )
+            ).with_reason("saveFailed")
         })?;
         local_data
             .initialize(&data_dir)

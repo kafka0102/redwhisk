@@ -101,7 +101,7 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Label 必须指定 project_id。",
-                )
+                ).with_reason("projectLabelRequiresProjectId")
             })?;
             self.ensure_project_exists(project_id)?;
         }
@@ -129,7 +129,7 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Agent 必须指定 project_id。",
-                )
+                ).with_reason("projectAgentRequiresProjectId")
             })?;
             self.ensure_project_exists(project_id)?;
         }
@@ -169,7 +169,7 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Label 必须指定 project_id。",
-                )
+                ).with_reason("projectLabelRequiresProjectId")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "projectId"))
             })?),
             ProjectLabelScope::Global => None,
@@ -209,7 +209,7 @@ where
         Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Agent Profile 不存在或已删除。",
-        )
+        ).with_reason("profileNotFound")
         .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", input.id)))
     }
 
@@ -226,7 +226,7 @@ where
         Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 不存在或已删除。",
-        )
+        ).with_reason("labelNotFound")
         .with_detail(ErrorDetail::new("ProjectLabel").with_value("labelId", input.id)))
     }
 
@@ -256,7 +256,7 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Skill 必须指定 project_id。",
-                )
+                ).with_reason("projectSkillRequiresProjectId")
             })?;
             self.ensure_project_exists(project_id)?;
         }
@@ -293,7 +293,7 @@ where
         Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Skill 不存在或已删除。",
-        )
+        ).with_reason("skillNotFound")
         .with_detail(ErrorDetail::new("SavedAgentSkill").with_value("savedAgentSkillId", input.id)))
     }
 
@@ -330,7 +330,7 @@ where
         };
 
         Err(
-            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
+            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message).with_reason("labelNameNotUnique")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
         )
     }
@@ -357,7 +357,7 @@ where
         };
 
         Err(
-            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
+            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message).with_reason("skillNameNotUnique")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
         )
     }
@@ -642,7 +642,7 @@ fn validate_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Agent Profile 名称不能为空。",
-        )
+        ).with_reason("nameRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -655,7 +655,7 @@ fn validate_command(command: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Agent command 不能为空。",
-        )
+        ).with_reason("commandRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "command")));
     }
 
@@ -668,7 +668,7 @@ fn validate_project_label_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 名称不能为空。",
-        )
+        ).with_reason("labelNameRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -676,7 +676,7 @@ fn validate_project_label_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 名称最多 15 个字符。",
-        )
+        ).with_reason("labelNameTooLong")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -693,7 +693,7 @@ fn validate_project_label_color(color: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 颜色必须是 #RRGGBB 格式。",
-        )
+        ).with_reason("labelColorInvalid")
         .with_detail(ErrorDetail::new("Field").with_value("name", "color")));
     }
 
@@ -706,7 +706,7 @@ fn validate_saved_agent_skill_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Skill 名称不能为空。",
-        )
+        ).with_reason("skillNameRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 

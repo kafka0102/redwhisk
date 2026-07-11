@@ -66,7 +66,7 @@ pub async fn open_session_monitor_window(
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {
         existing_window.show().map_err(|error| {
-            session_monitor_error(&window_label, "会话监控窗口显示失败。", error.to_string())
+            session_monitor_error(&window_label, "会话监控窗口显示失败。", error.to_string()).with_reason("windowShowFailed")
         })?;
 
         return Ok(OpenSessionMonitorWindowResponse { window_label });
@@ -88,7 +88,7 @@ pub async fn open_session_monitor_window(
     .shadow(false)
     .build()
     .map_err(|error| {
-        session_monitor_error(&window_label, "会话监控窗口打开失败。", error.to_string())
+        session_monitor_error(&window_label, "会话监控窗口打开失败。", error.to_string()).with_reason("windowOpenFailed")
     })?;
 
     let _ = monitor_window.set_visible_on_all_workspaces(true);
@@ -105,7 +105,7 @@ pub async fn close_session_monitor_window(
 
     if let Some(existing_window) = app.get_webview_window(&window_label) {
         existing_window.close().map_err(|error| {
-            session_monitor_error(&window_label, "会话监控窗口关闭失败。", error.to_string())
+            session_monitor_error(&window_label, "会话监控窗口关闭失败。", error.to_string()).with_reason("windowCloseFailed")
         })?;
     }
 
@@ -121,7 +121,7 @@ pub fn list_monitored_agent_sessions(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 查询失败。",
-        )
+        ).with_reason("queryFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -130,7 +130,7 @@ pub fn list_monitored_agent_sessions(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 查询失败。",
-            )
+            ).with_reason("queryFailed")
         })?;
         local_data
             .initialize(&data_dir)
@@ -159,7 +159,7 @@ pub async fn open_monitored_agent_session(
                 &target_window_label,
                 "目标项目窗口不存在。",
                 "No target window found".to_string(),
-            )
+            ).with_reason("targetWindowNotFound")
         })?;
     let emitted_window_label = target_window.label().to_string();
 
@@ -168,21 +168,21 @@ pub async fn open_monitored_agent_session(
             &emitted_window_label,
             "目标项目窗口恢复失败。",
             error.to_string(),
-        )
+        ).with_reason("targetWindowRestoreFailed")
     })?;
     target_window.show().map_err(|error| {
         session_monitor_error(
             &emitted_window_label,
             "目标项目窗口显示失败。",
             error.to_string(),
-        )
+        ).with_reason("targetWindowShowFailed")
     })?;
     target_window.set_focus().map_err(|error| {
         session_monitor_error(
             &emitted_window_label,
             "目标项目窗口聚焦失败。",
             error.to_string(),
-        )
+        ).with_reason("targetWindowFocusFailed")
     })?;
     app.emit_to(
         emitted_window_label.as_str(),
@@ -194,7 +194,7 @@ pub async fn open_monitored_agent_session(
             &emitted_window_label,
             "目标项目窗口事件发送失败。",
             error.to_string(),
-        )
+        ).with_reason("targetWindowEmitFailed")
     })?;
 
     Ok(OpenMonitoredAgentSessionResponse {

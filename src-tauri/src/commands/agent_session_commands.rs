@@ -68,7 +68,7 @@ pub async fn list_agent_sessions(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 查询失败。",
-        )
+        ).with_reason("queryFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -93,7 +93,7 @@ pub async fn start_agent_session(
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent Session 启动失败。",
-                )
+                ).with_reason("startFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
 
@@ -116,7 +116,7 @@ pub async fn start_agent_session(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 启动失败。",
-        )
+        ).with_reason("startFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -136,7 +136,7 @@ pub async fn get_project_git_branches(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Git 分支查询失败。",
-        )
+        ).with_reason("gitBranchQueryFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -156,7 +156,7 @@ pub async fn set_agent_session_attention(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 关注状态更新失败。",
-        )
+        ).with_reason("followStatusUpdateFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -171,7 +171,7 @@ pub async fn inject_agent_session_prompt(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session prompt 注入失败。",
-        )
+        ).with_reason("promptInjectFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
     let pty_sessions = state.pty_sessions.clone();
@@ -189,7 +189,7 @@ pub async fn inject_agent_session_prompt(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session prompt 注入失败。",
-        )
+        ).with_reason("promptInjectFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -214,7 +214,7 @@ fn require_structured_handle(
         CommandError::new(
             CommandErrorCode::AgentSessionNotRunning,
             "当前 Session 没有运行中的结构化会话。",
-        )
+        ).with_reason("noStructuredSession")
         .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
     })
 }
@@ -231,7 +231,7 @@ fn prepare_agent_session_data_dir(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 数据目录不可用。",
-        )
+        ).with_reason("dataDirUnavailable")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -240,7 +240,7 @@ fn prepare_agent_session_data_dir(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 数据目录不可用。",
-            )
+            ).with_reason("dataDirUnavailable")
         })?;
         local_data
             .initialize(&data_dir)
@@ -259,7 +259,7 @@ fn open_agent_session_database(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 数据目录不可用。",
-        )
+        ).with_reason("dataDirUnavailable")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -272,7 +272,7 @@ fn open_agent_session_database(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 数据库迁移失败。",
-            )
+            ).with_reason("migrationFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
     Ok(database)
@@ -349,7 +349,7 @@ pub async fn start_structured_agent_session(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 启动失败。",
-        )
+        ).with_reason("startFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -384,7 +384,7 @@ pub async fn resume_structured_agent_session(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 恢复失败。",
-        )
+        ).with_reason("restoreFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -415,7 +415,7 @@ pub async fn delete_agent_session(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 删除失败。",
-        )
+        ).with_reason("deleteFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -439,7 +439,7 @@ pub async fn update_agent_session_title(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 标题更新失败。",
-        )
+        ).with_reason("titleUpdateFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -465,7 +465,7 @@ pub async fn send_agent_message(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 消息发送失败。",
-        )
+        ).with_reason("messageSendFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -501,7 +501,7 @@ pub async fn cancel_agent_turn(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 取消失败。",
-        )
+        ).with_reason("cancelFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -523,7 +523,7 @@ pub async fn respond_agent_permission(
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "不支持的权限决策。",
-                )
+                ).with_reason("unsupportedPermissionDecision")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "decision"))
                 .with_detail(
                     ErrorDetail::new("Value").with_value("decision", input.decision.clone()),
@@ -538,7 +538,7 @@ pub async fn respond_agent_permission(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 权限响应失败。",
-        )
+        ).with_reason("permissionResponseFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -562,7 +562,7 @@ pub async fn set_agent_model(
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent 配置保存失败。",
-                )
+                ).with_reason("configSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?)
         } else {
@@ -579,7 +579,7 @@ pub async fn set_agent_model(
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent 配置保存失败。",
-                )
+                ).with_reason("configSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
         }
@@ -594,7 +594,7 @@ pub async fn set_agent_model(
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent 配置保存失败。",
-                )
+                ).with_reason("configSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
         }
@@ -607,7 +607,7 @@ pub async fn set_agent_model(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 配置保存失败。",
-        )
+        ).with_reason("configSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -629,14 +629,14 @@ pub async fn set_agent_thinking(
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent 配置保存失败。",
-                )
+                ).with_reason("configSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
             codex_config::write_reasoning_effort_to_home(&home_dir, effort).map_err(|error| {
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent 配置保存失败。",
-                )
+                ).with_reason("configSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
         }
@@ -649,7 +649,7 @@ pub async fn set_agent_thinking(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 配置保存失败。",
-        )
+        ).with_reason("configSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -675,7 +675,7 @@ pub async fn set_agent_mode(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 模式切换失败。",
-        )
+        ).with_reason("modeSwitchFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -695,7 +695,7 @@ pub async fn list_agent_models(
                     CommandError::new(
                         CommandErrorCode::AgentSessionPersistenceFailed,
                         "读取 Codex 配置失败。",
-                    )
+                    ).with_reason("codexConfigReadFailed")
                     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
                 })?;
                 default_codex_models_with_selected(
@@ -707,7 +707,7 @@ pub async fn list_agent_models(
                     CommandError::new(
                         CommandErrorCode::AgentSessionPersistenceFailed,
                         "读取 Claude 配置失败。",
-                    )
+                    ).with_reason("claudeConfigReadFailed")
                     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
                 })?;
                 claude_models_from_home(&home_dir)
@@ -732,7 +732,7 @@ pub async fn list_agent_models(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 模型列表读取失败。",
-        )
+        ).with_reason("modelListReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -799,7 +799,7 @@ pub async fn list_agent_modes(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent 模式列表读取失败。",
-        )
+        ).with_reason("modeListReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -819,7 +819,7 @@ pub async fn save_agent_attachment(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "附件保存失败：数据目录不可用。",
-            )
+            ).with_reason("attachmentDataDirUnavailable")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 
@@ -832,7 +832,7 @@ pub async fn save_agent_attachment(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "附件目录创建失败。",
-            )
+            ).with_reason("attachmentDirCreateFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
         let dest = attachment_dir.join(&sanitized);
@@ -840,7 +840,7 @@ pub async fn save_agent_attachment(
             CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "附件复制失败。",
-            )
+            ).with_reason("attachmentCopyFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             .with_detail(ErrorDetail::new("Source").with_value("path", input.source_path.clone()))
         })?;
@@ -856,7 +856,7 @@ pub async fn save_agent_attachment(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "附件保存失败。",
-        )
+        ).with_reason("attachmentSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -882,7 +882,7 @@ pub async fn read_agent_timeline(
         CommandError::new(
             CommandErrorCode::AgentSessionPersistenceFailed,
             "Agent Session 历史读取失败。",
-        )
+        ).with_reason("historyReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }

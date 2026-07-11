@@ -185,7 +185,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有已完成 Issue 可以查看 Summary。",
-            )
+            ).with_reason("mustBeCompletedToViewSummary")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
@@ -403,7 +403,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前附件不支持预览。",
-            ));
+            ).with_reason("attachmentPreviewUnsupported"));
         }
 
         let text_content = if source.kind == IssueAttachmentKind::Text {
@@ -472,7 +472,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有运行中的 Issue 可以标记待验收。",
-            )
+            ).with_reason("mustBeRunningToAccept")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
@@ -490,7 +490,7 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有存在关联 Agent Session 的 Issue 可以标记待验收。",
-            )
+            ).with_reason("mustHaveSessionToAccept")
             .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
         })?;
 
@@ -505,7 +505,7 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有运行中的 Issue 可以标记待验收。",
-            )
+            ).with_reason("mustBeRunningToAccept")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
@@ -638,7 +638,7 @@ impl<'connection> IssueService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "删除 Issue 时关闭关联 Session 失败。",
-                    )
+                    ).with_reason("deleteCloseSessionFailed")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                     ));
@@ -793,7 +793,7 @@ impl<'connection> IssueService<'connection> {
         Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "Agent 自动提交路径已停用，等待新流程重写。",
-        )
+        ).with_reason("autoCommitDisabled")
         .with_detail(ErrorDetail::new("CompletionPolicy").with_value("reason", "deprecated")))
     }
 
@@ -834,7 +834,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "已完成 Issue 不能重复完成。",
-            )
+            ).with_reason("alreadyCompleted")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", issue.id)
@@ -849,14 +849,14 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "Issue 完成必须存在关联 Agent Session。",
-                )
+                ).with_reason("sessionRequiredToComplete")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
             })?;
         if session.project_id != input.project_id {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "关联 Agent Session 不属于当前 Project。",
-            )
+            ).with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
         // completion_policy 已移除：完成时统一检测实际路径与未提交改动，
@@ -1046,7 +1046,7 @@ impl<'connection> IssueService<'connection> {
                             CommandError::new(
                                 CommandErrorCode::IssuePersistenceFailed,
                                 "Agent Commit 审计保存失败。",
-                            )
+                            ).with_reason("auditSaveFailed")
                             .with_detail(
                                 ErrorDetail::new("Cause").with_value("message", error.to_string()),
                             )
@@ -1434,7 +1434,7 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssuePersistenceFailed,
                     "CompletionAttempt 保存失败。",
-                )
+                ).with_reason("completionAttemptSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
         if let Some(attempt_id) = attempt_id {
@@ -1451,7 +1451,7 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssuePersistenceFailed,
                     "CompletionAttempt 更新失败。",
-                )
+                ).with_reason("completionAttemptUpdateFailed")
                 .with_detail(
                     ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt_id),
                 )
@@ -1597,7 +1597,7 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "Issue 完成必须存在关联 Agent Session。",
-                )
+                ).with_reason("sessionRequiredToComplete")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
             })?;
         let flow = IssueCompletionFlowRepository::new(self.issue_repository.connection())
@@ -1607,7 +1607,7 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "当前 Issue 不在自动提交流程中。",
-                )
+                ).with_reason("notInAutoCommitFlow")
                 .with_detail(
                     ErrorDetail::new("IssueCompletionFlow").with_value("issueId", issue.id),
                 )
@@ -2010,7 +2010,7 @@ impl<'connection> IssueService<'connection> {
                     .find_by_id(attachment_id)
                     .map_err(issue_database_error)?
                     .ok_or_else(|| {
-                        CommandError::new(CommandErrorCode::IssueNotFound, "附件不存在。")
+                        CommandError::new(CommandErrorCode::IssueNotFound, "附件不存在。").with_reason("attachmentNotFound")
                             .with_detail(
                                 ErrorDetail::new("IssueAttachment")
                                     .with_value("attachmentId", attachment_id),
@@ -2043,7 +2043,7 @@ impl<'connection> IssueService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "Draft 附件路径不可读取。",
-                    ));
+                    ).with_reason("draftAttachmentUnreadable"));
                 }
                 let analysis = analyze_attachment(&file_name, None);
                 Ok(ResolvedAttachmentSource {
@@ -2057,7 +2057,7 @@ impl<'connection> IssueService<'connection> {
             _ => Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "附件预览或导出参数无效。",
-            )),
+            ).with_reason("attachmentParamsInvalid")),
         }
     }
 
@@ -2089,7 +2089,7 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
-                )
+                ).with_reason("mustBeAcceptableWithSessionToCommit")
                 .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", issue_id))
             })?;
         let session = AgentSessionRepository::new(self.issue_repository.connection())
@@ -2099,7 +2099,7 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
-                )
+                ).with_reason("mustBeAcceptableWithSessionToCommit")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                 )
@@ -2110,7 +2110,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。",
-            )
+            ).with_reason("gitOperationBlockingCommit")
             .with_detail(ErrorDetail::new("GitOperation").with_value(
                 "state",
                 format_git_operation_state(snapshot.operation_state),
@@ -2120,7 +2120,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前仓库无未提交改动，请直接使用 Complete。",
-            )
+            ).with_reason("noChangesUseComplete")
             .with_detail(
                 ErrorDetail::new("GitStatus")
                     .with_value("head", snapshot.head.clone())
@@ -2140,7 +2140,7 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有待验收 Issue 可以准备 Agent Commit。",
-            )
+            ).with_reason("mustBeAcceptableToPrepareCommit")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", issue_id)
@@ -2201,7 +2201,7 @@ impl<'connection> IssueService<'connection> {
                                 CommandError::new(
                                     CommandErrorCode::IssueValidationFailed,
                                     "只有运行中的 Issue 可以标记待验收。",
-                                )
+                                ).with_reason("mustBeRunningToAccept")
                                 .with_detail(
                                     ErrorDetail::new("IssueStatus")
                                         .with_value("issueId", input.issue_id)
@@ -2253,7 +2253,7 @@ impl<'connection> IssueService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "Issue 完成必须通过 complete_issue_flow 执行。",
-                    )
+                    ).with_reason("mustUseCompletionFlow")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
                 }
                 let linked_session_id = IssueRepository::find_linked_session_id_in_transaction(
@@ -2277,7 +2277,7 @@ impl<'connection> IssueService<'connection> {
                                 CommandError::new(
                                     CommandErrorCode::IssueValidationFailed,
                                     "只有运行中的 Issue 可以标记待验收。",
-                                )
+                                ).with_reason("mustBeRunningToAccept")
                                 .with_detail(
                                     ErrorDetail::new("IssueStatus")
                                         .with_value("issueId", input.issue_id)
@@ -2432,7 +2432,7 @@ impl<'connection> IssueService<'connection> {
                     CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "退回 Backlog 时关闭关联 Agent Session 失败。",
-                    )
+                    ).with_reason("backlogCloseSessionFailed")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                     )
@@ -2466,7 +2466,7 @@ impl<'connection> IssueService<'connection> {
                 return Err(CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "退回 Backlog 时移除关联 Agent Session 失败。",
-                )
+                ).with_reason("backlogRemoveSessionFailed")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                 ));
@@ -2530,7 +2530,7 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有存在关联 Agent Session 的待验收 Issue 可以手动完成。",
-            )
+            ).with_reason("mustBeAcceptableWithSessionToComplete")
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
             )
@@ -2695,7 +2695,7 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssuePersistenceFailed,
                 "Issue 归档失败，关联会话不存在。",
-            )
+            ).with_reason("archiveSessionNotFound")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
         })?;
@@ -2765,7 +2765,7 @@ fn open_issue_database(
     MigrationRunner::default()
         .run(&database.connection)
         .map_err(|error| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 
@@ -2891,14 +2891,14 @@ fn read_current_branch(repo_path: &str) -> Result<String, CommandError> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前 Project 的 Git 状态不可用。",
-            )
+            ).with_reason("gitStatusUnavailable")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
     if !output.status.success() {
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "当前 Project 的 Git 状态不可用。",
-        )
+        ).with_reason("gitStatusUnavailable")
         .with_detail(ErrorDetail::new("Cause").with_value(
             "message",
             String::from_utf8_lossy(&output.stderr).to_string(),
@@ -2915,12 +2915,13 @@ fn completion_session_close_reason(option: CompletionAttemptOption) -> &'static 
 }
 
 fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> CommandError {
-    let message = match action {
-        CompleteIssueFlowAction::PromptDirtyDecision => "当前仓库存在未提交改动，不能直接完成。",
-        CompleteIssueFlowAction::Blocked => "当前 Git 正在进行中的操作阻止直接完成。",
-        _ => "Issue 完成必须通过 complete_issue_flow 继续处理。",
+    let (message, reason) = match action {
+        CompleteIssueFlowAction::PromptDirtyDecision => ("当前仓库存在未提交改动，不能直接完成。", "dirtyRepoCannotComplete"),
+        CompleteIssueFlowAction::Blocked => ("当前 Git 正在进行中的操作阻止直接完成。", "gitOperationBlocking"),
+        _ => ("Issue 完成必须通过 complete_issue_flow 继续处理。", "mustUseCompletionFlow"),
     };
     CommandError::new(CommandErrorCode::IssueValidationFailed, message)
+        .with_reason(reason)
         .with_detail(ErrorDetail::new("CompletionFlow").with_value("action", format!("{action:?}")))
 }
 
@@ -2930,7 +2931,7 @@ fn validate_title(title: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "Issue title 不能为空。",
-        )
+        ).with_reason("titleRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "title")));
     }
 
@@ -2939,7 +2940,7 @@ fn validate_title(title: &str) -> Result<String, CommandError> {
 
 fn serialize_label_ids(label_ids: &[i64]) -> Result<String, CommandError> {
     serde_json::to_string(label_ids).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
 }
@@ -2948,7 +2949,7 @@ fn invalid_issue_label(label_id: i64, project_id: i64) -> CommandError {
     CommandError::new(
         CommandErrorCode::IssueValidationFailed,
         "Issue labels 配置无效。",
-    )
+    ).with_reason("labelsInvalid")
     .with_detail(ErrorDetail::new("IssueLabel").with_value("labelId", label_id))
     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
 }
@@ -2974,12 +2975,12 @@ fn to_issue_label_record(label: ProjectLabelRow) -> IssueLabelRecord {
 }
 
 fn issue_not_found(issue_id: i64) -> CommandError {
-    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
         .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
 }
 
 fn issue_database_error(error: rusqlite::Error) -> CommandError {
-    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -2987,7 +2988,7 @@ fn issue_git_error(error: crate::git::status::GitStatusError) -> CommandError {
     CommandError::new(
         CommandErrorCode::IssueValidationFailed,
         "当前 Project 的 Git 状态不可用。",
-    )
+    ).with_reason("gitStatusUnavailable")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -3214,7 +3215,7 @@ fn latest_completion_from_issue_action(
             CommandError::new(
                 CommandErrorCode::IssuePersistenceFailed,
                 "Issue Summary 解析失败。",
-            )
+            ).with_reason("summaryParseFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             .with_detail(ErrorDetail::new("IssueAction").with_value("issueId", issue_id))
         })?;
@@ -3298,12 +3299,12 @@ fn current_epoch_millis() -> Result<i64, CommandError> {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 
     i64::try_from(duration.as_millis()).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
 }
@@ -3336,7 +3337,7 @@ fn persist_new_attachments(
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "附件源文件不存在。",
-            ));
+            ).with_reason("attachmentSourceNotFound"));
         }
 
         let display_name = attachment.display_name.trim();
@@ -3381,7 +3382,7 @@ fn persist_new_attachments(
             attachment.mime_type.as_deref(),
             i64::try_from(metadata.len()).map_err(|_| {
                 cleanup_created_files(&created_files);
-                CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+                CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
             })?,
             analysis.kind,
             analysis.is_previewable,
@@ -3411,7 +3412,7 @@ fn save_issue_attachment_draft_in_data_dir(
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "附件源文件不存在。",
-        ));
+        ).with_reason("attachmentSourceNotFound"));
     }
 
     let display_name = input.display_name.trim();
@@ -3459,7 +3460,7 @@ fn rewrite_attachment_tokens(
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "Issue description 缺少附件标记。",
-            ));
+            ).with_reason("descriptionMissingAttachmentMarker"));
         }
         rewritten = rewritten.replace(&from, &to);
     }
@@ -3633,14 +3634,14 @@ fn read_previewable_text_file(path: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "附件过大，暂不支持预览。",
-        ));
+        ).with_reason("attachmentTooLarge"));
     }
 
     fs::read_to_string(path).map_err(issue_io_error)
 }
 
 fn issue_io_error(error: std::io::Error) -> CommandError {
-    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
