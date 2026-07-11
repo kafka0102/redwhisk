@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  getCommandErrorMessage,
   toCommandError,
   type CommandError,
 } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
@@ -96,6 +98,7 @@ export function useSessionWorkspaceCache({
   sessionId,
   isSidePanelOpen,
 }: UseSessionWorkspaceCacheInput) {
+  const { t } = useI18n();
   const cacheBySessionRef = useRef<Map<number, SessionWorkspaceCache>>(
     new Map(),
   );
@@ -203,7 +206,7 @@ export function useSessionWorkspaceCache({
           ? {
               ...cache,
               isChangesLoading: false,
-              changesErrorMessage: commandError.message,
+              changesErrorMessage: getCommandErrorMessage(error, t),
               isChangesUnavailable: isUnavailable,
             }
           : cache,
@@ -251,7 +254,7 @@ export function useSessionWorkspaceCache({
           ? {
               ...cache,
               isFileTreeLoading: false,
-              fileTreeErrorMessage: toCommandError(error).message,
+              fileTreeErrorMessage: getCommandErrorMessage(error, t),
             }
           : cache,
       );
@@ -299,7 +302,7 @@ export function useSessionWorkspaceCache({
           ? {
               ...cache,
               isCommitHistoryLoading: false,
-              commitHistoryErrorMessage: toCommandError(error).message,
+              commitHistoryErrorMessage: getCommandErrorMessage(error, t),
             }
           : cache,
       );
@@ -435,7 +438,7 @@ export function useSessionWorkspaceCache({
             cache.changeTab.commitHash == null
               ? {
                   ...cache.changeTab,
-                  errorMessage: toCommandError(error).message,
+                  errorMessage: getCommandErrorMessage(error, t),
                   isLoading: false,
                 }
               : cache.changeTab,
@@ -498,7 +501,7 @@ export function useSessionWorkspaceCache({
             cache.changeTab.commitHash === commitHash
               ? {
                   ...cache.changeTab,
-                  errorMessage: toCommandError(error).message,
+                  errorMessage: getCommandErrorMessage(error, t),
                   isLoading: false,
                 }
               : cache.changeTab,
@@ -555,7 +558,7 @@ export function useSessionWorkspaceCache({
             cache.fileTab?.filePath === file.path
               ? {
                   ...cache.fileTab,
-                  errorMessage: toCommandError(error).message,
+                  errorMessage: getCommandErrorMessage(error, t),
                   isLoading: false,
                 }
               : cache.fileTab,

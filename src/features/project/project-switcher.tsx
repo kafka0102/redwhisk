@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ProjectSummary } from "../../app/app";
 import { openProjectWindow } from "./project-commands";
 import { getProjectIconColor } from "./project-icon-color";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface ProjectSwitcherProps {
@@ -20,7 +20,7 @@ export function ProjectSwitcher({
   onProjectsRefresh,
   projects,
 }: ProjectSwitcherProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const popoverId = useId();
   const switcherRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -32,7 +32,7 @@ export function ProjectSwitcher({
     }
 
     onProjectsRefresh().catch((refreshError: unknown) => {
-      setError(toCommandError(refreshError).message);
+      setError(getCommandErrorMessage(refreshError, t));
     });
   }, [isOpen, onProjectsRefresh]);
 
@@ -89,7 +89,7 @@ export function ProjectSwitcher({
       await openProjectWindow({ projectId: project.id });
       setIsOpen(false);
     } catch (openError) {
-      setError(toCommandError(openError).message);
+      setError(getCommandErrorMessage(openError, t));
     }
   }
 

@@ -19,7 +19,7 @@ import {
   listAgentProfiles,
   type AgentProfileRecord,
 } from "../settings/settings-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface TemporarySessionDialogProps {
@@ -35,7 +35,7 @@ export function TemporarySessionDialog({
   onClose,
   onStarted,
 }: TemporarySessionDialogProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
@@ -85,7 +85,7 @@ export function TemporarySessionDialog({
           return;
         }
 
-        setStatusMessage(toCommandError(error).message);
+        setStatusMessage(getCommandErrorMessage(error, t));
       } finally {
         if (isMounted) {
           setIsLoadingProfiles(false);
@@ -179,7 +179,7 @@ export function TemporarySessionDialog({
       await onStarted(result);
       didStart = true;
     } catch (error) {
-      setStatusMessage(toCommandError(error).message);
+      setStatusMessage(getCommandErrorMessage(error, t));
     }
 
     if (didStart) {

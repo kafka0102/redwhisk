@@ -5,7 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
 import type { TerminalOutputChunk, TerminalTransport } from "./terminal-types";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 const TERMINAL_STATUS_MAX_BYTES = 1;
@@ -38,7 +38,7 @@ export function TerminalSurface({
   transport,
   transportKey,
 }: TerminalSurfaceProps) {
-  const { theme, contentFontSize } = useI18n();
+  const { theme, contentFontSize, t } = useI18n();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -130,7 +130,7 @@ export function TerminalSurface({
       terminal.open(host);
       fitAddon.fit();
     } catch (error) {
-      const message = toCommandError(error).message;
+      const message = getCommandErrorMessage(error, t);
       const bootErrorTimer = window.setTimeout(() => {
         showStatusMessage("boot", message);
       }, 0);
@@ -155,7 +155,7 @@ export function TerminalSurface({
       try {
         fitAddon.fit();
       } catch (error) {
-        const message = toCommandError(error).message;
+        const message = getCommandErrorMessage(error, t);
         window.setTimeout(() => {
           if (!terminalRef.current) {
             return;
@@ -181,7 +181,7 @@ export function TerminalSurface({
 
     const disposeData = terminal.onData((data) => {
       void transportRef.current.write(data).catch((error) => {
-        showStatusMessage("input", toCommandError(error).message);
+        showStatusMessage("input", getCommandErrorMessage(error, t));
       });
     });
     terminal.attachCustomKeyEventHandler((event) => {
@@ -227,7 +227,7 @@ export function TerminalSurface({
         terminal.write(new Uint8Array(event.data));
         clearStatusMessage();
       } catch (error) {
-        showStatusMessage("output", toCommandError(error).message);
+        showStatusMessage("output", getCommandErrorMessage(error, t));
       }
     };
 
@@ -324,7 +324,7 @@ export function TerminalSurface({
         flushPendingOutput();
       } catch (error) {
         if (!isDisposed) {
-          showStatusMessage("restore", toCommandError(error).message);
+          showStatusMessage("restore", getCommandErrorMessage(error, t));
           hasRestored = true;
           flushPendingOutput();
         }
@@ -353,7 +353,7 @@ export function TerminalSurface({
         }
       } catch (error) {
         if (!isDisposed) {
-          showStatusMessage("poll", toCommandError(error).message);
+          showStatusMessage("poll", getCommandErrorMessage(error, t));
         }
       }
     };
@@ -369,7 +369,7 @@ export function TerminalSurface({
         }
       } catch (error) {
         if (!isDisposed) {
-          setStatusMessage(toCommandError(error).message);
+          setStatusMessage(getCommandErrorMessage(error, t));
         }
         return;
       }

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { useI18n } from "../../shared/i18n/i18n";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import {
   listSavedAgentSkills,
   saveProjectLabel,
@@ -52,7 +52,7 @@ export function ProjectLabelForm({
   onSaved,
   projectId,
 }: ProjectLabelFormProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [name, setName] = useState(label?.name ?? "");
   const [scope, setScope] = useState<ProjectLabelScope>(
     label?.scope ?? "global",
@@ -146,7 +146,7 @@ export function ProjectLabelForm({
       });
       onSaved(saved);
     } catch (error: unknown) {
-      setStatusMessage(toCommandError(error).message);
+      setStatusMessage(getCommandErrorMessage(error, t));
     } finally {
       setIsSaving(false);
     }

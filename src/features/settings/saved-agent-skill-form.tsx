@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useI18n } from "../../shared/i18n/i18n";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage, toCommandError } from "../../shared/commands/command-error";
 import {
   listAgentSkills,
   saveSavedAgentSkill,
@@ -52,7 +52,7 @@ export function SavedAgentSkillForm({
   onSaved,
   projectId,
 }: SavedAgentSkillFormProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [scope, setScope] = useState<AgentSkillScope>(skill?.scope ?? "global");
@@ -199,7 +199,7 @@ export function SavedAgentSkillForm({
       if (err.code === "duplicate_name") {
         setNameError(messages.settings.skillNameDuplicate);
       } else {
-        setStatusMessage(err.message);
+        setStatusMessage(getCommandErrorMessage(error, t));
       }
     } finally {
       setIsSaving(false);

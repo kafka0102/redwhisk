@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { listIssues, type IssueRecord } from "../issues/issue-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionIssueDrawerProps {
@@ -17,7 +17,7 @@ export function SessionIssueDrawer({
   projectId,
   onClose,
 }: SessionIssueDrawerProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [issue, setIssue] = useState<IssueRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function SessionIssueDrawer({
         }
 
         setIssue(null);
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
       } finally {
         if (isMounted) {
           setIsLoading(false);

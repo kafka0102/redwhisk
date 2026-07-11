@@ -19,7 +19,7 @@ import type {
   PermissionKind,
 } from "../agent-stream-types";
 import type { AgentPermissionDecisionLiteral } from "../agent-session-commands";
-import { toCommandError } from "../../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
 
 interface PermissionCardProps {
@@ -77,7 +77,7 @@ export function PermissionCard({
       });
       // 成功后由 reducer 的 permission_resolved 事件移除本卡片，无需手动处理。
     } catch (error) {
-      setErrorMessage(toCommandError(error).message);
+      setErrorMessage(getCommandErrorMessage(error, t));
       setPendingActionId(null);
     }
   }

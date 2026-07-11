@@ -4,7 +4,7 @@ import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ProjectTerminalCardState } from "./project-terminals-activity-state";
 import { updateProjectTerminalConfig } from "./project-terminal-commands";
@@ -22,7 +22,7 @@ export function ProjectTerminalEditDialog({
   projectId,
   terminal,
 }: ProjectTerminalEditDialogProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [name, setName] = useState(terminal.name);
   const [workingDir, setWorkingDir] = useState(terminal.workingDir);
   const [launchCommand, setLaunchCommand] = useState(terminal.launchCommand);
@@ -69,7 +69,7 @@ export function ProjectTerminalEditDialog({
         launchCommand: result.terminal.launchCommand,
       });
     } catch (error: unknown) {
-      setStatusMessage(toCommandError(error).message);
+      setStatusMessage(getCommandErrorMessage(error, t));
       setIsSaving(false);
     }
   }

@@ -9,7 +9,7 @@ import {
   type AgentScope,
   type AgentType,
 } from "./settings-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -39,7 +39,7 @@ export function AgentProfileForm({
   onCancel,
   onSaved,
 }: AgentProfileFormProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [name, setName] = useState(() => profile?.name ?? "");
   const [agentType, setAgentType] = useState<AgentType>(
     () => profile?.agentType ?? "codex",
@@ -69,7 +69,7 @@ export function AgentProfileForm({
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
-        toast.error(toCommandError(error).message);
+        toast.error(getCommandErrorMessage(error, t));
       })
       .finally(() => {
         if (isMounted) setIsDetecting(false);
@@ -118,7 +118,7 @@ export function AgentProfileForm({
       await testAgentCommand({ command: testedCommand });
       toast.success(messages.settings.commandAvailable(testedCommandName));
     } catch (error: unknown) {
-      toast.error(toCommandError(error).message);
+      toast.error(getCommandErrorMessage(error, t));
     } finally {
       setIsTesting(false);
     }
@@ -145,7 +145,7 @@ export function AgentProfileForm({
       });
       onSaved(savedProfile);
     } catch (error: unknown) {
-      setStatusMessage(toCommandError(error).message);
+      setStatusMessage(getCommandErrorMessage(error, t));
     } finally {
       setIsSaving(false);
     }

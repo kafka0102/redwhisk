@@ -31,6 +31,7 @@ import {
   type WorkspaceMode as SessionWorkspaceMode,
 } from "../agents/agent-session-commands";
 import {
+  getCommandErrorMessage,
   toCommandError,
   type CommandError,
 } from "../../shared/commands/command-error";
@@ -74,7 +75,7 @@ export function IssueRunDialog({
   onStartError,
   onStarted,
 }: IssueRunDialogProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [profiles, setProfiles] = useState<AgentProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
@@ -180,7 +181,7 @@ export function IssueRunDialog({
           return;
         }
 
-        setStatusMessage(toCommandError(error).message);
+        setStatusMessage(getCommandErrorMessage(error, t));
       } finally {
         if (isMounted) {
           setIsLoadingProfiles(false);
@@ -345,7 +346,7 @@ export function IssueRunDialog({
         return;
       }
 
-      setStatusMessage(commandError.message);
+      setStatusMessage(getCommandErrorMessage(error, t));
       onStartError?.(commandError);
     } finally {
       isStartingRef.current = false;

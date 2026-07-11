@@ -63,7 +63,7 @@ import {
   listProjectLabels,
   type ProjectLabelRecord,
 } from "../settings/settings-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import {
@@ -266,7 +266,7 @@ export function IssuesActivity({
   const { alertDialog, showAlert } = useAlertDialog();
 
   const showCommandErrorAlert = (error: unknown) => {
-    showAlert({ message: toCommandError(error).message, type: "error" });
+    showAlert({ message: getCommandErrorMessage(error, t), type: "error" });
   };
 
   function showCompletionLoadingDialog() {
@@ -373,7 +373,7 @@ export function IssuesActivity({
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(toCommandError(error).message);
+          setErrorMessage(getCommandErrorMessage(error, t));
         }
       } finally {
         if (isMounted) {
@@ -423,7 +423,7 @@ export function IssuesActivity({
 
         setAvailableLabels([]);
         setLabelsProjectId(projectId);
-        setLabelsErrorMessage(toCommandError(error).message);
+        setLabelsErrorMessage(getCommandErrorMessage(error, t));
         setLabelsLoadState("error");
       });
 
@@ -523,7 +523,7 @@ export function IssuesActivity({
       }));
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
         setLaneLoadState((prev) => ({
           ...prev,
           [status]: { ...prev[status], isLoadingMore: false },
@@ -699,7 +699,7 @@ export function IssuesActivity({
           setDialogErrorMessage(null);
           setTitleError(null);
         } else {
-          setDialogErrorMessage(toCommandError(error).message);
+          setDialogErrorMessage(getCommandErrorMessage(error, t));
         }
       }
     } finally {
@@ -796,7 +796,7 @@ export function IssuesActivity({
       openRunDialog(updatedIssue, trigger);
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
-        setDialogErrorMessage(toCommandError(error).message);
+        setDialogErrorMessage(getCommandErrorMessage(error, t));
       }
     } finally {
       if (activeProjectIdRef.current === requestProjectId) {
@@ -874,7 +874,7 @@ export function IssuesActivity({
       }
     } catch (error) {
       if (activeProjectIdRef.current === projectId) {
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
       }
     } finally {
       if (
@@ -966,7 +966,7 @@ export function IssuesActivity({
       }));
       return attachment;
     } catch (error) {
-      setDialogErrorMessage(toCommandError(error).message);
+      setDialogErrorMessage(getCommandErrorMessage(error, t));
       return null;
     }
   }
@@ -1002,7 +1002,7 @@ export function IssuesActivity({
       );
       setAttachmentPreview(toAttachmentPreviewState(preview));
     } catch (error) {
-      setDialogErrorMessage(toCommandError(error).message);
+      setDialogErrorMessage(getCommandErrorMessage(error, t));
     }
   }
 
@@ -1034,7 +1034,7 @@ export function IssuesActivity({
             },
       );
     } catch (error) {
-      setDialogErrorMessage(toCommandError(error).message);
+      setDialogErrorMessage(getCommandErrorMessage(error, t));
     }
   }
 
@@ -1096,7 +1096,7 @@ export function IssuesActivity({
           shouldDeleteWorktree = deleteConfirmed;
         }
       } catch (error) {
-        setDialogErrorMessage(toCommandError(error).message);
+        setDialogErrorMessage(getCommandErrorMessage(error, t));
         return;
       }
     }
@@ -1169,7 +1169,7 @@ export function IssuesActivity({
               issueId: currentIssue.id,
             });
           } catch (error) {
-            setDialogErrorMessage(toCommandError(error).message);
+            setDialogErrorMessage(getCommandErrorMessage(error, t));
           }
         }
       }
@@ -1453,7 +1453,7 @@ export function IssuesActivity({
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {
         if (isEditablePageOpen) {
-          setDialogErrorMessage(toCommandError(error).message);
+          setDialogErrorMessage(getCommandErrorMessage(error, t));
         } else {
           showCommandErrorAlert(error);
         }

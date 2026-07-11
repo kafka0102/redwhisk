@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import {
   type ProjectWorktreeLocation,
   type UpdateProjectSettingsInput,
@@ -90,6 +90,7 @@ function GeneralSettingsForm({
   worktreeLocation,
   worktreeSetupCommand,
 }: GeneralSettingsFormProps) {
+  const { t } = useI18n();
   const [projectNameValue, setProjectNameValue] = useState(projectName);
   const [projectPathValue, setProjectPathValue] = useState(projectPath);
   const [worktreeLocationValue, setWorktreeLocationValue] =
@@ -145,7 +146,7 @@ function GeneralSettingsForm({
         setWorktreeSetupCommandValue(nextDetectedCommand ?? "");
       }
     } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
+      setErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setIsChoosingRepoPath(false);
     }
@@ -168,7 +169,7 @@ function GeneralSettingsForm({
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
       });
     } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
+      setErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setIsSaving(false);
     }

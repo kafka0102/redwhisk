@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getIssueSummary, type IssueSummaryRecord } from "./issue-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueSummaryDialogProps {
@@ -15,7 +15,7 @@ export function IssueSummaryDialog({
   projectId,
   onClose,
 }: IssueSummaryDialogProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [summary, setSummary] = useState<IssueSummaryRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function IssueSummaryDialog({
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(toCommandError(error).message);
+          setErrorMessage(getCommandErrorMessage(error, t));
           setSummary(null);
         }
       } finally {

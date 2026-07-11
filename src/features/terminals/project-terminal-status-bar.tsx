@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 import {
@@ -31,7 +31,7 @@ export function ProjectTerminalStatusBar({
   projectId,
   sessionId,
 }: ProjectTerminalStatusBarProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [commands, setCommands] = useState<
     ProjectTerminalShortcutCommandRecord[]
   >([]);
@@ -50,7 +50,7 @@ export function ProjectTerminalStatusBar({
       setCommands(result.commands);
     } catch (error: unknown) {
       if (isMountedRef.current) {
-        setCommandError(toCommandError(error).message);
+        setCommandError(getCommandErrorMessage(error, t));
       }
     }
   }, [projectId]);
@@ -100,7 +100,7 @@ export function ProjectTerminalStatusBar({
     try {
       await writeProjectTerminal({ projectId, sessionId, data: command });
     } catch (error: unknown) {
-      setCommandError(toCommandError(error).message);
+      setCommandError(getCommandErrorMessage(error, t));
     }
   }
 

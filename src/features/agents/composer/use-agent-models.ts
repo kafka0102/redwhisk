@@ -17,7 +17,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { listAgentModels, setAgentModel } from "../agent-session-commands";
 import type { AgentModel } from "../agent-stream-types";
-import { toCommandError } from "../../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface UseAgentModelsArgs {
   projectId: number;
@@ -53,6 +54,7 @@ export function useAgentModels({
   enabled,
   onBeforeSelectModel,
 }: UseAgentModelsArgs): UseAgentModelsResult {
+  const { t } = useI18n();
   const [models, setModels] = useState<AgentModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function useAgentModels({
         if (isDisposed) {
           return;
         }
-        setError(toCommandError(loadError).message);
+        setError(getCommandErrorMessage(loadError, t));
       } finally {
         if (!isDisposed) {
           setIsLoading(false);
@@ -115,7 +117,7 @@ export function useAgentModels({
         await setAgentModel({ projectId, sessionId, modelId });
         // 后端经 model_changed 事件回传 currentModelId，Select 自动跟随。
       } catch (selectError) {
-        setError(toCommandError(selectError).message);
+        setError(getCommandErrorMessage(selectError, t));
       }
     },
     [onBeforeSelectModel, projectId, sessionId],

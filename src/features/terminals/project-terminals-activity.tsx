@@ -11,7 +11,7 @@ import {
 import { Pencil, Plus, X } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import {
@@ -57,7 +57,7 @@ export function ProjectTerminalsActivity({
   projectPath,
   state,
 }: ProjectTerminalsActivityProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [closingConfigId, setClosingConfigId] = useState<number | null>(null);
   const [hydratingTerminals, setHydratingTerminals] = useState(false);
@@ -132,7 +132,7 @@ export function ProjectTerminalsActivity({
         };
       });
     } catch (error: unknown) {
-      setTerminalStatusMessage(toCommandError(error).message);
+      setTerminalStatusMessage(getCommandErrorMessage(error, t));
       onStateChange((currentState) => ({
         ...currentState,
         hasHydrated: true,
@@ -213,7 +213,7 @@ export function ProjectTerminalsActivity({
         ],
       }));
     } catch (error: unknown) {
-      setTerminalStatusMessage(toCommandError(error).message);
+      setTerminalStatusMessage(getCommandErrorMessage(error, t));
     } finally {
       setCreatingTerminal(false);
     }
@@ -245,7 +245,7 @@ export function ProjectTerminalsActivity({
       }
       toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
-      setTerminalStatusMessage(toCommandError(error).message);
+      setTerminalStatusMessage(getCommandErrorMessage(error, t));
     } finally {
       setClosingConfigId(null);
     }

@@ -9,7 +9,7 @@ import {
 
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ProjectTerminalShortcutCommandRecord } from "./project-terminal-commands";
 
@@ -38,7 +38,7 @@ export function TerminalShortcutCommandsDialog({
   onSave,
   onDelete,
 }: TerminalShortcutCommandsDialogProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [editingDraft, setEditingDraft] = useState<DraftRow | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"save" | "delete" | null>(
@@ -105,7 +105,7 @@ export function TerminalShortcutCommandsDialog({
       setEditingDraft(null);
       setStatusMessage(null);
     } catch (error: unknown) {
-      setStatusMessage(toCommandError(error).message);
+      setStatusMessage(getCommandErrorMessage(error, t));
     } finally {
       setPendingAction(null);
     }
@@ -123,7 +123,7 @@ export function TerminalShortcutCommandsDialog({
       }
       setStatusMessage(null);
     } catch (error: unknown) {
-      setStatusMessage(toCommandError(error).message);
+      setStatusMessage(getCommandErrorMessage(error, t));
     } finally {
       setPendingAction(null);
     }

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { formatProcessingDuration } from "./agent-session-formatters";
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { listIssues, type IssueRecord } from "../issues/issue-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface SessionIssuePanelProps {
@@ -22,7 +22,7 @@ export function SessionIssuePanel({
   session,
   onOpenIssue,
 }: SessionIssuePanelProps) {
-  const { locale, messages } = useI18n();
+  const { locale, messages, t } = useI18n();
   const [issue, setIssue] = useState<IssueRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export function SessionIssuePanel({
         }
 
         setIssue(null);
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
       } finally {
         if (isMounted) {
           setIsLoading(false);

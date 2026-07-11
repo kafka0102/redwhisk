@@ -20,7 +20,7 @@ import {
   type ProjectLabelRecord,
   type SavedAgentSkillRecord,
 } from "./settings-commands";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import type { ProjectWorktreeLocation } from "../project/project-commands";
 import type { ProjectSummary } from "../../app/app";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -116,7 +116,7 @@ export function ProjectSettingsActivity({
   worktreeLocation = "repo_sibling",
   worktreeSetupCommand = "",
 }: ProjectSettingsActivityProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [internalActiveMenu, setInternalActiveMenu] =
     useState<SettingsMenu>(requestedMenu);
@@ -256,7 +256,7 @@ export function ProjectSettingsActivity({
         if (!isMounted) return;
         setProjectProfiles([]);
         setGlobalProfiles([]);
-        setProfilesErrorMessage(toCommandError(error).message);
+        setProfilesErrorMessage(getCommandErrorMessage(error, t));
         setProfilesProjectId(projectId);
         setProfilesLoadState("error");
       });
@@ -285,7 +285,7 @@ export function ProjectSettingsActivity({
         if (!isMounted) return;
         setProjectLabels([]);
         setGlobalLabels([]);
-        setLabelsErrorMessage(toCommandError(error).message);
+        setLabelsErrorMessage(getCommandErrorMessage(error, t));
         setLabelsProjectId(projectId);
         setLabelsLoadState("error");
       });
@@ -314,7 +314,7 @@ export function ProjectSettingsActivity({
         if (!isMounted) return;
         setProjectSkills([]);
         setGlobalSkills([]);
-        setSkillsErrorMessage(toCommandError(error).message);
+        setSkillsErrorMessage(getCommandErrorMessage(error, t));
         setSkillsProjectId(projectId);
         setSkillsLoadState("error");
       });
@@ -415,7 +415,7 @@ export function ProjectSettingsActivity({
       );
       toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
-      setProfilesErrorMessage(toCommandError(error).message);
+      setProfilesErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setDeletingProfileId(null);
     }
@@ -442,7 +442,7 @@ export function ProjectSettingsActivity({
       );
       toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
-      setLabelsErrorMessage(toCommandError(error).message);
+      setLabelsErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setDeletingLabelId(null);
     }
@@ -469,7 +469,7 @@ export function ProjectSettingsActivity({
       );
       toast.success(messages.toast.deleteSuccess);
     } catch (error: unknown) {
-      setSkillsErrorMessage(toCommandError(error).message);
+      setSkillsErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setDeletingSkillId(null);
     }

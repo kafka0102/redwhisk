@@ -23,7 +23,7 @@ import {
 } from "../agent-session-commands";
 import type { AgentMessageAttachment } from "../agent-session-commands";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
-import { toCommandError } from "../../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type { ComposerAttachment, ComposerEffort } from "./composer-types";
 import type { TurnStatus } from "../message-stream/message-stream-types";
@@ -185,7 +185,7 @@ export function useAgentComposer({
       setAttachments([]);
       onMessageSent?.(message);
     } catch (error) {
-      setSubmitError(toCommandError(error).message);
+      setSubmitError(getCommandErrorMessage(error, t));
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
@@ -211,7 +211,7 @@ export function useAgentComposer({
     try {
       await cancelAgentTurn({ projectId, sessionId });
     } catch (error) {
-      showCancelToast(toCommandError(error).message);
+      showCancelToast(getCommandErrorMessage(error, t));
     } finally {
       setIsCancelling(false);
     }
@@ -266,7 +266,7 @@ export function useAgentComposer({
             ? {
                 ...attachment,
                 status: "error",
-                error: toCommandError(error).message,
+                error: getCommandErrorMessage(error, t),
               }
             : attachment,
         ),
@@ -294,7 +294,7 @@ export function useAgentComposer({
         });
       } catch (error) {
         setEffort(previous);
-        setSubmitError(toCommandError(error).message);
+        setSubmitError(getCommandErrorMessage(error, t));
       }
     },
     [effort, onBeforeSetEffort, projectId, sessionId],

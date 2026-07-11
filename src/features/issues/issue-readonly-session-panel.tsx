@@ -6,7 +6,7 @@ import {
   type AgentSessionListItem,
 } from "../agents/agent-session-commands";
 import { formatProcessingDuration } from "../agents/agent-session-formatters";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueReadonlySessionPanelProps {
@@ -22,7 +22,7 @@ export function IssueReadonlySessionPanel({
   canOpenSession,
   onOpenSession,
 }: IssueReadonlySessionPanelProps) {
-  const { locale, messages } = useI18n();
+  const { locale, messages, t } = useI18n();
   const [session, setSession] = useState<AgentSessionListItem | null>(null);
   const [isLoading, setIsLoading] = useState(linkedSessionId != null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function IssueReadonlySessionPanel({
         }
 
         setSession(null);
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
       } finally {
         if (isMounted) {
           setIsLoading(false);

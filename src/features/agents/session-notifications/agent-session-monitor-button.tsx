@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
 } from "../../../components/ui/dropdown-menu";
 import { useI18n } from "../../../shared/i18n/i18n";
-import { toCommandError } from "../../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { listAgentSessions } from "../agent-session-commands";
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { formatSessionTitle } from "../agent-session-formatters";
@@ -48,7 +48,7 @@ export function AgentSessionMonitorButton({
   projectId,
   refreshIntervalMs = DEFAULT_MONITOR_REFRESH_INTERVAL_MS,
 }: AgentSessionMonitorButtonProps) {
-  const { locale, messages } = useI18n();
+  const { locale, messages, t } = useI18n();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
@@ -79,7 +79,7 @@ export function AgentSessionMonitorButton({
             : await listAgentSessions(projectId);
         setSessions(response.sessions);
       } catch (error) {
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
       } finally {
         if (showLoading) {
           setIsLoading(false);

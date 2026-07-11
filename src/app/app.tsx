@@ -31,7 +31,7 @@ import {
   OPEN_AGENT_SESSION_EVENT,
   type OpenAgentSessionEventPayload,
 } from "../features/agents/session-notifications/session-monitor-commands";
-import { toCommandError } from "../shared/commands/command-error";
+import { getCommandErrorMessage } from "../shared/commands/command-error";
 
 export interface ProjectSummary {
   id: number;
@@ -99,7 +99,7 @@ function ProjectApp() {
         }
       } catch (error: unknown) {
         if (isMounted) {
-          setLocalDataError(toCommandError(error).message);
+          setLocalDataError(getCommandErrorMessage(error, translate));
         }
 
         return;
@@ -116,7 +116,7 @@ function ProjectApp() {
         }
       } catch (error: unknown) {
         if (isMounted) {
-          setProjectOpenError(toCommandError(error).message);
+          setProjectOpenError(getCommandErrorMessage(error, translate));
         }
       }
     }
@@ -165,7 +165,7 @@ function ProjectApp() {
         }
       } catch (error: unknown) {
         if (!isDisposed) {
-          setProjectOpenError(toCommandError(error).message);
+          setProjectOpenError(getCommandErrorMessage(error, translate));
         }
       }
     }
@@ -229,7 +229,7 @@ function ProjectApp() {
           ),
         });
       } catch (error) {
-        setProjectCreationError(toCommandError(error).message);
+        setProjectCreationError(getCommandErrorMessage(error, translate));
       } finally {
         setIsCreatingProject(false);
       }
@@ -257,7 +257,7 @@ function ProjectApp() {
       );
       setSelectedProject(projectSummary);
     } catch (error) {
-      setProjectOpenError(toCommandError(error).message);
+      setProjectOpenError(getCommandErrorMessage(error, translate));
     }
   }
 
@@ -430,7 +430,7 @@ function CreateProjectDialog({
   onClose,
   onCreate,
 }: CreateProjectDialogProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [projectNameValue, setProjectNameValue] = useState(initialDraft.name);
   const [projectPathValue, setProjectPathValue] = useState(
     initialDraft.repoPath,
@@ -492,7 +492,7 @@ function CreateProjectDialog({
         setWorktreeSetupCommandValue(nextDetectedCommand ?? "");
       }
     } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
+      setErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setIsChoosingRepoPath(false);
     }
@@ -515,7 +515,7 @@ function CreateProjectDialog({
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
       });
     } catch (error: unknown) {
-      setErrorMessage(toCommandError(error).message);
+      setErrorMessage(getCommandErrorMessage(error, t));
     } finally {
       setIsSubmitting(false);
     }

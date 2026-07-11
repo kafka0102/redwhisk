@@ -23,7 +23,8 @@ import type {
   MessageStreamAction,
   MessageStreamState,
 } from "./message-stream-types";
-import { toCommandError } from "../../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface UseAgentMessageStreamArgs {
   projectId: number;
@@ -89,6 +90,7 @@ export function useAgentMessageStream({
   state: MessageStreamState;
   dispatch: Dispatch<MessageStreamAction>;
 } {
+  const { t } = useI18n();
   // 初始状态保持轻量。缓存恢复在 effect 中延迟到下一帧，保证 session tab
   // 的选中态可以先完成提交。
   const [state, dispatch] = useReducer(
@@ -303,7 +305,7 @@ export function useAgentMessageStream({
         }
         dispatch({
           type: "HYDRATE_FAILED",
-          error: toCommandError(error).message,
+          error: getCommandErrorMessage(error, t),
         });
       }
 

@@ -32,7 +32,7 @@ import {
   type IssueRecord,
 } from "../issues/issue-commands";
 import type { IssueOpenRequest } from "../issues/issue-open-request";
-import { toCommandError } from "../../shared/commands/command-error";
+import { getCommandErrorMessage, toCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
@@ -111,15 +111,15 @@ export function AgentsActivity({
   onSelectSession,
   projectId,
 }: AgentsActivityProps) {
-  const { locale, messages } = useI18n();
+  const { locale, messages, t } = useI18n();
   const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
   const { confirm, confirmationDialog } = useConfirmDialog();
   const { alertDialog, showAlert } = useAlertDialog();
   const showCommandErrorAlert = useCallback(
     (error: unknown) => {
-      showAlert({ message: toCommandError(error).message, type: "error" });
+      showAlert({ message: getCommandErrorMessage(error, t), type: "error" });
     },
-    [showAlert],
+    [showAlert, t],
   );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -253,7 +253,7 @@ export function AgentsActivity({
           return;
         }
 
-        setErrorMessage(toCommandError(error).message);
+        setErrorMessage(getCommandErrorMessage(error, t));
       } finally {
         if (!showLoading) {
           isRefreshInFlight = false;
@@ -334,7 +334,7 @@ export function AgentsActivity({
 
         setAvailableAgentProfiles([]);
         setHasAgentProfilesLoadError(true);
-        toast.error(toCommandError(error).message);
+        toast.error(getCommandErrorMessage(error, t));
       } finally {
         if (isMounted) {
           setIsLoadingAgentProfiles(false);
@@ -859,7 +859,7 @@ export function AgentsActivity({
       if (isCleanWorktreeAgentCommitPreviewError(commandError)) {
         await completeLinkedIssueClean(issue, session);
       } else {
-        showAlert({ message: commandError.message, type: "error" });
+        showAlert({ message: getCommandErrorMessage(error, t), type: "error" });
       }
     } finally {
       setIsPreparingAgentCommit(false);
@@ -1111,10 +1111,10 @@ export function AgentsActivity({
         `terminal:${terminal.sessionId}`,
       );
     } catch (error) {
-      toast.error(toCommandError(error).message);
+      toast.error(getCommandErrorMessage(error, t));
       setTerminalPanelState(agentSessionId, (panelState) => ({
         ...panelState,
-        errorMessage: toCommandError(error).message,
+        errorMessage: getCommandErrorMessage(error, t),
         isCreating: false,
       }));
     }
@@ -1348,7 +1348,7 @@ export function AgentsActivity({
           (closingTerminalSessionId) =>
             closingTerminalSessionId !== terminalSessionId,
         ),
-        errorMessage: toCommandError(error).message,
+        errorMessage: getCommandErrorMessage(error, t),
       }));
     }
   }
@@ -1433,7 +1433,7 @@ export function AgentsActivity({
       });
       await handleTemporarySessionStarted(result);
     } catch (error) {
-      toast.error(toCommandError(error).message);
+      toast.error(getCommandErrorMessage(error, t));
     } finally {
       setIsCreatingSession(false);
     }
