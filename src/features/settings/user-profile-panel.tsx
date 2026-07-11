@@ -4,6 +4,7 @@ import { Camera } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Card, CardContent, Input } from "@/components/ui";
+import defaultUserProfile from "@/assets/images/default_user_profile.png";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { getCommandErrorMessage } from "@/shared/commands/command-error";
 import { useI18n } from "@/shared/i18n/i18n";
@@ -114,13 +115,15 @@ export function UserProfilePanel() {
                   aria-label={t("globalSettings.avatarPickerLabel")}
                   onClick={() => void handleAvatarSelect()}
                 >
-                  {avatarPath ? (
-                    <img
-                      alt=""
-                      className="size-full object-cover"
-                      src={convertFileSrc(avatarPath)}
-                    />
-                  ) : null}
+                  <img
+                    alt=""
+                    className="size-full object-cover"
+                    src={
+                      avatarPath
+                        ? convertFileSrc(avatarPath)
+                        : defaultUserProfile
+                    }
+                  />
                   <span className="absolute inset-0 grid place-items-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                     <Camera aria-hidden="true" size={22} />
                   </span>

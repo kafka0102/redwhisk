@@ -106,6 +106,25 @@ describe("GlobalSettingsActivity", () => {
     expect(updateUserProfileMock).toHaveBeenCalledWith({ name: "RedWhisk" });
   });
 
+  it("renders the bundled image as the default avatar", async () => {
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "个人资料" }));
+
+    const avatar = screen
+      .getByRole("button", { name: "选择头像" })
+      .querySelector("img");
+    if (!avatar) {
+      throw new Error("默认头像未渲染");
+    }
+
+    expect(avatar).toHaveAttribute(
+      "src",
+      expect.stringContaining("default_user_profile.png"),
+    );
+  });
+
   it("opens an image picker and saves the selected avatar", async () => {
     const user = userEvent.setup();
     openDialogMock.mockResolvedValue("/tmp/avatar.jpg");
