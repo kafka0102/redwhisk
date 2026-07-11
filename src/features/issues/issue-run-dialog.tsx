@@ -195,7 +195,7 @@ export function IssueRunDialog({
     return () => {
       isMounted = false;
     };
-  }, [issue, messages.agentsFeature.noProfilesForAgentType, projectId]);
+  }, [issue, messages.agentsFeature.noProfilesForAgentType, projectId, t]);
 
   useEffect(() => {
     if (isLoadingProfiles || profiles.length === 0) {

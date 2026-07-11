@@ -55,7 +55,7 @@ export function IssueSummaryDialog({
     return () => {
       isMounted = false;
     };
-  }, [issueId, projectId]);
+  }, [issueId, projectId, t]);
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {

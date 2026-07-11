@@ -387,7 +387,7 @@ export function IssuesActivity({
     return () => {
       isMounted = false;
     };
-  }, [hasRequestedIssue, projectId, requestedIssueId]);
+  }, [hasRequestedIssue, projectId, requestedIssueId, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -430,7 +430,7 @@ export function IssuesActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   const currentAvailableLabels =
     labelsProjectId === projectId ? availableLabels : [];

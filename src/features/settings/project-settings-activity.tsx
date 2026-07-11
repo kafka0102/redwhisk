@@ -264,7 +264,7 @@ export function ProjectSettingsActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -293,7 +293,7 @@ export function ProjectSettingsActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -322,7 +322,7 @@ export function ProjectSettingsActivity({
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {

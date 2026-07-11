@@ -140,7 +140,7 @@ export function ProjectTerminalsActivity({
     } finally {
       setHydratingTerminals(false);
     }
-  }, [onStateChange, projectId]);
+  }, [onStateChange, projectId, t]);
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {

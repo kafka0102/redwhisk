@@ -53,7 +53,7 @@ export function ProjectTerminalStatusBar({
         setCommandError(getCommandErrorMessage(error, t));
       }
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   // 初次加载常用命令列表。
   useEffect(() => {

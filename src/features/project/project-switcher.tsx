@@ -34,7 +34,7 @@ export function ProjectSwitcher({
     onProjectsRefresh().catch((refreshError: unknown) => {
       setError(getCommandErrorMessage(refreshError, t));
     });
-  }, [isOpen, onProjectsRefresh]);
+  }, [isOpen, onProjectsRefresh, t]);
 
   useEffect(() => {
     if (!isOpen) {

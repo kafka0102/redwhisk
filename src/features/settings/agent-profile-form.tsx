@@ -78,7 +78,7 @@ export function AgentProfileForm({
     return () => {
       isMounted = false;
     };
-  }, [mode, profile]);
+  }, [mode, profile, t]);
 
   useEffect(() => {
     if (!profile) return;

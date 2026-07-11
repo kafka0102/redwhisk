@@ -400,7 +400,7 @@ export function TerminalSurface({
       latestSequenceRef.current = 0;
       statusSourceRef.current = null;
     };
-  }, [canBootXterm, transportKey]);
+  }, [canBootXterm, transportKey, t]);
 
   return (
     <div className={shellClassName}>

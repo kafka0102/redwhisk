@@ -26,7 +26,10 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useI18n } from "../../shared/i18n/i18n";
-import { getCommandErrorMessage, toCommandError } from "../../shared/commands/command-error";
+import {
+  getCommandErrorMessage,
+  toCommandError,
+} from "../../shared/commands/command-error";
 import {
   listAgentSkills,
   saveSavedAgentSkill,
