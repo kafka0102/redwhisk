@@ -4611,7 +4611,7 @@ button:focus-visible {
 
 .issue-page__content-shell--readonly {
   min-height: 0;
-  padding: 22px 10px 18px;
+  padding: 18px 10px 18px;
   overflow: auto;
 }
 
@@ -4844,7 +4844,7 @@ button:focus-visible {
 }
 
 .issue-dialog__editor--readonly {
-  gap: 0;
+  gap: 18px;
 }
 
 .issue-dialog__side {

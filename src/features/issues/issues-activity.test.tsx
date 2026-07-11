@@ -317,20 +317,6 @@ const completedLinkedSessionIssue: IssueRecord = {
   updatedAt: 1_780_637_000_000,
 };
 
-const crashedRunningIssue: IssueRecord = {
-  id: 26,
-  number: 26,
-  projectId: 1,
-  title: "Crashed running issue",
-  description: "Need log path later",
-  status: "running",
-  linkedSessionId: 402,
-  linkedSessionStatus: "crashed",
-  linkedSessionAttention: "none",
-  createdAt: 1_780_632_000_000,
-  updatedAt: 1_780_638_000_000,
-};
-
 const attentionIssue: IssueRecord = {
   id: 27,
   number: 27,
@@ -912,7 +898,6 @@ describe("IssuesActivity", () => {
     ).toBeNull();
     expect(within(page).getByText(issue.title)).toBeInTheDocument();
     expect(within(page).getByText(issue.description)).toBeInTheDocument();
-    expect(page.querySelector(".issue-detail__divider")).toBeInTheDocument();
     expect(within(page).queryByLabelText("Title")).not.toBeInTheDocument();
     expect(
       within(page).queryByLabelText("Description"),
@@ -947,6 +932,37 @@ describe("IssuesActivity", () => {
         screen.getByRole("button", { name: "Existing issue" }),
       ).toHaveFocus(),
     );
+  });
+
+  it("returns to the read-only detail when canceling an edit started from it", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [runningIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Running issue" }),
+    );
+
+    const readOnlyPage = screen.getByRole("region", { name: "Issue Detail" });
+    await openIssueMoreMenu(user, readOnlyPage);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Edit Issue" }),
+    );
+
+    expect(
+      screen.getByRole("form", { name: "Edit Issue" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    // 从只读详情发起的编辑：返回只读详情，而非关闭回看板。
+    expect(
+      screen.queryByRole("form", { name: "Edit Issue" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Issue Detail" }),
+    ).toBeInTheDocument();
   });
 
   it("lets the issue page use normal page focus order", async () => {
@@ -1740,41 +1756,6 @@ describe("IssuesActivity", () => {
     expect(
       within(dialog).queryByLabelText("Run summary"),
     ).not.toBeInTheDocument();
-  });
-
-  it("focuses the issue summary dialog container instead of the close button", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [completedIssue] });
-    getIssueSummaryMock.mockResolvedValue({
-      issue: completedIssue,
-      sessionStartedAt: 1_780_634_000_000,
-      sessionClosedAt: 1_780_635_000_000,
-      completion: {
-        option: "complete_manual",
-        result: "completed",
-        commitHash: "abc1234",
-        failureReason: null,
-        headBefore: null,
-        headAfter: null,
-        changedFilesJson: null,
-        createdAt: 1_780_635_000_000,
-        source: "issue_action",
-      },
-      diagnostics: [],
-    });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", { name: "Completed issue" }),
-    );
-    await openIssueMoreMenu(user);
-    await user.click(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
-    );
-
-    const dialog = await screen.findByRole("dialog", { name: "Issue Summary" });
-    expect(dialog).toHaveFocus();
   });
 
   it("renders read-only description image and file attachment tokens inline", async () => {
@@ -2950,35 +2931,36 @@ describe("IssuesActivity", () => {
     expect(within(dialog).queryByText("#301")).not.toBeInTheDocument();
   });
 
-  it("opens the linked session from the issue detail link even when the session is closed", async () => {
-    const user = userEvent.setup();
-    const onOpenAgentsActivity = vi.fn();
-    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
-
-    renderIssuesActivity({ onOpenAgentsActivity });
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Completed linked session issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await openIssueMoreMenu(user, dialog);
-    await user.click(
-      await screen.findByRole("menuitem", { name: "View Session" }),
-    );
-
-    expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
-    expect(
-      screen.queryByRole("region", { name: "Issue Detail" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("clears the cached read-only page when opening the linked session so the kanban shows on return", async () => {
     const user = userEvent.setup();
     const onOpenAgentsActivity = vi.fn();
     listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 401,
+          number: 401,
+          issueId: completedLinkedSessionIssue.id,
+          issueNumber: completedLinkedSessionIssue.number,
+          issueTitle: completedLinkedSessionIssue.title,
+          issueStatus: "completed",
+          agentProfileId: projectProfile.id,
+          canCompleteClean: false,
+          canCompleteAgentCommit: false,
+          title: null,
+          agentType: "codex",
+          status: "closed",
+          attention: "none",
+          isTurnRunning: false,
+          workspaceMode: "worktree",
+          logPath: "/tmp/completed.log",
+          latestOutput: null,
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_636_000_000,
+          closedAt: 1_780_637_000_000,
+        },
+      ],
+    });
 
     // 模拟从只读 Issue 页跳转 session 页面：父组件同步卸载 IssuesActivity，
     // 依赖 dialogMode 变化的缓存清理 effect 不会执行，必须由 openLinkedSession
@@ -2994,9 +2976,11 @@ describe("IssuesActivity", () => {
       }),
     );
     const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await openIssueMoreMenu(user, dialog);
+    const sessionPanel = within(dialog).getByRole("complementary", {
+      name: "Session info",
+    });
     await user.click(
-      await screen.findByRole("menuitem", { name: "View Session" }),
+      await within(sessionPanel).findByRole("button", { name: "View Session" }),
     );
 
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
@@ -3073,9 +3057,8 @@ describe("IssuesActivity", () => {
         worktreeCleanupDecision: null,
       }),
     );
-    await openIssueMoreMenu(user);
     expect(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
+      await screen.findByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
   });
 
@@ -3525,9 +3508,8 @@ describe("IssuesActivity", () => {
         worktreeCleanupDecision: null,
       }),
     );
-    await openIssueMoreMenu(user);
     expect(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
+      await screen.findByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
   });
 
@@ -3653,9 +3635,8 @@ describe("IssuesActivity", () => {
         worktreeCleanupDecision: false,
       }),
     );
-    await openIssueMoreMenu(user);
     expect(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
+      await screen.findByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
   });
 
@@ -3704,9 +3685,8 @@ describe("IssuesActivity", () => {
       }),
     );
 
-    await openIssueMoreMenu(user);
     expect(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
+      await screen.findByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
   });
 
@@ -3952,59 +3932,6 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows summary and linked session actions in the issue more menu", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
-    getIssueSummaryMock.mockResolvedValue({
-      issue: {
-        ...completedLinkedSessionIssue,
-        linkedSessionLogPath: "/tmp/completed.log",
-      },
-      sessionStartedAt: 1_780_636_000_000,
-      sessionClosedAt: 1_780_637_000_000,
-      completion: {
-        option: "complete_manual",
-        result: "completed",
-        commitHash: null,
-        failureReason: null,
-        headBefore: null,
-        headAfter: null,
-        changedFilesJson: null,
-        createdAt: 1_780_637_000_000,
-        source: "issue_action_fallback",
-      },
-      diagnostics: [
-        "缺少 CompletionAttempt 记录，已回退到 Issue 完成事件推断。",
-      ],
-    });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Completed linked session issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    expect(
-      within(dialog).queryByRole("button", { name: "Open Session" }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(dialog).queryByRole("button", { name: "View Summary" }),
-    ).not.toBeInTheDocument();
-    await openIssueMoreMenu(user, dialog);
-    expect(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("menuitem", { name: "View Session" }),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).queryByRole("button", { name: "Open Log" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("renders dual-column read-only detail with session info and run parameters", async () => {
     const user = userEvent.setup();
     const onOpenAgentsActivity = vi.fn();
@@ -4073,87 +4000,6 @@ describe("IssuesActivity", () => {
       within(sessionPanel).getByRole("button", { name: "View Session" }),
     );
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(401);
-  });
-
-  it("keeps the linked session entry available for crashed sessions without open log", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({
-      issues: [
-        {
-          ...crashedRunningIssue,
-          linkedSessionLogPath: "/tmp/crashed.log",
-        } as IssueRecord,
-      ],
-    });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Crashed running issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    expect(
-      within(dialog).queryByRole("button", { name: "Open Session" }),
-    ).not.toBeInTheDocument();
-    await openIssueMoreMenu(user, dialog);
-    expect(
-      await screen.findByRole("menuitem", { name: "View Session" }),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).queryByRole("button", { name: "Open Log" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("opens completed issue summary from the issue detail page", async () => {
-    const user = userEvent.setup();
-    listIssuesMock.mockResolvedValue({ issues: [completedLinkedSessionIssue] });
-    getIssueSummaryMock.mockResolvedValue({
-      issue: {
-        ...completedLinkedSessionIssue,
-        linkedSessionLogPath: "/tmp/completed.log",
-      },
-      sessionStartedAt: 1_780_636_000_000,
-      sessionClosedAt: 1_780_637_000_000,
-      completion: {
-        option: "agent_auto_commit",
-        result: "completed",
-        commitHash: "abc1234",
-        failureReason: null,
-        headBefore: "1111111",
-        headAfter: "abc1234",
-        changedFilesJson: "[]",
-        createdAt: 1_780_637_000_000,
-        source: "completion_attempt",
-      },
-      diagnostics: [],
-    });
-
-    renderIssuesActivity();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Completed linked session issue",
-      }),
-    );
-
-    const dialog = screen.getByRole("region", { name: "Issue Detail" });
-    await openIssueMoreMenu(user, dialog);
-    await user.click(
-      await screen.findByRole("menuitem", { name: "View Summary" }),
-    );
-
-    const summary = await screen.findByRole("dialog", {
-      name: "Issue Summary",
-    });
-    expect(
-      within(summary).getByText("Commit hash: abc1234"),
-    ).toBeInTheDocument();
-    expect(
-      within(summary).getByText("Log path: /tmp/completed.log"),
-    ).toBeInTheDocument();
   });
 
   it("returns to the board from a read-only detail when the activity icon signal fires", async () => {

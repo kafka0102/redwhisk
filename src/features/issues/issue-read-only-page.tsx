@@ -5,7 +5,6 @@ import {
   Ellipsis,
   Eye,
   FileText,
-  MessageSquare,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -43,7 +42,6 @@ interface IssueReadOnlyPageProps {
   isSaving: boolean;
   errorMessage: string | null;
   hasLinkedSession: boolean;
-  canViewSummary: boolean;
   canOpenAgentsActivity: boolean;
   onBack: () => void;
   onPreviewAttachment: (
@@ -56,7 +54,6 @@ interface IssueReadOnlyPageProps {
   onDeleteIssue: () => void;
   onEditIssue: () => void;
   onOpenLinkedSession: () => void;
-  onOpenSummary: () => void;
 }
 
 export function IssueReadOnlyPage({
@@ -65,7 +62,6 @@ export function IssueReadOnlyPage({
   isSaving,
   errorMessage,
   hasLinkedSession,
-  canViewSummary,
   canOpenAgentsActivity,
   onBack,
   onPreviewAttachment,
@@ -74,7 +70,6 @@ export function IssueReadOnlyPage({
   onDeleteIssue,
   onEditIssue,
   onOpenLinkedSession,
-  onOpenSummary,
 }: IssueReadOnlyPageProps) {
   const { messages } = useI18n();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -112,14 +107,9 @@ export function IssueReadOnlyPage({
               onAdvanceStatus={onAdvanceStatus}
             />
             <IssueMoreMenu
-              canOpenAgentsActivity={canOpenAgentsActivity}
-              canViewSummary={canViewSummary}
-              hasLinkedSession={hasLinkedSession}
               isSaving={isSaving}
               onDeleteIssue={() => setIsDeleteDialogOpen(true)}
               onEditIssue={onEditIssue}
-              onOpenLinkedSession={onOpenLinkedSession}
-              onOpenSummary={onOpenSummary}
             />
           </>
         }
@@ -198,7 +188,6 @@ function IssueReadOnlyDetails({
   return (
     <article className="issue-dialog__editor issue-dialog__editor--readonly issue-page__main issue-page__main--fullscreen issue-page__main--readonly">
       <h1 className="issue-detail__title">{title}</h1>
-      <div className="issue-detail__divider" aria-hidden="true" />
       <div className="issue-detail__description">
         <IssueDescriptionMarkdown
           description={description}
@@ -207,12 +196,7 @@ function IssueReadOnlyDetails({
           onPreviewAttachment={onPreviewAttachment}
         />
       </div>
-      {labels.length > 0 ? (
-        <>
-          <div className="issue-detail__divider" aria-hidden="true" />
-          <IssueReadOnlyLabels labels={labels} />
-        </>
-      ) : null}
+      {labels.length > 0 ? <IssueReadOnlyLabels labels={labels} /> : null}
     </article>
   );
 }
@@ -321,23 +305,13 @@ function IssueReadOnlyLabels({ labels }: { labels: IssueLabelRecord[] }) {
 }
 
 function IssueMoreMenu({
-  hasLinkedSession,
-  canViewSummary,
   isSaving,
-  canOpenAgentsActivity,
   onDeleteIssue,
   onEditIssue,
-  onOpenLinkedSession,
-  onOpenSummary,
 }: {
-  hasLinkedSession: boolean;
-  canViewSummary: boolean;
   isSaving: boolean;
-  canOpenAgentsActivity: boolean;
   onDeleteIssue: () => void;
   onEditIssue: () => void;
-  onOpenLinkedSession: () => void;
-  onOpenSummary: () => void;
 }) {
   const { messages } = useI18n();
 
@@ -354,20 +328,6 @@ function IssueMoreMenu({
         <DropdownMenuItem disabled={isSaving} onClick={onEditIssue}>
           <Pencil aria-hidden="true" size={14} strokeWidth={1.8} />
           {messages.issues.edit}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={isSaving || !hasLinkedSession || !canOpenAgentsActivity}
-          onClick={onOpenLinkedSession}
-        >
-          <MessageSquare aria-hidden="true" size={14} strokeWidth={1.8} />
-          {messages.issues.viewSession}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={isSaving || !canViewSummary}
-          onClick={onOpenSummary}
-        >
-          <FileText aria-hidden="true" size={14} strokeWidth={1.8} />
-          {messages.issues.viewSummary}
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={isSaving}

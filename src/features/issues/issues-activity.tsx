@@ -45,7 +45,6 @@ import { IssueReadOnlyPage } from "./issue-read-only-page";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
-import { IssueSummaryDialog } from "./issue-summary-dialog";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import {
   buildWorktreeMergeConflictPrompt,
@@ -214,7 +213,6 @@ export function IssuesActivity({
   // 启动 Agent Session 期间显示阻塞式 LoadingDialog 并隐藏 Run Dialog，
   // 避免 Run Dialog overlay 与 Radix LoadingDialog overlay 同时挂载（见 4df1948）。
   const [isStartingSession, setIsStartingSession] = useState(false);
-  const [summaryIssueId, setSummaryIssueId] = useState<number | null>(null);
   const [attachmentPreview, setAttachmentPreview] =
     useState<AttachmentPreviewState | null>(null);
   const [form, setForm] = useState<IssueFormState>(
@@ -577,7 +575,6 @@ export function IssuesActivity({
     setDialogErrorMessage(null);
     setTitleError(null);
     setRunDialogIssue(null);
-    setSummaryIssueId(null);
     setAttachmentPreview(null);
     hideCompletionLoadingDialog();
     const closingMode = dialogMode;
@@ -600,6 +597,23 @@ export function IssuesActivity({
     restoreDialogTriggerFocus(previousSelectedIssue);
   }
 
+  // 编辑页「返回」：从只读详情页进入编辑时回到只读详情页，而非关闭返回看板。
+  function handleCancelEditable() {
+    if (isSaving) {
+      return;
+    }
+
+    if (isReadOnlyEditRequested && dialogMode === "edit" && selectedIssue) {
+      setDialogErrorMessage(null);
+      setTitleError(null);
+      setIsReadOnlyEditRequested(false);
+      setForm(issueToForm(selectedIssue));
+      return;
+    }
+
+    closeDialog();
+  }
+
   function handleBackFromReadOnlyIssue() {
     if (
       typeof requestedIssue === "object" &&
@@ -609,7 +623,6 @@ export function IssuesActivity({
       setDialogErrorMessage(null);
       setTitleError(null);
       setRunDialogIssue(null);
-      setSummaryIssueId(null);
       setAttachmentPreview(null);
       hideCompletionLoadingDialog();
       setDialogMode(null);
@@ -823,16 +836,6 @@ export function IssuesActivity({
     onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
   }
 
-  function handleOpenSummary() {
-    if (selectedIssue?.status !== "completed") {
-      return;
-    }
-
-    setDialogErrorMessage(null);
-    setTitleError(null);
-    setSummaryIssueId(selectedIssue.id);
-  }
-
   function closeRunDialog() {
     setRunDialogIssue(null);
     if (runDialogTriggerRef.current?.isConnected) {
@@ -894,8 +897,6 @@ export function IssuesActivity({
   const isBacklogDialog =
     dialogMode === "create" || selectedIssue?.status === "backlog";
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
-  const canViewSummary =
-    dialogMode === "edit" && selectedIssue?.status === "completed";
   const canOpenLinkedSession =
     hasLinkedSession && Boolean(onOpenAgentsActivity);
   const isEditablePageOpen = Boolean(
@@ -1445,7 +1446,6 @@ export function IssuesActivity({
       setDialogMode(null);
       setIsReadOnlyEditRequested(false);
       setRunDialogIssue(null);
-      setSummaryIssueId(null);
       setAttachmentPreview(null);
       setForm(EMPTY_FORM);
       restoreDialogTriggerFocus(remainingIssues[0] ?? null);
@@ -1517,7 +1517,7 @@ export function IssuesActivity({
           isLoadingLabels={isLoadingLabels}
           labelsErrorMessage={currentLabelsErrorMessage}
           titleInputRef={titleInputRef}
-          onCancel={closeDialog}
+          onCancel={handleCancelEditable}
           onSubmit={handleSubmit}
           onFormChange={handleFormChange}
           onSelectAttachment={handleSelectAttachment}
@@ -1547,7 +1547,6 @@ export function IssuesActivity({
           isSaving={isSaving}
           errorMessage={dialogErrorMessage}
           hasLinkedSession={hasLinkedSession}
-          canViewSummary={canViewSummary}
           canOpenAgentsActivity={canOpenLinkedSession}
           onBack={handleBackFromReadOnlyIssue}
           onPreviewAttachment={(attachment) =>
@@ -1562,7 +1561,6 @@ export function IssuesActivity({
           onDeleteIssue={() => void handleDeleteIssue()}
           onEditIssue={editSelectedIssue}
           onOpenLinkedSession={openLinkedSession}
-          onOpenSummary={handleOpenSummary}
         />
       ) : null}
 
@@ -1583,13 +1581,6 @@ export function IssuesActivity({
           open
           dismissible={false}
           message={messages.issues.sessionStarting}
-        />
-      ) : null}
-      {summaryIssueId != null ? (
-        <IssueSummaryDialog
-          issueId={summaryIssueId}
-          projectId={projectId}
-          onClose={() => setSummaryIssueId(null)}
         />
       ) : null}
       {attachmentPreview ? (

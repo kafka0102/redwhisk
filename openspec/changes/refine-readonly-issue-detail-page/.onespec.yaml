@@ -1,0 +1,22 @@
+version: 1
+change: refine-readonly-issue-detail-page
+phase: review
+ambiguity: low
+complexity: unknown
+implementation_path: openspec-apply
+execution_method: native
+workspace: current-branch
+origin_branch: issue-65
+origin_workspace_path: /Users/yujianjia/workspace/kafka/redwhisk.worktrees/issue-65
+origin_workspace_mode: current-branch
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/refine-readonly-issue-detail-page/.onespec.yaml
+handoff_purpose: review
+handoff_summary: 'review handoff from 3 file(s); primary artifact: openspec/changes/refine-readonly-issue-detail-page/proposal.md'
+handoff_hash: 67c94ef1b04a633896d9062061ccca1a2d928e7a938e8e5bce4cec09be6baa70
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-07-11
+updated_at: 2026-07-11T15:40:48Z
