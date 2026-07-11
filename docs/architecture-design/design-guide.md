@@ -36,11 +36,11 @@ RedWhisk 的设计理念是**安静、紧凑、可靠**。界面应该像一个�
 
 | Token                   | Light     | Dark      | 用途           |
 | ----------------------- | --------- | --------- | -------------- |
-| `--color-app`           | `#ffffff` | `#000000` | 应用背景       |
-| `--color-surface`       | `#ffffff` | `#0b0b0c` | 面板、卡片背景 |
-| `--color-surface-muted` | `#f1f2f4` | `#141416` | Hover 背景     |
-| `--color-border`        | `#e3e5e8` | `#272a30` | 默认边框       |
-| `--color-border-strong` | `#d1d5db` | `#3a3f47` | 强调边框       |
+| `--color-app`           | `#ffffff` | `#1f2022` | 应用背景       |
+| `--color-surface`       | `#ffffff` | `#2a2a2b` | 面板、卡片背景 |
+| `--color-surface-muted` | `#f1f2f4` | `#333335` | Hover 背景     |
+| `--color-border`        | `#e3e5e8` | `#46494f` | 默认边框       |
+| `--color-border-strong` | `#d1d5db` | `#595e66` | 强调边框       |
 | `--color-text`          | `#17181a` | `#f5f5f5` | 主要文字       |
 | `--color-text-muted`    | `#5f6368` | `#b8bdc7` | 次要文字       |
 | `--color-text-subtle`   | `#8a8f98` | `#757b86` | 辅助文字       |
@@ -50,7 +50,7 @@ RedWhisk 的设计理念是**安静、紧凑、可靠**。界面应该像一个�
 | Token                  | Light     | Dark      | 用途             |
 | ---------------------- | --------- | --------- | ---------------- |
 | `--color-accent`       | `#111111` | `#ffffff` | 主按钮、选中状态 |
-| `--color-accent-muted` | `#e9eaee` | `#24262b` | 强调背景         |
+| `--color-accent-muted` | `#e9eaee` | `#43454a` | 强调背景         |
 
 ### 状态色
 
