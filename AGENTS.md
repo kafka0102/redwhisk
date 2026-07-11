@@ -41,18 +41,16 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 > 不得把领域逻辑塞进泛化 `utils`。
 
-## 4. 按任务类型读 docs（路由表）
+## 4. 按任务类型读 docs
 
-执行任务前按下表读取对应 `docs/`；不确定时先读 `docs/README.md`。
+执行任务前先读 `docs/README.md` 和本文件；再按任务叠加阅读：
 
-| 任务类型 | 必读 docs |
-| --- | --- |
-| 所有任务 | `docs/README.md`、本文件 |
-| TypeScript / 前端代码改动 | `docs/standards/engineering-spec.md`、`docs/standards/coding-style.md` |
-| UI / 页面 / 组件改动 | `docs/architecture-design/design-guide.md`、`frontend-large-component-splitting-rules.md`、（Settings）`settings-page-layout.md` |
-| 跨 Tauri 边界 / 状态机 / Codex session | `docs/architecture-design/agent-development-rules.md` |
-| Git 提交 | `docs/standards/git-workflow.md` |
-| 发布打包 | `docs/standards/release-workflow.md` |
+- 改动 TypeScript / TSX / JavaScript：读取 `docs/standards/engineering-spec.md`、`docs/standards/coding-style.md`。
+- 改动 UI、页面或组件：在前端代码规范外，额外读取 `docs/architecture-design/design-guide.md`、`docs/architecture-design/frontend-large-component-splitting-rules.md`。涉及 Settings 时，额外读取 `docs/architecture-design/settings-page-layout.md`。
+- 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
+- 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
+- 发布或打包：读取 `docs/standards/release-workflow.md`。
+- 任务类型不明确：先读 `docs/README.md`，再按相关性选择。
 
 ## 5. 质量门禁（任务完成判定，缺一不可）
 
