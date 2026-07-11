@@ -585,7 +585,7 @@ describe("ProjectSettingsActivity", () => {
         name: 'Are you sure you want to delete Agent Profile "Urgent"?',
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(deleteProjectLabelMock).toHaveBeenCalledWith({ id: 11 }),
     );
@@ -700,7 +700,7 @@ describe("ProjectSettingsActivity", () => {
         name: 'Are you sure you want to delete Agent Profile "Project Codex"?',
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", {
@@ -727,7 +727,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(
       await screen.findByRole("button", { name: "Delete Project Codex" }),
     );
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
       expect(deleteAgentProfileMock).toHaveBeenCalledWith({ id: 1 }),

@@ -36,12 +36,12 @@ const KIND_ICON: Record<PermissionKind, typeof Wrench> = {
   other: ShieldAlert,
 };
 
-const KIND_LABEL: Record<PermissionKind, string> = {
-  tool: "工具调用",
-  plan: "计划确认",
-  question: "用户输入",
-  mode: "模式切换",
-  other: "权限请求",
+const KIND_LABEL_KEY: Record<PermissionKind, string> = {
+  tool: "agentsFeature.permissionKindTool",
+  plan: "agentsFeature.permissionKindPlan",
+  question: "agentsFeature.permissionKindQuestion",
+  mode: "agentsFeature.permissionKindMode",
+  other: "agentsFeature.permissionKindOther",
 };
 
 export function PermissionCard({
@@ -49,16 +49,21 @@ export function PermissionCard({
   projectId,
   sessionId,
 }: PermissionCardProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const KindIcon = KIND_ICON[request.kind] ?? ShieldAlert;
+  const kindLabel = t(KIND_LABEL_KEY[request.kind] ?? KIND_LABEL_KEY.other);
 
   async function handleAction(action: AgentPermissionAction) {
     const decision = toDecisionLiteral(action.id);
     if (decision === null) {
-      setErrorMessage(`无法识别的审批动作：${action.id}`);
+      setErrorMessage(
+        t("agentsFeature.permissionActionUnrecognized", {
+          actionId: action.id,
+        }),
+      );
       return;
     }
     setPendingActionId(action.id);
@@ -90,9 +95,7 @@ export function PermissionCard({
           strokeWidth={1.8}
           className="agents-permission-card__icon"
         />
-        <span className="agents-permission-card__kind">
-          {KIND_LABEL[request.kind] ?? KIND_LABEL.other}
-        </span>
+        <span className="agents-permission-card__kind">{kindLabel}</span>
       </div>
       {request.title ? (
         <p className="agents-permission-card__title">{request.title}</p>

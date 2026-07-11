@@ -24,6 +24,7 @@ import {
 import type { AgentMessageAttachment } from "../agent-session-commands";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import { toCommandError } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 import type { ComposerAttachment, ComposerEffort } from "./composer-types";
 import type { TurnStatus } from "../message-stream/message-stream-types";
 
@@ -110,6 +111,7 @@ export function useAgentComposer({
   onBeforeSetEffort,
   onMessageSent,
 }: UseAgentComposerArgs): UseAgentComposerResult {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
@@ -158,7 +160,7 @@ export function useAgentComposer({
     }
     // 附件仍在落盘时阻止提交，避免发出不完整附件集。
     if (attachments.some((attachment) => attachment.status === "saving")) {
-      setSubmitError("附件正在上传，请稍候");
+      setSubmitError(t("agentsFeature.attachmentsUploading"));
       return;
     }
     const payloadAttachments: AgentMessageAttachment[] = attachments
@@ -197,6 +199,7 @@ export function useAgentComposer({
     projectId,
     sessionId,
     onMessageSent,
+    t,
   ]);
 
   const handleCancel = useCallback(async () => {
@@ -221,7 +224,7 @@ export function useAgentComposer({
     const sourcePath = await open({
       directory: false,
       multiple: false,
-      title: "选择附件",
+      title: t("agentsFeature.selectAttachmentTitle"),
     });
     if (typeof sourcePath !== "string") {
       return;
@@ -269,7 +272,7 @@ export function useAgentComposer({
         ),
       );
     }
-  }, [isReadOnly, projectId, sessionId]);
+  }, [isReadOnly, projectId, sessionId, t]);
 
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((current) =>

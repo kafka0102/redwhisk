@@ -30,6 +30,10 @@
   "alertDialog": {
     "acknowledge": "OK"
   },
+  "confirmDialog": {
+    "cancel": "Cancel",
+    "confirm": "Confirm"
+  },
   "toast": {
     "deleteSuccess": "Deleted successfully",
     "issueMarkedDone": "Issue marked as done"
@@ -270,7 +274,12 @@
     "completionWorktreeCleanupConfirm": "Delete",
     "completionWorktreeCleanupKeep": "Keep",
     "completionNoCommitDetected": "No new commit was detected.",
-    "completionGitOperationBlocked": "A Git operation is in progress. Resolve it before completing."
+    "completionGitOperationBlocked": "A Git operation is in progress. Resolve it before completing.",
+    "mergeConflictNeedsHandoff": "A merge conflict was detected and needs your help.",
+    "mergeConflictResolvePrompt": "Please resolve the conflicts from merging {{workspaceBranch}} into the originally recorded target branch {{targetBranch}}.",
+    "mergeConflictRelatedWorktree": "Related worktree: {{workspacePath}}",
+    "mergeConflictCompleteMerge": "After resolving conflicts, complete the merge and make sure the code lands on the target branch.",
+    "mergeConflictNoSessionHandoff": "Merge conflict detected, but no agent session is available to take over."
   },
   "issueSummary": {
     "closedAt": "Closed",
@@ -506,6 +515,26 @@
     "changedFiles": "Changed files",
     "changedFilesCount": "Changed files: {{count}}",
     "head": "HEAD: {{head}}",
-    "completionOption": "Completion option: {{option}}"
+    "completionOption": "Completion option: {{option}}",
+    "attachmentsUploading": "Attachments are uploading, please wait",
+    "selectAttachmentTitle": "Select attachment",
+    "changeKindAdded": "Added",
+    "changeKindDeleted": "Deleted",
+    "changeKindRenamed": "Renamed",
+    "changeKindCopied": "Copied",
+    "changeKindBinary": "Binary",
+    "changeKindModified": "Modified",
+    "todoCompleted": "Completed",
+    "todoIncomplete": "Incomplete",
+    "effortLow": "Low",
+    "effortMedium": "Medium",
+    "effortHigh": "High",
+    "effortXhigh": "X-High",
+    "permissionKindTool": "Tool call",
+    "permissionKindPlan": "Plan approval",
+    "permissionKindQuestion": "User input",
+    "permissionKindMode": "Mode switch",
+    "permissionKindOther": "Permission request",
+    "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}"
   }
 }

@@ -59,7 +59,7 @@ describe("desktop ui primitives", () => {
     const dialog = screen.getByRole("dialog", { name: "确认要删除吗？" });
     expect(dialog).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(handleConfirm).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "删除项目" }));

@@ -173,7 +173,7 @@ describe("AgentSessionView", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("combobox", { name: "Think mode" }),
-      ).toHaveTextContent("高");
+      ).toHaveTextContent("High");
     });
   });
 
@@ -199,7 +199,7 @@ describe("AgentSessionView", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("combobox", { name: "Think mode" }),
-      ).toHaveTextContent("高");
+      ).toHaveTextContent("High");
     });
   });
 
@@ -509,7 +509,7 @@ describe("AgentSessionView", () => {
     await user.click(
       await screen.findByRole("combobox", { name: "Think mode" }),
     );
-    await user.click(await screen.findByRole("option", { name: "高" }));
+    await user.click(await screen.findByRole("option", { name: "High" }));
 
     await waitFor(() => {
       expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({

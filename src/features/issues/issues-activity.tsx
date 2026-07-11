@@ -194,7 +194,7 @@ export function IssuesActivity({
   worktreeSetupCommand = "",
   issuesReturnSignal = 0,
 }: IssuesActivityProps) {
-  const { locale, messages } = useI18n();
+  const { locale, messages, t } = useI18n();
   const cachedPageState = issuePageStateCache.get(projectId) ?? null;
   const requestedIssueId =
     getIssueOpenRequestId(requestedIssue) ?? legacyRequestedIssueId;
@@ -1382,11 +1382,7 @@ export function IssuesActivity({
   ) {
     const sessionId = detail.sessionId ?? issue.linkedSessionId;
     if (sessionId == null) {
-      setDialogErrorMessage(
-        locale === "zh"
-          ? "代码合并存在冲突，但未找到可接管的 Agent Session。"
-          : "Merge conflict detected, but no agent session is available.",
-      );
+      setDialogErrorMessage(t("issues.mergeConflictNoSessionHandoff"));
       return;
     }
 

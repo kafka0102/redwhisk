@@ -348,7 +348,7 @@ describe("AgentComposer", () => {
 
     await user.click(screen.getByRole("combobox", { name: "Think mode" }));
 
-    expect(await screen.findByText("超高")).toBeInTheDocument();
+    expect(await screen.findByText("X-High")).toBeInTheDocument();
     expect(screen.queryByText("关闭")).not.toBeInTheDocument();
   });
 

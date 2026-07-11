@@ -372,7 +372,9 @@ describe("useAgentComposer", () => {
       await getState()!.handleSubmit();
     });
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
-    expect(getState()!.submitError).toBe("附件正在上传，请稍候");
+    expect(getState()!.submitError).toBe(
+      "Attachments are uploading, please wait",
+    );
     expect(getState()!.text).toBe("先发文本");
   });
 

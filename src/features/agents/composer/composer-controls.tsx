@@ -37,11 +37,11 @@ interface ComposerControlsProps {
   usage: AgentUsage | null;
 }
 
-const EFFORT_LABELS: Record<string, string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "超高",
+const EFFORT_KEY: Record<string, string> = {
+  low: "agentsFeature.effortLow",
+  medium: "agentsFeature.effortMedium",
+  high: "agentsFeature.effortHigh",
+  xhigh: "agentsFeature.effortXhigh",
 };
 
 export function ComposerControls({
@@ -65,7 +65,9 @@ export function ComposerControls({
   onCancel,
   usage,
 }: ComposerControlsProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
+  const effortLabel = (value: string): string =>
+    EFFORT_KEY[value] ? t(EFFORT_KEY[value]) : value;
   const currentModel = models.find(
     (model) => model.modelId === selectedModelId,
   );
@@ -161,14 +163,12 @@ export function ComposerControls({
                 className="agents-composer__select"
                 size="sm"
               >
-                <span data-slot="select-value">
-                  {EFFORT_LABELS[effortValue] ?? effortValue}
-                </span>
+                <span data-slot="select-value">{effortLabel(effortValue)}</span>
               </SelectTrigger>
               <SelectContent align="start" className="agents-composer__menu">
                 {thinkOptions.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {EFFORT_LABELS[option] ?? option}
+                    {effortLabel(option)}
                   </SelectItem>
                 ))}
               </SelectContent>

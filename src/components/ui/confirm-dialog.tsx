@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export interface ConfirmContentProps {
   cancelLabel?: string;
@@ -38,12 +39,9 @@ export interface ConfirmDialogProps extends ConfirmContentProps {
   children: ReactElement;
 }
 
-const DEFAULT_CANCEL_LABEL = "取消";
-const DEFAULT_CONFIRM_LABEL = "确认";
-
 export function ConfirmContent({
-  cancelLabel = DEFAULT_CANCEL_LABEL,
-  confirmLabel = DEFAULT_CONFIRM_LABEL,
+  cancelLabel,
+  confirmLabel,
   confirmVariant = "default",
   message,
   title,
@@ -51,13 +49,16 @@ export function ConfirmContent({
   onConfirm,
   footer,
 }: ConfirmContentProps) {
+  const { t } = useI18n();
+  const resolvedCancelLabel = cancelLabel ?? t("confirmDialog.cancel");
+  const resolvedConfirmLabel = confirmLabel ?? t("confirmDialog.confirm");
   const defaultFooter = (
     <DialogFooter>
       <Button type="button" variant="secondary" onClick={onCancel}>
-        {cancelLabel}
+        {resolvedCancelLabel}
       </Button>
       <Button type="button" variant={confirmVariant} onClick={onConfirm}>
-        {confirmLabel}
+        {resolvedConfirmLabel}
       </Button>
     </DialogFooter>
   );
@@ -74,9 +75,9 @@ export function ConfirmContent({
 }
 
 export function ConfirmDialog({
-  cancelLabel = DEFAULT_CANCEL_LABEL,
+  cancelLabel,
   children,
-  confirmLabel = DEFAULT_CONFIRM_LABEL,
+  confirmLabel,
   confirmVariant = "default",
   message,
   title,

@@ -30,6 +30,10 @@
   "alertDialog": {
     "acknowledge": "知道了"
   },
+  "confirmDialog": {
+    "cancel": "取消",
+    "confirm": "确认"
+  },
   "toast": {
     "deleteSuccess": "删除成功",
     "issueMarkedDone": "该任务已标记完成"
@@ -270,7 +274,12 @@
     "completionWorktreeCleanupConfirm": "删除",
     "completionWorktreeCleanupKeep": "保留",
     "completionNoCommitDetected": "未检测到新的提交。",
-    "completionGitOperationBlocked": "当前 Git 正在执行操作，请处理后再完成。"
+    "completionGitOperationBlocked": "当前 Git 正在执行操作，请处理后再完成。",
+    "mergeConflictNeedsHandoff": "代码合并存在冲突，需要你接管处理。",
+    "mergeConflictResolvePrompt": "请解决临时分支 {{workspaceBranch}} 合并到最初记录的目标分支 {{targetBranch}} 时产生的冲突。",
+    "mergeConflictRelatedWorktree": "相关 worktree：{{workspacePath}}",
+    "mergeConflictCompleteMerge": "解决冲突后，请完成合并并确保代码最终合入目标分支。",
+    "mergeConflictNoSessionHandoff": "代码合并存在冲突，但未找到可接管的智能体会话。"
   },
   "issueSummary": {
     "closedAt": "结束时间",
@@ -506,6 +515,26 @@
     "changedFiles": "变更文件",
     "changedFilesCount": "变更文件：{{count}}",
     "head": "当前提交：{{head}}",
-    "completionOption": "完成选项：{{option}}"
+    "completionOption": "完成选项：{{option}}",
+    "attachmentsUploading": "附件正在上传，请稍候",
+    "selectAttachmentTitle": "选择附件",
+    "changeKindAdded": "新增",
+    "changeKindDeleted": "删除",
+    "changeKindRenamed": "重命名",
+    "changeKindCopied": "复制",
+    "changeKindBinary": "二进制",
+    "changeKindModified": "修改",
+    "todoCompleted": "已完成",
+    "todoIncomplete": "未完成",
+    "effortLow": "低",
+    "effortMedium": "中",
+    "effortHigh": "高",
+    "effortXhigh": "超高",
+    "permissionKindTool": "工具调用",
+    "permissionKindPlan": "计划确认",
+    "permissionKindQuestion": "用户输入",
+    "permissionKindMode": "模式切换",
+    "permissionKindOther": "权限请求",
+    "permissionActionUnrecognized": "无法识别的审批动作：{{actionId}}"
   }
 }

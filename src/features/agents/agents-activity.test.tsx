@@ -2028,7 +2028,7 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("dialog", { name: "Delete this Session?" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(deleteAgentSessionMock).not.toHaveBeenCalled();
 
@@ -2036,7 +2036,7 @@ describe("AgentsActivity", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: "Delete session" }),
     );
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
       expect(deleteAgentSessionMock).toHaveBeenCalledWith({

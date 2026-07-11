@@ -828,7 +828,7 @@ function TodoCard({
 }: {
   item: Extract<AgentTimelineItem, { type: "todo" }>;
 }) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   return (
     <article className="agents-message__entry agents-message__entry--todo">
       <div className="agents-message__todo">
@@ -847,7 +847,11 @@ function TodoCard({
               <span
                 className="agents-message__todo-check"
                 aria-hidden="true"
-                aria-label={todo.completed ? "已完成" : "未完成"}
+                aria-label={
+                  todo.completed
+                    ? t("agentsFeature.todoCompleted")
+                    : t("agentsFeature.todoIncomplete")
+                }
               >
                 {todo.completed ? "✓" : "○"}
               </span>

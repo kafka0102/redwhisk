@@ -8,8 +8,18 @@ interface SessionDiffViewerProps {
   tab: SessionWorkspaceChangeTab;
 }
 
+const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
+  added: "agentsFeature.changeKindAdded",
+  untracked: "agentsFeature.changeKindAdded",
+  deleted: "agentsFeature.changeKindDeleted",
+  renamed: "agentsFeature.changeKindRenamed",
+  copied: "agentsFeature.changeKindCopied",
+  binary: "agentsFeature.changeKindBinary",
+  modified: "agentsFeature.changeKindModified",
+};
+
 export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
-  const { messages, contentFontSize } = useI18n();
+  const { messages, t, contentFontSize } = useI18n();
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -56,7 +66,7 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
       className="session-diff-viewer"
     >
       <div className="session-diff-viewer__status">
-        {formatDiffStatus(tab.diff.kind)} {tab.filePath}
+        {t(CHANGE_KIND_KEY[tab.diff.kind])} {tab.filePath}
       </div>
       <DiffEditor
         height="100%"
@@ -74,22 +84,4 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
       />
     </section>
   );
-}
-
-function formatDiffStatus(kind: WorkspaceChangeKind): string {
-  switch (kind) {
-    case "added":
-    case "untracked":
-      return "新增";
-    case "deleted":
-      return "删除";
-    case "renamed":
-      return "重命名";
-    case "copied":
-      return "复制";
-    case "binary":
-      return "二进制";
-    case "modified":
-      return "修改";
-  }
 }

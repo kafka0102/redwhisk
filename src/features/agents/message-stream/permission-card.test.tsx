@@ -39,7 +39,7 @@ describe("PermissionCard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Run command: ls -la")).toBeInTheDocument();
     expect(screen.getByText("执行 shell 命令")).toBeInTheDocument();
-    expect(screen.getByText("工具调用")).toBeInTheDocument();
+    expect(screen.getByText("Tool call")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "允许" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument();
   });
@@ -130,7 +130,7 @@ describe("PermissionCard", () => {
       />,
     );
 
-    expect(screen.getByText("用户输入")).toBeInTheDocument();
+    expect(screen.getByText("User input")).toBeInTheDocument();
     expect(screen.getByText("请确认分支")).toBeInTheDocument();
   });
 

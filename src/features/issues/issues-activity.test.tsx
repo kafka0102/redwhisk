@@ -2326,7 +2326,7 @@ describe("IssuesActivity", () => {
     await user.click(
       within(
         screen.getByRole("dialog", { name: "Are you sure you want to run?" }),
-      ).getByRole("button", { name: "确认" }),
+      ).getByRole("button", { name: "Confirm" }),
     );
     await user.click(
       within(
@@ -2383,7 +2383,7 @@ describe("IssuesActivity", () => {
     await user.click(
       within(
         screen.getByRole("dialog", { name: "Are you sure you want to run?" }),
-      ).getByRole("button", { name: "确认" }),
+      ).getByRole("button", { name: "Confirm" }),
     );
 
     await waitFor(() =>
@@ -2808,7 +2808,7 @@ describe("IssuesActivity", () => {
     await user.click(
       within(
         screen.getByRole("dialog", { name: "Are you sure you want to run?" }),
-      ).getByRole("button", { name: "确认" }),
+      ).getByRole("button", { name: "Confirm" }),
     );
 
     const runDialog = await screen.findByRole("dialog", {
@@ -2861,7 +2861,7 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      within(confirmation).getByRole("button", { name: "确认" }),
+      within(confirmation).getByRole("button", { name: "Confirm" }),
     );
 
     expect(
@@ -3055,7 +3055,7 @@ describe("IssuesActivity", () => {
         name: "This issue is still running. Mark it as completed?",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(markIssueReviewMock).toHaveBeenCalledWith({
         projectId: 1,
@@ -3110,7 +3110,7 @@ describe("IssuesActivity", () => {
         name: "Move this issue back to In Progress?",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(advanceIssueStatusMock).toHaveBeenCalledWith({
         projectId: 1,
@@ -3145,7 +3145,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "In Progress" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(
       await screen.findByRole("dialog", { name: errorMessage }),
@@ -3181,7 +3181,7 @@ describe("IssuesActivity", () => {
         name: "This issue is still running. Stop it and return it to Backlog?",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(advanceIssueStatusMock).toHaveBeenCalledWith({
         projectId: 1,
@@ -3226,7 +3226,7 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
 
     // 第一步：确认终止并退回 Backlog
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     // 第二步：同名 worktree 删除询问，确认删除
     await screen.findByRole("dialog", { name: "Same-name worktree exists" });
@@ -3273,7 +3273,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await screen.findByRole("dialog", { name: "Same-name worktree exists" });
     // 选择保留：仅退回状态，不删除 worktree
@@ -3310,7 +3310,7 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
 
     // 退回 Backlog 需要二次确认。
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
       expect(advanceIssueStatusMock).toHaveBeenCalledWith({
@@ -3459,7 +3459,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(completeIssueManualMock).not.toHaveBeenCalled();
     expect(
@@ -3509,7 +3509,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
     await user.click(
       await screen.findByRole("button", { name: "Complete without commit" }),
     );
@@ -3572,7 +3572,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(
       screen.getByRole("dialog", {
@@ -3634,7 +3634,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     // 保留 worktree（不删除）→ worktreeCleanupDecision=false → 完成。
     expect(
@@ -3682,7 +3682,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(
       await screen.findByRole("dialog", { name: "Submitting..." }),
@@ -3748,7 +3748,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
       expect(injectAgentSessionPromptMock).toHaveBeenCalledWith({
@@ -3806,7 +3806,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("button", { name: "Open status options" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
-    await user.click(screen.getByRole("button", { name: "确认" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(
       await screen.findByText(/目标分支工作区存在未提交改动/),

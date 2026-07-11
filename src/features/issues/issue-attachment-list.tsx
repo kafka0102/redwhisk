@@ -1,5 +1,6 @@
 import { Download, Eye, Paperclip, Trash2 } from "lucide-react";
 
+import { useI18n } from "@/shared/i18n/i18n";
 import type { IssueAttachmentRecord } from "./issue-commands";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 
@@ -24,6 +25,7 @@ export function IssueAttachmentList({
   onPreviewAttachment,
   onRemoveAttachment,
 }: IssueAttachmentListProps) {
+  const { t } = useI18n();
   return (
     <div className="issue-page__attachment-list">
       {attachments.map((attachment) => (
@@ -38,7 +40,9 @@ export function IssueAttachmentList({
           <div className="issue-page__attachment-actions">
             {attachment.isPreviewable ? (
               <button
-                aria-label={`查看 ${attachment.displayName}`}
+                aria-label={t("issues.previewAttachment", {
+                  displayName: attachment.displayName,
+                })}
                 className="issue-attachment-card__action"
                 type="button"
                 onClick={() => onPreviewAttachment(attachment)}
@@ -47,7 +51,9 @@ export function IssueAttachmentList({
               </button>
             ) : null}
             <button
-              aria-label={`下载 ${attachment.displayName}`}
+              aria-label={t("issues.downloadAttachment", {
+                displayName: attachment.displayName,
+              })}
               className="issue-attachment-card__action"
               type="button"
               onClick={() => onDownloadAttachment(attachment)}
@@ -56,7 +62,9 @@ export function IssueAttachmentList({
             </button>
             {canRemove ? (
               <button
-                aria-label={`删除 ${attachment.displayName}`}
+                aria-label={t("issues.removeAttachment", {
+                  displayName: attachment.displayName,
+                })}
                 className="issue-attachment-card__action"
                 type="button"
                 onClick={() => onRemoveAttachment?.(attachment)}
