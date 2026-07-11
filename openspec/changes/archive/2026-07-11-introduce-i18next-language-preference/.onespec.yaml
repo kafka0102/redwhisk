@@ -1,6 +1,6 @@
 version: 1
 change: introduce-i18next-language-preference
-phase: review
+phase: done
 ambiguity: high
 complexity: high
 implementation_path: superpowers
@@ -17,6 +17,6 @@ handoff_summary: 'review handoff from 5 file(s); primary artifact: openspec/chan
 handoff_hash: 866f9b2a70cc48fc841895df4fbcdf4c009ce5890c238e8f2c31bad23d4f8213
 touched_files_b64: null
 review_result: pending
-archive: pending
+archive: archived
 created_at: 2026-07-11
 updated_at: 2026-07-11T05:20:10Z
