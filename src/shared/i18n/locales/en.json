@@ -11,7 +11,8 @@
     "projectSettings": "Project Settings",
     "settings": "Settings",
     "terminals": "Terminals",
-    "workbench": "{{projectName}} workbench"
+    "workbench": "{{projectName}} workbench",
+    "projectNotFound": "Project not found."
   },
   "globalSettings": {
     "chinese": "简体中文",
@@ -279,7 +280,8 @@
     "mergeConflictResolvePrompt": "Please resolve the conflicts from merging {{workspaceBranch}} into the originally recorded target branch {{targetBranch}}.",
     "mergeConflictRelatedWorktree": "Related worktree: {{workspacePath}}",
     "mergeConflictCompleteMerge": "After resolving conflicts, complete the merge and make sure the code lands on the target branch.",
-    "mergeConflictNoSessionHandoff": "Merge conflict detected, but no agent session is available to take over."
+    "mergeConflictNoSessionHandoff": "Merge conflict detected, but no agent session is available to take over.",
+    "agentSessionOpenMissing": "No openable session was returned after starting the agent session."
   },
   "issueSummary": {
     "closedAt": "Closed",
@@ -535,6 +537,7 @@
     "permissionKindQuestion": "User input",
     "permissionKindMode": "Mode switch",
     "permissionKindOther": "Permission request",
-    "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}"
+    "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}",
+    "agentTypeAlt": "Agent type: {{label}}"
   }
 }

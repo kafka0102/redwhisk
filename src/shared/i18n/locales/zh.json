@@ -11,7 +11,8 @@
     "projectSettings": "项目设置",
     "settings": "设置",
     "terminals": "终端",
-    "workbench": "{{projectName}} 工作台"
+    "workbench": "{{projectName}} 工作台",
+    "projectNotFound": "项目不存在。"
   },
   "globalSettings": {
     "chinese": "简体中文",
@@ -279,7 +280,8 @@
     "mergeConflictResolvePrompt": "请解决临时分支 {{workspaceBranch}} 合并到最初记录的目标分支 {{targetBranch}} 时产生的冲突。",
     "mergeConflictRelatedWorktree": "相关 worktree：{{workspacePath}}",
     "mergeConflictCompleteMerge": "解决冲突后，请完成合并并确保代码最终合入目标分支。",
-    "mergeConflictNoSessionHandoff": "代码合并存在冲突，但未找到可接管的智能体会话。"
+    "mergeConflictNoSessionHandoff": "代码合并存在冲突，但未找到可接管的智能体会话。",
+    "agentSessionOpenMissing": "智能体会话启动后未返回可打开的会话。"
   },
   "issueSummary": {
     "closedAt": "结束时间",
@@ -535,6 +537,7 @@
     "permissionKindQuestion": "用户输入",
     "permissionKindMode": "模式切换",
     "permissionKindOther": "权限请求",
-    "permissionActionUnrecognized": "无法识别的审批动作：{{actionId}}"
+    "permissionActionUnrecognized": "无法识别的审批动作：{{actionId}}",
+    "agentTypeAlt": "智能体类型：{{label}}"
   }
 }

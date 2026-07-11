@@ -886,7 +886,7 @@ export function IssuesActivity({
         activeProjectIdRef.current === projectId &&
         result.sessionId == null
       ) {
-        setErrorMessage("Agent Session 启动后未返回可打开的会话。");
+        setErrorMessage(t("issues.agentSessionOpenMissing"));
       }
     }
   }

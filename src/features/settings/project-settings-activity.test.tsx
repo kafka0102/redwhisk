@@ -662,7 +662,7 @@ describe("ProjectSettingsActivity", () => {
     expect(
       within(table).getByRole("cell", { name: "Global" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByAltText("Agent 类型：Codex")).toHaveLength(2);
+    expect(screen.getAllByAltText("Agent type: Codex")).toHaveLength(2);
 
     const rows = within(table).getAllByRole("row").slice(1);
     expect(

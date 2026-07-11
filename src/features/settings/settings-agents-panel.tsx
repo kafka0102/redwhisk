@@ -48,7 +48,7 @@ export function AgentsSettingsPanel({
   onEditingProfileChange,
   onProfileSaved,
 }: AgentsSettingsPanelProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
 
   return (
     <>
@@ -99,7 +99,9 @@ export function AgentsSettingsPanel({
                   <TableRow key={profile.id}>
                     <TableCell>
                       <img
-                        alt={`Agent 类型：${agentLabel}`}
+                        alt={t("agentsFeature.agentTypeAlt", {
+                          label: agentLabel,
+                        })}
                         className="block size-[22px]"
                         src={getAgentLogoSrc(profile.agentType)}
                       />

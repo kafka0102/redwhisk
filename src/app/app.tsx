@@ -412,7 +412,7 @@ function openInitialProjectFromUrl(): Promise<ProjectRecord | null> {
   if (!Number.isSafeInteger(projectId) || projectId <= 0) {
     return Promise.reject({
       code: "PROJECT_NOT_FOUND",
-      message: "Project 不存在。",
+      message: i18next.getFixedT(getDefaultLocale())("app.projectNotFound"),
     });
   }
 
