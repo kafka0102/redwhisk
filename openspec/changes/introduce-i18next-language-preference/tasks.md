@@ -1,19 +1,27 @@
+## 进度（2026-07-11）
+
+- §1、§2 已完成并提交（worktree `worktree-introduce-i18next-language-preference`）。
+- 实例文件命名为 `i18n-instance.ts`（避免与旧 `i18n.tsx` 在 bundler 解析下撞名）。
+- 排序修正：原计划 Task 6「app 接线去 fixedLocale」必须在消费点迁移（§3）**之后**，因为旧 `useI18n`(`i18n.tsx`) 与新 `useI18n`(`i18n-provider.tsx`) 是两套独立 context；提前切 app 会使所有未迁移消费点回退到旧默认 `en`。正确顺序：app root 先共存挂载新 provider（包在旧 provider 外/内）→ 按 namespace 迁移消费点 → 全部迁完再切 app.tsx 并删旧 provider/字典。
+
 ## 1. i18next 基础设施
 
-- [ ] 1.1 安装 `i18next` + `react-i18next` 依赖。
-- [ ] 1.2 新增 `src/shared/i18n/locales/en.json`、`zh.json` 占位结构（按现有 `messages` 顶层分组）。
-- [ ] 1.3 新增 `src/shared/i18n/i18n.ts`：初始化 i18next（resources 注入 JSON、`fallbackLng: 'zh'`、插值配置、从 `redwhisk.locale` 读取初始 lng、无值默认 `zh`）。
-- [ ] 1.4 新增 `src/shared/i18n/i18n-provider.tsx`：包 `I18nextProvider`，收敛 theme / 内容字号偏好（沿用既有 localStorage 键与默认值逻辑）。
-- [ ] 1.5 新增 `src/shared/i18n/use-i18n.ts`：导出 `useTranslation()` 便捷封装与 theme / 内容字号 hook，替代旧 `useI18n` 的非文案职责。
-- [ ] 1.6 提供测试 i18next 实例 / 测试 helper，支持测试内显式指定 locale（默认 `en` 稳住既有断言）。
+- [x] 1.1 安装 `i18next` + `react-i18next` 依赖。
+- [x] 1.2 新增 `src/shared/i18n/locales/en.json`、`zh.json`（按现有 `messages` 顶层分组，1:1 转写）。
+- [x] 1.3 新增 `src/shared/i18n/i18n-instance.ts`：初始化 i18next（resources 注入 JSON、`fallbackLng: 'zh'`、插值配置、从 `redwhisk.locale` 读取初始 lng、无值默认 `zh`）。
+- [x] 1.4 新增 `src/shared/i18n/i18n-provider.tsx`：包 `I18nextProvider`，收敛 theme / 内容字号偏好（沿用既有 localStorage 键与默认值逻辑）。
+- [x] 1.5 `useI18n()` 合并导出（`t`/theme/字号）已并入 `i18n-provider.tsx`，未单独建 `use-i18n.ts`。
+- [x] 1.6 i18next 实例/provider/常量/资源均有 colocated 测试；测试内 locale 经 `changeLocale`/localStorage 控制。
 
 ## 2. 字典迁移与术语统一
 
-- [ ] 2.1 将 `messages.ts` 的 `en` 字典 1:1 转写入 `en.json`（嵌套结构保留）。
-- [ ] 2.2 将 `messages.ts` 的 `zh` 字典 1:1 转写入 `zh.json`，并完成术语统一：`agent→智能体`、`session→会话`、`Issues→任务` 及其派生词。
-- [ ] 2.3 将 `settings-messages.ts` 的 en/zh 合并入 `settings` 命名空间 JSON。
-- [ ] 2.4 将所有闭包式参数化文案改写为 `{{name}}` 模板字符串，记录 key 清单。
-- [ ] 2.5 补术语对照检查单测（断言 zh 中关键术语为智能体 / 会话 / 任务，无残留 代理 / Agent / 会话 与 任务 混用）。
+- [x] 2.1 将 `messages.ts` 的 `en` 字典 1:1 转写入 `en.json`（嵌套结构保留）。
+- [x] 2.2 将 `messages.ts` 的 `zh` 字典 1:1 转写入 `zh.json`，并完成术语统一：`agent→智能体`、`session→会话`、`Issues→任务` 及其派生词。
+- [x] 2.3 将 `settings-messages.ts` 的 en/zh 合并入 `settings` 命名空间 JSON。
+- [x] 2.4 将所有闭包式参数化文案改写为 `{{name}}` 模板字符串，记录 key 清单。
+- [x] 2.5 补术语对照检查单测（断言 zh 中关键术语为智能体 / 会话 / 任务，无残留 代理 / Agent / 会话 与 任务 混用）。
+  - 注：`agentsFeature.taskStatusLabel` 按分支拆为 4 键，`taskStatusLabelFallback={{status}}` 由调用方预处理下划线（原 `status.replace(/_/g,' ')`）。
+  - 注：修复源 en 字典中 `toast.issueMarkedDone`、`issues.confirmRunIssue` 的中文泄露。
 
 ## 3. 调用点迁移（按命名空间分批，TDD 守护）
 
