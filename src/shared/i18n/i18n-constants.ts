@@ -9,15 +9,7 @@ export const LOCALE_STORAGE_KEY = "redwhisk.locale";
 export const THEME_STORAGE_KEY = "redwhisk.theme";
 export const CONTENT_FONT_SIZE_STORAGE_KEY = "redwhisk.content-font-size";
 
-export const CONTENT_FONT_SIZE_OPTIONS = [
-  13,
-  14,
-  15,
-  16,
-  18,
-  20,
-  22,
-] as const;
+export const CONTENT_FONT_SIZE_OPTIONS = [13, 14, 15, 16, 18, 20, 22] as const;
 export const DEFAULT_CONTENT_FONT_SIZE: ContentFontSize = 14;
 
 export function getInitialThemePreference(): ThemePreference {
