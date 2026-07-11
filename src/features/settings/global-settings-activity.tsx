@@ -22,6 +22,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import {
   CONTENT_FONT_SIZE_OPTIONS,
   type ContentFontSize,
+  type Locale,
   type ThemePreference,
 } from "../../shared/i18n/messages";
 import {
@@ -41,6 +42,8 @@ const CONTENT_FONT_SIZE_ITEMS = CONTENT_FONT_SIZE_OPTIONS.map((size) => ({
 export function GlobalSettingsActivity() {
   const {
     messages,
+    locale,
+    setLocale,
     setThemePreference,
     themePreference,
     contentFontSize,
@@ -194,6 +197,44 @@ export function GlobalSettingsActivity() {
                           </span>
                         </Button>
                       ))}
+                    </div>
+                  </section>
+                  <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                      {messages.globalSettings.language}
+                    </h4>
+                    <div className="min-w-0">
+                      <Select
+                        items={[
+                          {
+                            value: "zh",
+                            label: messages.globalSettings.chinese,
+                          },
+                          {
+                            value: "en",
+                            label: messages.globalSettings.english,
+                          },
+                        ]}
+                        value={locale}
+                        onValueChange={(value) => {
+                          setLocale(value as Locale);
+                        }}
+                      >
+                        <SelectTrigger
+                          aria-label={messages.globalSettings.language}
+                          className="w-[200px]"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="zh">
+                            {messages.globalSettings.chinese}
+                          </SelectItem>
+                          <SelectItem value="en">
+                            {messages.globalSettings.english}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </section>
                   <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">

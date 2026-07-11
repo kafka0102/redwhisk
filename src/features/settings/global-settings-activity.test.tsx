@@ -63,6 +63,34 @@ describe("GlobalSettingsActivity", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 
+  it("renders the language preference with 简体中文 selected by default", () => {
+    renderGlobalSettings();
+
+    expect(screen.getByRole("heading", { name: "语言" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "语言" })).toHaveTextContent(
+      "简体中文",
+    );
+  });
+
+  it("switches the UI language to English from the language preference", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="zh">
+        <GlobalSettingsActivity />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "语言" })).toBeInTheDocument();
+    await selectShadcnOption(user, screen, "语言", "English");
+
+    expect(
+      screen.getByRole("heading", { name: "Language" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Language" }),
+    ).toHaveTextContent("English");
+  });
+
   it("ignores the stored English locale preference", () => {
     window.localStorage.setItem("redwhisk.locale", "en");
 
