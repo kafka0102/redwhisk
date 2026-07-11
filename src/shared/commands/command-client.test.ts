@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { TFunction } from "i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -42,7 +43,16 @@ import {
   updateProjectTerminalConfig,
   writeProjectTerminal,
 } from "../../features/terminals/project-terminal-commands";
-import { isCommandError, toCommandError } from "./command-error";
+import {
+  getCommandErrorMessage,
+  isCommandError,
+  toCommandError,
+} from "./command-error";
+
+function makeTranslationFunction(dict: Record<string, string>): TFunction {
+  return ((key: string) =>
+    key in dict ? dict[key] : key) as unknown as TFunction;
+}
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -517,6 +527,52 @@ describe("command client", () => {
       code: "UNKNOWN_COMMAND_ERROR",
       message: "bad shape",
     });
+  });
+
+  it("localizes command error message by code and reason", () => {
+    const t = makeTranslationFunction({
+      "errors.ISSUE_VALIDATION_FAILED.mustBeRunningToAccept":
+        "只有运行中的 Issue 可以标记待验收。",
+    });
+
+    expect(
+      getCommandErrorMessage(
+        {
+          code: "ISSUE_VALIDATION_FAILED",
+          message: "fallback",
+          reason: "mustBeRunningToAccept",
+        },
+        t,
+      ),
+    ).toBe("只有运行中的 Issue 可以标记待验收。");
+  });
+
+  it("uses default reason when reason absent", () => {
+    const t = makeTranslationFunction({
+      "errors.PROJECT_NOT_FOUND.default": "Project 不存在。",
+    });
+
+    expect(
+      getCommandErrorMessage(
+        { code: "PROJECT_NOT_FOUND", message: "fallback" },
+        t,
+      ),
+    ).toBe("Project 不存在。");
+  });
+
+  it("falls back to message when translation missing", () => {
+    const t = makeTranslationFunction({});
+
+    expect(
+      getCommandErrorMessage(
+        {
+          code: "ISSUE_VALIDATION_FAILED",
+          message: "原始后端文案",
+          reason: "mustBeRunningToAccept",
+        },
+        t,
+      ),
+    ).toBe("原始后端文案");
   });
 
   it("wraps unknown invoke failures as command errors", async () => {

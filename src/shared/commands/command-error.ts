@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 export interface CommandErrorDetail {
   "@type": string;
   [key: string]: unknown;
@@ -6,6 +8,7 @@ export interface CommandErrorDetail {
 export interface CommandError {
   code: string;
   message: string;
+  reason?: string;
   details?: CommandErrorDetail[];
 }
 
@@ -35,6 +38,14 @@ export function toCommandError(value: unknown): CommandError {
         ? value.message
         : (getObjectMessage(value) ?? String(value)),
   };
+}
+
+export function getCommandErrorMessage(error: unknown, t: TFunction): string {
+  const commandError = toCommandError(error);
+  const reason = commandError.reason ?? "default";
+  const key = `errors.${commandError.code}.${reason}`;
+  const localized = t(key);
+  return localized && localized !== key ? localized : commandError.message;
 }
 
 function hasValidDetails(
