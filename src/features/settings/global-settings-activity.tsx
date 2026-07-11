@@ -56,7 +56,7 @@ export function GlobalSettingsActivity() {
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
   const [activeSection, setActiveSection] =
-    useState<GlobalSettingsSection>("preferences");
+    useState<GlobalSettingsSection>("profile");
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;

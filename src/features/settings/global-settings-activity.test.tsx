@@ -50,40 +50,23 @@ describe("GlobalSettingsActivity", () => {
     document.documentElement.style.removeProperty("--content-font-size");
   });
 
-  it("renders Preferences in Chinese with Light theme by default", () => {
+  it("renders Profile by default in Chinese with Light theme applied", () => {
     renderGlobalSettings();
 
     expect(
       screen.getByRole("navigation", { name: "全局设置菜单" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "个人资料" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "偏好设置" })).toHaveAttribute(
       "aria-pressed",
-      "true",
+      "false",
     );
     expect(
-      screen.getByRole("heading", { name: "偏好设置" }),
+      screen.getByRole("heading", { name: "个人资料" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "English" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "中文" })).toBeNull();
-    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "浅色" })).toHaveClass(
-      "bg-[var(--color-accent-muted)]",
-    );
-    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "深色" })).not.toHaveClass(
-      "bg-[var(--color-accent-muted)]",
-    );
-    expect(screen.getByRole("button", { name: "跟随系统" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.queryByRole("switch", { name: "启用通知浮窗" })).toBeNull();
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 
@@ -152,8 +135,11 @@ describe("GlobalSettingsActivity", () => {
     });
   });
 
-  it("renders the language preference with 简体中文 selected by default", () => {
+  it("renders the language preference with 简体中文 selected by default", async () => {
+    const user = userEvent.setup();
     renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "偏好设置" }));
 
     expect(screen.getByRole("heading", { name: "语言" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "语言" })).toHaveTextContent(
@@ -169,6 +155,7 @@ describe("GlobalSettingsActivity", () => {
       </I18nProvider>,
     );
 
+    await user.click(screen.getByRole("button", { name: "偏好设置" }));
     expect(screen.getByRole("heading", { name: "语言" })).toBeInTheDocument();
     await selectShadcnOption(user, screen, "语言", "English");
 
@@ -186,15 +173,20 @@ describe("GlobalSettingsActivity", () => {
     renderGlobalSettings();
 
     expect(
-      screen.getByRole("heading", { name: "偏好设置" }),
+      screen.getByRole("heading", { name: "个人资料" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Preferences" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Profile" })).toBeNull();
   });
 
   it("persists Dark theme and applies it to the document root", async () => {
     const user = userEvent.setup();
     renderGlobalSettings();
 
+    await user.click(screen.getByRole("button", { name: "偏好设置" }));
+    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     await user.click(screen.getByRole("button", { name: "深色" }));
 
     expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute(
@@ -210,6 +202,7 @@ describe("GlobalSettingsActivity", () => {
     const user = userEvent.setup();
     renderGlobalSettings();
 
+    await user.click(screen.getByRole("button", { name: "偏好设置" }));
     await user.click(screen.getByRole("button", { name: "跟随系统" }));
 
     expect(screen.getByRole("button", { name: "跟随系统" })).toHaveAttribute(
@@ -232,8 +225,11 @@ describe("GlobalSettingsActivity", () => {
     expect(splitter).toHaveAttribute("aria-valuenow", "230");
   });
 
-  it("renders the content font size select with the default size", () => {
+  it("renders the content font size select with the default size", async () => {
+    const user = userEvent.setup();
     renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "偏好设置" }));
 
     expect(
       screen.getByRole("heading", { name: "内容字号" }),
@@ -253,6 +249,7 @@ describe("GlobalSettingsActivity", () => {
     const user = userEvent.setup();
     renderGlobalSettings();
 
+    await user.click(screen.getByRole("button", { name: "偏好设置" }));
     await selectShadcnOption(user, screen, "内容字号", "16");
 
     expect(

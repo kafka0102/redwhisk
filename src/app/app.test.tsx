@@ -10,7 +10,10 @@ import {
   updateIssue,
   type IssueRecord,
 } from "../features/issues/issue-commands";
-import { listProjectLabels } from "../features/settings/settings-commands";
+import {
+  getUserProfile,
+  listProjectLabels,
+} from "../features/settings/settings-commands";
 import {
   createProject,
   initializeLocalData,
@@ -89,6 +92,7 @@ vi.mock("../features/issues/issue-commands", () => ({
 }));
 
 vi.mock("../features/settings/settings-commands", () => ({
+  getUserProfile: vi.fn(),
   listProjectLabels: vi.fn(),
 }));
 
@@ -133,6 +137,7 @@ const openSessionMonitorWindowMock = vi.mocked(openSessionMonitorWindow);
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
+const getUserProfileMock = vi.mocked(getUserProfile);
 const updateIssueMock = vi.mocked(updateIssue);
 const createProjectMock = vi.mocked(createProject);
 const initializeLocalDataMock = vi.mocked(initializeLocalData);
@@ -163,6 +168,7 @@ describe("App project entry", () => {
     createIssueMock.mockReset();
     listIssuesMock.mockReset();
     listProjectLabelsMock.mockReset();
+    getUserProfileMock.mockReset();
     updateIssueMock.mockReset();
     getCurrentWindowMock.mockClear();
     openSessionMonitorWindowMock.mockReset();
@@ -203,6 +209,7 @@ describe("App project entry", () => {
     listProjectsMock.mockImplementation(async () => currentProjectList);
     currentIssues = [];
     listProjectLabelsMock.mockResolvedValue({ labels: [] });
+    getUserProfileMock.mockResolvedValue({ name: "", avatarPath: null });
     listIssuesMock.mockImplementation(async ({ projectId }) => {
       expect(projectId).toBe(1);
       return { issues: currentIssues };
@@ -606,7 +613,7 @@ describe("App project entry", () => {
     await user.click(screen.getByRole("button", { name: "全局设置" }));
 
     expect(
-      screen.getByRole("heading", { name: "偏好设置" }),
+      screen.getByRole("heading", { name: "个人资料" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全局设置" })).toHaveAttribute(
       "aria-pressed",
