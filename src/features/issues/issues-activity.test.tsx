@@ -2324,10 +2324,9 @@ describe("IssuesActivity", () => {
 
     await user.click(screen.getByRole("button", { name: "Run" }));
     await user.click(
-      within(screen.getByRole("dialog", { name: "确定要执行吗？" })).getByRole(
-        "button",
-        { name: "确认" },
-      ),
+      within(
+        screen.getByRole("dialog", { name: "Are you sure you want to run?" }),
+      ).getByRole("button", { name: "确认" }),
     );
     await user.click(
       within(
@@ -2382,10 +2381,9 @@ describe("IssuesActivity", () => {
 
     await user.click(within(editPage).getByRole("button", { name: "Run" }));
     await user.click(
-      within(screen.getByRole("dialog", { name: "确定要执行吗？" })).getByRole(
-        "button",
-        { name: "确认" },
-      ),
+      within(
+        screen.getByRole("dialog", { name: "Are you sure you want to run?" }),
+      ).getByRole("button", { name: "确认" }),
     );
 
     await waitFor(() =>
@@ -2808,10 +2806,9 @@ describe("IssuesActivity", () => {
     const dialog = screen.getByRole("form", { name: "Edit Issue" });
     await user.click(within(dialog).getByRole("button", { name: "Run" }));
     await user.click(
-      within(screen.getByRole("dialog", { name: "确定要执行吗？" })).getByRole(
-        "button",
-        { name: "确认" },
-      ),
+      within(
+        screen.getByRole("dialog", { name: "Are you sure you want to run?" }),
+      ).getByRole("button", { name: "确认" }),
     );
 
     const runDialog = await screen.findByRole("dialog", {
@@ -2853,9 +2850,11 @@ describe("IssuesActivity", () => {
 
     await user.click(runButton);
 
-    const confirmation = screen.getByRole("dialog", { name: "确定要执行吗？" });
+    const confirmation = screen.getByRole("dialog", {
+      name: "Are you sure you want to run?",
+    });
     expect(
-      within(confirmation).getByText("确定要执行吗？"),
+      within(confirmation).getByText("Are you sure you want to run?"),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: "Run Issue #1" }),

@@ -36,7 +36,9 @@ if (!i18n.isInitialized) {
       en: { translation: en },
       zh: { translation: zh },
     },
-    lng: getDefaultLocale(),
+    // 全局默认 en：无 provider 的裸渲染（如部分测试）回退 en，兼容旧行为。
+    // 生产首启 zh 由 app.tsx 经 initialLocale={getDefaultLocale()} 显式注入。
+    lng: "en",
     fallbackLng: DEFAULT_LOCALE,
     interpolation: { escapeValue: false },
     returnNull: false,

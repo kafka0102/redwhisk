@@ -7,15 +7,16 @@ function Probe() {
   const { t, locale, themePreference, contentFontSize } = useI18n();
   return (
     <span data-testid="probe">
-      {t("globalSettings.language")}|{locale}|{themePreference}|{contentFontSize}
+      {t("globalSettings.language")}|{locale}|{themePreference}|
+      {contentFontSize}
     </span>
   );
 }
 
 describe("I18nProvider", () => {
-  it("exposes t and defaults locale to zh", () => {
+  it("exposes t and honors an explicit zh locale", () => {
     render(
-      <I18nProvider>
+      <I18nProvider initialLocale="zh">
         <Probe />
       </I18nProvider>,
     );
@@ -25,11 +26,30 @@ describe("I18nProvider", () => {
     expect(text).toContain("light");
   });
 
-  it("throws when useI18n is used without a provider", () => {
+  it("defaults to en when no locale is provided", () => {
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+    const text = screen.getByTestId("probe").textContent ?? "";
+    expect(text).toContain("Language");
+    expect(text).toContain("en");
+  });
+
+  it("returns an English fallback when used without a provider", () => {
     function NoProvider() {
-      useI18n();
-      return null;
+      const { t, locale } = useI18n();
+      return (
+        <span data-testid="bare">
+          {t("globalSettings.language")}|{locale}
+        </span>
+      );
     }
-    expect(() => render(<NoProvider />)).toThrow(/I18nProvider/);
+    render(<NoProvider />);
+    const text = screen.getByTestId("bare").textContent ?? "";
+    // 全局默认 en，裸渲染不崩溃且走英文
+    expect(text).toContain("Language");
+    expect(text).toContain("en");
   });
 });

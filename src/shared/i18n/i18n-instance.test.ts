@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  SUPPORTED_LOCALES,
-  LOCALE_STORAGE_KEY,
-} from "./i18n-constants";
+import { SUPPORTED_LOCALES, LOCALE_STORAGE_KEY } from "./i18n-constants";
 import i18n, { changeLocale, getDefaultLocale } from "./i18n-instance";
 
 describe("getDefaultLocale", () => {

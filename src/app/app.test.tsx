@@ -148,6 +148,8 @@ describe("App project entry", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();
+    // 用例断言中文文案；统一以 zh 作为测试 locale，默认/未存储行为由专门用例覆盖。
+    window.localStorage.setItem("redwhisk.locale", "zh");
     tauriEventMocks.listeners.length = 0;
     tauriEventMocks.unlisten.mockReset();
     resetIssuePageStateCacheForTests();
@@ -406,7 +408,7 @@ describe("App project entry", () => {
     expect(
       await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "任务" })).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Projects" }),
     ).not.toBeInTheDocument();
@@ -510,16 +512,16 @@ describe("App project entry", () => {
     expect(screen.getByRole("menu", { name: "项目切换器" })).toBeVisible();
   });
 
-  it("uses Chinese as the fixed default UI language in a project workbench", async () => {
+  it("uses Chinese as the default UI language when no preference is stored", async () => {
     window.history.replaceState(null, "", "/?projectId=1");
-    window.localStorage.setItem("redwhisk.locale", "en");
+    window.localStorage.removeItem("redwhisk.locale");
 
     render(<App />);
 
     expect(
       await screen.findByRole("navigation", { name: "活动栏" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "任务" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "智能体" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "终端" })).toBeInTheDocument();
     expect(
@@ -562,9 +564,9 @@ describe("App project entry", () => {
 
     expect(
       activityButtons.map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["Issues", "智能体", "终端", "项目设置", "全局设置"]);
+    ).toEqual(["任务", "智能体", "终端", "项目设置", "全局设置"]);
     expect(
-      within(activityBar).getByRole("button", { name: "Issues" }),
+      within(activityBar).getByRole("button", { name: "任务" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
       within(activityBar).getByRole("button", { name: "项目设置" }),
@@ -572,7 +574,7 @@ describe("App project entry", () => {
     expect(
       within(activityBar).getByRole("button", { name: "全局设置" }),
     ).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "任务" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
@@ -598,7 +600,7 @@ describe("App project entry", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("button", { name: "Issues" }),
+      await screen.findByRole("button", { name: "任务" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "智能体" }));
     await user.click(screen.getByRole("button", { name: "全局设置" }));
@@ -620,8 +622,8 @@ describe("App project entry", () => {
       "false",
     );
 
-    await user.click(screen.getByRole("button", { name: "Issues" }));
-    expect(screen.getByRole("button", { name: "Issues" })).toHaveAttribute(
+    await user.click(screen.getByRole("button", { name: "任务" }));
+    expect(screen.getByRole("button", { name: "任务" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -634,13 +636,13 @@ describe("App project entry", () => {
     await user.click(
       await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
-    await user.click(await screen.findByRole("button", { name: "新建 Issue" }));
-    expect(screen.getByPlaceholderText("Issue 标题")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "新建任务" }));
+    expect(screen.getByPlaceholderText("任务标题")).toBeInTheDocument();
     expect(screen.getByLabelText("描述")).toBeInTheDocument();
     expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
     await user.type(screen.getByLabelText("标题"), "draft local issue");
     await user.type(screen.getByLabelText("描述"), "small task shape");
-    await user.click(screen.getByRole("button", { name: "创建 Issue" }));
+    await user.click(screen.getByRole("button", { name: "创建任务" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
       projectId: 1,
@@ -653,7 +655,7 @@ describe("App project entry", () => {
       await screen.findByRole("button", { name: "draft local issue" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.queryByRole("dialog", { name: "新建 Issue" }),
+      screen.queryByRole("dialog", { name: "新建任务" }),
     ).not.toBeInTheDocument();
   });
 
@@ -695,7 +697,7 @@ describe("App project entry", () => {
       labelIds: [],
     });
     expect(
-      screen.queryByRole("dialog", { name: "Issue 详情" }),
+      screen.queryByRole("dialog", { name: "任务详情" }),
     ).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Updated issue" }),
@@ -798,7 +800,7 @@ describe("App project entry", () => {
       worktreeSetupCommand: "",
     });
     expect(
-      await screen.findByRole("heading", { name: "Issues" }),
+      await screen.findByRole("heading", { name: "任务" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "当前项目 new-repo" }),
@@ -1096,7 +1098,7 @@ describe("App project entry", () => {
       screen.getByRole("menu", { name: "项目切换器" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("heading", { name: "Issues" }));
+    await user.click(screen.getByRole("heading", { name: "任务" }));
 
     expect(
       screen.queryByRole("menu", { name: "项目切换器" }),

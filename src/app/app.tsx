@@ -13,7 +13,7 @@ import {
   initialWorktreeSetupCommand,
 } from "../features/project/worktree-setup-command";
 import { I18nProvider, useI18n } from "../shared/i18n/i18n";
-import { I18N_MESSAGES, type Locale } from "../shared/i18n/messages";
+import i18next, { getDefaultLocale } from "../shared/i18n/i18n-instance";
 import {
   createProject,
   initializeLocalData,
@@ -82,8 +82,10 @@ function ProjectApp() {
     requestId: number;
     sessionId: number;
   } | null>(null);
-  const defaultLocale = getDefaultLocale();
-  const defaultMessages = I18N_MESSAGES[defaultLocale];
+
+  // ProjectApp 渲染 I18nProvider，自身位于 provider 之外；用 getFixedT 绑定 app 的
+  // 当前 locale（首启 zh / 持久化值），保证启动状态文案与目录选择标题与界面语言一致。
+  const translate = i18next.getFixedT(getDefaultLocale());
 
   useEffect(() => {
     let isMounted = true;
@@ -205,7 +207,7 @@ function ProjectApp() {
         const selectedPath = await open({
           directory: true,
           multiple: false,
-          title: defaultMessages.projectHome.selectGitRepository,
+          title: translate("projectHome.selectGitRepository"),
         });
 
         if (typeof selectedPath !== "string") {
@@ -232,11 +234,7 @@ function ProjectApp() {
         setIsCreatingProject(false);
       }
     },
-    [
-      defaultMessages.projectHome.selectGitRepository,
-      isCreatingProject,
-      setCreateProjectDraft,
-    ],
+    [translate, isCreatingProject, setCreateProjectDraft],
   );
 
   function handleCreateProject() {
@@ -297,15 +295,15 @@ function ProjectApp() {
   if (!selectedProject) {
     const statusMessages = [
       {
-        label: defaultMessages.app.localDataStatus,
+        label: translate("app.localDataStatus"),
         message: localDataError,
       },
       {
-        label: defaultMessages.app.projectCreationStatus,
+        label: translate("app.projectCreationStatus"),
         message: projectCreationError,
       },
       {
-        label: defaultMessages.app.openProjectStatus,
+        label: translate("app.openProjectStatus"),
         message: projectOpenError,
       },
     ].filter(
@@ -314,7 +312,7 @@ function ProjectApp() {
     );
 
     return (
-      <I18nProvider fixedLocale={defaultLocale}>
+      <I18nProvider initialLocale={getDefaultLocale()}>
         {statusMessages.length > 0 ? (
           <div className="local-data-status-stack">
             {statusMessages.map((status) => (
@@ -348,7 +346,7 @@ function ProjectApp() {
   }
 
   return (
-    <I18nProvider fixedLocale={defaultLocale}>
+    <I18nProvider initialLocale={getDefaultLocale()}>
       <>
         <AppShell
           onCreateProject={handleCreateProjectFromSwitcher}
@@ -569,8 +567,4 @@ function CreateProjectDialog({
       </div>
     </div>
   );
-}
-
-function getDefaultLocale(): Locale {
-  return "zh";
 }
