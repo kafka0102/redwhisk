@@ -28,7 +28,7 @@
 - [x] 3.1 建立 `messages-bridge.ts`：旧 `useI18n().messages` 返回值由 `t()` 派生（按 `{{}}` 判定函数/字符串、位置参数 zip、`taskStatusLabel` 保留 switch 语义）。
 - [x] 3.2 `i18n.tsx` 收敛为 re-export `i18n-provider`，55 个既有消费点零改写接入 i18next（等效覆盖 globalSettings/settings/app/issues/agents/其余命名空间）。
 - [x] 3.3 provider 改每实例 locale state + `useTranslation({lng})`，无 provider 返回英文回退；全量 587 测试通过，无回归。
-- [ ] 3.4 （后续清理）删除 `messages.ts` 中已无消费的历史字典数据 `I18N_MESSAGES`，仅保留 `I18nMessages` 等类型与共享常量；评估删除 `settings-messages.ts`。本次保留以降风险。
+- [x] 3.4 （后续清理）删除 `messages.ts` 中已无消费的历史字典数据 `I18N_MESSAGES`，仅保留 `I18nMessages` 接口并 re-export i18n-constants 类型/常量（约 1628→553 行）；删除无消费的 `settings-messages.ts`（键已并入 JSON `settings` 命名空间）。
 
 ## 4. 语言偏好 UI 与默认 locale
 
