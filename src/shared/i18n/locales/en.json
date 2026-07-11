@@ -15,6 +15,8 @@
     "projectNotFound": "Project not found."
   },
   "globalSettings": {
+    "avatar": "Avatar",
+    "avatarPickerLabel": "Choose avatar",
     "chinese": "简体中文",
     "contentFontSize": "Content font size",
     "dark": "Dark",
@@ -23,6 +25,9 @@
     "language": "Language",
     "light": "Light",
     "preferences": "Preferences",
+    "profile": "Profile",
+    "name": "Name",
+    "imageFilterName": "Images",
     "settings": "Settings",
     "settingsMenu": "Global Settings menu",
     "system": "System",
@@ -766,6 +771,13 @@
     },
     "SETTINGS_PERSISTENCE_FAILED": {
       "default": "Failed to save settings."
+    },
+    "USER_PROFILE_PERSISTENCE_FAILED": {
+      "default": "Failed to save profile."
+    },
+    "USER_PROFILE_VALIDATION_FAILED": {
+      "avatarFormatInvalid": "Avatar must be a PNG, JPG, or WebP image.",
+      "nameTooLong": "Name is limited to 20 characters."
     }
   }
 }

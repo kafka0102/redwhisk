@@ -1,4 +1,4 @@
-import { SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { SlidersHorizontal, UserRound, type LucideIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,6 +29,7 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
+import { UserProfilePanel } from "./user-profile-panel";
 
 const SETTINGS_MENU_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
 const SETTINGS_MENU_MIN_WIDTH = 180;
@@ -38,6 +39,7 @@ const CONTENT_FONT_SIZE_ITEMS = CONTENT_FONT_SIZE_OPTIONS.map((size) => ({
   value: String(size),
   label: String(size),
 }));
+type GlobalSettingsSection = "profile" | "preferences";
 
 export function GlobalSettingsActivity() {
   const {
@@ -48,10 +50,13 @@ export function GlobalSettingsActivity() {
     themePreference,
     contentFontSize,
     setContentFontSize,
+    t,
   } = useI18n();
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
     SETTINGS_MENU_DEFAULT_WIDTH,
   );
+  const [activeSection, setActiveSection] =
+    useState<GlobalSettingsSection>("preferences");
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
@@ -108,9 +113,16 @@ export function GlobalSettingsActivity() {
           aria-label={messages.globalSettings.settingsMenu}
         >
           <SettingsMenuItem
+            Icon={UserRound}
+            isActive={activeSection === "profile"}
+            label={t("globalSettings.profile")}
+            onClick={() => setActiveSection("profile")}
+          />
+          <SettingsMenuItem
             Icon={SlidersHorizontal}
-            isActive
+            isActive={activeSection === "preferences"}
             label={preferencesLabel}
+            onClick={() => setActiveSection("preferences")}
           />
         </nav>
 
@@ -164,111 +176,117 @@ export function GlobalSettingsActivity() {
         />
 
         <div className="settings-content settings-content--global-preferences">
-          <section
-            className="settings-section settings-section--global-preferences"
-            aria-label={preferencesLabel}
-          >
-            <div className="settings-section__header">
-              <h3>{preferencesLabel}</h3>
-            </div>
-            <div className="settings-section__body">
-              <Card>
-                <CardContent className="grid gap-5 p-7">
-                  <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-start gap-x-6 gap-y-3">
-                    <h4 className="m-0 pt-3 text-[15px] font-bold leading-[1.3]">
-                      {messages.globalSettings.theme}
-                    </h4>
-                    <div className="grid min-w-0 grid-cols-3 gap-3">
-                      {THEME_OPTIONS.map((themeOption) => (
-                        <Button
-                          key={themeOption}
-                          variant="ghost"
-                          aria-pressed={themePreference === themeOption}
-                          onClick={() => setThemePreference(themeOption)}
-                          className={cn(
-                            "grid h-auto min-w-0 gap-3 rounded-[var(--radius-card)] border border-border bg-background px-4 py-4 text-center font-normal text-muted-foreground hover:bg-[var(--color-surface-muted)]",
-                            themePreference === themeOption &&
-                              "border-[var(--color-border-strong)] bg-[var(--color-accent-muted)] font-medium text-foreground hover:bg-[var(--color-accent-muted)]",
-                          )}
+          {activeSection === "profile" ? (
+            <UserProfilePanel />
+          ) : (
+            <section
+              className="settings-section settings-section--global-preferences"
+              aria-label={preferencesLabel}
+            >
+              <div className="settings-section__header">
+                <h3>{preferencesLabel}</h3>
+              </div>
+              <div className="settings-section__body">
+                <Card>
+                  <CardContent className="grid gap-5 p-7">
+                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-start gap-x-6 gap-y-3">
+                      <h4 className="m-0 pt-3 text-[15px] font-bold leading-[1.3]">
+                        {messages.globalSettings.theme}
+                      </h4>
+                      <div className="grid min-w-0 grid-cols-3 gap-3">
+                        {THEME_OPTIONS.map((themeOption) => (
+                          <Button
+                            key={themeOption}
+                            variant="ghost"
+                            aria-pressed={themePreference === themeOption}
+                            onClick={() => setThemePreference(themeOption)}
+                            className={cn(
+                              "grid h-auto min-w-0 gap-3 rounded-[var(--radius-card)] border border-border bg-background px-4 py-4 text-center font-normal text-muted-foreground hover:bg-[var(--color-surface-muted)]",
+                              themePreference === themeOption &&
+                                "border-[var(--color-border-strong)] bg-[var(--color-accent-muted)] font-medium text-foreground hover:bg-[var(--color-accent-muted)]",
+                            )}
+                          >
+                            <ThemePreview theme={themeOption} />
+                            <span className="text-[15px] leading-[1.3]">
+                              {messages.globalSettings[themeOption]}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    </section>
+                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                      <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                        {messages.globalSettings.language}
+                      </h4>
+                      <div className="min-w-0">
+                        <Select
+                          items={[
+                            {
+                              value: "zh",
+                              label: messages.globalSettings.chinese,
+                            },
+                            {
+                              value: "en",
+                              label: messages.globalSettings.english,
+                            },
+                          ]}
+                          value={locale}
+                          onValueChange={(value) => {
+                            setLocale(value as Locale);
+                          }}
                         >
-                          <ThemePreview theme={themeOption} />
-                          <span className="text-[15px] leading-[1.3]">
-                            {messages.globalSettings[themeOption]}
-                          </span>
-                        </Button>
-                      ))}
-                    </div>
-                  </section>
-                  <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
-                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
-                      {messages.globalSettings.language}
-                    </h4>
-                    <div className="min-w-0">
-                      <Select
-                        items={[
-                          {
-                            value: "zh",
-                            label: messages.globalSettings.chinese,
-                          },
-                          {
-                            value: "en",
-                            label: messages.globalSettings.english,
-                          },
-                        ]}
-                        value={locale}
-                        onValueChange={(value) => {
-                          setLocale(value as Locale);
-                        }}
-                      >
-                        <SelectTrigger
-                          aria-label={messages.globalSettings.language}
-                          className="w-[200px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="zh">
-                            {messages.globalSettings.chinese}
-                          </SelectItem>
-                          <SelectItem value="en">
-                            {messages.globalSettings.english}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </section>
-                  <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
-                    <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
-                      {messages.globalSettings.contentFontSize}
-                    </h4>
-                    <div className="min-w-0">
-                      <Select
-                        items={CONTENT_FONT_SIZE_ITEMS}
-                        value={String(contentFontSize)}
-                        onValueChange={(value) => {
-                          setContentFontSize(Number(value) as ContentFontSize);
-                        }}
-                      >
-                        <SelectTrigger
-                          aria-label={messages.globalSettings.contentFontSize}
-                          className="w-[200px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CONTENT_FONT_SIZE_OPTIONS.map((size) => (
-                            <SelectItem key={size} value={String(size)}>
-                              {size}
+                          <SelectTrigger
+                            aria-label={messages.globalSettings.language}
+                            className="w-[200px]"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="zh">
+                              {messages.globalSettings.chinese}
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </section>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
+                            <SelectItem value="en">
+                              {messages.globalSettings.english}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </section>
+                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                      <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
+                        {messages.globalSettings.contentFontSize}
+                      </h4>
+                      <div className="min-w-0">
+                        <Select
+                          items={CONTENT_FONT_SIZE_ITEMS}
+                          value={String(contentFontSize)}
+                          onValueChange={(value) => {
+                            setContentFontSize(
+                              Number(value) as ContentFontSize,
+                            );
+                          }}
+                        >
+                          <SelectTrigger
+                            aria-label={messages.globalSettings.contentFontSize}
+                            className="w-[200px]"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONTENT_FONT_SIZE_OPTIONS.map((size) => (
+                              <SelectItem key={size} value={String(size)}>
+                                {size}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </section>
+                  </CardContent>
+                </Card>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </main>
@@ -279,16 +297,19 @@ function SettingsMenuItem({
   Icon,
   isActive,
   label,
+  onClick,
 }: {
   Icon: LucideIcon;
   isActive: boolean;
   label: string;
+  onClick: () => void;
 }) {
   return (
     <button
       className="settings-menu__item"
       type="button"
       aria-pressed={isActive}
+      onClick={onClick}
     >
       <Icon aria-hidden="true" size={15} strokeWidth={1.9} />
       <span>{label}</span>

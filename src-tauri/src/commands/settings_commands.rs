@@ -15,6 +15,7 @@ use crate::types::saved_agent_skill::{
     DeleteSavedAgentSkillInput, ListSavedAgentSkillsInput, SaveSavedAgentSkillInput,
     SavedAgentSkillListResponse, SavedAgentSkillRecord,
 };
+use crate::types::user_profile::{UpdateUserProfileInput, UserProfileRecord};
 
 #[tauri::command]
 pub fn detect_codex_command(
@@ -123,6 +124,27 @@ pub fn delete_saved_agent_skill(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::delete_saved_agent_skill_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn get_user_profile(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<UserProfileRecord, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    crate::core::user_profile_service::UserProfileService::get_profile_in_data_dir(data_dir)
+}
+
+#[tauri::command]
+pub fn update_user_profile(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: UpdateUserProfileInput,
+) -> Result<UserProfileRecord, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    crate::core::user_profile_service::UserProfileService::update_profile_in_data_dir(
+        data_dir, input,
+    )
 }
 
 fn prepare_settings_data_dir(

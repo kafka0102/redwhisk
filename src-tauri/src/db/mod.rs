@@ -11,3 +11,4 @@ pub mod project_label_repository;
 pub mod project_repository;
 pub mod project_terminal_shortcut_command_repository;
 pub mod saved_agent_skill_repository;
+pub mod user_profile_repository;

@@ -15,6 +15,8 @@
     "projectNotFound": "项目不存在。"
   },
   "globalSettings": {
+    "avatar": "头像",
+    "avatarPickerLabel": "选择头像",
     "chinese": "简体中文",
     "contentFontSize": "内容字号",
     "dark": "深色",
@@ -23,6 +25,9 @@
     "language": "语言",
     "light": "浅色",
     "preferences": "偏好设置",
+    "profile": "个人资料",
+    "name": "用户名",
+    "imageFilterName": "图片",
     "settings": "设置",
     "settingsMenu": "全局设置菜单",
     "system": "跟随系统",
@@ -766,6 +771,13 @@
     },
     "SETTINGS_PERSISTENCE_FAILED": {
       "default": "设置保存失败。"
+    },
+    "USER_PROFILE_PERSISTENCE_FAILED": {
+      "default": "个人资料保存失败。"
+    },
+    "USER_PROFILE_VALIDATION_FAILED": {
+      "avatarFormatInvalid": "头像必须是 PNG、JPG 或 WebP 图片。",
+      "nameTooLong": "用户名不能超过 20 个字符。"
     }
   }
 }

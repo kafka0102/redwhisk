@@ -16,3 +16,4 @@ pub mod project_terminal_shortcut_command;
 pub mod saved_agent_skill;
 pub mod session_event;
 pub mod session_workspace;
+pub mod user_profile;

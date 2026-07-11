@@ -131,6 +131,8 @@ pub(crate) const AGENT_SESSION_PROCESSING_DURATION_MIGRATION_VERSION: &str =
     "0039_agent_session_processing_duration";
 pub(crate) const AGENT_SESSION_PROCESSING_DURATION_MIGRATION_SQL: &str =
     include_str!("../../migrations/0039_agent_session_processing_duration.sql");
+const USER_PROFILES_MIGRATION_VERSION: &str = "0040_user_profiles";
+const USER_PROFILES_MIGRATION_SQL: &str = include_str!("../../migrations/0040_user_profiles.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -364,6 +366,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: AGENT_SESSION_PROCESSING_DURATION_MIGRATION_VERSION,
             sql: AGENT_SESSION_PROCESSING_DURATION_MIGRATION_SQL,
+        },
+        Migration {
+            version: USER_PROFILES_MIGRATION_VERSION,
+            sql: USER_PROFILES_MIGRATION_SQL,
         },
     ]
 }

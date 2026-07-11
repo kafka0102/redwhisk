@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use redwhisk_lib::agent::command_detector::AgentCommandDetector;
 use redwhisk_lib::core::settings_service::SettingsService;
+use redwhisk_lib::core::user_profile_service::UserProfileService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
@@ -17,6 +18,7 @@ use redwhisk_lib::types::project_label::{ProjectLabelScope, SaveProjectLabelInpu
 use redwhisk_lib::types::saved_agent_skill::{
     ListSavedAgentSkillsInput, SaveSavedAgentSkillInput, SavedAgentSkillPath,
 };
+use redwhisk_lib::types::user_profile::UpdateUserProfileInput;
 
 #[test]
 fn settings_migration_creates_restructured_agent_profiles_table() {
@@ -87,6 +89,40 @@ fn settings_migration_creates_saved_agent_skills_table() {
             "updated_at",
         ],
     );
+}
+
+#[test]
+fn settings_migration_creates_user_profiles_table() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+
+    assert_eq!(
+        table_columns(&database.connection, "user_profiles"),
+        vec!["id", "name", "avatar_path"],
+    );
+}
+
+#[test]
+fn user_profile_saves_name() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let profile = UserProfileService::update_profile_in_data_dir(
+        temp_dir.path(),
+        UpdateUserProfileInput {
+            name: Some("RedWhisk".to_string()),
+            avatar_source_path: None,
+        },
+    )
+    .expect("save profile");
+
+    assert_eq!(profile.name, "RedWhisk");
+    assert_eq!(profile.avatar_path, None);
 }
 
 #[test]
