@@ -256,23 +256,31 @@ Agent command 检测必须考虑桌面应用启动环境与用户终端环境的
 
 ## 文案与国际化
 
-当前项目已具备 `src/shared/i18n` 运行时能力。前端页面文本必须按 locale 统一管理，不再允许继续扩大硬编码文案范围。
+前端 i18n 运行时基于 `i18next` + `react-i18next`，资源为 `src/shared/i18n/locales/{en,zh}.json`。前端页面文本必须按 locale 统一管理，不再允许继续扩大硬编码文案范围。
+
+运行时结构：
+
+- `src/shared/i18n/i18n-instance.ts`：i18next 实例初始化、`getDefaultLocale()`（首启/持久化 locale，默认 `zh`）、`changeLocale()`。
+- `src/shared/i18n/i18n-provider.tsx`：`I18nProvider`（每实例 locale state + `useTranslation({ lng })` 同步绑定，避免全局泄漏；`fixedLocale` 锁定、`initialLocale` 初值、无 prop 默认 `en` 兼容测试；无 provider 返回英文回退）、`useI18n()`（返回 `t`、`messages`、`locale`、`setLocale`、theme/字号偏好）。
+- `src/shared/i18n/messages-bridge.ts`：`messages` 代理，由 `t()` 派生，让既有 `useI18n().messages.x.y` / `messages.x.fn(arg)` 调用零改写接入 i18next。
+- `src/shared/i18n/i18n.tsx`：迁移桥接入口，re-export 新 provider，保持既有 `from ".../i18n/i18n"` 导入不变。
+- `src/shared/i18n/messages.ts`：仅保留 `I18nMessages` 等类型与共享常量（历史字典数据已迁入 JSON，待后续清理）。
 
 必须遵守：
 
-- 所有用户可见文本都必须国际化：包括页面标题、按钮、表单标签、占位符、空态、加载态、错误态、菜单项、提示语、`title`、`aria-label`、Dialog / Drawer / Popover 文案和状态文本。
-- 新增或修改页面文案时，不得直接在 TSX 中新增散落硬编码字符串；应接入 `src/shared/i18n/**`，或在 feature 内部建立由 locale 驱动的 formatter / messages helper。
-- 若一个 feature 内同时存在通用文案和复杂格式化文案，通用短文案优先进入共享消息字典，复杂拼接文案可保留在 feature formatter 中，但必须以 locale 为输入。
+- 所有用户可见文本都必须国际化：页面标题、按钮、表单标签、占位符、空态、加载态、错误态、菜单项、提示语、`title`、`aria-label`、Dialog / Drawer / Popover 文案和状态文本。
+- 新增/修改文案：**新增 key 到 `locales/en.json` 与 `zh.json`（键树必须一致），组件用 `t("namespace.key")`**；参数化文案用 `{{name}}` 模板与 `t("namespace.key", { name })`。不要新增散落硬编码字符串，也不要为新增 key 改 `I18nMessages` 接口（用字符串 key）。
+- 既有 `useI18n().messages.x.y` 写法仍可工作（经桥接）；新代码优先用 `t()`。
+- 中文术语统一（仅 zh 值，不改标识符/文件名/路由）：`agent → 智能体`、`session → 会话`、`Issues → 任务`，及派生（`Agent Profile → 智能体配置`）。
+- 后端 Rust 不含面向用户展示文本、不感知 locale；错误以英文/code 经 `CommandError` 回传。前端对关键错误按 code/类型映射到本地化模板，未命中时直接展示后端英文 `message`，**不得在英文 locale 下混入中文**。
 - 不把 Codex 写死为通用 UI 命令语义；按钮和流程文案使用 Agent 泛称，配置项中体现 Codex。
-- 迁移旧页面时，优先处理运行时真实可见路径，并顺手清理同一区域未国际化的 `placeholder`、`aria-label`、状态文案与空态文案，避免只做一半。
+- 迁移旧页面时，优先处理运行时真实可见路径，顺手清理同区域未国际化的 `placeholder`、`aria-label`、状态文案与空态文案。
 
-推荐实现方式：
+默认 locale：生产首启 `zh`（由 `app.tsx` 经 `initialLocale={getDefaultLocale()}` 注入）；locale 持久化键 `redwhisk.locale`。语言切换经全局设置「语言偏好」或 `setLocale()`，即时生效。
 
-1. 在 `src/shared/i18n/messages.ts` 中为稳定、跨页面复用的文案新增 namespace 或字段。
-2. 组件内通过 `useI18n()` 读取 `locale` 与 `messages`，不要直接访问 `localStorage` 或自行维护第二套 locale 状态。
-3. 对状态名、动态标题、确认文案、错误摘要等需要格式化的文本，优先封装为 `messages.xxx.someFormatter(...)` 或 feature 内 `formatXxx(locale, ...)`。
-4. 对大型 feature，不要把所有文案都堆进单个页面组件；可拆到同 feature 下的 `*-messages.ts`、formatter 或 helper，以降低页面复杂度。
-5. 测试中如果断言可见文案，默认以英文为基线；需要覆盖中文切换时，应显式设置 locale 并断言切换后的文本。
+测试：
+
+- 断言可见文案时显式确定 locale：用 `<I18nProvider initialLocale="en">` / `"zh"`，或裸渲染（走英文回退）。不要依赖跨用例的全局 locale 残留。
 
 ## 测试与验证规则
 

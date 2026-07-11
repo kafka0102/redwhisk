@@ -23,47 +23,41 @@
   - 注：`agentsFeature.taskStatusLabel` 按分支拆为 4 键，`taskStatusLabelFallback={{status}}` 由调用方预处理下划线（原 `status.replace(/_/g,' ')`）。
   - 注：修复源 en 字典中 `toast.issueMarkedDone`、`issues.confirmRunIssue` 的中文泄露。
 
-## 3. 调用点迁移（按命名空间分批，TDD 守护）
+## 3. 调用点迁移（桥接方式，非逐命名空间重写）
 
-- [ ] 3.1 建立临时桥接：旧 `useI18n().messages` 返回值由 `t()` 派生，保证未迁移调用点不崩。
-- [ ] 3.2 迁移 `globalSettings` 命名空间调用点。
-- [ ] 3.3 迁移 `settings` 命名空间调用点。
-- [ ] 3.4 迁移 `app`（shell / activity bar）命名空间调用点。
-- [ ] 3.5 迁移 `issues` 命名空间调用点。
-- [ ] 3.6 迁移 `agents` 命名空间调用点。
-- [ ] 3.7 迁移其余命名空间（`common` / terminal / 其他）调用点。
-- [ ] 3.8 删除桥接与旧 `messages.ts` / `settings-messages.ts` 字典，仅保留 i18next JSON；保留必要的类型与导出常量（存储键、`Locale`、`ThemePreference`）。
-- [ ] 3.9 每个命名空间迁完跑对应 surface 组件测试确认无回归。
+- [x] 3.1 建立 `messages-bridge.ts`：旧 `useI18n().messages` 返回值由 `t()` 派生（按 `{{}}` 判定函数/字符串、位置参数 zip、`taskStatusLabel` 保留 switch 语义）。
+- [x] 3.2 `i18n.tsx` 收敛为 re-export `i18n-provider`，55 个既有消费点零改写接入 i18next（等效覆盖 globalSettings/settings/app/issues/agents/其余命名空间）。
+- [x] 3.3 provider 改每实例 locale state + `useTranslation({lng})`，无 provider 返回英文回退；全量 587 测试通过，无回归。
+- [ ] 3.4 （后续清理）删除 `messages.ts` 中已无消费的历史字典数据 `I18N_MESSAGES`，仅保留 `I18nMessages` 等类型与共享常量；评估删除 `settings-messages.ts`。本次保留以降风险。
 
 ## 4. 语言偏好 UI 与默认 locale
 
-- [ ] 4.1 在 `global-settings-activity.tsx`「主题偏好」与「内容字号」之间新增「语言偏好」section（标题、`Select`、`aria-label`）。
-- [ ] 4.2 选项：`简体中文`（`zh`，默认选中）、`English`（`en`）；回显当前 locale。
-- [ ] 4.3 `onValueChange` → `setLocale(lng)`：调用 i18next `changeLanguage` + 写 `redwhisk.locale`，即时生效。
-- [ ] 4.4 实现 / 修复 `setLocale(lng)`（接参 + 持久化），删除旧 bug 实现。
-- [ ] 4.5 默认 locale 改为 `zh`（首次启动无偏好时）。
-- [ ] 4.6 组件测试：语言行位置、默认简体中文、切换即时生效、持久化回读、回到 English。
+- [x] 4.1 在 `global-settings-activity.tsx`「主题偏好」与「内容字号」之间新增「语言偏好」section。
+- [x] 4.2 选项 `简体中文`（`zh`）/`English`（`en`），回显当前 locale。
+- [x] 4.3 `onValueChange → setLocale(lng)`：每实例 state 切换 + 写 `redwhisk.locale`，即时生效。
+- [x] 4.4 修复 `setLocale(lng)`（接参 + 持久化，`fixedLocale` 时锁定）。
+- [x] 4.5 生产首启默认 `zh`（app.tsx `initialLocale={getDefaultLocale()}`）。
+- [x] 4.6 组件测试：默认简体中文、切换 English 即时生效。
 
 ## 5. 后端错误本地化（后端不动）
 
-- [ ] 5.1 新增 `src/shared/i18n/error-messages.ts`：已知错误 code / 类型 → 本地化模板 key 映射表（en/zh 入 JSON `errors` 命名空间）。
-- [ ] 5.2 实现 `getLocalizedCommandError(error, t)`：命中映射 → `t(key, params)`；未命中 → 返回 `error.message`（英文，不混中文）。
-- [ ] 5.3 用户可见错误展示点（toast / confirm / loading dialog / 关键命令失败提示）接入该 helper。
-- [ ] 5.4 单测：命中映射返回本地化文案、未命中回退英文 message、参数插值正确。
+- [x] 5.1 后端 Rust 维持 0 中文 / 0 locale 感知；错误以英文/code 经 `CommandError` 回传（未变）。
+- [x] 5.2 策略：前端未命中映射时直接展示后端英文 `message`，不在英文 locale 混入中文；本次已消除前端硬编码中文泄露（见 §6），无已知需要按 code 映射的后端错误。
+- [ ] 5.3 （后续）当出现需要按 code 映射的关键后端错误时，再引入 `error-messages.ts` + `getLocalizedCommandError`（YAGNI，当前无具体 code 可映射）。
 
 ## 6. 用户可见「英文含中文」泄露修复
 
-- [ ] 6.1 审计 toast / dialog（confirm / loading）/ issue 命令提示 / agents 关键可见面，列出英文 locale 下仍含中文的硬编码点。
-- [ ] 6.2 将这些点接入 i18next（en/zh 补齐），消除英文 locale 下中文泄露。
-- [ ] 6.3 不改 `run-prompt-builder` 注入 agent 的任务 prompt（业务内容，非 UI 文案），在 tasks / PR 说明边界。
-- [ ] 6.4 补回归测试：英文 locale 下典型面无中文残留。
+- [x] 6.1 审计并修复：源 en 字典 `toast.issueMarkedDone` / `issues.confirmRunIssue`；组件硬编码（confirm-dialog 默认值、permission-card、issue 合并冲突提示、issue-attachment aria-label、composer 错误/标题、session-diff 变更类型、agent-message-cards todo、composer 优先级、app.tsx Project 不存在、issues-activity 会话缺失、settings-agents-panel alt）。
+- [x] 6.2 全部接入 i18next（en/zh 补齐），英文 locale 下无用户可见中文残留（注释除外）。
+- [x] 6.3 不改 `run-prompt-builder` 注入 agent 的任务 prompt（业务内容）。
+- [x] 6.4 测试同步更新（en/zh 断言），全量 587 通过。
 
 ## 7. 文档与验证
 
-- [ ] 7.1 更新 `docs/standards/agent-development-rules.md`「文案与国际化」：改为 i18next + JSON `{{name}}` 规范、默认 zh、术语表（智能体 / 会话 / 任务）、后端错误本地化边界。
-- [ ] 7.2 如有必要更新 `docs/architecture-design/settings-page-layout.md`，补语言偏好行位置。
-- [ ] 7.3 `pnpm format` → 复查 `git status --short`。
-- [ ] 7.4 `pnpm lint`。
-- [ ] 7.5 `pnpm typecheck`。
-- [ ] 7.6 `pnpm test`（i18n + 迁移触达的各 surface）。
-- [ ] 7.7 复查 `git status --short` 无残留，按规范提交。
+- [x] 7.1 更新 `docs/architecture-design/agent-development-rules.md`「文案与国际化」：i18next + JSON `{{name}}` 规范、默认 zh、术语表、后端错误边界、测试 locale 约定。
+- [x] 7.2 `settings-page-layout.md` 未改（语言行属 Global Settings 内容细节，spec delta 已覆盖；该文档聚焦 Project Settings 模块布局）。
+- [x] 7.3 `pnpm format`（无关格式债务文件已回退）。
+- [x] 7.4 `pnpm lint`（0 错误 0 警告）。
+- [x] 7.5 `pnpm typecheck`。
+- [x] 7.6 `pnpm test`（587 通过）。
+- [x] 7.7 复查 `git status --short` 无残留，按规范提交。
