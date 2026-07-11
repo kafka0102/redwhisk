@@ -5,6 +5,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { GlobalSettingsActivity } from "./global-settings-activity";
 import { selectShadcnOption } from "../../test/select-helpers";
+import { getUserProfile, updateUserProfile } from "./settings-commands";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: (path: string) => `asset://${path}`,
+}));
+
+vi.mock("./settings-commands", () => ({
+  getUserProfile: vi.fn(),
+  updateUserProfile: vi.fn(),
+}));
+
+const getUserProfileMock = vi.mocked(getUserProfile);
+const updateUserProfileMock = vi.mocked(updateUserProfile);
+const { open } = await import("@tauri-apps/plugin-dialog");
+const openDialogMock = vi.mocked(open);
 
 function renderGlobalSettings() {
   return render(
@@ -20,6 +39,11 @@ describe("GlobalSettingsActivity", () => {
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.style.removeProperty("--content-font-size");
     vi.stubGlobal("matchMedia", createMatchMedia(false));
+    getUserProfileMock.mockReset();
+    updateUserProfileMock.mockReset();
+    openDialogMock.mockReset();
+    getUserProfileMock.mockResolvedValue({ name: "", avatarPath: null });
+    updateUserProfileMock.mockResolvedValue({ name: "", avatarPath: null });
   });
 
   afterEach(() => {
@@ -61,6 +85,52 @@ describe("GlobalSettingsActivity", () => {
     );
     expect(screen.queryByRole("switch", { name: "启用通知浮窗" })).toBeNull();
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("shows Profile above Preferences and saves the name after a 300ms debounce", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "个人资料" }));
+
+    expect(
+      screen.getByRole("heading", { name: "个人资料" }),
+    ).toBeInTheDocument();
+    const nameInput = screen.getByRole("textbox", { name: "用户名" });
+    await user.type(nameInput, "RedWhisk");
+    expect(updateUserProfileMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(updateUserProfileMock).toHaveBeenCalledWith({ name: "RedWhisk" });
+  });
+
+  it("opens an image picker and saves the selected avatar", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/tmp/avatar.jpg");
+    updateUserProfileMock.mockResolvedValue({
+      name: "",
+      avatarPath: "/Users/alice/.redwhisk/avatars/profile.png",
+    });
+    renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "个人资料" }));
+    await user.click(screen.getByRole("button", { name: "选择头像" }));
+
+    expect(openDialogMock).toHaveBeenCalledWith({
+      directory: false,
+      filters: [
+        {
+          extensions: ["png", "jpg", "jpeg", "webp"],
+          name: "图片",
+        },
+      ],
+      multiple: false,
+    });
+    expect(updateUserProfileMock).toHaveBeenCalledWith({
+      avatarSourcePath: "/tmp/avatar.jpg",
+    });
   });
 
   it("renders the language preference with 简体中文 selected by default", () => {

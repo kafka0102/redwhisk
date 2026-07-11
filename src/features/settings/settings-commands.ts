@@ -145,6 +145,16 @@ export interface AgentCommandCheckResult {
   command: string;
 }
 
+export interface UserProfileRecord {
+  name: string;
+  avatarPath: string | null;
+}
+
+export interface UpdateUserProfileInput {
+  name?: string;
+  avatarSourcePath?: string;
+}
+
 export interface TestAgentCommandInput {
   command: string;
 }
@@ -159,6 +169,16 @@ export function testAgentCommand(
   return invokeCommand<AgentCommandCheckResult>("test_agent_command", {
     input,
   });
+}
+
+export function getUserProfile(): Promise<UserProfileRecord> {
+  return invokeCommand<UserProfileRecord>("get_user_profile");
+}
+
+export function updateUserProfile(
+  input: UpdateUserProfileInput,
+): Promise<UserProfileRecord> {
+  return invokeCommand<UserProfileRecord>("update_user_profile", { input });
 }
 
 export function listAgentProfiles(
