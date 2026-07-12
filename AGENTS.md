@@ -12,6 +12,20 @@
 - 数据：SQLite 是业务状态唯一事实源，前端不直接读写。
 - 包管理：`pnpm`（若不在 PATH，先加载 node 版本管理器，如 `nvm use` / `fnm use`）。
 
+## Agent skills
+
+### Issue tracker
+
+Issue 统一记录在 GitHub Issues 中。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认五类 triage 标签。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用单上下文布局：根目录 `CONTEXT.md` 与 `docs/adr/`。详见 `docs/agents/domain.md`。
+
 ## 2. 常用命令
 
 | 场景 | 命令 |
