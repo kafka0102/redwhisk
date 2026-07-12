@@ -1,4 +1,5 @@
-use tauri::State;
+use serde::Serialize;
+use tauri::{Emitter, State};
 
 use crate::app_state::AppState;
 use crate::core::session_workspace_service::SessionWorkspaceService;
@@ -9,6 +10,15 @@ use crate::types::session_workspace::{
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceDiffContent,
     WorkspaceFileContent,
 };
+
+pub const CODE_WORKSPACE_ROOTS_UPDATED_EVENT: &str = "code-workspace-roots-updated";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeWorkspaceRootsUpdatedEvent {
+    pub project_id: i64,
+    pub roots: Vec<crate::types::session_workspace::CodeWorkspaceRoot>,
+}
 
 #[tauri::command]
 pub fn get_project_worktree_changes(
@@ -103,4 +113,18 @@ fn with_session_workspace_service<T>(
         crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
     );
     action(service)
+}
+
+pub fn emit_code_workspace_roots_updated(app: &tauri::AppHandle, data_dir: &std::path::Path, project_id: i64) {
+    let Ok(database) = crate::db::connection::DatabaseConfig::new(data_dir).open() else { return; };
+    if crate::db::migrations::MigrationRunner::default().run(&database.connection).is_err() { return; }
+    let service = SessionWorkspaceService::new(
+        crate::db::project_repository::ProjectRepository::new(&database.connection),
+        crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
+    );
+    let Ok(response) = service.list_code_workspace_roots(project_id) else { return; };
+    let _ = app.emit(CODE_WORKSPACE_ROOTS_UPDATED_EVENT, CodeWorkspaceRootsUpdatedEvent {
+        project_id,
+        roots: response.roots,
+    });
 }

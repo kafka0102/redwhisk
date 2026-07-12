@@ -1,4 +1,5 @@
 import { Editor } from "@monaco-editor/react";
+import { listen } from "@tauri-apps/api/event";
 import { ChevronDown, ChevronRight, File, Folder, X } from "lucide-react";
 import {
   type CSSProperties,
@@ -20,9 +21,10 @@ import { useI18n } from "../../shared/i18n/i18n";
 import { SessionFileTreePanel } from "../agents/session-file-tree-panel";
 import {
   getProjectWorktreeFileTree,
-  listCodeWorkspaceRoots,
   readProjectWorktreeFile,
+  CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   type CodeWorkspaceRoot,
+  type CodeWorkspaceRootsUpdatedEvent,
   type WorkspaceFileContent,
   type WorkspaceFileTreeNode,
 } from "../agents/session-workspace-commands";
@@ -40,13 +42,15 @@ interface CodeFileTab {
 
 interface CodeWorkspaceProps {
   projectId: number;
+  roots: CodeWorkspaceRoot[];
 }
 
-export function CodeWorkspace({ projectId }: CodeWorkspaceProps) {
+export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const { contentFontSize, messages, t } = useI18n();
-  const [roots, setRoots] = useState<CodeWorkspaceRoot[]>([]);
-  const [selectedRoot, setSelectedRoot] = useState<CodeWorkspaceRoot | null>(
-    null,
+  const [workspaceRoots, setWorkspaceRoots] =
+    useState<CodeWorkspaceRoot[]>(roots);
+  const [selectedRootPath, setSelectedRootPath] = useState<string | null>(
+    () => selectInitialRoot(roots)?.path ?? null,
   );
   const [tree, setTree] = useState<WorkspaceFileTreeNode[]>([]);
   const [treeError, setTreeError] = useState<string | null>(null);
@@ -56,30 +60,33 @@ export function CodeWorkspace({ projectId }: CodeWorkspaceProps) {
   const [sidebarWidth, setSidebarWidth] = useState(400);
   const dragCleanupRef = useRef<(() => void) | null>(null);
 
+  const selectedRoot = useMemo(
+    () =>
+      workspaceRoots.find((root) => root.path === selectedRootPath) ??
+      selectInitialRoot(workspaceRoots),
+    [selectedRootPath, workspaceRoots],
+  );
+
   useEffect(() => {
-    let isCurrent = true;
-    void listCodeWorkspaceRoots(projectId)
-      .then((response) => {
-        if (!isCurrent) return;
-        setRoots(response.roots);
-        setSelectedRoot((current) => {
-          const nextRoot =
-            response.roots.find((root) => root.path === current?.path) ??
-            response.roots.find((root) => root.isProjectRoot) ??
-            response.roots[0] ??
-            null;
-          if (current && current.path !== nextRoot?.path) {
-            setTabs([]);
-            setActivePath(null);
-          }
-          return nextRoot;
-        });
-      })
-      .catch(() => {
-        if (isCurrent) setRoots([]);
-      });
+    let isDisposed = false;
+    let unlisten: (() => void) | null = null;
+    void listen<CodeWorkspaceRootsUpdatedEvent>(
+      CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
+      (event) => {
+        if (event.payload.projectId === projectId) {
+          setWorkspaceRoots(event.payload.roots);
+        }
+      },
+    ).then((nextUnlisten) => {
+      if (isDisposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
     return () => {
-      isCurrent = false;
+      isDisposed = true;
+      unlisten?.();
     };
   }, [projectId]);
 
@@ -118,7 +125,7 @@ export function CodeWorkspace({ projectId }: CodeWorkspaceProps) {
   }, [projectId, selectedRoot, t]);
 
   const selectRoot = (root: CodeWorkspaceRoot) => {
-    setSelectedRoot(root);
+    setSelectedRootPath(root.path);
     setTabs([]);
     setActivePath(null);
   };
@@ -233,7 +240,7 @@ export function CodeWorkspace({ projectId }: CodeWorkspaceProps) {
             <ChevronDown aria-hidden="true" size={14} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {roots.map((root) => (
+            {workspaceRoots.map((root) => (
               <DropdownMenuItem
                 key={root.path}
                 onClick={() => selectRoot(root)}
@@ -423,4 +430,10 @@ function findNode(
     if (descendant) return descendant;
   }
   return null;
+}
+
+function selectInitialRoot(
+  roots: CodeWorkspaceRoot[],
+): CodeWorkspaceRoot | null {
+  return roots.find((root) => root.isProjectRoot) ?? roots[0] ?? null;
 }

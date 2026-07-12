@@ -83,6 +83,8 @@ pub async fn start_agent_session(
     let pty_sessions = state.pty_sessions.clone();
     let agent_sessions = state.agent_sessions.clone();
     let agent_event_broadcaster = state.agent_event_broadcaster.clone();
+    let project_id = input.project_id;
+    let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let database = crate::db::connection::DatabaseConfig::new(&data_dir)
             .open()
@@ -97,7 +99,7 @@ pub async fn start_agent_session(
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
 
-        AgentSessionService::new(
+        let result = AgentSessionService::new(
             crate::db::issue_repository::IssueRepository::new(&database.connection),
             crate::db::project_repository::ProjectRepository::new(&database.connection),
             crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
@@ -109,7 +111,9 @@ pub async fn start_agent_session(
             &pty_sessions,
             &agent_sessions,
             &agent_event_broadcaster,
-        )
+        )?;
+        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
+        Ok(result)
     })
     .await
     .map_err(|error| {
@@ -329,6 +333,7 @@ pub async fn start_structured_agent_session(
     let agent_sessions = state.agent_sessions.clone();
     let agent_event_broadcaster = state.agent_event_broadcaster.clone();
     let project_id = input.project_id;
+    let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let result = AgentSessionService::start_structured_agent_session_in_data_dir(
             data_dir,
@@ -342,6 +347,7 @@ pub async fn start_structured_agent_session(
             Some(result.session_id),
             "session_started",
         );
+        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
         Ok(result)
     })
     .await
@@ -364,6 +370,7 @@ pub async fn resume_structured_agent_session(
     let agent_sessions = state.agent_sessions.clone();
     let agent_event_broadcaster = state.agent_event_broadcaster.clone();
     let project_id = input.project_id;
+    let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let result = AgentSessionService::resume_structured_agent_session_in_data_dir(
             data_dir,
@@ -377,6 +384,7 @@ pub async fn resume_structured_agent_session(
             Some(result.session_id),
             "session_resumed",
         );
+        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
         Ok(result)
     })
     .await

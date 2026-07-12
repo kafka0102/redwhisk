@@ -274,6 +274,7 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary>
         worktree_setup_command: row.get(4)?,
         created_at: row.get(5)?,
         last_opened_at: row.get(6)?,
+        code_workspaces: Vec::new(),
     })
 }
 

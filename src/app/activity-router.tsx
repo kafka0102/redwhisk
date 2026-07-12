@@ -9,6 +9,7 @@ import type { IssueOpenRequest } from "../features/issues/issue-open-request";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
 import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
 import type { ProjectWorktreeLocation } from "../features/project/project-commands";
+import type { CodeWorkspaceRoot } from "../features/agents/session-workspace-commands";
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -35,6 +36,7 @@ interface ActivityRouterProps {
   >;
   onSelectAgentSession: (sessionId: number) => void;
   projectId: number;
+  projectCodeWorkspaces: CodeWorkspaceRoot[];
   projectName: string;
   projectPath: string;
   projectWorktreeLocation: ProjectWorktreeLocation;
@@ -57,6 +59,7 @@ export function ActivityRouter({
   onProjectTerminalsStateChange,
   onSelectAgentSession,
   projectId,
+  projectCodeWorkspaces,
   projectName,
   projectPath,
   projectWorktreeLocation,
@@ -77,7 +80,13 @@ export function ActivityRouter({
   }
 
   if (activeActivity === "code") {
-    return <CodeWorkspace key={projectId} projectId={projectId} />;
+    return (
+      <CodeWorkspace
+        key={projectId}
+        projectId={projectId}
+        roots={projectCodeWorkspaces}
+      />
+    );
   }
 
   if (activeActivity === "terminals") {

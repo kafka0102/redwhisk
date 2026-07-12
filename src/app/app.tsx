@@ -26,6 +26,7 @@ import {
   type ProjectRecord,
   type ProjectListItem,
 } from "../features/project/project-commands";
+import type { CodeWorkspaceRoot } from "../features/agents/session-workspace-commands";
 import { SessionMonitorSurface } from "../features/agents/session-notifications/session-monitor-surface";
 import {
   OPEN_AGENT_SESSION_EVENT,
@@ -41,6 +42,7 @@ export interface ProjectSummary {
   worktreeSetupCommand: string;
   recentOpenedAt: string;
   status: "available" | "missing";
+  codeWorkspaces?: CodeWorkspaceRoot[];
 }
 
 interface CreateProjectDraft {
@@ -381,6 +383,7 @@ function toProjectSummary(
     worktreeSetupCommand: project.worktreeSetupCommand ?? "",
     recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,
     status: "pathStatus" in project ? project.pathStatus : "available",
+    codeWorkspaces: project.codeWorkspaces ?? [],
   };
 }
 

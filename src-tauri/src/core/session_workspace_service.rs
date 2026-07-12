@@ -9,10 +9,10 @@ use std::time::UNIX_EPOCH;
 
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::project_repository::ProjectRepository;
-use crate::git::worktree::is_additional_worktree;
+use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
-    CodeWorkspaceRoot, CodeWorkspaceRootsResponse,
+    CodeWorkspaceRootsResponse,
     ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceChangeKind,
     WorkspaceChangedFile, WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceDiffContent,
@@ -20,7 +20,7 @@ use crate::types::session_workspace::{
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
-const HIDDEN_DIRS: &[&str] = &[".git"];
+const HIDDEN_DIRS: &[&str] = &[".git", "node_modules", "target", "dist", "build", ".next", ".turbo", ".vite"];
 const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
 const MAX_COMMIT_HISTORY_ENTRIES: usize = 50;
 const BASE_BRANCH_CANDIDATES: &[&str] = &[
@@ -653,15 +653,11 @@ fn read_workspace_file_tree(root: &Path) -> Result<ProjectWorktreeFileTreeRespon
 }
 
 fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRootsResponse, CommandError> {
-    let output = run_git(root, &["worktree", "list", "--porcelain"])?;
-    let project_root = root.canonicalize().map_err(workspace_io_error)?;
-    let mut roots = Vec::new(); let mut path = None;
-    for line in output.lines().chain(std::iter::once("")) {
-        if let Some(value) = line.strip_prefix("worktree ") { path = Some(value.to_string()); }
-        else if let Some(branch) = line.strip_prefix("branch refs/heads/") { if let Some(path) = path.take() { roots.push(CodeWorkspaceRoot { is_project_root: Path::new(&path).canonicalize().ok().is_some_and(|candidate| candidate == project_root), branch: branch.to_string(), path }); } }
-        else if line.is_empty() { path = None; }
-    }
-    roots.sort_by(|a, b| b.is_project_root.cmp(&a.is_project_root).then_with(|| a.branch.cmp(&b.branch)));
+    let roots = list_code_workspaces(root).map_err(|error| {
+        CommandError::new(CommandErrorCode::AgentSessionValidationFailed, "代码工作区读取失败。")
+            .with_reason("codeWorkspaceReadFailed")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
     Ok(CodeWorkspaceRootsResponse { roots })
 }
 
@@ -696,7 +692,8 @@ fn read_directory_nodes(
             .to_string_lossy()
             .replace('\\', "/");
         let metadata = entry.metadata().map_err(workspace_io_error)?;
-        let is_ignored = Command::new("git").args(["check-ignore", "-q", "--no-index", "--", &relative_path]).current_dir(root).status().map(|status| status.success()).unwrap_or(false);
+        // 逐条启动 `git check-ignore` 会在大型仓库创建海量子进程并阻塞 command。
+        let is_ignored = false;
 
         if file_type.is_dir() {
             let mut children = read_directory_nodes(root, &path)?;

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::types::session_workspace::CodeWorkspaceRoot;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectWorktreeLocation {
@@ -56,6 +58,8 @@ pub struct ProjectSummary {
     pub worktree_setup_command: String,
     pub created_at: i64,
     pub last_opened_at: i64,
+    #[serde(default)]
+    pub code_workspaces: Vec<CodeWorkspaceRoot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

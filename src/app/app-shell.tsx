@@ -242,6 +242,7 @@ export function AppShell({
               onSelectAgentSession={setActiveAgentSessionId}
               activeProjectSettingsMenu={activeProjectSettingsMenu}
               projectWorktreeSetupCommand={project.worktreeSetupCommand}
+              projectCodeWorkspaces={project.codeWorkspaces ?? []}
               projectId={project.id}
               projectName={project.name}
               projectPath={project.path}

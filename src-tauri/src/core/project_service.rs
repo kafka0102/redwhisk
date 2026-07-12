@@ -6,6 +6,7 @@ use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::repository::is_git_repository;
+use crate::git::worktree::list_code_workspaces;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
@@ -30,14 +31,15 @@ impl<'connection> ProjectService<'connection> {
         let name = normalize_project_name(&input.name, &validated_repo.repo_path)?;
         validate_worktree_location(&validated_repo.repo_path, input.worktree_location)?;
 
-        self.repository
+        let project = self.repository
             .insert_or_get_existing_for_path(
                 &name,
                 &validated_repo.repo_path,
                 input.worktree_location,
                 input.worktree_setup_command.trim(),
             )
-            .map_err(project_database_error)
+            .map_err(project_database_error)?;
+        Ok(populate_code_workspaces(project))
     }
 
     pub fn list_projects(&self) -> Result<ProjectListResponse, CommandError> {
@@ -55,16 +57,17 @@ impl<'connection> ProjectService<'connection> {
     pub fn open_project(&self, input: OpenProjectInput) -> Result<ProjectSummary, CommandError> {
         self.project_available_for_open(input.project_id)?;
 
-        self.repository
+        let project = self.repository
             .update_last_opened_at(input.project_id)
-            .map_err(project_database_error)
+            .map_err(project_database_error)?;
+        Ok(populate_code_workspaces(project))
     }
 
     pub fn open_project_for_window(
         &self,
         input: OpenProjectInput,
     ) -> Result<ProjectSummary, CommandError> {
-        self.project_available_for_open(input.project_id)
+        Ok(populate_code_workspaces(self.project_available_for_open(input.project_id)?))
     }
 
     pub fn record_project_opened(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
@@ -83,7 +86,7 @@ impl<'connection> ProjectService<'connection> {
 
         self.project_by_id(input.project_id)?;
 
-        self.repository
+        let project = self.repository
             .update_settings(
                 input.project_id,
                 &project_name,
@@ -91,7 +94,8 @@ impl<'connection> ProjectService<'connection> {
                 input.worktree_location,
                 input.worktree_setup_command.trim(),
             )
-            .map_err(project_database_error)
+            .map_err(project_database_error)?;
+        Ok(populate_code_workspaces(project))
     }
 
     pub fn validate_project_repo_path(
@@ -380,6 +384,12 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         last_opened_at: project.last_opened_at,
         path_status,
     }
+}
+
+fn populate_code_workspaces(mut project: ProjectSummary) -> ProjectSummary {
+    // 项目记录可能早于 Git 初始化完成，或仓库后来被移动；保留项目可打开的既有语义。
+    project.code_workspaces = list_code_workspaces(&project.repo_path).unwrap_or_default();
+    project
 }
 
 fn ensure_project_path_available(project: &ProjectSummary) -> Result<(), CommandError> {

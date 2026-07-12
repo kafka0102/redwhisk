@@ -5,6 +5,8 @@ use std::process::Command;
 
 use thiserror::Error;
 
+use crate::types::session_workspace::CodeWorkspaceRoot;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitBranchInfo {
     pub current_branch: String,
@@ -74,6 +76,34 @@ pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo,
         current_branch,
         local_branches,
     })
+}
+
+pub fn list_code_workspaces(repo_path: impl AsRef<Path>) -> Result<Vec<CodeWorkspaceRoot>, GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let project_root = repo_path.canonicalize().map_err(|error| {
+        GitWorktreeError::InvalidRepoPath(format!("{}: {error}", repo_path.to_string_lossy()))
+    })?;
+    let output = run_git(&repo_path, &["worktree", "list", "--porcelain"])?;
+    let mut roots = Vec::new();
+    let mut workspace_path: Option<String> = None;
+    let mut branch: Option<String> = None;
+
+    let append_workspace = |roots: &mut Vec<CodeWorkspaceRoot>, workspace_path: &mut Option<String>, branch: &mut Option<String>| {
+        let Some(path) = workspace_path.take() else { return; };
+        let is_project_root = Path::new(&path).canonicalize().is_ok_and(|candidate| candidate == project_root);
+        roots.push(CodeWorkspaceRoot {
+            branch: branch.take().unwrap_or_else(|| "HEAD".to_string()),
+            path,
+            is_project_root,
+        });
+    };
+    for line in output.lines().chain(std::iter::once("")) {
+        if let Some(path) = line.strip_prefix("worktree ") { workspace_path = Some(path.to_string()); }
+        else if let Some(value) = line.strip_prefix("branch refs/heads/") { branch = Some(value.to_string()); }
+        else if line.is_empty() { append_workspace(&mut roots, &mut workspace_path, &mut branch); }
+    }
+    roots.sort_by(|left, right| right.is_project_root.cmp(&left.is_project_root).then_with(|| left.branch.cmp(&right.branch)));
+    Ok(roots)
 }
 
 pub fn create_worktree_for_issue(
@@ -495,6 +525,26 @@ mod tests {
             created.workspace_path
         );
         assert_eq!(current_branch(&created.workspace_path).unwrap(), "issue-3");
+    }
+
+    #[test]
+    fn lists_project_root_and_additional_worktrees_with_their_branches() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-3");
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+        git(&repo_dir, &["worktree", "add", "-b", "issue-3", worktree_path.to_string_lossy().as_ref(), "main"]);
+
+        let roots = list_code_workspaces(&repo_dir).expect("list code workspaces");
+
+        assert_eq!(roots.len(), 2);
+        assert_eq!(roots[0].branch, "main");
+        assert!(roots[0].is_project_root);
+        assert_eq!(roots[1].branch, "issue-3");
+        assert!(!roots[1].is_project_root);
     }
 
     #[test]

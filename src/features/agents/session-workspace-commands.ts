@@ -95,6 +95,14 @@ export interface CodeWorkspaceRootsResponse {
   roots: CodeWorkspaceRoot[];
 }
 
+export const CODE_WORKSPACE_ROOTS_UPDATED_EVENT =
+  "code-workspace-roots-updated";
+
+export interface CodeWorkspaceRootsUpdatedEvent {
+  projectId: number;
+  roots: CodeWorkspaceRoot[];
+}
+
 export interface ProjectWorktreeFileTreeResponse {
   nodes: WorkspaceFileTreeNode[];
   signature: string;

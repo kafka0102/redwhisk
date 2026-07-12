@@ -476,8 +476,12 @@ pub async fn delete_issue_worktree(
     input: DeleteIssueWorktreeInput,
 ) -> Result<DeleteIssueWorktreeResult, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let project_id = input.project_id;
+    let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)
+        let result = AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)?;
+        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
+        Ok(result)
     })
     .await
     .map_err(|error| {

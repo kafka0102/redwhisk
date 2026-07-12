@@ -47,6 +47,11 @@ export interface ProjectRecord {
   worktreeSetupCommand?: string;
   createdAt: number;
   lastOpenedAt: number;
+  codeWorkspaces?: Array<{
+    branch: string;
+    path: string;
+    isProjectRoot: boolean;
+  }>;
 }
 
 export interface ProjectListItem extends ProjectRecord {
