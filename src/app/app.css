@@ -6114,7 +6114,7 @@ button:focus-visible {
 .agents-message-stream__scroll {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: calc(var(--content-font-size) * 0.7);
   flex: 1;
   min-height: 0;
   padding: 28px 18px 18px;
@@ -6286,7 +6286,7 @@ button:focus-visible {
 }
 
 .agents-message__markdown p {
-  margin: 0 0 8px;
+  margin: 0 0 0.6em;
 }
 
 .agents-message__markdown p:last-child {
@@ -6295,8 +6295,16 @@ button:focus-visible {
 
 .agents-message__markdown ul,
 .agents-message__markdown ol {
-  margin: 0 0 8px;
-  padding-left: 20px;
+  margin: 0 0 0.6em;
+  padding-left: 1.5em;
+}
+
+.agents-message__markdown li {
+  margin-top: 0.15em;
+}
+
+.agents-message__markdown li:first-child {
+  margin-top: 0;
 }
 
 .agents-message__ordered-list {
@@ -6307,12 +6315,44 @@ button:focus-visible {
   list-style-type: disc;
 }
 
+/* 标题字号以 em 相对正文缩放：全局字号调大时同步放大，始终保持层级；
+   原硬编码 13px 会在字号 ≥14 时让标题小于正文，已弃用。 */
 .agents-message__markdown h1,
 .agents-message__markdown h2,
-.agents-message__markdown h3 {
-  margin: 8px 0 4px;
-  font-size: 13px;
+.agents-message__markdown h3,
+.agents-message__markdown h4,
+.agents-message__markdown h5,
+.agents-message__markdown h6 {
+  margin: 0.7em 0 0.3em;
   font-weight: 650;
+  line-height: 1.3;
+}
+
+.agents-message__markdown h1:first-child,
+.agents-message__markdown h2:first-child,
+.agents-message__markdown h3:first-child,
+.agents-message__markdown h4:first-child,
+.agents-message__markdown h5:first-child,
+.agents-message__markdown h6:first-child {
+  margin-top: 0;
+}
+
+.agents-message__markdown h1 {
+  font-size: 1.3em;
+}
+
+.agents-message__markdown h2 {
+  font-size: 1.2em;
+}
+
+.agents-message__markdown h3 {
+  font-size: 1.1em;
+}
+
+.agents-message__markdown h4,
+.agents-message__markdown h5,
+.agents-message__markdown h6 {
+  font-size: 1em;
 }
 
 .agents-message__markdown a {
