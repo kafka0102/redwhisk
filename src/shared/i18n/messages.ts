@@ -475,6 +475,8 @@ export interface I18nMessages {
     diffView: (fileName: string) => string;
     closeTab: (label: string) => string;
     sessionTab: string;
+    codeTab: string;
+    loadingCode: string;
     addSessionTool: string;
     terminalTool: string;
     browserTool: string;

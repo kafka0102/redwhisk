@@ -17,6 +17,8 @@ pub enum WorkspaceChangeKind {
 pub struct ProjectWorkspaceInput {
     pub project_id: i64,
     pub session_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -26,6 +28,8 @@ pub struct ProjectWorkspacePathInput {
     pub session_id: Option<i64>,
     pub file_path: String,
     pub commit_hash: Option<String>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -109,6 +113,21 @@ pub struct WorkspaceFileTreeNode {
     pub size_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified_at: Option<i64>,
+    pub is_ignored: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeWorkspaceRoot {
+    pub branch: String,
+    pub path: String,
+    pub is_project_root: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeWorkspaceRootsResponse {
+    pub roots: Vec<CodeWorkspaceRoot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

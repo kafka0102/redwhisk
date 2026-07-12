@@ -355,7 +355,7 @@ export function useSessionWorkspaceCache({
   const closeWorkspaceTabForSession = useCallback(
     (
       targetSessionId: number,
-      tab: Exclude<SessionWorkspaceTabKind, "session">,
+      tab: Exclude<SessionWorkspaceTabKind, "session" | "code">,
     ) => {
       updateSessionCache(targetSessionId, (cache) => {
         const nextCache = {
@@ -377,7 +377,7 @@ export function useSessionWorkspaceCache({
   );
 
   const closeWorkspaceTab = useCallback(
-    (tab: Exclude<SessionWorkspaceTabKind, "session">) => {
+    (tab: Exclude<SessionWorkspaceTabKind, "session" | "code">) => {
       if (sessionId == null) {
         return;
       }

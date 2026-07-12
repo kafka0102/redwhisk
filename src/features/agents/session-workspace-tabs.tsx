@@ -1,4 +1,4 @@
-import { GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
+import { Code2, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
@@ -29,11 +29,14 @@ export interface SessionWorkspaceToolTab {
 interface SessionWorkspaceTabsProps {
   activeTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
+  codeContent?: ReactNode;
   fileTab: SessionWorkspaceFileTab | null;
   sessionAgentType: AgentType;
   sessionContent: ReactNode;
   toolTabs: SessionWorkspaceToolTab[];
-  onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
+  onCloseTab: (
+    tab: Exclude<SessionWorkspaceTabKind, "session" | "code">,
+  ) => void;
   onCreateBrowserTab: () => void;
   onCreateTerminalTab: () => void;
   onSelectTab: (tab: SessionWorkspaceTabKind) => void;
@@ -42,6 +45,7 @@ interface SessionWorkspaceTabsProps {
 export function SessionWorkspaceTabs({
   activeTab,
   changeTab,
+  codeContent,
   fileTab,
   sessionAgentType,
   sessionContent,
@@ -71,6 +75,16 @@ export function SessionWorkspaceTabs({
             src={getAgentLogoSrc(sessionAgentType)}
           />
           {messages.agentsFeature.sessionTab}
+        </button>
+        <button
+          aria-selected={selectedTab === "code"}
+          className="session-workspace-tabs__tab"
+          role="tab"
+          type="button"
+          onClick={() => onSelectTab("code")}
+        >
+          <Code2 aria-hidden="true" size={14} strokeWidth={1.8} />
+          {messages.agentsFeature.codeTab}
         </button>
         {toolTabs.map((tab) => (
           <ClosableWorkspaceTab
@@ -146,6 +160,12 @@ export function SessionWorkspaceTabs({
             {sessionContent}
           </div>
         ) : null}
+        <div
+          className="session-workspace-tabs__pane"
+          hidden={selectedTab !== "code"}
+        >
+          {codeContent}
+        </div>
         {toolTabs.map((tab) => (
           <div
             key={tab.id}
@@ -181,8 +201,10 @@ interface ClosableWorkspaceTabProps {
   icon?: ReactNode;
   label: string;
   selected: boolean;
-  tab: Exclude<SessionWorkspaceTabKind, "session">;
-  onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
+  tab: Exclude<SessionWorkspaceTabKind, "session" | "code">;
+  onCloseTab: (
+    tab: Exclude<SessionWorkspaceTabKind, "session" | "code">,
+  ) => void;
   onSelectTab: (tab: SessionWorkspaceTabKind) => void;
 }
 
@@ -235,6 +257,10 @@ function getSelectedTab(
 
   if (activeTab === "changes" && changeTab) {
     return "changes";
+  }
+
+  if (activeTab === "code") {
+    return "code";
   }
 
   if (toolTabs.some((tab) => tab.id === activeTab)) {

@@ -153,6 +153,7 @@ vi.mock("./session-workspace-commands", () => ({
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
+  listCodeWorkspaceRoots: vi.fn().mockResolvedValue({ roots: [] }),
   readProjectWorktreeDiff: vi.fn(),
   readProjectWorktreeFile: vi.fn(),
 }));

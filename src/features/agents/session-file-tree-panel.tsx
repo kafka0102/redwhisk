@@ -224,7 +224,7 @@ function FileTreeRow({
     return (
       <button
         aria-expanded={node.isOpen}
-        className="session-file-tree__folder"
+        className={`session-file-tree__folder${node.data.isIgnored ? " session-file-tree__row--ignored" : ""}`}
         style={treeDepthStyle}
         type="button"
         onClick={() => node.toggle()}
@@ -256,7 +256,7 @@ function FileTreeRow({
 
   return (
     <button
-      className="session-file-tree__row"
+      className={`session-file-tree__row${node.data.isIgnored ? " session-file-tree__row--ignored" : ""}`}
       style={treeDepthStyle}
       type="button"
       onClick={() => onOpenFile(node.data)}

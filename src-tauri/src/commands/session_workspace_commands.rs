@@ -4,6 +4,7 @@ use crate::app_state::AppState;
 use crate::core::session_workspace_service::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
+    CodeWorkspaceRootsResponse,
     ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceDiffContent,
     WorkspaceFileContent,
@@ -16,6 +17,11 @@ pub fn get_project_worktree_changes(
     input: ProjectWorkspaceInput,
 ) -> Result<ProjectWorktreeChangesResponse, CommandError> {
     with_session_workspace_service(app, state, |service| service.get_changes(input))
+}
+
+#[tauri::command]
+pub fn list_code_workspace_roots(app: tauri::AppHandle, state: State<'_, AppState>, project_id: i64) -> Result<CodeWorkspaceRootsResponse, CommandError> {
+    with_session_workspace_service(app, state, |service| service.list_code_workspace_roots(project_id))
 }
 
 #[tauri::command]

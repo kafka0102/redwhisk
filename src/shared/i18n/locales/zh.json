@@ -474,6 +474,8 @@
     "diffView": "{{fileName}} 差异",
     "closeTab": "关闭 {{label}}",
     "sessionTab": "会话",
+    "codeTab": "代码",
+    "loadingCode": "正在加载代码工作区...",
     "addSessionTool": "添加会话工具",
     "terminalTool": "终端",
     "browserTool": "浏览器",

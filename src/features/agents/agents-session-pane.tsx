@@ -3,6 +3,7 @@ import { Check, ChevronDown, Ellipsis, PanelRightOpen, X } from "lucide-react";
 
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
+import { CodeWorkspace } from "./code-workspace";
 import { formatSessionTitle } from "./agent-session-formatters";
 import { Input } from "../../components/ui/input";
 import {
@@ -63,7 +64,7 @@ interface AgentsSessionPaneProps {
   onAcknowledgeSessionAttention: (sessionId: number) => void;
   onCloseWorkspaceTab: (
     sessionId: number,
-    tab: Exclude<SessionWorkspaceTabKind, "session">,
+    tab: Exclude<SessionWorkspaceTabKind, "session" | "code">,
   ) => void;
   onCreateBrowserTab: (sessionId: number) => void;
   onCreateTerminalTab: (sessionId: number) => void;
@@ -401,7 +402,7 @@ interface SessionWorkspacePaneProps {
   isCurrent: boolean;
   onCloseWorkspaceTab: (
     sessionId: number,
-    tab: Exclude<SessionWorkspaceTabKind, "session">,
+    tab: Exclude<SessionWorkspaceTabKind, "session" | "code">,
   ) => void;
   onCreateBrowserTab: (sessionId: number) => void;
   onCreateTerminalTab: (sessionId: number) => void;
@@ -445,6 +446,12 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
       <SessionWorkspaceTabs
         activeTab={workspace.activeWorkspaceTab}
         changeTab={workspace.changeTab}
+        codeContent={
+          <CodeWorkspace
+            isActive={workspace.activeWorkspaceTab === "code"}
+            projectId={projectId}
+          />
+        }
         fileTab={workspace.fileTab}
         sessionAgentType={workspace.agentType}
         sessionContent={

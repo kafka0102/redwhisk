@@ -76,7 +76,14 @@ describe("SessionWorkspaceTabs", () => {
       within(tablist)
         .getAllByRole("tab")
         .map((tab) => tab.textContent),
-    ).toEqual(["Session", "Terminal 1", "Browser 1", "app.tsx", "changes.ts"]);
+    ).toEqual([
+      "Session",
+      "Code",
+      "Terminal 1",
+      "Browser 1",
+      "app.tsx",
+      "changes.ts",
+    ]);
     const tabs = within(tablist).getAllByRole("tab");
     const addButton = within(tablist).getByRole("button", {
       name: "Add session tool",

@@ -29,6 +29,7 @@ export type SessionWorkspaceToolTabKind =
   | `browser:${number}`;
 export type SessionWorkspaceTabKind =
   | "session"
+  | "code"
   | "file"
   | "changes"
   | SessionWorkspaceToolTabKind;

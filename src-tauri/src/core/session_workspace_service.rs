@@ -12,6 +12,7 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::worktree::is_additional_worktree;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
+    CodeWorkspaceRoot, CodeWorkspaceRootsResponse,
     ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceChangeKind,
     WorkspaceChangedFile, WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceDiffContent,
@@ -19,16 +20,7 @@ use crate::types::session_workspace::{
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
-const IGNORED_DIRS: &[&str] = &[
-    ".git",
-    "node_modules",
-    "target",
-    "dist",
-    "build",
-    ".next",
-    ".turbo",
-    ".vite",
-];
+const HIDDEN_DIRS: &[&str] = &[".git"];
 const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
 const MAX_COMMIT_HISTORY_ENTRIES: usize = 50;
 const BASE_BRANCH_CANDIDATES: &[&str] = &[
@@ -62,7 +54,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeChangesResponse, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
+        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
         read_workspace_changes(&root)
     }
 
@@ -70,7 +62,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeFileTreeResponse, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
+        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
         read_workspace_file_tree(&root)
     }
 
@@ -78,7 +70,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
+        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
         let base_branch = self.resolve_session_base_branch(input.project_id, input.session_id);
         read_workspace_commit_history(&root, base_branch.as_deref())
     }
@@ -111,15 +103,20 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspacePathInput,
     ) -> Result<WorkspaceFileContent, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
+        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
         read_workspace_file(&root, &input.file_path)
+    }
+
+    pub fn list_code_workspace_roots(&self, project_id: i64) -> Result<CodeWorkspaceRootsResponse, CommandError> {
+        let root = self.resolve_workspace_root(project_id, None, None)?;
+        list_code_workspace_roots(&root)
     }
 
     pub fn read_diff(
         &self,
         input: ProjectWorkspacePathInput,
     ) -> Result<WorkspaceDiffContent, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id)?;
+        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
         if let Some(commit_hash) = input.commit_hash {
             read_workspace_commit_diff(&root, &commit_hash, &input.file_path)
         } else {
@@ -130,7 +127,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
     fn resolve_workspace_root(
         &self,
         project_id: i64,
-        session_id: Option<i64>,
+        session_id: Option<i64>, workspace_path: Option<&str>,
     ) -> Result<PathBuf, CommandError> {
         let project = self
             .project_repository
@@ -141,6 +138,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
                     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
             })?;
 
+        if let Some(workspace_path) = workspace_path {
+            let roots = list_code_workspace_roots(Path::new(&project.repo_path))?.roots;
+            if roots.iter().any(|root| root.path == workspace_path) { return canonical_workspace_root(workspace_path); }
+            return Err(workspace_validation_error("代码工作区不存在。", workspace_path).with_reason("codeWorkspaceNotFound"));
+        }
         if let Some(session_id) = session_id {
             if let Some(session) = self
                 .agent_session_repository
@@ -650,6 +652,19 @@ fn read_workspace_file_tree(root: &Path) -> Result<ProjectWorktreeFileTreeRespon
     Ok(ProjectWorktreeFileTreeResponse { nodes, signature })
 }
 
+fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRootsResponse, CommandError> {
+    let output = run_git(root, &["worktree", "list", "--porcelain"])?;
+    let project_root = root.canonicalize().map_err(workspace_io_error)?;
+    let mut roots = Vec::new(); let mut path = None;
+    for line in output.lines().chain(std::iter::once("")) {
+        if let Some(value) = line.strip_prefix("worktree ") { path = Some(value.to_string()); }
+        else if let Some(branch) = line.strip_prefix("branch refs/heads/") { if let Some(path) = path.take() { roots.push(CodeWorkspaceRoot { is_project_root: Path::new(&path).canonicalize().ok().is_some_and(|candidate| candidate == project_root), branch: branch.to_string(), path }); } }
+        else if line.is_empty() { path = None; }
+    }
+    roots.sort_by(|a, b| b.is_project_root.cmp(&a.is_project_root).then_with(|| a.branch.cmp(&b.branch)));
+    Ok(CodeWorkspaceRootsResponse { roots })
+}
+
 fn read_directory_nodes(
     root: &Path,
     dir: &Path,
@@ -671,7 +686,7 @@ fn read_directory_nodes(
         if file_type.is_symlink() {
             continue;
         }
-        if file_type.is_dir() && IGNORED_DIRS.contains(&name.as_str()) {
+        if file_type.is_dir() && HIDDEN_DIRS.contains(&name.as_str()) {
             continue;
         }
 
@@ -681,6 +696,7 @@ fn read_directory_nodes(
             .to_string_lossy()
             .replace('\\', "/");
         let metadata = entry.metadata().map_err(workspace_io_error)?;
+        let is_ignored = Command::new("git").args(["check-ignore", "-q", "--no-index", "--", &relative_path]).current_dir(root).status().map(|status| status.success()).unwrap_or(false);
 
         if file_type.is_dir() {
             let mut children = read_directory_nodes(root, &path)?;
@@ -693,6 +709,7 @@ fn read_directory_nodes(
                 children,
                 size_bytes: None,
                 modified_at: modified_at_millis(&metadata),
+                is_ignored,
             });
         } else if file_type.is_file() {
             nodes.push(WorkspaceFileTreeNode {
@@ -703,6 +720,7 @@ fn read_directory_nodes(
                 children: Vec::new(),
                 size_bytes: Some(metadata.len()),
                 modified_at: modified_at_millis(&metadata),
+                is_ignored,
             });
         }
     }

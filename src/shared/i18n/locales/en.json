@@ -474,6 +474,8 @@
     "diffView": "{{fileName}} diff",
     "closeTab": "Close {{label}}",
     "sessionTab": "Session",
+    "codeTab": "Code",
+    "loadingCode": "Loading code workspace...",
     "addSessionTool": "Add session tool",
     "terminalTool": "Terminal",
     "browserTool": "Browser",

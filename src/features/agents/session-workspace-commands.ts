@@ -12,6 +12,7 @@ export type WorkspaceChangeKind =
 export interface ProjectWorkspaceInput {
   projectId: number;
   sessionId?: number | null;
+  workspacePath?: string | null;
 }
 
 export interface ProjectWorkspacePathInput extends ProjectWorkspaceInput {
@@ -81,6 +82,17 @@ export interface WorkspaceFileTreeNode {
   children?: WorkspaceFileTreeNode[];
   sizeBytes?: number;
   modifiedAt?: number;
+  isIgnored?: boolean;
+}
+
+export interface CodeWorkspaceRoot {
+  branch: string;
+  path: string;
+  isProjectRoot: boolean;
+}
+
+export interface CodeWorkspaceRootsResponse {
+  roots: CodeWorkspaceRoot[];
 }
 
 export interface ProjectWorktreeFileTreeResponse {
@@ -115,6 +127,17 @@ export function getProjectWorktreeChanges(
   return invokeCommand<ProjectWorktreeChangesResponse>(
     "get_project_worktree_changes",
     { input },
+  );
+}
+
+export function listCodeWorkspaceRoots(
+  projectId: number,
+): Promise<CodeWorkspaceRootsResponse> {
+  return invokeCommand<CodeWorkspaceRootsResponse>(
+    "list_code_workspace_roots",
+    {
+      projectId,
+    },
   );
 }
 
