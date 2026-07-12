@@ -394,6 +394,8 @@
     "temporarySessionDefaultTitle": "未命名会话",
     "titleField": "标题",
     "viewIssue": "查看 issue",
+    "viewAllContent": "查看全部",
+    "collapseContent": "收起",
     "detailsField": "详情",
     "promptField": "提示词",
     "currentModelType": "当前模型类型",

@@ -392,6 +392,8 @@ export interface I18nMessages {
     temporarySessionDefaultTitle: string;
     titleField: string;
     viewIssue: string;
+    viewAllContent: string;
+    collapseContent: string;
     detailsField: string;
     promptField: string;
     currentModelType: string;

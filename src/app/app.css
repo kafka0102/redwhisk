@@ -3889,6 +3889,33 @@ button:focus-visible {
   word-break: break-all;
 }
 
+.expandable-text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.expandable-text__content--clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.expandable-text__toggle {
+  justify-self: start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.expandable-text__toggle:hover {
+  text-decoration: underline;
+}
+
 .session-changes-panel {
   display: grid;
   grid-template-rows: 36px minmax(0, 1fr);

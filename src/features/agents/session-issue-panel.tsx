@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatProcessingDuration } from "./agent-session-formatters";
+import { ExpandableText } from "./expandable-text";
 import type { AgentSessionListItem } from "./agent-session-commands";
 import { listIssues, type IssueRecord } from "../issues/issue-commands";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -157,7 +158,14 @@ export function SessionIssuePanel({
         <h4 className="session-issue-panel__issue-title">
           {issue?.title ?? issueTitle}
         </h4>
-        <div className="issue-detail__description">{description}</div>
+        <ExpandableText
+          key={issueId}
+          className="issue-detail__description"
+          text={description}
+          maxLines={8}
+          expandLabel={messages.agentsFeature.viewAllContent}
+          collapseLabel={messages.agentsFeature.collapseContent}
+        />
         {labels.length > 0 ? (
           <>
             <div className="issue-detail__divider" aria-hidden="true" />

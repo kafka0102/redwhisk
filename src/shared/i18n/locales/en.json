@@ -394,6 +394,8 @@
     "temporarySessionDefaultTitle": "Untitled Session",
     "titleField": "Title",
     "viewIssue": "View issue",
+    "viewAllContent": "View all",
+    "collapseContent": "Collapse",
     "detailsField": "Details",
     "promptField": "Prompt",
     "currentModelType": "Current model type",
