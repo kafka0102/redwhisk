@@ -32,7 +32,10 @@ import {
   type IssueRecord,
 } from "../issues/issue-commands";
 import type { IssueOpenRequest } from "../issues/issue-open-request";
-import { getCommandErrorMessage, toCommandError } from "../../shared/commands/command-error";
+import {
+  getCommandErrorMessage,
+  toCommandError,
+} from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
@@ -903,7 +906,10 @@ export function AgentsActivity({
   }
 
   // 直接点击状态转换主按钮（非下拉菜单）时走此入口：
-  // - 「待验收」：仅当前 Session 仍在运行中时二次确认；Session 已结束则直接标记。
+  // - 「待验收」：仅当前 Session 仍有进行中轮次（isTurnRunning）时二次确认；
+  //   轮次已结束（agent 空闲等待）或 session 已关闭则直接标记。
+  //   注意：session.status === "running" 对所有未关闭 session 均成立，
+  //   不能据此判断 agent 是否正在执行，须用 isTurnRunning。
   // - 「完成」：直接执行。
   // 下拉菜单选项仍走 handleTransitionAction，不弹确认。
   async function handleTransitionMainAction(action: SessionIssueTransition) {
@@ -916,9 +922,11 @@ export function AgentsActivity({
               session.sessionId === selectedSession.sessionId,
           ) ?? selectedSession)
         : null;
-      const isSessionRunning = currentSession?.status === "running";
+      const isTurnRunning =
+        currentSession?.status === "running" &&
+        currentSession.isTurnRunning === true;
 
-      if (isSessionRunning) {
+      if (isTurnRunning) {
         const confirmed = await confirm({
           cancelLabel: messages.agentsFeature.confirmMarkReviewNo,
           confirmLabel: messages.agentsFeature.confirmMarkReviewYes,
