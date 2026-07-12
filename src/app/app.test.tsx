@@ -571,7 +571,7 @@ describe("App project entry", () => {
 
     expect(
       activityButtons.map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["Issues", "智能体", "终端", "项目设置", "全局设置"]);
+    ).toEqual(["Issues", "智能体", "代码", "终端", "项目设置", "全局设置"]);
     expect(
       within(activityBar).getByRole("button", { name: "Issues" }),
     ).toHaveAttribute("aria-pressed", "true");

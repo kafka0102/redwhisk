@@ -1,6 +1,7 @@
 import {
   Bolt,
   Bot,
+  Code2,
   Kanban,
   Terminal,
   UserRoundCog,
@@ -41,6 +42,7 @@ const ACTIVITIES: Array<{
 }> = [
   { key: "issues", Icon: Kanban },
   { key: "agents", Icon: Bot },
+  { key: "code", Icon: Code2 },
   { key: "terminals", Icon: Terminal },
   { key: "settings", Icon: Bolt },
 ];
@@ -149,9 +151,11 @@ export function AppShell({
                 ? messages.app.issues
                 : key === "agents"
                   ? messages.app.agents
-                  : key === "terminals"
-                    ? messages.app.terminals
-                    : messages.app.settings;
+                  : key === "code"
+                    ? messages.agentsFeature.codeTab
+                    : key === "terminals"
+                      ? messages.app.terminals
+                      : messages.app.settings;
             const ariaLabel =
               key === "settings" ? messages.app.projectSettings : label;
 

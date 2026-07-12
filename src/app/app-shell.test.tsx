@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,6 +56,12 @@ vi.mock("../features/agents/agents-activity", () => ({
         open agents settings
       </button>
     </div>
+  ),
+}));
+
+vi.mock("../features/code/code-workspace", () => ({
+  CodeWorkspace: ({ projectId }: { projectId: number }) => (
+    <div>code workspace {projectId}</div>
   ),
 }));
 
@@ -332,5 +338,46 @@ describe("AppShell terminals activity persistence", () => {
     await user.click(screen.getByRole("button", { name: "Issues" }));
 
     expect(screen.getByText("issues signal:1")).toBeInTheDocument();
+  });
+
+  it("opens the independent Code activity between Agents and Terminals", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell
+        onCreateProject={() => {}}
+        onProjectUpdated={() => {}}
+        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
+        project={{
+          id: 1,
+          name: "RedWhisk",
+          path: "/tmp/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          recentOpenedAt: "2026-06-15T00:00:00.000Z",
+          status: "available",
+        }}
+        projects={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Code" }));
+
+    expect(screen.getByText("code workspace 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Code" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      within(screen.getByRole("navigation", { name: "Activity Bar" }))
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
+      "Issues",
+      "Agents",
+      "Code",
+      "Terminals",
+      "Project Settings",
+      "Global Settings",
+    ]);
   });
 });

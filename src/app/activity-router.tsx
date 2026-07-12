@@ -1,4 +1,5 @@
 import { AgentsActivity } from "../features/agents/agents-activity";
+import { CodeWorkspace } from "../features/code/code-workspace";
 import { IssuesActivity } from "../features/issues/issues-activity";
 import {
   ProjectSettingsActivity,
@@ -11,7 +12,12 @@ import type { ProjectWorktreeLocation } from "../features/project/project-comman
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 
-export type ActivityKey = "issues" | "agents" | "terminals" | "settings";
+export type ActivityKey =
+  | "issues"
+  | "agents"
+  | "code"
+  | "terminals"
+  | "settings";
 
 interface ActivityRouterProps {
   activeActivity: ActivityKey;
@@ -68,6 +74,10 @@ export function ActivityRouter({
         projectId={projectId}
       />
     );
+  }
+
+  if (activeActivity === "code") {
+    return <CodeWorkspace key={projectId} projectId={projectId} />;
   }
 
   if (activeActivity === "terminals") {

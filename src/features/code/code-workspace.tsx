@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -16,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui";
 import { useI18n } from "../../shared/i18n/i18n";
-import { SessionFileTreePanel } from "./session-file-tree-panel";
+import { SessionFileTreePanel } from "../agents/session-file-tree-panel";
 import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
@@ -24,7 +25,7 @@ import {
   type CodeWorkspaceRoot,
   type WorkspaceFileContent,
   type WorkspaceFileTreeNode,
-} from "./session-workspace-commands";
+} from "../agents/session-workspace-commands";
 
 const MAX_FILE_TABS = 10;
 
@@ -38,11 +39,10 @@ interface CodeFileTab {
 }
 
 interface CodeWorkspaceProps {
-  isActive: boolean;
   projectId: number;
 }
 
-export function CodeWorkspace({ isActive, projectId }: CodeWorkspaceProps) {
+export function CodeWorkspace({ projectId }: CodeWorkspaceProps) {
   const { contentFontSize, messages, t } = useI18n();
   const [roots, setRoots] = useState<CodeWorkspaceRoot[]>([]);
   const [selectedRoot, setSelectedRoot] = useState<CodeWorkspaceRoot | null>(
@@ -54,9 +54,9 @@ export function CodeWorkspace({ isActive, projectId }: CodeWorkspaceProps) {
   const [tabs, setTabs] = useState<CodeFileTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(400);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!isActive) return;
     let isCurrent = true;
     void listCodeWorkspaceRoots(projectId)
       .then((response) => {
@@ -81,7 +81,14 @@ export function CodeWorkspace({ isActive, projectId }: CodeWorkspaceProps) {
     return () => {
       isCurrent = false;
     };
-  }, [isActive, projectId]);
+  }, [projectId]);
+
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!selectedRoot) return;
@@ -203,7 +210,10 @@ export function CodeWorkspace({ isActive, projectId }: CodeWorkspaceProps) {
     const onMouseUp = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      dragCleanupRef.current = null;
     };
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = onMouseUp;
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   };
