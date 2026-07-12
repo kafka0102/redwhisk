@@ -14,18 +14,20 @@ impl<'connection> UserProfileRepository<'connection> {
     pub fn get_profile(&self) -> rusqlite::Result<UserProfileRecord> {
         self.connection
             .query_row(
-                "SELECT name, avatar_path FROM user_profiles WHERE id = 1",
+                "SELECT id, name, avatar_path FROM user_profiles WHERE id = 1",
                 [],
                 |row| {
                     Ok(UserProfileRecord {
-                        name: row.get(0)?,
-                        avatar_path: row.get(1)?,
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        avatar_path: row.get(2)?,
                     })
                 },
             )
             .optional()
             .map(|profile| {
                 profile.unwrap_or(UserProfileRecord {
+                    id: 1,
                     name: String::new(),
                     avatar_path: None,
                 })

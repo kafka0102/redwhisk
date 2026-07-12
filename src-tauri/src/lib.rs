@@ -82,6 +82,7 @@ pub fn run() {
             commands::issue_commands::send_agent_commit_prompt,
             commands::issue_commands::detect_agent_commit_completion,
             commands::issue_commands::get_issue_summary,
+            commands::issue_commands::get_issue_timeline,
             commands::issue_commands::delete_issue,
             commands::issue_commands::get_issue_worktree_status,
             commands::issue_commands::delete_issue_worktree,

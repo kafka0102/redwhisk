@@ -43,9 +43,10 @@ use crate::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput,
     DeleteIssueResult, DeleteIssueWorktreeCleanup, DetectAgentCommitCompletionInput,
     DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult,
-    ExportIssueAttachmentInput, GetIssueSummaryInput, IssueAttachmentInput, IssueAttachmentKind,
-    IssueAttachmentPreview, IssueAttachmentRecord, IssueLabelRecord, IssueListResponse,
-    IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, GetIssueTimelineInput, IssueAttachmentInput,
+    IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord, IssueLabelRecord,
+    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
+    IssueTimelineActionType, IssueTimelineActor, IssueTimelineEntry, IssueTimelineResponse,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
     SendAgentCommitPromptResult, UpdateIssueInput,
@@ -244,6 +245,59 @@ impl<'connection> IssueService<'connection> {
             completion,
             diagnostics,
         })
+    }
+
+    pub fn get_issue_timeline(
+        &self,
+        input: GetIssueTimelineInput,
+    ) -> Result<IssueTimelineResponse, CommandError> {
+        self.ensure_project_exists(input.project_id)?;
+        let issue = self
+            .issue_repository
+            .find_by_id(input.issue_id)
+            .map_err(issue_database_error)?
+            .filter(|issue| issue.project_id == input.project_id)
+            .ok_or_else(|| issue_not_found(input.issue_id))?;
+
+        let mut statement = self
+            .issue_repository
+            .connection()
+            .prepare(
+                "SELECT action_type, user_profiles.name, user_profiles.avatar_path, issue_actions.created_at
+                 FROM issue_actions
+                 LEFT JOIN user_profiles ON user_profiles.id = issue_actions.actor_user_profile_id
+                 WHERE issue_actions.issue_id = ?1
+                 ORDER BY issue_actions.created_at ASC, issue_actions.id ASC",
+            )
+            .map_err(issue_database_error)?;
+        let rows = statement
+            .query_map(rusqlite::params![issue.id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })
+            .map_err(issue_database_error)?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            let (action_type, name, avatar_path, created_at) = row.map_err(issue_database_error)?;
+            if action_type != "issue_created" {
+                continue;
+            }
+            entries.push(IssueTimelineEntry {
+                action_type: IssueTimelineActionType::IssueCreated,
+                actor: IssueTimelineActor {
+                    name: name.unwrap_or_default(),
+                    avatar_path,
+                },
+                created_at,
+            });
+        }
+
+        Ok(IssueTimelineResponse { entries })
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
@@ -1896,6 +1950,16 @@ impl<'connection> IssueService<'connection> {
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository).get_issue_summary(input)
+    }
+
+    pub fn get_issue_timeline_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: GetIssueTimelineInput,
+    ) -> Result<IssueTimelineResponse, CommandError> {
+        let database = open_issue_database(data_dir)?;
+        let issue_repository = IssueRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        IssueService::new(issue_repository, project_repository).get_issue_timeline(input)
     }
 
     pub fn delete_issue_in_data_dir(

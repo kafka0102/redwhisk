@@ -34,6 +34,7 @@ import type { IssueFormState } from "./issue-activity-types";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { IssueReadonlySessionPanel } from "./issue-readonly-session-panel";
 import { IssueSurfaceHeader } from "./issue-surface-header";
+import { IssueTimeline } from "./issue-timeline";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface IssueReadOnlyPageProps {
@@ -120,7 +121,9 @@ export function IssueReadOnlyPage({
           <IssueReadOnlyDetails
             attachments={form.attachments}
             description={rawDescription}
+            issueId={selectedIssue?.id ?? null}
             labels={labels}
+            projectId={selectedIssue?.projectId ?? null}
             title={form.title}
             onDownloadAttachment={onDownloadAttachment}
             onPreviewAttachment={onPreviewAttachment}
@@ -169,14 +172,18 @@ export function IssueReadOnlyPage({
 function IssueReadOnlyDetails({
   attachments,
   description,
+  issueId,
   labels,
+  projectId,
   title,
   onDownloadAttachment,
   onPreviewAttachment,
 }: {
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
   description: string;
+  issueId: number | null;
   labels: IssueLabelRecord[];
+  projectId: number | null;
   title: string;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
@@ -197,6 +204,9 @@ function IssueReadOnlyDetails({
         />
       </div>
       {labels.length > 0 ? <IssueReadOnlyLabels labels={labels} /> : null}
+      {projectId !== null && issueId !== null ? (
+        <IssueTimeline projectId={projectId} issueId={issueId} />
+      ) : null}
     </article>
   );
 }

@@ -25,6 +25,7 @@ import {
   detectAgentCommitCompletion,
   exportIssueAttachment,
   getIssueSummary,
+  getIssueTimeline,
   getIssueWorktreeStatus,
   listIssues,
   markIssueReview,
@@ -62,6 +63,7 @@ vi.mock("./issue-commands", () => ({
   detectAgentCommitCompletion: vi.fn(),
   exportIssueAttachment: vi.fn(),
   getIssueSummary: vi.fn(),
+  getIssueTimeline: vi.fn(),
   getIssueWorktreeStatus: vi.fn(),
   getProjectGitBranches: vi.fn(),
   listIssues: vi.fn(),
@@ -210,6 +212,7 @@ const deleteIssueWorktreeMock = vi.mocked(deleteIssueWorktree);
 const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
 const exportIssueAttachmentMock = vi.mocked(exportIssueAttachment);
 const getIssueSummaryMock = vi.mocked(getIssueSummary);
+const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 const getIssueWorktreeStatusMock = vi.mocked(getIssueWorktreeStatus);
 const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
@@ -423,6 +426,7 @@ describe("IssuesActivity", () => {
     detectAgentCommitCompletionMock.mockReset();
     exportIssueAttachmentMock.mockReset();
     getIssueSummaryMock.mockReset();
+    getIssueTimelineMock.mockReset();
     getIssueWorktreeStatusMock.mockReset();
     getProjectGitBranchesMock.mockReset();
     injectAgentSessionPromptMock.mockReset();
@@ -512,6 +516,7 @@ describe("IssuesActivity", () => {
       workspacePath: null,
       workspaceBranch: null,
     });
+    getIssueTimelineMock.mockResolvedValue({ entries: [] });
     deleteIssueWorktreeMock.mockResolvedValue({
       issueId: 0,
       deleted: true,

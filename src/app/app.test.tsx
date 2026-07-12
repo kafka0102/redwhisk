@@ -209,7 +209,7 @@ describe("App project entry", () => {
     listProjectsMock.mockImplementation(async () => currentProjectList);
     currentIssues = [];
     listProjectLabelsMock.mockResolvedValue({ labels: [] });
-    getUserProfileMock.mockResolvedValue({ name: "", avatarPath: null });
+    getUserProfileMock.mockResolvedValue({ id: 1, name: "", avatarPath: null });
     listIssuesMock.mockImplementation(async ({ projectId }) => {
       expect(projectId).toBe(1);
       return { issues: currentIssues };

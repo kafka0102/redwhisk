@@ -42,8 +42,12 @@ describe("GlobalSettingsActivity", () => {
     getUserProfileMock.mockReset();
     updateUserProfileMock.mockReset();
     openDialogMock.mockReset();
-    getUserProfileMock.mockResolvedValue({ name: "", avatarPath: null });
-    updateUserProfileMock.mockResolvedValue({ name: "", avatarPath: null });
+    getUserProfileMock.mockResolvedValue({ id: 1, name: "", avatarPath: null });
+    updateUserProfileMock.mockResolvedValue({
+      id: 1,
+      name: "",
+      avatarPath: null,
+    });
   });
 
   afterEach(() => {
@@ -113,6 +117,7 @@ describe("GlobalSettingsActivity", () => {
     openDialogMock.mockResolvedValue("/tmp/avatar.jpg");
     updateUserProfileMock.mockResolvedValue({
       name: "",
+      id: 1,
       avatarPath: "/Users/alice/.redwhisk/avatars/profile.png",
     });
     renderGlobalSettings();

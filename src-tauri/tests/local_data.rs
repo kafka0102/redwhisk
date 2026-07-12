@@ -59,11 +59,12 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0038_agent_sessions_project_scoped_number_unique",
             "0039_agent_session_processing_duration",
             "0040_user_profiles",
+            "0041_issue_timeline_actor",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0040_user_profiles".to_string())
+        Some("0041_issue_timeline_actor".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -131,12 +132,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0038_agent_sessions_project_scoped_number_unique",
             "0039_agent_session_processing_duration",
             "0040_user_profiles",
+            "0041_issue_timeline_actor",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0040_user_profiles".to_string())
+        Some("0041_issue_timeline_actor".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -145,7 +147,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 40);
+    assert_eq!(schema_migrations_count, 41);
 }
 
 #[test]

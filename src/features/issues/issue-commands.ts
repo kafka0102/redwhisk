@@ -76,6 +76,28 @@ export interface IssueListResponse {
   statusTotals?: IssueStatusTotals;
 }
 
+export type IssueTimelineActionType = "issue_created";
+
+export interface IssueTimelineActor {
+  name: string;
+  avatarPath?: string | null;
+}
+
+export interface IssueTimelineEntry {
+  actionType: IssueTimelineActionType;
+  actor: IssueTimelineActor;
+  createdAt: number;
+}
+
+export interface IssueTimelineResponse {
+  entries: IssueTimelineEntry[];
+}
+
+export interface GetIssueTimelineInput {
+  projectId: number;
+  issueId: number;
+}
+
 export interface ListIssuesInput {
   projectId: number;
   /** 滚动加载下一页时按状态过滤。 */
@@ -383,6 +405,12 @@ export function listIssues(input: ListIssuesInput): Promise<IssueListResponse> {
 
 export function createIssue(input: CreateIssueInput): Promise<IssueRecord> {
   return invokeCommand<IssueRecord>("create_issue", { input });
+}
+
+export function getIssueTimeline(
+  input: GetIssueTimelineInput,
+): Promise<IssueTimelineResponse> {
+  return invokeCommand<IssueTimelineResponse>("get_issue_timeline", { input });
 }
 
 export function updateIssue(input: UpdateIssueInput): Promise<IssueRecord> {

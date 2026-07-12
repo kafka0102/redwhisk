@@ -20,8 +20,9 @@ impl<'connection> EventRepository<'connection> {
         created_at: i64,
     ) -> rusqlite::Result<IssueActionRecord> {
         transaction.execute(
-            "INSERT INTO issue_actions (issue_id, action_type, payload_json, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO issue_actions (
+                issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
+             ) VALUES (?1, ?2, ?3, ?4, 'user', 1)",
             params![issue_id, action_type.as_str(), payload_json, created_at],
         )?;
 

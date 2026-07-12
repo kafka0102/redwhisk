@@ -133,6 +133,9 @@ pub(crate) const AGENT_SESSION_PROCESSING_DURATION_MIGRATION_SQL: &str =
     include_str!("../../migrations/0039_agent_session_processing_duration.sql");
 const USER_PROFILES_MIGRATION_VERSION: &str = "0040_user_profiles";
 const USER_PROFILES_MIGRATION_SQL: &str = include_str!("../../migrations/0040_user_profiles.sql");
+const ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION: &str = "0041_issue_timeline_actor";
+const ISSUE_TIMELINE_ACTOR_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0041_issue_timeline_actor.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -371,6 +374,10 @@ fn default_migrations() -> Vec<Migration> {
             version: USER_PROFILES_MIGRATION_VERSION,
             sql: USER_PROFILES_MIGRATION_SQL,
         },
+        Migration {
+            version: ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION,
+            sql: ISSUE_TIMELINE_ACTOR_MIGRATION_SQL,
+        },
     ]
 }
 
@@ -470,4 +477,70 @@ fn current_version(connection: &Connection) -> rusqlite::Result<Option<String>> 
 
 fn ensure_migration_table(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(SCHEMA_MIGRATIONS_SQL)
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{params, Connection};
+
+    use super::{
+        MigrationRunner, ISSUE_TIMELINE_ACTOR_MIGRATION_SQL, ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION,
+    };
+
+    #[test]
+    fn issue_timeline_actor_migration_preserves_user_id_one_and_backfills_legacy_actions() {
+        let connection = Connection::open_in_memory().expect("connection");
+        MigrationRunner::runner_skipping(&[ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION])
+            .run(&connection)
+            .expect("migrations before timeline actor");
+        connection
+            .execute(
+                "INSERT INTO user_profiles (id, name) VALUES (1, 'Alice')",
+                [],
+            )
+            .expect("legacy user profile");
+        connection
+            .execute(
+                "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+                 VALUES ('project', '/tmp/project', 1, 1)",
+                [],
+            )
+            .expect("project");
+        connection
+            .execute(
+                "INSERT INTO issues (project_id, number, title, description, status, created_at, updated_at)
+                 VALUES (1, 1, 'issue', '', 'backlog', 1, 1)",
+                [],
+            )
+            .expect("issue");
+        connection
+            .execute(
+                "INSERT INTO issue_actions (issue_id, action_type, payload_json, created_at)
+                 VALUES (1, 'issue_created', '{}', 1)",
+                [],
+            )
+            .expect("legacy action");
+
+        MigrationRunner::from_static_migrations(vec![(
+            ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION,
+            ISSUE_TIMELINE_ACTOR_MIGRATION_SQL,
+        )])
+        .run(&connection)
+        .expect("timeline actor migration");
+
+        let actor_id: Option<i64> = connection
+            .query_row(
+                "SELECT actor_user_profile_id FROM issue_actions WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("backfilled actor");
+        assert_eq!(actor_id, Some(1));
+        connection
+            .execute(
+                "INSERT INTO user_profiles (id, name) VALUES (?1, ?2)",
+                params![2, "Bob"],
+            )
+            .expect("stable user id is no longer constrained to one");
+    }
 }

@@ -146,6 +146,7 @@ export interface AgentCommandCheckResult {
 }
 
 export interface UserProfileRecord {
+  id: number;
   name: string;
   avatarPath: string | null;
 }

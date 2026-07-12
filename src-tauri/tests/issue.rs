@@ -162,7 +162,9 @@ fn issue_action_migration_creates_issue_actions_schema_with_issue_index() {
             "issue_id",
             "action_type",
             "payload_json",
-            "created_at"
+            "created_at",
+            "actor_kind",
+            "actor_user_profile_id"
         ],
     );
     assert_eq!(
@@ -294,6 +296,71 @@ fn create_issue_defaults_to_backlog_and_saves_timestamps() {
     assert_eq!(payload["title"], "Write local issue");
     assert_eq!(payload["description"], "Keep the shape small.");
     assert_eq!(payload["status"], "backlog");
+}
+
+#[test]
+fn issue_timeline_returns_created_entries_in_ascending_order_without_payload_json() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo");
+    database
+        .connection
+        .execute(
+            "UPDATE user_profiles SET name = ?1, avatar_path = ?2 WHERE id = 1",
+            rusqlite::params!["Alice", "/tmp/alice.png"],
+        )
+        .expect("update user profile");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Timeline issue".to_string(),
+            description: String::new(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "INSERT INTO issue_actions (
+                issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
+             ) VALUES (?1, 'issue_created', 'not json', ?2, 'user', 1)",
+            rusqlite::params![issue.id, issue.created_at - 1],
+        )
+        .expect("insert legacy action");
+    database
+        .connection
+        .execute(
+            "INSERT INTO issue_actions (
+                issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
+             ) VALUES (?1, 'unrecognized_legacy_action', '{}', ?2, 'user', 1)",
+            rusqlite::params![issue.id, issue.created_at + 1],
+        )
+        .expect("insert unknown action");
+
+    let timeline = service
+        .get_issue_timeline(redwhisk_lib::types::issue::GetIssueTimelineInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("timeline");
+
+    assert_eq!(timeline.entries.len(), 2);
+    assert_eq!(timeline.entries[0].created_at, issue.created_at - 1);
+    assert_eq!(timeline.entries[1].created_at, issue.created_at);
+    assert_eq!(timeline.entries[0].actor.name, "Alice");
+    assert_eq!(
+        timeline.entries[0].actor.avatar_path.as_deref(),
+        Some("/tmp/alice.png")
+    );
+    assert_eq!(
+        timeline.entries[0].action_type,
+        redwhisk_lib::types::issue::IssueTimelineActionType::IssueCreated
+    );
 }
 
 #[test]

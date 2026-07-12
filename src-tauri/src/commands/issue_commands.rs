@@ -14,8 +14,8 @@ use crate::types::issue::{
     CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput, DeleteIssueResult,
     DeleteIssueWorktreeInput, DeleteIssueWorktreeResult, DetectAgentCommitCompletionInput,
     DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
-    GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueListResponse, IssueRecord,
-    IssueStatus, IssueSummaryRecord, IssueWorktreeStatusResult, MarkIssueReviewInput,
+    GetIssueTimelineInput, GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueListResponse,
+    IssueRecord, IssueStatus, IssueSummaryRecord, IssueTimelineResponse, IssueWorktreeStatusResult, MarkIssueReviewInput,
     PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput,
     SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
     UpdateIssueInput,
@@ -385,6 +385,27 @@ pub async fn get_issue_summary(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 摘要读取失败。",
         ).with_reason("summaryReadFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+}
+
+#[tauri::command]
+pub async fn get_issue_timeline(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: GetIssueTimelineInput,
+) -> Result<IssueTimelineResponse, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        IssueService::get_issue_timeline_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Issue 时间轴读取失败。",
+        )
+        .with_reason("timelineReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
