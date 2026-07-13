@@ -92,65 +92,77 @@ export function SkillsSettingsPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {skills.map((skill) => (
-                <TableRow key={skill.id}>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      aria-label={skill.name}
-                      className="grid h-auto w-full max-w-full justify-start gap-1 px-0 text-left font-semibold hover:bg-transparent"
-                      onClick={() => {
-                        onEditingSkillChange({
-                          contextProjectId: projectId,
-                          skill,
-                        });
-                        onAddFormChange(null);
-                      }}
-                    >
-                      <span className="min-w-0 truncate">{skill.name}</span>
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    {skill.scope === "global"
-                      ? messages.settings.globalScope
-                      : messages.settings.projectScope}
-                  </TableCell>
-                  <TableCell className="overflow-hidden">
-                    <div className="flex flex-col gap-1">
-                      {skill.skillPaths.map((path, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+              {skills.map((skill) => {
+                const handleEdit = () => {
+                  onEditingSkillChange({ contextProjectId: projectId, skill });
+                  onAddFormChange(null);
+                };
+
+                return (
+                  <TableRow key={skill.id}>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-label={skill.name}
+                        className="grid h-auto w-full max-w-full justify-start gap-1 px-0 text-left font-semibold hover:bg-transparent"
+                        onClick={handleEdit}
+                      >
+                        <span className="min-w-0 truncate">{skill.name}</span>
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      {skill.scope === "global"
+                        ? messages.settings.globalScope
+                        : messages.settings.projectScope}
+                    </TableCell>
+                    <TableCell className="overflow-hidden">
+                      <div className="flex flex-col gap-1">
+                        {skill.skillPaths.map((path, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                          >
+                            <img
+                              alt={formatAgentTypeLabel(path.agentType)}
+                              className="block size-3 shrink-0"
+                              src={getAgentLogoSrc(path.agentType)}
+                            />
+                            <span className="truncate">{path.path}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="link"
+                          aria-label={`${messages.settings.edit} ${skill.name}`}
+                          className="h-auto p-0 font-semibold hover:no-underline"
+                          onClick={handleEdit}
                         >
-                          <img
-                            alt={formatAgentTypeLabel(path.agentType)}
-                            className="block size-3 shrink-0"
-                            src={getAgentLogoSrc(path.agentType)}
-                          />
-                          <span className="truncate">{path.path}</span>
-                        </span>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="link"
-                      aria-label={`${messages.settings.delete} ${skill.name}`}
-                      disabled={deletingSkillId === skill.id}
-                      className={cn(
-                        "h-auto p-0 font-semibold text-destructive hover:no-underline",
-                      )}
-                      onClick={() => {
-                        onDeleteSkill(skill);
-                      }}
-                    >
-                      {messages.settings.delete}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                          {messages.settings.edit}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="link"
+                          aria-label={`${messages.settings.delete} ${skill.name}`}
+                          disabled={deletingSkillId === skill.id}
+                          className={cn(
+                            "h-auto p-0 font-semibold text-destructive hover:no-underline",
+                          )}
+                          onClick={() => {
+                            onDeleteSkill(skill);
+                          }}
+                        >
+                          {messages.settings.delete}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

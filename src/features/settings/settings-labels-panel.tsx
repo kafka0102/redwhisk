@@ -92,64 +92,76 @@ export function LabelsSettingsPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {labels.map((label) => (
-                <TableRow key={label.id}>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      aria-label={label.name}
-                      className="grid h-auto w-full max-w-full justify-start gap-1 px-0 text-left font-semibold hover:bg-transparent"
-                      onClick={() => {
-                        onEditingLabelChange({
-                          contextProjectId: projectId,
-                          label,
-                        });
-                        onAddFormChange(null);
-                      }}
+              {labels.map((label) => {
+                const handleEdit = () => {
+                  onEditingLabelChange({ contextProjectId: projectId, label });
+                  onAddFormChange(null);
+                };
+
+                return (
+                  <TableRow key={label.id}>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-label={label.name}
+                        className="grid h-auto w-full max-w-full justify-start gap-1 px-0 text-left font-semibold hover:bg-transparent"
+                        onClick={handleEdit}
+                      >
+                        <span className="min-w-0 truncate">{label.name}</span>
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      {label.scope === "global"
+                        ? messages.settings.globalScope
+                        : messages.settings.projectScope}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className="inline-block font-mono font-semibold"
+                        style={{ color: label.color }}
+                      >
+                        {label.color}
+                      </span>
+                    </TableCell>
+                    <TableCell
+                      data-slot="settings-labels-skill-cell"
+                      className="overflow-hidden"
                     >
-                      <span className="min-w-0 truncate">{label.name}</span>
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    {label.scope === "global"
-                      ? messages.settings.globalScope
-                      : messages.settings.projectScope}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className="inline-block font-mono font-semibold"
-                      style={{ color: label.color }}
-                    >
-                      {label.color}
-                    </span>
-                  </TableCell>
-                  <TableCell
-                    data-slot="settings-labels-skill-cell"
-                    className="overflow-hidden"
-                  >
-                    <span className="block truncate">
-                      {label.workflowSkill ?? "—"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="link"
-                      aria-label={`${messages.settings.delete} ${label.name}`}
-                      disabled={deletingLabelId === label.id}
-                      className={cn(
-                        "h-auto p-0 font-semibold text-destructive hover:no-underline",
-                      )}
-                      onClick={() => {
-                        onDeleteLabel(label);
-                      }}
-                    >
-                      {messages.settings.delete}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      <span className="block truncate">
+                        {label.workflowSkill ?? "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="link"
+                          aria-label={`${messages.settings.edit} ${label.name}`}
+                          className="h-auto p-0 font-semibold hover:no-underline"
+                          onClick={handleEdit}
+                        >
+                          {messages.settings.edit}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="link"
+                          aria-label={`${messages.settings.delete} ${label.name}`}
+                          disabled={deletingLabelId === label.id}
+                          className={cn(
+                            "h-auto p-0 font-semibold text-destructive hover:no-underline",
+                          )}
+                          onClick={() => {
+                            onDeleteLabel(label);
+                          }}
+                        >
+                          {messages.settings.delete}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

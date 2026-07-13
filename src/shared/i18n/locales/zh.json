@@ -91,6 +91,7 @@
     "delete": "删除",
     "deleteConfirm": "确认删除智能体配置「{{profileName}}」吗？",
     "deleteTerminal": "删除终端「{{terminalName}}」",
+    "edit": "编辑",
     "editAgent": "编辑智能体",
     "editLabel": "编辑标签",
     "editTerminal": "编辑终端「{{terminalName}}」",

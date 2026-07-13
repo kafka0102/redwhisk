@@ -593,6 +593,50 @@ describe("ProjectSettingsActivity", () => {
     expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 
+  it("opens the edit label dialog from the action column edit button", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Urgent" }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Edit label" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the edit skill dialog from the action column edit button", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Edit codex-global" }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Edit skill" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows agents in a table below the header action", async () => {
     const user = userEvent.setup();
     const longWorkflowSkill =

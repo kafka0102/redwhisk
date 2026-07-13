@@ -94,6 +94,13 @@ export function AgentsSettingsPanel({
             <TableBody>
               {profiles.map((profile) => {
                 const agentLabel = formatAgentTypeLabel(profile.agentType);
+                const handleEdit = () => {
+                  onEditingProfileChange({
+                    contextProjectId: projectId,
+                    profile,
+                  });
+                  onAddFormChange(null);
+                };
 
                 return (
                   <TableRow key={profile.id}>
@@ -110,15 +117,9 @@ export function AgentsSettingsPanel({
                       <Button
                         type="button"
                         variant="ghost"
-                        aria-label={`Edit ${profile.name}`}
+                        aria-label={profile.name}
                         className="h-auto max-w-full justify-start px-0 font-semibold hover:bg-transparent"
-                        onClick={() => {
-                          onEditingProfileChange({
-                            contextProjectId: projectId,
-                            profile,
-                          });
-                          onAddFormChange(null);
-                        }}
+                        onClick={handleEdit}
                       >
                         <span className="min-w-0 truncate">{profile.name}</span>
                       </Button>
@@ -134,18 +135,29 @@ export function AgentsSettingsPanel({
                         : messages.settings.projectScope}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        type="button"
-                        variant="link"
-                        aria-label={`${messages.settings.delete} ${profile.name}`}
-                        disabled={deletingProfileId === profile.id}
-                        className="h-auto p-0 font-semibold text-destructive hover:no-underline"
-                        onClick={() => {
-                          onDeleteProfile(profile);
-                        }}
-                      >
-                        {messages.settings.delete}
-                      </Button>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="link"
+                          aria-label={`${messages.settings.edit} ${profile.name}`}
+                          className="h-auto p-0 font-semibold hover:no-underline"
+                          onClick={handleEdit}
+                        >
+                          {messages.settings.edit}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="link"
+                          aria-label={`${messages.settings.delete} ${profile.name}`}
+                          disabled={deletingProfileId === profile.id}
+                          className="h-auto p-0 font-semibold text-destructive hover:no-underline"
+                          onClick={() => {
+                            onDeleteProfile(profile);
+                          }}
+                        >
+                          {messages.settings.delete}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

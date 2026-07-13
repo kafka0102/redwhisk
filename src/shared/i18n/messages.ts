@@ -91,6 +91,7 @@ export interface I18nMessages {
     delete: string;
     deleteConfirm: (profileName: string) => string;
     deleteTerminal: (terminalName: string) => string;
+    edit: string;
     editAgent: string;
     editLabel: string;
     editTerminal: (terminalName: string) => string;

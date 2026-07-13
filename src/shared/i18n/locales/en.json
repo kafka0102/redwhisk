@@ -91,6 +91,7 @@
     "delete": "Delete",
     "deleteConfirm": "Are you sure you want to delete Agent Profile \"{{profileName}}\"?",
     "deleteTerminal": "Delete terminal \"{{terminalName}}\"",
+    "edit": "Edit",
     "editAgent": "Edit Agent",
     "editLabel": "Edit label",
     "editTerminal": "Edit terminal \"{{terminalName}}\"",
