@@ -45,5 +45,16 @@ export function configureMonacoEditor() {
   };
 
   loader.config({ monaco });
+
+  // 项目内 Monaco 仅作只读代码查看（code-workspace / session-file-viewer / diff），
+  // 关闭 TS/JS 语义诊断：默认 compilerOptions 未设 jsx，会把 tsx 里 JSX 对组件的引用
+  // 判为 unused 而标灰（"All imports in import declaration are unused."）。语法高亮不受影响。
+  monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: true,
+  });
+  monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: true,
+  });
+
   hasConfiguredMonacoEditor = true;
 }

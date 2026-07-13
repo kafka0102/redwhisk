@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const loaderConfigMock = vi.hoisted(() => vi.fn());
+const typescriptDefaultsSetDiagnosticsMock = vi.hoisted(() => vi.fn());
+const javascriptDefaultsSetDiagnosticsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@monaco-editor/react", () => ({
   loader: {
@@ -11,6 +13,14 @@ vi.mock("@monaco-editor/react", () => ({
 vi.mock("monaco-editor", () => ({
   editor: {},
   languages: {},
+  typescript: {
+    typescriptDefaults: {
+      setDiagnosticsOptions: typescriptDefaultsSetDiagnosticsMock,
+    },
+    javascriptDefaults: {
+      setDiagnosticsOptions: javascriptDefaultsSetDiagnosticsMock,
+    },
+  },
 }));
 
 vi.mock("monaco-editor/esm/vs/editor/editor.worker?worker", () => ({
@@ -36,6 +46,8 @@ vi.mock("monaco-editor/esm/vs/language/typescript/ts.worker?worker", () => ({
 describe("configureMonacoEditor", () => {
   afterEach(() => {
     loaderConfigMock.mockClear();
+    typescriptDefaultsSetDiagnosticsMock.mockClear();
+    javascriptDefaultsSetDiagnosticsMock.mockClear();
     delete (globalThis as { MonacoEnvironment?: unknown }).MonacoEnvironment;
     vi.resetModules();
   });
@@ -56,7 +68,10 @@ describe("configureMonacoEditor", () => {
 
     expect(loaderConfigMock).toHaveBeenCalledTimes(1);
     expect(loaderConfigMock).toHaveBeenCalledWith({
-      monaco: expect.objectContaining({ editor: {}, languages: {} }),
+      monaco: expect.objectContaining({
+        editor: {},
+        typescript: expect.any(Object),
+      }),
     });
     expect(environment?.getWorker("1", "typescript").constructor.name).toBe(
       "TsWorker",
@@ -73,5 +88,19 @@ describe("configureMonacoEditor", () => {
     expect(environment?.getWorker("1", "plaintext").constructor.name).toBe(
       "EditorWorker",
     );
+  });
+
+  it("disables semantic diagnostics for read-only viewers", async () => {
+    const { configureMonacoEditor } = await import("./monaco-editor-setup");
+
+    configureMonacoEditor();
+
+    // 只读查看场景关闭 TS/JS 语义诊断，避免 tsx 因默认未设 jsx 导致的 unused import 误报。
+    expect(typescriptDefaultsSetDiagnosticsMock).toHaveBeenCalledWith({
+      noSemanticValidation: true,
+    });
+    expect(javascriptDefaultsSetDiagnosticsMock).toHaveBeenCalledWith({
+      noSemanticValidation: true,
+    });
   });
 });
