@@ -6,6 +6,9 @@ const FIRST_TONE_FREQUENCY = 880;
 const SECOND_TONE_FREQUENCY = 1175;
 const TONE_DURATION_MS = 120;
 const RAMP_MS = 10;
+// 两音串行播放的总时长；AudioContext.close() 必须在此之后再执行，
+// 否则会停止正在播放的 oscillator，导致用户听不到提示音。
+const NOTIFICATION_TOTAL_DURATION_MS = TONE_DURATION_MS * 2;
 
 type AudioContextConstructor = new () => AudioContext;
 
@@ -28,10 +31,16 @@ export function playNotificationSound(): void {
   try {
     scheduleTwoToneBeep(audioContext);
   } catch {
-    // 节点连接或调度异常静默，不向上抛出。
-  } finally {
+    // 节点连接或调度异常静默，不向上抛出；调度失败时无音频需立即释放资源。
     void audioContext.close().catch(() => {});
+    return;
   }
+
+  // 提示音调度成功后仍在播放，close() 必须延迟到播放结束之后，
+  // 否则 AudioContext.close() 会停止正在播放的 oscillator，用户听不到声音。
+  window.setTimeout(() => {
+    void audioContext.close().catch(() => {});
+  }, NOTIFICATION_TOTAL_DURATION_MS);
 }
 
 function scheduleTwoToneBeep(audioContext: AudioContext): void {

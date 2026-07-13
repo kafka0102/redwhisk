@@ -106,4 +106,21 @@ describe("playNotificationSound", () => {
     );
     expect(() => playNotificationSound()).not.toThrow();
   });
+
+  // 提示音调度后仍在播放（两音各 120ms，共约 240ms）；若同步立即 close()，
+  // AudioContext.close() 会停止正在播放的 oscillator，用户听不到提示音。
+  // close 必须延迟到播放结束之后。
+  it("调度提示音后不同步关闭 AudioContext，避免中断正在播放的提示音", () => {
+    const { ctx } = createFakeAudioContext();
+    vi.stubGlobal(
+      "AudioContext",
+      vi.fn(function () {
+        return ctx;
+      }),
+    );
+
+    playNotificationSound();
+
+    expect(ctx.close).not.toHaveBeenCalled();
+  });
 });
