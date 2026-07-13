@@ -8,7 +8,7 @@
 - 存储 key：`redwhisk.notification-reminder`（沿用 `redwhisk.*` 前缀），localStorage 持久化。
 - 读取初值：`getInitialNotificationReminder()`，仿 `getInitialContentFontSize`，解析失败回退默认 `false`。
 - 注入位置：`src/shared/i18n/i18n-provider.tsx` 的 context value，新增 `notificationReminder` 与 `setNotificationReminder`。`i18n-provider` 虽以 i18n 命名，但已承载 theme/contentFontSize 等全局应用偏好，加入此处保持单一偏好入口、避免新建 provider 的额外成本。fallback 值同 `contentFontSize` 模式补齐。
-- 常量与类型放入 `src/shared/i18n/i18n-constants.ts`：`NOTIFICATION_REMINDER_STORAGE_KEY`、`DEFAULT_NOTIFICATION_REMINDER`、`getInitialNotificationReminder`、`isNotificationReminder`。
+- 常量放入 `src/shared/i18n/i18n-constants.ts`：`NOTIFICATION_REMINDER_STORAGE_KEY`、`DEFAULT_NOTIFICATION_REMINDER`、`getInitialNotificationReminder`（boolean 仅 true/false，直接在函数内联解析，不引入额外类型守卫）。
 
 不引入 Rust/SQLite：该偏好是纯前端 UI 偏好，与现有 theme/contentFontSize 同级，无需跨 Tauri 边界。
 
@@ -17,7 +17,7 @@
 在 `global-settings-activity.tsx` 的 Preferences Card 内，"内容字号" section 之后新增"通知提醒" section，沿用 `grid-cols-[120px_minmax(0,1fr)]` 布局：
 
 - label 列：`messages.globalSettings.notificationReminder` 文案 + help icon。
-- help icon：lucide-react `CircleHelp`（项目已用 lucide-react；`permission-card.tsx` 用 `HelpCircle`，统一选 `CircleHelp` 与新版图标名一致），尺寸 14-16，`aria-label` 指向 tooltip 文案。
+- help icon：lucide-react `HelpCircle`（跟随项目 `permission-card.tsx` 既有用法，保持图标命名一致），尺寸 14，`aria-label` 指向 tooltip 文案。
 - tooltip：用 `components/ui` 的 `Tooltip`/`TooltipTrigger`/`TooltipContent`（base-ui，hover 与 focus 触发；点击 icon 不触发默认行为）。base-ui Tooltip 默认 hover/focus 显示，满足"点击或悬停显示"。tooltip 文案 = `messages.globalSettings.notificationReminderTooltip`。
 - 控件列：`Select` 下拉框，选项 是/否，`w-[200px]`，与"内容字号"下拉框样式一致。option value 用 `"true"`/`"false"` 字符串，`onValueChange` 转 boolean 写入 `setNotificationReminder`。
 - a11y：help icon `aria-label`、tooltip 文案经 i18n；Select `aria-label` 指向 label 文案。

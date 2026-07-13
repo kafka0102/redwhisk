@@ -13,8 +13,11 @@ import i18next from "./i18n-instance";
 import {
   CONTENT_FONT_SIZE_STORAGE_KEY,
   DEFAULT_CONTENT_FONT_SIZE,
+  DEFAULT_NOTIFICATION_REMINDER,
   LOCALE_STORAGE_KEY,
+  NOTIFICATION_REMINDER_STORAGE_KEY,
   getInitialContentFontSize,
+  getInitialNotificationReminder,
   getInitialThemePreference,
   THEME_STORAGE_KEY,
   type ContentFontSize,
@@ -35,6 +38,8 @@ interface I18nContextValue {
   setThemePreference: (themePreference: ThemePreference) => void;
   contentFontSize: ContentFontSize;
   setContentFontSize: (size: ContentFontSize) => void;
+  notificationReminder: boolean;
+  setNotificationReminder: (value: boolean) => void;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -70,6 +75,9 @@ export function I18nProvider({
   );
   const [contentFontSize, setContentFontSizeState] = useState<ContentFontSize>(
     getInitialContentFontSize,
+  );
+  const [notificationReminder, setNotificationReminderState] = useState(
+    getInitialNotificationReminder,
   );
   const theme = themePreference === "system" ? systemTheme : themePreference;
 
@@ -142,8 +150,30 @@ export function I18nProvider({
           // Ignore persistence failures; runtime state still updates.
         }
       },
+      notificationReminder,
+      setNotificationReminder(nextNotificationReminder) {
+        setNotificationReminderState(nextNotificationReminder);
+        try {
+          window.localStorage.setItem(
+            NOTIFICATION_REMINDER_STORAGE_KEY,
+            String(nextNotificationReminder),
+          );
+        } catch {
+          // Ignore persistence failures; runtime state still updates.
+        }
+      },
     }),
-    [t, i18n, messages, theme, themePreference, contentFontSize, locale, fixedLocale],
+    [
+      t,
+      i18n,
+      messages,
+      theme,
+      themePreference,
+      contentFontSize,
+      notificationReminder,
+      locale,
+      fixedLocale,
+    ],
   );
 
   return (
@@ -173,6 +203,10 @@ export function useI18n(): I18nContextValue {
       },
       contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
       setContentFontSize() {
+        // No provider: ignore in isolated renders.
+      },
+      notificationReminder: DEFAULT_NOTIFICATION_REMINDER,
+      setNotificationReminder() {
         // No provider: ignore in isolated renders.
       },
     }),

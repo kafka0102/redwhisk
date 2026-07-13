@@ -42,6 +42,7 @@ import {
 import { IssueEditablePage } from "./issue-editable-page";
 import { isIssueFormDirty } from "./issue-form-dirty";
 import { IssueReadOnlyPage } from "./issue-read-only-page";
+import { runIssueRunningExitHooks } from "./issue-running-exit-hooks";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run-dialog";
@@ -193,7 +194,7 @@ export function IssuesActivity({
   worktreeSetupCommand = "",
   issuesReturnSignal = 0,
 }: IssuesActivityProps) {
-  const { locale, messages, t } = useI18n();
+  const { locale, messages, notificationReminder, t } = useI18n();
   const cachedPageState = issuePageStateCache.get(projectId) ?? null;
   const requestedIssueId =
     getIssueOpenRequestId(requestedIssue) ?? legacyRequestedIssueId;
@@ -1194,6 +1195,17 @@ export function IssuesActivity({
         restoreDialogTriggerFocus(updatedIssue);
       } else {
         setForm(issueToForm(updatedIssue));
+      }
+
+      // running 切到其他状态后异步触发切出钩子（提示音等）；不阻塞 UI，失败不影响已成功的状态切换。
+      if (currentIssue.status === "running" && targetStatus !== "running") {
+        void runIssueRunningExitHooks({
+          issueId: currentIssue.id,
+          projectId: requestProjectId,
+          fromStatus: "running",
+          targetStatus,
+          notificationReminder,
+        });
       }
     } catch (error) {
       if (activeProjectIdRef.current === requestProjectId) {

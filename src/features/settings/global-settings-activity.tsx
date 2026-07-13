@@ -1,4 +1,9 @@
-import { SlidersHorizontal, UserRound, type LucideIcon } from "lucide-react";
+import {
+  HelpCircle,
+  SlidersHorizontal,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -16,6 +21,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -50,6 +58,8 @@ export function GlobalSettingsActivity() {
     themePreference,
     contentFontSize,
     setContentFontSize,
+    notificationReminder,
+    setNotificationReminder,
     t,
   } = useI18n();
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(
@@ -278,6 +288,54 @@ export function GlobalSettingsActivity() {
                                 {size}
                               </SelectItem>
                             ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </section>
+                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                      <h4 className="m-0 flex items-center gap-1.5 text-[15px] font-bold leading-[1.3]">
+                        {messages.globalSettings.notificationReminder}
+                        <Tooltip>
+                          <TooltipTrigger
+                            type="button"
+                            aria-label={
+                              messages.globalSettings
+                                .notificationReminderTooltip
+                            }
+                            className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                          >
+                            <HelpCircle size={14} strokeWidth={1.9} />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {
+                              messages.globalSettings
+                                .notificationReminderTooltip
+                            }
+                          </TooltipContent>
+                        </Tooltip>
+                      </h4>
+                      <div className="min-w-0">
+                        <Select
+                          value={String(notificationReminder)}
+                          onValueChange={(value) => {
+                            setNotificationReminder(value === "true");
+                          }}
+                        >
+                          <SelectTrigger
+                            aria-label={
+                              messages.globalSettings.notificationReminder
+                            }
+                            className="w-[200px]"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">
+                              {messages.globalSettings.notificationReminderOn}
+                            </SelectItem>
+                            <SelectItem value="false">
+                              {messages.globalSettings.notificationReminderOff}
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

@@ -31,6 +31,10 @@ export interface I18nMessages {
     enableNotificationFloatingWindow: string;
     language: string;
     light: string;
+    notificationReminder: string;
+    notificationReminderOff: string;
+    notificationReminderOn: string;
+    notificationReminderTooltip: string;
     preferences: string;
     settings: string;
     settingsMenu: string;
