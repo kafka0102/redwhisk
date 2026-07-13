@@ -4403,12 +4403,14 @@ button:focus-visible {
   gap: 8px;
   max-width: 220px;
   padding: 0 10px;
+  border-top: 2px solid transparent;
   border-right: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .code-workspace__tab[aria-selected="true"] {
+  border-top-color: var(--color-accent);
   color: var(--color-text);
   background: var(--color-surface);
 }
