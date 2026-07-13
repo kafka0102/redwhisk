@@ -1,14 +1,20 @@
 // AgentComposer 组件测试。
 //
-// 覆盖：空态渲染、输入后发送按钮启用、Enter 不发送、Shift+Enter 不发送、
-// running 状态显示取消按钮、用量条渲染、附件 chip 渲染与移除、
-// 模型 Select 选项渲染、错误内联显示。
+// 覆盖：空态渲染、输入后发送按钮启用、Enter 换行、Shift/Ctrl/Cmd+Enter 发送、
+// IME 合成中不触发快捷提交、running 状态显示取消按钮、用量条渲染、
+// 附件 chip 渲染与移除、模型 Select 选项渲染、错误内联显示。
 //
 // base-ui Select 的弹出层在 jsdom 中需交互才挂载，故选项渲染测试通过
 // SelectItem 的文本（在 content 内）配合 waitFor 断言；发送/取消等核心交互
 // 直接验证命令 mock 被调用。
 
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -198,14 +204,68 @@ describe("AgentComposer", () => {
     expect(textarea).toHaveValue("你好\n");
   });
 
-  it("Shift+Enter 不发送，插入换行", async () => {
+  it("Shift+Enter 发送消息并清空输入", async () => {
     const user = userEvent.setup();
     await renderComposer();
     const textarea = screen.getByRole("textbox", { name: "Message input" });
     await user.type(textarea, "你好");
     await user.type(textarea, "{Shift>}{Enter}{/Shift}");
+    await waitFor(() => {
+      expect(sendAgentMessageMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+        message: "你好",
+        attachments: [],
+      });
+    });
+    expect(textarea).toHaveValue("");
+  });
+
+  it("Ctrl+Enter 发送消息并清空输入", async () => {
+    const user = userEvent.setup();
+    await renderComposer();
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
+    await user.type(textarea, "你好");
+    await user.type(textarea, "{Control>}{Enter}{/Control}");
+    await waitFor(() => {
+      expect(sendAgentMessageMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+        message: "你好",
+        attachments: [],
+      });
+    });
+    expect(textarea).toHaveValue("");
+  });
+
+  it("Cmd+Enter 发送消息并清空输入", async () => {
+    const user = userEvent.setup();
+    await renderComposer();
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
+    await user.type(textarea, "你好");
+    await user.type(textarea, "{Meta>}{Enter}{/Meta}");
+    await waitFor(() => {
+      expect(sendAgentMessageMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+        message: "你好",
+        attachments: [],
+      });
+    });
+    expect(textarea).toHaveValue("");
+  });
+
+  it("IME 合成中 Shift+Enter 不触发提交", async () => {
+    const user = userEvent.setup();
+    await renderComposer();
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
+    await user.type(textarea, "你好");
+    fireEvent.keyDown(textarea, {
+      key: "Enter",
+      shiftKey: true,
+      isComposing: true,
+    });
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
-    expect(textarea).toHaveValue("你好\n");
   });
 
   it("发送按钮仅显示图标，不展示文字", async () => {

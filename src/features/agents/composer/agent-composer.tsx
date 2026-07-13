@@ -99,7 +99,8 @@ export function AgentComposer({
       className="agents-composer"
       aria-label={messages.agentsFeature.messageInputForm}
       onSubmit={(event) => {
-        // 发送只由发送按钮触发，避免 textarea 回车提交。
+        // 防御：拦截表单默认提交，提交统一走 handleSubmit
+        // （发送按钮或 textarea 快捷键，见 onKeyDown）。
         event.preventDefault();
       }}
     >
@@ -113,6 +114,20 @@ export function AgentComposer({
         placeholder={messages.agentsFeature.messagePlaceholder}
         value={text}
         onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          // IME 合成中（如中文输入法选词）的 Enter 交由输入法处理，不触发提交。
+          if (event.nativeEvent.isComposing) {
+            return;
+          }
+          // Ctrl/Cmd+Enter、Shift+Enter 提交；纯 Enter 保持换行。
+          if (
+            event.key === "Enter" &&
+            (event.ctrlKey || event.metaKey || event.shiftKey)
+          ) {
+            event.preventDefault();
+            void handleSubmit();
+          }
+        }}
         disabled={isReadOnly}
         rows={3}
         style={{ maxHeight: TEXTAREA_MAX_HEIGHT_PX }}
