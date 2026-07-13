@@ -16,7 +16,9 @@
 
 ### Issue tracker
 
-Issue 统一记录在 GitHub Issues 中。详见 `docs/agents/issue-tracker.md`。
+开发技能（`to-tickets` / `triage` / `to-spec` / `qa` / `wayfinder`）使用的 ticket 以本地 markdown 形式记录在仓库 `.scratch/` 下，不使用 GitHub。详见 `docs/agents/issue-tracker.md`。
+
+> 此处的「ticket」与产品业务 Issue（`src/features/issues`，存 SQLite、由应用 UI 管理）是两个无关概念，禁止混用；详见 `docs/agents/issue-tracker.md` 顶部的「范围声明」。
 
 ### Triage labels
 
