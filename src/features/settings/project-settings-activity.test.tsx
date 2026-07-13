@@ -637,6 +637,28 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the edit skill dialog when clicking the skill name in the first column", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+    await user.click(
+      await screen.findByRole("button", { name: "codex-global" }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Edit skill" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows agents in a table below the header action", async () => {
     const user = userEvent.setup();
     const longWorkflowSkill =
@@ -816,6 +838,27 @@ describe("ProjectSettingsActivity", () => {
     });
     globalButton.focus();
     await user.keyboard(" ");
+
+    expect(
+      screen.getByRole("heading", { name: "Edit Agent" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the edit form when clicking the agent name in the first column", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Project Codex" }),
+    );
 
     expect(
       screen.getByRole("heading", { name: "Edit Agent" }),
