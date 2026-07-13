@@ -1,6 +1,13 @@
 import { Editor } from "@monaco-editor/react";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, ChevronRight, File, Folder, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  File,
+  Folder,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -22,7 +29,10 @@ import {
   toCommandError,
 } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
-import { FileTreePanel } from "../../shared/workspace/file-tree-panel";
+import {
+  FileTreePanel,
+  type FileTreeOpenState,
+} from "../../shared/workspace/file-tree-panel";
 import {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   getProjectWorktreeFileTree,
@@ -64,8 +74,15 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const [treeError, setTreeError] = useState<string | null>(
     () => cachedState?.treeError ?? null,
   );
+  const [treeLoaded, setTreeLoaded] = useState(
+    () => cachedState?.treeLoaded ?? false,
+  );
   const [isTreeLoading, setIsTreeLoading] = useState(
-    () => (cachedState?.tree.length ?? 0) === 0,
+    () => !(cachedState?.treeLoaded ?? false),
+  );
+  const [isTreeRefreshing, setIsTreeRefreshing] = useState(false);
+  const [openFolders, setOpenFolders] = useState<FileTreeOpenState>(
+    () => cachedState?.openFolders ?? {},
   );
   const [tabs, setTabs] = useState<CodeFileTab[]>(
     () => cachedState?.tabs ?? [],
@@ -81,6 +98,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const openFilePathsRef = useRef(
     new Set((cachedState?.tabs ?? []).map((tab) => tab.filePath)),
   );
+  const treeRequestSequenceRef = useRef(0);
   const fileNotFoundMessage = messages.agentsFeature.fileNotFound;
 
   const selectedRoot = useMemo(
@@ -93,20 +111,24 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   useEffect(() => {
     codeWorkspaceStateCache.set(projectId, {
       activePath,
+      openFolders,
       selectedRootPath,
       sidebarWidth,
       tabs,
       tree,
       treeError,
+      treeLoaded,
     });
   }, [
     activePath,
+    openFolders,
     projectId,
     selectedRootPath,
     sidebarWidth,
     tabs,
     tree,
     treeError,
+    treeLoaded,
   ]);
 
   useEffect(() => {
@@ -139,9 +161,23 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     [],
   );
 
+  const selectedRootWorkspacePath = selectedRoot?.path ?? null;
+  const translateRef = useRef(t);
   useEffect(() => {
-    if (!selectedRoot) return;
+    translateRef.current = t;
+  }, [t]);
+
+  // 已缓存且加载过的树直接复用，切页回来不强制重拉；换 root / 手动刷新另走入口。
+  // setState 放进 Promise 微任务，避免 react-hooks/set-state-in-effect。
+  // 依赖仅用 path 字符串 + treeLoaded，避免 t / root 对象引用抖动触发重复请求。
+  useEffect(() => {
+    if (!selectedRootWorkspacePath || treeLoaded) return;
+
     let isCurrent = true;
+    const requestSequence = treeRequestSequenceRef.current + 1;
+    treeRequestSequenceRef.current = requestSequence;
+    const workspacePath = selectedRootWorkspacePath;
+
     void Promise.resolve()
       .then(() => {
         if (!isCurrent) return null;
@@ -149,22 +185,74 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
         setTreeError(null);
         return getProjectWorktreeFileTree({
           projectId,
-          workspacePath: selectedRoot.path,
+          workspacePath,
         });
       })
       .then((response) => {
-        if (isCurrent && response) setTree(response.nodes);
+        if (
+          !isCurrent ||
+          treeRequestSequenceRef.current !== requestSequence ||
+          !response
+        ) {
+          return;
+        }
+        setTree(response.nodes);
+        setTreeError(null);
+        setTreeLoaded(true);
       })
       .catch((error) => {
-        if (isCurrent) setTreeError(t(error));
+        if (!isCurrent || treeRequestSequenceRef.current !== requestSequence) {
+          return;
+        }
+        setTreeError(translateRef.current(error));
+        setTreeLoaded(true);
       })
       .finally(() => {
-        if (isCurrent) setIsTreeLoading(false);
+        if (!isCurrent || treeRequestSequenceRef.current !== requestSequence) {
+          return;
+        }
+        setIsTreeLoading(false);
+        setIsTreeRefreshing(false);
       });
+
     return () => {
       isCurrent = false;
     };
-  }, [projectId, selectedRoot, t]);
+  }, [projectId, selectedRootWorkspacePath, treeLoaded]);
+
+  const refreshTree = useCallback(() => {
+    if (!selectedRootWorkspacePath || isTreeLoading || isTreeRefreshing) {
+      return;
+    }
+
+    const requestSequence = treeRequestSequenceRef.current + 1;
+    treeRequestSequenceRef.current = requestSequence;
+    const workspacePath = selectedRootWorkspacePath;
+
+    setIsTreeRefreshing(true);
+    setTreeError(null);
+
+    void getProjectWorktreeFileTree({
+      projectId,
+      workspacePath,
+    })
+      .then((response) => {
+        if (treeRequestSequenceRef.current !== requestSequence) return;
+        setTree(response.nodes);
+        setTreeError(null);
+        setTreeLoaded(true);
+      })
+      .catch((error) => {
+        if (treeRequestSequenceRef.current !== requestSequence) return;
+        setTreeError(translateRef.current(error));
+        setTreeLoaded(true);
+      })
+      .finally(() => {
+        if (treeRequestSequenceRef.current !== requestSequence) return;
+        setIsTreeLoading(false);
+        setIsTreeRefreshing(false);
+      });
+  }, [isTreeLoading, isTreeRefreshing, projectId, selectedRootWorkspacePath]);
 
   // 切回代码页时复检已打开文件：缓存内容先展示，再异步校验是否被删除。
   useEffect(() => {
@@ -228,9 +316,16 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const selectRoot = (root: CodeWorkspaceRoot) => {
     openFilePathsRef.current.clear();
     activePathRef.current = null;
+    treeRequestSequenceRef.current += 1;
     setSelectedRootPath(root.path);
     setTabs([]);
     setActivePath(null);
+    setTree([]);
+    setTreeError(null);
+    setTreeLoaded(false);
+    setIsTreeLoading(true);
+    setIsTreeRefreshing(false);
+    setOpenFolders({});
   };
 
   const activeTab = useMemo(
@@ -358,30 +453,52 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       style={{ "--code-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <aside className="code-workspace__sidebar">
-        <DropdownMenu>
-          <DropdownMenuTrigger className="code-workspace__branch">
-            <span>
-              {selectedRoot?.branch ?? messages.agentsFeature.loadingCode}
-            </span>
-            <ChevronDown aria-hidden="true" size={14} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {workspaceRoots.map((root) => (
-              <DropdownMenuItem
-                key={root.path}
-                onClick={() => selectRoot(root)}
-              >
-                {root.branch}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="code-workspace__branch-bar">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="code-workspace__branch">
+              <span>
+                {selectedRoot?.branch ?? messages.agentsFeature.loadingCode}
+              </span>
+              <ChevronDown aria-hidden="true" size={14} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {workspaceRoots.map((root) => (
+                <DropdownMenuItem
+                  key={root.path}
+                  onClick={() => selectRoot(root)}
+                >
+                  {root.branch}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            aria-label={messages.agentsFeature.refreshFileTree}
+            className="code-workspace__refresh"
+            disabled={!selectedRoot || isTreeLoading || isTreeRefreshing}
+            type="button"
+            onClick={refreshTree}
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={
+                isTreeRefreshing
+                  ? "code-workspace__refresh-icon--spin"
+                  : undefined
+              }
+              size={15}
+              strokeWidth={1.8}
+            />
+          </button>
+        </div>
         <FileTreePanel
           errorMessage={treeError}
           fileTree={tree}
+          initialOpenState={openFolders}
           isLoading={isTreeLoading}
           workspacePath={selectedRoot?.path}
           onOpenFile={openFile}
+          onOpenStateChange={setOpenFolders}
         />
       </aside>
       <div

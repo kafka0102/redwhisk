@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Tree, type NodeRendererProps } from "react-arborist";
+import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
 
 import type { WorkspaceFileTreeNode } from "./workspace-commands";
 import {
@@ -30,11 +30,17 @@ import { useI18n } from "../i18n/i18n";
 // （如 jsdom 无布局、或视口尚未布局完成），回退到该高度保证 Tree 可渲染。
 const FILE_TREE_FALLBACK_HEIGHT = 600;
 
+export type FileTreeOpenState = Record<string, boolean>;
+
 export interface FileTreePanelProps {
   errorMessage: string | null;
   fileTree: WorkspaceFileTreeNode[];
+  /** 挂载时恢复的目录展开状态；仅作 initial，运行期由 arborist 自管。 */
+  initialOpenState?: FileTreeOpenState;
   isLoading: boolean;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  /** 目录展开/折叠变化时回调，便于上层缓存切页后的结构。 */
+  onOpenStateChange?: (openState: FileTreeOpenState) => void;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
 }
@@ -54,12 +60,17 @@ interface FileTreeContextMenuState {
 export const FileTreePanel = memo(function FileTreePanel({
   errorMessage,
   fileTree,
+  initialOpenState,
   isLoading,
   onOpenFile,
+  onOpenStateChange,
   workspacePath,
 }: FileTreePanelProps) {
   const { messages } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
+  const treeApiRef = useRef<TreeApi<WorkspaceFileTreeNode> | undefined>(
+    undefined,
+  );
   const [viewportHeight, setViewportHeight] = useState(
     FILE_TREE_FALLBACK_HEIGHT,
   );
@@ -67,6 +78,17 @@ export const FileTreePanel = memo(function FileTreePanel({
   // 文件树数据异步到达前 viewport 不挂载；必须在 hasFileTree 变为 true 后
   // 再测量，否则首次 useLayoutEffect 会在 ref 仍为 null 时空跑并卡住 fallback 高度。
   const hasFileTree = fileTree.length > 0 && !errorMessage;
+
+  const handleToggle = useCallback(
+    (_id: string) => {
+      if (!onOpenStateChange) return;
+      const openState = treeApiRef.current?.openState;
+      if (openState) {
+        onOpenStateChange({ ...openState });
+      }
+    },
+    [onOpenStateChange],
+  );
 
   // react-arborist 的 Tree 需要数值高度做虚拟化，无法直接用 `height: 100%`。
   // 这里测量视口容器的实际高度并随容器尺寸变化更新，让文件树填满侧栏可用高度，
@@ -145,6 +167,7 @@ export const FileTreePanel = memo(function FileTreePanel({
       {hasFileTree ? (
         <div className="session-file-tree__viewport" ref={viewportRef}>
           <Tree<WorkspaceFileTreeNode>
+            ref={treeApiRef}
             aria-label={messages.agentsFeature.fileTree}
             childrenAccessor="children"
             className="session-file-tree__arborist"
@@ -155,10 +178,12 @@ export const FileTreePanel = memo(function FileTreePanel({
             height={viewportHeight}
             idAccessor="id"
             indent={12}
+            initialOpenState={initialOpenState}
             openByDefault={false}
             overscanCount={8}
             rowHeight={28}
             width="100%"
+            onToggle={handleToggle}
           >
             {renderFileTreeRow}
           </Tree>

@@ -14,11 +14,15 @@ export interface CodeFileTab {
 
 export interface CachedCodeWorkspaceState {
   activePath: string | null;
+  /** 目录展开状态（react-arborist OpenMap），切页回来保持展开结构。 */
+  openFolders: Record<string, boolean>;
   selectedRootPath: string | null;
   sidebarWidth: number;
   tabs: CodeFileTab[];
   tree: WorkspaceFileTreeNode[];
   treeError: string | null;
+  /** 当前 root 是否已成功/失败加载过树；用于避免切页回来强制重拉。 */
+  treeLoaded: boolean;
 }
 
 export const codeWorkspaceStateCache = new Map<

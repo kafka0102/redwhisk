@@ -70,10 +70,12 @@ const fileContent = {
 describe("CodeWorkspace", () => {
   beforeEach(() => {
     resetCodeWorkspaceStateCacheForTests();
+    vi.mocked(getProjectWorktreeFileTree).mockReset();
     vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
       nodes: [],
       signature: "empty",
     });
+    vi.mocked(readProjectWorktreeFile).mockReset();
     vi.mocked(readProjectWorktreeFile).mockResolvedValue(fileContent);
   });
 
@@ -181,5 +183,103 @@ describe("CodeWorkspace", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("文件不存在");
     expect(alert).toHaveClass("code-workspace__file-error");
+  });
+
+  it("reuses the cached file tree after remounting without refetching", async () => {
+    const treeNodes = [
+      {
+        id: "src",
+        name: "src",
+        path: "src",
+        kind: "directory" as const,
+        children: [],
+      },
+    ];
+    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
+      nodes: treeNodes,
+      signature: "sig-1",
+    });
+
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getProjectWorktreeFileTree).toHaveBeenCalled();
+    });
+    // 等待首轮加载结束，确保 treeLoaded 写入缓存。
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Refresh file tree" }),
+      ).toBeEnabled();
+    });
+
+    view.unmount();
+    vi.mocked(getProjectWorktreeFileTree).mockClear();
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    expect(getProjectWorktreeFileTree).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Refresh file tree" }),
+    ).toBeEnabled();
+  });
+
+  it("refetches the file tree when the refresh button is clicked", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [],
+        },
+      ],
+      signature: "sig-1",
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Refresh file tree" }),
+      ).toBeEnabled();
+    });
+
+    vi.mocked(getProjectWorktreeFileTree).mockClear();
+    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
+      nodes: [
+        {
+          id: "lib",
+          name: "lib",
+          path: "lib",
+          kind: "directory",
+          children: [],
+        },
+      ],
+      signature: "sig-2",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Refresh file tree" }));
+
+    await waitFor(() => {
+      expect(getProjectWorktreeFileTree).toHaveBeenCalledTimes(1);
+    });
+    expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+    });
   });
 });

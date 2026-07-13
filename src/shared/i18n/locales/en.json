@@ -446,6 +446,7 @@
     "issueDetailsTitle": "Issue details",
     "fileTree": "Project file tree",
     "refreshChanges": "Refresh changes",
+    "refreshFileTree": "Refresh file tree",
     "changes": "Changes",
     "files": "Files",
     "uncommitted": "Uncommitted",
