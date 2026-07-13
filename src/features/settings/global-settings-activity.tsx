@@ -23,6 +23,7 @@ import {
   SelectValue,
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -295,27 +296,41 @@ export function GlobalSettingsActivity() {
                     <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
                       <h4 className="m-0 flex items-center gap-1.5 text-[15px] font-bold leading-[1.3]">
                         {messages.globalSettings.notificationReminder}
-                        <Tooltip>
-                          <TooltipTrigger
-                            type="button"
-                            aria-label={
-                              messages.globalSettings
-                                .notificationReminderTooltip
-                            }
-                            className="inline-flex items-center text-muted-foreground hover:text-foreground"
-                          >
-                            <HelpCircle size={14} strokeWidth={1.9} />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {
-                              messages.globalSettings
-                                .notificationReminderTooltip
-                            }
-                          </TooltipContent>
-                        </Tooltip>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              type="button"
+                              aria-label={
+                                messages.globalSettings
+                                  .notificationReminderTooltip
+                              }
+                              className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                            >
+                              <HelpCircle size={14} strokeWidth={1.9} />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-none whitespace-nowrap">
+                              {
+                                messages.globalSettings
+                                  .notificationReminderTooltip
+                              }
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </h4>
                       <div className="min-w-0">
                         <Select
+                          items={[
+                            {
+                              value: "true",
+                              label:
+                                messages.globalSettings.notificationReminderOn,
+                            },
+                            {
+                              value: "false",
+                              label:
+                                messages.globalSettings.notificationReminderOff,
+                            },
+                          ]}
                           value={String(notificationReminder)}
                           onValueChange={(value) => {
                             setNotificationReminder(value === "true");
