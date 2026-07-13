@@ -22,15 +22,15 @@ import {
   toCommandError,
 } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
-import { SessionFileTreePanel } from "../agents/session-file-tree-panel";
+import { FileTreePanel } from "../../shared/workspace/file-tree-panel";
 import {
+  CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   getProjectWorktreeFileTree,
   readProjectWorktreeFile,
-  CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   type CodeWorkspaceRoot,
   type CodeWorkspaceRootsUpdatedEvent,
   type WorkspaceFileTreeNode,
-} from "../agents/session-workspace-commands";
+} from "../../shared/workspace/workspace-commands";
 import {
   codeWorkspaceStateCache,
   type CodeFileTab,
@@ -376,7 +376,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <SessionFileTreePanel
+        <FileTreePanel
           errorMessage={treeError}
           fileTree={tree}
           isLoading={isTreeLoading}

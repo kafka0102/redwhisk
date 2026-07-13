@@ -9,7 +9,7 @@ import type { IssueOpenRequest } from "../features/issues/issue-open-request";
 import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
 import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
 import type { ProjectWorktreeLocation } from "../features/project/project-commands";
-import type { CodeWorkspaceRoot } from "../features/agents/session-workspace-commands";
+import type { CodeWorkspaceRoot } from "../shared/workspace/workspace-commands";
 import type { ProjectSummary } from "./app";
 import type { Dispatch, SetStateAction } from "react";
 

@@ -58,7 +58,6 @@ interface SessionWorkspaceCache {
   fileTab: SessionWorkspaceFileTab | null;
   fileTree: WorkspaceFileTreeNode[];
   fileTreeErrorMessage: string | null;
-  fileTreeRequestSequence: number;
   isChangesLoading: boolean;
   isChangesUnavailable: boolean;
   isCommitHistoryLoading: boolean;
@@ -82,7 +81,6 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   fileTab: null,
   fileTree: [],
   fileTreeErrorMessage: null,
-  fileTreeRequestSequence: 0,
   isChangesLoading: false,
   isChangesUnavailable: false,
   isCommitHistoryLoading: false,
@@ -100,6 +98,10 @@ export function useSessionWorkspaceCache({
 }: UseSessionWorkspaceCacheInput) {
   const { t } = useI18n();
   const cacheBySessionRef = useRef<Map<number, SessionWorkspaceCache>>(
+    new Map(),
+  );
+  // 请求序号放 ref，避免轮询仅 bump sequence 就触发整树 re-render。
+  const fileTreeRequestSequenceBySessionRef = useRef<Map<number, number>>(
     new Map(),
   );
   const [, setCacheVersion] = useState(0);
@@ -121,7 +123,13 @@ export function useSessionWorkspaceCache({
       updater: (cache: SessionWorkspaceCache) => SessionWorkspaceCache,
     ) => {
       const cache = getSessionCache(cacheBySessionRef.current, targetSessionId);
-      cacheBySessionRef.current.set(targetSessionId, updater(cache));
+      const nextCache = updater(cache);
+      // 引用未变时跳过 setState，避免 agent 流式重渲染 / 轮询无变化时
+      // 把整棵 AgentsActivity 连带文件树一起刷掉（点击会感觉迟钝）。
+      if (nextCache === cache) {
+        return;
+      }
+      cacheBySessionRef.current.set(targetSessionId, nextCache);
       setCacheVersion((currentVersion) => currentVersion + 1);
     },
     [],
@@ -219,14 +227,21 @@ export function useSessionWorkspaceCache({
       return;
     }
 
-    let requestSequence = 0;
-    updateCurrentCache((cache) => ({
-      ...cache,
-      fileTreeRequestSequence: (requestSequence =
-        cache.fileTreeRequestSequence + 1),
-      isFileTreeLoading: true,
-      fileTreeErrorMessage: null,
-    }));
+    const requestSequence =
+      (fileTreeRequestSequenceBySessionRef.current.get(sessionId) ?? 0) + 1;
+    fileTreeRequestSequenceBySessionRef.current.set(sessionId, requestSequence);
+
+    // 仅在尚无树数据时进入 loading；后台轮询不写 cache，避免侧栏无意义重渲染。
+    updateCurrentCache((cache) => {
+      if (cache.fileTree.length > 0) {
+        return cache;
+      }
+      return {
+        ...cache,
+        isFileTreeLoading: true,
+        fileTreeErrorMessage: null,
+      };
+    });
 
     try {
       const response = await getProjectWorktreeFileTree({
@@ -234,30 +249,43 @@ export function useSessionWorkspaceCache({
         sessionId,
       });
 
-      updateCurrentCache((cache) =>
-        cache.fileTreeRequestSequence === requestSequence
-          ? {
-              ...cache,
-              fileTree:
-                cache.lastFileTreeSignature === response.signature
-                  ? cache.fileTree
-                  : response.nodes,
-              isFileTreeLoading: false,
-              fileTreeErrorMessage: null,
-              lastFileTreeSignature: response.signature,
-            }
-          : cache,
-      );
+      if (
+        fileTreeRequestSequenceBySessionRef.current.get(sessionId) !==
+        requestSequence
+      ) {
+        return;
+      }
+
+      updateCurrentCache((cache) => {
+        const signatureUnchanged =
+          cache.lastFileTreeSignature === response.signature;
+        if (
+          signatureUnchanged &&
+          !cache.isFileTreeLoading &&
+          cache.fileTreeErrorMessage == null
+        ) {
+          return cache;
+        }
+        return {
+          ...cache,
+          fileTree: signatureUnchanged ? cache.fileTree : response.nodes,
+          isFileTreeLoading: false,
+          fileTreeErrorMessage: null,
+          lastFileTreeSignature: response.signature,
+        };
+      });
     } catch (error) {
-      updateCurrentCache((cache) =>
-        cache.fileTreeRequestSequence === requestSequence
-          ? {
-              ...cache,
-              isFileTreeLoading: false,
-              fileTreeErrorMessage: getCommandErrorMessage(error, t),
-            }
-          : cache,
-      );
+      if (
+        fileTreeRequestSequenceBySessionRef.current.get(sessionId) !==
+        requestSequence
+      ) {
+        return;
+      }
+      updateCurrentCache((cache) => ({
+        ...cache,
+        isFileTreeLoading: false,
+        fileTreeErrorMessage: getCommandErrorMessage(error, t),
+      }));
     }
   }, [projectId, sessionId, updateCurrentCache, t]);
 
@@ -517,20 +545,44 @@ export function useSessionWorkspaceCache({
         return;
       }
 
-      updateCurrentCache((cache) => ({
-        ...cache,
-        activeWorkspaceTab: "file",
-        fileTab: {
-          fileName: file.name,
-          filePath: file.path,
-          content:
-            cache.fileTab?.filePath === file.path
-              ? cache.fileTab.content
-              : null,
-          errorMessage: null,
-          isLoading: true,
-        },
-      }));
+      // 与 CodeWorkspace 对齐：已打开且仍在加载 / 已有内容时不重复读盘，
+      // 避免连点同一文件触发二次 IO 与全量 cache 刷新。
+      let shouldFetch = true;
+      updateCurrentCache((cache) => {
+        const existing =
+          cache.fileTab?.filePath === file.path ? cache.fileTab : null;
+        if (existing != null) {
+          shouldFetch = false;
+          if (
+            cache.activeWorkspaceTab === "file" &&
+            (existing.content != null ||
+              existing.isLoading ||
+              existing.errorMessage != null)
+          ) {
+            return cache;
+          }
+          return {
+            ...cache,
+            activeWorkspaceTab: "file",
+            fileTab: existing,
+          };
+        }
+        return {
+          ...cache,
+          activeWorkspaceTab: "file",
+          fileTab: {
+            fileName: file.name,
+            filePath: file.path,
+            content: null,
+            errorMessage: null,
+            isLoading: true,
+          },
+        };
+      });
+
+      if (!shouldFetch) {
+        return;
+      }
 
       try {
         const content = await readProjectWorktreeFile({

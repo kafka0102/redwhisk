@@ -1621,12 +1621,8 @@ export function AgentsActivity({
               linkedIssue={linkedIssue}
               session={selectedSession}
               onActiveTabChange={workspaceCache.setSidePanelTab}
-              onOpenChangedFile={(file) => {
-                void workspaceCache.openChange(file);
-              }}
-              onOpenCommittedChangedFile={(commitHash, file) => {
-                void workspaceCache.openCommittedChange(commitHash, file);
-              }}
+              onOpenChangedFile={workspaceCache.openChange}
+              onOpenCommittedChangedFile={workspaceCache.openCommittedChange}
               onOpenIssue={(issueId) => {
                 if (selectedSession) {
                   setSessionReturnState(projectId, {
@@ -1643,15 +1639,11 @@ export function AgentsActivity({
                   sidePanelTab,
                 });
               }}
-              onOpenFile={(file) => {
-                void workspaceCache.openFile(file);
-              }}
-              onRefreshCommitHistory={() => {
-                void workspaceCache.refreshCommitHistory();
-              }}
-              onRefreshChanges={() => {
-                void workspaceCache.refreshChanges();
-              }}
+              // 必须传稳定引用：内联包装会在 agent 流式重渲染时换掉
+              // FileTreePanel 的行渲染器 identity，导致点击明显迟钝。
+              onOpenFile={workspaceCache.openFile}
+              onRefreshCommitHistory={workspaceCache.refreshCommitHistory}
+              onRefreshChanges={workspaceCache.refreshChanges}
               projectId={projectId}
               workspacePath={selectedSession.workspacePath}
             />

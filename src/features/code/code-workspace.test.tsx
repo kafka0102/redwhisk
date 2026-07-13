@@ -7,11 +7,11 @@ import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
-} from "../agents/session-workspace-commands";
+} from "../../shared/workspace/workspace-commands";
 import { resetCodeWorkspaceStateCacheForTests } from "./code-workspace-cache";
 import { CodeWorkspace } from "./code-workspace";
 
-vi.mock("../agents/session-workspace-commands", () => ({
+vi.mock("../../shared/workspace/workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
   getProjectWorktreeFileTree: vi.fn(),
   listCodeWorkspaceRoots: vi.fn(),
@@ -22,8 +22,8 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(vi.fn())),
 }));
 
-vi.mock("../agents/session-file-tree-panel", () => ({
-  SessionFileTreePanel: ({
+vi.mock("../../shared/workspace/file-tree-panel", () => ({
+  FileTreePanel: ({
     onOpenFile,
   }: {
     onOpenFile: (file: {

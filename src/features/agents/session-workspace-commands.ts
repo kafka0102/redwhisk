@@ -1,4 +1,27 @@
 import { invokeCommand } from "../../shared/commands/command-client";
+import type {
+  ProjectWorkspaceInput,
+  ProjectWorkspacePathInput,
+} from "../../shared/workspace/workspace-commands";
+
+// 共享的文件树 / 文件读取 / Code 根 API 与类型。agents 内部继续从本模块 re-export，
+// 避免 session 侧大规模改 import；CodeWorkspace 应直接从 shared/workspace 引用。
+export type {
+  CodeWorkspaceRoot,
+  CodeWorkspaceRootsResponse,
+  CodeWorkspaceRootsUpdatedEvent,
+  ProjectWorktreeFileTreeResponse,
+  ProjectWorkspaceInput,
+  ProjectWorkspacePathInput,
+  WorkspaceFileContent,
+  WorkspaceFileTreeNode,
+} from "../../shared/workspace/workspace-commands";
+export {
+  CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
+  getProjectWorktreeFileTree,
+  listCodeWorkspaceRoots,
+  readProjectWorktreeFile,
+} from "../../shared/workspace/workspace-commands";
 
 export type WorkspaceChangeKind =
   | "added"
@@ -8,17 +31,6 @@ export type WorkspaceChangeKind =
   | "copied"
   | "untracked"
   | "binary";
-
-export interface ProjectWorkspaceInput {
-  projectId: number;
-  sessionId?: number | null;
-  workspacePath?: string | null;
-}
-
-export interface ProjectWorkspacePathInput extends ProjectWorkspaceInput {
-  filePath: string;
-  commitHash?: string | null;
-}
 
 export interface WorkspaceChangedFile {
   filePath: string;
@@ -74,50 +86,6 @@ export interface ProjectWorktreeCommitHistoryResponse {
   isWorktree: boolean;
 }
 
-export interface WorkspaceFileTreeNode {
-  id: string;
-  name: string;
-  path: string;
-  kind: "directory" | "file";
-  children?: WorkspaceFileTreeNode[];
-  sizeBytes?: number;
-  modifiedAt?: number;
-  isIgnored?: boolean;
-}
-
-export interface CodeWorkspaceRoot {
-  branch: string;
-  path: string;
-  isProjectRoot: boolean;
-}
-
-export interface CodeWorkspaceRootsResponse {
-  roots: CodeWorkspaceRoot[];
-}
-
-export const CODE_WORKSPACE_ROOTS_UPDATED_EVENT =
-  "code-workspace-roots-updated";
-
-export interface CodeWorkspaceRootsUpdatedEvent {
-  projectId: number;
-  roots: CodeWorkspaceRoot[];
-}
-
-export interface ProjectWorktreeFileTreeResponse {
-  nodes: WorkspaceFileTreeNode[];
-  signature: string;
-}
-
-export interface WorkspaceFileContent {
-  filePath: string;
-  language?: string | null;
-  content: string;
-  modifiedAt?: number | null;
-  sizeBytes: number;
-  isBinary: boolean;
-  isTooLarge: boolean;
-}
-
 export interface WorkspaceDiffContent {
   filePath: string;
   oldPath?: string | null;
@@ -138,26 +106,6 @@ export function getProjectWorktreeChanges(
   );
 }
 
-export function listCodeWorkspaceRoots(
-  projectId: number,
-): Promise<CodeWorkspaceRootsResponse> {
-  return invokeCommand<CodeWorkspaceRootsResponse>(
-    "list_code_workspace_roots",
-    {
-      projectId,
-    },
-  );
-}
-
-export function getProjectWorktreeFileTree(
-  input: ProjectWorkspaceInput,
-): Promise<ProjectWorktreeFileTreeResponse> {
-  return invokeCommand<ProjectWorktreeFileTreeResponse>(
-    "get_project_worktree_file_tree",
-    { input },
-  );
-}
-
 export function getProjectWorktreeCommitHistory(
   input: ProjectWorkspaceInput,
 ): Promise<ProjectWorktreeCommitHistoryResponse> {
@@ -165,14 +113,6 @@ export function getProjectWorktreeCommitHistory(
     "get_project_worktree_commit_history",
     { input },
   );
-}
-
-export function readProjectWorktreeFile(
-  input: ProjectWorkspacePathInput,
-): Promise<WorkspaceFileContent> {
-  return invokeCommand<WorkspaceFileContent>("read_project_worktree_file", {
-    input,
-  });
 }
 
 export function readProjectWorktreeDiff(

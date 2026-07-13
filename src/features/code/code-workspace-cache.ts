@@ -1,7 +1,7 @@
 import type {
   WorkspaceFileContent,
   WorkspaceFileTreeNode,
-} from "../agents/session-workspace-commands";
+} from "../../shared/workspace/workspace-commands";
 
 export interface CodeFileTab {
   content: WorkspaceFileContent | null;

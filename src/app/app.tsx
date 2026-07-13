@@ -26,7 +26,7 @@ import {
   type ProjectRecord,
   type ProjectListItem,
 } from "../features/project/project-commands";
-import type { CodeWorkspaceRoot } from "../features/agents/session-workspace-commands";
+import type { CodeWorkspaceRoot } from "../shared/workspace/workspace-commands";
 import { SessionMonitorSurface } from "../features/agents/session-notifications/session-monitor-surface";
 import {
   OPEN_AGENT_SESSION_EVENT,
