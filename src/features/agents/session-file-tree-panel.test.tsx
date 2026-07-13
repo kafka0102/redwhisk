@@ -6,18 +6,26 @@ import { I18nProvider } from "../../shared/i18n/i18n";
 import { SessionFileTreePanel } from "./session-file-tree-panel";
 
 const treeHeights: number[] = [];
+const treeRowRenderers: ReactNode[] = [];
 
 vi.mock("react-arborist", () => ({
   Tree: ({
+    children,
     height,
     "aria-label": ariaLabel,
   }: {
+    children?: ReactNode;
     height: number;
     "aria-label"?: string;
   }) => {
     treeHeights.push(height);
+    treeRowRenderers.push(children);
     return (
-      <div aria-label={ariaLabel} data-testid="mock-file-tree" data-height={height} />
+      <div
+        aria-label={ariaLabel}
+        data-testid="mock-file-tree"
+        data-height={height}
+      />
     );
   },
 }));
@@ -28,6 +36,7 @@ describe("SessionFileTreePanel", () => {
 
   beforeEach(() => {
     treeHeights.length = 0;
+    treeRowRenderers.length = 0;
     resizeObserverCallback = null;
     observedElements = [];
 
@@ -66,9 +75,7 @@ describe("SessionFileTreePanel", () => {
       />,
     );
 
-    expect(
-      document.querySelector(".session-file-tree__viewport"),
-    ).toBeNull();
+    expect(document.querySelector(".session-file-tree__viewport")).toBeNull();
     expect(resizeObserverCallback).toBeNull();
 
     rerender(
@@ -131,6 +138,41 @@ describe("SessionFileTreePanel", () => {
       "842",
     );
     expect(treeHeights[treeHeights.length - 1]).toBe(842);
+  });
+
+  it("keeps the tree row renderer stable when unchanged props re-render", () => {
+    const fileTree = [
+      {
+        id: "src",
+        name: "src",
+        path: "src",
+        kind: "directory" as const,
+        children: [],
+      },
+    ];
+    const onOpenFile = vi.fn();
+    const { rerender } = renderWithI18n(
+      <SessionFileTreePanel
+        errorMessage={null}
+        fileTree={fileTree}
+        isLoading={false}
+        onOpenFile={onOpenFile}
+      />,
+    );
+    const firstRenderer = treeRowRenderers[treeRowRenderers.length - 1];
+
+    rerender(
+      <I18nProvider fixedLocale="en">
+        <SessionFileTreePanel
+          errorMessage={null}
+          fileTree={fileTree}
+          isLoading={false}
+          onOpenFile={onOpenFile}
+        />
+      </I18nProvider>,
+    );
+
+    expect(treeRowRenderers[treeRowRenderers.length - 1]).toBe(firstRenderer);
   });
 });
 

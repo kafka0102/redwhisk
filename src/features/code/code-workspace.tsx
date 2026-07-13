@@ -59,6 +59,8 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(400);
   const dragCleanupRef = useRef<(() => void) | null>(null);
+  const activePathRef = useRef<string | null>(null);
+  const openFilePathsRef = useRef(new Set<string>());
 
   const selectedRoot = useMemo(
     () =>
@@ -125,6 +127,8 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   }, [projectId, selectedRoot, t]);
 
   const selectRoot = (root: CodeWorkspaceRoot) => {
+    openFilePathsRef.current.clear();
+    activePathRef.current = null;
     setSelectedRootPath(root.path);
     setTabs([]);
     setActivePath(null);
@@ -139,6 +143,10 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     (file: WorkspaceFileTreeNode) => {
       if (!selectedRoot || file.kind !== "file") return;
       const now = Date.now();
+      const previousActivePath = activePathRef.current;
+      const isAlreadyOpen = openFilePathsRef.current.has(file.path);
+      activePathRef.current = file.path;
+      openFilePathsRef.current.add(file.path);
       setActivePath(file.path);
       setTabs((currentTabs) => {
         const existing = currentTabs.find((tab) => tab.filePath === file.path);
@@ -162,13 +170,19 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
                 (tab) =>
                   tab.filePath !==
                   currentTabs
-                    .filter((candidate) => candidate.filePath !== activePath)
+                    .filter(
+                      (candidate) => candidate.filePath !== previousActivePath,
+                    )
                     .sort(
                       (left, right) => left.lastActiveAt - right.lastActiveAt,
                     )[0]?.filePath,
               );
+        currentTabs
+          .filter((tab) => !retained.includes(tab))
+          .forEach((tab) => openFilePathsRef.current.delete(tab.filePath));
         return [...retained, nextTab];
       });
+      if (isAlreadyOpen) return;
       void readProjectWorktreeFile({
         projectId,
         workspacePath: selectedRoot.path,
@@ -193,14 +207,19 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
           );
         });
     },
-    [activePath, projectId, selectedRoot, t],
+    [projectId, selectedRoot, t],
   );
 
   const closeTab = (filePath: string) => {
+    openFilePathsRef.current.delete(filePath);
     setTabs((currentTabs) => {
       const remaining = currentTabs.filter((tab) => tab.filePath !== filePath);
-      if (activePath === filePath)
-        setActivePath(remaining[remaining.length - 1]?.filePath ?? null);
+      if (activePathRef.current === filePath) {
+        const nextActivePath =
+          remaining[remaining.length - 1]?.filePath ?? null;
+        activePathRef.current = nextActivePath;
+        setActivePath(nextActivePath);
+      }
       return remaining;
     });
   };
@@ -277,6 +296,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
               role="tab"
               type="button"
               onClick={() => {
+                activePathRef.current = tab.filePath;
                 setActivePath(tab.filePath);
                 setTabs((current) =>
                   current.map((item) =>

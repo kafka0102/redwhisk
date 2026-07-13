@@ -99,6 +99,17 @@ export function SessionFileTreePanel({
     [],
   );
 
+  const renderFileTreeRow = useCallback(
+    (props: NodeRendererProps<WorkspaceFileTreeNode>) => (
+      <FileTreeRow
+        {...props}
+        onOpenFile={onOpenFile}
+        onContextMenuNode={handleContextMenuNode}
+      />
+    ),
+    [handleContextMenuNode, onOpenFile],
+  );
+
   const handleCopy = useCallback(
     async (text: string) => {
       try {
@@ -144,13 +155,7 @@ export function SessionFileTreePanel({
             rowHeight={28}
             width="100%"
           >
-            {(props) => (
-              <FileTreeRow
-                {...props}
-                onOpenFile={onOpenFile}
-                onContextMenuNode={handleContextMenuNode}
-              />
-            )}
+            {renderFileTreeRow}
           </Tree>
         </div>
       ) : null}
