@@ -70,27 +70,42 @@ fn flush(logs_dir: &Path, buffer: &mut Vec<LogEntry>) {
         return;
     }
 
-    // 按月份分组，同月日志写入同一文件，跨月自然切分。
-    let mut groups: HashMap<String, Vec<&LogEntry>> = HashMap::new();
+    // 正常日志按月分组：包含全部条目（Info + Error），写入 `{YYYY-MM}.log`。
+    let mut normal_groups: HashMap<String, Vec<&LogEntry>> = HashMap::new();
+    // error 日志按月分组：仅 Error 条目，写入 `{YYYY-MM}.error.log`。
+    // Error 条目因此同时落在正常日志与 error 日志，便于独立排查。
+    let mut error_groups: HashMap<String, Vec<&LogEntry>> = HashMap::new();
     for entry in buffer.iter() {
         let month_key = month_key_from_epoch(entry.timestamp_millis);
-        groups.entry(month_key).or_default().push(entry);
-    }
-
-    for (month_key, entries) in groups {
-        let file_path = logs_dir.join(format!("{month_key}.log"));
-        if let Ok(mut file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&file_path)
-        {
-            for entry in entries {
-                let _ = writeln!(file, "{}", format_entry(entry));
-            }
+        normal_groups.entry(month_key.clone()).or_default().push(entry);
+        if entry.level == LogLevel::Error {
+            error_groups.entry(month_key).or_default().push(entry);
         }
     }
 
+    for (month_key, entries) in normal_groups {
+        write_entries(logs_dir, &format!("{month_key}.log"), &entries);
+    }
+    for (month_key, entries) in error_groups {
+        write_entries(logs_dir, &format!("{month_key}.error.log"), &entries);
+    }
+
     buffer.clear();
+}
+
+/// 将条目追加写入 `logs_dir/<file_name>`；打开失败时静默跳过，绝不阻塞后台线程。
+fn write_entries(logs_dir: &Path, file_name: &str, entries: &[&LogEntry]) {
+    let file_path = logs_dir.join(file_name);
+    let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file_path)
+    else {
+        return;
+    };
+    for entry in entries {
+        let _ = writeln!(file, "{}", format_entry(entry));
+    }
 }
 
 fn format_entry(entry: &LogEntry) -> String {
@@ -201,7 +216,7 @@ mod tests {
         // 生产中由 run_writer 启动时创建一次 logs 目录，测试镜像该前置条件。
         fs::create_dir_all(&logs_dir).expect("create logs dir");
 
-        // 同月两条 + 次月一条。
+        // 同月两条（Info + Error）+ 次月一条（Info）。
         let mut buffer = vec![
             entry(1783195200000, LogLevel::Info, "op_a", "first in month"),
             entry(1783195200000, LogLevel::Error, "op_b", "second in month"),
@@ -224,8 +239,8 @@ mod tests {
             .collect();
         log_files.sort();
 
-        // 跨两个月应切分成两个文件。
-        assert_eq!(log_files.len(), 2, "log files: {log_files:?}");
+        // 正常日志跨两个月各一个 + 同月 error 日志一个 = 3 个 `.log` 文件。
+        assert_eq!(log_files.len(), 3, "log files: {log_files:?}");
 
         let combined: String = log_files
             .iter()
@@ -233,6 +248,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
+        // 正常日志含全部条目（Info + Error）。
         assert!(combined.contains("first in month"), "combined: {combined}");
         assert!(combined.contains("second in month"), "combined: {combined}");
         assert!(combined.contains("[ERROR]"), "combined: {combined}");
@@ -240,6 +256,86 @@ mod tests {
             combined.contains("next month entry"),
             "combined: {combined}"
         );
+
+        // error 日志仅一个（同月那条 Error），且只含 Error 条目。
+        let error_files: Vec<&String> = log_files
+            .iter()
+            .filter(|name| name.ends_with(".error.log"))
+            .collect();
+        assert_eq!(error_files.len(), 1, "error files: {error_files:?}");
+        let error_content =
+            fs::read_to_string(logs_dir.join(error_files[0])).expect("read error log file content");
+        assert!(
+            error_content.contains("second in month"),
+            "error_content: {error_content}"
+        );
+        assert!(
+            error_content.contains("[ERROR]"),
+            "error_content: {error_content}"
+        );
+        assert!(
+            !error_content.contains("first in month"),
+            "error file should not include info entry: {error_content}"
+        );
+        assert!(
+            !error_content.contains("next month entry"),
+            "error file should not include next month entry: {error_content}"
+        );
+
         assert!(buffer.is_empty(), "buffer should be cleared after flush");
+    }
+
+    #[test]
+    fn error_entries_written_to_both_normal_and_error_file() {
+        let temp = TempDir::new().expect("create temp dir");
+        let logs_dir: PathBuf = temp.path().join("logs");
+        fs::create_dir_all(&logs_dir).expect("create logs dir");
+
+        // 同月 1 Info + 1 Error。
+        let mut buffer = vec![
+            entry(1783195200000, LogLevel::Info, "op_info", "info only"),
+            entry(1783195200000, LogLevel::Error, "op_err", "error duplicated"),
+        ];
+
+        flush(&logs_dir, &mut buffer);
+
+        let mut names: Vec<String> = fs::read_dir(&logs_dir)
+            .expect("read logs dir")
+            .filter_map(|entry| entry.ok().map(|entry| entry.file_name().to_string_lossy().to_string()))
+            .collect();
+        names.sort();
+
+        // 同月应产生正好两个文件：正常日志 + error 日志。
+        assert_eq!(names.len(), 2, "files: {names:?}");
+
+        let normal_name = names
+            .iter()
+            .find(|name| name.ends_with(".log") && !name.ends_with(".error.log"))
+            .expect("normal log file should exist");
+        let error_name = names
+            .iter()
+            .find(|name| name.ends_with(".error.log"))
+            .expect("error log file should exist");
+
+        let normal = fs::read_to_string(logs_dir.join(normal_name)).expect("read normal log");
+        let error = fs::read_to_string(logs_dir.join(error_name)).expect("read error log");
+
+        // 正常日志同时含 Info 与 Error。
+        assert!(normal.contains("info only"), "normal: {normal}");
+        assert!(normal.contains("error duplicated"), "normal: {normal}");
+        assert!(normal.contains("[INFO]"), "normal: {normal}");
+        assert!(normal.contains("[ERROR]"), "normal: {normal}");
+
+        // error 日志只含 Error，不含 Info。
+        assert!(error.contains("error duplicated"), "error: {error}");
+        assert!(error.contains("[ERROR]"), "error: {error}");
+        assert!(
+            !error.contains("info only"),
+            "error file should not include info entry: {error}"
+        );
+        assert!(
+            !error.contains("[INFO]"),
+            "error file should not include info level: {error}"
+        );
     }
 }

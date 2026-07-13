@@ -14,6 +14,7 @@ use crate::agent::session_registry::AgentSessionRegistry;
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
 use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
+use crate::logging::CommandResultExt;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentPermissionDecision, AgentSessionListResponse, CancelAgentTurnInput,
@@ -71,6 +72,7 @@ pub async fn list_agent_sessions(
         ).with_reason("queryFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("list_agent_sessions")
 }
 
 #[tauri::command]
@@ -123,6 +125,7 @@ pub async fn start_agent_session(
         ).with_reason("startFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("start_agent_session")
 }
 
 #[tauri::command]
@@ -143,6 +146,7 @@ pub async fn get_project_git_branches(
         ).with_reason("gitBranchQueryFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("get_project_git_branches")
 }
 
 #[tauri::command]
@@ -163,6 +167,7 @@ pub async fn set_agent_session_attention(
         ).with_reason("followStatusUpdateFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("set_agent_session_attention")
 }
 
 #[tauri::command]
@@ -196,6 +201,7 @@ pub async fn inject_agent_session_prompt(
         ).with_reason("promptInjectFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("inject_agent_session_prompt")
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +364,7 @@ pub async fn start_structured_agent_session(
         ).with_reason("startFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("start_structured_agent_session")
 }
 
 #[tauri::command]
@@ -395,6 +402,7 @@ pub async fn resume_structured_agent_session(
         ).with_reason("restoreFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("resume_structured_agent_session")
 }
 
 #[tauri::command]
@@ -426,6 +434,7 @@ pub async fn delete_agent_session(
         ).with_reason("deleteFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("delete_agent_session")
 }
 
 #[tauri::command]
@@ -450,6 +459,7 @@ pub async fn update_agent_session_title(
         ).with_reason("titleUpdateFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("update_agent_session_title")
 }
 
 #[tauri::command]
@@ -476,6 +486,7 @@ pub async fn send_agent_message(
         ).with_reason("messageSendFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("send_agent_message")
 }
 
 #[tauri::command]
@@ -512,6 +523,7 @@ pub async fn cancel_agent_turn(
         ).with_reason("cancelFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("cancel_agent_turn")
 }
 
 #[tauri::command]
@@ -549,6 +561,7 @@ pub async fn respond_agent_permission(
         ).with_reason("permissionResponseFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("respond_agent_permission")
 }
 
 #[tauri::command]
@@ -618,6 +631,7 @@ pub async fn set_agent_model(
         ).with_reason("configSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("set_agent_model")
 }
 
 #[tauri::command]
@@ -660,6 +674,7 @@ pub async fn set_agent_thinking(
         ).with_reason("configSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("set_agent_thinking")
 }
 
 #[tauri::command]
@@ -686,6 +701,7 @@ pub async fn set_agent_mode(
         ).with_reason("modeSwitchFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("set_agent_mode")
 }
 
 #[tauri::command]
@@ -743,6 +759,7 @@ pub async fn list_agent_models(
         ).with_reason("modelListReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("list_agent_models")
 }
 
 /// 从 `~/.claude/settings.json` 解析 Claude 可用模型列表。
@@ -810,6 +827,7 @@ pub async fn list_agent_modes(
         ).with_reason("modeListReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("list_agent_modes")
 }
 
 #[tauri::command]
@@ -867,6 +885,7 @@ pub async fn save_agent_attachment(
         ).with_reason("attachmentSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("save_agent_attachment")
 }
 
 #[tauri::command]
@@ -893,4 +912,5 @@ pub async fn read_agent_timeline(
         ).with_reason("historyReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+    .log_if_error("read_agent_timeline")
 }
