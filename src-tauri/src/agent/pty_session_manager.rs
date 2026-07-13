@@ -40,6 +40,14 @@ struct PtySessionHandle {
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     restore_buffer: Mutex<PtyRestoreBuffer>,
+    log: Mutex<PtyLogWriter>,
+}
+
+struct PtyLogWriter {
+    path: std::path::PathBuf,
+    file: Option<BufWriter<File>>,
+    unflushed_bytes: usize,
+    bytes_since_trim_check: usize,
 }
 
 struct PendingEmit {
@@ -137,16 +145,18 @@ impl PtySessionManager {
     }
 
     /// 增加可见订阅计数；`count > 0` 时才会向 output_sink 推送 live 输出。
+    /// 订阅前先 flush log，保证随后的 catch-up 能读到最新尾部。
     pub fn add_output_subscriber(&self, session_id: i64) {
+        let _ = self.flush_log(session_id);
         if let Ok(mut subscribers) = self.store.subscribers.lock() {
             let count = subscribers.entry(session_id).or_insert(0);
             *count = count.saturating_add(1);
         }
     }
 
-    /// 减少可见订阅计数；归零时冲刷并丢弃该 session 的 pending emit。
+    /// 减少可见订阅计数；归零时丢弃 pending emit（不向 sink 推送）。
     pub fn remove_output_subscriber(&self, session_id: i64) {
-        let should_flush = {
+        let should_discard_pending = {
             let Ok(mut subscribers) = self.store.subscribers.lock() else {
                 return;
             };
@@ -161,9 +171,19 @@ impl PtySessionManager {
                 false
             }
         };
-        if should_flush {
-            flush_pending_session(&self.store, session_id);
+        if should_discard_pending {
+            discard_pending_session(&self.store, session_id);
         }
+    }
+
+    /// 将 session 终端 log 刷到 OS（catch-up / 外部读之前调用）。
+    pub fn flush_log(&self, session_id: i64) -> Result<(), String> {
+        let session = self.lookup(session_id)?;
+        let mut log = session
+            .log
+            .lock()
+            .map_err(|_| "failed to lock PTY log writer".to_string())?;
+        log.flush().map_err(|error| error.to_string())
     }
 
     pub fn spawn_pending(&self, request: &PtySpawnRequest) -> Result<PendingPtySession, String> {
@@ -245,11 +265,22 @@ impl PtySessionManager {
             }
         };
 
+        let log_writer = match PtyLogWriter::open(Path::new(&pending.log_path)) {
+            Ok(log_writer) => log_writer,
+            Err(error) => {
+                return Err(PtyRegisterError {
+                    message: error,
+                    pending,
+                });
+            }
+        };
+
         let handle = Arc::new(PtySessionHandle {
             master: Mutex::new(pending.master),
             writer: Mutex::new(pending.writer),
             killer: Mutex::new(pending.killer),
             restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
+            log: Mutex::new(log_writer),
         });
 
         sessions.insert(session_id, Arc::clone(&handle));
@@ -257,7 +288,6 @@ impl PtySessionManager {
 
         let reader_store = Arc::clone(&self.store);
         let reader_handle = Arc::clone(&handle);
-        let log_path = pending.log_path.clone();
         let mut reader = pending.reader;
         thread::spawn(move || {
             run_reader_loop(
@@ -265,7 +295,6 @@ impl PtySessionManager {
                 reader_handle,
                 project_id,
                 session_id,
-                log_path,
                 &mut reader,
             );
         });
@@ -277,13 +306,19 @@ impl PtySessionManager {
                 .wait()
                 .ok()
                 .and_then(|status| i32::try_from(status.exit_code()).ok());
+            let had_subscribers = has_output_subscribers(&store, session_id);
             if let Ok(mut sessions) = store.sessions.lock() {
                 sessions.remove(&session_id);
             }
             if let Ok(mut subscribers) = store.subscribers.lock() {
                 subscribers.remove(&session_id);
             }
-            flush_pending_session(&store, session_id);
+            // 退出前若仍有可见订阅，冲刷最后一包；否则丢弃 pending。
+            if had_subscribers {
+                flush_pending_session(&store, session_id);
+            } else {
+                discard_pending_session(&store, session_id);
+            }
             on_exit(PtyExitStatus { exit_code });
         });
 
@@ -416,48 +451,22 @@ fn run_reader_loop(
     handle: Arc<PtySessionHandle>,
     project_id: i64,
     session_id: i64,
-    log_path: String,
     reader: &mut Box<dyn Read + Send>,
 ) {
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path);
-    let mut file = match file {
-        Ok(file) => BufWriter::with_capacity(LOG_FLUSH_EVERY_BYTES, file),
-        Err(_) => return,
-    };
     let mut buffer = [0_u8; 4096];
     let mut sequence = 0_u64;
-    let mut bytes_since_trim_check = 0_usize;
 
     loop {
         match reader.read(&mut buffer) {
             Ok(0) => break,
             Ok(count) => {
                 let data = &buffer[..count];
-                if file.write_all(data).is_err() {
+                if let Ok(mut log) = handle.log.lock() {
+                    if log.write_all(data).is_err() {
+                        break;
+                    }
+                } else {
                     break;
-                }
-                // 合并写入后尽快可见：catch-up / 外部读 log 依赖已落盘尾部。
-                // 这里 flush 到 OS page cache，不做 fsync，成本远低于同步落盘。
-                if file.flush().is_err() {
-                    break;
-                }
-                bytes_since_trim_check = bytes_since_trim_check.saturating_add(count);
-
-                if bytes_since_trim_check >= LOG_TRIM_CHECK_EVERY_BYTES {
-                    drop(file);
-                    let _ = trim_log_file(Path::new(&log_path), LOG_MAX_BYTES);
-                    file = match OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&log_path)
-                    {
-                        Ok(next) => BufWriter::with_capacity(LOG_FLUSH_EVERY_BYTES, next),
-                        Err(_) => return,
-                    };
-                    bytes_since_trim_check = 0;
                 }
 
                 sequence = sequence.saturating_add(1);
@@ -473,10 +482,15 @@ fn run_reader_loop(
         }
     }
 
-    let _ = file.flush();
-    drop(file);
-    let _ = trim_log_file(Path::new(&log_path), LOG_MAX_BYTES);
-    flush_pending_session(&store, session_id);
+    if let Ok(mut log) = handle.log.lock() {
+        let _ = log.flush();
+        let _ = log.trim_if_needed(true);
+    }
+    if has_output_subscribers(&store, session_id) {
+        flush_pending_session(&store, session_id);
+    } else {
+        discard_pending_session(&store, session_id);
+    }
 }
 
 fn spawn_coalesce_thread(store: Arc<PtySessionStore>) {
@@ -571,6 +585,69 @@ fn flush_pending_session(store: &PtySessionStore, session_id: i64) {
             sequence: pending.sequence,
             data: pending.data,
         });
+    }
+}
+
+fn discard_pending_session(store: &PtySessionStore, session_id: i64) {
+    if let Ok(mut pending_emits) = store.pending_emits.lock() {
+        pending_emits.remove(&session_id);
+    }
+}
+
+impl PtyLogWriter {
+    fn open(path: &Path) -> Result<Self, String> {
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|error| error.to_string())?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            file: Some(BufWriter::with_capacity(LOG_FLUSH_EVERY_BYTES, file)),
+            unflushed_bytes: 0,
+            bytes_since_trim_check: 0,
+        })
+    }
+
+    fn write_all(&mut self, data: &[u8]) -> Result<(), String> {
+        let Some(file) = self.file.as_mut() else {
+            return Err("log writer closed".to_string());
+        };
+        file.write_all(data).map_err(|error| error.to_string())?;
+        self.unflushed_bytes = self.unflushed_bytes.saturating_add(data.len());
+        self.bytes_since_trim_check = self.bytes_since_trim_check.saturating_add(data.len());
+
+        if self.unflushed_bytes >= LOG_FLUSH_EVERY_BYTES {
+            self.flush()?;
+        }
+        self.trim_if_needed(false)?;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), String> {
+        if let Some(file) = self.file.as_mut() {
+            file.flush().map_err(|error| error.to_string())?;
+        }
+        self.unflushed_bytes = 0;
+        Ok(())
+    }
+
+    fn trim_if_needed(&mut self, force: bool) -> Result<(), String> {
+        if !force && self.bytes_since_trim_check < LOG_TRIM_CHECK_EVERY_BYTES {
+            return Ok(());
+        }
+        self.flush()?;
+        // 关闭句柄后再裁剪，避免与追加写竞争。
+        self.file = None;
+        trim_log_file(&self.path, LOG_MAX_BYTES)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|error| error.to_string())?;
+        self.file = Some(BufWriter::with_capacity(LOG_FLUSH_EVERY_BYTES, file));
+        self.bytes_since_trim_check = 0;
+        Ok(())
     }
 }
 

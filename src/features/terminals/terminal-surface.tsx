@@ -5,14 +5,13 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
-import type { TerminalOutputChunk, TerminalTransport } from "./terminal-types";
+import { TerminalLivePipeline } from "./terminal-live-pipeline";
+import type { TerminalTransport } from "./terminal-types";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
 const TERMINAL_STATUS_MAX_BYTES = 1;
 const TERMINAL_STATUS_POLL_MS = 2_000;
-const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
-const TERMINAL_HISTORY_MAX_BYTES = 1024 * 1024;
 const TERMINAL_WORD_SEPARATOR = " ()[]{}',\"`";
 
 type TerminalStatusSource =
@@ -44,7 +43,6 @@ export function TerminalSurface({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const transportRef = useRef(transport);
-  const latestSequenceRef = useRef(0);
   const statusSourceRef = useRef<TerminalStatusSource | null>(null);
   const themeRef = useRef(theme);
   const contentFontSizeRef = useRef(contentFontSize);
@@ -153,7 +151,6 @@ export function TerminalSurface({
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    latestSequenceRef.current = 0;
 
     const syncSize = () => {
       // 宿主被 hidden（切到其他 workspace tab 时 pane 变为 display:none，
@@ -209,6 +206,87 @@ export function TerminalSurface({
       return true;
     });
 
+    let isDisposed = false;
+    let statusTimer: number | null = null;
+    let unlistenOutput: (() => void) | null = null;
+    let desiredVisible = false;
+
+    const pipelineTransport: TerminalTransport = {
+      readSnapshot: (maxBytes) => transportRef.current.readSnapshot(maxBytes),
+      resize: (rows, cols) => transportRef.current.resize(rows, cols),
+      restore: () => transportRef.current.restore(),
+      setLiveSubscription: (active) =>
+        transportRef.current.setLiveSubscription(active),
+      subscribeOutput: (handler) =>
+        transportRef.current.subscribeOutput(handler),
+      write: (data) => transportRef.current.write(data),
+    };
+
+    const pipeline = new TerminalLivePipeline(pipelineTransport, {
+      writeBytes: (bytes) => {
+        try {
+          terminal.write(bytes);
+          clearStatusMessage();
+        } catch (error) {
+          showStatusMessage("output", getCommandErrorMessage(error, t));
+        }
+      },
+      writeHistory: (text) => {
+        terminal.reset();
+        terminal.write(text);
+        terminal.scrollToBottom();
+      },
+      onRestoreIncomplete: () => {
+        showStatusMessage(
+          "restore",
+          "Terminal restore snapshot is incomplete. Showing log tail; live output continues below.",
+        );
+      },
+      onRestoreError: (error) => {
+        showStatusMessage("restore", getCommandErrorMessage(error, t));
+      },
+      onInactive: () => {
+        clearStatusMessage("inactive");
+      },
+      onLiveReady: () => {
+        clearStatusMessage();
+      },
+      onPendingDropped: () => {
+        showStatusMessage(
+          "restore",
+          "Terminal restore is taking longer than expected. Older live output was dropped while waiting for restore.",
+        );
+      },
+    });
+
+    const isLayoutVisible = (): boolean =>
+      host.offsetWidth > 0 && host.offsetHeight > 0;
+
+    const isDocumentVisible = (): boolean =>
+      typeof document === "undefined" || document.visibilityState === "visible";
+
+    const isTerminalVisible = (): boolean =>
+      isLayoutVisible() && isDocumentVisible();
+
+    const refreshLiveVisibility = async () => {
+      if (isDisposed) {
+        return;
+      }
+
+      const shouldBeVisible = isTerminalVisible();
+      if (shouldBeVisible === desiredVisible) {
+        return;
+      }
+      desiredVisible = shouldBeVisible;
+
+      if (shouldBeVisible) {
+        await pipeline.becomeVisible();
+        return;
+      }
+
+      await pipeline.becomeHidden();
+    };
+
     const resizeObserver =
       typeof ResizeObserver === "undefined"
         ? null
@@ -224,223 +302,10 @@ export function TerminalSurface({
     };
     window.addEventListener("resize", handleWindowResize);
 
-    let isDisposed = false;
-    let isLiveSubscribed = false;
-    let catchUpGeneration = 0;
-    let statusTimer: number | null = null;
-    let unlistenOutput: (() => void) | null = null;
-    let rafWriteId: number | null = null;
-    const pendingLiveChunks: Uint8Array[] = [];
-    let pendingLiveBytes = 0;
-    const pendingOutputEvents: TerminalOutputChunk[] = [];
-    let pendingOutputBytes = 0;
-
-    const isLayoutVisible = (): boolean =>
-      host.offsetWidth > 0 && host.offsetHeight > 0;
-
-    const isDocumentVisible = (): boolean =>
-      typeof document === "undefined" || document.visibilityState === "visible";
-
-    const isTerminalVisible = (): boolean =>
-      isLayoutVisible() && isDocumentVisible();
-
-    const decodeOutputData = (data: string): Uint8Array | null => {
-      try {
-        return decodeBase64ToUint8Array(data);
-      } catch {
-        return null;
-      }
+    const handleVisibilityChange = () => {
+      void refreshLiveVisibility();
     };
-
-    const flushRafWrites = () => {
-      rafWriteId = null;
-      if (isDisposed || pendingLiveChunks.length === 0) {
-        pendingLiveChunks.length = 0;
-        pendingLiveBytes = 0;
-        return;
-      }
-
-      const total = pendingLiveBytes;
-      const merged = new Uint8Array(total);
-      let offset = 0;
-      for (const chunk of pendingLiveChunks) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
-      }
-      pendingLiveChunks.length = 0;
-      pendingLiveBytes = 0;
-
-      try {
-        terminal.write(merged);
-        clearStatusMessage();
-      } catch (error) {
-        showStatusMessage("output", getCommandErrorMessage(error, t));
-      }
-    };
-
-    const scheduleLiveWrite = (bytes: Uint8Array) => {
-      if (bytes.length === 0) {
-        return;
-      }
-      pendingLiveChunks.push(bytes);
-      pendingLiveBytes += bytes.length;
-      if (rafWriteId === null) {
-        rafWriteId = window.requestAnimationFrame(flushRafWrites);
-      }
-    };
-
-    const writeOutput = (event: TerminalOutputChunk) => {
-      if (isDisposed || event.sequence <= latestSequenceRef.current) {
-        return;
-      }
-
-      const bytes = decodeOutputData(event.data);
-      if (!bytes) {
-        return;
-      }
-
-      latestSequenceRef.current = event.sequence;
-      scheduleLiveWrite(bytes);
-    };
-
-    const flushPendingOutput = () => {
-      for (const event of pendingOutputEvents.splice(0)) {
-        pendingOutputBytes = Math.max(
-          0,
-          pendingOutputBytes - estimateBase64DecodedLength(event.data),
-        );
-        writeOutput(event);
-      }
-      pendingOutputBytes = 0;
-    };
-
-    const discardPendingOutput = () => {
-      pendingOutputEvents.length = 0;
-      pendingOutputBytes = 0;
-    };
-
-    const queuePendingOutput = (event: TerminalOutputChunk) => {
-      pendingOutputEvents.push(event);
-      pendingOutputBytes += estimateBase64DecodedLength(event.data);
-
-      while (
-        pendingOutputBytes > TERMINAL_PENDING_OUTPUT_MAX_BYTES &&
-        pendingOutputEvents.length > 0
-      ) {
-        const droppedEvent = pendingOutputEvents.shift();
-        if (!droppedEvent) {
-          break;
-        }
-        pendingOutputBytes = Math.max(
-          0,
-          pendingOutputBytes - estimateBase64DecodedLength(droppedEvent.data),
-        );
-        showStatusMessage(
-          "restore",
-          "Terminal restore is taking longer than expected. Older live output was dropped while waiting for restore.",
-        );
-      }
-    };
-
-    const handleOutput = (event: TerminalOutputChunk) => {
-      if (!isLiveSubscribed) {
-        queuePendingOutput(event);
-        return;
-      }
-
-      writeOutput(event);
-    };
-
-    const writeHistorySnapshot = async () => {
-      const snapshotResult = await transportRef.current.readSnapshot(
-        TERMINAL_HISTORY_MAX_BYTES,
-      );
-      if (isDisposed) {
-        return;
-      }
-
-      if (snapshotResult.snapshot) {
-        terminal.reset();
-        terminal.write(snapshotResult.snapshot);
-        terminal.scrollToBottom();
-      }
-    };
-
-    const catchUpFromLog = async () => {
-      const generation = ++catchUpGeneration;
-      try {
-        const restoreResult = await transportRef.current.restore();
-        if (isDisposed || generation !== catchUpGeneration) {
-          return;
-        }
-
-        await writeHistorySnapshot();
-        if (isDisposed || generation !== catchUpGeneration) {
-          return;
-        }
-
-        if (!restoreResult.isActive) {
-          discardPendingOutput();
-          clearStatusMessage("inactive");
-          return;
-        }
-
-        latestSequenceRef.current = restoreResult.sequence;
-        if (!restoreResult.isComplete) {
-          showStatusMessage(
-            "restore",
-            "Terminal restore snapshot is incomplete. Showing log tail; live output continues below.",
-          );
-        } else {
-          clearStatusMessage();
-        }
-        flushPendingOutput();
-      } catch (error) {
-        if (!isDisposed && generation === catchUpGeneration) {
-          showStatusMessage("restore", getCommandErrorMessage(error, t));
-          flushPendingOutput();
-        }
-      }
-    };
-
-    const setBackendLiveSubscription = async (active: boolean) => {
-      try {
-        await transportRef.current.setLiveSubscription(active);
-      } catch {
-        // Subscription failures should not tear down the terminal surface.
-      }
-    };
-
-    const refreshLiveVisibility = async () => {
-      if (isDisposed) {
-        return;
-      }
-
-      const shouldBeLive = isTerminalVisible();
-      if (shouldBeLive === isLiveSubscribed) {
-        return;
-      }
-
-      if (shouldBeLive) {
-        isLiveSubscribed = true;
-        await setBackendLiveSubscription(true);
-        if (isDisposed || !isLiveSubscribed) {
-          return;
-        }
-        await catchUpFromLog();
-        return;
-      }
-
-      isLiveSubscribed = false;
-      await setBackendLiveSubscription(false);
-      discardPendingOutput();
-      if (rafWriteId !== null) {
-        window.cancelAnimationFrame(rafWriteId);
-        rafWriteId = null;
-      }
-      pendingLiveChunks.length = 0;
-      pendingLiveBytes = 0;
-    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     const refreshStatus = async () => {
       try {
@@ -469,15 +334,11 @@ export function TerminalSurface({
       }
     };
 
-    const handleVisibilityChange = () => {
-      void refreshLiveVisibility();
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
     const startTerminal = async () => {
       try {
-        unlistenOutput =
-          await transportRef.current.subscribeOutput(handleOutput);
+        unlistenOutput = await transportRef.current.subscribeOutput((event) => {
+          pipeline.handleOutput(event);
+        });
         if (isDisposed) {
           unlistenOutput();
           unlistenOutput = null;
@@ -503,17 +364,11 @@ export function TerminalSurface({
 
     return () => {
       isDisposed = true;
-      catchUpGeneration += 1;
-      if (isLiveSubscribed) {
-        isLiveSubscribed = false;
-        void setBackendLiveSubscription(false);
-      }
+      desiredVisible = false;
+      pipeline.dispose();
       unlistenOutput?.();
       if (statusTimer !== null) {
         window.clearInterval(statusTimer);
-      }
-      if (rafWriteId !== null) {
-        window.cancelAnimationFrame(rafWriteId);
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       resizeObserver?.disconnect();
@@ -523,7 +378,6 @@ export function TerminalSurface({
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
-      latestSequenceRef.current = 0;
       statusSourceRef.current = null;
     };
   }, [canBootXterm, transportKey, t]);
@@ -544,23 +398,6 @@ export function TerminalSurface({
       ) : null}
     </div>
   );
-}
-
-function decodeBase64ToUint8Array(data: string): Uint8Array {
-  const binary = atob(data);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
-function estimateBase64DecodedLength(data: string): number {
-  if (data.length === 0) {
-    return 0;
-  }
-  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
-  return Math.max(0, Math.floor((data.length * 3) / 4) - padding);
 }
 
 function getTerminalTheme(theme: "light" | "dark") {

@@ -2736,6 +2736,7 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
     let mut snapshot = String::new();
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = manager.flush_log(77);
         snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
         if snapshot.contains("hello from pty") {
             break;
@@ -2784,6 +2785,7 @@ fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
         if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             events.push(event);
         }
+        let _ = manager.flush_log(77);
         snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
         if snapshot.contains("hello event stream")
             && events.iter().any(|event| {

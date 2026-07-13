@@ -576,6 +576,11 @@ impl<'connection> ProjectTerminalService<'connection> {
     ) -> Result<ReadProjectTerminalResult, CommandError> {
         self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
+        let is_active = session.is_active && pty_sessions.contains(input.session_id);
+        if is_active {
+            // catch-up / 状态轮询前刷 log，避免 BufWriter 未落盘导致尾部缺失。
+            let _ = pty_sessions.flush_log(input.session_id);
+        }
         let snapshot = read_terminal_snapshot(
             Path::new(&session.log_path),
             input.max_bytes.unwrap_or(32_768),
@@ -585,7 +590,7 @@ impl<'connection> ProjectTerminalService<'connection> {
         Ok(ReadProjectTerminalResult {
             session_id: input.session_id,
             snapshot,
-            is_active: session.is_active && pty_sessions.contains(input.session_id),
+            is_active,
         })
     }
 
