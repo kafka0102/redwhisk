@@ -22,6 +22,7 @@ const quillInstances = vi.hoisted(() => {
     getSelection: ReturnType<typeof vi.fn>;
     insertText: ReturnType<typeof vi.fn>;
     setSelection: ReturnType<typeof vi.fn>;
+    updateContents: ReturnType<typeof vi.fn>;
   }> = [];
   return instances;
 });
@@ -46,6 +47,7 @@ vi.mock("quill", () => {
       this.contents = { ops };
     });
     setSelection = vi.fn();
+    updateContents = vi.fn();
 
     constructor(host: HTMLElement) {
       host.appendChild(this.root);
@@ -412,9 +414,8 @@ describe("RichTextEditor", () => {
     editorRoot.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(quillInstances[0].insertText).toHaveBeenCalledWith(
-      0,
-      "hello world",
+    expect(quillInstances[0].updateContents).toHaveBeenCalledWith(
+      [{ retain: 0 }, { insert: "hello world" }],
       "user",
     );
     expect(quillInstances[0].setSelection).toHaveBeenCalledWith(
@@ -443,7 +444,10 @@ describe("RichTextEditor", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(quillInstances[0].deleteText).toHaveBeenCalledWith(4, 3, "user");
-    expect(quillInstances[0].insertText).toHaveBeenCalledWith(4, "new", "user");
+    expect(quillInstances[0].updateContents).toHaveBeenCalledWith(
+      [{ retain: 4 }, { insert: "new" }],
+      "user",
+    );
     expect(quillInstances[0].setSelection).toHaveBeenCalledWith(
       4 + "new".length,
       0,
@@ -468,7 +472,62 @@ describe("RichTextEditor", () => {
     editorRoot.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(false);
-    expect(quillInstances[0].insertText).not.toHaveBeenCalled();
+    expect(quillInstances[0].updateContents).not.toHaveBeenCalled();
+  });
+
+  it("renders pasted markdown bold and list as a formatted delta", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    const editorRoot = quillInstances[0].root;
+    const event = createPasteEvent("**bold**\n- item");
+    editorRoot.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    const updateContentsCalls = quillInstances[0].updateContents.mock.calls;
+    const pasteOps = updateContentsCalls[updateContentsCalls.length - 1]?.[0];
+    // 加粗与列表标记被解析为富文本 delta，而非原样保留星号 / 连字符。
+    expect(pasteOps).toContainEqual({
+      insert: "bold",
+      attributes: { bold: true },
+    });
+    expect(pasteOps).toContainEqual({
+      insert: "\n",
+      attributes: { list: "bullet" },
+    });
+    expect(JSON.stringify(pasteOps)).not.toContain("**");
+    // "bold"(4) + "\n"(1) + "item"(4) + 列表换行(1) = 10
+    expect(quillInstances[0].setSelection).toHaveBeenCalledWith(10, 0, "user");
+  });
+
+  it("strips the trailing plain newline so plain paste does not add a blank line", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    const editorRoot = quillInstances[0].root;
+    const event = createPasteEvent("plain text");
+    editorRoot.dispatchEvent(event);
+
+    const updateContentsCalls = quillInstances[0].updateContents.mock.calls;
+    const pasteOps = updateContentsCalls[updateContentsCalls.length - 1]?.[0];
+    // 末尾文档结束换行被剥离，仅保留正文 insert，避免在光标处多出空行。
+    expect(pasteOps).toEqual([{ retain: 0 }, { insert: "plain text" }]);
   });
 });
 

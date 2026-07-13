@@ -336,10 +336,12 @@ export function RichTextEditor({
       isComposing = false;
       restorePlaceholderAfterInput();
     };
-    // 粘贴时只保留纯文本并去除首尾空白：丢弃 HTML/富文本格式，避免外部样式
-    // 污染编辑器。监听器挂在 quill.root 的父节点上并以捕获阶段先于 Quill 自带
-    // 的 onCapturePaste 执行，preventDefault 后 Quill 会在 defaultPrevented
-    // 检查处直接退出，不再走其 clipboard 转换链路。
+    // 粘贴时丢弃 HTML/富文本格式（只取纯文本并去首尾空白），避免外部样式污染
+    // 编辑器；再把纯文本按 Markdown 解析为 delta 插入，使加粗 / 列表 / 标题 /
+    // 引用 / 代码等标记在粘贴当下即渲染，与保存后重新打开的渲染一致。监听器
+    // 挂在 quill.root 的父节点上并以捕获阶段先于 Quill 自带的 onCapturePaste
+    // 执行，preventDefault 后 Quill 会在 defaultPrevented 检查处直接退出，不
+    // 再走其 clipboard 转换链路。
     const handlePaste = (event: ClipboardEvent) => {
       const clipboardData = event.clipboardData;
       if (!clipboardData) {
@@ -362,8 +364,9 @@ export function RichTextEditor({
       if (selection && selection.length > 0) {
         quill.deleteText(selection.index, selection.length, "user");
       }
-      quill.insertText(index, trimmedText, "user");
-      quill.setSelection(index + trimmedText.length, 0, "user");
+      const contentOps = buildPasteContent(trimmedText);
+      quill.updateContents([{ retain: index }, ...contentOps], "user");
+      quill.setSelection(index + measureDeltaLength(contentOps), 0, "user");
     };
 
     quill.root.addEventListener("compositionstart", handleCompositionStart);
@@ -567,6 +570,47 @@ export function RichTextEditor({
 function getQuillOperations(quill: Quill): DeltaOperation[] {
   const contents = quill.getContents() as { ops?: DeltaOperation[] };
   return contents.ops ?? [];
+}
+
+// 将粘贴文本转为可插入的 delta 片段：先按 Markdown 解析为文档 delta，再剥离
+// 末尾代表文档结束的普通换行（无块级属性的 "\n"），使其作为片段插入光标处而
+// 非整体替换。附件传空数组：粘贴属外部内容，不与既有附件 token 绑定，仅渲染
+// Markdown 排版（加粗 / 列表 / 标题 / 引用 / 代码）。
+function buildPasteContent(markdown: string): DeltaOperation[] {
+  const { ops } = markdownToDelta(markdown, []);
+  return stripTrailingPlainNewline(ops);
+}
+
+// 末尾若是无属性的普通换行（文档结束符），剥掉它，避免在光标处多出一个空行；
+// 末尾若是带块级格式的换行（如列表项 / 标题），保留它，由其后既有换行承接，
+// 使光标落在内容下方的新行。与 Quill clipboard.convert 的末尾换行处理一致。
+function stripTrailingPlainNewline(ops: DeltaOperation[]): DeltaOperation[] {
+  if (ops.length === 0) {
+    return ops;
+  }
+  const last = ops[ops.length - 1];
+  if (
+    typeof last.insert === "string" &&
+    last.insert === "\n" &&
+    !last.attributes
+  ) {
+    return ops.slice(0, -1);
+  }
+  return ops;
+}
+
+// 累加 delta 片段的字符长度，用于粘贴后定位光标：字符串 insert 取其长度，embed
+// 计 1，其余（retain / delete）不在粘贴片段中出现。
+function measureDeltaLength(ops: DeltaOperation[]): number {
+  return ops.reduce((total, op) => {
+    if (typeof op.insert === "string") {
+      return total + op.insert.length;
+    }
+    if (op.insert != null) {
+      return total + 1;
+    }
+    return total;
+  }, 0);
 }
 
 function applyMarkdownShortcuts(quill: Quill) {
