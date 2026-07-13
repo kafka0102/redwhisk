@@ -364,6 +364,81 @@ fn issue_timeline_returns_created_entries_in_ascending_order_without_payload_jso
 }
 
 #[test]
+fn issue_timeline_returns_all_known_action_types_not_only_created() {
+    use redwhisk_lib::types::issue::IssueTimelineActionType;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "sample-repo");
+    database
+        .connection
+        .execute(
+            "UPDATE user_profiles SET name = ?1 WHERE id = 1",
+            rusqlite::params!["Alice"],
+        )
+        .expect("update user profile");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Timeline issue".to_string(),
+            description: String::new(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+
+    // create_issue 已写入 issue_created；补齐首期其余四种已实现动作。
+    let base = issue.created_at;
+    database
+        .connection
+        .execute(
+            "INSERT INTO issue_actions (
+                issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
+             ) VALUES
+                (?1, 'agent_session_started', '{}', ?2, 'user', 1),
+                (?1, 'issue_status_changed', '{}', ?3, 'user', 1),
+                (?1, 'issue_review_marked', '{}', ?4, 'user', 1),
+                (?1, 'issue_completed', '{}', ?5, 'user', 1)",
+            rusqlite::params![issue.id, base + 1, base + 2, base + 3, base + 4],
+        )
+        .expect("insert actions");
+
+    let timeline = service
+        .get_issue_timeline(redwhisk_lib::types::issue::GetIssueTimelineInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("timeline");
+
+    assert_eq!(timeline.entries.len(), 5);
+    assert_eq!(
+        timeline.entries[0].action_type,
+        IssueTimelineActionType::IssueCreated
+    );
+    assert_eq!(
+        timeline.entries[1].action_type,
+        IssueTimelineActionType::AgentSessionStarted
+    );
+    assert_eq!(
+        timeline.entries[2].action_type,
+        IssueTimelineActionType::IssueStatusChanged
+    );
+    assert_eq!(
+        timeline.entries[3].action_type,
+        IssueTimelineActionType::IssueReviewMarked
+    );
+    assert_eq!(
+        timeline.entries[4].action_type,
+        IssueTimelineActionType::IssueCompleted
+    );
+    // 全部动作 actor 均回填为当前用户（actor_user_profile_id = 1）。
+    assert!(timeline.entries.iter().all(|entry| entry.actor.name == "Alice"));
+}
+
+#[test]
 fn create_issue_rolls_back_issue_when_issue_action_insert_fails() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

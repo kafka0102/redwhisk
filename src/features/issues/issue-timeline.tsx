@@ -64,6 +64,10 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
   const { messages } = useI18n();
   const actionText: Record<IssueTimelineEntry["actionType"], string> = {
     issue_created: messages.issues.timelineCreated,
+    agent_session_started: messages.issues.timelineAgentSessionStarted,
+    issue_review_marked: messages.issues.timelineReviewMarked,
+    issue_status_changed: messages.issues.timelineStatusChanged,
+    issue_completed: messages.issues.timelineCompleted,
   };
 
   return (

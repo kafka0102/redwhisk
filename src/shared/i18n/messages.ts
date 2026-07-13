@@ -257,11 +257,15 @@ export interface I18nMessages {
     titleField: string;
     titlePlaceholder: string;
     titleRequired: string;
+    timelineAgentSessionStarted: string;
+    timelineCompleted: string;
     timelineCreated: string;
     timelineDaysAgo: (days: number) => string;
     timelineHoursAgo: (hours: number) => string;
     timelineJustNow: string;
     timelineMinutesAgo: (minutes: number) => string;
+    timelineReviewMarked: string;
+    timelineStatusChanged: string;
     timelineTitle: string;
     viewSession: string;
     viewSummary: string;

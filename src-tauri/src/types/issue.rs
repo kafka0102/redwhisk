@@ -301,6 +301,25 @@ pub struct IssueTimelineEntry {
 #[serde(rename_all = "snake_case")]
 pub enum IssueTimelineActionType {
     IssueCreated,
+    AgentSessionStarted,
+    IssueReviewMarked,
+    IssueStatusChanged,
+    IssueCompleted,
+}
+
+impl IssueTimelineActionType {
+    /// 将 `issue_actions.action_type` 字符串解析为时间轴动作类型。
+    /// 返回 `None` 表示该动作不应进入时间轴（未知类型或 `issue_deleted`）。
+    pub fn from_action_str(value: &str) -> Option<Self> {
+        Some(match value {
+            "issue_created" => Self::IssueCreated,
+            "agent_session_started" => Self::AgentSessionStarted,
+            "issue_review_marked" => Self::IssueReviewMarked,
+            "issue_status_changed" => Self::IssueStatusChanged,
+            "issue_completed" => Self::IssueCompleted,
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

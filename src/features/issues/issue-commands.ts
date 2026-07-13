@@ -76,7 +76,12 @@ export interface IssueListResponse {
   statusTotals?: IssueStatusTotals;
 }
 
-export type IssueTimelineActionType = "issue_created";
+export type IssueTimelineActionType =
+  | "issue_created"
+  | "agent_session_started"
+  | "issue_review_marked"
+  | "issue_status_changed"
+  | "issue_completed";
 
 export interface IssueTimelineActor {
   name: string;

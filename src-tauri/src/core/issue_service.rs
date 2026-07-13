@@ -284,11 +284,11 @@ impl<'connection> IssueService<'connection> {
         let mut entries = Vec::new();
         for row in rows {
             let (action_type, name, avatar_path, created_at) = row.map_err(issue_database_error)?;
-            if action_type != "issue_created" {
+            let Some(action_type) = IssueTimelineActionType::from_action_str(&action_type) else {
                 continue;
-            }
+            };
             entries.push(IssueTimelineEntry {
-                action_type: IssueTimelineActionType::IssueCreated,
+                action_type,
                 actor: IssueTimelineActor {
                     name: name.unwrap_or_default(),
                     avatar_path,
