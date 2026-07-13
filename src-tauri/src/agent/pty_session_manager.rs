@@ -18,8 +18,9 @@ const LOG_MAX_BYTES: usize = 32 * 1024 * 1024;
 const LOG_FLUSH_EVERY_BYTES: usize = 64 * 1024;
 const LOG_TRIM_CHECK_EVERY_BYTES: usize = 8 * 1024 * 1024;
 const EMIT_COALESCE_MAX_BYTES: usize = 64 * 1024;
-const EMIT_COALESCE_MAX_MS: u64 = 16;
-const COALESCE_TICK_MS: u64 = 8;
+// 交互回显优先：合并窗口过大会让 TUI 输入（如 grok）感觉“粘滞”。
+const EMIT_COALESCE_MAX_MS: u64 = 4;
+const COALESCE_TICK_MS: u64 = 2;
 
 #[derive(Clone)]
 pub struct PtySessionManager {

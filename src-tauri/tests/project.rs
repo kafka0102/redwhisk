@@ -868,17 +868,16 @@ fn open_project_restores_saved_project_terminals_without_duplicate_launches() {
         listed.terminals[0].session_id
     );
 
-    let snapshot = terminal_service
-        .read_terminal_snapshot(
-            ReadProjectTerminalInput {
-                project_id: stored_project.id,
-                session_id: relisted.terminals[0].session_id,
-                max_bytes: Some(1024),
-            },
-            &registry,
-            &manager,
-        )
-        .expect("read restored snapshot");
+    let snapshot = ProjectTerminalService::read_terminal_snapshot(
+        ReadProjectTerminalInput {
+            project_id: stored_project.id,
+            session_id: relisted.terminals[0].session_id,
+            max_bytes: Some(1024),
+        },
+        &registry,
+        &manager,
+    )
+    .expect("read restored snapshot");
     assert!(snapshot.is_active);
 }
 

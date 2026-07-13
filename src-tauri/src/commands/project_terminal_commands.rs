@@ -51,13 +51,10 @@ pub fn create_temporary_project_terminal(
 
 #[tauri::command]
 pub fn read_project_terminal(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: ReadProjectTerminalInput,
 ) -> Result<ReadProjectTerminalResult, CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::read_terminal_snapshot_in_data_dir(
-        data_dir,
+    ProjectTerminalService::read_terminal_snapshot(
         input,
         &state.project_terminals,
         &state.pty_sessions,
@@ -81,13 +78,11 @@ pub fn list_project_terminals(
 
 #[tauri::command]
 pub fn write_project_terminal(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: WriteProjectTerminalInput,
 ) -> Result<(), CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::write_terminal_input_in_data_dir(
-        data_dir,
+    // 热路径：禁止 prepare_data_dir / open SQLite（每个按键一次）。
+    ProjectTerminalService::write_terminal_input(
         input,
         &state.project_terminals,
         &state.pty_sessions,
@@ -96,13 +91,10 @@ pub fn write_project_terminal(
 
 #[tauri::command]
 pub fn restore_project_terminal(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: RestoreProjectTerminalInput,
 ) -> Result<RestoreProjectTerminalResult, CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::restore_terminal_in_data_dir(
-        data_dir,
+    ProjectTerminalService::restore_terminal(
         input,
         &state.project_terminals,
         &state.pty_sessions,
@@ -111,13 +103,10 @@ pub fn restore_project_terminal(
 
 #[tauri::command]
 pub fn subscribe_project_terminal_output(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: SubscribeProjectTerminalOutputInput,
 ) -> Result<(), CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::subscribe_terminal_output_in_data_dir(
-        data_dir,
+    ProjectTerminalService::subscribe_terminal_output(
         input,
         &state.project_terminals,
         &state.pty_sessions,
@@ -126,13 +115,10 @@ pub fn subscribe_project_terminal_output(
 
 #[tauri::command]
 pub fn unsubscribe_project_terminal_output(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: SubscribeProjectTerminalOutputInput,
 ) -> Result<(), CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::unsubscribe_terminal_output_in_data_dir(
-        data_dir,
+    ProjectTerminalService::unsubscribe_terminal_output(
         input,
         &state.project_terminals,
         &state.pty_sessions,
@@ -141,13 +127,11 @@ pub fn unsubscribe_project_terminal_output(
 
 #[tauri::command]
 pub fn resize_project_terminal(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: ResizeProjectTerminalInput,
 ) -> Result<(), CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::resize_terminal_in_data_dir(
-        data_dir,
+    // 热路径：FitAddon 频繁触发，禁止 open SQLite。
+    ProjectTerminalService::resize_terminal(
         input,
         &state.project_terminals,
         &state.pty_sessions,
@@ -231,13 +215,10 @@ pub fn delete_project_terminal_shortcut_command(
 
 #[tauri::command]
 pub fn read_project_terminal_cwd(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: ReadProjectTerminalCwdInput,
 ) -> Result<ReadProjectTerminalCwdResult, CommandError> {
-    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
-    ProjectTerminalService::read_terminal_cwd_in_data_dir(
-        data_dir,
+    ProjectTerminalService::read_terminal_cwd(
         input,
         &state.project_terminals,
         &state.pty_sessions,

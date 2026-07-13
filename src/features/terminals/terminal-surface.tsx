@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
+import { createTerminalInputWriter } from "./terminal-input-writer";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
 import type { TerminalTransport } from "./terminal-types";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -188,10 +189,15 @@ export function TerminalSurface({
 
     syncSize();
 
-    const disposeData = terminal.onData((data) => {
-      void transportRef.current.write(data).catch((error) => {
+    // 串行写入 + 在途合并：连打时不并发 invoke，并把积压键合成一次 write。
+    const inputWriter = createTerminalInputWriter(
+      (data) => transportRef.current.write(data),
+      (error) => {
         showStatusMessage("input", getCommandErrorMessage(error, t));
-      });
+      },
+    );
+    const disposeData = terminal.onData((data) => {
+      inputWriter.push(data);
     });
     terminal.attachCustomKeyEventHandler((event) => {
       if (isCopyShortcut(event) && terminal.hasSelection()) {
@@ -366,6 +372,7 @@ export function TerminalSurface({
       isDisposed = true;
       desiredVisible = false;
       pipeline.dispose();
+      inputWriter.dispose();
       unlistenOutput?.();
       if (statusTimer !== null) {
         window.clearInterval(statusTimer);

@@ -568,13 +568,12 @@ impl<'connection> ProjectTerminalService<'connection> {
         Ok(())
     }
 
+    /// 热路径：读 log / 状态轮询只依赖 registry，不打开 SQLite。
     pub fn read_terminal_snapshot(
-        &self,
         input: ReadProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<ReadProjectTerminalResult, CommandError> {
-        self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
         let is_active = session.is_active && pty_sessions.contains(input.session_id);
         if is_active {
@@ -594,13 +593,12 @@ impl<'connection> ProjectTerminalService<'connection> {
         })
     }
 
+    /// 热路径：cwd 轮询仅依赖 registry + PTY，不打开 SQLite。
     pub fn read_terminal_cwd(
-        &self,
         input: ReadProjectTerminalCwdInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<ReadProjectTerminalCwdResult, CommandError> {
-        self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
         if !session.is_active || !pty_sessions.contains(input.session_id) {
             return Ok(ReadProjectTerminalCwdResult {
@@ -618,13 +616,13 @@ impl<'connection> ProjectTerminalService<'connection> {
         })
     }
 
+    /// 热路径：仅走内存 registry + PTY，禁止打开 SQLite。
+    /// 每个按键都会调用，DB 校验会把输入延迟拉到不可用。
     pub fn write_terminal_input(
-        &self,
         input: WriteProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
         if input.data.is_empty() {
             return Ok(());
@@ -638,13 +636,12 @@ impl<'connection> ProjectTerminalService<'connection> {
             .map_err(project_terminal_inactive_error)
     }
 
+    /// 热路径：restore 只读内存 ring buffer，不打开 SQLite。
     pub fn restore_terminal(
-        &self,
         input: RestoreProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<RestoreProjectTerminalResult, CommandError> {
-        self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
 
         if !session.is_active || !pty_sessions.contains(input.session_id) {
@@ -680,13 +677,12 @@ impl<'connection> ProjectTerminalService<'connection> {
         })
     }
 
+    /// 热路径：仅内存，不打开 SQLite。
     pub fn subscribe_terminal_output(
-        &self,
         input: SubscribeProjectTerminalOutputInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
         if !session.is_active || !pty_sessions.contains(input.session_id) {
             return Ok(());
@@ -695,25 +691,23 @@ impl<'connection> ProjectTerminalService<'connection> {
         Ok(())
     }
 
+    /// 热路径：仅内存，不打开 SQLite。
     pub fn unsubscribe_terminal_output(
-        &self,
         input: SubscribeProjectTerminalOutputInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        self.project_by_id(input.project_id)?;
         let _ = registry.find(input.project_id, input.session_id)?;
         pty_sessions.remove_output_subscriber(input.session_id);
         Ok(())
     }
 
+    /// 热路径：仅内存，不打开 SQLite（FitAddon 会频繁触发）。
     pub fn resize_terminal(
-        &self,
         input: ResizeProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        self.project_by_id(input.project_id)?;
         let session = registry.find(input.project_id, input.session_id)?;
         if !session.is_active {
             return Err(project_terminal_inactive_error("Project Terminal 已停止。"));
@@ -775,92 +769,66 @@ impl<'connection> ProjectTerminalService<'connection> {
     }
 
     pub fn read_terminal_snapshot_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: ReadProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<ReadProjectTerminalResult, CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).read_terminal_snapshot(
-            input,
-            registry,
-            pty_sessions,
-        )
+        Self::read_terminal_snapshot(input, registry, pty_sessions)
     }
 
     pub fn read_terminal_cwd_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: ReadProjectTerminalCwdInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<ReadProjectTerminalCwdResult, CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).read_terminal_cwd(input, registry, pty_sessions)
+        Self::read_terminal_cwd(input, registry, pty_sessions)
     }
 
     pub fn write_terminal_input_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: WriteProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).write_terminal_input(input, registry, pty_sessions)
+        Self::write_terminal_input(input, registry, pty_sessions)
     }
 
     pub fn restore_terminal_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: RestoreProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<RestoreProjectTerminalResult, CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).restore_terminal(input, registry, pty_sessions)
+        Self::restore_terminal(input, registry, pty_sessions)
     }
 
     pub fn subscribe_terminal_output_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: SubscribeProjectTerminalOutputInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).subscribe_terminal_output(
-            input,
-            registry,
-            pty_sessions,
-        )
+        Self::subscribe_terminal_output(input, registry, pty_sessions)
     }
 
     pub fn unsubscribe_terminal_output_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: SubscribeProjectTerminalOutputInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).unsubscribe_terminal_output(
-            input,
-            registry,
-            pty_sessions,
-        )
+        Self::unsubscribe_terminal_output(input, registry, pty_sessions)
     }
 
     pub fn resize_terminal_in_data_dir(
-        data_dir: impl AsRef<Path>,
+        _data_dir: impl AsRef<Path>,
         input: ResizeProjectTerminalInput,
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        let database = open_project_database(data_dir)?;
-        let repository = ProjectRepository::new(&database.connection);
-        ProjectTerminalService::new(repository).resize_terminal(input, registry, pty_sessions)
+        Self::resize_terminal(input, registry, pty_sessions)
     }
 
     pub fn close_terminal_in_data_dir(
@@ -1534,32 +1502,30 @@ mod tests {
         assert_eq!(created.working_dir, current_repo.to_string_lossy());
         assert!(!created.launch_command.is_empty());
 
-        service
-            .write_terminal_input(
-                WriteProjectTerminalInput {
-                    project_id: project.id,
-                    session_id: created.session_id,
-                    data: "echo project-terminal-test\r".to_string(),
-                },
-                &registry,
-                &manager,
-            )
-            .expect("write terminal input");
+        ProjectTerminalService::write_terminal_input(
+            WriteProjectTerminalInput {
+                project_id: project.id,
+                session_id: created.session_id,
+                data: "echo project-terminal-test\r".to_string(),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("write terminal input");
 
         let mut saw_output = false;
         for _ in 0..40 {
             std::thread::sleep(std::time::Duration::from_millis(50));
-            let snapshot = service
-                .read_terminal_snapshot(
-                    ReadProjectTerminalInput {
-                        project_id: project.id,
-                        session_id: created.session_id,
-                        max_bytes: Some(8_192),
-                    },
-                    &registry,
-                    &manager,
-                )
-                .expect("read snapshot");
+            let snapshot = ProjectTerminalService::read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: project.id,
+                    session_id: created.session_id,
+                    max_bytes: Some(8_192),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("read snapshot");
             if snapshot.snapshot.contains("project-terminal-test") {
                 saw_output = true;
                 break;
@@ -1568,30 +1534,28 @@ mod tests {
 
         assert!(saw_output, "expected shell output to include echoed input");
 
-        let restored = service
-            .restore_terminal(
-                RestoreProjectTerminalInput {
-                    project_id: project.id,
-                    session_id: created.session_id,
-                },
-                &registry,
-                &manager,
-            )
-            .expect("restore terminal");
+        let restored = ProjectTerminalService::restore_terminal(
+            RestoreProjectTerminalInput {
+                project_id: project.id,
+                session_id: created.session_id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("restore terminal");
         assert!(restored.is_active);
 
-        service
-            .resize_terminal(
-                ResizeProjectTerminalInput {
-                    project_id: project.id,
-                    session_id: created.session_id,
-                    rows: 40,
-                    cols: 120,
-                },
-                &registry,
-                &manager,
-            )
-            .expect("resize terminal");
+        ProjectTerminalService::resize_terminal(
+            ResizeProjectTerminalInput {
+                project_id: project.id,
+                session_id: created.session_id,
+                rows: 40,
+                cols: 120,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("resize terminal");
 
         service
             .close_terminal(
@@ -1997,17 +1961,16 @@ mod tests {
             crate::types::errors::CommandErrorCode::ProjectTerminalValidationFailed
         );
 
-        let snapshot = service
-            .read_terminal_snapshot(
-                ReadProjectTerminalInput {
-                    project_id: owner_project.id,
-                    session_id: created.session_id,
-                    max_bytes: Some(1024),
-                },
-                &registry,
-                &manager,
-            )
-            .expect("owner project should still read session");
+        let snapshot = ProjectTerminalService::read_terminal_snapshot(
+            ReadProjectTerminalInput {
+                project_id: owner_project.id,
+                session_id: created.session_id,
+                max_bytes: Some(1024),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("owner project should still read session");
         assert_eq!(snapshot.session_id, created.session_id);
 
         service
