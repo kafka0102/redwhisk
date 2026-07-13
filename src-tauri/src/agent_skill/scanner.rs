@@ -123,10 +123,14 @@ fn scan_skill_root_result(
     };
 
     for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
+        // 跟随符号链接：用户常把 .agents/skills 下的 skill 以软链放进 .claude/skills 等
+        // root，应按所在 root 的 agent_type 识别，而不是跳过。broken symlink 等无法解析
+        // 的条目由 metadata 返回 Err 直接跳过。
+        let metadata = match fs::metadata(entry.path()) {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
         };
-        if !file_type.is_dir() || file_type.is_symlink() {
+        if !metadata.is_dir() {
             continue;
         }
 
@@ -442,6 +446,33 @@ mod tests {
                 && skill.agent_type == AgentType::Claude
                 && skill.scope == AgentSkillScope::Global
         }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn agent_skill_scanner_follows_symlinked_global_skill_per_root() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let home = temp_dir.path();
+        // 真实 skill 位于 .agents/skills（Codex root）
+        write_skill(&home.join(".agents/skills/implement"), "Implement");
+        // .claude/skills/implement 以软链指向同一个 skill，应按所在 root 识别为 Claude
+        fs::create_dir_all(home.join(".claude/skills")).expect("claude skills root");
+        symlink(
+            home.join(".agents/skills/implement"),
+            home.join(".claude/skills/implement"),
+        )
+        .expect("symlink skill");
+
+        let skills = scan_global_skills(Some(home));
+
+        assert!(skills
+            .iter()
+            .any(|skill| skill.name == "implement" && skill.agent_type == AgentType::Claude));
+        assert!(skills
+            .iter()
+            .any(|skill| skill.name == "implement" && skill.agent_type == AgentType::Codex));
     }
 
     fn write_skill(skill_dir: &Path, contents: &str) {
