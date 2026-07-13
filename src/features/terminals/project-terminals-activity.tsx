@@ -42,8 +42,9 @@ interface ProjectTerminalsActivityProps {
 const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
 const ACTIVE_TERMINAL_CARD_BACKGROUND =
   "color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))";
+/** 选中态描边：比卡片背景略深一点即可，避免过黑 */
 const ACTIVE_TERMINAL_CARD_BORDER =
-  "color-mix(in srgb, var(--color-accent) 52%, var(--color-border-strong))";
+  "color-mix(in srgb, var(--color-text) 14%, var(--project-terminal-card-background, var(--color-surface)))";
 const INACTIVE_TERMINAL_CARD_BACKGROUND = "var(--color-surface)";
 const INACTIVE_TERMINAL_CARD_BORDER = "var(--color-border)";
 
