@@ -4347,6 +4347,9 @@ button:focus-visible {
   color: var(--color-text);
   font-size: 12px;
   text-align: left;
+  /* 右键打开自定义菜单时，避免浏览器在文件名上留下文本选区高亮。
+     文件名复制已由右键菜单项承担，行内文本无需被直接选中。 */
+  user-select: none;
 }
 
 .session-file-tree__row--ignored {
