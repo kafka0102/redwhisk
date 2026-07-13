@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 
@@ -87,7 +93,11 @@ function ProjectApp() {
 
   // ProjectApp 渲染 I18nProvider，自身位于 provider 之外；用 getFixedT 绑定 app 的
   // 当前 locale（首启 zh / 持久化值），保证启动状态文案与目录选择标题与界面语言一致。
-  const translate = i18next.getFixedT(getDefaultLocale());
+  // getFixedT 每次调用都会返回新的函数引用，必须用 useMemo 固定，否则下方初始化 effect
+  // 的依赖每次渲染都变，会与 setProjects 触发的重渲染形成闭环：旧 closure 在 openProject
+  // (真实 Tauri IPC，毫秒级) resolve 前被清理，setSelectedProject 被跳过，新窗口永远停在
+  // ProjectHome（项目列表）而打不开项目工作台。
+  const translate = useMemo(() => i18next.getFixedT(getDefaultLocale()), []);
 
   useEffect(() => {
     let isMounted = true;

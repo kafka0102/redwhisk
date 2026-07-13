@@ -437,6 +437,42 @@ describe("App project entry", () => {
     );
   });
 
+  it("opens the project workbench in a new window even when openProject IPC is slow", async () => {
+    // 回归：getFixedT 每次渲染返回新引用曾导致初始化 effect 反复重跑，setProjects 触发的
+    // 重渲染在 openProject resolve 前清理了旧 closure，setSelectedProject 被跳过，新窗口
+    // 永远停在 ProjectHome。真实 Tauri IPC 是毫秒级，这里用 50ms 延迟复现该时序。
+    window.history.replaceState(null, "", "/?projectId=1");
+    openProjectMock.mockImplementation(async ({ projectId }) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const project = currentProjectList.projects.find(
+        (item) => item.id === projectId,
+      );
+      if (!project || project.pathStatus === "missing") {
+        throw {
+          code: "PROJECT_REPO_PATH_UNAVAILABLE",
+          message: "Project 路径不存在或不可访问。",
+        };
+      }
+      return {
+        id: project.id,
+        name: project.name,
+        repoPath: project.repoPath,
+        createdAt: project.createdAt,
+        lastOpenedAt: 1_780_628_400_000,
+      };
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "当前项目 RedWhisk" },
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("opens a monitored session from the desktop monitor while on Project Home", async () => {
     render(<App />);
 
