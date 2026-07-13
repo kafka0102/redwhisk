@@ -1,0 +1,22 @@
+version: 1
+change: add-notification-reminder-setting
+phase: proposal-ready
+ambiguity: low
+complexity: unknown
+implementation_path: undecided
+execution_method: undecided
+workspace: undecided
+origin_branch: unknown
+origin_workspace_path: unknown
+origin_workspace_mode: unknown
+implementation_workspace_path: unknown
+plan: null
+handoff_context: openspec/changes/add-notification-reminder-setting/.onespec.yaml
+handoff_purpose: proposal
+handoff_summary: 'proposal handoff from 5 file(s); primary artifact: openspec/changes/add-notification-reminder-setting/proposal.md'
+handoff_hash: 3c1f2e3a31446705de9a23c2e16a463d2810c2509769771cd00a30eb33868321
+touched_files_b64: null
+review_result: pending
+archive: pending
+created_at: 2026-07-13
+updated_at: 2026-07-13T07:48:49Z
