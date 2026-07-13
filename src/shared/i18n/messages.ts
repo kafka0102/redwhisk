@@ -467,6 +467,7 @@ export interface I18nMessages {
     loadingDiff: string;
     selectFile: string;
     selectChangedFile: string;
+    fileNotFound: string;
     fileUnavailable: string;
     diffUnavailable: string;
     binaryPreviewUnavailable: string;

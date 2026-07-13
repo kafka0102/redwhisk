@@ -17,6 +17,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui";
+import {
+  getCommandErrorMessage,
+  toCommandError,
+} from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { SessionFileTreePanel } from "../agents/session-file-tree-panel";
 import {
@@ -25,20 +29,20 @@ import {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   type CodeWorkspaceRoot,
   type CodeWorkspaceRootsUpdatedEvent,
-  type WorkspaceFileContent,
   type WorkspaceFileTreeNode,
 } from "../agents/session-workspace-commands";
+import {
+  codeWorkspaceStateCache,
+  type CodeFileTab,
+} from "./code-workspace-cache";
 
 const MAX_FILE_TABS = 10;
-
-interface CodeFileTab {
-  content: WorkspaceFileContent | null;
-  errorMessage: string | null;
-  fileName: string;
-  filePath: string;
-  isLoading: boolean;
-  lastActiveAt: number;
-}
+const DEFAULT_SIDEBAR_WIDTH = 400;
+const MISSING_FILE_ERROR_REASONS = new Set([
+  "filePathInaccessible",
+  "pathNotFile",
+  "workspaceFileReadFailed",
+]);
 
 interface CodeWorkspaceProps {
   projectId: number;
@@ -47,20 +51,37 @@ interface CodeWorkspaceProps {
 
 export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const { contentFontSize, messages, t } = useI18n();
+  const cachedState = codeWorkspaceStateCache.get(projectId);
   const [workspaceRoots, setWorkspaceRoots] =
     useState<CodeWorkspaceRoot[]>(roots);
   const [selectedRootPath, setSelectedRootPath] = useState<string | null>(
-    () => selectInitialRoot(roots)?.path ?? null,
+    () =>
+      cachedState?.selectedRootPath ?? selectInitialRoot(roots)?.path ?? null,
   );
-  const [tree, setTree] = useState<WorkspaceFileTreeNode[]>([]);
-  const [treeError, setTreeError] = useState<string | null>(null);
-  const [isTreeLoading, setIsTreeLoading] = useState(false);
-  const [tabs, setTabs] = useState<CodeFileTab[]>([]);
-  const [activePath, setActivePath] = useState<string | null>(null);
-  const [sidebarWidth, setSidebarWidth] = useState(400);
+  const [tree, setTree] = useState<WorkspaceFileTreeNode[]>(
+    () => cachedState?.tree ?? [],
+  );
+  const [treeError, setTreeError] = useState<string | null>(
+    () => cachedState?.treeError ?? null,
+  );
+  const [isTreeLoading, setIsTreeLoading] = useState(
+    () => (cachedState?.tree.length ?? 0) === 0,
+  );
+  const [tabs, setTabs] = useState<CodeFileTab[]>(
+    () => cachedState?.tabs ?? [],
+  );
+  const [activePath, setActivePath] = useState<string | null>(
+    () => cachedState?.activePath ?? null,
+  );
+  const [sidebarWidth, setSidebarWidth] = useState(
+    () => cachedState?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
+  );
   const dragCleanupRef = useRef<(() => void) | null>(null);
-  const activePathRef = useRef<string | null>(null);
-  const openFilePathsRef = useRef(new Set<string>());
+  const activePathRef = useRef<string | null>(cachedState?.activePath ?? null);
+  const openFilePathsRef = useRef(
+    new Set((cachedState?.tabs ?? []).map((tab) => tab.filePath)),
+  );
+  const fileNotFoundMessage = messages.agentsFeature.fileNotFound;
 
   const selectedRoot = useMemo(
     () =>
@@ -68,6 +89,25 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       selectInitialRoot(workspaceRoots),
     [selectedRootPath, workspaceRoots],
   );
+
+  useEffect(() => {
+    codeWorkspaceStateCache.set(projectId, {
+      activePath,
+      selectedRootPath,
+      sidebarWidth,
+      tabs,
+      tree,
+      treeError,
+    });
+  }, [
+    activePath,
+    projectId,
+    selectedRootPath,
+    sidebarWidth,
+    tabs,
+    tree,
+    treeError,
+  ]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -125,6 +165,65 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       isCurrent = false;
     };
   }, [projectId, selectedRoot, t]);
+
+  // 切回代码页时复检已打开文件：缓存内容先展示，再异步校验是否被删除。
+  useEffect(() => {
+    if (!selectedRoot || tabs.length === 0) return;
+
+    let isCurrent = true;
+    const tabsToValidate = tabs;
+    const workspacePath = selectedRoot.path;
+
+    void Promise.all(
+      tabsToValidate.map(async (tab) => {
+        try {
+          const content = await readProjectWorktreeFile({
+            projectId,
+            workspacePath,
+            filePath: tab.filePath,
+          });
+          return {
+            content,
+            errorMessage: null as string | null,
+            filePath: tab.filePath,
+          };
+        } catch (error) {
+          return {
+            content: null,
+            errorMessage: resolveFileLoadErrorMessage(
+              error,
+              fileNotFoundMessage,
+              t,
+            ),
+            filePath: tab.filePath,
+          };
+        }
+      }),
+    ).then((results) => {
+      if (!isCurrent) return;
+      const resultByPath = new Map(
+        results.map((result) => [result.filePath, result]),
+      );
+      setTabs((currentTabs) =>
+        currentTabs.map((tab) => {
+          const result = resultByPath.get(tab.filePath);
+          if (!result) return tab;
+          return {
+            ...tab,
+            content: result.content,
+            errorMessage: result.errorMessage,
+            isLoading: false,
+          };
+        }),
+      );
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+    // 仅在挂载 / 切换 root 时复检，避免打开新文件时重复请求。
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount/root revalidation
+  }, [fileNotFoundMessage, projectId, selectedRoot?.path, t]);
 
   const selectRoot = (root: CodeWorkspaceRoot) => {
     openFilePathsRef.current.clear();
@@ -201,13 +300,21 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
           setTabs((currentTabs) =>
             currentTabs.map((tab) =>
               tab.filePath === file.path
-                ? { ...tab, errorMessage: t(error), isLoading: false }
+                ? {
+                    ...tab,
+                    errorMessage: resolveFileLoadErrorMessage(
+                      error,
+                      fileNotFoundMessage,
+                      t,
+                    ),
+                    isLoading: false,
+                  }
                 : tab,
             ),
           );
         });
     },
-    [projectId, selectedRoot, t],
+    [fileNotFoundMessage, projectId, selectedRoot, t],
   );
 
   const closeTab = (filePath: string) => {
@@ -413,7 +520,7 @@ function CodeContent({
     );
   if (tab.errorMessage)
     return (
-      <p className="session-viewer-state" role="alert">
+      <p className="code-workspace__file-error" role="alert">
         {tab.errorMessage}
       </p>
     );
@@ -456,4 +563,20 @@ function selectInitialRoot(
   roots: CodeWorkspaceRoot[],
 ): CodeWorkspaceRoot | null {
   return roots.find((root) => root.isProjectRoot) ?? roots[0] ?? null;
+}
+
+function resolveFileLoadErrorMessage(
+  error: unknown,
+  fileNotFoundMessage: string,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (isMissingWorkspaceFileError(error)) {
+    return fileNotFoundMessage;
+  }
+  return getCommandErrorMessage(error, t);
+}
+
+function isMissingWorkspaceFileError(error: unknown): boolean {
+  const reason = toCommandError(error).reason;
+  return reason != null && MISSING_FILE_ERROR_REASONS.has(reason);
 }

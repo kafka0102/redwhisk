@@ -466,6 +466,7 @@
     "loadingDiff": "Loading diff...",
     "selectFile": "Select a file.",
     "selectChangedFile": "Select a changed file.",
+    "fileNotFound": "File does not exist",
     "fileUnavailable": "File unavailable",
     "diffUnavailable": "Diff unavailable",
     "binaryPreviewUnavailable": "Binary files cannot be previewed.",

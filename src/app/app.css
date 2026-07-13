@@ -4438,6 +4438,19 @@ button:focus-visible {
   text-underline-offset: 2px;
 }
 
+.code-workspace__file-error {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  margin: 0;
+  padding: 12px;
+  background: var(--color-surface-panel);
+  color: var(--color-danger);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .session-file-tree__folder {
   padding-left: calc(6px + var(--tree-depth, 0) * 12px);
   color: var(--color-text-muted);
