@@ -90,16 +90,14 @@ describe("CodeWorkspace", () => {
     expect(listCodeWorkspaceRoots).not.toHaveBeenCalled();
   });
 
-  it("shows an empty-state prompt in the content area when no file is open", () => {
+  it("keeps the content area empty when no file is open", () => {
     render(
       <I18nProvider initialLocale="en">
         <CodeWorkspace projectId={1} roots={roots} />
       </I18nProvider>,
     );
 
-    const emptyState = screen.getByText("Select a file.");
-    expect(emptyState).toBeInTheDocument();
-    expect(emptyState).toHaveClass("code-workspace__empty-state");
+    expect(screen.queryByText("Select a file.")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 

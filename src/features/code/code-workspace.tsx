@@ -556,11 +556,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
               messages={messages}
             />
           </>
-        ) : (
-          <p className="session-viewer-state code-workspace__empty-state">
-            {messages.agentsFeature.selectFile}
-          </p>
-        )}
+        ) : null}
       </main>
     </section>
   );
@@ -644,11 +640,7 @@ function CodeContent({
     );
   }
   if (!tab.content) {
-    return (
-      <p className="session-viewer-state">
-        {messages.agentsFeature.selectFile}
-      </p>
-    );
+    return null;
   }
   if (tab.content.isBinary || tab.content.isTooLarge) {
     return (
