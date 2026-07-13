@@ -4386,14 +4386,25 @@ button:focus-visible {
 }
 
 .code-workspace__main {
-  display: grid;
-  grid-template-rows: 36px 32px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .code-workspace__tabs {
   display: flex;
+  flex: 0 0 36px;
   overflow-x: auto;
   border-bottom: 1px solid var(--color-border);
+}
+
+/* Editor / empty / loading / error fill remaining height below tabs (+ breadcrumb). */
+.code-workspace__main
+  > :not(.code-workspace__tabs):not(.code-workspace__breadcrumb) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .code-workspace__tab {
@@ -4417,6 +4428,7 @@ button:focus-visible {
 
 .code-workspace__breadcrumb {
   display: flex;
+  flex: 0 0 32px;
   align-items: center;
   gap: 4px;
   min-width: 0;

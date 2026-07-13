@@ -88,6 +88,19 @@ describe("CodeWorkspace", () => {
     expect(listCodeWorkspaceRoots).not.toHaveBeenCalled();
   });
 
+  it("shows an empty-state prompt in the content area when no file is open", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    const emptyState = screen.getByText("Select a file.");
+    expect(emptyState).toBeInTheDocument();
+    expect(emptyState).toHaveClass("code-workspace__empty-state");
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
   it("avoids duplicate file reads while a selected file is still loading", async () => {
     const user = userEvent.setup();
     vi.mocked(readProjectWorktreeFile).mockReturnValue(new Promise(() => {}));

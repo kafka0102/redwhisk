@@ -440,7 +440,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
             />
           </>
         ) : (
-          <p className="session-viewer-state">
+          <p className="session-viewer-state code-workspace__empty-state">
             {messages.agentsFeature.selectFile}
           </p>
         )}
@@ -512,26 +512,36 @@ function CodeContent({
   contentFontSize: number;
   messages: ReturnType<typeof useI18n>["messages"];
 }) {
-  if (tab.isLoading)
+  if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
         {messages.agentsFeature.loadingFile}
       </p>
     );
-  if (tab.errorMessage)
+  }
+  if (tab.errorMessage) {
     return (
       <p className="code-workspace__file-error" role="alert">
         {tab.errorMessage}
       </p>
     );
-  if (!tab.content || tab.content.isBinary || tab.content.isTooLarge)
+  }
+  if (!tab.content) {
     return (
       <p className="session-viewer-state">
-        {tab.content?.isBinary
+        {messages.agentsFeature.selectFile}
+      </p>
+    );
+  }
+  if (tab.content.isBinary || tab.content.isTooLarge) {
+    return (
+      <p className="session-viewer-state">
+        {tab.content.isBinary
           ? messages.agentsFeature.binaryPreviewUnavailable
           : messages.agentsFeature.largeFilePreviewUnavailable}
       </p>
     );
+  }
   return (
     <Editor
       height="100%"
