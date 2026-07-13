@@ -11,13 +11,24 @@ pub mod types;
 
 use agent::latest_output_writer::LatestOutputWriter;
 use app_state::AppState;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use commands::agent_skill_commands::trigger_global_skill_refresh;
 use core::local_data_service::LocalDataService;
 use local_data_path::redwhisk_data_dir;
 use logging::Logger;
+use serde::Serialize;
 use tauri::{Emitter, Manager};
 
 const AGENT_SESSION_TERMINAL_OUTPUT_EVENT: &str = "agent-session-terminal-output";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalOutputEventPayload {
+    project_id: i64,
+    session_id: i64,
+    sequence: u64,
+    data: String,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -35,7 +46,13 @@ pub fn run() {
             let state = app.state::<AppState>();
             state.pty_sessions.set_output_sink(move |event| {
                 latest_output_writer.record_terminal_output(&event);
-                let _ = app_handle.emit(AGENT_SESSION_TERMINAL_OUTPUT_EVENT, event);
+                let payload = TerminalOutputEventPayload {
+                    project_id: event.project_id,
+                    session_id: event.session_id,
+                    sequence: event.sequence,
+                    data: STANDARD.encode(&event.data),
+                };
+                let _ = app_handle.emit(AGENT_SESSION_TERMINAL_OUTPUT_EVENT, payload);
             });
             state
                 .agent_event_broadcaster
@@ -59,6 +76,8 @@ pub fn run() {
             commands::project_terminal_commands::read_project_terminal,
             commands::project_terminal_commands::write_project_terminal,
             commands::project_terminal_commands::restore_project_terminal,
+            commands::project_terminal_commands::subscribe_project_terminal_output,
+            commands::project_terminal_commands::unsubscribe_project_terminal_output,
             commands::project_terminal_commands::resize_project_terminal,
             commands::project_terminal_commands::close_project_terminal,
             commands::project_terminal_commands::update_project_terminal_config,

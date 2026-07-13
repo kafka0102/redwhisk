@@ -5,6 +5,8 @@ import {
   readProjectTerminal,
   resizeProjectTerminal,
   restoreProjectTerminal,
+  subscribeProjectTerminalOutput,
+  unsubscribeProjectTerminalOutput,
   writeProjectTerminal,
 } from "./project-terminal-commands";
 
@@ -27,6 +29,10 @@ export function ProjectTerminal({
           resize: (rows, cols) =>
             resizeProjectTerminal({ projectId, sessionId, rows, cols }),
           restore: () => restoreProjectTerminal({ projectId, sessionId }),
+          setLiveSubscription: (active) =>
+            active
+              ? subscribeProjectTerminalOutput({ projectId, sessionId })
+              : unsubscribeProjectTerminalOutput({ projectId, sessionId }),
           subscribeOutput: (handler) =>
             subscribeAgentSessionTerminalOutput((event) => {
               if (

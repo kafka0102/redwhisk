@@ -3,17 +3,23 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
+const LOG_MAX_BYTES: usize = 32 * 1024 * 1024;
+const LOG_FLUSH_EVERY_BYTES: usize = 64 * 1024;
+const LOG_TRIM_CHECK_EVERY_BYTES: usize = 8 * 1024 * 1024;
+const EMIT_COALESCE_MAX_BYTES: usize = 64 * 1024;
+const EMIT_COALESCE_MAX_MS: u64 = 16;
+const COALESCE_TICK_MS: u64 = 8;
 
 #[derive(Clone)]
 pub struct PtySessionManager {
@@ -23,6 +29,8 @@ pub struct PtySessionManager {
 struct PtySessionStore {
     sessions: Mutex<HashMap<i64, Arc<PtySessionHandle>>>,
     output_sink: Mutex<Option<Arc<dyn Fn(PtyOutputEvent) + Send + Sync>>>,
+    subscribers: Mutex<HashMap<i64, usize>>,
+    pending_emits: Mutex<HashMap<i64, PendingEmit>>,
     #[cfg(test)]
     kill_failures: Mutex<HashSet<i64>>,
 }
@@ -32,6 +40,14 @@ struct PtySessionHandle {
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     restore_buffer: Mutex<PtyRestoreBuffer>,
+}
+
+struct PendingEmit {
+    project_id: i64,
+    session_id: i64,
+    sequence: u64,
+    data: Vec<u8>,
+    first_at: Instant,
 }
 
 pub struct PtySpawnRequest {
@@ -99,14 +115,16 @@ impl std::fmt::Debug for PtyRegisterError {
 
 impl PtySessionManager {
     pub fn new() -> Self {
-        Self {
-            store: Arc::new(PtySessionStore {
-                sessions: Mutex::new(HashMap::new()),
-                output_sink: Mutex::new(None),
-                #[cfg(test)]
-                kill_failures: Mutex::new(HashSet::new()),
-            }),
-        }
+        let store = Arc::new(PtySessionStore {
+            sessions: Mutex::new(HashMap::new()),
+            output_sink: Mutex::new(None),
+            subscribers: Mutex::new(HashMap::new()),
+            pending_emits: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            kill_failures: Mutex::new(HashSet::new()),
+        });
+        spawn_coalesce_thread(Arc::clone(&store));
+        Self { store }
     }
 
     pub fn set_output_sink<F>(&self, sink: F)
@@ -115,6 +133,36 @@ impl PtySessionManager {
     {
         if let Ok(mut output_sink) = self.store.output_sink.lock() {
             *output_sink = Some(Arc::new(sink));
+        }
+    }
+
+    /// 增加可见订阅计数；`count > 0` 时才会向 output_sink 推送 live 输出。
+    pub fn add_output_subscriber(&self, session_id: i64) {
+        if let Ok(mut subscribers) = self.store.subscribers.lock() {
+            let count = subscribers.entry(session_id).or_insert(0);
+            *count = count.saturating_add(1);
+        }
+    }
+
+    /// 减少可见订阅计数；归零时冲刷并丢弃该 session 的 pending emit。
+    pub fn remove_output_subscriber(&self, session_id: i64) {
+        let should_flush = {
+            let Ok(mut subscribers) = self.store.subscribers.lock() else {
+                return;
+            };
+            let Some(count) = subscribers.get_mut(&session_id) else {
+                return;
+            };
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                subscribers.remove(&session_id);
+                true
+            } else {
+                false
+            }
+        };
+        if should_flush {
+            flush_pending_session(&self.store, session_id);
         }
     }
 
@@ -212,42 +260,14 @@ impl PtySessionManager {
         let log_path = pending.log_path.clone();
         let mut reader = pending.reader;
         thread::spawn(move || {
-            let file = OpenOptions::new().create(true).append(true).open(log_path);
-            let mut file = match file {
-                Ok(file) => file,
-                Err(_) => return,
-            };
-            let mut buffer = [0_u8; 4096];
-            let mut sequence = 0_u64;
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(count) => {
-                        let data = &buffer[..count];
-                        let _ = file.write_all(data);
-                        let _ = file.flush();
-                        sequence = sequence.saturating_add(1);
-                        if let Ok(mut restore_buffer) = reader_handle.restore_buffer.lock() {
-                            restore_buffer.push(sequence, data);
-                        }
-                        if let Some(output_sink) = reader_store
-                            .output_sink
-                            .lock()
-                            .ok()
-                            .and_then(|sink| sink.clone())
-                        {
-                            output_sink(PtyOutputEvent {
-                                project_id,
-                                session_id,
-                                sequence,
-                                data: data.to_vec(),
-                            });
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
+            run_reader_loop(
+                reader_store,
+                reader_handle,
+                project_id,
+                session_id,
+                log_path,
+                &mut reader,
+            );
         });
 
         let store = Arc::clone(&self.store);
@@ -260,6 +280,10 @@ impl PtySessionManager {
             if let Ok(mut sessions) = store.sessions.lock() {
                 sessions.remove(&session_id);
             }
+            if let Ok(mut subscribers) = store.subscribers.lock() {
+                subscribers.remove(&session_id);
+            }
+            flush_pending_session(&store, session_id);
             on_exit(PtyExitStatus { exit_code });
         });
 
@@ -385,6 +409,191 @@ impl PtySessionManager {
             .expect("lock kill failures")
             .insert(session_id);
     }
+}
+
+fn run_reader_loop(
+    store: Arc<PtySessionStore>,
+    handle: Arc<PtySessionHandle>,
+    project_id: i64,
+    session_id: i64,
+    log_path: String,
+    reader: &mut Box<dyn Read + Send>,
+) {
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path);
+    let mut file = match file {
+        Ok(file) => BufWriter::with_capacity(LOG_FLUSH_EVERY_BYTES, file),
+        Err(_) => return,
+    };
+    let mut buffer = [0_u8; 4096];
+    let mut sequence = 0_u64;
+    let mut bytes_since_trim_check = 0_usize;
+
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                let data = &buffer[..count];
+                if file.write_all(data).is_err() {
+                    break;
+                }
+                // 合并写入后尽快可见：catch-up / 外部读 log 依赖已落盘尾部。
+                // 这里 flush 到 OS page cache，不做 fsync，成本远低于同步落盘。
+                if file.flush().is_err() {
+                    break;
+                }
+                bytes_since_trim_check = bytes_since_trim_check.saturating_add(count);
+
+                if bytes_since_trim_check >= LOG_TRIM_CHECK_EVERY_BYTES {
+                    drop(file);
+                    let _ = trim_log_file(Path::new(&log_path), LOG_MAX_BYTES);
+                    file = match OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&log_path)
+                    {
+                        Ok(next) => BufWriter::with_capacity(LOG_FLUSH_EVERY_BYTES, next),
+                        Err(_) => return,
+                    };
+                    bytes_since_trim_check = 0;
+                }
+
+                sequence = sequence.saturating_add(1);
+                if let Ok(mut restore_buffer) = handle.restore_buffer.lock() {
+                    restore_buffer.push(sequence, data);
+                }
+
+                if has_output_subscribers(&store, session_id) {
+                    queue_output_chunk(&store, project_id, session_id, sequence, data);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    let _ = file.flush();
+    drop(file);
+    let _ = trim_log_file(Path::new(&log_path), LOG_MAX_BYTES);
+    flush_pending_session(&store, session_id);
+}
+
+fn spawn_coalesce_thread(store: Arc<PtySessionStore>) {
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(COALESCE_TICK_MS));
+        flush_due_pending(&store);
+    });
+}
+
+fn has_output_subscribers(store: &PtySessionStore, session_id: i64) -> bool {
+    store
+        .subscribers
+        .lock()
+        .ok()
+        .map(|subscribers| subscribers.get(&session_id).copied().unwrap_or(0) > 0)
+        .unwrap_or(false)
+}
+
+fn queue_output_chunk(
+    store: &PtySessionStore,
+    project_id: i64,
+    session_id: i64,
+    sequence: u64,
+    data: &[u8],
+) {
+    let should_flush = {
+        let Ok(mut pending_emits) = store.pending_emits.lock() else {
+            return;
+        };
+        let entry = pending_emits.entry(session_id).or_insert_with(|| PendingEmit {
+            project_id,
+            session_id,
+            sequence,
+            data: Vec::new(),
+            first_at: Instant::now(),
+        });
+        entry.project_id = project_id;
+        entry.session_id = session_id;
+        entry.sequence = sequence;
+        entry.data.extend_from_slice(data);
+        entry.data.len() >= EMIT_COALESCE_MAX_BYTES
+            || entry.first_at.elapsed() >= Duration::from_millis(EMIT_COALESCE_MAX_MS)
+    };
+
+    if should_flush {
+        flush_pending_session(store, session_id);
+    }
+}
+
+fn flush_due_pending(store: &PtySessionStore) {
+    let due_sessions = {
+        let Ok(pending_emits) = store.pending_emits.lock() else {
+            return;
+        };
+        pending_emits
+            .iter()
+            .filter(|(_, pending)| {
+                pending.first_at.elapsed() >= Duration::from_millis(EMIT_COALESCE_MAX_MS)
+                    || pending.data.len() >= EMIT_COALESCE_MAX_BYTES
+            })
+            .map(|(session_id, _)| *session_id)
+            .collect::<Vec<_>>()
+    };
+
+    for session_id in due_sessions {
+        flush_pending_session(store, session_id);
+    }
+}
+
+fn flush_pending_session(store: &PtySessionStore, session_id: i64) {
+    let pending = {
+        let Ok(mut pending_emits) = store.pending_emits.lock() else {
+            return;
+        };
+        pending_emits.remove(&session_id)
+    };
+    let Some(pending) = pending else {
+        return;
+    };
+    if pending.data.is_empty() {
+        return;
+    }
+    if let Some(output_sink) = store
+        .output_sink
+        .lock()
+        .ok()
+        .and_then(|sink| sink.clone())
+    {
+        output_sink(PtyOutputEvent {
+            project_id: pending.project_id,
+            session_id: pending.session_id,
+            sequence: pending.sequence,
+            data: pending.data,
+        });
+    }
+}
+
+pub(crate) fn trim_log_file(path: &Path, max_bytes: usize) -> Result<(), String> {
+    if max_bytes == 0 || !path.exists() {
+        return Ok(());
+    }
+
+    let content = std::fs::read(path).map_err(|error| error.to_string())?;
+    if content.len() <= max_bytes {
+        return Ok(());
+    }
+
+    let start = content.len().saturating_sub(max_bytes);
+    let mut cut = start;
+    if let Some(relative) = content[start..].iter().position(|byte| *byte == b'\n') {
+        cut = start.saturating_add(relative).saturating_add(1);
+        if cut >= content.len() {
+            cut = start;
+        }
+    }
+
+    std::fs::write(path, &content[cut..]).map_err(|error| error.to_string())
 }
 
 impl PtyRestoreBuffer {
@@ -546,7 +755,8 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::build_shell_command_line;
+    use super::{build_shell_command_line, trim_log_file};
+    use std::io::Write;
 
     #[test]
     fn build_shell_command_line_preserves_command_arguments() {
@@ -559,8 +769,25 @@ mod tests {
     #[test]
     fn build_shell_command_line_quotes_prompt_argument() {
         assert_eq!(
-            build_shell_command_line("codex --dangerously-bypass-approvals-and-sandbox", Some("fix 'bug'")),
+            build_shell_command_line(
+                "codex --dangerously-bypass-approvals-and-sandbox",
+                Some("fix 'bug'")
+            ),
             "exec codex --dangerously-bypass-approvals-and-sandbox 'fix '\"'\"'bug'\"'\"'' || exit $?"
         );
+    }
+
+    #[test]
+    fn trim_log_file_keeps_tail_within_max_bytes() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = temp_dir.path().join("terminal.log");
+        let mut file = std::fs::File::create(&path).expect("create log");
+        write!(file, "aaaa\nbbbb\ncccc\ndddd\n").expect("write log");
+        drop(file);
+
+        trim_log_file(&path, 10).expect("trim log");
+        let content = std::fs::read_to_string(&path).expect("read trimmed");
+        assert!(content.len() <= 10);
+        assert!(content.contains("dddd") || content.ends_with("dddd\n") || content.contains("ccc"));
     }
 }

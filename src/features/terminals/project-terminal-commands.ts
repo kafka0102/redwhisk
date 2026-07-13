@@ -143,6 +143,23 @@ export function restoreProjectTerminal(
   );
 }
 
+export interface SubscribeProjectTerminalOutputInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export function subscribeProjectTerminalOutput(
+  input: SubscribeProjectTerminalOutputInput,
+): Promise<void> {
+  return invokeCommand("subscribe_project_terminal_output", { input });
+}
+
+export function unsubscribeProjectTerminalOutput(
+  input: SubscribeProjectTerminalOutputInput,
+): Promise<void> {
+  return invokeCommand("unsubscribe_project_terminal_output", { input });
+}
+
 export function writeProjectTerminal(
   input: WriteProjectTerminalInput,
 ): Promise<void> {

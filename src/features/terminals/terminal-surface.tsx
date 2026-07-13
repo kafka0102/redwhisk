@@ -1,5 +1,6 @@
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
@@ -84,6 +85,7 @@ export function TerminalSurface({
 
     let terminal: Terminal;
     let fitAddon: FitAddon;
+    let webglAddon: WebglAddon | null = null;
 
     const showStatusMessage = (
       source: TerminalStatusSource,
@@ -128,6 +130,16 @@ export function TerminalSurface({
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(new ClipboardAddon());
       terminal.open(host);
+      try {
+        webglAddon = new WebglAddon();
+        webglAddon.onContextLoss(() => {
+          webglAddon?.dispose();
+          webglAddon = null;
+        });
+        terminal.loadAddon(webglAddon);
+      } catch {
+        webglAddon = null;
+      }
       fitAddon.fit();
     } catch (error) {
       const message = getCommandErrorMessage(error, t);
@@ -202,40 +214,100 @@ export function TerminalSurface({
         ? null
         : new ResizeObserver(() => {
             syncSize();
+            void refreshLiveVisibility();
           });
     resizeObserver?.observe(host);
 
     const handleWindowResize = () => {
       syncSize();
+      void refreshLiveVisibility();
     };
     window.addEventListener("resize", handleWindowResize);
 
     let isDisposed = false;
-    let hasRestored = false;
-    let pendingOutputBytes = 0;
+    let isLiveSubscribed = false;
+    let catchUpGeneration = 0;
     let statusTimer: number | null = null;
     let unlistenOutput: (() => void) | null = null;
+    let rafWriteId: number | null = null;
+    const pendingLiveChunks: Uint8Array[] = [];
+    let pendingLiveBytes = 0;
     const pendingOutputEvents: TerminalOutputChunk[] = [];
+    let pendingOutputBytes = 0;
 
-    const writeOutput = (event: TerminalOutputChunk) => {
-      if (isDisposed || event.sequence <= latestSequenceRef.current) {
+    const isLayoutVisible = (): boolean =>
+      host.offsetWidth > 0 && host.offsetHeight > 0;
+
+    const isDocumentVisible = (): boolean =>
+      typeof document === "undefined" || document.visibilityState === "visible";
+
+    const isTerminalVisible = (): boolean =>
+      isLayoutVisible() && isDocumentVisible();
+
+    const decodeOutputData = (data: string): Uint8Array | null => {
+      try {
+        return decodeBase64ToUint8Array(data);
+      } catch {
+        return null;
+      }
+    };
+
+    const flushRafWrites = () => {
+      rafWriteId = null;
+      if (isDisposed || pendingLiveChunks.length === 0) {
+        pendingLiveChunks.length = 0;
+        pendingLiveBytes = 0;
         return;
       }
 
-      latestSequenceRef.current = event.sequence;
+      const total = pendingLiveBytes;
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of pendingLiveChunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+      pendingLiveChunks.length = 0;
+      pendingLiveBytes = 0;
+
       try {
-        terminal.write(new Uint8Array(event.data));
+        terminal.write(merged);
         clearStatusMessage();
       } catch (error) {
         showStatusMessage("output", getCommandErrorMessage(error, t));
       }
     };
 
+    const scheduleLiveWrite = (bytes: Uint8Array) => {
+      if (bytes.length === 0) {
+        return;
+      }
+      pendingLiveChunks.push(bytes);
+      pendingLiveBytes += bytes.length;
+      if (rafWriteId === null) {
+        rafWriteId = window.requestAnimationFrame(flushRafWrites);
+      }
+    };
+
+    const writeOutput = (event: TerminalOutputChunk) => {
+      if (isDisposed || event.sequence <= latestSequenceRef.current) {
+        return;
+      }
+
+      const bytes = decodeOutputData(event.data);
+      if (!bytes) {
+        return;
+      }
+
+      latestSequenceRef.current = event.sequence;
+      scheduleLiveWrite(bytes);
+    };
+
     const flushPendingOutput = () => {
       for (const event of pendingOutputEvents.splice(0)) {
         pendingOutputBytes = Math.max(
           0,
-          pendingOutputBytes - event.data.length,
+          pendingOutputBytes - estimateBase64DecodedLength(event.data),
         );
         writeOutput(event);
       }
@@ -249,7 +321,7 @@ export function TerminalSurface({
 
     const queuePendingOutput = (event: TerminalOutputChunk) => {
       pendingOutputEvents.push(event);
-      pendingOutputBytes += event.data.length;
+      pendingOutputBytes += estimateBase64DecodedLength(event.data);
 
       while (
         pendingOutputBytes > TERMINAL_PENDING_OUTPUT_MAX_BYTES &&
@@ -261,7 +333,7 @@ export function TerminalSurface({
         }
         pendingOutputBytes = Math.max(
           0,
-          pendingOutputBytes - droppedEvent.data.length,
+          pendingOutputBytes - estimateBase64DecodedLength(droppedEvent.data),
         );
         showStatusMessage(
           "restore",
@@ -271,7 +343,7 @@ export function TerminalSurface({
     };
 
     const handleOutput = (event: TerminalOutputChunk) => {
-      if (!hasRestored) {
+      if (!isLiveSubscribed) {
         queuePendingOutput(event);
         return;
       }
@@ -279,56 +351,95 @@ export function TerminalSurface({
       writeOutput(event);
     };
 
-    const restoreTerminal = async () => {
+    const writeHistorySnapshot = async () => {
+      const snapshotResult = await transportRef.current.readSnapshot(
+        TERMINAL_HISTORY_MAX_BYTES,
+      );
+      if (isDisposed) {
+        return;
+      }
+
+      if (snapshotResult.snapshot) {
+        terminal.reset();
+        terminal.write(snapshotResult.snapshot);
+        terminal.scrollToBottom();
+      }
+    };
+
+    const catchUpFromLog = async () => {
+      const generation = ++catchUpGeneration;
       try {
-        const result = await transportRef.current.restore();
-        if (isDisposed) {
+        const restoreResult = await transportRef.current.restore();
+        if (isDisposed || generation !== catchUpGeneration) {
           return;
         }
 
-        if (!result.isActive) {
+        await writeHistorySnapshot();
+        if (isDisposed || generation !== catchUpGeneration) {
+          return;
+        }
+
+        if (!restoreResult.isActive) {
           discardPendingOutput();
-          const snapshotResult = await transportRef.current.readSnapshot(
-            TERMINAL_HISTORY_MAX_BYTES,
-          );
-          if (isDisposed) {
-            return;
-          }
-
-          if (snapshotResult.snapshot) {
-            terminal.write(snapshotResult.snapshot);
-            terminal.scrollToBottom();
-          }
           clearStatusMessage("inactive");
-          hasRestored = true;
           return;
         }
 
-        if (!result.isComplete) {
+        latestSequenceRef.current = restoreResult.sequence;
+        if (!restoreResult.isComplete) {
           showStatusMessage(
             "restore",
-            "Terminal restore snapshot is unavailable. New live output will continue below.",
+            "Terminal restore snapshot is incomplete. Showing log tail; live output continues below.",
           );
-          hasRestored = true;
-          flushPendingOutput();
-          return;
+        } else {
+          clearStatusMessage();
         }
-
-        for (const chunk of result.chunks) {
-          terminal.write(new Uint8Array(chunk));
-        }
-        latestSequenceRef.current = result.sequence;
-        terminal.scrollToBottom();
-        clearStatusMessage();
-        hasRestored = true;
         flushPendingOutput();
       } catch (error) {
-        if (!isDisposed) {
+        if (!isDisposed && generation === catchUpGeneration) {
           showStatusMessage("restore", getCommandErrorMessage(error, t));
-          hasRestored = true;
           flushPendingOutput();
         }
       }
+    };
+
+    const setBackendLiveSubscription = async (active: boolean) => {
+      try {
+        await transportRef.current.setLiveSubscription(active);
+      } catch {
+        // Subscription failures should not tear down the terminal surface.
+      }
+    };
+
+    const refreshLiveVisibility = async () => {
+      if (isDisposed) {
+        return;
+      }
+
+      const shouldBeLive = isTerminalVisible();
+      if (shouldBeLive === isLiveSubscribed) {
+        return;
+      }
+
+      if (shouldBeLive) {
+        isLiveSubscribed = true;
+        await setBackendLiveSubscription(true);
+        if (isDisposed || !isLiveSubscribed) {
+          return;
+        }
+        await catchUpFromLog();
+        return;
+      }
+
+      isLiveSubscribed = false;
+      await setBackendLiveSubscription(false);
+      discardPendingOutput();
+      if (rafWriteId !== null) {
+        window.cancelAnimationFrame(rafWriteId);
+        rafWriteId = null;
+      }
+      pendingLiveChunks.length = 0;
+      pendingLiveBytes = 0;
     };
 
     const refreshStatus = async () => {
@@ -358,6 +469,11 @@ export function TerminalSurface({
       }
     };
 
+    const handleVisibilityChange = () => {
+      void refreshLiveVisibility();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     const startTerminal = async () => {
       try {
         unlistenOutput =
@@ -374,7 +490,7 @@ export function TerminalSurface({
         return;
       }
 
-      await restoreTerminal();
+      await refreshLiveVisibility();
       await refreshStatus();
       if (!isDisposed) {
         statusTimer = window.setInterval(() => {
@@ -387,13 +503,23 @@ export function TerminalSurface({
 
     return () => {
       isDisposed = true;
+      catchUpGeneration += 1;
+      if (isLiveSubscribed) {
+        isLiveSubscribed = false;
+        void setBackendLiveSubscription(false);
+      }
       unlistenOutput?.();
       if (statusTimer !== null) {
         window.clearInterval(statusTimer);
       }
+      if (rafWriteId !== null) {
+        window.cancelAnimationFrame(rafWriteId);
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       resizeObserver?.disconnect();
       window.removeEventListener("resize", handleWindowResize);
       disposeData.dispose();
+      webglAddon?.dispose();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -418,6 +544,23 @@ export function TerminalSurface({
       ) : null}
     </div>
   );
+}
+
+function decodeBase64ToUint8Array(data: string): Uint8Array {
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function estimateBase64DecodedLength(data: string): number {
+  if (data.length === 0) {
+    return 0;
+  }
+  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((data.length * 3) / 4) - padding);
 }
 
 function getTerminalTheme(theme: "light" | "dark") {

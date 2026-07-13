@@ -2772,6 +2772,7 @@ fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
     manager
         .register_for_project(42, 77, pending, |_| {})
         .expect("register project session");
+    manager.add_output_subscriber(77);
 
     manager
         .write_input(77, "hello event stream\r")
@@ -2779,7 +2780,7 @@ fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
 
     let mut events = Vec::new();
     let mut snapshot = String::new();
-    for _ in 0..20 {
+    for _ in 0..40 {
         if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             events.push(event);
         }

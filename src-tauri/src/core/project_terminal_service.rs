@@ -20,8 +20,8 @@ use crate::types::project_terminal::{
     DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
     ListProjectTerminalsResult, ProjectTerminalSummary, ReadProjectTerminalInput,
     ReadProjectTerminalResult, ResizeProjectTerminalInput, RestoreProjectTerminalInput,
-    RestoreProjectTerminalResult, UpdateProjectTerminalConfigInput,
-    UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
+    RestoreProjectTerminalResult, SubscribeProjectTerminalOutputInput,
+    UpdateProjectTerminalConfigInput, UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
 };
 use crate::types::project_terminal_config::ProjectTerminalConfig;
 use crate::types::project_terminal_shortcut_command::{
@@ -675,6 +675,33 @@ impl<'connection> ProjectTerminalService<'connection> {
         })
     }
 
+    pub fn subscribe_terminal_output(
+        &self,
+        input: SubscribeProjectTerminalOutputInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        self.project_by_id(input.project_id)?;
+        let session = registry.find(input.project_id, input.session_id)?;
+        if !session.is_active || !pty_sessions.contains(input.session_id) {
+            return Ok(());
+        }
+        pty_sessions.add_output_subscriber(input.session_id);
+        Ok(())
+    }
+
+    pub fn unsubscribe_terminal_output(
+        &self,
+        input: SubscribeProjectTerminalOutputInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        self.project_by_id(input.project_id)?;
+        let _ = registry.find(input.project_id, input.session_id)?;
+        pty_sessions.remove_output_subscriber(input.session_id);
+        Ok(())
+    }
+
     pub fn resize_terminal(
         &self,
         input: ResizeProjectTerminalInput,
@@ -788,6 +815,36 @@ impl<'connection> ProjectTerminalService<'connection> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectTerminalService::new(repository).restore_terminal(input, registry, pty_sessions)
+    }
+
+    pub fn subscribe_terminal_output_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SubscribeProjectTerminalOutputInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).subscribe_terminal_output(
+            input,
+            registry,
+            pty_sessions,
+        )
+    }
+
+    pub fn unsubscribe_terminal_output_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SubscribeProjectTerminalOutputInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<(), CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).unsubscribe_terminal_output(
+            input,
+            registry,
+            pty_sessions,
+        )
     }
 
     pub fn resize_terminal_in_data_dir(

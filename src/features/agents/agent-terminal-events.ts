@@ -7,7 +7,8 @@ export interface AgentSessionTerminalOutputEvent {
   projectId: number;
   sessionId: number;
   sequence: number;
-  data: number[];
+  /** base64-encoded terminal bytes */
+  data: string;
 }
 
 export function subscribeAgentSessionTerminalOutput(

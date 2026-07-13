@@ -77,6 +77,13 @@ pub struct RestoreProjectTerminalInput {
     pub session_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscribeProjectTerminalOutputInput {
+    pub project_id: i64,
+    pub session_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoreProjectTerminalResult {

@@ -9,7 +9,8 @@ use crate::types::project_terminal::{
     DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
     ListProjectTerminalsResult, ReadProjectTerminalInput, ReadProjectTerminalResult,
     ResizeProjectTerminalInput, RestoreProjectTerminalInput, RestoreProjectTerminalResult,
-    UpdateProjectTerminalConfigInput, UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
+    SubscribeProjectTerminalOutputInput, UpdateProjectTerminalConfigInput,
+    UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
 };
 use crate::types::project_terminal_shortcut_command::{
     DeleteProjectTerminalShortcutCommandInput, ListProjectTerminalShortcutCommandsInput,
@@ -101,6 +102,36 @@ pub fn restore_project_terminal(
 ) -> Result<RestoreProjectTerminalResult, CommandError> {
     let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
     ProjectTerminalService::restore_terminal_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn subscribe_project_terminal_output(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SubscribeProjectTerminalOutputInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::subscribe_terminal_output_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn unsubscribe_project_terminal_output(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SubscribeProjectTerminalOutputInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::unsubscribe_terminal_output_in_data_dir(
         data_dir,
         input,
         &state.project_terminals,
