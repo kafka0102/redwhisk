@@ -1,4 +1,3 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { X } from "lucide-react";
 import { useState } from "react";
 
@@ -17,6 +16,7 @@ import type {
   DismissUpdatePromptAction,
   UpdateStatus,
 } from "../../shared/commands/app-update-commands";
+import { openReleasePage } from "./open-release-page";
 
 interface UpdatePromptBadgeProps {
   status: UpdateStatus;
@@ -43,11 +43,7 @@ export function UpdatePromptBadge({
     if (!status.releaseUrl) {
       return;
     }
-    try {
-      await openUrl(status.releaseUrl);
-    } catch {
-      // 打开浏览器失败时静默；用户可稍后重试。
-    }
+    await openReleasePage(status.releaseUrl);
   }
 
   async function handleDismiss(action: DismissUpdatePromptAction) {

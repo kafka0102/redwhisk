@@ -4,6 +4,9 @@ export const UPDATE_PROMPT_CHANGED_EVENT = "update-prompt-changed";
 
 export type DismissUpdatePromptAction = "snooze7Days" | "ignoreVersion";
 
+/** 与 Rust `UpdateCheckErrorCode` 同步（camelCase）。 */
+export type UpdateCheckErrorCode = "network" | "invalidResponse" | "unknown";
+
 export interface UpdateStatus {
   shouldShowPrompt: boolean;
   currentVersion: string;
@@ -13,7 +16,8 @@ export interface UpdateStatus {
   ignoredVersion: string | null;
   snoozeUntil: string | null;
   checkedAt: string | null;
-  error: string | null;
+  /** 强制检查失败时的稳定错误码；静默路径一般为 null。 */
+  errorCode: UpdateCheckErrorCode | null;
 }
 
 export interface GetUpdateStatusInput {

@@ -20,8 +20,17 @@ pub struct UpdateStatus {
     pub snooze_until: Option<String>,
     /// 最近一次成功解析远端版本的时间（UTC RFC3339）。
     pub checked_at: Option<String>,
-    /// 仅强制刷新失败时填充；启动静默检查不返回致命错误时通常为 null。
-    pub error: Option<String>,
+    /// 仅强制刷新失败时填充稳定错误码；启动静默检查通常为 null。
+    pub error_code: Option<UpdateCheckErrorCode>,
+}
+
+/// 强制检查失败时的稳定错误码（camelCase 序列化）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateCheckErrorCode {
+    Network,
+    InvalidResponse,
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

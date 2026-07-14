@@ -7,11 +7,14 @@ use crate::db::app_update_repository::AppUpdateRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::types::app_update::{
-    AppUpdateStateRecord, DismissUpdatePromptAction, DismissUpdatePromptInput, UpdateStatus,
+    AppUpdateStateRecord, DismissUpdatePromptAction, DismissUpdatePromptInput,
+    UpdateCheckErrorCode, UpdateStatus,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
-use super::github::{GitHubLatestReleaseSource, LatestRelease, LatestReleaseSource};
+use super::github::{
+    GitHubLatestReleaseSource, LatestRelease, LatestReleaseFetchError, LatestReleaseSource,
+};
 use super::version::{is_newer_version, strip_version_prefix};
 
 /// 检查结果缓存 TTL。
@@ -47,8 +50,8 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
         if force_refresh {
             match self.fetch_and_cache() {
                 Ok(updated) => state = updated,
-                Err(error) => {
-                    return Ok(self.build_status_from_state(&state, Some(error.to_string())));
+                Err(error_code) => {
+                    return Ok(self.build_status_from_state(&state, Some(error_code)));
                 }
             }
             // 手动检查成功后清除 snooze。
@@ -62,7 +65,7 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
         if !self.cache_is_fresh(&state) {
             match self.fetch_and_cache() {
                 Ok(updated) => state = updated,
-                Err(_error) => {
+                Err(_error_code) => {
                     // 启动/静默路径：网络失败不暴露 error，尽量用旧缓存判定。
                 }
             }
@@ -109,10 +112,11 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
         Ok(self.build_status_from_state(&state, None))
     }
 
-    fn fetch_and_cache(&self) -> Result<AppUpdateStateRecord, LatestReleaseFetchErrorDisplay> {
-        let latest = self.release_source.fetch_latest().map_err(|error| {
-            LatestReleaseFetchErrorDisplay(error.to_string())
-        })?;
+    fn fetch_and_cache(&self) -> Result<AppUpdateStateRecord, UpdateCheckErrorCode> {
+        let latest = self
+            .release_source
+            .fetch_latest()
+            .map_err(map_fetch_error)?;
         let checked_at = format_rfc3339(self.now);
         match latest {
             Some(LatestRelease {
@@ -121,17 +125,17 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
             }) => {
                 self.repository
                     .save_cache(&checked_at, Some(&version), Some(&release_url))
-                    .map_err(|error| LatestReleaseFetchErrorDisplay(error.to_string()))?;
+                    .map_err(|_| UpdateCheckErrorCode::Unknown)?;
             }
             None => {
                 self.repository
                     .save_cache(&checked_at, None, None)
-                    .map_err(|error| LatestReleaseFetchErrorDisplay(error.to_string()))?;
+                    .map_err(|_| UpdateCheckErrorCode::Unknown)?;
             }
         }
         self.repository
             .get_state()
-            .map_err(|error| LatestReleaseFetchErrorDisplay(error.to_string()))
+            .map_err(|_| UpdateCheckErrorCode::Unknown)
     }
 
     fn cache_is_fresh(&self, state: &AppUpdateStateRecord) -> bool {
@@ -152,7 +156,7 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
     fn build_status_from_state(
         &self,
         state: &AppUpdateStateRecord,
-        force_error: Option<String>,
+        force_error: Option<UpdateCheckErrorCode>,
     ) -> UpdateStatus {
         let latest_version = state.cached_latest_version.clone();
         let release_url = state.cached_release_url.clone();
@@ -184,17 +188,15 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
             ignored_version: state.ignored_version.clone(),
             snooze_until: state.snooze_until.clone(),
             checked_at: state.last_checked_at.clone(),
-            error: force_error,
+            error_code: force_error,
         }
     }
 }
 
-#[derive(Debug)]
-struct LatestReleaseFetchErrorDisplay(String);
-
-impl std::fmt::Display for LatestReleaseFetchErrorDisplay {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+fn map_fetch_error(error: LatestReleaseFetchError) -> UpdateCheckErrorCode {
+    match error {
+        LatestReleaseFetchError::Network => UpdateCheckErrorCode::Network,
+        LatestReleaseFetchError::InvalidResponse => UpdateCheckErrorCode::InvalidResponse,
     }
 }
 
@@ -423,26 +425,26 @@ mod tests {
         let connection = open_db();
         let source = MockSource {
             calls: Rc::new(Cell::new(0)),
-            result: Err(LatestReleaseFetchError::Network("down".into())),
+            result: Err(LatestReleaseFetchError::Network),
         };
         let status = service(&connection, source, "0.0.3")
             .get_status(false)
             .expect("status");
         assert!(!status.should_show_prompt);
-        assert!(status.error.is_none());
+        assert!(status.error_code.is_none());
     }
 
     #[test]
-    fn force_network_error_surfaces_error() {
+    fn force_network_error_surfaces_stable_error_code() {
         let connection = open_db();
         let source = MockSource {
             calls: Rc::new(Cell::new(0)),
-            result: Err(LatestReleaseFetchError::Network("down".into())),
+            result: Err(LatestReleaseFetchError::Network),
         };
         let status = service(&connection, source, "0.0.3")
             .get_status(true)
             .expect("status");
-        assert!(status.error.is_some());
+        assert_eq!(status.error_code, Some(UpdateCheckErrorCode::Network));
         assert!(!status.should_show_prompt);
     }
 }

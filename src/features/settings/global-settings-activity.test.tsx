@@ -20,13 +20,9 @@ vi.mock("./settings-commands", () => ({
   updateUserProfile: vi.fn(),
 }));
 
-vi.mock("../../shared/commands/app-update-commands", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../shared/commands/app-update-commands")
-  >("../../shared/commands/app-update-commands");
-  return {
-    ...actual,
-    getUpdateStatus: vi.fn().mockResolvedValue({
+vi.mock("../app-update/use-update-status", () => ({
+  useUpdateStatus: () => ({
+    status: {
       shouldShowPrompt: false,
       currentVersion: "0.0.3",
       hasUpdate: false,
@@ -35,10 +31,14 @@ vi.mock("../../shared/commands/app-update-commands", async () => {
       ignoredVersion: null,
       snoozeUntil: null,
       checkedAt: null,
-      error: null,
-    }),
-  };
-});
+      errorCode: null,
+    },
+    isChecking: false,
+    checkError: null,
+    dismiss: vi.fn(),
+    checkForUpdates: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
 
 const getUserProfileMock = vi.mocked(getUserProfile);
 const updateUserProfileMock = vi.mocked(updateUserProfile);

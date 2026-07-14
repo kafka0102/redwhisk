@@ -1,106 +1,122 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { LoaderCircle, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import appLogo from "@/assets/images/app-logo.png";
-import {
-  getUpdateStatus,
-  type UpdateStatus,
+import { openReleasePage } from "../app-update/open-release-page";
+import { useUpdateStatus } from "../app-update/use-update-status";
+import type {
+  UpdateCheckErrorCode,
+  UpdateStatus,
 } from "../../shared/commands/app-update-commands";
-import { isCommandError } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
-type CheckFeedback =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | { kind: "upToDate" }
-  | { kind: "updateAvailable"; version: string; releaseUrl: string }
-  | { kind: "ignored"; version: string; releaseUrl: string | null }
-  | { kind: "error"; message: string };
+function errorCodeMessage(
+  t: (key: string) => string,
+  errorCode: UpdateCheckErrorCode,
+): string {
+  switch (errorCode) {
+    case "network":
+      return t("globalSettings.checkFailedNetwork");
+    case "invalidResponse":
+      return t("globalSettings.checkFailedInvalidResponse");
+    case "unknown":
+      return t("globalSettings.checkFailedUnknown");
+  }
+}
 
-function feedbackFromStatus(status: UpdateStatus): CheckFeedback {
-  if (status.error) {
-    return { kind: "error", message: status.error };
+function renderCheckFeedback(
+  t: (key: string, params?: Record<string, string>) => string,
+  status: UpdateStatus | null,
+  isChecking: boolean,
+  checkError: string | null,
+  hasChecked: boolean,
+  onOpenRelease: (url: string) => void,
+): ReactNode {
+  if (isChecking) {
+    return <span>{t("globalSettings.checkingForUpdates")}</span>;
+  }
+
+  if (!hasChecked) {
+    return null;
+  }
+
+  if (status?.errorCode) {
+    return (
+      <span className="about-panel__feedback-error">
+        {errorCodeMessage(t, status.errorCode)}
+      </span>
+    );
+  }
+
+  if (checkError) {
+    return (
+      <span className="about-panel__feedback-error">
+        {t("globalSettings.checkFailedUnknown")}
+      </span>
+    );
   }
 
   if (
-    status.hasUpdate &&
+    status?.hasUpdate &&
     status.latestVersion &&
     status.ignoredVersion === status.latestVersion
   ) {
-    return {
-      kind: "ignored",
-      version: status.latestVersion,
-      releaseUrl: status.releaseUrl,
-    };
+    return (
+      <span className="about-panel__feedback-stack">
+        <span>
+          {t("globalSettings.updateIgnored", {
+            version: status.latestVersion,
+          })}
+        </span>
+        {status.releaseUrl ? (
+          <button
+            className="about-panel__feedback-link"
+            type="button"
+            onClick={() => {
+              onOpenRelease(status.releaseUrl!);
+            }}
+          >
+            {t("globalSettings.openRelease")}
+          </button>
+        ) : null}
+      </span>
+    );
   }
 
-  if (status.hasUpdate && status.latestVersion && status.releaseUrl) {
-    return {
-      kind: "updateAvailable",
-      version: status.latestVersion,
-      releaseUrl: status.releaseUrl,
-    };
+  if (status?.hasUpdate && status.latestVersion && status.releaseUrl) {
+    return (
+      <button
+        className="about-panel__feedback-link"
+        type="button"
+        onClick={() => {
+          onOpenRelease(status.releaseUrl!);
+        }}
+      >
+        {t("globalSettings.updateAvailable", {
+          version: status.latestVersion,
+        })}
+      </button>
+    );
   }
 
-  return { kind: "upToDate" };
+  return <span>{t("globalSettings.upToDate")}</span>;
 }
 
 export function AboutPanel() {
   const { t } = useI18n();
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
-  const [feedback, setFeedback] = useState<CheckFeedback>({ kind: "idle" });
-  const [isChecking, setIsChecking] = useState(false);
+  const { status, isChecking, checkError, checkForUpdates } = useUpdateStatus();
+  const [hasChecked, setHasChecked] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void Promise.resolve()
-      .then(() => getUpdateStatus({ forceRefresh: false }))
-      .then((next) => {
-        if (!cancelled) {
-          setStatus(next);
-        }
-      })
-      .catch(() => {
-        // 关于页首次静默加载失败时仍展示产品信息；版本号留空直至手动检查。
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleCheck = useCallback(async () => {
+  async function handleCheck() {
     if (isChecking) {
       return;
     }
+    await checkForUpdates();
+    setHasChecked(true);
+  }
 
-    setIsChecking(true);
-    setFeedback({ kind: "checking" });
-
-    try {
-      const next = await getUpdateStatus({ forceRefresh: true });
-      setStatus(next);
-      setFeedback(feedbackFromStatus(next));
-    } catch (error: unknown) {
-      const message = isCommandError(error)
-        ? error.message
-        : error instanceof Error && error.message
-          ? error.message
-          : t("globalSettings.checkFailed");
-      setFeedback({ kind: "error", message });
-    } finally {
-      setIsChecking(false);
-    }
-  }, [isChecking, t]);
-
-  async function handleOpenRelease(url: string) {
-    try {
-      await openUrl(url);
-    } catch {
-      // 打开失败静默；用户可重试。
-    }
+  function handleOpenRelease(url: string) {
+    void openReleasePage(url);
   }
 
   const versionText = status?.currentVersion
@@ -142,52 +158,14 @@ export function AboutPanel() {
           </button>
         </div>
         <div className="about-panel__feedback" role="status" aria-live="polite">
-          {feedback.kind === "checking" ? (
-            <span>{t("globalSettings.checkingForUpdates")}</span>
-          ) : null}
-          {feedback.kind === "upToDate" ? (
-            <span>{t("globalSettings.upToDate")}</span>
-          ) : null}
-          {feedback.kind === "updateAvailable" ? (
-            <button
-              className="about-panel__feedback-link"
-              type="button"
-              onClick={() => {
-                void handleOpenRelease(feedback.releaseUrl);
-              }}
-            >
-              {t("globalSettings.updateAvailable", {
-                version: feedback.version,
-              })}
-            </button>
-          ) : null}
-          {feedback.kind === "ignored" ? (
-            <span className="about-panel__feedback-stack">
-              <span>
-                {t("globalSettings.updateIgnored", {
-                  version: feedback.version,
-                })}
-              </span>
-              {feedback.releaseUrl ? (
-                <button
-                  className="about-panel__feedback-link"
-                  type="button"
-                  onClick={() => {
-                    void handleOpenRelease(feedback.releaseUrl!);
-                  }}
-                >
-                  {t("globalSettings.openRelease")}
-                </button>
-              ) : null}
-            </span>
-          ) : null}
-          {feedback.kind === "error" ? (
-            <span className="about-panel__feedback-error">
-              {t("globalSettings.checkFailedDetail", {
-                message: feedback.message,
-              })}
-            </span>
-          ) : null}
+          {renderCheckFeedback(
+            t,
+            status,
+            isChecking,
+            checkError,
+            hasChecked,
+            handleOpenRelease,
+          )}
         </div>
         <p className="about-panel__description">
           {t("globalSettings.productDescription")}

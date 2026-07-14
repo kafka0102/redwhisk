@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UpdatePromptBadge } from "./update-prompt-badge";
 import type { UpdateStatus } from "../../shared/commands/app-update-commands";
 
-const openUrlMock = vi.fn();
+const openReleasePageMock = vi.fn();
 
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openUrl: (...args: unknown[]) => openUrlMock(...args),
+vi.mock("./open-release-page", () => ({
+  openReleasePage: (...args: unknown[]) => openReleasePageMock(...args),
 }));
 
 function buildStatus(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
@@ -21,15 +21,15 @@ function buildStatus(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
     ignoredVersion: null,
     snoozeUntil: null,
     checkedAt: "2026-07-14T12:00:00.000Z",
-    error: null,
+    errorCode: null,
     ...overrides,
   };
 }
 
 describe("UpdatePromptBadge", () => {
   beforeEach(() => {
-    openUrlMock.mockReset();
-    openUrlMock.mockResolvedValue(undefined);
+    openReleasePageMock.mockReset();
+    openReleasePageMock.mockResolvedValue(true);
   });
 
   it("renders nothing when shouldShowPrompt is false", () => {
@@ -49,7 +49,7 @@ describe("UpdatePromptBadge", () => {
     await user.click(screen.getByRole("button", { name: "Open release page" }));
 
     await waitFor(() => {
-      expect(openUrlMock).toHaveBeenCalledWith(
+      expect(openReleasePageMock).toHaveBeenCalledWith(
         "https://github.com/kafka0102/redwhisk/releases/tag/v0.1.0",
       );
     });

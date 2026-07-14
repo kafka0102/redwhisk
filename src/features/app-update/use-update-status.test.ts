@@ -34,7 +34,7 @@ function buildStatus(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
     ignoredVersion: null,
     snoozeUntil: null,
     checkedAt: "2026-07-14T12:00:00.000Z",
-    error: null,
+    errorCode: null,
     ...overrides,
   };
 }
@@ -114,5 +114,111 @@ describe("useUpdateStatus", () => {
       action: "snooze7Days",
     });
     expect(result.current.status?.shouldShowPrompt).toBe(false);
+  });
+
+  it("checkForUpdates force-refreshes and exposes isChecking", async () => {
+    let resolveCheck: ((value: UpdateStatus) => void) | undefined;
+    getUpdateStatusMock.mockImplementation(
+      (input?: { forceRefresh?: boolean }) => {
+        if (input?.forceRefresh) {
+          return new Promise<UpdateStatus>((resolve) => {
+            resolveCheck = resolve;
+          });
+        }
+        return Promise.resolve(buildStatus());
+      },
+    );
+
+    const { result } = renderHook(() => useUpdateStatus());
+    await waitFor(() => {
+      expect(result.current.status).not.toBeNull();
+    });
+    expect(result.current.isChecking).toBe(false);
+
+    let checkPromise: Promise<void>;
+    act(() => {
+      checkPromise = result.current.checkForUpdates();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isChecking).toBe(true);
+    });
+
+    await act(async () => {
+      resolveCheck?.(
+        buildStatus({
+          shouldShowPrompt: true,
+          latestVersion: "0.2.0",
+          hasUpdate: true,
+        }),
+      );
+      await checkPromise;
+    });
+
+    expect(getUpdateStatusMock).toHaveBeenCalledWith({ forceRefresh: true });
+    expect(result.current.isChecking).toBe(false);
+    expect(result.current.status?.latestVersion).toBe("0.2.0");
+  });
+
+  it("checkForUpdates surfaces command failures via checkError", async () => {
+    getUpdateStatusMock
+      .mockResolvedValueOnce(buildStatus())
+      .mockRejectedValueOnce({
+        code: "APP_UPDATE_PERSISTENCE_FAILED",
+        message: "boom",
+      });
+
+    const { result } = renderHook(() => useUpdateStatus());
+    await waitFor(() => {
+      expect(result.current.status).not.toBeNull();
+    });
+
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+
+    expect(result.current.checkError).toBe("boom");
+    expect(result.current.isChecking).toBe(false);
+  });
+
+  it("ignores incomplete event payloads and refreshes quietly", async () => {
+    let eventHandler: ((event: { payload: unknown }) => void) | undefined;
+    listenMock.mockImplementation(
+      async (
+        _event: string,
+        handler: (event: { payload: unknown }) => void,
+      ) => {
+        eventHandler = handler;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useUpdateStatus());
+    await waitFor(() => {
+      expect(result.current.status?.latestVersion).toBe("0.1.0");
+    });
+
+    getUpdateStatusMock.mockClear();
+    getUpdateStatusMock.mockResolvedValue(
+      buildStatus({ latestVersion: "0.3.0" }),
+    );
+
+    act(() => {
+      eventHandler?.({
+        payload: {
+          shouldShowPrompt: true,
+          currentVersion: "0.0.3",
+          hasUpdate: true,
+          // 故意缺少其余字段 → 不作为完整 UpdateStatus 应用
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(getUpdateStatusMock).toHaveBeenCalledWith({ forceRefresh: false });
+    });
+    await waitFor(() => {
+      expect(result.current.status?.latestVersion).toBe("0.3.0");
+    });
   });
 });
