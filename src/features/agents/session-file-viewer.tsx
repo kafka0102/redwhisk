@@ -8,7 +8,7 @@ interface SessionFileViewerProps {
 }
 
 export function SessionFileViewer({ tab }: SessionFileViewerProps) {
-  const { messages, contentFontSize } = useI18n();
+  const { messages, contentFontSize, theme } = useI18n();
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -57,6 +57,7 @@ export function SessionFileViewer({ tab }: SessionFileViewerProps) {
       <div className="session-file-viewer__status">{tab.filePath}</div>
       <Editor
         height="100%"
+        theme={theme === "dark" ? "vs-dark" : "light"}
         language={tab.content.language ?? undefined}
         options={{
           readOnly: true,

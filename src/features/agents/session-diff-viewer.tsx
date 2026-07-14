@@ -19,7 +19,7 @@ const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
 };
 
 export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
-  const { messages, t, contentFontSize } = useI18n();
+  const { messages, t, contentFontSize, theme } = useI18n();
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -70,6 +70,7 @@ export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
       </div>
       <DiffEditor
         height="100%"
+        theme={theme === "dark" ? "vs-dark" : "light"}
         language={tab.diff.language ?? undefined}
         modified={tab.diff.modifiedContent}
         original={tab.diff.originalContent}
