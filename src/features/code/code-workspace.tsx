@@ -1,13 +1,6 @@
 import { Editor } from "@monaco-editor/react";
 import { listen } from "@tauri-apps/api/event";
-import {
-  ChevronDown,
-  ChevronRight,
-  File,
-  Folder,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, RefreshCw, X } from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -31,6 +24,7 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import {
   FileTreePanel,
+  FileTypeIcon,
   type FileTreeOpenState,
 } from "../../shared/workspace/file-tree-panel";
 import {
@@ -572,6 +566,8 @@ function CodeBreadcrumb({
   tree: WorkspaceFileTreeNode[];
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
 }) {
+  // 受控弹层：同一时间只展开一个目录段。打开文件后立即关闭，回到面包屑。
+  const [openCrumb, setOpenCrumb] = useState<string | null>(null);
   const segments = filePath.split("/");
   return (
     <nav className="code-workspace__breadcrumb" aria-label={filePath}>
@@ -585,28 +581,21 @@ function CodeBreadcrumb({
             {isFile || !node ? (
               <span>{segment}</span>
             ) : (
-              <DropdownMenu>
+              <DropdownMenu
+                open={openCrumb === path}
+                onOpenChange={(open) => setOpenCrumb(open ? path : null)}
+              >
                 <DropdownMenuTrigger className="code-workspace__crumb">
                   {segment}
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {node.children?.map((child) => (
-                    <DropdownMenuItem
-                      key={child.path}
-                      onClick={() => {
-                        if (child.kind === "file") onOpenFile(child);
-                      }}
-                    >
-                      <>
-                        {child.kind === "directory" ? (
-                          <Folder size={14} />
-                        ) : (
-                          <File size={14} />
-                        )}
-                        {child.name}
-                      </>
-                    </DropdownMenuItem>
-                  ))}
+                <DropdownMenuContent align="start" className="w-[500px]">
+                  <CodeBreadcrumbMenuTree
+                    nodes={node.children ?? []}
+                    onOpenFile={(file) => {
+                      onOpenFile(file);
+                      setOpenCrumb(null);
+                    }}
+                  />
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -614,6 +603,121 @@ function CodeBreadcrumb({
         );
       })}
     </nav>
+  );
+}
+
+// 面包屑目录弹层内的递归文件树：与左侧目录树一致的展开/收起交互与视觉，
+// 目录点击切换展开（多级），文件点击打开。展开状态在弹层挂载期内自管，
+// 关闭弹层后随 Popup 卸载重置。
+function CodeBreadcrumbMenuTree({
+  nodes,
+  onOpenFile,
+}: {
+  nodes: WorkspaceFileTreeNode[];
+  onOpenFile: (file: WorkspaceFileTreeNode) => void;
+}) {
+  const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
+  const toggleDir = useCallback((path: string) => {
+    setOpenDirs((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+  return (
+    <div className="code-workspace__crumb-tree" role="tree">
+      {nodes.map((node) => (
+        <CodeBreadcrumbMenuRow
+          key={node.path}
+          depth={0}
+          node={node}
+          openDirs={openDirs}
+          toggleDir={toggleDir}
+          onOpenFile={onOpenFile}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CodeBreadcrumbMenuRow({
+  node,
+  depth,
+  openDirs,
+  toggleDir,
+  onOpenFile,
+}: {
+  node: WorkspaceFileTreeNode;
+  depth: number;
+  openDirs: Set<string>;
+  toggleDir: (path: string) => void;
+  onOpenFile: (file: WorkspaceFileTreeNode) => void;
+}) {
+  const treeDepthStyle = { "--tree-depth": depth } as CSSProperties;
+  if (node.kind === "directory") {
+    const isOpen = openDirs.has(node.path);
+    return (
+      <div role="none">
+        <button
+          aria-expanded={isOpen}
+          className={`session-file-tree__folder${node.isIgnored ? " session-file-tree__row--ignored" : ""}`}
+          style={treeDepthStyle}
+          type="button"
+          onClick={() => toggleDir(node.path)}
+        >
+          {isOpen ? (
+            <ChevronDown
+              aria-hidden="true"
+              className="session-file-tree__chevron"
+              size={13}
+              strokeWidth={2}
+            />
+          ) : (
+            <ChevronRight
+              aria-hidden="true"
+              className="session-file-tree__chevron"
+              size={13}
+              strokeWidth={2}
+            />
+          )}
+          <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
+          <span>{node.name}</span>
+        </button>
+        {isOpen && node.children && node.children.length > 0 ? (
+          <div role="group">
+            {node.children.map((child) => (
+              <CodeBreadcrumbMenuRow
+                key={child.path}
+                depth={depth + 1}
+                node={child}
+                openDirs={openDirs}
+                toggleDir={toggleDir}
+                onOpenFile={onOpenFile}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <button
+      className={`session-file-tree__row${node.isIgnored ? " session-file-tree__row--ignored" : ""}`}
+      style={treeDepthStyle}
+      type="button"
+      onClick={() => onOpenFile(node)}
+    >
+      <span
+        aria-hidden="true"
+        className="session-file-tree__chevron session-file-tree__chevron--placeholder"
+      />
+      <FileTypeIcon fileName={node.name} />
+      <span>{node.name}</span>
+    </button>
   );
 }
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -34,32 +34,39 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(vi.fn())),
 }));
 
-vi.mock("../../shared/workspace/file-tree-panel", () => ({
-  FileTreePanel: ({
-    onOpenFile,
-  }: {
-    onOpenFile: (file: {
-      id: string;
-      kind: "file";
-      name: string;
-      path: string;
-    }) => void;
-  }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onOpenFile({
-          id: "src/file.ts",
-          kind: "file",
-          name: "file.ts",
-          path: "src/file.ts",
-        })
-      }
-    >
-      Open file
-    </button>
-  ),
-}));
+vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../shared/workspace/file-tree-panel")
+    >();
+  return {
+    ...actual,
+    FileTreePanel: ({
+      onOpenFile,
+    }: {
+      onOpenFile: (file: {
+        id: string;
+        kind: "file";
+        name: string;
+        path: string;
+      }) => void;
+    }) => (
+      <button
+        type="button"
+        onClick={() =>
+          onOpenFile({
+            id: "src/file.ts",
+            kind: "file",
+            name: "file.ts",
+            path: "src/file.ts",
+          })
+        }
+      >
+        Open file
+      </button>
+    ),
+  };
+});
 
 const roots = [
   {
@@ -324,5 +331,66 @@ describe("CodeWorkspace", () => {
       projectId: 1,
       workspacePath: "/tmp/redwhisk",
     });
+  });
+
+  it("opens a 500px nested tree menu from a breadcrumb folder", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          children: [
+            {
+              id: "src/sub",
+              name: "sub",
+              path: "src/sub",
+              kind: "directory",
+              children: [
+                {
+                  id: "src/sub/deep.ts",
+                  name: "deep.ts",
+                  path: "src/sub/deep.ts",
+                  kind: "file",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      signature: "sig-tree",
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    // 通过 mock 的 FileTreePanel 打开 src/file.ts，让面包屑出现 src 目录段。
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+
+    // 点击面包屑 src 目录段，弹层以 500px 宽打开树形菜单。
+    await user.click(screen.getByRole("button", { name: "src" }));
+    const tree = await screen.findByRole("tree");
+    const popup = document.querySelector('[data-slot="dropdown-menu-content"]');
+    expect(popup?.className).toContain("w-[500px]");
+
+    // 子目录默认收起；点击展开后出现孙级文件，支持多级展开。
+    await user.click(within(tree).getByRole("button", { name: "sub" }));
+    expect(within(tree).getByText("deep.ts")).toBeInTheDocument();
+
+    // 点击文件打开并关闭弹层。
+    vi.mocked(readProjectWorktreeFile).mockClear();
+    await user.click(within(tree).getByRole("button", { name: "deep.ts" }));
+    expect(readProjectWorktreeFile).toHaveBeenCalledWith(
+      expect.objectContaining({ filePath: "src/sub/deep.ts" }),
+    );
+    expect(screen.queryByRole("tree")).not.toBeInTheDocument();
   });
 });

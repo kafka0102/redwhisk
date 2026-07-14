@@ -304,7 +304,7 @@ function FileTreeRow({
         aria-hidden="true"
         className="session-file-tree__chevron session-file-tree__chevron--placeholder"
       />
-      <FileTypeIcon extension={getFileExtension(node.data.name)} />
+      <FileTypeIcon fileName={node.data.name} />
       <span>{node.data.name}</span>
     </button>
   );
@@ -318,11 +318,8 @@ function joinWorkspacePath(
   return `${workspacePath.replace(/\/+$/, "")}/${relativePath}`;
 }
 
-interface FileTypeIconProps {
-  extension: string;
-}
-
-function FileTypeIcon({ extension }: FileTypeIconProps) {
+export function FileTypeIcon({ fileName }: { fileName: string }) {
+  const extension = getFileExtension(fileName);
   const className = `session-file-tree__icon session-file-tree__icon--${extension || "plain"}`;
 
   switch (extension) {
