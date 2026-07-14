@@ -2656,4 +2656,135 @@ mod tests {
         assert_eq!(listed.terminals[0].session_id, created.session_id);
         assert!(manager.contains(created.session_id));
     }
+
+    #[test]
+    fn project_terminal_survives_abnormal_exit_of_foreground_command() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        // 等待交互式 shell 就绪（exec $SHELL 完成初始化）。
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let probe = ProjectTerminalService::read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: project.id,
+                    session_id: created.session_id,
+                    max_bytes: Some(256),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("probe snapshot");
+            if probe.is_active && !probe.snapshot.is_empty() {
+                break;
+            }
+        }
+        // 额外等待 shell 读取启动配置完成，避免命令被吞。
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // 在交互式 shell 里运行一个会异常退出的前台命令（模拟 grok 这类 TUI 崩溃），
+        // 紧跟存活探针：子进程崩溃后 shell 应继续回显 SURVIVED-<code>。
+        ProjectTerminalService::write_terminal_input(
+            WriteProjectTerminalInput {
+                project_id: project.id,
+                session_id: created.session_id,
+                data: "sh -c 'kill -SEGV $$'; echo SURVIVED-$?\r".to_string(),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("write input");
+
+        // 轮询等待 shell 恢复并回显探针。
+        let mut echoed = false;
+        for _ in 0..60 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = ProjectTerminalService::read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: project.id,
+                    session_id: created.session_id,
+                    max_bytes: Some(8_192),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("read snapshot");
+            if snapshot.snapshot.contains("SURVIVED-") {
+                echoed = true;
+                break;
+            }
+            if !snapshot.is_active {
+                break;
+            }
+        }
+
+        let snapshot = ProjectTerminalService::read_terminal_snapshot(
+            ReadProjectTerminalInput {
+                project_id: project.id,
+                session_id: created.session_id,
+                max_bytes: Some(8_192),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("final snapshot");
+
+        assert!(
+            snapshot.is_active,
+            "交互式 shell 必须在前台命令异常退出后存活；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+        assert!(
+            echoed,
+            "shell 应在子进程崩溃后继续回显探针；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+
+        service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: project.id,
+                    session_id: created.session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("close terminal");
+    }
 }
