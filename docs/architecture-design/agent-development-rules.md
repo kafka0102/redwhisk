@@ -2,7 +2,7 @@
 
 ## 目标
 
-本文档把 `_bmad-output` 中的架构、PRD、UX 与实现故事约束，收敛为后续 Agent 开发可直接引用的通用规则。
+本文档收敛为后续 Agent 开发可直接引用的通用规则。
 
 当规划文档与当前代码不一致时，以当前代码事实为准。特别是：实体 `id` 当前使用 SQLite `INTEGER` / TypeScript `number`，时间字段当前使用 Unix epoch milliseconds / TypeScript `number`，不是字符串 ID 或 ISO 字符串。
 
@@ -318,13 +318,6 @@ git diff -- docs
 
 本规则整理自以下文档和代码事实：
 
-- `_bmad-output/planning-artifacts/architecture.md`
-- `_bmad-output/planning-artifacts/epics.md`
-- `_bmad-output/planning-artifacts/implementation-readiness-report-2026-06-04.md`
-- `_bmad-output/planning-artifacts/sprint-change-proposal-integer-ids-and-epoch-ms-2026-06-05.md`
-- `_bmad-output/planning-artifacts/ux-designs/ux-redwhisk-2026-06-03/DESIGN.md`
-- `_bmad-output/planning-artifacts/ux-designs/ux-redwhisk-2026-06-03/EXPERIENCE.md`
-- `_bmad-output/implementation-artifacts/6-1-stabilize-agent-session-terminal-rendering.md`
 - `package.json`
 - `src/`
 - `src-tauri/src/`

@@ -1,7 +1,0 @@
-[workflow]
-
-persistent_facts = [
-  "file:{project-root}/AGENTS.md",
-  "file:{project-root}/docs/standards/shared/git-workflow.md",
-  "file:{project-root}/docs/standards/shared/coding-style.md",
-]
