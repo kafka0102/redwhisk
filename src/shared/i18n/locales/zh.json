@@ -15,6 +15,7 @@
     "projectNotFound": "项目不存在。"
   },
   "globalSettings": {
+    "about": "关于",
     "avatar": "头像",
     "avatarPickerLabel": "选择头像",
     "chinese": "简体中文",
@@ -29,6 +30,8 @@
     "notificationReminderOn": "是",
     "notificationReminderTooltip": "当 agent session 完成或需要用户确认时，发出声音提醒",
     "preferences": "偏好设置",
+    "productDescription": "RedWhisk（红拂）是以 Issue 为核心的本地 AI Coding 工作台。用 Git Worktree 并行推进多任务，接入 Codex、Claude Code 等智能体，在隔离工作区中同时执行，数据留在本机。",
+    "productName": "RedWhisk",
     "profile": "个人资料",
     "name": "用户名",
     "imageFilterName": "图片",

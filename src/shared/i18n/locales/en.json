@@ -15,6 +15,7 @@
     "projectNotFound": "Project not found."
   },
   "globalSettings": {
+    "about": "About",
     "avatar": "Avatar",
     "avatarPickerLabel": "Choose avatar",
     "chinese": "简体中文",
@@ -29,6 +30,8 @@
     "notificationReminderOn": "Yes",
     "notificationReminderTooltip": "Play a sound when an agent session completes or needs your confirmation",
     "preferences": "Preferences",
+    "productDescription": "RedWhisk is a local AI coding workbench centered on Issues. Run parallel tasks with Git worktrees, connect Codex, Claude Code, and similar agents, and keep your project data on this machine.",
+    "productName": "RedWhisk",
     "profile": "Profile",
     "name": "Name",
     "imageFilterName": "Images",
