@@ -161,6 +161,14 @@ git push origin v0.1.0
 - `RedWhisk_<version>_universal.dmg`
 - `RedWhisk_<version>_universal.app.zip`
 
+### 应用内版本检测
+
+客户端仅将 **已 Publish** 的 GitHub `releases/latest` 视为「可用更新」（见 [ADR 0004](../adr/0004-app-update-check-via-github-release.md)）。
+
+- draft Release **不会**触发 Workbench 顶栏版本提醒，也不会在「关于」页手动检查中表现为可更新。
+- tag 推送并完成 CI 后，仍须在 GitHub Releases 页面 Publish，用户才会检测到新版本。
+- 检测结果缓存默认 1 小时；关于页「检查更新」会强制刷新并清除「7 天内不再提醒」冷却（仍尊重「忽略此版本」）。
+
 ### PR 构建检查
 
 `.github/workflows/release.yml` 还配置了 `check` job，在 PR 到 `main` / `devlop` 时触发：

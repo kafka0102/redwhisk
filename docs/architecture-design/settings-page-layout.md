@@ -16,10 +16,19 @@ Settings 页面使用左右两栏：
 
 ## 菜单项
 
-Settings 菜单项由图标和文字组成。当前菜单项包括：
+Settings 菜单项由图标和文字组成。
+
+Project Settings 当前菜单项包括：
 
 - `General`
 - `Agents`
+- `Labels` / `Skills`（按实现扩展，仍复用同一两栏骨架）
+
+Global Settings 当前菜单项包括：
+
+- `Profile`（个人资料）
+- `Preferences`（偏好设置）
+- `About`（关于：产品标识、版本与检查更新；内容区可垂直居中展示，不强制套用 80% 表单 card 模板）
 
 图标优先使用项目已依赖的 `lucide-react`。如后续改用外部图标资源，必须保存为本地资产，并确认 license 允许随应用分发。
 
