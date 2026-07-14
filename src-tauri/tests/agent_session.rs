@@ -1335,6 +1335,98 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
 }
 
 #[test]
+fn start_agent_session_in_worktree_mode_rejects_leftover_worktree_on_disk() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-leftover-project");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let issue_number: i64 = database
+        .connection
+        .query_row(
+            "SELECT number FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("read issue number");
+    database
+        .connection
+        .execute(
+            "UPDATE projects
+             SET worktree_location = 'repo_internal',
+                 worktree_setup_command = 'printf project-setup > project-setup.txt'
+             WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree settings");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    // 模拟上次启动失败遗留的同名 worktree 主路径（无 session 行，纯磁盘残留）。
+    let leftover_path = repo_path
+        .join(".worktrees")
+        .join(format!("issue-{issue_number}"));
+    std::fs::create_dir_all(&leftover_path).expect("create leftover worktree dir");
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: Some("printf run-setup > run-setup.txt".to_string()),
+            },
+        )
+        .expect_err("start should reject leftover worktree");
+
+    assert_eq!(error.code, CommandErrorCode::IssueWorktreeOccupied);
+    // 占用检测发生在创建 session 之前：issue 应回到 backlog，无 session 残留。
+    let issue = IssueRepository::new(&database.connection)
+        .find_by_id(issue_id)
+        .expect("find issue")
+        .expect("issue exists");
+    assert_eq!(issue.status, IssueStatus::Backlog);
+    assert!(
+        AgentSessionRepository::new(&database.connection)
+            .find_by_issue_id(issue_id)
+            .expect("find session")
+            .is_none(),
+        "no session should be created"
+    );
+}
+
+#[test]
 fn start_agent_session_in_worktree_mode_runs_setup_command_before_agent_start() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

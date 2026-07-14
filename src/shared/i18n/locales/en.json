@@ -631,7 +631,8 @@
       "projectWorkdirInaccessible": "Project working directory is inaccessible.",
       "worktreeDeleteFailed": "Failed to delete worktree.",
       "worktreeInitCommandFailed": "Worktree initialization command failed.",
-      "worktreeInitDirInaccessible": "Worktree initialization directory is inaccessible."
+      "worktreeInitDirInaccessible": "Worktree initialization directory is inaccessible.",
+      "worktreeCreateFailed": "Failed to create Agent Session workspace."
     },
     "AGENT_SESSION_STREAM_FAILED": {
       "default": "Agent session error."

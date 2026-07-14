@@ -423,13 +423,22 @@ impl<'connection> AgentSessionService<'connection> {
         };
         let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
         let mut child = if pending_pty.is_none() {
-            let mut child = spawn_agent_process(
+            let mut child = match spawn_agent_process(
                 &launch.profile,
                 &launch.working_dir,
                 &launch.log_path,
                 initial_prompt_argument.as_deref(),
-            )?;
-            ensure_process_started(&mut child, &launch.command_snapshot)?;
+            ) {
+                Ok(child) => child,
+                Err(error) => {
+                    self.cleanup_owned_worktree(input.project_id, &launch);
+                    return Err(error);
+                }
+            };
+            if let Err(error) = ensure_process_started(&mut child, &launch.command_snapshot) {
+                self.cleanup_owned_worktree(input.project_id, &launch);
+                return Err(error);
+            }
             Some(child)
         } else {
             None
@@ -777,6 +786,7 @@ impl<'connection> AgentSessionService<'connection> {
             Ok(handle) => handle,
             Err(error) => {
                 agent_registry.unmark_starting(result.session_id);
+                self.cleanup_owned_worktree(input.project_id, &launch);
                 let _ = self.rollback_failed_structured_issue_session(
                     input.project_id,
                     input.issue_id,
@@ -809,6 +819,7 @@ impl<'connection> AgentSessionService<'connection> {
         if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
             agent_registry.unmark_starting(result.session_id);
             handle.shutdown();
+            self.cleanup_owned_worktree(input.project_id, &launch);
             let _ = self.rollback_failed_structured_issue_session(
                 input.project_id,
                 input.issue_id,
@@ -1005,6 +1016,7 @@ impl<'connection> AgentSessionService<'connection> {
             Ok(handle) => handle,
             Err(error) => {
                 agent_registry.unmark_starting(result.session_id);
+                self.cleanup_owned_worktree(input.project_id, &launch);
                 let _ = self.rollback_failed_structured_issue_session(
                     input.project_id,
                     input.issue_id,
@@ -1019,6 +1031,7 @@ impl<'connection> AgentSessionService<'connection> {
         if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
             agent_registry.unmark_starting(result.session_id);
             handle.shutdown();
+            self.cleanup_owned_worktree(input.project_id, &launch);
             let _ = self.rollback_failed_structured_issue_session(
                 input.project_id,
                 input.issue_id,
@@ -1062,6 +1075,27 @@ impl<'connection> AgentSessionService<'connection> {
         .map_err(agent_session_database_error)?;
         transaction.commit().map_err(agent_session_database_error)?;
         Ok(())
+    }
+
+    /// Agent 进程启动失败时清理 Redwhisk 自建 worktree。
+    ///
+    /// 仅在「agent 未真正产出」的启动失败路径调用：此时 worktree 无成果需保留，
+    /// 清理可避免残留目录/分支卡死下次启动（分支已检出 → `git worktree add` 失败）。
+    /// 外部/当前分支（External）不动；best-effort：清理失败不阻塞错误返回。
+    fn cleanup_owned_worktree(&self, project_id: i64, launch: &SessionLaunchContext) {
+        if launch.worktree_owner != WorktreeOwner::Redwhisk {
+            return;
+        }
+        let (Some(workspace_path), Some(workspace_branch)) = (
+            launch.workspace_path.as_deref(),
+            launch.workspace_branch.as_deref(),
+        ) else {
+            return;
+        };
+        let Ok(project) = self.project_by_id(project_id) else {
+            return;
+        };
+        let _ = cleanup_worktree(&project.repo_path, workspace_path, workspace_branch);
     }
 
     fn prepare_issue_session_launch(
@@ -1169,13 +1203,32 @@ impl<'connection> AgentSessionService<'connection> {
                             )
                     })?
                     .number;
+                // 检测磁盘上残留的同名 worktree（如上次启动失败后未清理）。
+                // session 行检查（上方）覆盖有 session 记录的情况；此处补 disk 检测，
+                // 覆盖回滚后无 session 但 worktree 目录仍在的情况，给出清晰「占用」错误，
+                // 避免走到 create_worktree_for_issue 因分支已检出被误标成「进程启动失败」。
+                let primary_worktree_path =
+                    Path::new(&worktree_root_path).join(format!("issue-{issue_number}"));
+                if primary_worktree_path.exists() {
+                    return Err(CommandError::new(
+                        CommandErrorCode::IssueWorktreeOccupied,
+                        "同名 worktree 已被占用，请删除后再运行。",
+                    )
+                    .with_detail(
+                        ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
+                    )
+                    .with_detail(
+                        ErrorDetail::new("Worktree")
+                            .with_value("workspacePath", primary_worktree_path.to_string_lossy()),
+                    ));
+                }
                 let created = create_worktree_for_issue(
                     &project.repo_path,
                     &worktree_root_path,
                     issue_number,
                     &target_branch,
                 )
-                .map_err(agent_session_start_error)?;
+                .map_err(worktree_create_error)?;
                 if let Err(error) = run_worktree_setup_command(
                     &created.workspace_path,
                     worktree_setup_command.as_deref(),
@@ -4190,6 +4243,16 @@ fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {
         CommandErrorCode::AgentSessionStartFailed,
         "Agent 进程启动失败。",
     ).with_reason("processStartFailed")
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+/// worktree 创建失败（如分支已检出、路径冲突等 git 错误）的专属错误。
+/// 与进程启动失败区分，避免把 git 错误误标成「Agent 进程启动失败。」。
+fn worktree_create_error(error: impl std::fmt::Display) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::AgentSessionStartFailed,
+        "Agent Session 工作区创建失败。",
+    ).with_reason("worktreeCreateFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 

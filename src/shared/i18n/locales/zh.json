@@ -631,7 +631,8 @@
       "projectWorkdirInaccessible": "Project 工作目录不可访问。",
       "worktreeDeleteFailed": "删除 worktree 失败。",
       "worktreeInitCommandFailed": "Worktree 初始化命令执行失败。",
-      "worktreeInitDirInaccessible": "Worktree 初始化目录不可访问。"
+      "worktreeInitDirInaccessible": "Worktree 初始化目录不可访问。",
+      "worktreeCreateFailed": "Agent Session 工作区创建失败。"
     },
     "AGENT_SESSION_STREAM_FAILED": {
       "default": "Agent 会话出错。"
