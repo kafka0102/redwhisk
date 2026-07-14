@@ -25,3 +25,4 @@ graphify-out/
 *.njsproj
 *.sln
 *.sw?
+.scratch/
