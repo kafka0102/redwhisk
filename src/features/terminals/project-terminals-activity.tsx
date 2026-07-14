@@ -40,14 +40,6 @@ interface ProjectTerminalsActivityProps {
 }
 
 const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
-/** light 下 accent 近黑，比例过高会发灰；只留极轻选中底色 */
-const ACTIVE_TERMINAL_CARD_BACKGROUND =
-  "color-mix(in srgb, var(--color-accent) 4%, var(--color-surface))";
-/** 选中态描边：比卡片背景略深一点即可，避免过黑 */
-const ACTIVE_TERMINAL_CARD_BORDER =
-  "color-mix(in srgb, var(--color-text) 10%, var(--project-terminal-card-background, var(--color-surface)))";
-const INACTIVE_TERMINAL_CARD_BACKGROUND = "var(--color-surface)";
-const INACTIVE_TERMINAL_CARD_BORDER = "var(--color-border)";
 
 function formatTerminalPathForDisplay(path: string): string {
   return formatHomePathForDisplay(path);
@@ -348,16 +340,6 @@ export function ProjectTerminalsActivity({
                 <section
                   key={terminalCard.configId}
                   className="project-terminals-card-shell"
-                  style={
-                    {
-                      "--project-terminal-card-background": isActive
-                        ? ACTIVE_TERMINAL_CARD_BACKGROUND
-                        : INACTIVE_TERMINAL_CARD_BACKGROUND,
-                      "--project-terminal-card-border": isActive
-                        ? ACTIVE_TERMINAL_CARD_BORDER
-                        : INACTIVE_TERMINAL_CARD_BORDER,
-                    } as CSSProperties
-                  }
                 >
                   <button
                     aria-label={terminalCard.name}

@@ -141,7 +141,7 @@ describe("ProjectTerminalsActivity", () => {
     expect(path).toHaveTextContent("~/workspace/kafka/redwhisk/apps/api");
   });
 
-  it("creates terminals, selects by config id, and keeps a stable active background", async () => {
+  it("creates terminals, selects by config id without inline card color variables", async () => {
     const user = userEvent.setup();
     listProjectTerminalsMock.mockResolvedValue({ terminals: [] });
     createProjectTerminalMock.mockResolvedValue({
@@ -167,10 +167,12 @@ describe("ProjectTerminalsActivity", () => {
     const sidebar = screen.getByLabelText("Project terminals");
     const terminalButton = within(sidebar).getByRole("button", { name: "API" });
     expect(terminalButton).toHaveAttribute("aria-pressed", "true");
-    expect(terminalButton.parentElement).toHaveAttribute(
-      "style",
-      expect.stringContaining("--project-terminal-card-background: color-mix("),
-    );
+    expect(
+      terminalButton.parentElement?.getAttribute("style") ?? "",
+    ).not.toContain("--project-terminal-card-background");
+    expect(
+      terminalButton.parentElement?.getAttribute("style") ?? "",
+    ).not.toContain("color-mix(");
     expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
   });
 

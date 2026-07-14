@@ -2768,10 +2768,12 @@ button:focus-visible {
 
 .project-terminals-sidebar__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 10px 12px;
+  height: var(--activity-header-height);
+  padding: 0 10px;
+  margin: -14px 0 0;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -2831,7 +2833,7 @@ button:focus-visible {
 .project-terminals-card-list {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 0;
   min-height: 0;
   overflow: auto;
   padding: 0;
@@ -2851,30 +2853,22 @@ button:focus-visible {
   gap: 0;
   width: 100%;
   min-width: 0;
-  min-height: 62px;
-  /* 右侧不预留操作按钮宽；按钮绝对定位叠在右上，路径可占满卡片 */
-  padding: 9px 10px 9px 8px;
-  border: 1px solid var(--project-terminal-card-border, var(--color-border));
-  border-radius: var(--radius-card);
-  background: var(--project-terminal-card-background, #fff);
+  /* 右侧不预留操作按钮宽；按钮绝对定位叠在右上，路径可占满行 */
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition:
-    border-color 160ms ease-out,
-    transform 160ms ease-out,
-    background-color 160ms ease-out;
+  transition: background-color 160ms ease-out;
 }
 
-.project-terminals-card:hover {
-  border-color: var(--color-border-strong);
-}
-
-.project-terminals-card-shell:has(
-    .project-terminals-card[aria-pressed="true"]
-  ):hover
-  .project-terminals-card {
-  border-color: var(--project-terminal-card-border, var(--color-border-strong));
+.project-terminals-card-shell:hover .project-terminals-card,
+.project-terminals-card:hover,
+.project-terminals-card[aria-pressed="true"] {
+  background: var(--color-surface-muted);
 }
 
 .project-terminals-card__copy {
@@ -2907,7 +2901,7 @@ button:focus-visible {
 
 .project-terminals-card__actions {
   position: absolute;
-  top: 10px;
+  top: 8px;
   right: 10px;
   display: inline-flex;
   align-items: center;
@@ -2974,13 +2968,6 @@ button:focus-visible {
 .project-terminals-card__delete:disabled {
   cursor: default;
   opacity: 0.45;
-}
-
-.project-terminals-card-shell:hover .project-terminals-card__copy,
-.project-terminals-card__actions:focus-within
-  ~ .project-terminals-card
-  .project-terminals-card__copy {
-  transform: translateX(0);
 }
 
 .project-terminals-splitter {
