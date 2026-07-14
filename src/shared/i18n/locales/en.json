@@ -14,6 +14,14 @@
     "workbench": "{{projectName}} workbench",
     "projectNotFound": "Project not found."
   },
+  "updatePrompt": {
+    "label": "Update available",
+    "tooltip": "{{currentVersion}} → {{latestVersion}}",
+    "openRelease": "Open release page",
+    "dismissMenu": "Dismiss options",
+    "snooze7Days": "Remind me in 7 days",
+    "ignoreVersion": "Ignore this version"
+  },
   "globalSettings": {
     "about": "About",
     "avatar": "Avatar",

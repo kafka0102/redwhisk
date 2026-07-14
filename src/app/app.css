@@ -380,6 +380,69 @@ button:focus-visible {
   background: var(--color-surface);
 }
 
+/* Workbench 顶栏版本提醒：靠右，可点击区域排除窗口拖拽 */
+.update-prompt {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: stretch;
+  margin-left: auto;
+  max-width: min(240px, 40vw);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.update-prompt__main {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  padding: 2px 8px 2px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.update-prompt__main:hover {
+  background: var(--color-accent-muted);
+}
+
+.update-prompt__label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-prompt__close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.update-prompt__close:hover {
+  background: var(--color-accent-muted);
+  color: var(--color-text);
+}
+
+.update-prompt__close:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .workbench__header-settings {
   display: grid;
   place-items: center;

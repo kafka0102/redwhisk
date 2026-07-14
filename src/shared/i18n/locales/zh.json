@@ -14,6 +14,14 @@
     "workbench": "{{projectName}} 工作台",
     "projectNotFound": "项目不存在。"
   },
+  "updatePrompt": {
+    "label": "有新版本",
+    "tooltip": "{{currentVersion}} → {{latestVersion}}",
+    "openRelease": "打开更新页面",
+    "dismissMenu": "关闭选项",
+    "snooze7Days": "7 天内不再提醒",
+    "ignoreVersion": "忽略此版本"
+  },
   "globalSettings": {
     "about": "关于",
     "avatar": "头像",

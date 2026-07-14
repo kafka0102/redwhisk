@@ -12,6 +12,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
+import { UpdatePromptBadge } from "../features/app-update/update-prompt-badge";
+import { useUpdateStatus } from "../features/app-update/use-update-status";
 import { ProjectSwitcher } from "../features/project/project-switcher";
 import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
 import type { IssueOpenRequest } from "../features/issues/issue-open-request";
@@ -60,6 +62,8 @@ export function AppShell({
     projectId: project.id,
     projectName: project.name,
   });
+  const { status: updateStatus, dismiss: dismissUpdatePrompt } =
+    useUpdateStatus();
   const [activeActivity, setActiveActivity] = useState<ActivityKey>("issues");
   const [activeProjectSettingsMenu, setActiveProjectSettingsMenu] =
     useState<SettingsMenu>("general");
@@ -126,7 +130,8 @@ export function AppShell({
   ) {
     if (
       event.target instanceof Element &&
-      event.target.closest(".project-switcher")
+      (event.target.closest(".project-switcher") ||
+        event.target.closest(".update-prompt"))
     ) {
       return;
     }
@@ -213,6 +218,12 @@ export function AppShell({
             projects={projects}
             onProjectsRefresh={onProjectsRefresh}
           />
+          {updateStatus ? (
+            <UpdatePromptBadge
+              status={updateStatus}
+              onDismiss={dismissUpdatePrompt}
+            />
+          ) : null}
         </header>
         <div className="workbench__content">
           {isGlobalSettingsOpen ? (

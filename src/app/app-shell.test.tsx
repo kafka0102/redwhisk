@@ -24,6 +24,17 @@ vi.mock("../features/project/project-switcher", () => ({
   ProjectSwitcher: () => <div className="project-switcher">switcher</div>,
 }));
 
+vi.mock("../features/app-update/use-update-status", () => ({
+  useUpdateStatus: () => ({
+    status: null,
+    dismiss: vi.fn(),
+  }),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+}));
+
 vi.mock("../features/issues/issues-activity", () => ({
   IssuesActivity: ({
     issuesReturnSignal,
