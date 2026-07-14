@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -21,6 +22,9 @@ use super::version::{is_newer_version, strip_version_prefix};
 pub const UPDATE_CHECK_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 
 const SNOOZE_DURATION: Duration = Duration::from_secs(60 * 60 * 24 * 7);
+
+/// 进程内串行化远端检查：多窗口冷启动时合并为一次网络请求（持锁后二次读缓存）。
+static UPDATE_NETWORK_FETCH_LOCK: Mutex<()> = Mutex::new(());
 
 pub struct AppUpdateService<'connection, S> {
     repository: AppUpdateRepository<'connection>,
@@ -45,30 +49,43 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
     }
 
     pub fn get_status(&self, force_refresh: bool) -> Result<UpdateStatus, CommandError> {
-        let mut state = self.repository.get_state().map_err(update_database_error)?;
+        let state = self.repository.get_state().map_err(update_database_error)?;
 
-        if force_refresh {
-            match self.fetch_and_cache() {
-                Ok(updated) => state = updated,
-                Err(error_code) => {
+        // 快路径：缓存仍新鲜且非强制刷新，无需抢全局锁。
+        if !force_refresh && self.cache_is_fresh(&state) {
+            return Ok(self.build_status_from_state(&state, None));
+        }
+
+        // 持锁合并 inflight：并发窗口在缓存过期时只打一次远端。
+        let _fetch_guard = UPDATE_NETWORK_FETCH_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        // 持锁后二次读取：可能已被其它窗口写满新鲜缓存。
+        let mut state = self.repository.get_state().map_err(update_database_error)?;
+        if !force_refresh && self.cache_is_fresh(&state) {
+            return Ok(self.build_status_from_state(&state, None));
+        }
+
+        match self.fetch_and_cache() {
+            Ok(updated) => {
+                state = updated;
+            }
+            Err(error_code) => {
+                if force_refresh {
                     return Ok(self.build_status_from_state(&state, Some(error_code)));
                 }
+                // 启动/静默路径：网络失败不暴露 error，尽量用旧缓存判定。
+                return Ok(self.build_status_from_state(&state, None));
             }
+        }
+
+        if force_refresh {
             // 手动检查成功后清除 snooze。
             self.repository
                 .save_snooze_until(None)
                 .map_err(update_database_error)?;
             state.snooze_until = None;
-            return Ok(self.build_status_from_state(&state, None));
-        }
-
-        if !self.cache_is_fresh(&state) {
-            match self.fetch_and_cache() {
-                Ok(updated) => state = updated,
-                Err(_error_code) => {
-                    // 启动/静默路径：网络失败不暴露 error，尽量用旧缓存判定。
-                }
-            }
         }
 
         Ok(self.build_status_from_state(&state, None))
@@ -446,5 +463,83 @@ mod tests {
             .expect("status");
         assert_eq!(status.error_code, Some(UpdateCheckErrorCode::Network));
         assert!(!status.should_show_prompt);
+    }
+
+    /// 模拟多窗口冷启动：两个线程同时在空缓存下检查，应只触发一次网络请求。
+    #[test]
+    fn concurrent_stale_checks_share_single_network_fetch() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+        use std::time::Duration;
+
+        #[derive(Clone)]
+        struct SlowCountingSource {
+            calls: Arc<AtomicU32>,
+        }
+
+        impl LatestReleaseSource for SlowCountingSource {
+            fn fetch_latest(&self) -> Result<Option<LatestRelease>, LatestReleaseFetchError> {
+                let previous = self.calls.fetch_add(1, Ordering::SeqCst);
+                // 首个请求稍慢，确保第二个线程在无合并时也会进入 fetch。
+                if previous == 0 {
+                    thread::sleep(Duration::from_millis(80));
+                }
+                Ok(Some(LatestRelease {
+                    version: "0.2.0".to_string(),
+                    release_url: "https://github.com/example/r/releases/tag/v0.2.0"
+                        .to_string(),
+                }))
+            }
+        }
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let db_path = temp_dir.path().join("redwhisk.sqlite3");
+        {
+            let connection = Connection::open(&db_path).expect("open db");
+            MigrationRunner::default()
+                .run(&connection)
+                .expect("migrate");
+        }
+
+        let calls = Arc::new(AtomicU32::new(0));
+        let barrier = Arc::new(Barrier::new(3));
+        let mut handles = Vec::new();
+
+        for _ in 0..2 {
+            let db_path = db_path.clone();
+            let calls = calls.clone();
+            let barrier = barrier.clone();
+            handles.push(thread::spawn(move || {
+                let connection = Connection::open(&db_path).expect("open db");
+                let source = SlowCountingSource {
+                    calls: calls.clone(),
+                };
+                let svc = AppUpdateService::new(
+                    AppUpdateRepository::new(&connection),
+                    source,
+                    "0.0.3",
+                    fixed_now(),
+                );
+                barrier.wait();
+                svc.get_status(false).expect("status")
+            }));
+        }
+
+        barrier.wait();
+        let statuses: Vec<_> = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("join"))
+            .collect();
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "concurrent cold checks must coalesce into one network fetch"
+        );
+        for status in statuses {
+            assert!(status.has_update);
+            assert_eq!(status.latest_version.as_deref(), Some("0.2.0"));
+        }
     }
 }
