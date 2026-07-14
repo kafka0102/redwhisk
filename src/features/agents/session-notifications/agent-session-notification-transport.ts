@@ -36,7 +36,10 @@ export const agentSessionNotificationTransport: AgentSessionNotificationTranspor
     },
 
     async sendSystemNotification(intent) {
-      if (!(await ensureNotificationPermission())) {
+      const permissionGranted = await ensureNotificationPermission();
+      // [notify] 诊断：系统通知权限是否取得；未取得则无横幅、无声（静默 return）。
+      console.info(`[notify] sendSystemNotification 权限=${permissionGranted}`);
+      if (!permissionGranted) {
         return;
       }
 
@@ -76,10 +79,14 @@ export const agentSessionNotificationTransport: AgentSessionNotificationTranspor
 
 async function ensureNotificationPermission(): Promise<boolean> {
   if (await isPermissionGranted()) {
+    console.info("[notify] 系统通知权限已授予");
     return true;
   }
 
-  return (await requestPermission()) === "granted";
+  // [notify] 诊断：未授权时申请；macOS 仅在"从未询问"时弹系统框，已拒绝则返回 denied。
+  const decision = await requestPermission();
+  console.info(`[notify] 系统通知权限未授予，requestPermission=${decision}`);
+  return decision === "granted";
 }
 
 function createNotificationId(key: string): number {

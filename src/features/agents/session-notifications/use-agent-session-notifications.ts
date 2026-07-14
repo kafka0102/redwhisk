@@ -58,11 +58,21 @@ export function useAgentSessionNotifications({
             copy: messages.agentNotifications,
             projectName,
           });
-          if (!intent || notifiedKeysRef.current.has(intent.key)) {
+          if (!intent) {
+            return;
+          }
+          // [notify] 诊断：流式通知事件（turn_completed/turn_failed/permission_requested）。
+          if (notifiedKeysRef.current.has(intent.key)) {
+            console.info(
+              `[notify] stream 重复跳过 type=${envelope.event.type} key=${intent.key}`,
+            );
             return;
           }
 
           notifiedKeysRef.current.add(intent.key);
+          console.info(
+            `[notify] stream 命中 type=${envelope.event.type} key=${intent.key}`,
+          );
           void deliverNotification(intent, transport);
         });
 
@@ -103,6 +113,16 @@ export function useAgentSessionNotifications({
           const previousStatus = previousStatusById.get(session.sessionId);
           nextStatusById.set(session.sessionId, session.status);
 
+          // [notify] 诊断：打印所有 running 切出转换；若落到 stopped 等未覆盖状态，
+          // 命中门控=false 会被静默跳过（当前只认 closed/crashed）。
+          if (previousStatus === "running" && session.status !== "running") {
+            const matched =
+              session.status === "closed" || session.status === "crashed";
+            console.info(
+              `[notify] status 转换 session=${session.sessionId} running->${session.status} 命中门控=${matched}`,
+            );
+          }
+
           if (
             previousStatus === "running" &&
             (session.status === "closed" || session.status === "crashed")
@@ -140,7 +160,12 @@ async function deliverNotification(
   transport: AgentSessionNotificationTransport,
 ): Promise<void> {
   try {
-    if (await transport.isWindowFocused()) {
+    const windowFocused = await transport.isWindowFocused();
+    // [notify] 诊断：窗口聚焦时只走应用内 toast，不发系统通知（无声）；离开窗口才发系统通知+声音。
+    console.info(
+      `[notify] deliver key=${intent.key} level=${intent.level} windowFocused=${windowFocused}`,
+    );
+    if (windowFocused) {
       transport.showInAppNotification(intent);
       return;
     }
@@ -149,7 +174,8 @@ async function deliverNotification(
       transport.requestAttention(intent.level),
       transport.sendSystemNotification(intent),
     ]);
-  } catch {
+  } catch (error) {
+    console.info("[notify] deliver 异常，回落 in-app toast", error);
     transport.showInAppNotification(intent);
   }
 }
@@ -189,10 +215,20 @@ async function deliverSessionStatusNotification({
   );
 
   if (!intent) {
+    // [notify] 诊断：状态规则未生成通知意图。
+    console.info(
+      `[notify] status intent 为空 session=${session.sessionId} status=${session.status}`,
+    );
     return;
   }
 
-  if (session.status === "closed" && (await transport.isWindowFocused())) {
+  const closedAndFocused =
+    session.status === "closed" && (await transport.isWindowFocused());
+  if (closedAndFocused) {
+    // [notify] 诊断：closed 且窗口聚焦，按设计跳过通知。
+    console.info(
+      `[notify] status closed 且窗口聚焦，跳过 session=${session.sessionId}`,
+    );
     return;
   }
 
