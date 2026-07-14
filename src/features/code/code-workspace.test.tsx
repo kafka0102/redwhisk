@@ -11,6 +11,18 @@ import {
 import { resetCodeWorkspaceStateCacheForTests } from "./code-workspace-cache";
 import { CodeWorkspace } from "./code-workspace";
 
+// 捕获 Monaco Editor 实际接收到的 theme prop，用于断言代码浏览器跟随应用明暗主题。
+const { editorThemeProp } = vi.hoisted(() => ({
+  editorThemeProp: { current: undefined as string | undefined },
+}));
+
+vi.mock("@monaco-editor/react", () => ({
+  Editor: ({ theme }: { theme?: string }) => {
+    editorThemeProp.current = theme;
+    return null;
+  },
+}));
+
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
   getProjectWorktreeFileTree: vi.fn(),
@@ -70,6 +82,8 @@ const fileContent = {
 describe("CodeWorkspace", () => {
   beforeEach(() => {
     resetCodeWorkspaceStateCacheForTests();
+    editorThemeProp.current = undefined;
+    window.localStorage.clear();
     vi.mocked(getProjectWorktreeFileTree).mockReset();
     vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
       nodes: [],
@@ -99,6 +113,37 @@ describe("CodeWorkspace", () => {
 
     expect(screen.queryByText("Select a file.")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("renders the code editor with the light Monaco theme by default", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+
+    await waitFor(() => {
+      expect(editorThemeProp.current).toBe("light");
+    });
+  });
+
+  it("renders the code editor with the vs-dark Monaco theme under dark mode", async () => {
+    window.localStorage.setItem("redwhisk.theme", "dark");
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+
+    await waitFor(() => {
+      expect(editorThemeProp.current).toBe("vs-dark");
+    });
   });
 
   it("avoids duplicate file reads while a selected file is still loading", async () => {

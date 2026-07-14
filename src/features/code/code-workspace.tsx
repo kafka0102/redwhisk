@@ -60,7 +60,7 @@ interface CodeWorkspaceProps {
 }
 
 export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
-  const { contentFontSize, messages, t } = useI18n();
+  const { contentFontSize, messages, theme, t } = useI18n();
   const cachedState = codeWorkspaceStateCache.get(projectId);
   const [workspaceRoots, setWorkspaceRoots] =
     useState<CodeWorkspaceRoot[]>(roots);
@@ -554,6 +554,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
               tab={activeTab}
               contentFontSize={contentFontSize}
               messages={messages}
+              theme={theme}
             />
           </>
         ) : null}
@@ -620,10 +621,12 @@ function CodeContent({
   tab,
   contentFontSize,
   messages,
+  theme,
 }: {
   tab: CodeFileTab;
   contentFontSize: number;
   messages: ReturnType<typeof useI18n>["messages"];
+  theme: "light" | "dark";
 }) {
   if (tab.isLoading) {
     return (
@@ -654,6 +657,7 @@ function CodeContent({
   return (
     <Editor
       height="100%"
+      theme={theme === "dark" ? "vs-dark" : "light"}
       language={tab.content.language ?? undefined}
       options={{
         readOnly: true,

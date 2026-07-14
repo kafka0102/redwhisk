@@ -4739,8 +4739,17 @@ button:focus-visible {
 .session-file-tree__row:focus-visible,
 .session-file-tree__folder:hover,
 .session-file-tree__folder:focus-visible {
-  background: #f7f8fa;
+  background: var(--color-surface-muted);
   outline: none;
+}
+
+/* dark 下与侧栏列表（agents-session-row 等）选中/悬停统一为 #48494f，
+   避免亮色 #f7f8fa 背景叠加浅色文字造成白底白字不可读。 */
+:root[data-theme="dark"] .session-file-tree__row:hover,
+:root[data-theme="dark"] .session-file-tree__row:focus-visible,
+:root[data-theme="dark"] .session-file-tree__folder:hover,
+:root[data-theme="dark"] .session-file-tree__folder:focus-visible {
+  background: #48494f;
 }
 
 .session-file-tree__icon {
