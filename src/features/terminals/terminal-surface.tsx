@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
 import { createTerminalInputWriter } from "./terminal-input-writer";
+import { writeTerminalHistory } from "./terminal-history-writer";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
 import { getTerminalTheme } from "./terminal-theme";
 import type { TerminalTransport } from "./terminal-types";
@@ -197,7 +198,13 @@ export function TerminalSurface({
         showStatusMessage("input", getCommandErrorMessage(error, t));
       },
     );
+    // restore 回放期间抑制：历史中的 CSI/OSC 查询会被 xterm 应答，
+    // 若写回 PTY 会在 shell 回显成乱码，并在每次切页时累积。
+    let suppressPtyInput = false;
     const disposeData = terminal.onData((data) => {
+      if (suppressPtyInput) {
+        return;
+      }
       inputWriter.push(data);
     });
     terminal.attachCustomKeyEventHandler((event) => {
@@ -238,11 +245,10 @@ export function TerminalSurface({
           showStatusMessage("output", getCommandErrorMessage(error, t));
         }
       },
-      writeHistory: (text) => {
-        terminal.reset();
-        terminal.write(text);
-        terminal.scrollToBottom();
-      },
+      writeHistory: (text) =>
+        writeTerminalHistory(terminal, text, (suppressed) => {
+          suppressPtyInput = suppressed;
+        }),
       onRestoreIncomplete: () => {
         showStatusMessage(
           "restore",

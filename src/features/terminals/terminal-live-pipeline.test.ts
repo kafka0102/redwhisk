@@ -113,6 +113,60 @@ describe("TerminalLivePipeline", () => {
     expect(transport.setLiveSubscription).toHaveBeenCalledWith(true);
   });
 
+  it("awaits writeHistory before flushing live output", async () => {
+    const writes: string[] = [];
+    let resolveHistory!: () => void;
+    const historyGate = new Promise<void>((resolve) => {
+      resolveHistory = resolve;
+    });
+    let historyStarted!: () => void;
+    const historyStartedGate = new Promise<void>((resolve) => {
+      historyStarted = resolve;
+    });
+
+    const transport = createTransport({
+      readSnapshot: vi.fn(async () => ({
+        snapshot: "from-log",
+        isActive: true,
+      })),
+    });
+
+    const pipeline = new TerminalLivePipeline(transport, {
+      writeBytes: (bytes) => {
+        writes.push(new TextDecoder().decode(bytes));
+      },
+      writeHistory: async (text) => {
+        writes.push(`history-start:${text}`);
+        historyStarted();
+        await historyGate;
+        writes.push(`history-end:${text}`);
+      },
+      onRestoreIncomplete: vi.fn(),
+      onRestoreError: vi.fn(),
+      onInactive: vi.fn(),
+      onLiveReady: vi.fn(),
+      onPendingDropped: vi.fn(),
+    });
+
+    const visiblePromise = pipeline.becomeVisible();
+    await historyStartedGate;
+
+    pipeline.handleOutput({
+      sequence: 11,
+      data: textToBase64("live-after"),
+    });
+
+    // history 未完成前不得写 live
+    expect(writes).toEqual(["history-start:from-log"]);
+
+    resolveHistory();
+    await visiblePromise;
+
+    expect(writes[0]).toBe("history-start:from-log");
+    expect(writes[1]).toBe("history-end:from-log");
+    expect(writes.slice(2).join("")).toContain("live-after");
+  });
+
   it("drops output while idle and catch-up from log on re-visible", async () => {
     const writes: string[] = [];
     const transport = createTransport();

@@ -7,7 +7,7 @@ const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
 
 export interface TerminalLivePipelineCallbacks {
   writeBytes: (bytes: Uint8Array) => void;
-  writeHistory: (text: string) => void;
+  writeHistory: (text: string) => void | Promise<void>;
   onRestoreIncomplete: () => void;
   onRestoreError: (error: unknown) => void;
   onInactive: () => void;
@@ -87,7 +87,10 @@ export class TerminalLivePipeline {
       }
 
       if (snapshotResult.snapshot) {
-        this.callbacks.writeHistory(snapshotResult.snapshot);
+        await this.callbacks.writeHistory(snapshotResult.snapshot);
+        if (!this.isCurrentGeneration(generation)) {
+          return;
+        }
       }
 
       if (!restoreResult.isActive) {
