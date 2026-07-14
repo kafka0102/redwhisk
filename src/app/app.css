@@ -1885,6 +1885,19 @@ button:focus-visible {
   margin: 0;
 }
 
+/* Quill snow 主题会用内置 SVG 替换 .ql-bold 等按钮的图标，其 .ql-stroke / .ql-fill
+   在 quill.snow.css 中被硬编码为 #444 / #ccc，dark 模式下与工具栏背景对比不足、难以
+   辨识。这里改用 currentColor，使这些内置图标跟随按钮 color（--color-text-muted），
+   与未被替换的附件图标（lucide，stroke=currentColor）保持一致。 */
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-stroke,
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-stroke-miter {
+  stroke: currentColor;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-fill {
+  fill: currentColor;
+}
+
 .rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker {
   height: 26px;
   color: var(--color-text-muted);
