@@ -146,7 +146,9 @@ pub fn run() {
             commands::settings_commands::save_saved_agent_skill,
             commands::settings_commands::delete_saved_agent_skill,
             commands::settings_commands::get_user_profile,
-            commands::settings_commands::update_user_profile
+            commands::settings_commands::update_user_profile,
+            commands::app_update_commands::get_update_status,
+            commands::app_update_commands::dismiss_update_prompt
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

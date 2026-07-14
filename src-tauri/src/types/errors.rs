@@ -34,6 +34,8 @@ pub enum CommandErrorCode {
     AgentCommandUnavailable,
     UserProfilePersistenceFailed,
     UserProfileValidationFailed,
+    AppUpdatePersistenceFailed,
+    AppUpdateValidationFailed,
     UnknownCommandError,
 }
 
