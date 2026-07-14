@@ -9,6 +9,12 @@ RedWhisk(红拂) 是一款以 Issue 为核心的 AI Coding 本地工作台。它
 
 当前主要支持 macOS。
 
+## 直接下载
+
+若只需使用应用、无需本地编译，请到 [GitHub Releases](https://github.com/kafka0102/redwhisk/releases) 下载最新版本。
+
+首次打开未签名安装包时，请参考下方「Release 安装提示」。
+
 ## 安装依赖
 
 ```bash
