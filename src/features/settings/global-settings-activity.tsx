@@ -1,5 +1,6 @@
 import {
   HelpCircle,
+  Info,
   SlidersHorizontal,
   UserRound,
   type LucideIcon,
@@ -38,6 +39,7 @@ import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
 } from "../../shared/layout/sidebar-width";
+import { AboutPanel } from "./about-panel";
 import { UserProfilePanel } from "./user-profile-panel";
 
 const SETTINGS_MENU_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
@@ -48,7 +50,7 @@ const CONTENT_FONT_SIZE_ITEMS = CONTENT_FONT_SIZE_OPTIONS.map((size) => ({
   value: String(size),
   label: String(size),
 }));
-type GlobalSettingsSection = "profile" | "preferences";
+type GlobalSettingsSection = "profile" | "preferences" | "about";
 
 export function GlobalSettingsActivity() {
   const {
@@ -135,6 +137,12 @@ export function GlobalSettingsActivity() {
             label={preferencesLabel}
             onClick={() => setActiveSection("preferences")}
           />
+          <SettingsMenuItem
+            Icon={Info}
+            isActive={activeSection === "about"}
+            label={t("globalSettings.about")}
+            onClick={() => setActiveSection("about")}
+          />
         </nav>
 
         <div
@@ -186,9 +194,17 @@ export function GlobalSettingsActivity() {
           }}
         />
 
-        <div className="settings-content settings-content--global-preferences">
+        <div
+          className={
+            activeSection === "about"
+              ? "settings-content settings-content--global-about"
+              : "settings-content settings-content--global-preferences"
+          }
+        >
           {activeSection === "profile" ? (
             <UserProfilePanel />
+          ) : activeSection === "about" ? (
+            <AboutPanel />
           ) : (
             <section
               className="settings-section settings-section--global-preferences"

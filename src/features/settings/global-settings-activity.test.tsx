@@ -20,6 +20,26 @@ vi.mock("./settings-commands", () => ({
   updateUserProfile: vi.fn(),
 }));
 
+vi.mock("../../shared/commands/app-update-commands", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../shared/commands/app-update-commands")
+  >("../../shared/commands/app-update-commands");
+  return {
+    ...actual,
+    getUpdateStatus: vi.fn().mockResolvedValue({
+      shouldShowPrompt: false,
+      currentVersion: "0.0.3",
+      hasUpdate: false,
+      latestVersion: "0.0.3",
+      releaseUrl: null,
+      ignoredVersion: null,
+      snoozeUntil: null,
+      checkedAt: null,
+      error: null,
+    }),
+  };
+});
+
 const getUserProfileMock = vi.mocked(getUserProfile);
 const updateUserProfileMock = vi.mocked(updateUserProfile);
 const { open } = await import("@tauri-apps/plugin-dialog");
@@ -68,10 +88,35 @@ describe("GlobalSettingsActivity", () => {
       "aria-pressed",
       "false",
     );
+    expect(screen.getByRole("button", { name: "关于" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     expect(
       screen.getByRole("heading", { name: "个人资料" }),
     ).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("opens the About section with product identity and version check control", async () => {
+    const user = userEvent.setup();
+    renderGlobalSettings();
+
+    await user.click(screen.getByRole("button", { name: "关于" }));
+
+    expect(screen.getByRole("button", { name: "关于" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: "RedWhisk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "检查更新" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/以 Issue 为核心的本地 AI Coding 工作台/),
+    ).toBeInTheDocument();
   });
 
   it("shows Profile above Preferences and saves the name after a 300ms debounce", async () => {

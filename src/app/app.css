@@ -845,6 +845,126 @@ button:focus-visible {
   width: min(100%, clamp(760px, 84%, 980px));
 }
 
+.settings-content--global-about {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+
+.about-panel {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 100%;
+  padding: 32px 24px;
+}
+
+.about-panel__content {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(100%, 420px);
+  text-align: center;
+}
+
+.about-panel__logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.about-panel__name {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.about-panel__version-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.about-panel__version {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.about-panel__check {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.about-panel__check:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.about-panel__check:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.about-panel__check-spin {
+  animation: about-panel-spin 0.9s linear infinite;
+}
+
+@keyframes about-panel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.about-panel__feedback {
+  min-height: 1.3em;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.about-panel__feedback-stack {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.about-panel__feedback-link {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.about-panel__feedback-link:hover {
+  color: var(--color-accent);
+}
+
+.about-panel__feedback-error {
+  color: var(--color-danger);
+}
+
+.about-panel__description {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
 .settings-general-card {
   width: 100%;
   margin: 0;

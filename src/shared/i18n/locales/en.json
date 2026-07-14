@@ -26,6 +26,10 @@
     "about": "About",
     "avatar": "Avatar",
     "avatarPickerLabel": "Choose avatar",
+    "checkFailed": "Update check failed",
+    "checkFailedDetail": "Update check failed: {{message}}",
+    "checkForUpdates": "Check for updates",
+    "checkingForUpdates": "Checking for updates…",
     "chinese": "简体中文",
     "contentFontSize": "Content font size",
     "dark": "Dark",
@@ -37,6 +41,7 @@
     "notificationReminderOff": "No",
     "notificationReminderOn": "Yes",
     "notificationReminderTooltip": "Play a sound when an agent session completes or needs your confirmation",
+    "openRelease": "Open release page",
     "preferences": "Preferences",
     "productDescription": "RedWhisk is a local AI coding workbench centered on Issues. Run parallel tasks with Git worktrees, connect Codex, Claude Code, and similar agents, and keep your project data on this machine.",
     "productName": "RedWhisk",
@@ -46,7 +51,12 @@
     "settings": "Settings",
     "settingsMenu": "Global Settings menu",
     "system": "System",
-    "theme": "Theme"
+    "theme": "Theme",
+    "upToDate": "You're up to date",
+    "updateAvailable": "Update available: {{version}}",
+    "updateIgnored": "{{version}} ignored",
+    "versionLabel": "Version {{version}}",
+    "versionUnknown": "Version —"
   },
   "alertDialog": {
     "acknowledge": "OK"
