@@ -118,6 +118,7 @@ impl<'connection> ProjectLabelRepository<'connection> {
                             project_labels.del
                      FROM project_labels
                      WHERE project_labels.del = 0
+                       AND project_labels.scope = 'global'
                        AND lower(project_labels.name) = lower(?1)
                        AND (?2 IS NULL OR project_labels.id != ?2)
                      LIMIT 1",

@@ -596,7 +596,7 @@
     "AGENT_PROFILE_VALIDATION_FAILED": {
       "commandRequired": "Agent command is required.",
       "labelColorInvalid": "Label color must be in #RRGGBB format.",
-      "labelNameNotUnique": "Global Label name must be unique across all projects and globally.",
+      "labelNameNotUnique": "Global Label name must be unique.",
       "labelNameRequired": "Label name is required.",
       "labelNameTooLong": "Label name is limited to 15 characters.",
       "labelNotFound": "Label not found or already deleted.",

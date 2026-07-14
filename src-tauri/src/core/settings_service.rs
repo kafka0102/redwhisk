@@ -326,7 +326,7 @@ where
 
         let message = match scope {
             ProjectLabelScope::Project => "同一项目内的 Label 名称必须唯一。",
-            ProjectLabelScope::Global => "全局 Label 名称必须在所有项目和全局范围内唯一。",
+            ProjectLabelScope::Global => "全局 Label 名称必须唯一。",
         };
 
         Err(
@@ -816,22 +816,21 @@ mod tests {
     }
 
     #[test]
-    fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
+    fn save_global_label_rejects_duplicate_name_within_global_scope() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let database = test_database(temp_dir.path());
         let service = test_settings_service(&database.connection);
-        let project_id = insert_project(&database.connection, "repo-a");
 
         service
             .save_project_label(SaveProjectLabelInput {
                 id: None,
                 name: "ops".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_id),
+                scope: ProjectLabelScope::Global,
+                project_id: None,
                 color: "#112233".to_string(),
                 workflow_skill: None,
             })
-            .expect("project label");
+            .expect("first global label");
 
         let error = service
             .save_project_label(SaveProjectLabelInput {
@@ -845,6 +844,50 @@ mod tests {
             .expect_err("global duplicate should fail");
 
         assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    }
+
+    #[test]
+    fn save_global_label_allows_same_name_present_in_project_scope() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = test_database(temp_dir.path());
+        let service = test_settings_service(&database.connection);
+        let project_id = insert_project(&database.connection, "repo-a");
+
+        let project_label = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "hotfix".to_string(),
+                scope: ProjectLabelScope::Project,
+                project_id: Some(project_id),
+                color: "#112233".to_string(),
+                workflow_skill: None,
+            })
+            .expect("project label");
+
+        let global_label = service
+            .save_project_label(SaveProjectLabelInput {
+                id: None,
+                name: "hotfix".to_string(),
+                scope: ProjectLabelScope::Global,
+                project_id: None,
+                color: "#445566".to_string(),
+                workflow_skill: None,
+            })
+            .expect("global label should coexist with project label");
+
+        assert_eq!(global_label.scope, ProjectLabelScope::Global);
+        assert_ne!(global_label.id, project_label.id);
+
+        service
+            .save_project_label(SaveProjectLabelInput {
+                id: Some(global_label.id),
+                name: "hotfix".to_string(),
+                scope: ProjectLabelScope::Global,
+                project_id: None,
+                color: "#778899".to_string(),
+                workflow_skill: None,
+            })
+            .expect("editing global label should succeed");
     }
 
     #[test]

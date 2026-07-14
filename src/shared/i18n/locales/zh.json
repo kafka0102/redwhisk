@@ -596,7 +596,7 @@
     "AGENT_PROFILE_VALIDATION_FAILED": {
       "commandRequired": "Agent command 不能为空。",
       "labelColorInvalid": "Label 颜色必须是 #RRGGBB 格式。",
-      "labelNameNotUnique": "全局 Label 名称必须在所有项目和全局范围内唯一。",
+      "labelNameNotUnique": "全局 Label 名称必须唯一。",
       "labelNameRequired": "Label 名称不能为空。",
       "labelNameTooLong": "Label 名称最多 15 个字符。",
       "labelNotFound": "Label 不存在或已删除。",
