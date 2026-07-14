@@ -60,6 +60,7 @@ import {
   resumeStructuredAgentSession,
 } from "../agents/agent-session-commands";
 import {
+  isGlobalLabelOverridden,
   listProjectLabels,
   type ProjectLabelRecord,
 } from "../settings/settings-commands";
@@ -400,17 +401,20 @@ export function IssuesActivity({
           return;
         }
 
-        setAvailableLabels(
-          [...projectResponse.labels, ...globalResponse.labels].sort(
-            (left, right) => {
-              if (left.scope !== right.scope) {
-                return left.scope === "project" ? -1 : 1;
-              }
-
-              return left.name.localeCompare(right.name);
-            },
+        const projectLabels = projectResponse.labels;
+        const visibleLabels = [
+          ...projectLabels,
+          ...globalResponse.labels.filter(
+            (label) => !isGlobalLabelOverridden(label, projectLabels),
           ),
-        );
+        ].sort((left, right) => {
+          if (left.scope !== right.scope) {
+            return left.scope === "project" ? -1 : 1;
+          }
+
+          return left.name.localeCompare(right.name);
+        });
+        setAvailableLabels(visibleLabels);
         setLabelsProjectId(projectId);
         setLabelsErrorMessage(null);
         setLabelsLoadState("ready");

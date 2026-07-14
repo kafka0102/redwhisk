@@ -32,18 +32,22 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
 
-vi.mock("./settings-commands", () => ({
-  detectCodexCommand: vi.fn(),
-  deleteAgentProfile: vi.fn(),
-  deleteProjectLabel: vi.fn(),
-  testAgentCommand: vi.fn(),
-  listAgentProfiles: vi.fn(),
-  listAgentSkills: vi.fn(),
-  listProjectLabels: vi.fn(),
-  listSavedAgentSkills: vi.fn(),
-  saveAgentProfile: vi.fn(),
-  saveProjectLabel: vi.fn(),
-}));
+vi.mock("./settings-commands", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./settings-commands")>();
+  return {
+    ...actual,
+    detectCodexCommand: vi.fn(),
+    deleteAgentProfile: vi.fn(),
+    deleteProjectLabel: vi.fn(),
+    testAgentCommand: vi.fn(),
+    listAgentProfiles: vi.fn(),
+    listAgentSkills: vi.fn(),
+    listProjectLabels: vi.fn(),
+    listSavedAgentSkills: vi.fn(),
+    saveAgentProfile: vi.fn(),
+    saveProjectLabel: vi.fn(),
+  };
+});
 
 const settingsEventMocks = vi.hoisted(() => {
   const listeners: Array<{
@@ -612,6 +616,103 @@ describe("ProjectSettingsActivity", () => {
 
     expect(
       screen.getByRole("dialog", { name: "Edit label" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sorts labels project-first by recency and dims global labels shadowed by project labels", async () => {
+    const user = userEvent.setup();
+    listProjectLabelsMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          labels: [
+            {
+              id: 20,
+              name: "bug",
+              scope: "project",
+              projectId: 1,
+              color: "#E11D48",
+              workflowSkill: null,
+            },
+            {
+              id: 11,
+              name: "Urgent",
+              scope: "project",
+              projectId: 1,
+              color: "#E11D48",
+              workflowSkill: null,
+            },
+          ],
+        };
+      }
+
+      return {
+        labels: [
+          {
+            id: 12,
+            name: "bug",
+            scope: "global",
+            projectId: null,
+            color: "#3B82F6",
+            workflowSkill: null,
+          },
+          {
+            id: 13,
+            name: "Shared",
+            scope: "global",
+            projectId: null,
+            color: "#3B82F6",
+            workflowSkill: null,
+          },
+        ],
+      };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+
+    const rows = (await screen.findAllByRole("row")).slice(1);
+    const rowInfo = rows.map((row) => {
+      const cells = row.querySelectorAll("td");
+      return {
+        element: row,
+        name: cells[0]?.textContent?.trim() ?? "",
+        scope: cells[1]?.textContent?.trim() ?? "",
+      };
+    });
+
+    // 项目级在前（id 降序），全局级在后（id 降序）；全局同名 bug 被排到末尾。
+    expect(rowInfo.map((row) => row.name)).toEqual([
+      "bug",
+      "Urgent",
+      "Shared",
+      "bug",
+    ]);
+
+    const globalBug = rowInfo.find(
+      (row) => row.name === "bug" && row.scope === "Global",
+    );
+    expect(globalBug).toBeTruthy();
+    expect(globalBug?.element).toHaveClass("bg-muted/50");
+
+    const sharedGlobal = rowInfo.find(
+      (row) => row.name === "Shared" && row.scope === "Global",
+    );
+    expect(sharedGlobal).toBeTruthy();
+    expect(sharedGlobal?.element).not.toHaveClass("bg-muted/50");
+
+    const globalBugButton = globalBug?.element.querySelector("button");
+    expect(globalBugButton).not.toBeNull();
+    await user.hover(globalBugButton ?? document.body);
+    expect(
+      await screen.findByText(/overridden by a project-level label/i),
     ).toBeInTheDocument();
   });
 

@@ -99,6 +99,7 @@ export interface I18nMessages {
     globalScope: string;
     labelNameRequired: string;
     labelNameTooLong: string;
+    labelOverriddenByProject: string;
     labels: string;
     labelStatus: string;
     loading: string;

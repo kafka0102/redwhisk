@@ -124,6 +124,23 @@ export interface ListProjectLabelsInput {
   projectId: number | null;
 }
 
+// 全局 Label 与项目级 Label 同名（大小写不敏感，与后端 find_duplicate_name 的 lower() 一致）
+// 时，项目级覆盖全局级：本项目内该全局 Label 不再可用。该判定在设置面板（覆盖行提示）
+// 与 Issue 标签下拉（隐藏被覆盖的全局 Label）共用。
+export function isGlobalLabelOverridden(
+  label: ProjectLabelRecord,
+  projectLabels: ProjectLabelRecord[],
+): boolean {
+  if (label.scope !== "global") {
+    return false;
+  }
+
+  const name = label.name.toLowerCase();
+  return projectLabels.some(
+    (projectLabel) => projectLabel.name.toLowerCase() === name,
+  );
+}
+
 export interface ProjectLabelListResponse {
   labels: ProjectLabelRecord[];
 }

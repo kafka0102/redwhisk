@@ -122,6 +122,7 @@
     "globalScope": "全局",
     "labelNameRequired": "标签名不能为空。",
     "labelNameTooLong": "标签名不能超过 15 个字符。",
+    "labelOverriddenByProject": "该标签被项目级同名标签覆盖，在本项目中不会被使用。",
     "labels": "标签",
     "labelStatus": "标签状态",
     "loading": "加载中...",

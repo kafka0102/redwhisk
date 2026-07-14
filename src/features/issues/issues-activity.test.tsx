@@ -82,11 +82,16 @@ vi.mock("../agents/agent-session-commands", () => ({
   resumeStructuredAgentSession: vi.fn(),
 }));
 
-vi.mock("../settings/settings-commands", () => ({
-  listAgentProfiles: vi.fn(),
-  listProjectLabels: vi.fn(),
-  listSavedAgentSkills: vi.fn(),
-}));
+vi.mock("../settings/settings-commands", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../settings/settings-commands")>();
+  return {
+    ...actual,
+    listAgentProfiles: vi.fn(),
+    listProjectLabels: vi.fn(),
+    listSavedAgentSkills: vi.fn(),
+  };
+});
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -1556,6 +1561,59 @@ describe("IssuesActivity", () => {
         labelIds: [301, 302],
       }),
     );
+  });
+
+  it("hides global labels shadowed by a project-level label in the label dropdown", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    listProjectLabelsMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return {
+          labels: [
+            {
+              id: 301,
+              name: "bug",
+              scope: "project",
+              projectId: 1,
+              color: "#E11D48",
+              workflowSkill: null,
+            },
+          ],
+        };
+      }
+
+      return {
+        labels: [
+          {
+            id: 302,
+            name: "bug",
+            scope: "global",
+            projectId: null,
+            color: "#3B82F6",
+            workflowSkill: null,
+          },
+          {
+            id: 303,
+            name: "release",
+            scope: "global",
+            projectId: null,
+            color: "#3B82F6",
+            workflowSkill: null,
+          },
+        ],
+      };
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    await user.click(screen.getByRole("button", { name: "Add label" }));
+
+    // 项目级同名 bug 覆盖全局 bug：下拉只剩一个 bug（项目级），release 不受影响。
+    expect(screen.getAllByRole("option", { name: "bug" })).toHaveLength(1);
+    expect(screen.getByRole("option", { name: "release" })).toBeInTheDocument();
   });
 
   it("opens project settings labels when the picker is empty", async () => {

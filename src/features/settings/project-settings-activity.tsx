@@ -206,7 +206,7 @@ export function ProjectSettingsActivity({
   const currentProjectLabels = isLabelsCurrent ? projectLabels : [];
   const currentGlobalLabels = isLabelsCurrent ? globalLabels : [];
   const currentLabels = [...currentProjectLabels, ...currentGlobalLabels].sort(
-    (left, right) => left.id - right.id,
+    compareLabelsByScopeAndRecency,
   );
   const currentLabelsErrorMessage = isLabelsCurrent ? labelsErrorMessage : null;
   const currentLabelsLoadState = isLabelsCurrent ? labelsLoadState : "loading";
@@ -767,7 +767,19 @@ function mergeLabel(
   savedLabel: ProjectLabelRecord,
 ): ProjectLabelRecord[] {
   const remaining = removeLabel(currentLabels, savedLabel.id);
-  return [...remaining, savedLabel].sort((left, right) => left.id - right.id);
+  return [...remaining, savedLabel].sort(compareLabelsByScopeAndRecency);
+}
+
+// 标签排序：项目级在前、全局级在后；同范围内新建（id 更大）的排在前面。
+function compareLabelsByScopeAndRecency(
+  left: ProjectLabelRecord,
+  right: ProjectLabelRecord,
+): number {
+  if (left.scope !== right.scope) {
+    return left.scope === "project" ? -1 : 1;
+  }
+
+  return right.id - left.id;
 }
 
 function removeLabel(

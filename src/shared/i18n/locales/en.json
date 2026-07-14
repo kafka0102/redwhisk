@@ -122,6 +122,7 @@
     "globalScope": "Global",
     "labelNameRequired": "Label name is required.",
     "labelNameTooLong": "Label name must be 15 characters or fewer.",
+    "labelOverriddenByProject": "This label is overridden by a project-level label with the same name and will not be used in this project.",
     "labels": "Labels",
     "labelStatus": "Label status",
     "loading": "Loading...",

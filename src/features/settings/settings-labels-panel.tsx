@@ -1,4 +1,11 @@
-import { Button, Empty, EmptyTitle } from "@/components/ui";
+import {
+  Button,
+  Empty,
+  EmptyTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui";
 import {
   Table,
   TableBody,
@@ -8,7 +15,10 @@ import {
   TableRow,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { type ProjectLabelRecord } from "./settings-commands";
+import {
+  isGlobalLabelOverridden,
+  type ProjectLabelRecord,
+} from "./settings-commands";
 import { ProjectLabelForm } from "./project-label-form";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -51,6 +61,7 @@ export function LabelsSettingsPanel({
   onOpenSkillsMenu,
 }: LabelsSettingsPanelProps) {
   const { messages } = useI18n();
+  const projectLabels = labels.filter((label) => label.scope === "project");
 
   return (
     <>
@@ -97,19 +108,38 @@ export function LabelsSettingsPanel({
                   onEditingLabelChange({ contextProjectId: projectId, label });
                   onAddFormChange(null);
                 };
+                const overridden = isGlobalLabelOverridden(
+                  label,
+                  projectLabels,
+                );
+                const nameButton = (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={label.name}
+                    className="grid h-auto w-full max-w-full justify-start gap-1 px-0 text-left font-semibold hover:bg-transparent"
+                    onClick={handleEdit}
+                  >
+                    <span className="min-w-0 truncate">{label.name}</span>
+                  </Button>
+                );
 
                 return (
-                  <TableRow key={label.id}>
+                  <TableRow
+                    key={label.id}
+                    className={overridden ? "bg-muted/50" : undefined}
+                  >
                     <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        aria-label={label.name}
-                        className="grid h-auto w-full max-w-full justify-start gap-1 px-0 text-left font-semibold hover:bg-transparent"
-                        onClick={handleEdit}
-                      >
-                        <span className="min-w-0 truncate">{label.name}</span>
-                      </Button>
+                      {overridden ? (
+                        <Tooltip>
+                          <TooltipTrigger render={nameButton} />
+                          <TooltipContent>
+                            {messages.settings.labelOverriddenByProject}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        nameButton
+                      )}
                     </TableCell>
                     <TableCell>
                       {label.scope === "global"
