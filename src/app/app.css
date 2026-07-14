@@ -2443,7 +2443,7 @@ button:focus-visible {
 .agents-sidebar {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 8px;
+  gap: 0;
   padding: 14px 0 12px;
   background: var(--color-surface);
 }
@@ -2590,6 +2590,12 @@ button:focus-visible {
 .agents-session-row:hover,
 .agents-session-row[aria-pressed="true"] {
   background: var(--color-surface-muted);
+}
+
+/* 仅活动侧栏列表行：dark 选中/悬停抬高一档，不改全局 surface-muted */
+:root[data-theme="dark"] .agents-session-row:hover,
+:root[data-theme="dark"] .agents-session-row[aria-pressed="true"] {
+  background: #48494f;
 }
 
 .agents-session-row__header {
@@ -2869,6 +2875,14 @@ button:focus-visible {
 .project-terminals-card:hover,
 .project-terminals-card[aria-pressed="true"] {
   background: var(--color-surface-muted);
+}
+
+:root[data-theme="dark"]
+  .project-terminals-card-shell:hover
+  .project-terminals-card,
+:root[data-theme="dark"] .project-terminals-card:hover,
+:root[data-theme="dark"] .project-terminals-card[aria-pressed="true"] {
+  background: #48494f;
 }
 
 .project-terminals-card__copy {
