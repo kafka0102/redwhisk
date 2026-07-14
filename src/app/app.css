@@ -863,7 +863,7 @@ button:focus-visible {
   display: grid;
   justify-items: center;
   gap: 12px;
-  width: min(100%, 420px);
+  width: min(100%, 620px);
   text-align: center;
 }
 
