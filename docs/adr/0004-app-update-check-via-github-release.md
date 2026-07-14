@@ -12,7 +12,7 @@ RedWhisk 通过 tag（`v*.*.*`）触发 GitHub Actions 构建 macOS Universal �
 
 ## 决定
 
-1. **只做检测 + 外链引导，不做应用内安装或自动替换。** 发现可用更新后，用系统浏览器打开已发布的 GitHub Release 页，由用户自行下载 `.dmg` / `.app.zip`。
+1. **只做检测 + 外链引导，不做应用内安装或自动替换。** 发现可用更新后，用系统浏览器打开已发布的 GitHub Release 页，由用户自行下载 `.app.zip`。
 2. **「可用更新」的唯一事实源是** `GET /repos/kafka0102/redwhisk/releases/latest`（仅已 Publish 的 latest；draft 与未 Publish 的 tag **不**构成可用更新）。生产环境仓库标识写死，测试可注入。
 3. **版本比较使用 SemVer**（比较前去掉 tag 的 `v` 前缀）。仅当 `latest > current` 时存在可用更新；本地版本 ≥ latest 时视为无更新。
 4. **检测与偏好策略集中在 Rust command + SQLite**，前端只展示与触发操作：启动时异步检查（失败静默）、全局设置「关于」页可强制刷新；结果缓存 TTL 默认 1 小时。

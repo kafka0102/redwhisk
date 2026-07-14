@@ -17,7 +17,7 @@ env:
   NODE_OPTIONS: --max-old-space-size=6144
 
 jobs:
-  # PR 上的轻量构建验证：不产出 dmg，只确保前后端可编译
+  # PR 上的轻量构建验证：不产出可执行包，只确保前后端可编译
   check:
     name: 构建检查（PR）
     runs-on: macos-latest
@@ -94,7 +94,7 @@ jobs:
       - name: 安装前端依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 构建 Universal Mac 包（.app + .dmg）
+      - name: 构建 Universal Mac 包（.app）
         run: pnpm build:macos
 
       - name: 打包 .app 为 Release 资源
@@ -127,15 +127,13 @@ jobs:
         with:
           name: redwhisk-macos-universal
           path: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip
 
-      - name: 创建 Draft Release 并附带 .dmg 与 .app.zip
+      - name: 创建 Draft Release 并附带 .app.zip
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           generate_release_notes: true
           files: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip

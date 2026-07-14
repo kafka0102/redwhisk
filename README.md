@@ -13,7 +13,7 @@ RedWhisk(红拂) 是一款以 Issue 为核心的 AI Coding 本地工作台。它
 
 若只需使用应用、无需本地编译，请到 [GitHub Releases](https://github.com/kafka0102/redwhisk/releases) 下载最新版本。
 
-首次打开未签名安装包时，请参考下方「Release 安装提示」。
+首次打开未签名应用时，请参考下方「Release 安装提示」。
 
 ## 安装依赖
 
@@ -35,17 +35,14 @@ pnpm tauri dev
 pnpm build:macos
 ```
 
-构建完成后，安装包和应用包位于：
+构建完成后，可执行文件位于：
 
 ```text
-src-tauri/target/universal-apple-darwin/release/bundle/dmg/
-src-tauri/target/universal-apple-darwin/release/bundle/macos/
+src-tauri/target/universal-apple-darwin/release/bundle/macos/RedWhisk.app
 ```
 
-其中 `dmg/` 目录包含可分发的 DMG 安装包，`macos/` 目录包含构建出的 `RedWhisk.app`。
-
-当前仓库在 macOS 26 上会绕过 Tauri 内置的 `dmg` bundler，改为在生成 `.app` 后手工创建 DMG，以规避系统 `hdiutil` 的只读挂载回归。
+`macos/` 目录包含构建出的 Universal `RedWhisk.app`，同时支持 Intel 与 Apple Silicon。安装包（dmg）实测存在问题，已从构建流程中移除。
 
 ## Release 安装提示
 
-从 Release 下载的安装包目前未进行 Apple 开发者签名。首次打开时，macOS 可能会拦截直接双击启动；请在 Finder 中右键点击应用或安装包，选择“打开”，再在系统提示中确认打开。
+从 Release 下载的应用目前未进行 Apple 开发者签名。首次打开时，macOS 可能会拦截直接双击启动；请在 Finder 中右键点击应用，选择“打开”，再在系统提示中确认打开。

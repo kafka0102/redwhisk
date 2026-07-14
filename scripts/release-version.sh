@@ -104,13 +104,9 @@ if [[ "${cargo_version}" != "${version}" ]]; then
 fi
 
 shopt -s nullglob
-dmg_files=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
 app_files=(src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
 shopt -u nullglob
 
-if (( ${#dmg_files[@]} == 0 )); then
-  fail "未找到 dmg 产物"
-fi
 if (( ${#app_files[@]} == 0 )); then
   fail "未找到 .app 产物"
 fi
@@ -142,6 +138,5 @@ cat <<EOF
   gh release view ${tag_name} --json tagName,isDraft,assets,url
 
 本地产物：
-  ${dmg_files[*]}
   ${app_files[*]}
 EOF

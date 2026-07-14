@@ -8,12 +8,12 @@
 
 当前仓库已包含以下发版基础设施：
 
-- `scripts/build-macos.sh`：本地构建 Universal Mac 安装包。
+- `scripts/build-macos.sh`：本地构建 Universal Mac 可执行文件（`.app`）。
 - `scripts/bump-version.mjs`：统一同步多文件版本号。
 - `scripts/release-version.sh`：按版本号执行验证、构建、提交、tag 与推送。
 - `package.json` 暴露 `build:macos`、`bump-version` 与 `release:version` 根脚本入口。
 - `.github/workflows/release.yml`：tag 触发的自动发布工作流。
-- `src-tauri/tauri.conf.json` 的 `bundle.targets` 默认配置为 `["app"]`，仅 `pnpm tauri build` 本地快速构建不打 dmg；`build:macos` 脚本与 CI 发布先显式产出 `.app`，再通过仓库脚本手工产出 dmg。
+- `src-tauri/tauri.conf.json` 的 `bundle.targets` 配置为 `["app"]`，`build:macos` 与 CI 发布都仅产出 `.app`；CI 再把 `.app` 压成 `.app.zip` 作为 GitHub Release 资源。
 - `src-tauri/Cargo.toml` 配置了 `[profile.release]` 体积优化。
 
 ## 适用范围
@@ -74,8 +74,9 @@ pnpm build:macos
 
 `pnpm build:macos` 构建的是 Universal 包，单个产物同时支持 Intel（x86_64）与 Apple Silicon（aarch64）：
 
-- `src-tauri/target/universal-apple-darwin/release/bundle/dmg/RedWhisk_<version>_universal.dmg`
 - `src-tauri/target/universal-apple-darwin/release/bundle/macos/RedWhisk.app`
+
+> 安装包（dmg）实测存在问题，已从构建流程中移除；当前只产出可直接运行的 `.app`。
 
 ### 脚本流程
 
@@ -83,9 +84,8 @@ pnpm build:macos
 
 1. `rustup target add aarch64-apple-darwin x86_64-apple-darwin`（幂等，已安装会跳过）
 2. `pnpm install --frozen-lockfile`
-3. `pnpm tauri build --target universal-apple-darwin --bundles app`（Tauri 自动编译双架构并 `lipo` 合并；默认 `pnpm tauri build` 只产出 .app）
-4. `bash scripts/build-dmg.sh`（基于已生成的 `.app` 手工创建 dmg，绕过 macOS 26 上 `hdiutil` / create-dmg 的只读回归）
-5. 打印产物路径
+3. `pnpm tauri build --target universal-apple-darwin --bundles app`（Tauri 自动编译双架构并 `lipo` 合并，仅产出 `.app`）
+4. 打印产物路径
 
 任意步骤失败脚本立即退出。首次执行需要编译两份 Rust 产物，耗时较长（通常 15–25 分钟），后续增量构建会显著加快。
 
@@ -150,15 +150,14 @@ git push origin v0.1.0
 
 1. 安装 pnpm 9、Node 20、Rust stable 与两个 Apple target
 2. `pnpm install --frozen-lockfile`
-3. `pnpm build:macos`
-4. 将 `.app` 打包为 `.app.zip`，便于作为 GitHub Release 单文件资源上传
+3. `pnpm build:macos`（仅产出 `.app`）
+4. 将 `.app` 打包为 `.app.zip`，作为 GitHub Release 单文件资源上传
 5. 上传构建产物为 workflow artifact（保留构建历史）
-6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.dmg` 与 `.app.zip`
+6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.app.zip`
 7. 启用 `generate_release_notes: true`，自动按 commit 历史生成 changelog
 
 发布后产物为 **draft** 状态，需要人工审核 changelog 与产物后，在 GitHub Releases 页面点 Publish 才对外可见。Release asset 包含：
 
-- `RedWhisk_<version>_universal.dmg`
 - `RedWhisk_<version>_universal.app.zip`
 
 ### 应用内版本检测
@@ -178,19 +177,7 @@ git push origin v0.1.0
 - `pnpm build`（前端构建）
 - `cd src-tauri && cargo check --all-targets`
 
-PR 检查不产出 dmg，主要用于防止发版前出现基础构建回归。
-
-## macOS 26 DMG 兼容说明
-
-在 macOS 26.4.1 上，Tauri 当前依赖的 create-dmg / `hdiutil create -srcfolder` 链路会触发 `create failed - 只读文件系统`，即使目标目录本身可写。当前仓库的规避策略是：
-
-1. 继续让 Tauri 负责 Universal `.app` 构建；
-2. 使用 `scripts/build-dmg.sh` 创建空白 UDRW HFS+ 镜像；
-3. 通过 `diskutil image attach --noMount` 附加镜像；
-4. 手工以 `mount -t hfs -o rw` 挂载分区；
-5. 拷贝 `.app` 与 `/Applications` 链接后再压缩为最终 `.dmg`。
-
-如未来 Tauri 或 create-dmg 官方修复该回归，可再评估是否回切到原生 `--bundles dmg`。
+PR 检查不产出可执行包，主要用于防止发版前出现基础构建回归。
 
 ## 核心原则
 
@@ -226,7 +213,7 @@ PR 检查不产出 dmg，主要用于防止发版前出现基础构建回归。
 必须遵守：
 
 - 本地构建与 CI 发布都使用 `universal-apple-darwin` target
-- 单个 dmg 同时支持 Intel 与 Apple Silicon，不让用户选架构
+- 单个产物（`.app`）同时支持 Intel 与 Apple Silicon，不让用户选架构
 
 如未来需要分架构产出（减小体积），应作为独立任务更新本文档。
 
