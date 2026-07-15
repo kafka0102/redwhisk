@@ -82,3 +82,103 @@ export function readProjectWorktreeFile(
     input,
   });
 }
+
+export type WorkspaceChangeKind =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "copied"
+  | "untracked"
+  | "binary";
+
+export interface WorkspaceChangedFile {
+  filePath: string;
+  oldPath?: string | null;
+  fileName: string;
+  kind: WorkspaceChangeKind;
+  status: string;
+  additions: number;
+  deletions: number;
+  isBinary: boolean;
+  contentHash: string;
+  metadataSignature: string;
+}
+
+export type WorkspaceCommitStatus =
+  | "A"
+  | "M"
+  | "D"
+  | "R"
+  | "C"
+  | "T"
+  | "U"
+  | "X";
+
+export interface WorkspaceCommitChangedFile {
+  filePath: string;
+  oldPath?: string | null;
+  fileName: string;
+  kind: WorkspaceChangeKind;
+  status: WorkspaceCommitStatus;
+}
+
+export interface WorkspaceCommitRecord {
+  hash: string;
+  shortHash: string;
+  message: string;
+  authorName: string;
+  committedAt: number;
+  files: WorkspaceCommitChangedFile[];
+  isPushed: boolean;
+  pushedTo?: string | null;
+  isCreatedInWorktree: boolean;
+}
+
+export interface ProjectWorktreeChangesResponse {
+  files: WorkspaceChangedFile[];
+  signature: string;
+}
+
+export interface ProjectWorktreeCommitHistoryResponse {
+  commits: WorkspaceCommitRecord[];
+  signature: string;
+  isWorktree: boolean;
+}
+
+export interface WorkspaceDiffContent {
+  filePath: string;
+  oldPath?: string | null;
+  kind: WorkspaceChangeKind;
+  language?: string | null;
+  originalContent: string;
+  modifiedContent: string;
+  isBinary: boolean;
+  isTooLarge: boolean;
+}
+
+export function getProjectWorktreeChanges(
+  input: ProjectWorkspaceInput,
+): Promise<ProjectWorktreeChangesResponse> {
+  return invokeCommand<ProjectWorktreeChangesResponse>(
+    "get_project_worktree_changes",
+    { input },
+  );
+}
+
+export function getProjectWorktreeCommitHistory(
+  input: ProjectWorkspaceInput,
+): Promise<ProjectWorktreeCommitHistoryResponse> {
+  return invokeCommand<ProjectWorktreeCommitHistoryResponse>(
+    "get_project_worktree_commit_history",
+    { input },
+  );
+}
+
+export function readProjectWorktreeDiff(
+  input: ProjectWorkspacePathInput,
+): Promise<WorkspaceDiffContent> {
+  return invokeCommand<WorkspaceDiffContent>("read_project_worktree_diff", {
+    input,
+  });
+}
