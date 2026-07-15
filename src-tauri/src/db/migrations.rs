@@ -139,6 +139,9 @@ const ISSUE_TIMELINE_ACTOR_MIGRATION_SQL: &str =
 const APP_UPDATE_STATE_MIGRATION_VERSION: &str = "0042_app_update_state";
 const APP_UPDATE_STATE_MIGRATION_SQL: &str =
     include_str!("../../migrations/0042_app_update_state.sql");
+const ISSUE_ACTION_AGENT_ACTOR_MIGRATION_VERSION: &str = "0043_issue_action_agent_actor";
+const ISSUE_ACTION_AGENT_ACTOR_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0043_issue_action_agent_actor.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -384,6 +387,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: APP_UPDATE_STATE_MIGRATION_VERSION,
             sql: APP_UPDATE_STATE_MIGRATION_SQL,
+        },
+        Migration {
+            version: ISSUE_ACTION_AGENT_ACTOR_MIGRATION_VERSION,
+            sql: ISSUE_ACTION_AGENT_ACTOR_MIGRATION_SQL,
         },
     ]
 }

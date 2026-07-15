@@ -327,6 +327,11 @@ impl IssueTimelineActionType {
 pub struct IssueTimelineActor {
     pub name: String,
     pub avatar_path: Option<String>,
+    /// 操作者类型：`user` 或 `agent`。前端按此切换头像来源。
+    pub actor_kind: String,
+    /// Agent 操作者的类型（如 `codex` / `claude`）；用户操作者为 `None`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
 }
 
 /// 看板四个甬道的 Issue 总数（按状态分组、仅统计未删除 Issue）。

@@ -51,7 +51,7 @@ use crate::types::issue::{
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
     SendAgentCommitPromptResult, UpdateIssueInput,
 };
-use crate::types::issue_action::IssueActionType;
+use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::issue_completion::{
     CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult, DirtyWorkspaceOption,
     IssueCompletionFlowRecord, IssueCompletionPhase,
@@ -263,9 +263,19 @@ impl<'connection> IssueService<'connection> {
             .issue_repository
             .connection()
             .prepare(
-                "SELECT action_type, user_profiles.name, user_profiles.avatar_path, issue_actions.created_at
+                "SELECT
+                    issue_actions.action_type,
+                    issue_actions.actor_kind,
+                    issue_actions.actor_agent_name_snapshot,
+                    agent_profiles.agent_type,
+                    user_profiles.name,
+                    user_profiles.avatar_path,
+                    issue_actions.created_at
                  FROM issue_actions
-                 LEFT JOIN user_profiles ON user_profiles.id = issue_actions.actor_user_profile_id
+                 LEFT JOIN user_profiles
+                    ON user_profiles.id = issue_actions.actor_user_profile_id
+                 LEFT JOIN agent_profiles
+                    ON agent_profiles.id = issue_actions.actor_agent_profile_id
                  WHERE issue_actions.issue_id = ?1
                  ORDER BY issue_actions.created_at ASC, issue_actions.id ASC",
             )
@@ -274,24 +284,46 @@ impl<'connection> IssueService<'connection> {
             .query_map(rusqlite::params![issue.id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(1)?,
                     row.get::<_, Option<String>>(2)?,
-                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i64>(6)?,
                 ))
             })
             .map_err(issue_database_error)?;
 
         let mut entries = Vec::new();
         for row in rows {
-            let (action_type, name, avatar_path, created_at) = row.map_err(issue_database_error)?;
+            let (
+                action_type,
+                actor_kind,
+                agent_name_snapshot,
+                agent_type,
+                user_name,
+                user_avatar_path,
+                created_at,
+            ) = row.map_err(issue_database_error)?;
             let Some(action_type) = IssueTimelineActionType::from_action_str(&action_type) else {
                 continue;
+            };
+            let (name, avatar_path, resolved_agent_type) = if actor_kind == "agent" {
+                (
+                    agent_name_snapshot.unwrap_or_default(),
+                    None,
+                    agent_type,
+                )
+            } else {
+                (user_name.unwrap_or_default(), user_avatar_path, None)
             };
             entries.push(IssueTimelineEntry {
                 action_type,
                 actor: IssueTimelineActor {
-                    name: name.unwrap_or_default(),
+                    name,
                     avatar_path,
+                    actor_kind,
+                    agent_type: resolved_agent_type,
                 },
                 created_at,
             });
@@ -364,6 +396,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueCreated,
             &payload_json,
             saved_issue.created_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -579,6 +612,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueReviewMarked,
             &payload_json,
             reviewed_issue.updated_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -754,6 +788,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueDeleted,
             &payload_json,
             deleted_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -1480,6 +1515,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueCompleted,
             &issue_action_payload,
             completed_issue.updated_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -2285,6 +2321,7 @@ impl<'connection> IssueService<'connection> {
                             IssueActionType::IssueReviewMarked,
                             &payload_json,
                             reviewed_issue.updated_at,
+                            IssueActionActor::User { profile_id: 1 },
                         )
                         .map_err(issue_database_error)?;
 
@@ -2360,6 +2397,7 @@ impl<'connection> IssueService<'connection> {
                             IssueActionType::IssueReviewMarked,
                             &review_payload,
                             reviewed_issue.updated_at,
+                            IssueActionActor::User { profile_id: 1 },
                         )
                         .map_err(issue_database_error)?;
 
@@ -2457,6 +2495,7 @@ impl<'connection> IssueService<'connection> {
             action_type,
             &payload_json,
             updated_issue.updated_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -2549,6 +2588,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueStatusChanged,
             &payload_json,
             updated_issue.updated_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -2618,6 +2658,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueCompleted,
             &issue_action_payload,
             completed_issue.updated_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -2720,6 +2761,7 @@ impl<'connection> IssueService<'connection> {
             IssueActionType::IssueCompleted,
             &issue_action_payload,
             completed_issue.updated_at,
+            IssueActionActor::User { profile_id: 1 },
         )
         .map_err(issue_database_error)?;
 
@@ -3722,13 +3764,89 @@ mod tests {
         AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
         ToolCallStatus,
     };
-    use crate::types::issue::{AdvanceIssueStatusInput, IssueStatus};
+    use crate::types::issue::{
+        AdvanceIssueStatusInput, GetIssueTimelineInput, IssueTimelineActionType, IssueStatus,
+    };
     use crate::types::issue_completion::{CompleteIssueFlowAction, CompleteIssueFlowInput};
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
     use std::process::Command;
     use tempfile::tempdir;
+
+    #[test]
+    fn get_issue_timeline_resolves_agent_and_user_actors() {
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', '', 1, 1)",
+                [],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert agent profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'Issue 16', '', 'backlog', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO issue_actions (issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id)
+                 VALUES (16, 'issue_created', '{}', 10, 'user', 1)",
+                [],
+            )
+            .expect("insert user actor action");
+        connection
+            .execute(
+                "INSERT INTO issue_actions (issue_id, action_type, payload_json, created_at, actor_kind, actor_agent_profile_id, actor_agent_name_snapshot)
+                 VALUES (16, 'agent_session_started', '{}', 20, 'agent', 101, 'Codex')",
+                [],
+            )
+            .expect("insert agent actor action");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        let response = service
+            .get_issue_timeline(GetIssueTimelineInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("read timeline");
+
+        let entries = response.entries;
+        assert_eq!(entries.len(), 2);
+
+        let user_entry = &entries[0];
+        assert_eq!(
+            user_entry.action_type,
+            IssueTimelineActionType::IssueCreated
+        );
+        assert_eq!(user_entry.actor.actor_kind, "user");
+        assert!(user_entry.actor.agent_type.is_none());
+
+        let agent_entry = &entries[1];
+        assert_eq!(
+            agent_entry.action_type,
+            IssueTimelineActionType::AgentSessionStarted
+        );
+        assert_eq!(agent_entry.actor.actor_kind, "agent");
+        assert_eq!(agent_entry.actor.name, "Codex");
+        assert_eq!(agent_entry.actor.agent_type.as_deref(), Some("codex"));
+    }
 
     #[test]
     fn rollback_running_issue_to_backlog_removes_linked_session_log_file() {

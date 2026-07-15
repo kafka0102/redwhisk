@@ -86,6 +86,10 @@ export type IssueTimelineActionType =
 export interface IssueTimelineActor {
   name: string;
   avatarPath?: string | null;
+  /** 操作者类型：`user` 或 `agent`，前端按此切换头像来源。 */
+  actorKind: string;
+  /** Agent 操作者的类型（如 `codex` / `claude`）；用户操作者为 `undefined`。 */
+  agentType?: string;
 }
 
 export interface IssueTimelineEntry {

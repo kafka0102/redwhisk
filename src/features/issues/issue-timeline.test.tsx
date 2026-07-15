@@ -13,6 +13,10 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn((path: string) => `asset://${path}`),
 }));
 
+vi.mock("../agents/agent-visuals", () => ({
+  getAgentLogoSrc: vi.fn((agentType: string) => `agent-logo:${agentType}`),
+}));
+
 const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 
 function renderTimeline() {
@@ -44,7 +48,7 @@ describe("IssueTimeline", () => {
       entries: [
         {
           actionType: "issue_created",
-          actor: { name: "Alice", avatarPath: null },
+          actor: { name: "Alice", avatarPath: null, actorKind: "user" },
           createdAt: Date.now() - 120_000,
         },
       ],
@@ -62,5 +66,29 @@ describe("IssueTimeline", () => {
       "src",
       expect.stringContaining("default_user_profile"),
     );
+  });
+
+  it("renders the agent actor with the agent logo instead of the user avatar", async () => {
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "agent_session_started",
+          actor: {
+            name: "Codex",
+            avatarPath: null,
+            actorKind: "agent",
+            agentType: "codex",
+          },
+          createdAt: Date.now() - 120_000,
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText("Codex")).toBeVisible();
+    const avatar = document.querySelector(".issue-timeline__avatar");
+    expect(avatar).not.toBeNull();
+    expect(avatar).toHaveAttribute("src", "agent-logo:codex");
   });
 });

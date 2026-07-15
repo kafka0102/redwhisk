@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import defaultUserProfile from "@/assets/images/default_user_profile.png";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import { getIssueTimeline, type IssueTimelineEntry } from "./issue-commands";
+import { getAgentLogoSrc } from "../agents/agent-visuals";
+import {
+  getIssueTimeline,
+  type IssueTimelineActor,
+  type IssueTimelineEntry,
+} from "./issue-commands";
 
 interface IssueTimelineProps {
   projectId: number;
@@ -76,11 +81,7 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
       <img
         alt=""
         className="issue-timeline__avatar"
-        src={
-          entry.actor.avatarPath
-            ? convertFileSrc(entry.actor.avatarPath)
-            : defaultUserProfile
-        }
+        src={resolveActorAvatar(entry.actor)}
       />
       <span className="issue-timeline__actor">{entry.actor.name}</span>
       <span className="issue-timeline__action">
@@ -94,6 +95,15 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
       </time>
     </li>
   );
+}
+
+function resolveActorAvatar(actor: IssueTimelineActor): string {
+  if (actor.actorKind === "agent") {
+    return getAgentLogoSrc(actor.agentType ?? "codex");
+  }
+  return actor.avatarPath
+    ? convertFileSrc(actor.avatarPath)
+    : defaultUserProfile;
 }
 
 function formatRelativeTime(

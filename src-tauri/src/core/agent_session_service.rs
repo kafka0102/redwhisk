@@ -54,7 +54,7 @@ use crate::types::issue::{
     DeleteIssueWorktreeResult, GetIssueWorktreeStatusInput, IssueRecord, IssueStatus,
     IssueWorktreeStatusResult,
 };
-use crate::types::issue_action::IssueActionType;
+use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
@@ -518,6 +518,7 @@ impl<'connection> AgentSessionService<'connection> {
                 IssueActionType::AgentSessionStarted,
                 &issue_action_payload,
                 updated_issue.updated_at,
+                IssueActionActor::User { profile_id: 1 },
             )?;
 
             transaction.commit()?;
@@ -748,6 +749,7 @@ impl<'connection> AgentSessionService<'connection> {
                 IssueActionType::AgentSessionStarted,
                 &issue_action_payload,
                 updated_issue.updated_at,
+                IssueActionActor::User { profile_id: 1 },
             )?;
 
             transaction.commit()?;
@@ -983,6 +985,7 @@ impl<'connection> AgentSessionService<'connection> {
                 IssueActionType::AgentSessionStarted,
                 &issue_action_payload,
                 updated_issue.updated_at,
+                IssueActionActor::User { profile_id: 1 },
             )?;
 
             transaction.commit()?;

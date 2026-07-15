@@ -10,6 +10,28 @@ pub struct IssueActionRecord {
     pub created_at: i64,
 }
 
+/// Issue 动作的操作者。按 `actor_kind` 二选一：
+/// 用户操作者携带用户档案 id；Agent 操作者携带 Agent 配置 id 与发表时的名称快照
+/// （配置改名或删除后历史仍可读）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IssueActionActor {
+    User { profile_id: i64 },
+    Agent {
+        profile_id: i64,
+        name_snapshot: String,
+    },
+}
+
+impl IssueActionActor {
+    /// 稳定字符串，写入 `issue_actions.actor_kind`。
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Self::User { .. } => "user",
+            Self::Agent { .. } => "agent",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueActionType {

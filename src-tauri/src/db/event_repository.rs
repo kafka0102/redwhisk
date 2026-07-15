@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
-use crate::types::issue_action::{IssueActionRecord, IssueActionType};
+use crate::types::issue_action::{IssueActionActor, IssueActionRecord, IssueActionType};
 use crate::types::session_event::{SessionEventRecord, SessionEventType};
 
 pub struct EventRepository<'connection> {
@@ -18,13 +18,37 @@ impl<'connection> EventRepository<'connection> {
         action_type: IssueActionType,
         payload_json: &str,
         created_at: i64,
+        actor: IssueActionActor,
     ) -> rusqlite::Result<IssueActionRecord> {
-        transaction.execute(
-            "INSERT INTO issue_actions (
-                issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
-             ) VALUES (?1, ?2, ?3, ?4, 'user', 1)",
-            params![issue_id, action_type.as_str(), payload_json, created_at],
-        )?;
+        match actor {
+            IssueActionActor::User { profile_id } => {
+                transaction.execute(
+                    "INSERT INTO issue_actions (
+                        issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
+                     ) VALUES (?1, ?2, ?3, ?4, 'user', ?5)",
+                    params![issue_id, action_type.as_str(), payload_json, created_at, profile_id],
+                )?;
+            }
+            IssueActionActor::Agent {
+                profile_id,
+                name_snapshot,
+            } => {
+                transaction.execute(
+                    "INSERT INTO issue_actions (
+                        issue_id, action_type, payload_json, created_at, actor_kind,
+                        actor_agent_profile_id, actor_agent_name_snapshot
+                     ) VALUES (?1, ?2, ?3, ?4, 'agent', ?5, ?6)",
+                    params![
+                        issue_id,
+                        action_type.as_str(),
+                        payload_json,
+                        created_at,
+                        profile_id,
+                        name_snapshot,
+                    ],
+                )?;
+            }
+        }
 
         let id = transaction.last_insert_rowid();
         Self::find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
