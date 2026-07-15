@@ -19,6 +19,7 @@ import {
   type StartStructuredAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
+import { clearComposerDraft } from "./composer/use-agent-composer";
 import {
   DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
   SIDEBAR_RESIZE_STEP,
@@ -1166,6 +1167,9 @@ export function AgentsActivity({
 
     try {
       await deleteAgentSession({ projectId, sessionId: deletedSessionId });
+      // 清除该 session 的输入草稿缓存：agent_sessions.id 无 AUTOINCREMENT 会复用，
+      // 不清则旧草稿串入复用该 id 的新 session（ADR 0006）。
+      clearComposerDraft(deletedSessionId);
       setTerminalPanelStateBySessionId(
         ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
           remainingState,

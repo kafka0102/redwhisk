@@ -24,6 +24,7 @@ import {
   startStructuredAgentSession,
   updateAgentSessionTitle,
 } from "./agent-session-commands";
+import * as composerDraftModule from "./composer/use-agent-composer";
 import {
   completeIssueFlow,
   completeIssueClean,
@@ -1990,6 +1991,10 @@ describe("AgentsActivity", () => {
 
   it("deletes a standalone session after confirmation", async () => {
     const user = userEvent.setup();
+    const clearComposerDraftSpy = vi.spyOn(
+      composerDraftModule,
+      "clearComposerDraft",
+    );
     listAgentSessionsMock
       .mockResolvedValueOnce({
         sessions: [
@@ -2045,6 +2050,8 @@ describe("AgentsActivity", () => {
         sessionId: 701,
       }),
     );
+    // 删除成功后应清除该 session 的输入草稿缓存（ADR 0006：id 复用必须清理）。
+    expect(clearComposerDraftSpy).toHaveBeenCalledWith(701);
     expect(await screen.findByText("No sessions.")).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", { name: "Session" }),
