@@ -215,6 +215,9 @@ export function IssuesActivity({
   // 启动 Agent Session 期间显示阻塞式 LoadingDialog 并隐藏 Run Dialog，
   // 避免 Run Dialog overlay 与 Radix LoadingDialog overlay 同时挂载（见 4df1948）。
   const [isStartingSession, setIsStartingSession] = useState(false);
+  // 删除 Issue / 切换状态期间显示阻塞式 LoadingDialog，避免用户误以为提交无响应。
+  const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [isAdvancingStatus, setIsAdvancingStatus] = useState(false);
   const [attachmentPreview, setAttachmentPreview] =
     useState<AttachmentPreviewState | null>(null);
   const [form, setForm] = useState<IssueFormState>(
@@ -325,6 +328,8 @@ export function IssuesActivity({
       setDialogErrorMessage(null);
       setTitleError(null);
       hideCompletionLoadingDialog();
+      setIsDeletingIssue(false);
+      setIsAdvancingStatus(false);
 
       try {
         const response = await listIssues({
@@ -1123,6 +1128,7 @@ export function IssuesActivity({
         currentIssue.status === "running" &&
         currentIssue.linkedSessionStatus === "running"
       ) {
+        setIsAdvancingStatus(true);
         updatedIssue = await markIssueReview({
           projectId: requestProjectId,
           issueId: currentIssue.id,
@@ -1161,6 +1167,7 @@ export function IssuesActivity({
           currentIssue.id,
         );
       } else {
+        setIsAdvancingStatus(true);
         updatedIssue = await advanceIssueStatus({
           projectId: requestProjectId,
           issueId: currentIssue.id,
@@ -1231,6 +1238,7 @@ export function IssuesActivity({
       if (activeProjectIdRef.current === requestProjectId) {
         setIsSaving(false);
       }
+      setIsAdvancingStatus(false);
     }
   }
 
@@ -1440,6 +1448,7 @@ export function IssuesActivity({
     setDialogErrorMessage(null);
     setTitleError(null);
     setIsSaving(true);
+    setIsDeletingIssue(true);
     const requestProjectId = projectId;
     const issueToDelete = selectedIssue;
 
@@ -1478,6 +1487,7 @@ export function IssuesActivity({
       if (activeProjectIdRef.current === requestProjectId) {
         setIsSaving(false);
       }
+      setIsDeletingIssue(false);
     }
   }
 
@@ -1597,6 +1607,20 @@ export function IssuesActivity({
           open
           dismissible={false}
           message={messages.issues.sessionStarting}
+        />
+      ) : null}
+      {isDeletingIssue ? (
+        <LoadingDialog
+          open
+          dismissible={false}
+          message={messages.issues.deletingIssue}
+        />
+      ) : null}
+      {isAdvancingStatus ? (
+        <LoadingDialog
+          open
+          dismissible={false}
+          message={messages.issues.updatingStatus}
         />
       ) : null}
       {attachmentPreview ? (

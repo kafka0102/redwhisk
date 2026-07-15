@@ -3166,6 +3166,38 @@ describe("IssuesActivity", () => {
     );
   });
 
+  it("shows a blocking loading dialog while advancing status and hides it when done", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [runningIssue] });
+    const pendingAdvance =
+      createDeferred<Awaited<ReturnType<typeof advanceIssueStatus>>>();
+    advanceIssueStatusMock.mockReturnValue(pendingAdvance.promise);
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Running issue" }),
+    );
+    const detail = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Review" }));
+
+    expect(advanceIssueStatusMock).toHaveBeenCalledTimes(1);
+    const loadingDialog = await screen.findByRole("dialog");
+    expect(loadingDialog).toHaveTextContent("Updating status...");
+
+    pendingAdvance.resolve({
+      ...runningIssue,
+      status: "review",
+      updatedAt: runningIssue.updatedAt + 1_000,
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
   it("shows read-only status transition command failures in alert dialog", async () => {
     const user = userEvent.setup();
     const reviewWithClosedSession: IssueRecord = {
@@ -3893,6 +3925,38 @@ describe("IssuesActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Running issue" }),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
+  });
+
+  it("shows a blocking loading dialog while deleting and hides it when done", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
+    const pendingDelete =
+      createDeferred<Awaited<ReturnType<typeof deleteIssue>>>();
+    deleteIssueMock.mockReturnValue(pendingDelete.promise);
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    const form = screen.getByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const deleteDialog = screen.getByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    await user.click(
+      within(deleteDialog).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(deleteIssueMock).toHaveBeenCalledTimes(1);
+    const loadingDialog = await screen.findByRole("dialog");
+    expect(loadingDialog).toHaveTextContent("Deleting...");
+
+    pendingDelete.resolve({ issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
 

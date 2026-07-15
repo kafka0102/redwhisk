@@ -196,6 +196,7 @@ export interface I18nMessages {
     deleteReadonly: string;
     deleteEditable: string;
     deleteConfirmMessage: string;
+    deletingIssue: string;
     deleteConfirmTitle: string;
     deleteConfirmTitleReadonly: string;
     description: string;
@@ -240,6 +241,7 @@ export interface I18nMessages {
     start: string;
     starting: string;
     sessionStarting: string;
+    updatingStatus: string;
     status: string;
     statusLabel: string;
     summaryClose: string;
