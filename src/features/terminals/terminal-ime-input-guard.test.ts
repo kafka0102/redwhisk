@@ -23,7 +23,7 @@ describe("installTerminalImeInputGuard", () => {
     document.body.replaceChildren();
   });
 
-  it("clears residual text before keyCode 229 reaches xterm handlers", () => {
+  it("does not clear residual on keyCode 229 (avoids racing first punct insert)", () => {
     const { host, textarea } = createHarness();
     const guard = installTerminalImeInputGuard(host, textarea);
     textarea.value = "你好";
@@ -36,24 +36,7 @@ describe("installTerminalImeInputGuard", () => {
       }),
     );
 
-    expect(textarea.value).toBe("");
-    guard.dispose();
-  });
-
-  it("does not clear residual while composing", () => {
-    const { host, textarea } = createHarness();
-    const guard = installTerminalImeInputGuard(host, textarea);
-
-    textarea.dispatchEvent(new Event("compositionstart", { bubbles: true }));
-    textarea.value = "nihao";
-    textarea.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "Process",
-        keyCode: 229,
-        bubbles: true,
-      }),
-    );
-    expect(textarea.value).toBe("nihao");
+    expect(textarea.value).toBe("你好");
     guard.dispose();
   });
 
@@ -72,6 +55,48 @@ describe("installTerminalImeInputGuard", () => {
     guard.dispose();
   });
 
+  it("falls back to send insertText when xterm onData misses it", () => {
+    const { host, textarea } = createHarness();
+    const sendFallbackData = vi.fn();
+    const guard = installTerminalImeInputGuard(host, textarea, {
+      sendFallbackData,
+    });
+
+    const inputEvent = new InputEvent("input", {
+      bubbles: true,
+      data: "“",
+      inputType: "insertText",
+    });
+    textarea.dispatchEvent(inputEvent);
+
+    expect(sendFallbackData).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(16);
+    expect(sendFallbackData).toHaveBeenCalledWith("“");
+
+    guard.dispose();
+  });
+
+  it("does not fallback-send when onData already forwarded the same text", () => {
+    const { host, textarea } = createHarness();
+    const sendFallbackData = vi.fn();
+    const guard = installTerminalImeInputGuard(host, textarea, {
+      sendFallbackData,
+    });
+
+    expect(guard.filterData("“")).toBe("“");
+    textarea.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "“",
+        inputType: "insertText",
+      }),
+    );
+    vi.advanceTimersByTime(16);
+    expect(sendFallbackData).not.toHaveBeenCalled();
+
+    guard.dispose();
+  });
+
   it("drops DEL during IME key suppress window even after empty-textarea Backspace", () => {
     const { host, textarea } = createHarness();
     const guard = installTerminalImeInputGuard(host, textarea);
@@ -83,7 +108,6 @@ describe("installTerminalImeInputGuard", () => {
         bubbles: true,
       }),
     );
-    // IME 随后可能再打一个“空 textarea 的 Backspace”
     textarea.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Backspace",
@@ -94,11 +118,10 @@ describe("installTerminalImeInputGuard", () => {
     );
 
     expect(guard.filterData("\x7f")).toBeNull();
-    expect(guard.filterData("，")).toBe("，");
-    expect(guard.filterData("，\x7f")).toBe("，");
+    expect(guard.filterData("“")).toBe("“");
+    expect(guard.filterData("“\x7f")).toBe("“");
 
-    vi.advanceTimersByTime(50);
-    // suppress 结束后，真实 Backspace 才可转发
+    vi.advanceTimersByTime(80);
     textarea.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Backspace",

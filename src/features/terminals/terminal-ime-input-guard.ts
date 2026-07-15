@@ -1,18 +1,26 @@
 /**
- * 修复 xterm 在中文等 IME 下把 helper textarea 残留误判为退格的问题。
+ * 修复 xterm + 中文 IME 下标点首次按键丢失 / 误退格。
  *
- * 根因（@xterm/xterm CompositionHelper，仓库已 pnpm patch）：
- * 1. composition 提交后 textarea.value 仍保留已发送文本
- * 2. keyCode=229 路径比较 old/new，变短时旧逻辑会写出 \x7f
- * 3. 部分 IME 会先对残留发 Backspace 再提交标点
+ * 背景：
+ * - composition 后 helper textarea 可能残留已提交文本
+ * - keyCode=229 路径用 setTimeout 采样 textarea；WKWebView 上 0ms 过早会丢掉第一次标点
+ * - 仓库对 @xterm/xterm 做了 patch（变短不再发 DEL，采样改为 10ms）
  *
- * 本 guard 作为运行时兜底：
- * - host 捕获阶段预清残留、吞掉清残留用 Backspace
- * - IME 按键窗口内丢弃 DEL/BS
- * - 无真实用户 Backspace 标记时丢弃 DEL/BS
+ * 本 guard：
+ * - composition 结束后清残留
+ * - IME 窗口内丢弃误发 DEL/BS；吞掉清残留用 Backspace
+ * - 对非 composing 的 insertText 做短延迟兜底，避免 xterm 漏发第一次全角标点
  */
 const DEL = "\x7f";
 const BACKSPACE = "\b";
+const IME_DELETE_SUPPRESS_MS = 80;
+const INSERT_FALLBACK_DELAY_MS = 16;
+const RECENT_FORWARD_WINDOW_MS = 80;
+
+export interface TerminalImeInputGuardOptions {
+  /** xterm 漏发 IME insertText 时的兜底写入 */
+  sendFallbackData?: (data: string) => void;
+}
 
 export interface TerminalImeInputGuard {
   dispose: () => void;
@@ -23,6 +31,7 @@ export interface TerminalImeInputGuard {
 export function installTerminalImeInputGuard(
   host: HTMLElement,
   textarea: HTMLTextAreaElement,
+  options: TerminalImeInputGuardOptions = {},
 ): TerminalImeInputGuard {
   let isComposing = false;
   let isFinalizingComposition = false;
@@ -30,6 +39,10 @@ export function installTerminalImeInputGuard(
   let imeDeleteSuppressDepth = 0;
   let finalizeTimer: number | null = null;
   let imeSuppressTimer: number | null = null;
+  let insertFallbackTimer: number | null = null;
+  let pendingInsertFallback: string | null = null;
+  let recentForwarded = "";
+  let recentForwardedAt = 0;
 
   const clearResidual = (): void => {
     if (textarea.value.length === 0) {
@@ -44,17 +57,71 @@ export function installTerminalImeInputGuard(
     if (imeSuppressTimer !== null) {
       window.clearTimeout(imeSuppressTimer);
     }
-    // 覆盖 xterm CompositionHelper 的 setTimeout(0) 与紧随其后的 IME Backspace
     imeSuppressTimer = window.setTimeout(() => {
       imeSuppressTimer = null;
       imeDeleteSuppressDepth = 0;
-    }, 50);
+    }, IME_DELETE_SUPPRESS_MS);
+  };
+
+  const noteForwarded = (data: string): void => {
+    if (data.length === 0) {
+      return;
+    }
+    if (data === DEL || data === BACKSPACE) {
+      return;
+    }
+    recentForwarded = data;
+    recentForwardedAt = Date.now();
+  };
+
+  const wasRecentlyForwarded = (data: string): boolean => {
+    if (data.length === 0) {
+      return false;
+    }
+    if (Date.now() - recentForwardedAt > RECENT_FORWARD_WINDOW_MS) {
+      return false;
+    }
+    return recentForwarded.includes(data) || data.includes(recentForwarded);
+  };
+
+  const flushInsertFallback = (): void => {
+    insertFallbackTimer = null;
+    const data = pendingInsertFallback;
+    pendingInsertFallback = null;
+    if (!data || isComposing) {
+      return;
+    }
+    if (wasRecentlyForwarded(data)) {
+      return;
+    }
+    options.sendFallbackData?.(data);
+    noteForwarded(data);
+    // 兜底发送后清掉 helper 残留，避免下一次 229 采样被干扰
+    if (!isComposing && !isFinalizingComposition) {
+      clearResidual();
+    }
+  };
+
+  const scheduleInsertFallback = (data: string): void => {
+    pendingInsertFallback = data;
+    if (insertFallbackTimer !== null) {
+      window.clearTimeout(insertFallbackTimer);
+    }
+    insertFallbackTimer = window.setTimeout(
+      flushInsertFallback,
+      INSERT_FALLBACK_DELAY_MS,
+    );
   };
 
   const handleCompositionStart = (): void => {
     isComposing = true;
     isFinalizingComposition = false;
     beginImeDeleteSuppress();
+    pendingInsertFallback = null;
+    if (insertFallbackTimer !== null) {
+      window.clearTimeout(insertFallbackTimer);
+      insertFallbackTimer = null;
+    }
     if (finalizeTimer !== null) {
       window.clearTimeout(finalizeTimer);
       finalizeTimer = null;
@@ -68,6 +135,7 @@ export function installTerminalImeInputGuard(
     if (finalizeTimer !== null) {
       window.clearTimeout(finalizeTimer);
     }
+    // 晚于 xterm compositionend 的 setTimeout(0) 终态发送
     finalizeTimer = window.setTimeout(() => {
       finalizeTimer = null;
       isFinalizingComposition = false;
@@ -91,13 +159,12 @@ export function installTerminalImeInputGuard(
 
     if (isImeKey) {
       beginImeDeleteSuppress();
-      if (!isComposing && !isFinalizingComposition) {
-        clearResidual();
-      }
+      // 注意：不要在 229 上同步 clearResidual。
+      // 第一次全角标点时 IME 可能尚未写入，抢清会干扰后续采样；
+      // 残留清理交给 compositionend / fallback / Backspace 吞并路径。
     }
 
     if (isBackspace) {
-      // IME 清残留 / 组合态退格：不交给 shell
       if (
         imeDeleteSuppressDepth > 0 ||
         isComposing ||
@@ -114,8 +181,27 @@ export function installTerminalImeInputGuard(
     }
   };
 
+  const handleTextareaInput = (event: Event): void => {
+    if (isComposing || isFinalizingComposition) {
+      return;
+    }
+    const inputEvent = event as InputEvent;
+    if (inputEvent.inputType !== "insertText") {
+      return;
+    }
+    const data = inputEvent.data;
+    if (!data) {
+      return;
+    }
+    // 非 composing 的 insertText：xterm 在 keyDownSeen && composed 时会忽略 input，
+    // 只靠 229 的延时 diff；若 diff 仍漏发，由这里兜底。
+    beginImeDeleteSuppress();
+    scheduleInsertFallback(data);
+  };
+
   textarea.addEventListener("compositionstart", handleCompositionStart);
   textarea.addEventListener("compositionend", handleCompositionEnd);
+  textarea.addEventListener("input", handleTextareaInput);
   host.addEventListener("keydown", handleHostKeyDownCapture, true);
 
   return {
@@ -126,12 +212,17 @@ export function installTerminalImeInputGuard(
 
       const containsDelete = data.includes(DEL) || data.includes(BACKSPACE);
       if (!containsDelete) {
+        noteForwarded(data);
         return data;
       }
 
       if (imeDeleteSuppressDepth > 0) {
         const stripped = data.split(DEL).join("").split(BACKSPACE).join("");
-        return stripped.length > 0 ? stripped : null;
+        if (stripped.length > 0) {
+          noteForwarded(stripped);
+          return stripped;
+        }
+        return null;
       }
 
       if (data === DEL || data === BACKSPACE) {
@@ -142,13 +233,17 @@ export function installTerminalImeInputGuard(
         return null;
       }
 
-      // 混合数据：无 allow 时剥掉退格控制符
       if (allowDeleteChars > 0) {
         allowDeleteChars -= 1;
+        noteForwarded(data);
         return data;
       }
       const stripped = data.split(DEL).join("").split(BACKSPACE).join("");
-      return stripped.length > 0 ? stripped : null;
+      if (stripped.length > 0) {
+        noteForwarded(stripped);
+        return stripped;
+      }
+      return null;
     },
     dispose(): void {
       if (finalizeTimer !== null) {
@@ -159,8 +254,13 @@ export function installTerminalImeInputGuard(
         window.clearTimeout(imeSuppressTimer);
         imeSuppressTimer = null;
       }
+      if (insertFallbackTimer !== null) {
+        window.clearTimeout(insertFallbackTimer);
+        insertFallbackTimer = null;
+      }
       textarea.removeEventListener("compositionstart", handleCompositionStart);
       textarea.removeEventListener("compositionend", handleCompositionEnd);
+      textarea.removeEventListener("input", handleTextareaInput);
       host.removeEventListener("keydown", handleHostKeyDownCapture, true);
     },
   };

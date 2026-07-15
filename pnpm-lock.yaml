@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@xterm/xterm@6.0.0':
-    hash: 1315c157a622bb0908aaf6afc2fdbf66acea35eadfca885a8b99d0b557688571
+    hash: 71ff0ffbb99464ed74686675e168a1f4b1cc4b7afe638f96fd6624a7d419e3e5
     path: patches/@xterm__xterm@6.0.0.patch
 
 importers:
@@ -42,7 +42,7 @@ importers:
         version: 0.19.0
       '@xterm/xterm':
         specifier: ^6.0.0
-        version: 6.0.0(patch_hash=1315c157a622bb0908aaf6afc2fdbf66acea35eadfca885a8b99d0b557688571)
+        version: 6.0.0(patch_hash=71ff0ffbb99464ed74686675e168a1f4b1cc4b7afe638f96fd6624a7d419e3e5)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -4921,7 +4921,7 @@ snapshots:
 
   '@xterm/addon-webgl@0.19.0': {}
 
-  '@xterm/xterm@6.0.0(patch_hash=1315c157a622bb0908aaf6afc2fdbf66acea35eadfca885a8b99d0b557688571)': {}
+  '@xterm/xterm@6.0.0(patch_hash=71ff0ffbb99464ed74686675e168a1f4b1cc4b7afe638f96fd6624a7d419e3e5)': {}
 
   accepts@2.0.0:
     dependencies:

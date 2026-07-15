@@ -90,6 +90,9 @@ export function TerminalSurface({
     let webglAddon: WebglAddon | null = null;
     let imeInputGuard: ReturnType<typeof installTerminalImeInputGuard> | null =
       null;
+    const imeFallbackSendRef: { current: ((data: string) => void) | null } = {
+      current: null,
+    };
 
     const showStatusMessage = (
       source: TerminalStatusSource,
@@ -135,7 +138,11 @@ export function TerminalSurface({
       terminal.loadAddon(new ClipboardAddon());
       terminal.open(host);
       imeInputGuard = terminal.textarea
-        ? installTerminalImeInputGuard(host, terminal.textarea)
+        ? installTerminalImeInputGuard(host, terminal.textarea, {
+            sendFallbackData: (data) => {
+              imeFallbackSendRef.current?.(data);
+            },
+          })
         : null;
       try {
         webglAddon = new WebglAddon();
@@ -207,6 +214,12 @@ export function TerminalSurface({
     // restore 回放期间抑制：历史中的 CSI/OSC 查询会被 xterm 应答，
     // 若写回 PTY 会在 shell 回显成乱码，并在每次切页时累积。
     let suppressPtyInput = false;
+    imeFallbackSendRef.current = (data: string) => {
+      if (suppressPtyInput) {
+        return;
+      }
+      inputWriter.push(data);
+    };
     const disposeData = terminal.onData((data) => {
       if (suppressPtyInput) {
         return;
