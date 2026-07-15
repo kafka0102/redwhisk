@@ -8,6 +8,8 @@ import {
   readAgentTimeline,
 } from "../agent-session-commands";
 import { useAgentSessionNotifications } from "./use-agent-session-notifications";
+import { playNotificationSound } from "../../../shared/audio/notification-sound";
+import { NOTIFICATION_REMINDER_STORAGE_KEY } from "../../../shared/i18n/i18n-constants";
 import type { AgentSessionNotificationTransport } from "./agent-session-notification-transport";
 
 const mocks = vi.hoisted(() => ({
@@ -35,8 +37,13 @@ vi.mock("../agent-session-commands", () => ({
   readAgentTimeline: vi.fn(),
 }));
 
+vi.mock("../../../shared/audio/notification-sound", () => ({
+  playNotificationSound: vi.fn(),
+}));
+
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+const mockedPlayNotificationSound = vi.mocked(playNotificationSound);
 
 function Probe({
   pollIntervalMs,
@@ -95,6 +102,8 @@ describe("useAgentSessionNotifications", () => {
     readAgentTimelineMock.mockReset();
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
     readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    mockedPlayNotificationSound.mockReset();
+    window.localStorage.removeItem(NOTIFICATION_REMINDER_STORAGE_KEY);
   });
 
   it("shows an in-app notification when the window is focused", async () => {
@@ -297,6 +306,48 @@ describe("useAgentSessionNotifications", () => {
         title: "RedWhisk session failed",
       }),
     );
+  });
+
+  it("偏好开启时 running->closed 播放合成提示音（不受窗口聚焦门控）", async () => {
+    window.localStorage.setItem(NOTIFICATION_REMINDER_STORAGE_KEY, "true");
+    const transport = createTransport({ isWindowFocused: true });
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [session({ sessionId: 8, status: "running" })],
+      })
+      .mockResolvedValue({
+        sessions: [session({ sessionId: 8, status: "closed" })],
+      });
+    readAgentTimelineMock.mockResolvedValue({ effort: null, items: [] });
+
+    await renderProbe({ pollIntervalMs: 10, transport });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    expect(mockedPlayNotificationSound).toHaveBeenCalledTimes(1);
+  });
+
+  it("偏好关闭时不播放合成提示音", async () => {
+    window.localStorage.setItem(NOTIFICATION_REMINDER_STORAGE_KEY, "false");
+    const transport = createTransport({ isWindowFocused: false });
+    listAgentSessionsMock
+      .mockResolvedValueOnce({
+        sessions: [session({ sessionId: 8, status: "running" })],
+      })
+      .mockResolvedValue({
+        sessions: [session({ sessionId: 8, status: "closed" })],
+      });
+    readAgentTimelineMock.mockResolvedValue({ effort: null, items: [] });
+
+    await renderProbe({ pollIntervalMs: 10, transport });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    expect(mockedPlayNotificationSound).not.toHaveBeenCalled();
   });
 });
 

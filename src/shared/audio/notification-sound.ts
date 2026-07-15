@@ -1,7 +1,7 @@
 // 用 Web Audio API 合成两音上行短促提示音（880Hz -> 1175Hz）。
 // 纯前端、无音频资源；AudioContext 不可用或播放失败时静默，不阻断调用方。
 
-const NOTIFICATION_GAIN = 0.18;
+const NOTIFICATION_GAIN = 0.5;
 const FIRST_TONE_FREQUENCY = 880;
 const SECOND_TONE_FREQUENCY = 1175;
 const TONE_DURATION_MS = 120;
@@ -24,6 +24,12 @@ export function playNotificationSound(): void {
   } catch {
     return;
   }
+
+  // [notify] 诊断：报告 AudioContext 状态。session 完成由轮询触发（非用户手势），
+  // autoplay 策略下若停在 suspended，oscillator 调度不发声（用户听不到提示音）。
+  console.info(
+    `[notify] playNotificationSound AudioContext state=${audioContext.state}`,
+  );
 
   // 部分 webview 需用户手势后 resume；resume 失败仍尝试调度，不阻断播放。
   void audioContext.resume().catch(() => {});

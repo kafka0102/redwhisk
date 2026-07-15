@@ -89,7 +89,7 @@ describe("playNotificationSound", () => {
     const rampValues = gains.flatMap(
       (gain) => gain.gain.linearRampToValueAtTime.mock.calls,
     );
-    expect(rampValues.some(([value]) => value === 0.18)).toBe(true);
+    expect(rampValues.some(([value]) => value === 0.5)).toBe(true);
   });
 
   it("AudioContext 不可用时静默返回", () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { playNotificationSound } from "../../../shared/audio/notification-sound";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
   listAgentSessions,
@@ -32,7 +33,7 @@ export function useAgentSessionNotifications({
   projectName,
   transport = agentSessionNotificationTransport,
 }: UseAgentSessionNotificationsArgs): void {
-  const { messages } = useI18n();
+  const { messages, notificationReminder } = useI18n();
   const notifiedKeysRef = useRef<Set<string>>(new Set());
   const sessionStatusByIdRef = useRef<
     Map<number, AgentSessionListItem["status"]>
@@ -127,6 +128,11 @@ export function useAgentSessionNotifications({
             previousStatus === "running" &&
             (session.status === "closed" || session.status === "crashed")
           ) {
+            // 偏好开启时播放合成提示音；与系统通知解耦、不受窗口聚焦门控，
+            // 确保 session 完成（任务结束）即使用户正盯着窗口也能听到。
+            if (notificationReminder) {
+              playNotificationSound();
+            }
             void deliverSessionStatusNotification({
               messages,
               projectId,
@@ -152,7 +158,14 @@ export function useAgentSessionNotifications({
       isDisposed = true;
       window.clearInterval(intervalId);
     };
-  }, [messages, pollIntervalMs, projectId, projectName, transport]);
+  }, [
+    messages,
+    notificationReminder,
+    pollIntervalMs,
+    projectId,
+    projectName,
+    transport,
+  ]);
 }
 
 async function deliverNotification(
