@@ -1,12 +1,12 @@
 use std::time::Duration;
 
-use serde::Deserialize;
-
 use super::version::strip_version_prefix;
 
 pub const DEFAULT_GITHUB_OWNER: &str = "kafka0102";
 pub const DEFAULT_GITHUB_REPO: &str = "redwhisk";
-pub const DEFAULT_GITHUB_API_BASE: &str = "https://api.github.com";
+/// GitHub 网页端点基址。改用网页而非 REST API：未鉴权 API 按 IP 限流 60 次/小时，
+/// 共享/NAT 出口会迅速耗尽并把限流误报成网络错误；网页 releases 端点无此限制。
+pub const DEFAULT_GITHUB_WEB_BASE: &str = "https://github.com";
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -29,7 +29,7 @@ pub trait LatestReleaseSource {
 
 #[derive(Debug, Clone)]
 pub struct GitHubLatestReleaseSource {
-    api_base: String,
+    web_base: String,
     owner: String,
     repo: String,
     user_agent: String,
@@ -38,7 +38,7 @@ pub struct GitHubLatestReleaseSource {
 impl Default for GitHubLatestReleaseSource {
     fn default() -> Self {
         Self::new(
-            DEFAULT_GITHUB_API_BASE,
+            DEFAULT_GITHUB_WEB_BASE,
             DEFAULT_GITHUB_OWNER,
             DEFAULT_GITHUB_REPO,
         )
@@ -46,9 +46,13 @@ impl Default for GitHubLatestReleaseSource {
 }
 
 impl GitHubLatestReleaseSource {
-    pub fn new(api_base: impl Into<String>, owner: impl Into<String>, repo: impl Into<String>) -> Self {
+    pub fn new(
+        web_base: impl Into<String>,
+        owner: impl Into<String>,
+        repo: impl Into<String>,
+    ) -> Self {
         Self {
-            api_base: api_base.into().trim_end_matches('/').to_string(),
+            web_base: web_base.into().trim_end_matches('/').to_string(),
             owner: owner.into(),
             repo: repo.into(),
             user_agent: "RedWhisk-App-Update-Check".to_string(),
@@ -57,27 +61,23 @@ impl GitHubLatestReleaseSource {
 
     fn latest_url(&self) -> String {
         format!(
-            "{}/repos/{}/{}/releases/latest",
-            self.api_base, self.owner, self.repo
+            "{}/{}/{}/releases/latest",
+            self.web_base, self.owner, self.repo
         )
     }
 }
 
 impl LatestReleaseSource for GitHubLatestReleaseSource {
+    /// 请求 `/releases/latest`：有发布则 302 重定向到 `/releases/tag/<tag>`，
+    /// ureq 自动跟随后从最终 URL 解析 tag；无发布返回 404 视作无更新。
     fn fetch_latest(&self) -> Result<Option<LatestRelease>, LatestReleaseFetchError> {
         let response = ureq::get(&self.latest_url())
             .set("User-Agent", &self.user_agent)
-            .set("Accept", "application/vnd.github+json")
             .timeout(HTTP_TIMEOUT)
             .call();
 
         match response {
-            Ok(response) => {
-                let body = response
-                    .into_string()
-                    .map_err(|_| LatestReleaseFetchError::InvalidResponse)?;
-                parse_latest_release_json(&body).map(Some)
-            }
+            Ok(response) => parse_release_tag_from_url(response.get_url()).map(Some),
             Err(ureq::Error::Status(404, _)) => Ok(None),
             Err(ureq::Error::Status(_, _)) => Err(LatestReleaseFetchError::Network),
             Err(_) => Err(LatestReleaseFetchError::Network),
@@ -85,34 +85,46 @@ impl LatestReleaseSource for GitHubLatestReleaseSource {
     }
 }
 
-/// 解析 GitHub `/releases/latest` JSON body。
-pub fn parse_latest_release_json(body: &str) -> Result<LatestRelease, LatestReleaseFetchError> {
-    let parsed: GitHubLatestReleaseBody =
-        serde_json::from_str(body).map_err(|_| LatestReleaseFetchError::InvalidResponse)?;
-    let tag = parsed.tag_name.trim();
+/// 从 `/releases/latest` 重定向后的最终 URL 解析 tag 与 release 页地址。
+///
+/// 形如 `https://github.com/{owner}/{repo}/releases/tag/<tag>`，
+/// `<tag>` 取标记后的剩余路径（保留 `/` 以兼容含斜杠的 tag），并剥离 query/fragment。
+pub fn parse_release_tag_from_url(url: &str) -> Result<LatestRelease, LatestReleaseFetchError> {
+    const TAG_MARKER: &str = "/releases/tag/";
+
+    let marker_index = url
+        .rfind(TAG_MARKER)
+        .ok_or(LatestReleaseFetchError::InvalidResponse)?;
+    let after_marker = &url[marker_index + TAG_MARKER.len()..];
+
+    // tag 为标记后到 query/fragment 之前的路径段，去掉尾部斜杠。
+    let tag = after_marker
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('/');
     if tag.is_empty() {
         return Err(LatestReleaseFetchError::InvalidResponse);
     }
-    let html_url = parsed.html_url.trim();
-    if html_url.is_empty() {
-        return Err(LatestReleaseFetchError::InvalidResponse);
-    }
+
+    // release_url 为不含 query/fragment 的干净 release 页地址。
+    let release_url = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .trim_end_matches('/')
+        .to_string();
+
     Ok(LatestRelease {
         version: strip_version_prefix(tag).to_string(),
-        release_url: html_url.to_string(),
+        release_url,
     })
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubLatestReleaseBody {
-    tag_name: String,
-    html_url: String,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_latest_release_json, strip_version_prefix, LatestRelease, LatestReleaseFetchError,
+        parse_release_tag_from_url, strip_version_prefix, LatestRelease, LatestReleaseFetchError,
         LatestReleaseSource,
     };
 
@@ -127,36 +139,51 @@ mod tests {
     }
 
     #[test]
-    fn parses_github_latest_json_and_strips_v_prefix() {
-        let json = r#"{
-            "tag_name": "v0.1.0",
-            "html_url": "https://github.com/kafka0102/redwhisk/releases/tag/v0.1.0",
-            "draft": false
-        }"#;
-        let release = parse_latest_release_json(json).expect("parse");
-        assert_eq!(release.version, "0.1.0");
+    fn parses_tag_from_release_url_and_strips_v_prefix() {
+        let release =
+            parse_release_tag_from_url("https://github.com/kafka0102/redwhisk/releases/tag/v0.0.5")
+                .expect("parse");
+        assert_eq!(release.version, "0.0.5");
         assert_eq!(
             release.release_url,
-            "https://github.com/kafka0102/redwhisk/releases/tag/v0.1.0"
+            "https://github.com/kafka0102/redwhisk/releases/tag/v0.0.5",
         );
     }
 
     #[test]
-    fn rejects_empty_tag_or_url() {
+    fn strips_query_and_fragment_from_release_url() {
+        let release = parse_release_tag_from_url(
+            "https://github.com/kafka0102/redwhisk/releases/tag/v0.0.5?foo=bar#changelog",
+        )
+        .expect("parse");
+        assert_eq!(release.version, "0.0.5");
+        assert_eq!(
+            release.release_url,
+            "https://github.com/kafka0102/redwhisk/releases/tag/v0.0.5",
+        );
+    }
+
+    #[test]
+    fn preserves_slash_in_tag() {
+        let release = parse_release_tag_from_url(
+            "https://github.com/kafka0102/redwhisk/releases/tag/release/v1.0",
+        )
+        .expect("parse");
+        assert_eq!(release.version, "release/v1.0");
+    }
+
+    #[test]
+    fn rejects_url_without_tag_marker() {
         assert!(matches!(
-            parse_latest_release_json(r#"{"tag_name":"","html_url":"https://x"}"#),
-            Err(LatestReleaseFetchError::InvalidResponse)
-        ));
-        assert!(matches!(
-            parse_latest_release_json(r#"{"tag_name":"v1.0.0","html_url":"  "}"#),
+            parse_release_tag_from_url("https://github.com/kafka0102/redwhisk/releases"),
             Err(LatestReleaseFetchError::InvalidResponse)
         ));
     }
 
     #[test]
-    fn rejects_invalid_json() {
+    fn rejects_empty_tag_segment() {
         assert!(matches!(
-            parse_latest_release_json("not-json"),
+            parse_release_tag_from_url("https://github.com/kafka0102/redwhisk/releases/tag/"),
             Err(LatestReleaseFetchError::InvalidResponse)
         ));
     }
