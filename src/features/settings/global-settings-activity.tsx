@@ -216,7 +216,7 @@ export function GlobalSettingsActivity() {
               <div className="settings-section__body">
                 <Card>
                   <CardContent className="grid gap-5 p-7">
-                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-start gap-x-6 gap-y-3">
+                    <section className="grid min-w-0 grid-cols-[220px_minmax(0,1fr)] items-start gap-x-6 gap-y-3">
                       <h4 className="m-0 pt-3 text-[15px] font-bold leading-[1.3]">
                         {messages.globalSettings.theme}
                       </h4>
@@ -241,7 +241,7 @@ export function GlobalSettingsActivity() {
                         ))}
                       </div>
                     </section>
-                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                    <section className="grid min-w-0 grid-cols-[220px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
                       <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
                         {messages.globalSettings.language}
                       </h4>
@@ -279,7 +279,7 @@ export function GlobalSettingsActivity() {
                         </Select>
                       </div>
                     </section>
-                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                    <section className="grid min-w-0 grid-cols-[220px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
                       <h4 className="m-0 text-[15px] font-bold leading-[1.3]">
                         {messages.globalSettings.contentFontSize}
                       </h4>
@@ -309,7 +309,7 @@ export function GlobalSettingsActivity() {
                         </Select>
                       </div>
                     </section>
-                    <section className="grid min-w-0 grid-cols-[120px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
+                    <section className="grid min-w-0 grid-cols-[220px_minmax(0,1fr)] items-center gap-x-6 gap-y-3">
                       <h4 className="m-0 flex items-center gap-1.5 text-[15px] font-bold leading-[1.3]">
                         {messages.globalSettings.notificationReminder}
                         <TooltipProvider>
