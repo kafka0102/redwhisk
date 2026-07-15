@@ -211,7 +211,12 @@ export function TerminalSurface({
       if (suppressPtyInput) {
         return;
       }
-      if (imeInputGuard && !imeInputGuard.shouldForwardData(data)) {
+      if (imeInputGuard) {
+        const filtered = imeInputGuard.filterData(data);
+        if (filtered === null) {
+          return;
+        }
+        inputWriter.push(filtered);
         return;
       }
       inputWriter.push(data);

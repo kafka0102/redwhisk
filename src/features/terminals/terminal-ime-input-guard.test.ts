@@ -45,7 +45,7 @@ describe("installTerminalImeInputGuard", () => {
     const guard = installTerminalImeInputGuard(host, textarea);
 
     textarea.dispatchEvent(new Event("compositionstart", { bubbles: true }));
-    textarea.value = "ni";
+    textarea.value = "nihao";
     textarea.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Process",
@@ -53,8 +53,7 @@ describe("installTerminalImeInputGuard", () => {
         bubbles: true,
       }),
     );
-
-    expect(textarea.value).toBe("ni");
+    expect(textarea.value).toBe("nihao");
     guard.dispose();
   });
 
@@ -73,24 +72,41 @@ describe("installTerminalImeInputGuard", () => {
     guard.dispose();
   });
 
-  it("swallows Backspace that only clears helper residual", () => {
+  it("drops DEL during IME key suppress window even after empty-textarea Backspace", () => {
     const { host, textarea } = createHarness();
     const guard = installTerminalImeInputGuard(host, textarea);
-    textarea.value = "残留";
 
-    const event = new KeyboardEvent("keydown", {
-      key: "Backspace",
-      keyCode: 8,
-      bubbles: true,
-      cancelable: true,
-    });
-    const stopSpy = vi.spyOn(event, "stopPropagation");
-    textarea.dispatchEvent(event);
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Process",
+        keyCode: 229,
+        bubbles: true,
+      }),
+    );
+    // IME 随后可能再打一个“空 textarea 的 Backspace”
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Backspace",
+        keyCode: 8,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
 
-    expect(textarea.value).toBe("");
-    expect(event.defaultPrevented).toBe(true);
-    expect(stopSpy).toHaveBeenCalled();
-    expect(guard.shouldForwardData("\x7f")).toBe(false);
+    expect(guard.filterData("\x7f")).toBeNull();
+    expect(guard.filterData("，")).toBe("，");
+    expect(guard.filterData("，\x7f")).toBe("，");
+
+    vi.advanceTimersByTime(50);
+    // suppress 结束后，真实 Backspace 才可转发
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Backspace",
+        keyCode: 8,
+        bubbles: true,
+      }),
+    );
+    expect(guard.filterData("\x7f")).toBe("\x7f");
 
     guard.dispose();
   });
@@ -99,7 +115,7 @@ describe("installTerminalImeInputGuard", () => {
     const { host, textarea } = createHarness();
     const guard = installTerminalImeInputGuard(host, textarea);
 
-    expect(guard.shouldForwardData("\x7f")).toBe(false);
+    expect(guard.filterData("\x7f")).toBeNull();
 
     textarea.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -108,8 +124,8 @@ describe("installTerminalImeInputGuard", () => {
         bubbles: true,
       }),
     );
-    expect(guard.shouldForwardData("\x7f")).toBe(true);
-    expect(guard.shouldForwardData("\x7f")).toBe(false);
+    expect(guard.filterData("\x7f")).toBe("\x7f");
+    expect(guard.filterData("\x7f")).toBeNull();
 
     guard.dispose();
   });
@@ -118,10 +134,10 @@ describe("installTerminalImeInputGuard", () => {
     const { host, textarea } = createHarness();
     const guard = installTerminalImeInputGuard(host, textarea);
 
-    expect(guard.shouldForwardData("a")).toBe(true);
-    expect(guard.shouldForwardData("中")).toBe(true);
-    expect(guard.shouldForwardData("，")).toBe(true);
-    expect(guard.shouldForwardData("\r")).toBe(true);
+    expect(guard.filterData("a")).toBe("a");
+    expect(guard.filterData("中")).toBe("中");
+    expect(guard.filterData("，")).toBe("，");
+    expect(guard.filterData("\r")).toBe("\r");
 
     guard.dispose();
   });
