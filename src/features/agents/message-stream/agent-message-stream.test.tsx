@@ -39,6 +39,8 @@ function createMessageStreamState(
     effort: null,
     lastSeq: null,
     lastError: null,
+    turnInterrupted: false,
+    interruptedStopReason: null,
     isInitialized: true,
     ...overrides,
   };
@@ -110,6 +112,38 @@ describe("AgentMessageStream", () => {
     expect(messageCard?.compareDocumentPosition(running!)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it("异常中断且携带 stop_reason 时渲染提示条", () => {
+    render(
+      <AgentMessageStreamView
+        state={createMessageStreamState({
+          turnInterrupted: true,
+          interruptedStopReason: "max_tokens",
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "This turn may not have finished normally (interrupted, stop_reason: max_tokens). Send a message to continue.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("异常中断且无 stop_reason 时渲染无原因提示条", () => {
+    render(
+      <AgentMessageStreamView
+        state={createMessageStreamState({
+          turnInterrupted: true,
+          interruptedStopReason: null,
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "This turn may not have finished normally (interrupted). Send a message to continue.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("渲染 reasoning 折叠区", async () => {

@@ -6626,6 +6626,18 @@ button:focus-visible {
   animation: agents-message-thinking-pulse 1.2s ease-in-out infinite;
 }
 
+/* 异常中断提示：turn 在工具完成后被提前掐断、无收尾消息时展示，提示用户可重发继续。 */
+.agents-message-stream__interrupted {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 8px;
+  background: var(--color-danger-muted);
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .agents-message__spinner {
   animation: agents-message-spin 900ms linear infinite;
 }
@@ -6713,7 +6725,8 @@ button:focus-visible {
 .agents-message__entry--todo,
 .agents-message__entry--error,
 .agents-message__entry--compaction,
-.agents-message__entry--running {
+.agents-message__entry--running,
+.agents-message__entry--interrupted {
   display: flex;
   justify-content: flex-start;
 }

@@ -36,6 +36,10 @@ export interface MessageStreamState {
   effort: string | null;
   lastSeq: number | null;
   lastError: string | null;
+  /** 上一轮是否异常终止（stop_reason 异常，或末条是已完成 tool_call 且无收尾消息）。 */
+  turnInterrupted: boolean;
+  /** 异常终止时携带的 SDK stop_reason（后端未上报时为 null）。 */
+  interruptedStopReason: string | null;
   /** readAgentTimeline 完成前为 false，完成后为 true。 */
   isInitialized: boolean;
 }

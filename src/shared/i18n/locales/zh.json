@@ -457,6 +457,8 @@
     "thinking": "正在思考…",
     "scrollToBottom": "回到底部",
     "scrollToTop": "回到顶部",
+    "turnInterrupted": "本轮可能未正常完成（异常中断）。可重新发送消息继续。",
+    "turnInterruptedWithReason": "本轮可能未正常完成（异常中断，stop_reason：{{stopReason}}）。可重新发送消息继续。",
     "reasoningTitle": "正在思考…",
     "reasoningDuration": "思考过程（共进行了 {{seconds}} 秒）",
     "structuredSessionView": "智能体结构化会话视图",

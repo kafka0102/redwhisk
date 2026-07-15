@@ -40,8 +40,34 @@ export function createInitialState(): MessageStreamState {
     effort: null,
     lastSeq: null,
     lastError: null,
+    turnInterrupted: false,
+    interruptedStopReason: null,
     isInitialized: false,
   };
+}
+
+/** 视为「正常完成」的 SDK stop_reason。null（后端未上报）也算正常，避免误判。 */
+const CLEAN_STOP_REASONS = new Set(["end_turn", "stop_sequence"]);
+
+function isCleanStopReason(stopReason: string | null): boolean {
+  return stopReason === null || CLEAN_STOP_REASONS.has(stopReason);
+}
+
+/**
+ * 末条 timeline 是否为「已完成的 tool_call」。
+ *
+ * 正常 turn 都以 assistant 收尾消息结束；若 tool 完成后直接 turn_completed、无收尾
+ * 消息，即「被提前掐断」形态。该信号与 stop_reason 无关，可兜底代理把空响应当
+ * end_turn 上报、或后端未上报 stop_reason 的场景。
+ */
+function lastEntryIsCompletedToolCall(entries: MessageStreamEntry[]): boolean {
+  const last = entries[entries.length - 1];
+  return (
+    last !== undefined &&
+    last.kind === "tool_call" &&
+    last.item.type === "tool_call" &&
+    last.item.status === "completed"
+  );
 }
 
 /** 主 reducer。 */
@@ -116,7 +142,12 @@ export function messageStreamReducer(
         kind: "user_message",
         item,
       };
-      return { ...state, entries: [...state.entries, entry] };
+      return {
+        ...state,
+        entries: [...state.entries, entry],
+        turnInterrupted: false,
+        interruptedStopReason: null,
+      };
     }
 
     default:
@@ -133,11 +164,26 @@ function applyEvent(
       return state;
 
     case "turn_started":
-      return { ...state, turnStatus: "running" };
+      return {
+        ...state,
+        turnStatus: "running",
+        turnInterrupted: false,
+        interruptedStopReason: null,
+      };
 
     case "turn_completed": {
       const usage = mergeUsage(state.usage, event.usage);
-      return { ...state, turnStatus: "idle", usage };
+      const stopReason = event.stopReason ?? null;
+      const reasonAbnormal = !isCleanStopReason(stopReason);
+      const interrupted =
+        reasonAbnormal || lastEntryIsCompletedToolCall(state.entries);
+      return {
+        ...state,
+        turnStatus: "idle",
+        usage,
+        turnInterrupted: interrupted,
+        interruptedStopReason: reasonAbnormal ? stopReason : null,
+      };
     }
 
     case "turn_failed": {

@@ -434,6 +434,10 @@ export interface I18nMessages {
     scrollToBottom: string;
     /** 长内容时回到顶部的导航按钮 aria-label。 */
     scrollToTop: string;
+    /** 本轮异常中断（无 stop_reason）时的提示。 */
+    turnInterrupted: string;
+    /** 本轮异常中断且携带 stop_reason 时的提示。 */
+    turnInterruptedWithReason: (stopReason: string) => string;
     reasoningTitle: string;
     /** 已完成 reasoning 块的标题文案，入参为持续秒数。 */
     reasoningDuration: (seconds: number) => string;

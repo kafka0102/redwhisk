@@ -86,7 +86,14 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const [navTarget, setNavTarget] = useState<ScrollNavTarget>("hidden");
-  const { entries, turnStatus, isInitialized, lastError } = state;
+  const {
+    entries,
+    turnStatus,
+    isInitialized,
+    lastError,
+    turnInterrupted,
+    interruptedStopReason,
+  } = state;
   const isClaude = agentType === "claude" || agentType === "claude_code";
   const isTurnActive = turnStatus === "running" || isTurnRunning;
   // Claude Code 首次运行时，从用户消息展示到 Claude 首条输出之间有数秒连接延迟。
@@ -116,6 +123,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     turnStatus,
     shouldShowThinking,
     hasClaudeOutput,
+    turnInterrupted,
   ]);
   // 切换到本 session（isActive 由 false 变 true）时，若非完成态且消息流可见，
   // 定位到底部，便于查看正在执行的输出或待确认项。
@@ -166,6 +174,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     turnStatus,
     shouldShowThinking,
     hasClaudeOutput,
+    turnInterrupted,
     measureNav,
   ]);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
@@ -209,6 +218,17 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
           </p>
         ) : null}
         <AgentMessageCards entries={entries} />
+        {turnInterrupted ? (
+          <div className="agents-message__entry agents-message__entry--interrupted">
+            <p className="agents-message-stream__interrupted" role="status">
+              {interruptedStopReason
+                ? messages.agentsFeature.turnInterruptedWithReason(
+                    interruptedStopReason,
+                  )
+                : messages.agentsFeature.turnInterrupted}
+            </p>
+          </div>
+        ) : null}
         {shouldShowThinking ? (
           <div className="agents-message__entry agents-message__entry--running">
             <div

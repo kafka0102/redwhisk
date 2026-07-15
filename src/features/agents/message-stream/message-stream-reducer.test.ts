@@ -772,6 +772,104 @@ describe("messageStreamReducer", () => {
       });
       expect(state.turnStatus).toBe("canceled");
     });
+
+    it("turn_completed 正常收尾（end_turn + assistant 消息）不标记异常中断", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t1" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "完成了",
+          messageId: "a1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_completed",
+          turnId: "t1",
+          usage: null,
+          stopReason: "end_turn",
+        },
+      });
+      expect(state.turnInterrupted).toBe(false);
+      expect(state.interruptedStopReason).toBeNull();
+    });
+
+    it("turn_completed 异常 stop_reason（max_tokens）标记异常中断并携带原因", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t1" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "半截",
+          messageId: "a1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_completed",
+          turnId: "t1",
+          usage: null,
+          stopReason: "max_tokens",
+        },
+      });
+      expect(state.turnInterrupted).toBe(true);
+      expect(state.interruptedStopReason).toBe("max_tokens");
+    });
+
+    it("turn_completed 末条为已完成 tool_call（无收尾消息）即使 end_turn 也判异常", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t1" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c1",
+          name: "shell",
+          detail: { type: "shell", command: "echo hi" },
+          status: "completed",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_completed",
+          turnId: "t1",
+          usage: null,
+          stopReason: "end_turn",
+        },
+      });
+      expect(state.turnInterrupted).toBe(true);
+      // 启发式命中但 stop_reason 本身正常时，不展示误导性的 end_turn
+      expect(state.interruptedStopReason).toBeNull();
+    });
+
+    it("turn_started 清空上一轮的异常中断标记", () => {
+      let state: ReturnType<typeof createInitialState> = {
+        ...createInitialState(),
+        turnInterrupted: true,
+        interruptedStopReason: "max_tokens",
+      };
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t2" },
+      });
+      expect(state.turnInterrupted).toBe(false);
+      expect(state.interruptedStopReason).toBeNull();
+    });
   });
 
   describe("权限请求", () => {
