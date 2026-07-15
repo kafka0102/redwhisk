@@ -485,6 +485,7 @@
     "changes": "变更",
     "files": "文件",
     "uncommitted": "未提交",
+    "uncommittedChanges": "未提交变更",
     "committed": "已提交",
     "loadingChanges": "正在加载变更...",
     "noUncommittedChanges": "暂无未提交变更。",

@@ -485,6 +485,7 @@
     "changes": "Changes",
     "files": "Files",
     "uncommitted": "Uncommitted",
+    "uncommittedChanges": "Uncommitted changes",
     "committed": "Committed",
     "loadingChanges": "Loading changes...",
     "noUncommittedChanges": "No uncommitted changes.",

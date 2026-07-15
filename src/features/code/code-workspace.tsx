@@ -40,6 +40,8 @@ import {
   type CodeFileTab,
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
+import { CodeWorkspaceChangesView } from "./code-workspace-changes-view";
+import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 
 const MAX_FILE_TABS = 10;
 const DEFAULT_SIDEBAR_WIDTH = 400;
@@ -91,6 +93,9 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const [viewType, setViewType] = useState<CodeWorkspaceView>(
     () => cachedState?.viewType ?? "files",
   );
+  const [uncommittedChangesExpanded, setUncommittedChangesExpanded] = useState(
+    () => cachedState?.uncommittedChangesExpanded ?? true,
+  );
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const activePathRef = useRef<string | null>(cachedState?.activePath ?? null);
   const openFilePathsRef = useRef(
@@ -116,6 +121,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       tree,
       treeError,
       treeLoaded,
+      uncommittedChangesExpanded,
       viewType,
     });
   }, [
@@ -128,6 +134,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     tree,
     treeError,
     treeLoaded,
+    uncommittedChangesExpanded,
     viewType,
   ]);
 
@@ -166,6 +173,18 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   useEffect(() => {
     translateRef.current = t;
   }, [t]);
+
+  // 变更视图数据：进入变更视图或切换工作区时拉取一次，不轮询。
+  const {
+    changes: workspaceChanges,
+    isChangesLoading,
+    changesErrorMessage,
+    refreshChanges,
+  } = useCodeWorkspaceChanges(
+    projectId,
+    selectedRootWorkspacePath,
+    viewType === "changes",
+  );
 
   // 已缓存且加载过的树直接复用，切页回来不强制重拉；换 root / 手动刷新另走入口。
   // setState 放进 Promise 微任务，避免 react-hooks/set-state-in-effect。
@@ -491,11 +510,20 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
             </DropdownMenuContent>
           </DropdownMenu>
           <button
-            aria-label={messages.agentsFeature.refreshFileTree}
+            aria-label={
+              viewType === "files"
+                ? messages.agentsFeature.refreshFileTree
+                : messages.agentsFeature.refreshChanges
+            }
             className="code-workspace__refresh"
-            disabled={!selectedRoot || isTreeLoading || isTreeRefreshing}
+            disabled={
+              !selectedRoot ||
+              (viewType === "files"
+                ? isTreeLoading || isTreeRefreshing
+                : isChangesLoading)
+            }
             type="button"
-            onClick={refreshTree}
+            onClick={viewType === "files" ? refreshTree : refreshChanges}
           >
             <RefreshCw
               aria-hidden="true"
@@ -520,7 +548,23 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
             onOpenStateChange={setOpenFolders}
           />
         ) : (
-          <div className="code-workspace__changes-view" />
+          <CodeWorkspaceChangesView
+            changes={workspaceChanges}
+            changesErrorMessage={changesErrorMessage}
+            isChangesLoading={isChangesLoading}
+            isUncommittedExpanded={uncommittedChangesExpanded}
+            onOpenChangedFile={(file) =>
+              openFile({
+                id: file.filePath,
+                kind: "file",
+                name: file.fileName,
+                path: file.filePath,
+              })
+            }
+            onToggleUncommittedExpanded={() =>
+              setUncommittedChangesExpanded((current) => !current)
+            }
+          />
         )}
       </aside>
       <div

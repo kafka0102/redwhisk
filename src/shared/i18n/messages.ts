@@ -463,6 +463,7 @@ export interface I18nMessages {
     changes: string;
     files: string;
     uncommitted: string;
+    uncommittedChanges: string;
     committed: string;
     loadingChanges: string;
     noUncommittedChanges: string;
