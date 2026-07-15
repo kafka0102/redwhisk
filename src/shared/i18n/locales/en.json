@@ -487,6 +487,7 @@
     "uncommitted": "Uncommitted",
     "uncommittedChanges": "Uncommitted changes",
     "committed": "Committed",
+    "committedChanges": "Committed changes",
     "loadingChanges": "Loading changes...",
     "noUncommittedChanges": "No uncommitted changes.",
     "noCommittedChanges": "This branch has no new commits.",

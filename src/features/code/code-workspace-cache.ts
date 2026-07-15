@@ -30,6 +30,8 @@ export interface CachedCodeWorkspaceState {
   viewType: CodeWorkspaceView;
   /** 「变更」视图下「未提交变更」折叠面板是否展开，默认展开。 */
   uncommittedChangesExpanded: boolean;
+  /** 「变更」视图下「已提交变更」折叠面板是否展开，默认展开。 */
+  committedChangesExpanded: boolean;
 }
 
 export const codeWorkspaceStateCache = new Map<

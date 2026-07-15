@@ -96,6 +96,9 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const [uncommittedChangesExpanded, setUncommittedChangesExpanded] = useState(
     () => cachedState?.uncommittedChangesExpanded ?? true,
   );
+  const [committedChangesExpanded, setCommittedChangesExpanded] = useState(
+    () => cachedState?.committedChangesExpanded ?? true,
+  );
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const activePathRef = useRef<string | null>(cachedState?.activePath ?? null);
   const openFilePathsRef = useRef(
@@ -122,6 +125,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       treeError,
       treeLoaded,
       uncommittedChangesExpanded,
+      committedChangesExpanded,
       viewType,
     });
   }, [
@@ -135,6 +139,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     treeError,
     treeLoaded,
     uncommittedChangesExpanded,
+    committedChangesExpanded,
     viewType,
   ]);
 
@@ -179,7 +184,12 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     changes: workspaceChanges,
     isChangesLoading,
     changesErrorMessage,
+    commitHistory,
+    isCommitHistoryLoading,
+    commitHistoryErrorMessage,
+    isWorktree,
     refreshChanges,
+    refreshCommitHistory,
   } = useCodeWorkspaceChanges(
     projectId,
     selectedRootWorkspacePath,
@@ -520,10 +530,17 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
               !selectedRoot ||
               (viewType === "files"
                 ? isTreeLoading || isTreeRefreshing
-                : isChangesLoading)
+                : isChangesLoading || isCommitHistoryLoading)
             }
             type="button"
-            onClick={viewType === "files" ? refreshTree : refreshChanges}
+            onClick={
+              viewType === "files"
+                ? refreshTree
+                : () => {
+                    refreshChanges();
+                    refreshCommitHistory();
+                  }
+            }
           >
             <RefreshCw
               aria-hidden="true"
@@ -563,6 +580,14 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
             }
             onToggleUncommittedExpanded={() =>
               setUncommittedChangesExpanded((current) => !current)
+            }
+            commitHistory={commitHistory}
+            commitHistoryErrorMessage={commitHistoryErrorMessage}
+            isCommitHistoryLoading={isCommitHistoryLoading}
+            isWorktree={isWorktree}
+            isCommittedExpanded={committedChangesExpanded}
+            onToggleCommittedExpanded={() =>
+              setCommittedChangesExpanded((current) => !current)
             }
           />
         )}

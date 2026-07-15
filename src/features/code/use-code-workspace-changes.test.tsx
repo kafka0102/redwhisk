@@ -3,11 +3,15 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
-import { getProjectWorktreeChanges } from "../../shared/workspace/workspace-commands";
+import {
+  getProjectWorktreeChanges,
+  getProjectWorktreeCommitHistory,
+} from "../../shared/workspace/workspace-commands";
 import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   getProjectWorktreeChanges: vi.fn(),
+  getProjectWorktreeCommitHistory: vi.fn(),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -36,6 +40,16 @@ const inaccessibleError = {
 describe("useCodeWorkspaceChanges", () => {
   beforeEach(() => {
     vi.mocked(getProjectWorktreeChanges).mockReset();
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [],
+      signature: "changes-empty",
+    });
+    vi.mocked(getProjectWorktreeCommitHistory).mockReset();
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: [],
+      signature: "commits-empty",
+      isWorktree: false,
+    });
   });
 
   it("fetches uncommitted changes when enabled with a workspace path", async () => {
@@ -138,5 +152,39 @@ describe("useCodeWorkspaceChanges", () => {
     );
 
     expect(result.current.changes).toBe(initialChanges);
+  });
+
+  it("fetches committed history alongside uncommitted changes", async () => {
+    const commit = {
+      hash: "abc123",
+      shortHash: "abc123",
+      message: "feat: add thing",
+      authorName: "Alice",
+      committedAt: 1_780_638_000,
+      files: [],
+      isPushed: true,
+      pushedTo: "origin/main",
+      isCreatedInWorktree: false,
+    };
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: [commit],
+      signature: "commits-1",
+      isWorktree: true,
+    });
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.commitHistory).toEqual([commit]);
+    });
+    expect(getProjectWorktreeCommitHistory).toHaveBeenCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+    });
+    expect(result.current.isWorktree).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
   });
 });

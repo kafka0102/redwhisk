@@ -487,6 +487,7 @@
     "uncommitted": "未提交",
     "uncommittedChanges": "未提交变更",
     "committed": "已提交",
+    "committedChanges": "已提交变更",
     "loadingChanges": "正在加载变更...",
     "noUncommittedChanges": "暂无未提交变更。",
     "noCommittedChanges": "该分支没有新的提交记录。",

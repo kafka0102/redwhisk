@@ -465,6 +465,7 @@ export interface I18nMessages {
     uncommitted: string;
     uncommittedChanges: string;
     committed: string;
+    committedChanges: string;
     loadingChanges: string;
     noUncommittedChanges: string;
     noCommittedChanges: string;
