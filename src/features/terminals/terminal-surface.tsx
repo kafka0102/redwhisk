@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
+import { installTerminalImeTextareaCleanup } from "./terminal-ime-textarea-cleanup";
 import { createTerminalInputWriter } from "./terminal-input-writer";
 import { writeTerminalHistory } from "./terminal-history-writer";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
@@ -87,6 +88,7 @@ export function TerminalSurface({
     let terminal: Terminal;
     let fitAddon: FitAddon;
     let webglAddon: WebglAddon | null = null;
+    let disposeImeTextareaCleanup: (() => void) | null = null;
 
     const showStatusMessage = (
       source: TerminalStatusSource,
@@ -131,6 +133,9 @@ export function TerminalSurface({
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(new ClipboardAddon());
       terminal.open(host);
+      disposeImeTextareaCleanup = terminal.textarea
+        ? installTerminalImeTextareaCleanup(terminal.textarea)
+        : null;
       try {
         webglAddon = new WebglAddon();
         webglAddon.onContextLoss(() => {
@@ -388,6 +393,7 @@ export function TerminalSurface({
       resizeObserver?.disconnect();
       window.removeEventListener("resize", handleWindowResize);
       disposeData.dispose();
+      disposeImeTextareaCleanup?.();
       webglAddon?.dispose();
       terminal.dispose();
       terminalRef.current = null;
