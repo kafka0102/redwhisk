@@ -25,6 +25,13 @@ pub enum AgentStreamEvent {
     TurnCompleted {
         turn_id: Option<String>,
         usage: Option<AgentUsage>,
+        /// SDK `result.stop_reason`：正常为 `end_turn`。异常终止（`max_tokens` /
+        /// `tool_use` / 空值等）可据此区分「正常完成」与「被提前掐断」。
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stop_reason: Option<String>,
+        /// SDK `result.subtype`（`success` / `error_max_tokens` 等）。
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subtype: Option<String>,
     },
     /// 一轮对话失败。
     TurnFailed {

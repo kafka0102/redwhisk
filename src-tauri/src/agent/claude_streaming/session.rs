@@ -700,6 +700,7 @@ fn build_events(
             result_text,
             errors,
             subtype,
+            stop_reason,
             ..
         } => {
             // flush 残留文本与 reasoning（turn 结束前确保所有增量都已广播）。
@@ -734,6 +735,12 @@ fn build_events(
                 events.push(AgentStreamEvent::TurnCompleted {
                     turn_id: turn_id.clone(),
                     usage: None,
+                    stop_reason,
+                    subtype: if subtype.is_empty() {
+                        None
+                    } else {
+                        Some(subtype)
+                    },
                 });
             } else {
                 events.push(AgentStreamEvent::TurnFailed {
@@ -1361,11 +1368,52 @@ mod tests {
                 stop_reason: Some("end_turn".into()),
             },
         );
-        assert!(events
+        let completed = events
             .iter()
-            .any(|e| matches!(e, AgentStreamEvent::TurnCompleted { .. })));
+            .find_map(|e| match e {
+                AgentStreamEvent::TurnCompleted {
+                    stop_reason, subtype, ..
+                } => Some((stop_reason.clone(), subtype.clone())),
+                _ => None,
+            })
+            .expect("应广播 TurnCompleted");
+        assert_eq!(completed.0.as_deref(), Some("end_turn"));
+        assert_eq!(completed.1.as_deref(), Some("success"));
         let guard = state.lock().unwrap();
         assert!(guard.turn_finalized);
+    }
+
+    #[test]
+    fn result_success_carries_abnormal_stop_reason() {
+        // 异常终止（max_tokens）仍走 success 分支（is_error=false），但 stop_reason
+        // 不是 end_turn。透传后前端/日志可据此识别「被提前掐断」的 turn。
+        let state = test_state(Some("abc".into()));
+        let config = test_config();
+        let events = build_events(
+            &state,
+            &config,
+            &Some("t1".into()),
+            ClaudeStreamMessage::Result {
+                subtype: "success".into(),
+                is_error: false,
+                result_text: Some("OK".into()),
+                session_id: Some("abc".into()),
+                usage: None,
+                errors: vec![],
+                stop_reason: Some("max_tokens".into()),
+            },
+        );
+        let completed = events
+            .iter()
+            .find_map(|e| match e {
+                AgentStreamEvent::TurnCompleted {
+                    stop_reason, subtype, ..
+                } => Some((stop_reason.clone(), subtype.clone())),
+                _ => None,
+            })
+            .expect("应广播 TurnCompleted");
+        assert_eq!(completed.0.as_deref(), Some("max_tokens"));
+        assert_eq!(completed.1.as_deref(), Some("success"));
     }
 
     #[test]

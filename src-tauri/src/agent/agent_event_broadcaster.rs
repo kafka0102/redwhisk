@@ -511,6 +511,8 @@ mod tests {
             turn_running_from_stream_event(&AgentStreamEvent::TurnCompleted {
                 turn_id: None,
                 usage: None,
+                stop_reason: None,
+                subtype: None,
             }),
             D::EndedWithGrace
         );
@@ -548,6 +550,8 @@ mod tests {
             turn_running_from_stream_event(&AgentStreamEvent::TurnCompleted {
                 turn_id: None,
                 usage: None,
+                stop_reason: None,
+                subtype: None,
             }),
             D::EndedWithGrace
         );

@@ -15,7 +15,15 @@
 export type AgentStreamEvent =
   | { type: "thread_started"; threadId: string }
   | { type: "turn_started"; turnId: string | null }
-  | { type: "turn_completed"; turnId: string | null; usage: AgentUsage | null }
+  | {
+      type: "turn_completed";
+      turnId: string | null;
+      usage: AgentUsage | null;
+      /** SDK result.stop_reason（正常 end_turn）。异常终止时为 max_tokens / 空值等。 */
+      stopReason?: string | null;
+      /** SDK result.subtype（success / error_max_tokens 等）。 */
+      subtype?: string | null;
+    }
   | {
       type: "turn_failed";
       turnId: string | null;

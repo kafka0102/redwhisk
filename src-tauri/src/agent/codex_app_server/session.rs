@@ -719,7 +719,12 @@ fn build_events(
                     code: Some(status),
                 });
             } else {
-                events.push(AgentStreamEvent::TurnCompleted { turn_id, usage });
+                events.push(AgentStreamEvent::TurnCompleted {
+                    turn_id,
+                    usage,
+                    stop_reason: None,
+                    subtype: None,
+                });
             }
             events
         }
