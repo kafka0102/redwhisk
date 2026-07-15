@@ -5,7 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
-import { installTerminalImeTextareaCleanup } from "./terminal-ime-textarea-cleanup";
+import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
 import { writeTerminalHistory } from "./terminal-history-writer";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
@@ -88,7 +88,8 @@ export function TerminalSurface({
     let terminal: Terminal;
     let fitAddon: FitAddon;
     let webglAddon: WebglAddon | null = null;
-    let disposeImeTextareaCleanup: (() => void) | null = null;
+    let imeInputGuard: ReturnType<typeof installTerminalImeInputGuard> | null =
+      null;
 
     const showStatusMessage = (
       source: TerminalStatusSource,
@@ -133,8 +134,8 @@ export function TerminalSurface({
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(new ClipboardAddon());
       terminal.open(host);
-      disposeImeTextareaCleanup = terminal.textarea
-        ? installTerminalImeTextareaCleanup(terminal.textarea)
+      imeInputGuard = terminal.textarea
+        ? installTerminalImeInputGuard(host, terminal.textarea)
         : null;
       try {
         webglAddon = new WebglAddon();
@@ -208,6 +209,9 @@ export function TerminalSurface({
     let suppressPtyInput = false;
     const disposeData = terminal.onData((data) => {
       if (suppressPtyInput) {
+        return;
+      }
+      if (imeInputGuard && !imeInputGuard.shouldForwardData(data)) {
         return;
       }
       inputWriter.push(data);
@@ -393,7 +397,7 @@ export function TerminalSurface({
       resizeObserver?.disconnect();
       window.removeEventListener("resize", handleWindowResize);
       disposeData.dispose();
-      disposeImeTextareaCleanup?.();
+      imeInputGuard?.dispose();
       webglAddon?.dispose();
       terminal.dispose();
       terminalRef.current = null;
