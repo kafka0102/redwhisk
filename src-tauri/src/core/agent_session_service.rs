@@ -19,7 +19,7 @@ use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
 use crate::agent::codex_config;
 use crate::agent::pty_session_manager::{
-    read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PtyCommandMode, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
@@ -407,6 +407,7 @@ impl<'connection> AgentSessionService<'connection> {
             Some(
                 pty_sessions
                     .spawn_pending(&PtySpawnRequest {
+                        mode: PtyCommandMode::ExecReplace,
                         command: launch.command_snapshot.clone(),
                         working_dir: launch.working_dir.clone(),
                         log_path: launch.log_path.clone(),

@@ -59,7 +59,16 @@ struct PendingEmit {
     first_at: Instant,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PtyCommandMode {
+    /// 以 `exec <command> [prompt] || exit $?` 启动：命令替换 shell，退出即结束 session。
+    ExecReplace,
+    /// 命令在非交互 login shell 中执行，结束后 `exec $SHELL -li` 落到交互式 login shell。
+    InteractiveRun,
+}
+
 pub struct PtySpawnRequest {
+    pub mode: PtyCommandMode,
     pub command: String,
     pub working_dir: String,
     pub log_path: String,
@@ -198,8 +207,11 @@ impl PtySessionManager {
             })
             .map_err(|error| error.to_string())?;
 
-        let mut command =
-            build_command_builder(&request.command, request.initial_prompt.as_deref());
+        let mut command = build_command_builder(
+            &request.command,
+            request.initial_prompt.as_deref(),
+            request.mode,
+        );
         command.cwd(&request.working_dir);
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
@@ -807,18 +819,48 @@ pub(crate) fn build_shell_command_line(command: &str, prompt: Option<&str>) -> S
     format!("{command_line} || exit $?")
 }
 
-fn build_command_builder(command: &str, prompt: Option<&str>) -> CommandBuilder {
+/// 构造「执行 command 后落到交互式 login shell」的 `-lc` 命令串。
+/// command 为空或就是 shell 本身时，直接进入纯交互式 login shell。
+/// 用 `-lc`（而非 `-lic`）执行 command：zsh 的 `-i -c` 组合在有 `.zshrc`（如
+/// powerlevel10k）时不会可靠执行 `-c` 命令，因此先以非交互 login shell 跑完 command，
+/// 再 `exec $SHELL -li` 进入交互式 login shell，命令退出后保留 shell。
+fn build_shell_keepalive_command_line(command: &str, shell: &str) -> String {
+    let trimmed = command.trim();
+    if trimmed.is_empty() || trimmed == shell {
+        format!("exec {shell} -li")
+    } else {
+        format!("{trimmed}; exec {shell} -li")
+    }
+}
+
+fn build_command_builder(
+    command: &str,
+    prompt: Option<&str>,
+    mode: PtyCommandMode,
+) -> CommandBuilder {
     #[cfg(unix)]
     {
         let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-        let mut builder = CommandBuilder::new(shell);
-        builder.arg("-lc");
-        builder.arg(build_shell_command_line(command, prompt));
-        builder
+        match mode {
+            PtyCommandMode::ExecReplace => {
+                let mut builder = CommandBuilder::new(shell);
+                builder.arg("-lc");
+                builder.arg(build_shell_command_line(command, prompt));
+                builder
+            }
+            PtyCommandMode::InteractiveRun => {
+                let keepalive = build_shell_keepalive_command_line(command, &shell);
+                let mut builder = CommandBuilder::new(shell);
+                builder.arg("-lc");
+                builder.arg(keepalive);
+                builder
+            }
+        }
     }
 
     #[cfg(not(unix))]
     {
+        let _ = mode;
         let mut builder = CommandBuilder::new(command);
         if let Some(prompt) = prompt {
             builder.arg(prompt);
@@ -833,7 +875,7 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_shell_command_line, trim_log_file};
+    use super::{build_shell_keepalive_command_line, build_shell_command_line, trim_log_file};
     use std::io::Write;
 
     #[test]
@@ -852,6 +894,34 @@ mod tests {
                 Some("fix 'bug'")
             ),
             "exec codex --dangerously-bypass-approvals-and-sandbox 'fix '\"'\"'bug'\"'\"'' || exit $?"
+        );
+    }
+
+    #[test]
+    fn build_shell_keepalive_command_line_runs_command_then_interactive_shell() {
+        assert_eq!(
+            build_shell_keepalive_command_line("grok", "/bin/zsh"),
+            "grok; exec /bin/zsh -li"
+        );
+        assert_eq!(
+            build_shell_keepalive_command_line("grok --model x", "/bin/zsh"),
+            "grok --model x; exec /bin/zsh -li"
+        );
+    }
+
+    #[test]
+    fn build_shell_keepalive_command_line_plain_shell_for_empty_or_shell() {
+        assert_eq!(
+            build_shell_keepalive_command_line("", "/bin/zsh"),
+            "exec /bin/zsh -li"
+        );
+        assert_eq!(
+            build_shell_keepalive_command_line("   ", "/bin/zsh"),
+            "exec /bin/zsh -li"
+        );
+        assert_eq!(
+            build_shell_keepalive_command_line("/bin/zsh", "/bin/zsh"),
+            "exec /bin/zsh -li"
         );
     }
 

@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::agent::pty_session_manager::{
-    read_terminal_snapshot, PendingPtySession, PtyRegisterError, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PendingPtySession, PtyCommandMode, PtyRegisterError, PtySessionManager,
+    PtySpawnRequest,
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -293,6 +294,7 @@ impl<'connection> ProjectTerminalService<'connection> {
             run_create_after_config_insert_hook(project.id, config.id);
             registry.with_config_lock(project.id, config.id, || {
                 let pending = match pty_sessions.spawn_pending(&PtySpawnRequest {
+                    mode: PtyCommandMode::InteractiveRun,
                     command: config.launch_command.clone(),
                     working_dir: config.working_dir.clone(),
                     log_path: log_path.to_string_lossy().to_string(),
@@ -412,6 +414,7 @@ impl<'connection> ProjectTerminalService<'connection> {
 
         let pending = pty_sessions
             .spawn_pending(&PtySpawnRequest {
+                mode: PtyCommandMode::InteractiveRun,
                 command: shell_command.clone(),
                 working_dir: agent_session.working_dir.clone(),
                 log_path: log_path.to_string_lossy().to_string(),
@@ -1102,6 +1105,7 @@ impl<'connection> ProjectTerminalService<'connection> {
 
         let pending = pty_sessions
             .spawn_pending(&PtySpawnRequest {
+                mode: PtyCommandMode::InteractiveRun,
                 command,
                 working_dir: config.working_dir.clone(),
                 log_path: log_path.to_string_lossy().to_string(),
@@ -2781,6 +2785,139 @@ mod tests {
                 CloseProjectTerminalInput {
                     project_id: project.id,
                     session_id: created.session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("close terminal");
+    }
+
+    #[test]
+    fn project_terminal_keeps_shell_after_launch_command_exits() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        // 启动命令设为会自行退出且写入 marker 文件的命令（模拟 grok 被 ctrl+c 后退出）。
+        // 走 InteractiveRun 包装：`$SHELL -lc '<cmd>; exec $SHELL -li'`，命令退出后保留 shell。
+        let marker = temp_dir.path().join("launch_ran");
+        let launch_command = format!("sh -c 'echo ran > {}'", marker.display());
+        let config = service
+            .project_repository
+            .insert_project_terminal_config(
+                project.id,
+                "auto-exit",
+                &project.repo_path,
+                &launch_command,
+            )
+            .expect("insert terminal config");
+
+        let session_id = service
+            .start_terminal_for_config(temp_dir.path(), &config, &registry, &manager)
+            .expect("start terminal for config");
+
+        // 轮询 marker 文件，确定性验证启动命令已执行（不依赖 snapshot 时序与窗口）。
+        let mut launched = false;
+        for _ in 0..80 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            if marker.exists() {
+                launched = true;
+                break;
+            }
+        }
+        // 等待 exec 后的交互式 login shell 完成 .zshrc 初始化，避免探针被启动过程吞掉。
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+
+        // 启动命令已退出，注入存活探针：shell 应继续回显 SURVIVED-<code>。
+        ProjectTerminalService::write_terminal_input(
+            WriteProjectTerminalInput {
+                project_id: project.id,
+                session_id,
+                data: "echo SURVIVED-$?\r".to_string(),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("write probe");
+
+        let mut echoed = false;
+        for _ in 0..120 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = ProjectTerminalService::read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: project.id,
+                    session_id,
+                    max_bytes: Some(8_192),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("read snapshot");
+            if snapshot.snapshot.contains("SURVIVED-") {
+                echoed = true;
+                break;
+            }
+            if !snapshot.is_active {
+                break;
+            }
+        }
+
+        let snapshot = ProjectTerminalService::read_terminal_snapshot(
+            ReadProjectTerminalInput {
+                project_id: project.id,
+                session_id,
+                max_bytes: Some(8_192),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("final snapshot");
+
+        assert!(
+            launched,
+            "启动命令应被执行；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+        assert!(
+            snapshot.is_active,
+            "启动命令退出后 session 必须保持 active；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+        assert!(
+            echoed,
+            "启动命令退出后 shell 应继续回显探针；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+
+        service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: project.id,
+                    session_id,
                 },
                 &registry,
                 &manager,

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use redwhisk_lib::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use redwhisk_lib::agent::pty_session_manager::{
-    read_terminal_snapshot, PtyExitStatus, PtySessionManager, PtySpawnRequest,
+    read_terminal_snapshot, PtyCommandMode, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
 use redwhisk_lib::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
@@ -2806,6 +2806,7 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
 
     let pending = manager
         .spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::ExecReplace,
             command: command.to_string_lossy().to_string(),
             working_dir: temp_dir.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
@@ -2852,6 +2853,7 @@ fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
 
     let pending = manager
         .spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::ExecReplace,
             command: command.to_string_lossy().to_string(),
             working_dir: temp_dir.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
@@ -2909,6 +2911,7 @@ fn pty_session_manager_restores_complete_output_chunks_for_active_session() {
     let manager = PtySessionManager::new();
     let pending = manager
         .spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::ExecReplace,
             command: command.to_string_lossy().to_string(),
             working_dir: temp_dir.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
@@ -2969,6 +2972,7 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
     let manager = PtySessionManager::new();
     let pending = manager
         .spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::ExecReplace,
             command: command.to_string_lossy().to_string(),
             working_dir: temp_dir.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
@@ -3061,6 +3065,7 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
     let manager = PtySessionManager::new();
     let pending = manager
         .spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::ExecReplace,
             command: command.to_string_lossy().to_string(),
             working_dir: temp_dir.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
