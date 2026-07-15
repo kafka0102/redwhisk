@@ -4602,6 +4602,32 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.code-workspace__view-type {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  width: 60px;
+  height: 100%;
+  padding: 0 8px;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.code-workspace__view-type > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-workspace__changes-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .code-workspace__refresh {
   display: inline-grid;
   flex-shrink: 0;

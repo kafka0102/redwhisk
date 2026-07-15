@@ -38,6 +38,7 @@ import {
 import {
   codeWorkspaceStateCache,
   type CodeFileTab,
+  type CodeWorkspaceView,
 } from "./code-workspace-cache";
 
 const MAX_FILE_TABS = 10;
@@ -87,6 +88,9 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   const [sidebarWidth, setSidebarWidth] = useState(
     () => cachedState?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
   );
+  const [viewType, setViewType] = useState<CodeWorkspaceView>(
+    () => cachedState?.viewType ?? "files",
+  );
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const activePathRef = useRef<string | null>(cachedState?.activePath ?? null);
   const openFilePathsRef = useRef(
@@ -112,6 +116,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       tree,
       treeError,
       treeLoaded,
+      viewType,
     });
   }, [
     activePath,
@@ -123,6 +128,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     tree,
     treeError,
     treeLoaded,
+    viewType,
   ]);
 
   useEffect(() => {
@@ -466,6 +472,24 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="code-workspace__view-type">
+              <span>
+                {viewType === "files"
+                  ? messages.agentsFeature.files
+                  : messages.agentsFeature.changes}
+              </span>
+              <ChevronDown aria-hidden="true" size={14} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setViewType("files")}>
+                {messages.agentsFeature.files}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setViewType("changes")}>
+                {messages.agentsFeature.changes}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             aria-label={messages.agentsFeature.refreshFileTree}
             className="code-workspace__refresh"
@@ -485,15 +509,19 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
             />
           </button>
         </div>
-        <FileTreePanel
-          errorMessage={treeError}
-          fileTree={tree}
-          initialOpenState={openFolders}
-          isLoading={isTreeLoading}
-          workspacePath={selectedRoot?.path}
-          onOpenFile={openFile}
-          onOpenStateChange={setOpenFolders}
-        />
+        {viewType === "files" ? (
+          <FileTreePanel
+            errorMessage={treeError}
+            fileTree={tree}
+            initialOpenState={openFolders}
+            isLoading={isTreeLoading}
+            workspacePath={selectedRoot?.path}
+            onOpenFile={openFile}
+            onOpenStateChange={setOpenFolders}
+          />
+        ) : (
+          <div className="code-workspace__changes-view" />
+        )}
       </aside>
       <div
         className="code-workspace__splitter"
