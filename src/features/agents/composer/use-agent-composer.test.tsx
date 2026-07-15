@@ -8,7 +8,11 @@ import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TurnStatus } from "../message-stream/message-stream-types";
-import { useAgentComposer } from "./use-agent-composer";
+import {
+  clearComposerDraft,
+  clearComposerDraftCacheForTest,
+  useAgentComposer,
+} from "./use-agent-composer";
 import type { UseAgentComposerResult } from "./use-agent-composer";
 
 const dialogMocks = vi.hoisted(() => ({
@@ -73,6 +77,7 @@ type ProbeInput = Omit<ProbeProps, "onState">;
 async function renderProbe(props: ProbeInput): Promise<{
   getState: () => UseAgentComposerResult | null;
   rerenderWith: (next: Partial<Pick<ProbeProps, "turnStatus">>) => void;
+  unmount: () => void;
 }> {
   let latest: UseAgentComposerResult | null = null;
   const captureState = (state: UseAgentComposerResult) => {
@@ -107,6 +112,7 @@ async function renderProbe(props: ProbeInput): Promise<{
         />,
       );
     },
+    unmount: result.unmount,
   };
 }
 
@@ -123,6 +129,8 @@ beforeEach(() => {
       kind: "text",
     }),
   );
+  // 草稿缓存是 module-level 单例，跨用例共享，每个用例前清空避免互相污染。
+  clearComposerDraftCacheForTest();
 });
 
 afterEach(() => {
@@ -479,5 +487,108 @@ describe("useAgentComposer", () => {
     expect(setAgentThinkingMock).not.toHaveBeenCalled();
     expect(getState()!.effort).toBe("medium");
     expect(getState()!.submitError).toBe("恢复失败");
+  });
+
+  describe("输入草稿缓存（按 sessionId 隔离的纯内存）", () => {
+    it("卸载后重挂载同一 sessionId，已输入文本保留", async () => {
+      const first = await renderProbe({
+        projectId: 1,
+        sessionId: 100,
+        turnStatus: "idle",
+      });
+      await act(async () => {
+        first.getState()!.setText("草稿保留");
+      });
+      first.unmount();
+
+      const second = await renderProbe({
+        projectId: 1,
+        sessionId: 100,
+        turnStatus: "idle",
+      });
+      expect(second.getState()!.text).toBe("草稿保留");
+    });
+
+    it("不同 sessionId 的草稿互相隔离，切换不互相覆盖", async () => {
+      const a = await renderProbe({
+        projectId: 1,
+        sessionId: 200,
+        turnStatus: "idle",
+      });
+      await act(async () => {
+        a.getState()!.setText("A 草稿");
+      });
+      const b = await renderProbe({
+        projectId: 1,
+        sessionId: 201,
+        turnStatus: "idle",
+      });
+      // B 初始为空，未被 A 污染。
+      expect(b.getState()!.text).toBe("");
+      await act(async () => {
+        b.getState()!.setText("B 草稿");
+      });
+      // 两个实例并存时各自保留自身草稿。
+      expect(a.getState()!.text).toBe("A 草稿");
+      a.unmount();
+      b.unmount();
+
+      const aAgain = await renderProbe({
+        projectId: 1,
+        sessionId: 200,
+        turnStatus: "idle",
+      });
+      const bAgain = await renderProbe({
+        projectId: 1,
+        sessionId: 201,
+        turnStatus: "idle",
+      });
+      expect(aAgain.getState()!.text).toBe("A 草稿");
+      expect(bAgain.getState()!.text).toBe("B 草稿");
+    });
+
+    it("发送成功后该 sessionId 的草稿被清除", async () => {
+      const first = await renderProbe({
+        projectId: 1,
+        sessionId: 300,
+        turnStatus: "idle",
+      });
+      await act(async () => {
+        first.getState()!.setText("发送后应清除");
+      });
+      await act(async () => {
+        await first.getState()!.handleSubmit();
+      });
+      expect(first.getState()!.text).toBe("");
+      first.unmount();
+
+      const second = await renderProbe({
+        projectId: 1,
+        sessionId: 300,
+        turnStatus: "idle",
+      });
+      expect(second.getState()!.text).toBe("");
+    });
+
+    it("clearComposerDraft 调用后新挂载的同 sessionId 实例读到空串（模拟 id 复用）", async () => {
+      const first = await renderProbe({
+        projectId: 1,
+        sessionId: 400,
+        turnStatus: "idle",
+      });
+      await act(async () => {
+        first.getState()!.setText("删除后不应复用");
+      });
+      first.unmount();
+
+      clearComposerDraft(400);
+
+      const second = await renderProbe({
+        projectId: 1,
+        sessionId: 400,
+        turnStatus: "idle",
+      });
+      expect(second.getState()!.text).toBe("");
+    });
   });
 });

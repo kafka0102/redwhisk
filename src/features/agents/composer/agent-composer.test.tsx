@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentComposer } from "./agent-composer";
+import { clearComposerDraftCacheForTest } from "./use-agent-composer";
 import { getAgentCapabilities } from "../agent-capabilities";
 import type { AgentUsage } from "../agent-stream-types";
 
@@ -59,6 +60,8 @@ const SAMPLE_USAGE: AgentUsage = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 草稿缓存是 module-level 单例，跨用例共享，每个用例前清空避免互相污染。
+  clearComposerDraftCacheForTest();
   dialogMocks.open.mockResolvedValue(null);
   sendAgentMessageMock.mockResolvedValue(undefined);
   cancelAgentTurnMock.mockResolvedValue(undefined);

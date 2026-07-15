@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentStreamEventEnvelope } from "./agent-stream-types";
 import { AgentSessionView } from "./agent-session-view";
 import { clearAgentMessageStreamCacheForTest } from "./message-stream/use-agent-message-stream";
+import { clearComposerDraftCacheForTest } from "./composer/use-agent-composer";
 
 // vi.hoisted 让 mock 工厂与测试体共享同一份可变 listeners，便于推送事件。
 const mocks = vi.hoisted(() => ({
@@ -92,6 +93,7 @@ function emitEvent(payload: AgentStreamEventEnvelope) {
 
 afterEach(() => {
   clearAgentMessageStreamCacheForTest();
+  clearComposerDraftCacheForTest();
 });
 
 describe("AgentSessionView", () => {

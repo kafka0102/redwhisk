@@ -101,6 +101,34 @@ function inferKind(displayName: string): AgentAttachmentKindLiteral {
   return "generic";
 }
 
+/**
+ * Session 输入草稿缓存：按 sessionId 隔离的纯内存 Map。
+ *
+ * 作为 JS 模块单例存活于 AgentsActivity 生命周期之外，使切走工作台页面再切回、
+ * 或切 Session 再切回时未发送的文本仍保留；关闭应用即丢失（有意取舍，详见 ADR 0006）。
+ *
+ * 非显然约束：agent_sessions.id 无 AUTOINCREMENT，删除后可能被复用，因此 Session 删除
+ * 流程必须调用 {@link clearComposerDraft} 清除该项，否则旧草稿会串入复用该 id 的新 Session。
+ */
+const composerDraftCache = new Map<number, string>();
+
+/**
+ * 清除指定 sessionId 的输入草稿缓存项。
+ *
+ * 供 Session 删除流程在 deleteAgentSession 成功后调用（见 ADR 0006：id 复用必须清理）。
+ */
+export function clearComposerDraft(sessionId: number): void {
+  composerDraftCache.delete(sessionId);
+}
+
+/**
+ * 清空全部输入草稿缓存。仅供测试隔离使用：module-level 单例会跨用例残留，
+ * 命名参照 message-stream 的 clearAgentMessageStreamCacheForTest 先例。
+ */
+export function clearComposerDraftCacheForTest(): void {
+  composerDraftCache.clear();
+}
+
 export function useAgentComposer({
   projectId,
   sessionId,
@@ -112,7 +140,18 @@ export function useAgentComposer({
   onMessageSent,
 }: UseAgentComposerArgs): UseAgentComposerResult {
   const { t } = useI18n();
-  const [text, setText] = useState("");
+  // 文本初始值从草稿缓存读取（切页面/切 Session 再切回时保留未发送输入，详见 ADR 0006）。
+  const [text, setTextState] = useState(
+    () => composerDraftCache.get(sessionId) ?? "",
+  );
+  // setText 同步写缓存 + 触发渲染，保证卸载后草稿仍存活于模块单例。
+  const setText = useCallback(
+    (value: string) => {
+      composerDraftCache.set(sessionId, value);
+      setTextState(value);
+    },
+    [sessionId],
+  );
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -182,6 +221,8 @@ export function useAgentComposer({
         attachments: payloadAttachments,
       });
       setText("");
+      // 发送成功后从草稿缓存删除该项（不留空串项、与 Session 删除清理一致，见 ADR 0006）。
+      clearComposerDraft(sessionId);
       setAttachments([]);
       onMessageSent?.(message);
     } catch (error) {
@@ -198,6 +239,7 @@ export function useAgentComposer({
     onBeforeSend,
     projectId,
     sessionId,
+    setText,
     onMessageSent,
     t,
   ]);
