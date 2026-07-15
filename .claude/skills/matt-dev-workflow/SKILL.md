@@ -1,7 +1,6 @@
 ---
 name: matt-dev-workflow
 description: 把常规开发任务串成一条「前半交互、后半无人」的闭环 —— /grill-with-docs 厘清需求后，用户一句 go 即自动出 spec、拆 tracer-bullet tickets、按 frontier 逐张 /implement（/tdd + /code-review + commit），最后汇总交用户验收。
-disable-model-invocation: true
 ---
 
 # Matt Dev Workflow
