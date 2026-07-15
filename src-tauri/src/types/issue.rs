@@ -295,6 +295,9 @@ pub struct IssueTimelineEntry {
     pub action_type: IssueTimelineActionType,
     pub actor: IssueTimelineActor,
     pub created_at: i64,
+    /// 评论动作（`IssueCommentAdded`）内联的评论正文；其余动作为 `None`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment_body: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -305,6 +308,7 @@ pub enum IssueTimelineActionType {
     IssueReviewMarked,
     IssueStatusChanged,
     IssueCompleted,
+    IssueCommentAdded,
 }
 
 impl IssueTimelineActionType {
@@ -317,6 +321,7 @@ impl IssueTimelineActionType {
             "issue_review_marked" => Self::IssueReviewMarked,
             "issue_status_changed" => Self::IssueStatusChanged,
             "issue_completed" => Self::IssueCompleted,
+            "issue_comment_added" => Self::IssueCommentAdded,
             _ => return None,
         })
     }

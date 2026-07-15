@@ -288,6 +288,7 @@
     "titlePlaceholder": "Issue 标题",
     "titleRequired": "Issue 标题不能为空。",
     "timelineAgentSessionStarted": "启动了智能体会话",
+    "timelineCommentAdded": "添加了评论",
     "timelineCompleted": "完成了此 Issue",
     "timelineCreated": "创建了此 Issue",
     "timelineDaysAgo": "{{days}} 天前",

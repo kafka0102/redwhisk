@@ -288,6 +288,7 @@
     "titlePlaceholder": "Issue title",
     "titleRequired": "Issue title is required.",
     "timelineAgentSessionStarted": "started an agent session",
+    "timelineCommentAdded": "added a comment",
     "timelineCompleted": "completed this Issue",
     "timelineCreated": "created this Issue",
     "timelineDaysAgo": "{{days}}d ago",

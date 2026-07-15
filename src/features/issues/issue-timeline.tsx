@@ -73,6 +73,7 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
     issue_review_marked: messages.issues.timelineReviewMarked,
     issue_status_changed: messages.issues.timelineStatusChanged,
     issue_completed: messages.issues.timelineCompleted,
+    issue_comment_added: messages.issues.timelineCommentAdded,
   };
 
   return (

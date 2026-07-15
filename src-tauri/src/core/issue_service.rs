@@ -270,12 +270,15 @@ impl<'connection> IssueService<'connection> {
                     agent_profiles.agent_type,
                     user_profiles.name,
                     user_profiles.avatar_path,
-                    issue_actions.created_at
+                    issue_actions.created_at,
+                    issue_comments.body
                  FROM issue_actions
                  LEFT JOIN user_profiles
                     ON user_profiles.id = issue_actions.actor_user_profile_id
                  LEFT JOIN agent_profiles
                     ON agent_profiles.id = issue_actions.actor_agent_profile_id
+                 LEFT JOIN issue_comments
+                    ON issue_comments.id = json_extract(issue_actions.payload_json, '$.commentId')
                  WHERE issue_actions.issue_id = ?1
                  ORDER BY issue_actions.created_at ASC, issue_actions.id ASC",
             )
@@ -290,6 +293,7 @@ impl<'connection> IssueService<'connection> {
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, i64>(6)?,
+                    row.get::<_, Option<String>>(7)?,
                 ))
             })
             .map_err(issue_database_error)?;
@@ -304,6 +308,7 @@ impl<'connection> IssueService<'connection> {
                 user_name,
                 user_avatar_path,
                 created_at,
+                comment_body,
             ) = row.map_err(issue_database_error)?;
             let Some(action_type) = IssueTimelineActionType::from_action_str(&action_type) else {
                 continue;
@@ -317,6 +322,13 @@ impl<'connection> IssueService<'connection> {
             } else {
                 (user_name.unwrap_or_default(), user_avatar_path, None)
             };
+            // 评论正文仅在评论动作上内联，其余动作显式置空。
+            let resolved_comment_body = if action_type == IssueTimelineActionType::IssueCommentAdded
+            {
+                comment_body
+            } else {
+                None
+            };
             entries.push(IssueTimelineEntry {
                 action_type,
                 actor: IssueTimelineActor {
@@ -326,10 +338,67 @@ impl<'connection> IssueService<'connection> {
                     agent_type: resolved_agent_type,
                 },
                 created_at,
+                comment_body: resolved_comment_body,
             });
         }
 
         Ok(IssueTimelineResponse { entries })
+    }
+
+    /// 在单事务内写一条 Issue 评论与对应的 `IssueCommentAdded` 动作。
+    ///
+    /// 评论正文独立存入 `issue_comments`，动作负载只存评论引用（评论 id、关联会话、
+    /// 关联 turn），正文不进事件负载。作者归属由 `actor` 表达：Agent 携带名称快照，
+    /// 用户携带档案 id（为未来用户手动评论预留，本票仅覆盖 Agent 路径）。
+    ///
+    /// 幂等：`(linked_session_id, linked_turn_id)` 命中 `UNIQUE` 冲突时（Agent 评论
+    /// 重复触发），忽略重复写入，不再插入动作，静默返回 `Ok(())`。用户评论两个关联
+    /// 列均为 `NULL`，SQLite 中 NULL 不冲突，可多条。
+    pub fn add_issue_comment(
+        &self,
+        issue_id: i64,
+        body: &str,
+        actor: IssueActionActor,
+        linked_session_id: Option<i64>,
+        linked_turn_id: Option<&str>,
+    ) -> Result<(), CommandError> {
+        let created_at = current_epoch_millis()?;
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(issue_database_error)?;
+
+        let inserted = transaction
+            .execute(
+                "INSERT INTO issue_comments (issue_id, body, linked_session_id, linked_turn_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(linked_session_id, linked_turn_id) DO NOTHING",
+                rusqlite::params![issue_id, body, linked_session_id, linked_turn_id, created_at],
+            )
+            .map_err(issue_database_error)?;
+        let comment_id = transaction.last_insert_rowid();
+
+        // 仅在真正写入新评论时才追加动作；重复触发（UNIQUE 冲突）整体忽略。
+        if inserted > 0 {
+            let payload_json = json!({
+                "commentId": comment_id,
+                "linkedSessionId": linked_session_id,
+                "linkedTurnId": linked_turn_id,
+            });
+            EventRepository::insert_issue_action_in_transaction(
+                &transaction,
+                issue_id,
+                IssueActionType::IssueCommentAdded,
+                &payload_json.to_string(),
+                created_at,
+                actor,
+            )
+            .map_err(issue_database_error)?;
+        }
+
+        transaction.commit().map_err(issue_database_error)?;
+        Ok(())
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
@@ -3767,6 +3836,7 @@ mod tests {
     use crate::types::issue::{
         AdvanceIssueStatusInput, GetIssueTimelineInput, IssueTimelineActionType, IssueStatus,
     };
+    use crate::types::issue_action::IssueActionActor;
     use crate::types::issue_completion::{CompleteIssueFlowAction, CompleteIssueFlowInput};
     use rusqlite::{params, Connection};
     use std::fs;
@@ -3846,6 +3916,161 @@ mod tests {
         assert_eq!(agent_entry.actor.actor_kind, "agent");
         assert_eq!(agent_entry.actor.name, "Codex");
         assert_eq!(agent_entry.actor.agent_type.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn add_issue_comment_publishes_agent_comment_visible_in_timeline() {
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', '', 1, 1)",
+                [],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert agent profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'Issue 16', '', 'backlog', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO issue_actions (issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id)
+                 VALUES (16, 'issue_created', '{}', 10, 'user', 1)",
+                [],
+            )
+            .expect("insert user actor action");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        service
+            .add_issue_comment(
+                16,
+                "已实现评论存储，验证命令：cargo test",
+                IssueActionActor::Agent {
+                    profile_id: 101,
+                    name_snapshot: "Codex 快照".to_string(),
+                },
+                Some(42),
+                Some("turn-1"),
+            )
+            .expect("publish agent comment");
+
+        let response = service
+            .get_issue_timeline(GetIssueTimelineInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("read timeline");
+        let entries = response.entries;
+        assert_eq!(entries.len(), 2);
+
+        // 非 comment 动作 comment_body 必须为 None。
+        let created_entry = &entries[0];
+        assert_eq!(
+            created_entry.action_type,
+            IssueTimelineActionType::IssueCreated
+        );
+        assert!(created_entry.comment_body.is_none());
+
+        let comment_entry = &entries[1];
+        assert_eq!(
+            comment_entry.action_type,
+            IssueTimelineActionType::IssueCommentAdded
+        );
+        assert_eq!(comment_entry.actor.actor_kind, "agent");
+        assert_eq!(comment_entry.actor.name, "Codex 快照");
+        assert_eq!(comment_entry.actor.agent_type.as_deref(), Some("codex"));
+        assert_eq!(
+            comment_entry.comment_body.as_deref(),
+            Some("已实现评论存储，验证命令：cargo test")
+        );
+    }
+
+    #[test]
+    fn add_issue_comment_is_idempotent_for_same_session_and_turn() {
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', '', 1, 1)",
+                [],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert agent profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'Issue 16', '', 'backlog', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        let actor = IssueActionActor::Agent {
+            profile_id: 101,
+            name_snapshot: "Codex".to_string(),
+        };
+        service
+            .add_issue_comment(16, "首次交付摘要", actor.clone(), Some(42), Some("turn-1"))
+            .expect("publish first comment");
+        // 同一 (session, turn) 重复触发：静默忽略，不新增动作。
+        service
+            .add_issue_comment(16, "重复触发的摘要", actor, Some(42), Some("turn-1"))
+            .expect("duplicate trigger is ignored");
+
+        let comment_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM issue_comments WHERE issue_id = 16",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count comments");
+        assert_eq!(comment_count, 1, "重复触发只产生一条评论");
+
+        let response = service
+            .get_issue_timeline(GetIssueTimelineInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("read timeline");
+        let comment_entries: Vec<_> = response
+            .entries
+            .iter()
+            .filter(|entry| entry.action_type == IssueTimelineActionType::IssueCommentAdded)
+            .collect();
+        assert_eq!(comment_entries.len(), 1, "时间轴只出现一条评论动作");
+        assert_eq!(
+            comment_entries[0].comment_body.as_deref(),
+            Some("首次交付摘要"),
+            "重复触发不覆盖已有评论正文"
+        );
     }
 
     #[test]

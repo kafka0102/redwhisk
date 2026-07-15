@@ -81,7 +81,8 @@ export type IssueTimelineActionType =
   | "agent_session_started"
   | "issue_review_marked"
   | "issue_status_changed"
-  | "issue_completed";
+  | "issue_completed"
+  | "issue_comment_added";
 
 export interface IssueTimelineActor {
   name: string;
@@ -96,6 +97,8 @@ export interface IssueTimelineEntry {
   actionType: IssueTimelineActionType;
   actor: IssueTimelineActor;
   createdAt: number;
+  /** 评论动作（`issue_comment_added`）内联的评论正文；其余动作为 `undefined`。 */
+  commentBody?: string;
 }
 
 export interface IssueTimelineResponse {

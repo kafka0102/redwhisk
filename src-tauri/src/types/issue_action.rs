@@ -41,6 +41,7 @@ pub enum IssueActionType {
     IssueStatusChanged,
     IssueCompleted,
     IssueDeleted,
+    IssueCommentAdded,
 }
 
 impl IssueActionType {
@@ -52,6 +53,7 @@ impl IssueActionType {
             Self::IssueStatusChanged => "issue_status_changed",
             Self::IssueCompleted => "issue_completed",
             Self::IssueDeleted => "issue_deleted",
+            Self::IssueCommentAdded => "issue_comment_added",
         }
     }
 }

@@ -262,6 +262,7 @@ export interface I18nMessages {
     titlePlaceholder: string;
     titleRequired: string;
     timelineAgentSessionStarted: string;
+    timelineCommentAdded: string;
     timelineCompleted: string;
     timelineCreated: string;
     timelineDaysAgo: (days: number) => string;
