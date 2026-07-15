@@ -86,6 +86,7 @@ pub fn run() {
             commands::project_terminal_commands::save_project_terminal_shortcut_command,
             commands::project_terminal_commands::delete_project_terminal_shortcut_command,
             commands::project_terminal_commands::read_project_terminal_cwd,
+            commands::project_terminal_commands::set_app_theme,
             commands::issue_commands::list_issues,
             commands::issue_commands::create_issue,
             commands::issue_commands::update_issue,

@@ -11,7 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
 const LOG_MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -32,6 +32,7 @@ struct PtySessionStore {
     output_sink: Mutex<Option<Arc<dyn Fn(PtyOutputEvent) + Send + Sync>>>,
     subscribers: Mutex<HashMap<i64, usize>>,
     pending_emits: Mutex<HashMap<i64, PendingEmit>>,
+    app_theme: Mutex<TerminalBackgroundTheme>,
     #[cfg(test)]
     kill_failures: Mutex<HashSet<i64>>,
 }
@@ -65,6 +66,28 @@ pub enum PtyCommandMode {
     ExecReplace,
     /// 命令在非交互 login shell 中执行，结束后 `exec $SHELL -li` 落到交互式 login shell。
     InteractiveRun,
+}
+
+/// 应用终端背景主题，用于在 spawn 时向 PTY 子进程声明背景深浅（注入 `COLORFGBG`），
+/// 使 Claude Code / Codex 等 CLI 能按终端实际背景选择匹配的配色，避免深色背景上深色
+/// 输出不可见（或反之）。值由前端解析 `light` / `dark`（含 system 跟随）后同步。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TerminalBackgroundTheme {
+    Light,
+    Dark,
+}
+
+impl TerminalBackgroundTheme {
+    /// 返回 `COLORFGBG` 取值（`"fg;bg"`）。CLI 按 bg 索引判定深浅：
+    /// bg 0–6/8 判为 dark，7/9–15 判为 light。dark 取近黑背景(0)，light 取近白背景(15)，
+    /// fg 取与该主题默认前景对应的反色索引。
+    fn color_fgbg(self) -> &'static str {
+        match self {
+            TerminalBackgroundTheme::Dark => "15;0",
+            TerminalBackgroundTheme::Light => "0;15",
+        }
+    }
 }
 
 pub struct PtySpawnRequest {
@@ -138,11 +161,22 @@ impl PtySessionManager {
             output_sink: Mutex::new(None),
             subscribers: Mutex::new(HashMap::new()),
             pending_emits: Mutex::new(HashMap::new()),
+            // 前端未同步前的保守默认：与无 COLORFGBG 时多数 CLI 的 dark fallback 等价，
+            // 避免极端时序下误判为 light 导致深色背景上输出不可见。
+            app_theme: Mutex::new(TerminalBackgroundTheme::Dark),
             #[cfg(test)]
             kill_failures: Mutex::new(HashSet::new()),
         });
         spawn_coalesce_thread(Arc::clone(&store));
         Self { store }
+    }
+
+    /// 更新终端背景主题；后续 spawn 的 PTY 会据此注入 `COLORFGBG`。
+    /// 已运行的 session 不会回溯更新（子进程仅在启动时读取一次该变量）。
+    pub fn set_theme(&self, theme: TerminalBackgroundTheme) {
+        if let Ok(mut app_theme) = self.store.app_theme.lock() {
+            *app_theme = theme;
+        }
     }
 
     pub fn set_output_sink<F>(&self, sink: F)
@@ -215,6 +249,10 @@ impl PtySessionManager {
         command.cwd(&request.working_dir);
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
+        // 声明终端背景深浅，供 Claude Code / Codex 等 CLI 选择匹配的配色方案。
+        if let Ok(theme) = self.store.app_theme.lock() {
+            command.env("COLORFGBG", theme.color_fgbg());
+        }
 
         let mut child = pair
             .slave
@@ -875,8 +913,17 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_shell_keepalive_command_line, build_shell_command_line, trim_log_file};
+    use super::{
+        build_shell_keepalive_command_line, build_shell_command_line, trim_log_file,
+        TerminalBackgroundTheme,
+    };
     use std::io::Write;
+
+    #[test]
+    fn terminal_background_theme_color_fgbg_matches_palette() {
+        assert_eq!(TerminalBackgroundTheme::Dark.color_fgbg(), "15;0");
+        assert_eq!(TerminalBackgroundTheme::Light.color_fgbg(), "0;15");
+    }
 
     #[test]
     fn build_shell_command_line_preserves_command_arguments() {

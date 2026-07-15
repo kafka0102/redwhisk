@@ -26,6 +26,7 @@ import {
 } from "./i18n-constants";
 import { createMessagesProxy } from "./messages-bridge";
 import type { I18nMessages } from "./messages";
+import { setAppTheme } from "../commands/app-commands";
 
 interface I18nContextValue {
   t: TFunction;
@@ -99,6 +100,9 @@ export function I18nProvider({
 
   useEffect(() => {
     window.document.documentElement.dataset.theme = theme;
+    void setAppTheme({ theme }).catch(() => {
+      // 后端未就绪或同步失败时忽略；theme 下次变化会重试。
+    });
   }, [theme]);
 
   useEffect(() => {

@@ -1,5 +1,7 @@
+use serde::Deserialize;
 use tauri::State;
 
+use crate::agent::pty_session_manager::TerminalBackgroundTheme;
 use crate::app_state::AppState;
 use crate::core::project_terminal_service::ProjectTerminalService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -47,6 +49,23 @@ pub fn create_temporary_project_terminal(
         &state.project_terminals,
         &state.pty_sessions,
     )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAppThemeInput {
+    pub theme: TerminalBackgroundTheme,
+}
+
+/// 同步前端解析后的终端背景主题（`light` / `dark`，已含 system 跟随），
+/// 供后续 spawn 的 PTY 注入 `COLORFGBG`。已运行的 session 不受影响。
+#[tauri::command]
+pub fn set_app_theme(
+    state: State<'_, AppState>,
+    input: SetAppThemeInput,
+) -> Result<(), CommandError> {
+    state.pty_sessions.set_theme(input.theme);
+    Ok(())
 }
 
 #[tauri::command]
