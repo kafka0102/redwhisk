@@ -41,6 +41,8 @@ pub fn run() {
             let data_dir = redwhisk_data_dir(app.handle())?;
             // 先初始化全局 Logger，后续启动流程即可记录关键操作与错误日志。
             Logger::init(data_dir.clone());
+            // 启动即清空所有终端历史日志，软件再次打开不保留上次会话输出。
+            core::project_terminal_service::purge_terminal_log_dir(&data_dir);
             let app_handle = app.handle().clone();
             let latest_output_writer = LatestOutputWriter::new(data_dir);
             let state = app.state::<AppState>();

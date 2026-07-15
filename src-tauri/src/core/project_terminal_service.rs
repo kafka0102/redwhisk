@@ -1241,6 +1241,22 @@ fn remove_terminal_log_file(log_path: &str) {
     let _ = fs::remove_file(path);
 }
 
+/// 启动时清空终端日志目录：删除 project-terminal-logs 下所有文件。
+/// 目录不存在或单文件删除失败时静默跳过，不阻断启动；目录本身保留，
+/// 后续创建终端时仍由 terminal_log_path 的 create_dir_all 兜底。
+pub fn purge_terminal_log_dir(data_dir: impl AsRef<Path>) {
+    let log_dir = data_dir.as_ref().join(PROJECT_TERMINAL_LOG_DIR_NAME);
+    let Ok(entries) = fs::read_dir(&log_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            let _ = fs::remove_file(&path);
+        }
+    }
+}
+
 fn project_terminal_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalPersistenceFailed,
@@ -1387,7 +1403,10 @@ mod tests {
         WriteProjectTerminalInput,
     };
 
-    use super::{restore_test_hooks, ProjectTerminalRegistry, ProjectTerminalService};
+    use super::{
+        purge_terminal_log_dir, restore_test_hooks, ProjectTerminalRegistry,
+        ProjectTerminalService, PROJECT_TERMINAL_LOG_DIR_NAME,
+    };
 
     fn terminal_test_env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -1732,6 +1751,39 @@ mod tests {
             "关闭终端后应删除日志文件: {}",
             log_path.display()
         );
+    }
+
+    #[test]
+    fn purge_terminal_log_dir_removes_all_log_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_dir = temp_dir.path().join(PROJECT_TERMINAL_LOG_DIR_NAME);
+        std::fs::create_dir_all(&log_dir).expect("create log dir");
+        std::fs::write(log_dir.join("project-1-terminal-1.log"), "old output 1")
+            .expect("write log 1");
+        std::fs::write(log_dir.join("project-2-terminal-1.log"), "old output 2")
+            .expect("write log 2");
+
+        purge_terminal_log_dir(temp_dir.path());
+
+        let remaining: Vec<_> = std::fs::read_dir(&log_dir)
+            .expect("read log dir")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect();
+        assert!(
+            remaining.is_empty(),
+            "启动清理后终端日志目录应为空，剩余: {remaining:?}"
+        );
+    }
+
+    #[test]
+    fn purge_terminal_log_dir_skips_missing_directory_without_panicking() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        purge_terminal_log_dir(temp_dir.path());
+        assert!(!temp_dir
+            .path()
+            .join(PROJECT_TERMINAL_LOG_DIR_NAME)
+            .exists());
     }
 
     #[test]
