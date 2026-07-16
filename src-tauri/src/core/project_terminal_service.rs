@@ -2976,4 +2976,154 @@ mod tests {
             )
             .expect("close terminal");
     }
+
+    #[test]
+    fn project_terminal_keeps_shell_after_launch_command_interrupted_by_ctrl_c() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        // 启动命令为一个长时间运行的前台进程（模拟 `pnpm dev`），Ctrl+C 应只中断它，
+        // 不能连带杀死 `-lc` 包装 shell；中断后包装 shell 应继续 `exec $SHELL -li`
+        // 落到交互式 login shell 并保持 session active。
+        let config = service
+            .project_repository
+            .insert_project_terminal_config(
+                project.id,
+                "long-running",
+                &project.repo_path,
+                "sleep 30",
+            )
+            .expect("insert terminal config");
+
+        let session_id = service
+            .start_terminal_for_config(temp_dir.path(), &config, &registry, &manager)
+            .expect("start terminal for config");
+
+        // 等待 `-lc` 包装 shell 启动并进入 sleep 前台。
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let probe = ProjectTerminalService::read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: project.id,
+                    session_id,
+                    max_bytes: Some(256),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("probe snapshot");
+            if probe.is_active {
+                break;
+            }
+        }
+        // 额外等待确保 sleep 已在前台运行。
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // 发送 Ctrl+C（SIGINT）。
+        ProjectTerminalService::write_terminal_input(
+            WriteProjectTerminalInput {
+                project_id: project.id,
+                session_id,
+                data: "\x03".to_string(),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("write ctrl-c");
+
+        // 等待 exec 后的交互式 login shell 完成 .zshrc 初始化，避免探针被启动过程吞掉。
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+
+        // 注入存活探针：交互式 shell 应回显 SURVIVED-<code>。
+        ProjectTerminalService::write_terminal_input(
+            WriteProjectTerminalInput {
+                project_id: project.id,
+                session_id,
+                data: "echo SURVIVED-$?\r".to_string(),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("write probe");
+
+        let mut echoed = false;
+        for _ in 0..120 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = ProjectTerminalService::read_terminal_snapshot(
+                ReadProjectTerminalInput {
+                    project_id: project.id,
+                    session_id,
+                    max_bytes: Some(8_192),
+                },
+                &registry,
+                &manager,
+            )
+            .expect("read snapshot");
+            if snapshot.snapshot.contains("SURVIVED-") {
+                echoed = true;
+                break;
+            }
+            if !snapshot.is_active {
+                break;
+            }
+        }
+
+        let snapshot = ProjectTerminalService::read_terminal_snapshot(
+            ReadProjectTerminalInput {
+                project_id: project.id,
+                session_id,
+                max_bytes: Some(8_192),
+            },
+            &registry,
+            &manager,
+        )
+        .expect("final snapshot");
+
+        assert!(
+            snapshot.is_active,
+            "Ctrl+C 中断启动命令后 session 必须保持 active；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+        assert!(
+            echoed,
+            "Ctrl+C 后 shell 应继续回显探针；snapshot 尾部:\n{}",
+            snapshot.snapshot
+        );
+
+        service
+            .close_terminal(
+                CloseProjectTerminalInput {
+                    project_id: project.id,
+                    session_id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("close terminal");
+    }
 }

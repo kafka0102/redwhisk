@@ -893,12 +893,18 @@ pub(crate) fn build_shell_command_line(command: &str, prompt: Option<&str>) -> S
 /// 用 `-lc`（而非 `-lic`）执行 command：zsh 的 `-i -c` 组合在有 `.zshrc`（如
 /// powerlevel10k）时不会可靠执行 `-c` 命令，因此先以非交互 login shell 跑完 command，
 /// 再 `exec $SHELL -li` 进入交互式 login shell，命令退出后保留 shell。
+///
+/// 非交互 `-lc` 包装 shell 不开启作业控制，与前台 command 共处同一前台进程组；
+/// 用户 Ctrl+C 中断 command 时，SIGINT 会同时发给包装 shell 把它一起杀死，导致永远
+/// 到不了 `exec $SHELL -li`，PTY 退出、session 失活。因此运行 command 前给包装 shell
+/// 装一个 no-op INT trap 让它存活（被捕获的信号在派生外部命令子进程时会被复位为默认
+/// 动作，故 command 仍会正常收到 SIGINT 被中断），exec 前再复位。
 fn build_shell_keepalive_command_line(command: &str, shell: &str) -> String {
     let trimmed = command.trim();
     if trimmed.is_empty() || trimmed == shell {
         format!("exec {shell} -li")
     } else {
-        format!("{trimmed}; exec {shell} -li")
+        format!("trap ':' INT; {trimmed}; trap - INT; exec {shell} -li")
     }
 }
 
@@ -979,11 +985,11 @@ mod tests {
     fn build_shell_keepalive_command_line_runs_command_then_interactive_shell() {
         assert_eq!(
             build_shell_keepalive_command_line("grok", "/bin/zsh"),
-            "grok; exec /bin/zsh -li"
+            "trap ':' INT; grok; trap - INT; exec /bin/zsh -li"
         );
         assert_eq!(
             build_shell_keepalive_command_line("grok --model x", "/bin/zsh"),
-            "grok --model x; exec /bin/zsh -li"
+            "trap ':' INT; grok --model x; trap - INT; exec /bin/zsh -li"
         );
     }
 
