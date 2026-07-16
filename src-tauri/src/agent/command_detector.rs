@@ -76,6 +76,58 @@ fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
     shells
 }
 
+/// 以 login+interactive 方式启动用户首选 shell，解析出完整的 `$PATH`。
+///
+/// GUI（Dock/Finder）启动的进程继承 launchd 的极简 PATH，缺少用户在交互式配置
+/// （`~/.zshrc` / `~/.bashrc`）里写入的目录（典型如 nvm/fnm/volta 的 node bin、
+/// rbenv shims）。PTY 子进程若用非交互 `-lc` 执行用户命令（如 `pnpm`），会因为
+/// 这些目录缺失而报 `command not found`。这里通过 `-lic` 让 shell 加载完整交互式
+/// 配置后回显 `$PATH`，供 PTY spawn 时注入子进程环境。
+///
+/// 失败（找不到可用 shell 或 shell 异常退出）返回 `None`，调用方回退到继承的 PATH，
+/// 与未注入时的行为一致，不阻断启动。
+pub(crate) fn resolve_interactive_shell_path() -> Option<OsString> {
+    let preferred_shell = env::var("SHELL").ok();
+    let shells = shell_lookup_candidates(preferred_shell.as_deref());
+    resolve_interactive_shell_path_with_shells_and_env(&shells, &[])
+}
+
+fn resolve_interactive_shell_path_with_shells_and_env(
+    shells: &[String],
+    environment_overrides: &[(&str, &OsStr)],
+) -> Option<OsString> {
+    for shell in shells {
+        if let Some(path) = resolve_path_with_shell(shell, environment_overrides) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn resolve_path_with_shell(
+    shell: &str,
+    environment_overrides: &[(&str, &OsStr)],
+) -> Option<OsString> {
+    let mut process = Command::new(shell);
+    process.args(["-lic", "printf %s \"$PATH\""]);
+    for (key, value) in environment_overrides {
+        process.env(key, value);
+    }
+
+    let output = process.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout);
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(OsString::from(trimmed))
+    }
+}
+
 #[cfg(test)]
 fn run_command_lookup_with_shells_and_env(
     command: &str,
@@ -319,6 +371,45 @@ mod tests {
         assert_eq!(lookup.command, command_path.display().to_string());
         let lookup_path = lookup.path.expect("lookup path");
         assert!(env::split_paths(&lookup_path).any(|path| path == bin_dir));
+    }
+
+    #[test]
+    fn resolve_interactive_shell_path_loads_zshrc_directories() {
+        // 模拟 GUI 启动：父进程只有 launchd 极简 PATH，nvm node 目录写在 .zshrc。
+        // resolve_interactive_shell_path 应通过 -lic 加载 .zshrc，返回含该目录的 PATH。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!("export PATH=\"{}:$PATH\"\n", bin_dir.display()),
+        )
+        .expect("zshrc");
+
+        let path = resolve_interactive_shell_path_with_shells_and_env(
+            &["/bin/zsh".to_string()],
+            &[
+                ("HOME", temp_dir.path().as_os_str()),
+                ("ZDOTDIR", temp_dir.path().as_os_str()),
+                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
+            ],
+        )
+        .expect("resolved interactive path");
+
+        assert!(
+            env::split_paths(&path).any(|entry| entry == bin_dir),
+            "解析出的 PATH 应包含 .zshrc 写入的目录，实际：{path:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_interactive_shell_path_returns_none_when_shell_missing() {
+        // 不可用的 shell 应优雅返回 None，由调用方回退到继承的 PATH。
+        let path = resolve_interactive_shell_path_with_shells_and_env(
+            &["/path/that/does/not/exist/redwhisk-shell".to_string()],
+            &[],
+        );
+        assert!(path.is_none(), "不可用的 shell 应返回 None");
     }
 
     #[test]

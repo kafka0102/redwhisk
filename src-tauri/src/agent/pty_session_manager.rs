@@ -2,6 +2,7 @@ use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
 use std::env;
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Read, Write};
 use std::path::Path;
@@ -33,6 +34,7 @@ struct PtySessionStore {
     subscribers: Mutex<HashMap<i64, usize>>,
     pending_emits: Mutex<HashMap<i64, PendingEmit>>,
     app_theme: Mutex<TerminalBackgroundTheme>,
+    interactive_path: Mutex<Option<OsString>>,
     #[cfg(test)]
     kill_failures: Mutex<HashSet<i64>>,
 }
@@ -164,6 +166,7 @@ impl PtySessionManager {
             // 前端未同步前的保守默认：与无 COLORFGBG 时多数 CLI 的 dark fallback 等价，
             // 避免极端时序下误判为 light 导致深色背景上输出不可见。
             app_theme: Mutex::new(TerminalBackgroundTheme::Dark),
+            interactive_path: Mutex::new(None),
             #[cfg(test)]
             kill_failures: Mutex::new(HashSet::new()),
         });
@@ -177,6 +180,28 @@ impl PtySessionManager {
         if let Ok(mut app_theme) = self.store.app_theme.lock() {
             *app_theme = theme;
         }
+    }
+
+    /// 解析并缓存「login+interactive shell」的完整 `$PATH`，供 PTY 子进程注入。
+    ///
+    /// 命中缓存直接返回；否则以用户首选 shell 的 `-lic` 解析一次（加载 `.zshrc` 等
+    /// 交互式配置，得到含 nvm/fnm 等目录的完整 PATH），成功后缓存供后续 spawn 复用。
+    /// 解析在释放锁的状态下进行，避免持锁 fork 子进程阻塞并发 spawn。
+    /// 解析失败不缓存、返回 `None`，调用方回退到继承的 PATH（与历史行为一致）。
+    fn resolved_interactive_path(&self) -> Option<OsString> {
+        if let Ok(guard) = self.store.interactive_path.lock() {
+            if let Some(cached) = guard.as_ref() {
+                return Some(cached.clone());
+            }
+        }
+
+        let resolved = crate::agent::command_detector::resolve_interactive_shell_path();
+        if let Some(resolved) = resolved.as_ref() {
+            if let Ok(mut guard) = self.store.interactive_path.lock() {
+                *guard = Some(resolved.clone());
+            }
+        }
+        resolved
     }
 
     pub fn set_output_sink<F>(&self, sink: F)
@@ -252,6 +277,12 @@ impl PtySessionManager {
         // 声明终端背景深浅，供 Claude Code / Codex 等 CLI 选择匹配的配色方案。
         if let Ok(theme) = self.store.app_theme.lock() {
             command.env("COLORFGBG", theme.color_fgbg());
+        }
+        // 注入 login+interactive 解析出的完整 PATH：GUI 启动的进程继承 launchd 极简
+        // PATH，缺少 nvm/fnm 等交互式配置（.zshrc）写入的目录，PTY 子进程用非交互
+        // `-lc` 执行用户命令（如 pnpm）会 command not found。解析失败回退继承 PATH。
+        if let Some(resolved_path) = self.resolved_interactive_path() {
+            command.env("PATH", resolved_path);
         }
 
         let mut child = pair
