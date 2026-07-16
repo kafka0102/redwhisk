@@ -12,15 +12,24 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
-    CodeWorkspaceRootsResponse,
-    ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
-    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceChangeKind,
-    WorkspaceChangedFile, WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceDiffContent,
-    WorkspaceFileContent, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
+    CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
+    ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
+    ProjectWorktreeFileTreeResponse, WorkspaceChangeKind, WorkspaceChangedFile,
+    WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceDiffContent, WorkspaceFileContent,
+    WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
-const HIDDEN_DIRS: &[&str] = &[".git", "node_modules", "target", "dist", "build", ".next", ".turbo", ".vite"];
+const HIDDEN_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".turbo",
+    ".vite",
+];
 const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
 const MAX_COMMIT_HISTORY_ENTRIES: usize = 50;
 const BASE_BRANCH_CANDIDATES: &[&str] = &[
@@ -54,7 +63,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeChangesResponse, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
         read_workspace_changes(&root)
     }
 
@@ -62,7 +75,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeFileTreeResponse, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
         read_workspace_file_tree(&root)
     }
 
@@ -70,7 +87,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
         let base_branch = self.resolve_session_base_branch(input.project_id, input.session_id);
         read_workspace_commit_history(&root, base_branch.as_deref())
     }
@@ -103,11 +124,18 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspacePathInput,
     ) -> Result<WorkspaceFileContent, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
         read_workspace_file(&root, &input.file_path)
     }
 
-    pub fn list_code_workspace_roots(&self, project_id: i64) -> Result<CodeWorkspaceRootsResponse, CommandError> {
+    pub fn list_code_workspace_roots(
+        &self,
+        project_id: i64,
+    ) -> Result<CodeWorkspaceRootsResponse, CommandError> {
         let root = self.resolve_workspace_root(project_id, None, None)?;
         list_code_workspace_roots(&root)
     }
@@ -116,7 +144,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
         &self,
         input: ProjectWorkspacePathInput,
     ) -> Result<WorkspaceDiffContent, CommandError> {
-        let root = self.resolve_workspace_root(input.project_id, input.session_id, input.workspace_path.as_deref())?;
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
         if let Some(commit_hash) = input.commit_hash {
             read_workspace_commit_diff(&root, &commit_hash, &input.file_path)
         } else {
@@ -127,7 +159,8 @@ impl<'connection> SessionWorkspaceService<'connection> {
     fn resolve_workspace_root(
         &self,
         project_id: i64,
-        session_id: Option<i64>, workspace_path: Option<&str>,
+        session_id: Option<i64>,
+        workspace_path: Option<&str>,
     ) -> Result<PathBuf, CommandError> {
         let project = self
             .project_repository
@@ -140,8 +173,13 @@ impl<'connection> SessionWorkspaceService<'connection> {
 
         if let Some(workspace_path) = workspace_path {
             let roots = list_code_workspace_roots(Path::new(&project.repo_path))?.roots;
-            if roots.iter().any(|root| root.path == workspace_path) { return canonical_workspace_root(workspace_path); }
-            return Err(workspace_validation_error("代码工作区不存在。", workspace_path).with_reason("codeWorkspaceNotFound"));
+            if roots.iter().any(|root| root.path == workspace_path) {
+                return canonical_workspace_root(workspace_path);
+            }
+            return Err(
+                workspace_validation_error("代码工作区不存在。", workspace_path)
+                    .with_reason("codeWorkspaceNotFound"),
+            );
         }
         if let Some(session_id) = session_id {
             if let Some(session) = self
@@ -169,7 +207,8 @@ pub fn resolve_workspace_relative_path(
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "仓库路径不可访问。",
-        ).with_reason("repoPathInaccessible")
+        )
+        .with_reason("repoPathInaccessible")
         .with_detail(
             ErrorDetail::new("WorkspaceRoot")
                 .with_value("path", root.to_string_lossy().to_string()),
@@ -181,25 +220,27 @@ pub fn resolve_workspace_relative_path(
     let joined_path = root.join(relative_path);
     let parent = joined_path.parent().unwrap_or(root);
     let canonical_parent = parent.canonicalize().map_err(|error| {
-        workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path).with_reason("filePathInaccessible")
+        workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path)
+            .with_reason("filePathInaccessible")
     })?;
 
     if !canonical_parent.starts_with(&canonical_root) {
-        return Err(workspace_validation_error(
-            "文件路径不能离开仓库目录。",
-            file_path,
-        ).with_reason("filePathOutsideRepo"));
+        return Err(
+            workspace_validation_error("文件路径不能离开仓库目录。", file_path)
+                .with_reason("filePathOutsideRepo"),
+        );
     }
 
     if joined_path.exists() {
         let canonical_path = joined_path.canonicalize().map_err(|error| {
-            workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path).with_reason("filePathInaccessible")
+            workspace_validation_error(&format!("文件路径不可访问：{error}"), file_path)
+                .with_reason("filePathInaccessible")
         })?;
         if !canonical_path.starts_with(&canonical_root) {
-            return Err(workspace_validation_error(
-                "文件路径不能离开仓库目录。",
-                file_path,
-            ).with_reason("filePathOutsideRepo"));
+            return Err(
+                workspace_validation_error("文件路径不能离开仓库目录。", file_path)
+                    .with_reason("filePathOutsideRepo"),
+            );
         }
     }
 
@@ -217,10 +258,10 @@ fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandErr
             )
         })
     {
-        return Err(workspace_validation_error(
-            "路径必须是仓库内相对路径。",
-            file_path,
-        ).with_reason("pathMustBeRelative"));
+        return Err(
+            workspace_validation_error("路径必须是仓库内相对路径。", file_path)
+                .with_reason("pathMustBeRelative"),
+        );
     }
 
     Ok(relative_path)
@@ -231,7 +272,8 @@ fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "仓库路径不可访问。",
-        ).with_reason("repoPathInaccessible")
+        )
+        .with_reason("repoPathInaccessible")
         .with_detail(ErrorDetail::new("WorkspaceRoot").with_value("path", path.to_string()))
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
@@ -240,7 +282,8 @@ fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "仓库路径不是目录。",
-        ).with_reason("repoPathNotDir")
+        )
+        .with_reason("repoPathNotDir")
         .with_detail(ErrorDetail::new("WorkspaceRoot").with_value("path", path.to_string())));
     }
 
@@ -287,6 +330,16 @@ fn read_workspace_changes(root: &Path) -> Result<ProjectWorktreeChangesResponse,
     Ok(ProjectWorktreeChangesResponse { files, signature })
 }
 
+/// 单次 `git log --name-status` 解析出的一条提交：表头字段 + 该提交的变更文件。
+struct CommitLogEntry {
+    hash: String,
+    short_hash: String,
+    author_name: String,
+    committed_at_seconds: i64,
+    message: String,
+    files: Vec<WorkspaceCommitChangedFile>,
+}
+
 fn read_workspace_commit_history(
     root: &Path,
     base_branch: Option<&str>,
@@ -315,40 +368,82 @@ fn read_workspace_commit_history(
     };
 
     let upstream = current_upstream(root)?;
-    let args = vec![
-        "log".to_string(),
-        "--date-order".to_string(),
-        format!("--max-count={MAX_COMMIT_HISTORY_ENTRIES}"),
-        "--format=%H%x00%h%x00%an%x00%ct%x00%s%x00".to_string(),
-    ];
 
-    let output = run_git_owned(root, &args)?;
-    let mut commits = Vec::new();
-    for record in output.lines().filter(|record| !record.is_empty()) {
-        let mut parts = record.split('\0');
-        let hash = parts.next().unwrap_or_default();
-        let short_hash = parts.next().unwrap_or_default();
-        let author_name = parts.next().unwrap_or_default();
-        let committed_at_seconds = parts.next().unwrap_or_default().parse::<i64>().unwrap_or(0);
-        let message = parts.next().unwrap_or_default();
-        if hash.is_empty() {
-            continue;
+    // 单次 git log --name-status 取最近 50 条提交与其变更文件，替代旧实现「每条提交
+    // 一次 diff-tree」（50 条 ≈ 50 个子进程）。--root 让初始提交也按新增展示，与旧
+    // diff-tree --root 行为一致；-M -C 保留重命名/复制检测。
+    let log_output = run_git_owned(
+        root,
+        &[
+            "log".to_string(),
+            "--date-order".to_string(),
+            format!("--max-count={MAX_COMMIT_HISTORY_ENTRIES}"),
+            "--root".to_string(),
+            "--name-status".to_string(),
+            "-M".to_string(),
+            "-C".to_string(),
+            "--format=%H%x00%h%x00%an%x00%ct%x00%s".to_string(),
+        ],
+    )?;
+
+    // pushed 判定批量化：单次 rev-list <upstream> 取其可达提交集合，成员判定替代旧
+    // 「每条提交一次 merge-base --is-ancestor」（50 条 ≈ 50 个子进程）。无 upstream
+    // 或 rev-list 失败 → 空集合，所有提交按未 push 处理，与旧 merge-base 失败等价。
+    let pushed_set: HashSet<String> = match upstream.as_deref() {
+        Some(upstream_ref) => run_git(root, &["rev-list", upstream_ref])
+            .ok()
+            .map(|output| {
+                output
+                    .lines()
+                    .map(|line| line.trim().to_string())
+                    .filter(|line| !line.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default(),
+        None => HashSet::new(),
+    };
+
+    // 解析：含 NUL 的行是提交头（hash\0shorthash\0author\0ct\0message），其后到下一
+    // 个头之间的非空行是该提交的 name-status 变更文件，累加到最近一条提交上。
+    let mut entries: Vec<CommitLogEntry> = Vec::new();
+    for line in log_output.lines() {
+        if line.contains('\0') {
+            let mut parts = line.split('\0');
+            let hash = parts.next().unwrap_or_default().to_string();
+            if hash.is_empty() {
+                continue;
+            }
+            entries.push(CommitLogEntry {
+                hash,
+                short_hash: parts.next().unwrap_or_default().to_string(),
+                author_name: parts.next().unwrap_or_default().to_string(),
+                committed_at_seconds: parts.next().unwrap_or_default().parse::<i64>().unwrap_or(0),
+                message: parts.next().unwrap_or_default().to_string(),
+                files: Vec::new(),
+            });
+        } else if let Some(entry) = entries.last_mut() {
+            if let Some(file) = parse_commit_changed_file(line) {
+                entry.files.push(file);
+            }
         }
+    }
 
-        let is_pushed = commit_is_pushed(root, hash, upstream.as_deref());
+    let mut commits = Vec::new();
+    for entry in entries {
+        let is_pushed = pushed_set.contains(&entry.hash);
         // 有 own 集合时按成员判定；无集合时 worktree 场景（主分支 / base 解析失败）
         // 视为全部自身（true），非 worktree 恒为 false。
         let is_created_in_worktree = match &worktree_own_commits {
-            Some(own) => own.contains(hash),
+            Some(own) => own.contains(&entry.hash),
             None => is_worktree,
         };
         commits.push(WorkspaceCommitRecord {
-            hash: hash.to_string(),
-            short_hash: short_hash.to_string(),
-            message: message.to_string(),
-            author_name: author_name.to_string(),
-            committed_at: committed_at_seconds.saturating_mul(1_000),
-            files: read_commit_changed_files(root, hash)?,
+            hash: entry.hash,
+            short_hash: entry.short_hash,
+            message: entry.message,
+            author_name: entry.author_name,
+            committed_at: entry.committed_at_seconds.saturating_mul(1_000),
+            files: entry.files,
             pushed_to: if is_pushed { upstream.clone() } else { None },
             is_pushed,
             is_created_in_worktree,
@@ -389,25 +484,6 @@ fn current_upstream(root: &Path) -> Result<Option<String>, CommandError> {
         return Ok(None);
     }
     Ok(Some(upstream.to_string()))
-}
-
-// 判定单个 commit 是否已 push 到指定 upstream（即是否为 upstream 的祖先）。
-//
-// 基于 `git merge-base --is-ancestor <hash> <upstream>`：exit 0 表示是祖先（已
-// push），exit 1 表示否，其他非零视为未 push 且不阻塞整体读取。upstream 为 None
-// 时恒为 false。
-fn commit_is_pushed(root: &Path, commit_hash: &str, upstream: Option<&str>) -> bool {
-    let Some(upstream) = upstream else {
-        return false;
-    };
-    let status = Command::new("git")
-        .args(["merge-base", "--is-ancestor", commit_hash, upstream])
-        .current_dir(root)
-        .output();
-    match status {
-        Ok(output) => output.status.success(),
-        Err(_) => false,
-    }
 }
 
 // 列出某个 revision 范围（如 `base..HEAD`）内的全部 commit hash，用于标记 worktree
@@ -568,7 +644,8 @@ fn parse_status_entries(output: &[u8]) -> Result<Vec<StatusEntry>, CommandError>
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Git status 输出无法解析。",
-            ).with_reason("gitStatusUnparseable"));
+            )
+            .with_reason("gitStatusUnparseable"));
         }
 
         let status = String::from_utf8_lossy(&record[..2]).to_string();
@@ -654,9 +731,12 @@ fn read_workspace_file_tree(root: &Path) -> Result<ProjectWorktreeFileTreeRespon
 
 fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRootsResponse, CommandError> {
     let roots = list_code_workspaces(root).map_err(|error| {
-        CommandError::new(CommandErrorCode::AgentSessionValidationFailed, "代码工作区读取失败。")
-            .with_reason("codeWorkspaceReadFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "代码工作区读取失败。",
+        )
+        .with_reason("codeWorkspaceReadFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
     Ok(CodeWorkspaceRootsResponse { roots })
 }
@@ -670,7 +750,8 @@ fn read_directory_nodes(
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "文件树读取失败。",
-        ).with_reason("fileTreeReadFailed")
+        )
+        .with_reason("fileTreeReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -771,7 +852,10 @@ fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffCont
         .files
         .into_iter()
         .find(|file| file.file_path == file_path)
-        .ok_or_else(|| workspace_validation_error("文件没有未提交变更。", file_path).with_reason("fileNoUncommittedChanges"))?;
+        .ok_or_else(|| {
+            workspace_validation_error("文件没有未提交变更。", file_path)
+                .with_reason("fileNoUncommittedChanges")
+        })?;
 
     if change.is_binary {
         return Ok(WorkspaceDiffContent {
@@ -861,7 +945,10 @@ fn read_workspace_commit_diff(
     let change = read_commit_changed_files(root, &commit_hash)?
         .into_iter()
         .find(|file| file.file_path == file_path)
-        .ok_or_else(|| workspace_validation_error("文件不属于该提交。", file_path).with_reason("fileNotInCommit"))?;
+        .ok_or_else(|| {
+            workspace_validation_error("文件不属于该提交。", file_path)
+                .with_reason("fileNotInCommit")
+        })?;
     validate_workspace_relative_path(&change.file_path)?;
     if let Some(old_path) = &change.old_path {
         validate_workspace_relative_path(old_path)?;
@@ -966,13 +1053,15 @@ fn resolve_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFile,
     let absolute_path = resolve_workspace_relative_path(root, file_path)?;
     let metadata = fs::symlink_metadata(&absolute_path).map_err(workspace_io_error)?;
     if metadata.file_type().is_symlink() {
-        return Err(workspace_validation_error(
-            "路径不能是符号链接。",
-            file_path,
-        ).with_reason("pathCannotBeSymlink"));
+        return Err(
+            workspace_validation_error("路径不能是符号链接。", file_path)
+                .with_reason("pathCannotBeSymlink"),
+        );
     }
     if !metadata.is_file() {
-        return Err(workspace_validation_error("路径不是文件。", file_path).with_reason("pathNotFile"));
+        return Err(
+            workspace_validation_error("路径不是文件。", file_path).with_reason("pathNotFile")
+        );
     }
 
     Ok(WorkspaceFile {
@@ -1002,7 +1091,8 @@ fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead,
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git blob 大小无法解析。",
-        ).with_reason("gitBlobSizeUnparseable")
+        )
+        .with_reason("gitBlobSizeUnparseable")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
     if size > MAX_TEXT_FILE_BYTES {
@@ -1020,7 +1110,8 @@ fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead,
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Git 输出不是 UTF-8。",
-            ).with_reason("gitOutputNotUtf8")
+            )
+            .with_reason("gitOutputNotUtf8")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })
 }
@@ -1033,10 +1124,10 @@ fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, Command
             .chars()
             .all(|character| character.is_ascii_hexdigit())
     {
-        return Err(workspace_validation_error(
-            "提交哈希格式无效。",
-            commit_hash,
-        ).with_reason("commitHashInvalid"));
+        return Err(
+            workspace_validation_error("提交哈希格式无效。", commit_hash)
+                .with_reason("commitHashInvalid"),
+        );
     }
 
     let output = run_git(
@@ -1050,7 +1141,9 @@ fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, Command
     )?;
     let resolved_hash = output.trim();
     if resolved_hash.is_empty() {
-        return Err(workspace_validation_error("提交不存在。", commit_hash).with_reason("commitNotFound"));
+        return Err(
+            workspace_validation_error("提交不存在。", commit_hash).with_reason("commitNotFound")
+        );
     }
 
     Ok(resolved_hash.to_string())
@@ -1066,7 +1159,8 @@ fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git 输出不是 UTF-8。",
-        ).with_reason("gitOutputNotUtf8")
+        )
+        .with_reason("gitOutputNotUtf8")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
 }
@@ -1085,14 +1179,16 @@ fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Git 命令执行失败。",
-            ).with_reason("gitCommandFailed")
+            )
+            .with_reason("gitCommandFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
     if !output.status.success() {
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git 命令执行失败。",
-        ).with_reason("gitCommandFailed")
+        )
+        .with_reason("gitCommandFailed")
         .with_detail(ErrorDetail::new("Cause").with_value(
             "message",
             String::from_utf8_lossy(&output.stderr).to_string(),
@@ -1105,7 +1201,8 @@ fn workspace_persistence_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
         "工作区查询失败。",
-    ).with_reason("workspaceQueryFailed")
+    )
+    .with_reason("workspaceQueryFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -1113,7 +1210,8 @@ fn workspace_io_error(error: std::io::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "工作区文件读取失败。",
-    ).with_reason("workspaceFileReadFailed")
+    )
+    .with_reason("workspaceFileReadFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
