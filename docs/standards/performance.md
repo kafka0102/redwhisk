@@ -39,7 +39,7 @@
 
 - `list_agent_sessions(project_id, status?)`：变更页 running 检测传 `status=running` 只取运行中会话，其余 8 处调用方不传、仍取全量。
 
-**反例**：`src/features/code/use-changes-auto-refresh.ts` 的 `useWorktreeRunningSession` 历史上每 5s 拉全量 session 再前端过滤 running turn。
+**反例**：`src/features/changes/use-changes-auto-refresh.ts` 的 `useWorktreeRunningSession` 历史上每 5s 拉全量 session 再前端过滤 running turn。
 
 ## 4. 新增命令 / 轮询前的自检
 

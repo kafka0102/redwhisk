@@ -46,7 +46,7 @@
 
 - 本决策记录：`docs/adr/0008-changes-promoted-to-activity-with-conditional-polling.md`
 - 领域语言：`CONTEXT.md`（变更 Activity、代码工作区）
-- 现有实现：`src/features/code/code-workspace.tsx`、`code-workspace-changes-view.tsx`、`use-code-workspace-changes.ts`、`code-workspace-cache.ts`
+- 现有实现：`src/features/code/code-workspace.tsx`、`code-workspace-cache.ts`（外壳与共享缓存）；变更专属件 `code-workspace-changes-view.tsx`、`use-code-workspace-changes.ts`、`use-changes-auto-refresh.ts` 已迁至 `src/features/changes/`（见 [ADR-0009](./0009-changes-split-into-own-feature-dir.md)）
 - Activity / 菜单：`src/app/app-shell.tsx`（`ACTIVITIES`）、`src/app/activity-router.tsx`（`ActivityKey`、`ActivityRouter`）
 - 运行态信号：`src/features/agents/agent-session-commands.ts`（`AgentSessionStatus`、`isTurnRunning`、`workspacePath`）、`agent-session-list-changed` 事件
 - 轮询 / 可见性先例：`src/features/agents/use-session-workspace-cache.ts`、`use-agent-session-notifications.ts`、`src/features/terminals/terminal-surface.tsx`（`document.visibilityState`）
