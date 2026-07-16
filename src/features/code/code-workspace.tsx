@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Folder, RefreshCw, X } from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  Profiler,
   useCallback,
   useEffect,
   useMemo,
@@ -108,6 +109,12 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     new Set((cachedState?.tabs ?? []).map((tab) => tab.filePath)),
   );
   const treeRequestSequenceRef = useRef(0);
+  // [DEBUG-rwperf] 临时埋点，测量后删除（grep DEBUG-rwperf）。
+  const rwMountedRef = useRef(false);
+  if (!rwMountedRef.current) {
+    rwMountedRef.current = true;
+    console.warn(`[DEBUG-rwperf] CodeWorkspace mount view=${view}`);
+  }
   const fileNotFoundMessage = messages.agentsFeature.fileNotFound;
 
   const selectedRoot = useMemo(
@@ -231,9 +238,16 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
         if (!isCurrent) return null;
         setIsTreeLoading(true);
         setTreeError(null);
+        // [DEBUG-rwperf] 临时埋点
+        const rwT0 = performance.now();
         return getProjectWorktreeFileTree({
           projectId,
           workspacePath,
+        }).then((res) => {
+          console.warn(
+            `[DEBUG-rwperf] getProjectWorktreeFileTree ${(performance.now() - rwT0).toFixed(0)}ms`,
+          );
+          return res;
         });
       })
       .then((response) => {
@@ -425,12 +439,16 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
         return [...retained, nextTab];
       });
       if (isAlreadyOpen) return;
+      const rwT0 = performance.now();
       void readProjectWorktreeFile({
         projectId,
         workspacePath: selectedRoot.path,
         filePath: file.path,
       })
         .then((content) => {
+          console.warn(
+            `[DEBUG-rwperf] readProjectWorktreeFile(open) ${(performance.now() - rwT0).toFixed(0)}ms`,
+          );
           setTabs((currentTabs) =>
             currentTabs.map((tab) =>
               tab.filePath === file.path
@@ -495,149 +513,158 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   };
 
   return (
-    <section
-      className="code-workspace"
-      aria-label={messages.agentsFeature.codeTab}
-      style={{ "--code-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    <Profiler
+      id="code-workspace"
+      onRender={(id, phase, actualDuration) =>
+        console.warn(
+          `[DEBUG-rwperf] render ${id} ${phase} ${actualDuration.toFixed(1)}ms`,
+        )
+      }
     >
-      <aside className="code-workspace__sidebar">
-        <div className="code-workspace__branch-bar">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="code-workspace__branch">
-              <span>
-                {selectedRoot?.branch ?? messages.agentsFeature.loadingCode}
-              </span>
-              <ChevronDown aria-hidden="true" size={14} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {workspaceRoots.map((root) => (
-                <DropdownMenuItem
-                  key={root.path}
-                  onClick={() => selectRoot(root)}
-                >
-                  {root.branch}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      <section
+        className="code-workspace"
+        aria-label={messages.agentsFeature.codeTab}
+        style={{ "--code-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      >
+        <aside className="code-workspace__sidebar">
+          <div className="code-workspace__branch-bar">
+            <DropdownMenu>
+              <DropdownMenuTrigger className="code-workspace__branch">
+                <span>
+                  {selectedRoot?.branch ?? messages.agentsFeature.loadingCode}
+                </span>
+                <ChevronDown aria-hidden="true" size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {workspaceRoots.map((root) => (
+                  <DropdownMenuItem
+                    key={root.path}
+                    onClick={() => selectRoot(root)}
+                  >
+                    {root.branch}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {view === "files" ? (
+              <button
+                aria-label={messages.agentsFeature.refreshFileTree}
+                className="code-workspace__refresh"
+                disabled={!selectedRoot || isTreeLoading || isTreeRefreshing}
+                type="button"
+                onClick={refreshTree}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={
+                    isTreeRefreshing
+                      ? "code-workspace__refresh-icon--spin"
+                      : undefined
+                  }
+                  size={15}
+                  strokeWidth={1.8}
+                />
+              </button>
+            ) : null}
+          </div>
           {view === "files" ? (
-            <button
-              aria-label={messages.agentsFeature.refreshFileTree}
-              className="code-workspace__refresh"
-              disabled={!selectedRoot || isTreeLoading || isTreeRefreshing}
-              type="button"
-              onClick={refreshTree}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                className={
-                  isTreeRefreshing
-                    ? "code-workspace__refresh-icon--spin"
-                    : undefined
-                }
-                size={15}
-                strokeWidth={1.8}
-              />
-            </button>
-          ) : null}
-        </div>
-        {view === "files" ? (
-          <FileTreePanel
-            errorMessage={treeError}
-            fileTree={tree}
-            initialOpenState={openFolders}
-            isLoading={isTreeLoading}
-            workspacePath={selectedRoot?.path}
-            onOpenFile={openFile}
-            onOpenStateChange={setOpenFolders}
-          />
-        ) : (
-          <CodeWorkspaceChangesView
-            changes={workspaceChanges}
-            changesErrorMessage={changesErrorMessage}
-            isChangesLoading={isChangesLoading}
-            isUncommittedExpanded={uncommittedChangesExpanded}
-            onOpenChangedFile={(file) =>
-              openFile({
-                id: file.filePath,
-                kind: "file",
-                name: file.fileName,
-                path: file.filePath,
-              })
-            }
-            onToggleUncommittedExpanded={() =>
-              setUncommittedChangesExpanded((current) => !current)
-            }
-            commitHistory={commitHistory}
-            commitHistoryErrorMessage={commitHistoryErrorMessage}
-            isCommitHistoryLoading={isCommitHistoryLoading}
-            isWorktree={isWorktree}
-            isCommittedExpanded={committedChangesExpanded}
-            onToggleCommittedExpanded={() =>
-              setCommittedChangesExpanded((current) => !current)
-            }
-          />
-        )}
-      </aside>
-      <div
-        className="code-workspace__splitter"
-        role="separator"
-        aria-orientation="vertical"
-        aria-valuemin={230}
-        aria-valuemax={640}
-        aria-valuenow={sidebarWidth}
-        onMouseDown={beginResize}
-      />
-      <main className="code-workspace__main">
-        <div className="code-workspace__tabs" role="tablist">
-          {tabs.map((tab) => (
-            <button
-              key={tab.filePath}
-              aria-selected={activePath === tab.filePath}
-              className="code-workspace__tab"
-              role="tab"
-              type="button"
-              onClick={() => {
-                activePathRef.current = tab.filePath;
-                setActivePath(tab.filePath);
-                setTabs((current) =>
-                  current.map((item) =>
-                    item.filePath === tab.filePath
-                      ? { ...item, lastActiveAt: Date.now() }
-                      : item,
-                  ),
-                );
-              }}
-            >
-              <span>{tab.fileName}</span>
-              <X
-                aria-label={messages.agentsFeature.closeTab(tab.fileName)}
-                size={13}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeTab(tab.filePath);
-                }}
-              />
-            </button>
-          ))}
-        </div>
-        {activeTab ? (
-          <>
-            <CodeBreadcrumb
-              filePath={activeTab.filePath}
-              tree={tree}
+            <FileTreePanel
+              errorMessage={treeError}
+              fileTree={tree}
+              initialOpenState={openFolders}
+              isLoading={isTreeLoading}
+              workspacePath={selectedRoot?.path}
               onOpenFile={openFile}
+              onOpenStateChange={setOpenFolders}
             />
-            <CodeContent
-              tab={activeTab}
-              contentFontSize={contentFontSize}
-              messages={messages}
-              theme={theme}
+          ) : (
+            <CodeWorkspaceChangesView
+              changes={workspaceChanges}
+              changesErrorMessage={changesErrorMessage}
+              isChangesLoading={isChangesLoading}
+              isUncommittedExpanded={uncommittedChangesExpanded}
+              onOpenChangedFile={(file) =>
+                openFile({
+                  id: file.filePath,
+                  kind: "file",
+                  name: file.fileName,
+                  path: file.filePath,
+                })
+              }
+              onToggleUncommittedExpanded={() =>
+                setUncommittedChangesExpanded((current) => !current)
+              }
+              commitHistory={commitHistory}
+              commitHistoryErrorMessage={commitHistoryErrorMessage}
+              isCommitHistoryLoading={isCommitHistoryLoading}
+              isWorktree={isWorktree}
+              isCommittedExpanded={committedChangesExpanded}
+              onToggleCommittedExpanded={() =>
+                setCommittedChangesExpanded((current) => !current)
+              }
             />
-          </>
-        ) : null}
-      </main>
-    </section>
+          )}
+        </aside>
+        <div
+          className="code-workspace__splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={230}
+          aria-valuemax={640}
+          aria-valuenow={sidebarWidth}
+          onMouseDown={beginResize}
+        />
+        <main className="code-workspace__main">
+          <div className="code-workspace__tabs" role="tablist">
+            {tabs.map((tab) => (
+              <button
+                key={tab.filePath}
+                aria-selected={activePath === tab.filePath}
+                className="code-workspace__tab"
+                role="tab"
+                type="button"
+                onClick={() => {
+                  activePathRef.current = tab.filePath;
+                  setActivePath(tab.filePath);
+                  setTabs((current) =>
+                    current.map((item) =>
+                      item.filePath === tab.filePath
+                        ? { ...item, lastActiveAt: Date.now() }
+                        : item,
+                    ),
+                  );
+                }}
+              >
+                <span>{tab.fileName}</span>
+                <X
+                  aria-label={messages.agentsFeature.closeTab(tab.fileName)}
+                  size={13}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeTab(tab.filePath);
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+          {activeTab ? (
+            <>
+              <CodeBreadcrumb
+                filePath={activeTab.filePath}
+                tree={tree}
+                onOpenFile={openFile}
+              />
+              <CodeContent
+                tab={activeTab}
+                contentFontSize={contentFontSize}
+                messages={messages}
+                theme={theme}
+              />
+            </>
+          ) : null}
+        </main>
+      </section>
+    </Profiler>
   );
 }
 
@@ -816,6 +843,8 @@ function CodeContent({
   messages: ReturnType<typeof useI18n>["messages"];
   theme: "light" | "dark";
 }) {
+  // [DEBUG-rwperf] Monaco 挂载耗时，测量后删除。
+  const rwEditorT0Ref = useRef(performance.now());
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -853,6 +882,11 @@ function CodeContent({
         scrollBeyondLastLine: false,
         fontSize: contentFontSize,
       }}
+      onMount={() =>
+        console.warn(
+          `[DEBUG-rwperf] Monaco onMount elapsed=${(performance.now() - rwEditorT0Ref.current).toFixed(0)}ms`,
+        )
+      }
       value={tab.content.content}
     />
   );

@@ -80,7 +80,16 @@ export function useCodeWorkspaceChanges(
             setIsChangesUnavailable(false);
             lastChangesSignatureRef.current = null;
           }
-          return getProjectWorktreeChanges({ projectId, workspacePath });
+          // [DEBUG-rwperf] 临时埋点
+          const rwT0 = performance.now();
+          return getProjectWorktreeChanges({ projectId, workspacePath }).then(
+            (res) => {
+              console.warn(
+                `[DEBUG-rwperf] getProjectWorktreeChanges ${(performance.now() - rwT0).toFixed(0)}ms`,
+              );
+              return res;
+            },
+          );
         })
         .then((response) => {
           if (
@@ -127,7 +136,17 @@ export function useCodeWorkspaceChanges(
             setCommitHistory([]);
             lastCommitHistorySignatureRef.current = null;
           }
-          return getProjectWorktreeCommitHistory({ projectId, workspacePath });
+          // [DEBUG-rwperf] 临时埋点
+          const rwT0b = performance.now();
+          return getProjectWorktreeCommitHistory({
+            projectId,
+            workspacePath,
+          }).then((res) => {
+            console.warn(
+              `[DEBUG-rwperf] getProjectWorktreeCommitHistory ${(performance.now() - rwT0b).toFixed(0)}ms`,
+            );
+            return res;
+          });
         })
         .then((response) => {
           if (

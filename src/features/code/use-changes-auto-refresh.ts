@@ -42,8 +42,12 @@ export function useWorktreeRunningSession(
     let unlisten: (() => void) | null = null;
 
     const recompute = () => {
+      const rwT0 = performance.now();
       void listAgentSessions(projectId)
         .then((response) => {
+          console.warn(
+            `[DEBUG-rwperf] listAgentSessions ${(performance.now() - rwT0).toFixed(0)}ms`,
+          );
           if (isDisposed) return;
           setIsRunning(hasRunningTurn(response.sessions, workspacePath));
         })
