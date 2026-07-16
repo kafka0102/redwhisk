@@ -144,6 +144,9 @@ const ISSUE_ACTION_AGENT_ACTOR_MIGRATION_SQL: &str =
     include_str!("../../migrations/0043_issue_action_agent_actor.sql");
 const ISSUE_COMMENTS_MIGRATION_VERSION: &str = "0044_issue_comments";
 const ISSUE_COMMENTS_MIGRATION_SQL: &str = include_str!("../../migrations/0044_issue_comments.sql");
+const AGENT_SESSION_TURN_SOURCE_MIGRATION_VERSION: &str = "0045_agent_session_turn_source";
+const AGENT_SESSION_TURN_SOURCE_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0045_agent_session_turn_source.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -397,6 +400,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: ISSUE_COMMENTS_MIGRATION_VERSION,
             sql: ISSUE_COMMENTS_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSION_TURN_SOURCE_MIGRATION_VERSION,
+            sql: AGENT_SESSION_TURN_SOURCE_MIGRATION_SQL,
         },
     ]
 }

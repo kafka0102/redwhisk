@@ -139,6 +139,17 @@ impl<'connection> AgentSessionService<'connection> {
         self.start_agent_session_internal(data_dir, input, None)
     }
 
+    /// 标记当前 turn 来源为 `follow_up`（用户在 session 中追问）。在 send_message
+    /// 前调用：写 source 同时清空 current_turn_id，待 TurnStarted 回流时由
+    /// broadcaster 写入新 turn_id。completion turn 自动评论提取仅在 source 为
+    /// completion 时触发，故 follow_up turn 不会发表评论。
+    pub fn record_follow_up_turn_source(&self, session_id: i64) -> Result<(), CommandError> {
+        self.agent_session_repository
+            .update_current_turn_source(session_id, "follow_up")
+            .map_err(agent_session_database_error)?;
+        Ok(())
+    }
+
     pub fn start_agent_session_with_pty(
         &self,
         data_dir: impl AsRef<Path>,
@@ -819,6 +830,12 @@ impl<'connection> AgentSessionService<'connection> {
 
         broadcaster.register_session(result.session_id);
         let handle: Arc<dyn AgentSessionHandle> = Arc::new(codex_handle);
+        // 首条派发消息标记为 initial turn 来源；写 source 同时清空 current_turn_id，
+        // 待 TurnStarted 回流时由 broadcaster 写入真实 turn_id（completion turn 自动
+        // 评论提取依赖此配对）。
+        let _ = self
+            .agent_session_repository
+            .update_current_turn_source(result.session_id, "initial");
         if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
             agent_registry.unmark_starting(result.session_id);
             handle.shutdown();
@@ -1032,6 +1049,10 @@ impl<'connection> AgentSessionService<'connection> {
 
         broadcaster.register_session(result.session_id);
         let handle: Arc<dyn AgentSessionHandle> = Arc::new(claude_handle);
+        // 同 codex 路径：首条派发消息标记为 initial turn 来源。
+        let _ = self
+            .agent_session_repository
+            .update_current_turn_source(result.session_id, "initial");
         if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
             agent_registry.unmark_starting(result.session_id);
             handle.shutdown();

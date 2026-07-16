@@ -696,6 +696,32 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    /// 写入当前 turn 的来源（initial / follow_up / completion），同时清空
+    /// `current_turn_id`：新 turn 上下文开始，旧 turn_id 失效，待 `TurnStarted`
+    /// 回流时由 `update_current_turn_id` 重新写入。写 source 必须与清 turn_id
+    /// 在同一 UPDATE 内原子完成，避免提取任务读到新 source 配旧 turn_id 的中间态。
+    pub fn update_current_turn_source(&self, session_id: i64, source: &str) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET current_turn_source = ?1,
+                 current_turn_id = NULL
+             WHERE id = ?2 AND status = 'running' AND del = 0",
+            params![source, session_id],
+        )
+    }
+
+    /// 写入当前 turn 的标识（来自 `TurnStarted` 事件的 turn_id）。仅当 session 仍
+    /// 在运行时写入；被新 turn 抢占（source 已被覆盖并清空 turn_id）时本次写入
+    /// 会被新一轮 `update_current_turn_source` 覆盖。
+    pub fn update_current_turn_id(&self, session_id: i64, turn_id: &str) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET current_turn_id = ?1
+             WHERE id = ?2 AND status = 'running' AND del = 0",
+            params![turn_id, session_id],
+        )
+    }
+
     /// turn 正常完成：写结束时间与最后输出时间，并按 turn_started_at 原子累加
     /// processing_ms。漏记 turn_started_at 时本次不计（COALESCE 兜底为 0 增量），
     /// 避免负值或异常值污染累计处理时长。
