@@ -2,7 +2,7 @@
 
 ## 状态
 
-拟议。
+已采纳（2026-07-15 落地实现，commit 10a02a5 / f304c48 / 621c902 / 24081ab / b8708aa）。落地时修正了决定 1 与决定 6 两处判断，见文末「实现落地修正」。
 
 ## 背景
 
@@ -59,3 +59,12 @@ ADR 0002 规划了 `issue_comments` 表与「从 Agent 最终答复提取 `<issu
 - **提取策略**：提取不到时 fallback 截断最终答复（否决：与 CONTEXT.md「评论唯一来源 = `<issue-comment>`、完整答复仍属 Session」冲突）。
 - **actor 模型**：把 agent 名称快照塞 `payload_json`（否决：违反 ADR 0002「操作者列化、payload 仅存展示参数」）。
 - **执行体**：独立 worker + channel（否决：对单机桌面应用过重）；session.rs 就地提取（否决：让 agent 层依赖 core 写入，分层更乱，且 codex 路径要重复实现）。
+
+## 实现落地修正（2026-07-15）
+
+实现时发现原决定的两处判断前提有误，按实际取舍落地（原文保留以追溯）：
+
+- **决定 1（触发范围）**：收窄为**仅 `completion` turn 触发**，去掉 `initial`。`initial` turn（派发首条消息）时 Agent 通常无可交付内容，强制发表易产生噪音；自动评论收敛到「完成时发交付摘要」最干净。故 `<issue-comment>` prompt 契约只需注入完成流程的 `build_agent_commit_completion_prompt`，不改 `run-prompt-builder`（原决定 3 要求两处同步注入的前提随之失效）。
+- **决定 6（操作者归属）**：`AgentSessionStarted` 是**用户**启动 Agent 会话时把 Issue 从 backlog 切到 running 的状态切换动作，操作主体是人，维持 `actor_kind='user'` 正确，**不归 agent**。仅评论动作（`IssueCommentAdded`）归 `agent`（交付摘要是 Agent 产出）。历史动作不回填。
+
+完整设计见 `docs/superpowers/specs/2026-07-15-agent-turn-comment-auto-post-design.md`。
