@@ -17,7 +17,7 @@ const CHANGES_REFRESH_INTERVAL_IDLE_MS = 8_000;
 /**
  * 判定选中 worktree 上是否存在 running turn 的 Agent session。
  *
- * 数据来自 listAgentSessions 全量过滤（无按 worktree 取 session 的专用 command）；
+ * 数据来自 listAgentSessions（传 status=running 只取运行中会话）再按 workspacePath 判定；
  * 监听 agent-session-list-changed 事件，payload 命中本 projectId 时去抖 500ms
  * 重算（先例 agents-activity.tsx），外加 5s 慢速兜底轮询保证事件丢失时仍能收敛。
  * `workspacePath` 为空或未启用 → false。卸载时清理监听与定时器。
@@ -42,12 +42,8 @@ export function useWorktreeRunningSession(
     let unlisten: (() => void) | null = null;
 
     const recompute = () => {
-      const rwT0 = performance.now();
       void listAgentSessions(projectId, { status: "running" })
         .then((response) => {
-          console.warn(
-            `[DEBUG-rwperf] listAgentSessions ${(performance.now() - rwT0).toFixed(0)}ms`,
-          );
           if (isDisposed) return;
           setIsRunning(hasRunningTurn(response.sessions, workspacePath));
         })
