@@ -4219,23 +4219,36 @@ button:focus-visible {
 
 .session-change-row:hover,
 .session-change-row:focus-visible {
-  background: #f7f8fa;
+  background: var(--color-surface-muted);
   outline: none;
 }
 
 .session-change-row__name {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   min-width: 0;
-  overflow: hidden;
   font-size: 13px;
   line-height: 1.2;
+}
+
+.session-change-row__name > span:first-child {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .session-change-row__path {
-  margin-left: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--color-text-subtle);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-change-row__actions {
@@ -4441,7 +4454,8 @@ button:focus-visible {
 
 .session-commit-file__name {
   flex: 0 0 auto;
-  max-width: calc(42% + 20px);
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   font-size: 13px;
   line-height: 1.25;
@@ -4450,6 +4464,7 @@ button:focus-visible {
 }
 
 .session-commit-file__path {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-subtle);
