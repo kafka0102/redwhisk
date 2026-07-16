@@ -1646,8 +1646,18 @@ export function AgentsActivity({
               // 必须传稳定引用：内联包装会在 agent 流式重渲染时换掉
               // FileTreePanel 的行渲染器 identity，导致点击明显迟钝。
               onOpenFile={workspaceCache.openFile}
-              onRefreshCommitHistory={workspaceCache.refreshCommitHistory}
-              onRefreshChanges={workspaceCache.refreshChanges}
+              onToggleCommittedChangesExpanded={
+                workspaceCache.toggleCommittedChangesExpanded
+              }
+              onToggleUncommittedChangesExpanded={
+                workspaceCache.toggleUncommittedChangesExpanded
+              }
+              isCommittedChangesExpanded={
+                workspaceCache.committedChangesExpanded
+              }
+              isUncommittedChangesExpanded={
+                workspaceCache.uncommittedChangesExpanded
+              }
               projectId={projectId}
               workspacePath={selectedSession.workspacePath}
             />

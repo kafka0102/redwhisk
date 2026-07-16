@@ -24,6 +24,8 @@ interface SessionSidePanelProps {
   isChangesLoading: boolean;
   isCommitHistoryLoading: boolean;
   isFileTreeLoading: boolean;
+  isCommittedChangesExpanded: boolean;
+  isUncommittedChangesExpanded: boolean;
   linkedIssue: LinkedSessionIssue | null;
   session: AgentSessionListItem | null;
   onActiveTabChange: (tab: SessionSidePanelTab) => void;
@@ -34,8 +36,8 @@ interface SessionSidePanelProps {
   ) => void;
   onOpenIssue: (issueId: number) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
-  onRefreshCommitHistory: () => void;
-  onRefreshChanges: () => void;
+  onToggleCommittedChangesExpanded: () => void;
+  onToggleUncommittedChangesExpanded: () => void;
   projectId: number;
   workspacePath?: string | null;
 }
@@ -52,6 +54,8 @@ export function SessionSidePanel({
   isChangesLoading,
   isCommitHistoryLoading,
   isFileTreeLoading,
+  isCommittedChangesExpanded,
+  isUncommittedChangesExpanded,
   linkedIssue,
   session,
   onActiveTabChange,
@@ -59,8 +63,8 @@ export function SessionSidePanel({
   onOpenCommittedChangedFile,
   onOpenIssue,
   onOpenFile,
-  onRefreshCommitHistory,
-  onRefreshChanges,
+  onToggleCommittedChangesExpanded,
+  onToggleUncommittedChangesExpanded,
   projectId,
   workspacePath,
 }: SessionSidePanelProps) {
@@ -119,10 +123,12 @@ export function SessionSidePanel({
             errorMessage={changesErrorMessage}
             isCommitHistoryLoading={isCommitHistoryLoading}
             isLoading={isChangesLoading}
+            isUncommittedExpanded={isUncommittedChangesExpanded}
+            isCommittedExpanded={isCommittedChangesExpanded}
+            onToggleUncommittedExpanded={onToggleUncommittedChangesExpanded}
+            onToggleCommittedExpanded={onToggleCommittedChangesExpanded}
             onOpenChangedFile={onOpenChangedFile}
             onOpenCommittedChangedFile={onOpenCommittedChangedFile}
-            onRefreshCommitHistory={onRefreshCommitHistory}
-            onRefreshChanges={onRefreshChanges}
           />
         ) : (
           <SessionFileTreePanel

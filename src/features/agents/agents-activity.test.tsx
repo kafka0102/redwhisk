@@ -864,39 +864,6 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("refreshes uncommitted changes immediately from the refresh button", async () => {
-    const user = userEvent.setup();
-    getProjectWorktreeChangesMock
-      .mockResolvedValueOnce({
-        signature: "one",
-        files: [changedFile("src/one.ts", "modified")],
-      })
-      .mockResolvedValueOnce({
-        signature: "two",
-        files: [
-          changedFile("src/one.ts", "modified"),
-          changedFile("src/two.ts", "added"),
-        ],
-      });
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [runningSession(301)],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-    await user.click(await screen.findByLabelText("Open session side panel"));
-    await user.click(screen.getByRole("tab", { name: "Changes" }));
-    expect(
-      await screen.findByRole("button", { name: /one.ts/ }),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Refresh changes" }));
-
-    expect(
-      await screen.findByRole("button", { name: /two.ts/ }),
-    ).toBeInTheDocument();
-    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
-  });
-
   it("stops auto-refreshing uncommitted changes when the workspace root is inaccessible", async () => {
     vi.useFakeTimers();
     getProjectWorktreeChangesMock.mockRejectedValue({
@@ -958,10 +925,12 @@ describe("AgentsActivity", () => {
     // 先成功加载过未提交文件，此时 one.ts 可见。
     expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
 
-    // worktree 被删除后刷新变为不可访问：错误信息显示，残留的旧文件行必须消失，
-    // 否则点击会打开已不存在的文件。
-    fireEvent.click(screen.getByRole("button", { name: "Refresh changes" }));
-    await flushMicrotasks();
+    // worktree 被删除后，下一次 2s 自动轮询返回不可访问：错误信息显示，残留的旧文件
+    // 行必须消失，否则点击会打开已不存在的文件。手动刷新按钮已按 spec 移除，这里通过
+    // 推进未提交轮询间隔触发第二次拉取。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
 
     expect(screen.getByText("仓库路径不可访问。")).toBeInTheDocument();
     expect(
@@ -971,6 +940,12 @@ describe("AgentsActivity", () => {
 
   it("loads committed branch history and expands changed files", async () => {
     const user = userEvent.setup();
+    // 本用例聚焦已提交历史：把未提交清空，避免与已提交面板的 status 字母（M/R/A）
+    // 同时渲染造成断言歧义。
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "empty",
+      files: [],
+    });
     getProjectWorktreeCommitHistoryMock.mockResolvedValue({
       signature: "commit-history",
       commits: [
@@ -996,8 +971,10 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(panel).getByRole("tab", { name: "Changes" }));
 
-    await user.click(within(panel).getByRole("tab", { name: "Uncommitted" }));
-    await user.click(within(panel).getByRole("tab", { name: "Committed" }));
+    // 已提交面板默认收起：点击面板头展开后才触发首次拉取与轮询。
+    await user.click(
+      within(panel).getByRole("button", { name: "Committed changes" }),
+    );
 
     const commitButton = await within(panel).findByRole("button", {
       name: /fix\(web\): 补齐列表标题宽度限制/,
@@ -5110,23 +5087,23 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(panel).getByRole("tab", { name: "Changes" }));
     expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
+    // Session 变更页改为两折叠面板：未提交默认展开、已提交默认收起，无 Tabs、无刷新按钮。
+    const uncommittedHeader = within(panel).getByRole("button", {
+      name: "Uncommitted changes",
+    });
+    expect(uncommittedHeader).toHaveAttribute("aria-expanded", "true");
     expect(
-      within(panel).getByRole("tab", { name: "Uncommitted" }),
-    ).toBeInTheDocument();
+      within(panel).getByRole("button", { name: "Committed changes" }),
+    ).toHaveAttribute("aria-expanded", "false");
     expect(
-      within(panel).getByRole("button", { name: "Refresh changes" }),
-    ).toBeInTheDocument();
-
-    await user.click(within(panel).getByRole("tab", { name: "Uncommitted" }));
-    expect(
-      within(panel).getByRole("tab", { name: "Committed" }),
-    ).toBeInTheDocument();
+      within(panel).queryByRole("button", { name: "Refresh changes" }),
+    ).not.toBeInTheDocument();
 
     await user.click(
       screen.getByRole("heading", { name: "#20 Existing issue" }),
     );
     expect(
-      within(panel).getByRole("tab", { name: "Committed" }),
+      within(panel).getByRole("button", { name: "Uncommitted changes" }),
     ).toBeInTheDocument();
 
     await user.hover(

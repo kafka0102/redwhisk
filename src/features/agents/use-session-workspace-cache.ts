@@ -25,6 +25,7 @@ import type {
 } from "./session-workspace-types";
 
 const CHANGES_POLL_INTERVAL_MS = 2_000;
+const COMMIT_HISTORY_POLL_INTERVAL_MS = 5_000;
 const FILE_TREE_POLL_INTERVAL_MS = 5_000;
 
 interface UseSessionWorkspaceCacheInput {
@@ -51,6 +52,8 @@ interface SessionWorkspaceCache {
   changes: WorkspaceChangedFile[];
   changesErrorMessage: string | null;
   changesRequestSequence: number;
+  committedChangesExpanded: boolean;
+  uncommittedChangesExpanded: boolean;
   commitHistory: WorkspaceCommitRecord[];
   isCommitFromWorktree: boolean;
   commitHistoryErrorMessage: string | null;
@@ -74,6 +77,11 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   changes: [],
   changesErrorMessage: null,
   changesRequestSequence: 0,
+  // Session 侧默认：未提交面板展开、已提交面板收起。与 code-workspace 侧（两个均默认
+  // 展开、持久化于 codeWorkspaceStateCache）刻意不同；展开已提交面板才会触发首次拉取
+  // 与后续 5s 轮询（见 committed 轮询 effect）。
+  committedChangesExpanded: false,
+  uncommittedChangesExpanded: true,
   commitHistory: [],
   isCommitFromWorktree: false,
   commitHistoryErrorMessage: null,
@@ -648,6 +656,37 @@ export function useSessionWorkspaceCache({
     refreshChanges,
   ]);
 
+  // 已提交历史门控轮询：仅在「侧栏打开 + changes tab + 已提交面板展开 + 仓库可访问」
+  // 时运行。进入即补拉一次并按 5s 间隔轮询；收起面板 / 切换 tab / 关闭侧栏立即停止。
+  // 比未提交的 2s 慢一档：已提交历史变化频率低，且展开才意味着用户关心。仓库不可访问
+  // 同样视为不可恢复错误，停止轮询（与 changes 轮询语义一致）。
+  useEffect(() => {
+    if (
+      !isSidePanelOpen ||
+      currentCache.sidePanelTab !== "changes" ||
+      !currentCache.committedChangesExpanded ||
+      currentCache.isChangesUnavailable
+    ) {
+      return;
+    }
+
+    void refreshCommitHistory();
+    const intervalId = window.setInterval(
+      () => void refreshCommitHistory(),
+      COMMIT_HISTORY_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    currentCache.sidePanelTab,
+    currentCache.committedChangesExpanded,
+    currentCache.isChangesUnavailable,
+    isSidePanelOpen,
+    refreshCommitHistory,
+  ]);
+
   useEffect(() => {
     if (!isSidePanelOpen || currentCache.sidePanelTab !== "files") {
       return;
@@ -664,6 +703,20 @@ export function useSessionWorkspaceCache({
     };
   }, [currentCache.sidePanelTab, isSidePanelOpen, refreshFileTree]);
 
+  const toggleUncommittedChangesExpanded = useCallback(() => {
+    updateCurrentCache((cache) => ({
+      ...cache,
+      uncommittedChangesExpanded: !cache.uncommittedChangesExpanded,
+    }));
+  }, [updateCurrentCache]);
+
+  const toggleCommittedChangesExpanded = useCallback(() => {
+    updateCurrentCache((cache) => ({
+      ...cache,
+      committedChangesExpanded: !cache.committedChangesExpanded,
+    }));
+  }, [updateCurrentCache]);
+
   return {
     activeWorkspaceTab: currentCache.activeWorkspaceTab,
     changeTab: currentCache.changeTab,
@@ -671,6 +724,7 @@ export function useSessionWorkspaceCache({
     changesErrorMessage: currentCache.changesErrorMessage,
     closeWorkspaceTab,
     closeWorkspaceTabForSession,
+    committedChangesExpanded: currentCache.committedChangesExpanded,
     commitHistory: currentCache.commitHistory,
     isCommitFromWorktree: currentCache.isCommitFromWorktree,
     commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
@@ -691,6 +745,9 @@ export function useSessionWorkspaceCache({
     setSidePanelTab,
     setSidePanelTabForSession,
     sidePanelTab: currentCache.sidePanelTab,
+    toggleCommittedChangesExpanded,
+    toggleUncommittedChangesExpanded,
+    uncommittedChangesExpanded: currentCache.uncommittedChangesExpanded,
   };
 }
 
