@@ -509,6 +509,10 @@ pub async fn send_agent_message(
         let service = build_agent_session_service(&database.connection);
         service.find_project_session_record(input.project_id, input.session_id)?;
         let handle = require_structured_handle(&agent_sessions, input.session_id)?;
+        // 标记 follow_up turn 来源：覆盖前一个 turn 的 source，避免前一 turn 为 completion
+        // 时，follow_up turn 完成误触发评论提取（提取仅在 source=='completion' 且 turn_id
+        // 配对时触发）。写入失败不阻断消息发送（评论提取是旁路）。
+        let _ = service.record_follow_up_turn_source(input.session_id);
         handle
             .send_message(input.message, input.attachments)
             .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)

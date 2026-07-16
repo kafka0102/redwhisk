@@ -6,6 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
+use rusqlite::OptionalExtension;
+
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::core::agent_session_service::{
@@ -399,6 +401,121 @@ impl<'connection> IssueService<'connection> {
 
         transaction.commit().map_err(issue_database_error)?;
         Ok(())
+    }
+
+    /// completion turn 完成后尝试自动发表 Issue 评论（端到端编排）。
+    ///
+    /// 步骤：
+    /// 1. 读取 session 的 `current_turn_source` 与 `current_turn_id`，校验 source 为
+    ///    `completion` 且 turn_id 与入参一致（被新 turn 抢占则返回 `Ok(false)`）。
+    /// 2. 找到 session 关联的未删除 Issue（无关联返回 `Ok(false)`）。
+    /// 3. 取 Agent 配置名快照（查不到用空串兜底，仍归属 Agent）。
+    /// 4. 按 turn_id 从 session log 读取该 turn 最后一条助手答复，正则提取首个
+    ///    `<issue-comment>` 标签内容（提取不到静默返回 `Ok(false)`）。
+    /// 5. 调用 `add_issue_comment` 写入（UNIQUE 保证幂等）；返回是否真正发表了评论。
+    ///
+    /// 失败（DB 错误等）向上抛 `CommandError`，由调用方独立 catch，不影响 session 运行。
+    pub fn try_publish_completion_comment(
+        &self,
+        session_id: i64,
+        turn_id: &str,
+    ) -> Result<bool, CommandError> {
+        let connection = self.issue_repository.connection();
+
+        // 直接 SQL 读 current_turn_* 列（未映射进 AgentSessionRecord）。
+        let (current_turn_source, current_turn_id): (Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT current_turn_source, current_turn_id FROM agent_sessions
+                 WHERE id = ?1 AND del = 0",
+                rusqlite::params![session_id],
+                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .map_err(issue_database_error)?;
+
+        if current_turn_source.as_deref() != Some("completion") {
+            return Ok(false);
+        }
+        if current_turn_id.as_deref() != Some(turn_id) {
+            // 被新 turn 抢占。
+            return Ok(false);
+        }
+
+        let session = AgentSessionRepository::new(connection)
+            .find_by_id(session_id)
+            .map_err(issue_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::IssuePersistenceFailed,
+                    "Agent Session 不存在或已删除。",
+                )
+                .with_reason("agentSessionNotFound")
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+            })?;
+
+        // 取关联 Issue：session 经 agent_sessions.issue_id 关联到 issue，确认未删除。
+        let issue_id: Option<i64> = connection
+            .query_row(
+                "SELECT issues.id FROM issues
+                 JOIN agent_sessions ON agent_sessions.issue_id = issues.id
+                 WHERE agent_sessions.id = ?1 AND issues.del = 0",
+                rusqlite::params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(issue_database_error)?;
+        let Some(issue_id) = issue_id else {
+            return Ok(false);
+        };
+
+        // Agent 名称快照：查不到用空串兜底。
+        let name_snapshot: String = connection
+            .query_row(
+                "SELECT name FROM agent_profiles WHERE id = ?1",
+                rusqlite::params![session.agent_profile_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(issue_database_error)?
+            .unwrap_or_default();
+
+        let Some(text) = crate::core::agent_session_service::read_last_assistant_text_for_turn(
+            &session.log_path,
+            turn_id,
+        ) else {
+            return Ok(false);
+        };
+        let Some(body) = extract_issue_comment_from_assistant_text(&text) else {
+            return Ok(false);
+        };
+
+        // 幂等：命中 UNIQUE 时 add_issue_comment 静默忽略并整体不写动作；这里通过
+        // 先查是否已存在评论来决定返回值（并发触发由 UNIQUE 兜底，最多多算一次）。
+        let already_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM issue_comments
+                    WHERE linked_session_id = ?1 AND linked_turn_id = ?2
+                 )",
+                rusqlite::params![session_id, turn_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|v: i64| v != 0)
+            .map_err(issue_database_error)?;
+        if already_exists {
+            return Ok(false);
+        }
+
+        self.add_issue_comment(
+            issue_id,
+            &body,
+            IssueActionActor::Agent {
+                profile_id: session.agent_profile_id,
+                name_snapshot,
+            },
+            Some(session_id),
+            Some(turn_id),
+        )?;
+        Ok(true)
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
@@ -1192,6 +1309,11 @@ impl<'connection> IssueService<'connection> {
                     // detect_agent_commit_completion 比对识别新 commit）。
                     let completion_prompt =
                         build_agent_commit_completion_prompt(&issue.title, &snapshot.head);
+                    // 标记当前 turn 来源为 completion（写 source 同时清空 current_turn_id）。
+                    // 提取任务据此 + 配对的 turn_id 判断是否发表评论。忽略写入错误：写库
+                    // 失败不应阻断完成流程本身，最坏情况只是该 turn 不自动发表评论。
+                    let _ = AgentSessionRepository::new(self.issue_repository.connection())
+                        .update_current_turn_source(session.id, "completion");
                     if let Some(handle) = agent_registry.get(session.id) {
                         handle
                             .send_message(completion_prompt, Vec::new())
@@ -3321,7 +3443,8 @@ Issue: {issue_title}\n\
 - 不要提交无关改动\n\
 - 先自检再提交\n\
 - 使用中文 Conventional Commit\n\
-- 完成后请回复 commit hash、提交结果与验证命令\n"
+- 完成后请回复 commit hash、提交结果与验证命令\n\
+- 完成后在答复正文顶层用 <issue-comment>精简中文交付摘要</issue-comment> 输出本次交付内容（做了什么 / 结果 / 验证命令），该标签会被系统提取为 Issue 评论；不要把标签放进代码块或对其转义\n"
     )
 }
 
@@ -3815,6 +3938,66 @@ fn read_previewable_text_file(path: &str) -> Result<String, CommandError> {
     fs::read_to_string(path).map_err(issue_io_error)
 }
 
+/// 从 Agent 助手答复正文提取首个 `<issue-comment>` 标签内容；无匹配返回 None。
+///
+/// 不做容错：标签出现在 fenced code block（``` / ~~~）内或被反斜杠转义时不识别，
+/// 缺闭合标签不识别，空内容不识别。依赖 `build_agent_commit_completion_prompt`
+/// 约束 Agent 把标签写在答复正文顶层。
+pub(crate) fn extract_issue_comment_from_assistant_text(text: &str) -> Option<String> {
+    const START_TAG: &str = "<issue-comment>";
+    const END_TAG: &str = "</issue-comment>";
+
+    let bytes = text.as_bytes();
+    let mut cursor = 0usize;
+
+    loop {
+        let rel = text[cursor..].find(START_TAG)?;
+        let start_idx = cursor + rel;
+
+        // 跳过位于 fenced code block 内的标签：扫描标签前缀统计 fence 切换次数。
+        if is_inside_code_fence(&text[..start_idx]) {
+            cursor = start_idx + START_TAG.len();
+            continue;
+        }
+        // 跳过被反斜杠转义的标签（`\<issue-comment>`）。
+        if start_idx > 0 && bytes[start_idx - 1] == b'\\' {
+            cursor = start_idx + START_TAG.len();
+            continue;
+        }
+
+        let after_start = start_idx + START_TAG.len();
+        let end_rel = text[after_start..].find(END_TAG)?;
+        let content = &text[after_start..after_start + end_rel];
+        let trimmed = content.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        return Some(trimmed.to_string());
+    }
+}
+
+/// 统计 `prefix` 文本中 fenced code block（``` / ~~~）的嵌套状态：返回 true 表示
+/// 当前位置（紧接 prefix 之后）落在未闭合的代码块内。
+fn is_inside_code_fence(prefix: &str) -> bool {
+    let mut in_fence = false;
+    let mut fence_marker: &str = "";
+    for line in prefix.lines() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("```").or_else(|| trimmed.strip_prefix("~~~")) {
+            let _ = rest; // fence 后缀（语言标注或空）不影响切换
+            let marker = &trimmed[..3];
+            if !in_fence {
+                in_fence = true;
+                fence_marker = marker;
+            } else if marker == fence_marker {
+                in_fence = false;
+                fence_marker = "";
+            }
+        }
+    }
+    in_fence
+}
+
 fn issue_io_error(error: std::io::Error) -> CommandError {
     CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
@@ -3916,6 +4099,189 @@ mod tests {
         assert_eq!(agent_entry.actor.actor_kind, "agent");
         assert_eq!(agent_entry.actor.name, "Codex");
         assert_eq!(agent_entry.actor.agent_type.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn extract_issue_comment_from_assistant_text_cases() {
+        use super::extract_issue_comment_from_assistant_text;
+        assert_eq!(
+            extract_issue_comment_from_assistant_text(
+                "提交完成 <issue-comment>交付了 X，验证通过</issue-comment>"
+            ),
+            Some("交付了 X，验证通过".to_string())
+        );
+        // 多个标签取首个
+        assert_eq!(
+            extract_issue_comment_from_assistant_text(
+                "<issue-comment>first</issue-comment> 后续 <issue-comment>second</issue-comment>"
+            ),
+            Some("first".to_string())
+        );
+        assert_eq!(extract_issue_comment_from_assistant_text("无标签答复"), None);
+        // 代码块内的标签不识别
+        assert_eq!(
+            extract_issue_comment_from_assistant_text(
+                "```\n<issue-comment>in code block</issue-comment>\n```"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn read_last_assistant_text_for_turn_returns_last_match() {
+        use crate::core::agent_session_service::read_last_assistant_text_for_turn;
+        let temp = tempdir().expect("temp dir");
+        let log = temp.path().join("session.log");
+        let line = |turn_id: &str, text: &str| -> String {
+            format!(
+                "{{\"projectId\":1,\"sessionId\":30,\"seq\":1,\"epoch\":\"e\",\"event\":{{\"type\":\"timeline\",\"item\":{{\"type\":\"assistant_message\",\"text\":\"{text}\"}},\"turnId\":\"{turn_id}\",\"seq\":1,\"timestamp\":1}}}}"
+            )
+        };
+        fs::write(
+            &log,
+            format!(
+                "{}\n{}\n{}\n",
+                line("t1", "first in t1"),
+                line("t2", "other turn"),
+                line("t1", "last in t1 <issue-comment>x</issue-comment>"),
+            ),
+        )
+        .expect("write log");
+        assert_eq!(
+            read_last_assistant_text_for_turn(log.to_string_lossy().as_ref(), "t1"),
+            Some("last in t1 <issue-comment>x</issue-comment>".to_string())
+        );
+        assert_eq!(
+            read_last_assistant_text_for_turn(log.to_string_lossy().as_ref(), "missing"),
+            None
+        );
+    }
+
+    #[test]
+    fn try_publish_completion_comment_publishes_only_for_matched_completion_turn() {
+        let temp = tempdir().expect("temp dir");
+        let log = temp.path().join("session.log");
+        let line = |turn_id: &str, text: &str| -> String {
+            format!(
+                "{{\"projectId\":1,\"sessionId\":30,\"seq\":1,\"epoch\":\"e\",\"event\":{{\"type\":\"timeline\",\"item\":{{\"type\":\"assistant_message\",\"text\":\"{text}\"}},\"turnId\":\"{turn_id}\",\"seq\":1,\"timestamp\":1}}}}"
+            )
+        };
+        fs::write(
+            &log,
+            line("t1", "done <issue-comment>交付摘要正文</issue-comment>"),
+        )
+        .expect("write log");
+
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'P', '', 1, 1)",
+                [],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert agent profile");
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, title, description, status, label_ids, created_at, updated_at, del)
+                 VALUES (16, 1, 'I16', '', 'running', '[]', 1, 1, 0)",
+                [],
+            )
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   status, attention, working_dir, command_snapshot, prompt_snapshot,
+                   workspace_mode, target_branch, workspace_branch, workspace_path,
+                   origin_branch, worktree_owner, log_path,
+                   list_inserted_at, last_active_at, started_at, closed_at, del,
+                   current_turn_source, current_turn_id
+                 ) VALUES (
+                   30, 1, 16, NULL, 101, NULL,
+                   'running', 'none', '', 'codex', '',
+                   'current_branch', NULL, NULL, NULL,
+                   NULL, 'external', ?1,
+                   1, 2, 1, NULL, 0,
+                   'completion', 't1'
+                 )",
+                params![log.to_string_lossy().to_string()],
+            )
+            .expect("insert agent session");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        // completion + turn_id 匹配 → 发表评论
+        assert!(
+            service.try_publish_completion_comment(30, "t1").expect("publish"),
+            "completion turn 应发表评论"
+        );
+        let timeline = service
+            .get_issue_timeline(GetIssueTimelineInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("timeline");
+        let comment = timeline
+            .entries
+            .iter()
+            .find(|e| e.action_type == IssueTimelineActionType::IssueCommentAdded)
+            .expect("应有评论动作");
+        assert_eq!(comment.actor.actor_kind, "agent");
+        assert_eq!(comment.actor.name, "Codex");
+        assert_eq!(comment.comment_body.as_deref(), Some("交付摘要正文"));
+
+        // 幂等：重复触发不再新增评论
+        let count_after_replay = {
+            let _ = service
+                .try_publish_completion_comment(30, "t1")
+                .expect("replay");
+            service
+                .get_issue_timeline(GetIssueTimelineInput {
+                    project_id: 1,
+                    issue_id: 16,
+                })
+                .expect("timeline")
+                .entries
+                .iter()
+                .filter(|e| e.action_type == IssueTimelineActionType::IssueCommentAdded)
+                .count()
+        };
+        assert_eq!(count_after_replay, 1, "幂等：仍只有一条评论");
+
+        // turn_id 不匹配（被抢占）→ 不发表
+        assert!(
+            !service
+                .try_publish_completion_comment(30, "t_other")
+                .expect("mismatch"),
+            "turn_id 不匹配不应发表"
+        );
+
+        // follow_up 来源 → 不发表
+        connection
+            .execute(
+                "UPDATE agent_sessions SET current_turn_source='follow_up' WHERE id=30",
+                [],
+            )
+            .expect("set follow_up");
+        assert!(
+            !service
+                .try_publish_completion_comment(30, "t1")
+                .expect("follow_up"),
+            "follow_up turn 不应发表"
+        );
     }
 
     #[test]

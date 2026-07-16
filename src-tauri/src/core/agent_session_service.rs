@@ -3629,6 +3629,39 @@ fn read_timeline_from_session_log(
     read_timeline_from_log_path(&session.log_path)
 }
 
+/// 按 `turn_id` 从 session log 读取该 turn 最后一条助手答复正文。
+/// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`
+/// 且 turn_id 等于入参的事件，取最后一条的 text。log 路径空或文件不可读返回 None。
+/// 供 completion turn 自动评论提取使用。
+pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -> Option<String> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+
+    use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem};
+
+    if log_path.trim().is_empty() {
+        return None;
+    }
+    let file = File::open(log_path).ok()?;
+    BufReader::new(file)
+        .lines()
+        .filter_map(|line| line.ok())
+        .filter_map(|line| structured_events_from_log_line(&line))
+        .flatten()
+        .filter_map(|event| match event {
+            AgentStreamEvent::Timeline {
+                item,
+                turn_id: Some(t),
+                ..
+            } if t == turn_id => match item {
+                AgentTimelineItem::AssistantMessage { text, .. } => Some(text),
+                _ => None,
+            },
+            _ => None,
+        })
+        .last()
+}
+
 fn command_error_to_sqlite(error: CommandError) -> rusqlite::Error {
     rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(error.message)))
 }

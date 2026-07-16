@@ -136,6 +136,8 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "turn_started_at",
             "processing_ms",
             "last_output_at",
+            "current_turn_source",
+            "current_turn_id",
         ]
     );
 

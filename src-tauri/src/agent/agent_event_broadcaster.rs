@@ -13,12 +13,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter};
 
+use crate::core::issue_service::IssueService;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
+use crate::db::issue_repository::IssueRepository;
+use crate::db::project_repository::ProjectRepository;
 use crate::local_data_path::redwhisk_data_dir;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
 };
+use rusqlite::OptionalExtension;
 
 /// 结构化 Agent 事件流的 Tauri event 名。
 pub const AGENT_SESSION_STREAM_EVENT: &str = "agent-session-stream-event";
@@ -29,12 +33,22 @@ pub const TURN_GRACE_MS: i64 = 3000;
 /// grace 收尾延迟任务的额外缓冲，确保越过 grace 边界后再执行 CAS。
 const TURN_GRACE_FINALIZE_BUFFER_MS: u64 = 1000;
 
+/// Issue 时间轴有新条目（如 Agent 自动发表评论）时广播，前端按 issueId 刷新对应时间轴。
+pub const ISSUE_TIMELINE_CHANGED_EVENT: &str = "issue-timeline-changed";
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentSessionListChangedPayload {
     project_id: i64,
     session_id: Option<i64>,
     reason: &'static str,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IssueTimelineChangedPayload {
+    issue_id: Option<i64>,
+    session_id: i64,
 }
 
 /// 单个 session 的游标状态。
@@ -179,6 +193,54 @@ impl AgentEventBroadcaster {
         }
     }
 
+    /// completion turn 评论提取任务：独立开库连接，调 IssueService 提取并发表评论，
+    /// 成功后广播时间轴刷新。失败独立 catch（仅打印日志），不影响 session 运行与
+    /// 既有的提交检测（detect_agent_commit_completion）。
+    fn try_completion_comment_extraction(&self, session_id: i64, turn_id: String) {
+        let Some(app_handle) = self.app_handle.get() else {
+            return;
+        };
+        let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
+            return;
+        };
+        let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
+            return;
+        };
+        let issue_service = IssueService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+        );
+        match issue_service.try_publish_completion_comment(session_id, &turn_id) {
+            Ok(true) => {
+                let issue_id: Option<i64> = database
+                    .connection
+                    .query_row(
+                        "SELECT issues.id FROM issues
+                         JOIN agent_sessions ON agent_sessions.issue_id = issues.id
+                         WHERE agent_sessions.id = ?1 AND issues.del = 0 LIMIT 1",
+                        rusqlite::params![session_id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()
+                    .ok()
+                    .flatten();
+                let _ = app_handle.emit(
+                    ISSUE_TIMELINE_CHANGED_EVENT,
+                    IssueTimelineChangedPayload {
+                        issue_id,
+                        session_id,
+                    },
+                );
+            }
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!(
+                    "[completion-comment-extraction] session {session_id} turn {turn_id} failed: {error:?}"
+                );
+            }
+        }
+    }
+
     fn advance_cursor(&self, session_id: i64) -> (u64, String) {
         let mut cursors = match self.cursors.lock() {
             Ok(cursors) => cursors,
@@ -255,6 +317,10 @@ impl AgentEventBroadcaster {
                 let _ = repository.update_turn_running(envelope.session_id, true, updated_at);
                 let _ = repository.clear_turn_ended_at(envelope.session_id);
                 let _ = repository.update_turn_started_at(envelope.session_id, updated_at);
+                // 写入 TurnStarted 携带的 turn_id，供 TurnCompleted 提取任务做配对校验。
+                if let AgentStreamEvent::TurnStarted { turn_id: Some(t) } = &envelope.event {
+                    let _ = repository.update_current_turn_id(envelope.session_id, t);
+                }
             }
             TurnRunningDecision::EndedWithGrace => {
                 let _ = repository.record_turn_completed(envelope.session_id, updated_at);
@@ -275,6 +341,16 @@ impl AgentEventBroadcaster {
                         expected_turn_ended_at,
                     );
                 });
+                // completion turn 评论提取：TurnCompleted 携带 turn_id 时触发，
+                // 任务内校验 turn 来源与 turn_id 配对后提取 <issue-comment> 发表评论。
+                if let AgentStreamEvent::TurnCompleted { turn_id: Some(t), .. } = &envelope.event {
+                    let broadcaster = self.clone();
+                    let session_id = envelope.session_id;
+                    let turn_id = t.clone();
+                    std::thread::spawn(move || {
+                        broadcaster.try_completion_comment_extraction(session_id, turn_id);
+                    });
+                }
             }
             TurnRunningDecision::EndedImmediately => {
                 let _ = repository.update_turn_running(envelope.session_id, false, updated_at);
