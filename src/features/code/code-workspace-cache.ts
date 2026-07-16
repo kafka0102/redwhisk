@@ -12,7 +12,7 @@ export interface CodeFileTab {
   lastActiveAt: number;
 }
 
-/** 左侧栏「文件 / 变更」视图类型，切页回来保持选择。 */
+/** 左侧栏「文件 / 变更」视图类型，由父层 Activity 受控传入。 */
 export type CodeWorkspaceView = "files" | "changes";
 
 export interface CachedCodeWorkspaceState {
@@ -26,8 +26,6 @@ export interface CachedCodeWorkspaceState {
   treeError: string | null;
   /** 当前 root 是否已成功/失败加载过树；用于避免切页回来强制重拉。 */
   treeLoaded: boolean;
-  /** 左侧栏当前视图类型（文件 / 变更）。 */
-  viewType: CodeWorkspaceView;
   /** 「变更」视图下「未提交变更」折叠面板是否展开，默认展开。 */
   uncommittedChangesExpanded: boolean;
   /** 「变更」视图下「已提交变更」折叠面板是否展开，默认展开。 */

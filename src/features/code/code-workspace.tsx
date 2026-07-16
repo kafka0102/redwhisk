@@ -54,9 +54,11 @@ const MISSING_FILE_ERROR_REASONS = new Set([
 interface CodeWorkspaceProps {
   projectId: number;
   roots: CodeWorkspaceRoot[];
+  /** 左栏视图：由父层 Activity 受控传入，「代码」传 "files"，「变更」传 "changes"。 */
+  view: CodeWorkspaceView;
 }
 
-export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
+export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
   const cachedState = codeWorkspaceStateCache.get(projectId);
   const [workspaceRoots, setWorkspaceRoots] =
@@ -89,9 +91,6 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   );
   const [sidebarWidth, setSidebarWidth] = useState(
     () => cachedState?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
-  );
-  const [viewType, setViewType] = useState<CodeWorkspaceView>(
-    () => cachedState?.viewType ?? "files",
   );
   const [uncommittedChangesExpanded, setUncommittedChangesExpanded] = useState(
     () => cachedState?.uncommittedChangesExpanded ?? true,
@@ -126,7 +125,6 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
       treeLoaded,
       uncommittedChangesExpanded,
       committedChangesExpanded,
-      viewType,
     });
   }, [
     activePath,
@@ -140,7 +138,6 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     treeLoaded,
     uncommittedChangesExpanded,
     committedChangesExpanded,
-    viewType,
   ]);
 
   useEffect(() => {
@@ -180,6 +177,7 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
   }, [t]);
 
   // 变更视图数据：进入变更视图或切换工作区时拉取一次，不轮询。
+  // 注意：refresh* 暂未在 files/changes 任一视图消费（03 引入条件轮询后会在此调用）。
   const {
     changes: workspaceChanges,
     isChangesLoading,
@@ -188,12 +186,10 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
     isCommitHistoryLoading,
     commitHistoryErrorMessage,
     isWorktree,
-    refreshChanges,
-    refreshCommitHistory,
   } = useCodeWorkspaceChanges(
     projectId,
     selectedRootWorkspacePath,
-    viewType === "changes",
+    view === "changes",
   );
 
   // 已缓存且加载过的树直接复用，切页回来不强制重拉；换 root / 手动刷新另走入口。
@@ -501,60 +497,28 @@ export function CodeWorkspace({ projectId, roots }: CodeWorkspaceProps) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="code-workspace__view-type">
-              <span>
-                {viewType === "files"
-                  ? messages.agentsFeature.files
-                  : messages.agentsFeature.changes}
-              </span>
-              <ChevronDown aria-hidden="true" size={14} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => setViewType("files")}>
-                {messages.agentsFeature.files}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setViewType("changes")}>
-                {messages.agentsFeature.changes}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            aria-label={
-              viewType === "files"
-                ? messages.agentsFeature.refreshFileTree
-                : messages.agentsFeature.refreshChanges
-            }
-            className="code-workspace__refresh"
-            disabled={
-              !selectedRoot ||
-              (viewType === "files"
-                ? isTreeLoading || isTreeRefreshing
-                : isChangesLoading || isCommitHistoryLoading)
-            }
-            type="button"
-            onClick={
-              viewType === "files"
-                ? refreshTree
-                : () => {
-                    refreshChanges();
-                    refreshCommitHistory();
-                  }
-            }
-          >
-            <RefreshCw
-              aria-hidden="true"
-              className={
-                isTreeRefreshing
-                  ? "code-workspace__refresh-icon--spin"
-                  : undefined
-              }
-              size={15}
-              strokeWidth={1.8}
-            />
-          </button>
+          {view === "files" ? (
+            <button
+              aria-label={messages.agentsFeature.refreshFileTree}
+              className="code-workspace__refresh"
+              disabled={!selectedRoot || isTreeLoading || isTreeRefreshing}
+              type="button"
+              onClick={refreshTree}
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={
+                  isTreeRefreshing
+                    ? "code-workspace__refresh-icon--spin"
+                    : undefined
+                }
+                size={15}
+                strokeWidth={1.8}
+              />
+            </button>
+          ) : null}
         </div>
-        {viewType === "files" ? (
+        {view === "files" ? (
           <FileTreePanel
             errorMessage={treeError}
             fileTree={tree}

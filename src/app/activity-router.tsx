@@ -85,6 +85,7 @@ export function ActivityRouter({
         key={projectId}
         projectId={projectId}
         roots={projectCodeWorkspaces}
+        view="files"
       />
     );
   }

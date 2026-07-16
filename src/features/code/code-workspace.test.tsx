@@ -68,6 +68,27 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
   };
 });
 
+// 变更视图渲染件以哨兵文本取代，聚焦「view=changes 时该分支被渲染」的接线断言。
+vi.mock("./code-workspace-changes-view", () => ({
+  CodeWorkspaceChangesView: () => <div>Changes View</div>,
+}));
+
+// view=changes 时 CodeWorkspace 仍会调用本 hook，这里返回稳定空态避免触发未 mock 的 command。
+vi.mock("./use-code-workspace-changes", () => ({
+  useCodeWorkspaceChanges: () => ({
+    changes: [],
+    isChangesLoading: false,
+    changesErrorMessage: null,
+    isChangesUnavailable: false,
+    commitHistory: [],
+    isCommitHistoryLoading: false,
+    commitHistoryErrorMessage: null,
+    isWorktree: false,
+    refreshChanges: () => {},
+    refreshCommitHistory: () => {},
+  }),
+}));
+
 const roots = [
   {
     branch: "main",
@@ -103,7 +124,7 @@ describe("CodeWorkspace", () => {
   it("uses the workspace snapshot returned when the project opened", () => {
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -114,7 +135,7 @@ describe("CodeWorkspace", () => {
   it("keeps the content area empty when no file is open", () => {
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -126,7 +147,7 @@ describe("CodeWorkspace", () => {
     const user = userEvent.setup();
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -142,7 +163,7 @@ describe("CodeWorkspace", () => {
     const user = userEvent.setup();
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -159,7 +180,7 @@ describe("CodeWorkspace", () => {
 
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -175,7 +196,7 @@ describe("CodeWorkspace", () => {
     const user = userEvent.setup();
     const view = render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -190,7 +211,7 @@ describe("CodeWorkspace", () => {
 
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -208,7 +229,7 @@ describe("CodeWorkspace", () => {
     const user = userEvent.setup();
     const view = render(
       <I18nProvider initialLocale="zh">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -226,7 +247,7 @@ describe("CodeWorkspace", () => {
 
     render(
       <I18nProvider initialLocale="zh">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -252,7 +273,7 @@ describe("CodeWorkspace", () => {
 
     const view = render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -271,7 +292,7 @@ describe("CodeWorkspace", () => {
 
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -298,7 +319,7 @@ describe("CodeWorkspace", () => {
 
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -365,7 +386,7 @@ describe("CodeWorkspace", () => {
 
     render(
       <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} />
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
@@ -392,5 +413,40 @@ describe("CodeWorkspace", () => {
       expect.objectContaining({ filePath: "src/sub/deep.ts" }),
     );
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+  });
+
+  it("renders the file tree and the refresh button under view='files'", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} view="files" />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open file" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Refresh file tree" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the changes view without a refresh button under view='changes'", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={roots} view="changes" />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Changes View")).toBeInTheDocument();
+    // 文件树与文件树刷新按钮在 changes 视图下不渲染。
+    expect(
+      screen.queryByRole("button", { name: "Open file" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh file tree" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh changes" }),
+    ).not.toBeInTheDocument();
   });
 });
