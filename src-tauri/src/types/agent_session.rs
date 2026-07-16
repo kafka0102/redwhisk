@@ -178,7 +178,7 @@ pub struct AgentSessionRecord {
     pub closed_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentSessionStatus {
     Running,

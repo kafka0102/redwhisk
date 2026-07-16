@@ -98,9 +98,11 @@ export interface UpdateAgentSessionTitleResult {
 
 export function listAgentSessions(
   projectId: number,
+  options?: { status?: AgentSessionStatus },
 ): Promise<AgentSessionListResponse> {
   return invokeCommand<AgentSessionListResponse>("list_agent_sessions", {
     projectId,
+    status: options?.status,
   });
 }
 

@@ -43,7 +43,7 @@ export function useWorktreeRunningSession(
 
     const recompute = () => {
       const rwT0 = performance.now();
-      void listAgentSessions(projectId)
+      void listAgentSessions(projectId, { status: "running" })
         .then((response) => {
           console.warn(
             `[DEBUG-rwperf] listAgentSessions ${(performance.now() - rwT0).toFixed(0)}ms`,
