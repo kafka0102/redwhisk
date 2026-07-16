@@ -16,6 +16,7 @@
 - [编码风格](./standards/coding-style.md)
 - [Git 工作流规范](./standards/git-workflow.md)
 - [发布与打包规范](./standards/release-workflow.md)
+- [性能与并发规范](./standards/performance.md)
 
 ## 架构与项目规范类
 
@@ -57,3 +58,4 @@
 | Codex 或 Claude provider      | [Agent Provider 协议](./architecture-design/agent-provider-protocol.md)     | Tauri 契约、状态机                 |
 | Worktree、Git 完成或清理      | [Worktree 与 Git 生命周期](./architecture-design/worktree-git-lifecycle.md) | 状态机、数据模型                   |
 | Git 提交                      | Git 工作流规范                                                              | 测试策略                           |
+| 后端命令、git 操作、轮询性能   | [性能与并发规范](./standards/performance.md)                                | Tauri 契约、Worktree 与 Git 生命周期 |
