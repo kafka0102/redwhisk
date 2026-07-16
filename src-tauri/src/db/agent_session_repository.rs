@@ -646,6 +646,26 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    /// 收到「有产出」的 timeline 事件（reasoning / assistant_message / tool_call）
+    /// 时，若 turn 已被 spurious `turn_completed` 落到 idle 或仍在 grace 窗口内，
+    /// 恢复运行态。WHERE 守卫 `is_turn_running = 0 OR turn_ended_at IS NOT NULL`
+    /// 保证正常活动 turn 内（is_turn_running=1 且 turn_ended_at=NULL）为 0 行 no-op，
+    /// 不给每条 reasoning 加写。返回是否实际翻转（据此决定是否广播 list 刷新）。
+    pub fn ensure_turn_running(&self, session_id: i64, now: i64) -> rusqlite::Result<bool> {
+        let changed = self.connection.execute(
+            "UPDATE agent_sessions
+             SET is_turn_running = 1,
+                 turn_ended_at = NULL,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?1
+               AND status = 'running'
+               AND del = 0
+               AND (is_turn_running = 0 OR turn_ended_at IS NOT NULL)",
+            params![session_id, now],
+        )?;
+        Ok(changed > 0)
+    }
+
     pub fn update_turn_ended_at(&self, session_id: i64, now: i64) -> rusqlite::Result<usize> {
         self.connection.execute(
             "UPDATE agent_sessions
@@ -1438,5 +1458,88 @@ mod tests {
             "agent_sessions",
             "uidx_agent_sessions_project_id_number"
         ));
+    }
+
+    // 插入一条 status='running' 的 session，带最小必需列；is_turn_running /
+    // turn_ended_at 用默认值，由调用方 UPDATE 成所需初始态。
+    fn insert_running_session_for_turn_state(connection: &Connection, id: i64, number: i64) {
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, number, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   last_active_at, started_at, del
+                 ) VALUES (
+                   ?1, 1, ?2, 100, 'running', 'none',
+                   '/tmp/repo', 'codex', '', '/tmp/s.log',
+                   10, 10, 0
+                 )",
+                params![id, number],
+            )
+            .expect("insert running session");
+    }
+
+    fn read_turn_state(connection: &Connection, id: i64) -> (i64, Option<i64>) {
+        connection
+            .query_row(
+                "SELECT is_turn_running, turn_ended_at FROM agent_sessions WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read turn state")
+    }
+
+    #[test]
+    fn ensure_turn_running_restores_idle_and_clears_grace() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        insert_agent_profile(&connection, 100);
+        insert_running_session_for_turn_state(&connection, 701, 1);
+        insert_running_session_for_turn_state(&connection, 702, 2);
+        insert_running_session_for_turn_state(&connection, 703, 3);
+        // 701: grace 已收尾的 idle（is_turn_running=0, turn_ended_at=NULL）
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 0, turn_ended_at = NULL WHERE id = 701",
+                [],
+            )
+            .expect("set 701 idle");
+        // 702: grace pending（is_turn_running=1, turn_ended_at 已写）
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = 5000 WHERE id = 702",
+                [],
+            )
+            .expect("set 702 grace");
+        // 703: 正常活动 turn（is_turn_running=1, turn_ended_at=NULL）
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = NULL WHERE id = 703",
+                [],
+            )
+            .expect("set 703 active");
+
+        let repository = AgentSessionRepository::new(&connection);
+
+        // idle → 恢复 running 并清 turn_ended_at，返回 true。
+        assert!(repository
+            .ensure_turn_running(701, 6_000)
+            .expect("ensure 701"));
+        let (running, ended) = read_turn_state(&connection, 701);
+        assert_eq!(running, 1);
+        assert_eq!(ended, None);
+
+        // grace pending → 清 turn_ended_at 并保持 running，返回 true。
+        assert!(repository
+            .ensure_turn_running(702, 6_000)
+            .expect("ensure 702"));
+        let (running, ended) = read_turn_state(&connection, 702);
+        assert_eq!(running, 1);
+        assert_eq!(ended, None);
+
+        // 正常活动 turn → no-op，返回 false（不给每条 reasoning 加写）。
+        assert!(!repository
+            .ensure_turn_running(703, 6_000)
+            .expect("ensure 703"));
     }
 }

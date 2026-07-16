@@ -8,6 +8,7 @@ import {
   createInitialState,
   messageStreamReducer,
 } from "./message-stream-reducer";
+import type { MessageStreamState } from "./message-stream-types";
 
 function timelineEvent(item: AgentTimelineItem, seq = 1): AgentStreamEvent {
   return { type: "timeline", item, seq, timestamp: 0 };
@@ -979,6 +980,53 @@ describe("messageStreamReducer", () => {
         event: { type: "thread_started", threadId: "th1" },
       });
       expect(after).toBe(before);
+    });
+  });
+
+  describe("timeline 有产出事件清除异常中断态", () => {
+    function interruptedState(): MessageStreamState {
+      return {
+        ...createInitialState(),
+        turnStatus: "idle",
+        turnInterrupted: true,
+        interruptedStopReason: null,
+        isInitialized: true,
+      };
+    }
+
+    it("reasoning 事件在异常中断后恢复 running 并清红条", () => {
+      const next = messageStreamReducer(interruptedState(), {
+        type: "EVENT",
+        event: timelineEvent({ type: "reasoning", text: "继续思考" }),
+      });
+      expect(next.turnInterrupted).toBe(false);
+      expect(next.interruptedStopReason).toBeNull();
+      expect(next.turnStatus).toBe("running");
+    });
+
+    it("正常 running 态下 reasoning 事件不改动 turn 态", () => {
+      const next = messageStreamReducer(
+        {
+          ...createInitialState(),
+          turnStatus: "running",
+          isInitialized: true,
+        },
+        {
+          type: "EVENT",
+          event: timelineEvent({ type: "reasoning", text: "思考" }),
+        },
+      );
+      expect(next.turnStatus).toBe("running");
+      expect(next.turnInterrupted).toBe(false);
+    });
+
+    it("user_message 事件不恢复 running（非 agent 产出）", () => {
+      const next = messageStreamReducer(interruptedState(), {
+        type: "EVENT",
+        event: timelineEvent({ type: "user_message", text: "继续" }),
+      });
+      expect(next.turnInterrupted).toBe(true);
+      expect(next.turnStatus).toBe("idle");
     });
   });
 });

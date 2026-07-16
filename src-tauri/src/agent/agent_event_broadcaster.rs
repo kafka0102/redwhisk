@@ -16,7 +16,9 @@ use tauri::{AppHandle, Emitter};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::local_data_path::redwhisk_data_dir;
-use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvelope};
+use crate::types::agent_session_stream::{
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+};
 
 /// 结构化 Agent 事件流的 Tauri event 名。
 pub const AGENT_SESSION_STREAM_EVENT: &str = "agent-session-stream-event";
@@ -220,7 +222,18 @@ impl AgentEventBroadcaster {
             }
         }
 
-        if !should_update_latest_output && decision == TurnRunningDecision::None && resume_session_id.is_none() {
+        // ContinueRunning / None 的 timeline 事件只在 latest_output 需要写入（节流
+        // 750ms）时才开库：ContinueRunning 顺带调用 ensure_turn_running 恢复运行态，
+        // 避免每条 reasoning 都打开 DB。
+        let needs_db_write = should_update_latest_output
+            || matches!(
+                decision,
+                TurnRunningDecision::Running
+                    | TurnRunningDecision::EndedWithGrace
+                    | TurnRunningDecision::EndedImmediately
+            )
+            || resume_session_id.is_some();
+        if !needs_db_write {
             return false;
         }
         let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
@@ -266,6 +279,11 @@ impl AgentEventBroadcaster {
             TurnRunningDecision::EndedImmediately => {
                 let _ = repository.update_turn_running(envelope.session_id, false, updated_at);
                 let _ = repository.clear_turn_ended_at(envelope.session_id);
+            }
+            // 仅与 latest_output 写入（节流）同路径到达：按需把被 spurious
+            // turn_completed 落到 idle / grace 的 turn 恢复成 running。
+            TurnRunningDecision::ContinueRunning => {
+                let _ = repository.ensure_turn_running(envelope.session_id, updated_at);
             }
             TurnRunningDecision::None => {}
         }
@@ -356,20 +374,39 @@ fn should_refresh_session_list_for_stream_event(event: &AgentStreamEvent) -> boo
     !matches!(event, AgentStreamEvent::Timeline { .. })
 }
 
-/// turn 运行态的三态决策，供 `persist_stream_event` 决定如何写 DB。
+/// turn 运行态决策，供 `persist_stream_event` 决定如何写 DB。
 ///
 /// - `Running`：turn 开始，置 `is_turn_running=1` 并清 `turn_ended_at`。
 /// - `EndedWithGrace`：turn 正常结束或 codex 瞬态空错误，进入 grace period：
 ///   只写 `turn_ended_at`，不置 `is_turn_running=0`，由后续 grace 扫描收尾。
 /// - `EndedImmediately`：turn 真失败或被取消，立即置 `is_turn_running=0` 并清
 ///   `turn_ended_at`。
+/// - `ContinueRunning`：收到「有产出」的 timeline 事件（reasoning /
+///   assistant_message / tool_call）。某些 provider（如经代理桥接的 claude
+///   流）会发 spurious `turn_completed`，但随后继续产出 reasoning/tool_call
+///   却不再发 `turn_started`；若不处理，grace 收尾会把 `is_turn_running` 置 0，
+///   导致「明明还在跑」却显示空闲（蓝点）。此时按需恢复运行态。
 /// - `None`：非 turn 事件，不动 turn 相关字段。
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TurnRunningDecision {
     Running,
     EndedWithGrace,
     EndedImmediately,
+    ContinueRunning,
     None,
+}
+
+/// 判断 timeline item 是否代表 agent 正在产出（即 turn 实际仍在跑）。
+///
+/// reasoning / assistant_message / tool_call 视为产出；user_message 是用户输入、
+/// error / todo / compaction 是辅助态，不计。
+fn timeline_item_indicates_active_work(item: &AgentTimelineItem) -> bool {
+    matches!(
+        item,
+        AgentTimelineItem::AssistantMessage { .. }
+            | AgentTimelineItem::Reasoning { .. }
+            | AgentTimelineItem::ToolCall { .. }
+    )
 }
 
 fn turn_running_from_stream_event(event: &AgentStreamEvent) -> TurnRunningDecision {
@@ -384,6 +421,13 @@ fn turn_running_from_stream_event(event: &AgentStreamEvent) -> TurnRunningDecisi
             }
         }
         AgentStreamEvent::TurnCanceled { .. } => TurnRunningDecision::EndedImmediately,
+        AgentStreamEvent::Timeline { item, .. } => {
+            if timeline_item_indicates_active_work(item) {
+                TurnRunningDecision::ContinueRunning
+            } else {
+                TurnRunningDecision::None
+            }
+        }
         _ => TurnRunningDecision::None,
     }
 }
@@ -591,6 +635,45 @@ mod tests {
         assert_eq!(
             turn_running_from_stream_event(&AgentStreamEvent::ModelChanged {
                 model_id: "gpt-5".to_string(),
+            }),
+            D::None
+        );
+        // 有产出的 timeline 事件 → ContinueRunning：spurious turn_completed 之后
+        // 靠 reasoning/assistant_message/tool_call 维持运行态，避免被误判 idle。
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::Reasoning {
+                    text: "thinking".into(),
+                    duration_ms: None,
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 0,
+            }),
+            D::ContinueRunning
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage {
+                    text: "hi".into(),
+                    message_id: None,
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 0,
+            }),
+            D::ContinueRunning
+        );
+        // 非产出 timeline（user_message）→ None：用户输入不等于 agent 在跑。
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::UserMessage {
+                    text: "继续".into(),
+                    message_id: None,
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 0,
             }),
             D::None
         );

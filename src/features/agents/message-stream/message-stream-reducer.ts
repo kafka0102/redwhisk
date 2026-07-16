@@ -70,6 +70,21 @@ function lastEntryIsCompletedToolCall(entries: MessageStreamEntry[]): boolean {
   );
 }
 
+/**
+ * timeline item 是否代表 agent 正在产出（即 turn 实际仍在跑）。
+ *
+ * reasoning / assistant_message / tool_call 视为产出；user_message 是用户输入，
+ * error / todo / compaction 是辅助态，不计。用于在 spurious turn_completed 之后
+ * 收到产出事件时恢复 running 并清掉误挂的「异常中断」红条。
+ */
+function timelineItemIndicatesActiveWork(item: AgentTimelineItem): boolean {
+  return (
+    item.type === "assistant_message" ||
+    item.type === "reasoning" ||
+    item.type === "tool_call"
+  );
+}
+
 /** 主 reducer。 */
 export function messageStreamReducer(
   state: MessageStreamState,
@@ -206,15 +221,28 @@ function applyEvent(
       return { ...state, turnStatus: "canceled" };
 
     case "timeline": {
+      // 收到「有产出」事件说明 turn 实际仍在跑。若此前被 spurious turn_completed
+      // 误置异常中断态，恢复 running 并清红条，避免活动进行中却挂着「异常中断」。
+      const turnPatch =
+        state.turnInterrupted && timelineItemIndicatesActiveWork(event.item)
+          ? ({
+              turnStatus: "running",
+              turnInterrupted: false,
+              interruptedStopReason: null,
+            } as Pick<
+              MessageStreamState,
+              "turnStatus" | "turnInterrupted" | "interruptedStopReason"
+            >)
+          : {};
       if (shouldSkipTimelineItem(event.item, state.entries)) {
         const lastSeq =
           event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
-        return { ...state, lastSeq };
+        return { ...state, ...turnPatch, lastSeq };
       }
       const entries = applyTimelineItem(state.entries, event.item);
       const lastSeq =
         event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
-      return { ...state, entries, lastSeq };
+      return { ...state, ...turnPatch, entries, lastSeq };
     }
 
     case "usage_updated":
