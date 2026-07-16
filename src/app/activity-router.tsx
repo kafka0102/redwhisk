@@ -17,6 +17,7 @@ export type ActivityKey =
   | "issues"
   | "agents"
   | "code"
+  | "changes"
   | "terminals"
   | "settings";
 
@@ -86,6 +87,17 @@ export function ActivityRouter({
         projectId={projectId}
         roots={projectCodeWorkspaces}
         view="files"
+      />
+    );
+  }
+
+  if (activeActivity === "changes") {
+    return (
+      <CodeWorkspace
+        key={projectId}
+        projectId={projectId}
+        roots={projectCodeWorkspaces}
+        view="changes"
       />
     );
   }

@@ -2,6 +2,7 @@
   "app": {
     "activityBarLabel": "Activity Bar",
     "agents": "Agents",
+    "changes": "Changes",
     "sessions": "Sessions",
     "globalSettings": "Global Settings",
     "issues": "Issues",

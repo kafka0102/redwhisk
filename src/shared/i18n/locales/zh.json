@@ -2,6 +2,7 @@
   "app": {
     "activityBarLabel": "活动栏",
     "agents": "智能体",
+    "changes": "变更",
     "sessions": "会话",
     "globalSettings": "全局设置",
     "issues": "Issues",

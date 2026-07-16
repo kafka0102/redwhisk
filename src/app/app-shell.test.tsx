@@ -71,8 +71,16 @@ vi.mock("../features/agents/agents-activity", () => ({
 }));
 
 vi.mock("../features/code/code-workspace", () => ({
-  CodeWorkspace: ({ projectId }: { projectId: number }) => (
-    <div>code workspace {projectId}</div>
+  CodeWorkspace: ({
+    projectId,
+    view,
+  }: {
+    projectId: number;
+    view: "files" | "changes";
+  }) => (
+    <div>
+      code workspace {projectId} view:{view}
+    </div>
   ),
 }));
 
@@ -373,7 +381,7 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(screen.getByRole("button", { name: "Code" }));
 
-    expect(screen.getByText("code workspace 1")).toBeInTheDocument();
+    expect(screen.getByText("code workspace 1 view:files")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Code" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -386,9 +394,51 @@ describe("AppShell terminals activity persistence", () => {
       "Issues",
       "Agents",
       "Code",
+      "Changes",
       "Terminals",
       "Project Settings",
       "Global Settings",
     ]);
+  });
+
+  it("opens the Changes activity between Code and Terminals with view=changes", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell
+        onCreateProject={() => {}}
+        onProjectUpdated={() => {}}
+        onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
+        project={{
+          id: 1,
+          name: "RedWhisk",
+          path: "/tmp/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          recentOpenedAt: "2026-06-15T00:00:00.000Z",
+          status: "available",
+        }}
+        projects={[]}
+      />,
+    );
+
+    const changesButton = screen.getByRole("button", { name: "Changes" });
+    const codeButton = screen.getByRole("button", { name: "Code" });
+    const terminalsButton = screen.getByRole("button", { name: "Terminals" });
+
+    const navButtons = within(
+      screen.getByRole("navigation", { name: "Activity Bar" }),
+    ).getAllByRole("button");
+    const codeIndex = navButtons.indexOf(codeButton);
+    const changesIndex = navButtons.indexOf(changesButton);
+    const terminalsIndex = navButtons.indexOf(terminalsButton);
+    expect(codeIndex).toBeLessThan(changesIndex);
+    expect(changesIndex).toBeLessThan(terminalsIndex);
+
+    await user.click(changesButton);
+
+    expect(
+      screen.getByText("code workspace 1 view:changes"),
+    ).toBeInTheDocument();
+    expect(changesButton).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -12,6 +12,7 @@ export interface I18nMessages {
   app: {
     activityBarLabel: string;
     agents: string;
+    changes: string;
     sessions: string;
     globalSettings: string;
     issues: string;
