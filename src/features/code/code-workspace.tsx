@@ -40,12 +40,12 @@ import {
   type CodeFileTab,
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
-import { CodeWorkspaceChangesView } from "./code-workspace-changes-view";
+import { CodeWorkspaceChangesView } from "../changes/code-workspace-changes-view";
 import {
   useChangesAutoRefresh,
   useWorktreeRunningSession,
-} from "./use-changes-auto-refresh";
-import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
+} from "../changes/use-changes-auto-refresh";
+import { useCodeWorkspaceChanges } from "../changes/use-code-workspace-changes";
 
 const MAX_FILE_TABS = 10;
 const DEFAULT_SIDEBAR_WIDTH = 400;

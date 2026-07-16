@@ -69,12 +69,12 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
 });
 
 // 变更视图渲染件以哨兵文本取代，聚焦「view=changes 时该分支被渲染」的接线断言。
-vi.mock("./code-workspace-changes-view", () => ({
+vi.mock("../changes/code-workspace-changes-view", () => ({
   CodeWorkspaceChangesView: () => <div>Changes View</div>,
 }));
 
 // view=changes 时 CodeWorkspace 仍会调用本 hook，这里返回稳定空态避免触发未 mock 的 command。
-vi.mock("./use-code-workspace-changes", () => ({
+vi.mock("../changes/use-code-workspace-changes", () => ({
   useCodeWorkspaceChanges: () => ({
     changes: [],
     isChangesLoading: false,
@@ -91,7 +91,7 @@ vi.mock("./use-code-workspace-changes", () => ({
 
 // 条件轮询 hook 单独在 use-changes-auto-refresh.test.ts 覆盖；组件级测试以 no-op mock 隔离，
 // 避免 changes 视图渲染时触发真实 listAgentSessions / 事件订阅。
-vi.mock("./use-changes-auto-refresh", () => ({
+vi.mock("../changes/use-changes-auto-refresh", () => ({
   useWorktreeRunningSession: () => false,
   useChangesAutoRefresh: () => {},
 }));
