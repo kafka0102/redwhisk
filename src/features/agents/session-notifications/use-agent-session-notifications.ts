@@ -74,6 +74,14 @@ export function useAgentSessionNotifications({
           console.info(
             `[notify] stream 命中 type=${envelope.event.type} key=${intent.key}`,
           );
+          // 每轮 turn 完成播放一次提示音：声音针对 session，不受窗口聚焦门控，
+          // 即使用户盯着窗口也能听到；偏好关闭时静默。
+          if (
+            envelope.event.type === "turn_completed" &&
+            notificationReminder
+          ) {
+            playNotificationSound();
+          }
           void deliverNotification(intent, transport);
         });
 
@@ -92,7 +100,13 @@ export function useAgentSessionNotifications({
       isDisposed = true;
       unlisten?.();
     };
-  }, [messages.agentNotifications, projectId, projectName, transport]);
+  }, [
+    messages.agentNotifications,
+    notificationReminder,
+    projectId,
+    projectName,
+    transport,
+  ]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -128,11 +142,6 @@ export function useAgentSessionNotifications({
             previousStatus === "running" &&
             (session.status === "closed" || session.status === "crashed")
           ) {
-            // 偏好开启时播放合成提示音；与系统通知解耦、不受窗口聚焦门控，
-            // 确保 session 完成（任务结束）即使用户正盯着窗口也能听到。
-            if (notificationReminder) {
-              playNotificationSound();
-            }
             void deliverSessionStatusNotification({
               messages,
               projectId,
@@ -158,14 +167,7 @@ export function useAgentSessionNotifications({
       isDisposed = true;
       window.clearInterval(intervalId);
     };
-  }, [
-    messages,
-    notificationReminder,
-    pollIntervalMs,
-    projectId,
-    projectName,
-    transport,
-  ]);
+  }, [messages, pollIntervalMs, projectId, projectName, transport]);
 }
 
 async function deliverNotification(

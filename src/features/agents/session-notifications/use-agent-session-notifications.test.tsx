@@ -308,7 +308,7 @@ describe("useAgentSessionNotifications", () => {
     );
   });
 
-  it("偏好开启时 running->closed 播放合成提示音（不受窗口聚焦门控）", async () => {
+  it("session running->closed 不播放提示音（声音改由 turn 完成触发）", async () => {
     window.localStorage.setItem(NOTIFICATION_REMINDER_STORAGE_KEY, "true");
     const transport = createTransport({ isWindowFocused: true });
     listAgentSessionsMock
@@ -326,25 +326,46 @@ describe("useAgentSessionNotifications", () => {
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     });
 
+    expect(mockedPlayNotificationSound).not.toHaveBeenCalled();
+  });
+
+  it("偏好开启时 turn_completed 播放提示音（不受窗口聚焦门控）", async () => {
+    window.localStorage.setItem(NOTIFICATION_REMINDER_STORAGE_KEY, "true");
+    const transport = createTransport({ isWindowFocused: true });
+
+    await renderProbe({ transport });
+
+    await emit({
+      projectId: 1,
+      sessionId: 2,
+      seq: 8,
+      epoch: "epoch-1",
+      event: {
+        type: "turn_completed",
+        turnId: "turn-1",
+        usage: null,
+      },
+    });
+
     expect(mockedPlayNotificationSound).toHaveBeenCalledTimes(1);
   });
 
-  it("偏好关闭时不播放合成提示音", async () => {
+  it("偏好关闭时 turn_completed 不播放提示音", async () => {
     window.localStorage.setItem(NOTIFICATION_REMINDER_STORAGE_KEY, "false");
     const transport = createTransport({ isWindowFocused: false });
-    listAgentSessionsMock
-      .mockResolvedValueOnce({
-        sessions: [session({ sessionId: 8, status: "running" })],
-      })
-      .mockResolvedValue({
-        sessions: [session({ sessionId: 8, status: "closed" })],
-      });
-    readAgentTimelineMock.mockResolvedValue({ effort: null, items: [] });
 
-    await renderProbe({ pollIntervalMs: 10, transport });
+    await renderProbe({ transport });
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    await emit({
+      projectId: 1,
+      sessionId: 2,
+      seq: 9,
+      epoch: "epoch-1",
+      event: {
+        type: "turn_completed",
+        turnId: "turn-1",
+        usage: null,
+      },
     });
 
     expect(mockedPlayNotificationSound).not.toHaveBeenCalled();
