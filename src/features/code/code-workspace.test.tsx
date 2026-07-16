@@ -89,6 +89,13 @@ vi.mock("./use-code-workspace-changes", () => ({
   }),
 }));
 
+// 条件轮询 hook 单独在 use-changes-auto-refresh.test.ts 覆盖；组件级测试以 no-op mock 隔离，
+// 避免 changes 视图渲染时触发真实 listAgentSessions / 事件订阅。
+vi.mock("./use-changes-auto-refresh", () => ({
+  useWorktreeRunningSession: () => false,
+  useChangesAutoRefresh: () => {},
+}));
+
 const roots = [
   {
     branch: "main",

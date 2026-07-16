@@ -41,6 +41,10 @@ import {
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
 import { CodeWorkspaceChangesView } from "./code-workspace-changes-view";
+import {
+  useChangesAutoRefresh,
+  useWorktreeRunningSession,
+} from "./use-changes-auto-refresh";
 import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 
 const MAX_FILE_TABS = 10;
@@ -176,21 +180,40 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     translateRef.current = t;
   }, [t]);
 
-  // 变更视图数据：进入变更视图或切换工作区时拉取一次，不轮询。
-  // 注意：refresh* 暂未在 files/changes 任一视图消费（03 引入条件轮询后会在此调用）。
+  // 变更视图数据：进入变更视图或切换工作区时拉取一次；条件轮询由下方
+  // useChangesAutoRefresh 按可见性 × running turn 驱动，复用本 hook 的 refresh*。
   const {
     changes: workspaceChanges,
     isChangesLoading,
     changesErrorMessage,
+    isChangesUnavailable,
     commitHistory,
     isCommitHistoryLoading,
     commitHistoryErrorMessage,
     isWorktree,
+    refreshChanges,
+    refreshCommitHistory,
   } = useCodeWorkspaceChanges(
     projectId,
     selectedRootWorkspacePath,
     view === "changes",
   );
+
+  // 条件轮询：仅 changes 视图启用。running 标志经 listAgentSessions 全量过滤 +
+  // agent-session-list-changed 事件重算得出；files 视图 enabled=false 不订阅、不轮询。
+  const isWorktreeRunning = useWorktreeRunningSession(
+    projectId,
+    selectedRootWorkspacePath,
+    view === "changes",
+  );
+  useChangesAutoRefresh({
+    enabled: view === "changes",
+    workspacePath: selectedRootWorkspacePath,
+    running: isWorktreeRunning,
+    refreshChanges,
+    refreshCommitHistory,
+    isUnavailable: isChangesUnavailable,
+  });
 
   // 已缓存且加载过的树直接复用，切页回来不强制重拉；换 root / 手动刷新另走入口。
   // setState 放进 Promise 微任务，避免 react-hooks/set-state-in-effect。
