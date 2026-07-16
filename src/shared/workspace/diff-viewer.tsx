@@ -1,11 +1,26 @@
 import { DiffEditor } from "@monaco-editor/react";
 
-import type { WorkspaceChangeKind } from "./session-workspace-commands";
-import type { SessionWorkspaceChangeTab } from "./session-workspace-types";
-import { useI18n } from "../../shared/i18n/i18n";
+import { useI18n } from "../i18n/i18n";
+import type {
+  WorkspaceChangeKind,
+  WorkspaceDiffContent,
+} from "./workspace-commands";
 
-interface SessionDiffViewerProps {
-  tab: SessionWorkspaceChangeTab;
+/**
+ * Diff 渲染所需的最小输入契约：加载 / 错误 / 空 / diff 四态字段。
+ * agent 会话变更面板与代码工作区变更页共用本渲染件，各自只负责产出该结构。
+ */
+export interface WorkspaceDiffTab {
+  fileName: string;
+  filePath: string;
+  diff: WorkspaceDiffContent | null;
+  isLoading: boolean;
+  errorMessage: string | null;
+}
+
+interface DiffViewerProps {
+  /** null 表示尚未选中变更文件，渲染空态提示。 */
+  tab: WorkspaceDiffTab | null;
 }
 
 const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
@@ -18,8 +33,17 @@ const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
   modified: "agentsFeature.changeKindModified",
 };
 
-export function SessionDiffViewer({ tab }: SessionDiffViewerProps) {
+export function DiffViewer({ tab }: DiffViewerProps) {
   const { messages, t, contentFontSize, theme } = useI18n();
+
+  if (!tab) {
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.selectChangedFile}
+      </p>
+    );
+  }
+
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">

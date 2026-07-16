@@ -7,8 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui";
-import { SessionDiffViewer } from "./session-diff-viewer";
 import { SessionFileViewer } from "./session-file-viewer";
+import { DiffViewer } from "../../shared/workspace/diff-viewer";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { AgentType } from "./agent-session-commands";
 import { getAgentLogoSrc } from "./agent-visuals";
@@ -168,7 +168,7 @@ export function SessionWorkspaceTabs({
             className="session-workspace-tabs__pane"
             hidden={selectedTab !== "changes"}
           >
-            <SessionDiffViewer tab={changeTab} />
+            <DiffViewer tab={changeTab} />
           </div>
         ) : null}
       </div>

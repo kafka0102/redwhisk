@@ -1,9 +1,9 @@
 import type {
   WorkspaceCommitChangedFile,
   WorkspaceChangedFile,
-  WorkspaceDiffContent,
   WorkspaceFileContent,
 } from "./session-workspace-commands";
+import type { WorkspaceDiffTab } from "../../shared/workspace/diff-viewer";
 
 export interface SessionWorkspaceFile {
   fileName: string;
@@ -16,12 +16,9 @@ export interface SessionWorkspaceFileTab extends SessionWorkspaceFile {
   errorMessage: string | null;
 }
 
-export interface SessionWorkspaceChangeTab extends SessionWorkspaceFile {
+export interface SessionWorkspaceChangeTab extends WorkspaceDiffTab {
   change: WorkspaceChangedFile | WorkspaceCommitChangedFile;
   commitHash?: string | null;
-  diff: WorkspaceDiffContent | null;
-  isLoading: boolean;
-  errorMessage: string | null;
 }
 
 export type SessionWorkspaceToolTabKind =

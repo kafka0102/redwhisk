@@ -35,11 +35,13 @@ import {
   type CodeWorkspaceRootsUpdatedEvent,
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
+import { DiffViewer } from "../../shared/workspace/diff-viewer";
 import {
   codeWorkspaceStateCache,
   type CodeFileTab,
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
+import { useCodeWorkspaceDiff } from "./use-code-workspace-diff";
 import { CodeWorkspaceChangesView } from "../changes/code-workspace-changes-view";
 import {
   useChangesAutoRefresh,
@@ -215,6 +217,15 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     isUnavailable: isChangesUnavailable,
   });
 
+  // 变更页右侧单 diff 面板取数。view 切换不卸载本组件，diffTab 跨 code↔changes 保留；
+  // 切换 root 时由 selectRoot 调 clear() 清空（diff 绑定具体 workspacePath）。
+  const {
+    diffTab,
+    openChange: openDiffChange,
+    openCommittedChange: openCommittedDiff,
+    clear: clearDiff,
+  } = useCodeWorkspaceDiff(projectId, selectedRootWorkspacePath);
+
   // 已缓存且加载过的树直接复用，切页回来不强制重拉；换 root / 手动刷新另走入口。
   // setState 放进 Promise 微任务，避免 react-hooks/set-state-in-effect。
   // 依赖仅用 path 字符串 + treeLoaded，避免 t / root 对象引用抖动触发重复请求。
@@ -374,6 +385,7 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     setIsTreeLoading(true);
     setIsTreeRefreshing(false);
     setOpenFolders({});
+    clearDiff();
   };
 
   const activeTab = useMemo(
@@ -557,14 +569,8 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
             changesErrorMessage={changesErrorMessage}
             isChangesLoading={isChangesLoading}
             isUncommittedExpanded={uncommittedChangesExpanded}
-            onOpenChangedFile={(file) =>
-              openFile({
-                id: file.filePath,
-                kind: "file",
-                name: file.fileName,
-                path: file.filePath,
-              })
-            }
+            onOpenChangedFile={openDiffChange}
+            onOpenCommittedChangedFile={openCommittedDiff}
             onToggleUncommittedExpanded={() =>
               setUncommittedChangesExpanded((current) => !current)
             }
@@ -589,53 +595,59 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
         onMouseDown={beginResize}
       />
       <main className="code-workspace__main">
-        <div className="code-workspace__tabs" role="tablist">
-          {tabs.map((tab) => (
-            <button
-              key={tab.filePath}
-              aria-selected={activePath === tab.filePath}
-              className="code-workspace__tab"
-              role="tab"
-              type="button"
-              onClick={() => {
-                activePathRef.current = tab.filePath;
-                setActivePath(tab.filePath);
-                setTabs((current) =>
-                  current.map((item) =>
-                    item.filePath === tab.filePath
-                      ? { ...item, lastActiveAt: Date.now() }
-                      : item,
-                  ),
-                );
-              }}
-            >
-              <span>{tab.fileName}</span>
-              <X
-                aria-label={messages.agentsFeature.closeTab(tab.fileName)}
-                size={13}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeTab(tab.filePath);
-                }}
-              />
-            </button>
-          ))}
-        </div>
-        {activeTab ? (
+        {view === "changes" ? (
+          <DiffViewer tab={diffTab} />
+        ) : (
           <>
-            <CodeBreadcrumb
-              filePath={activeTab.filePath}
-              tree={tree}
-              onOpenFile={openFile}
-            />
-            <CodeContent
-              tab={activeTab}
-              contentFontSize={contentFontSize}
-              messages={messages}
-              theme={theme}
-            />
+            <div className="code-workspace__tabs" role="tablist">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.filePath}
+                  aria-selected={activePath === tab.filePath}
+                  className="code-workspace__tab"
+                  role="tab"
+                  type="button"
+                  onClick={() => {
+                    activePathRef.current = tab.filePath;
+                    setActivePath(tab.filePath);
+                    setTabs((current) =>
+                      current.map((item) =>
+                        item.filePath === tab.filePath
+                          ? { ...item, lastActiveAt: Date.now() }
+                          : item,
+                      ),
+                    );
+                  }}
+                >
+                  <span>{tab.fileName}</span>
+                  <X
+                    aria-label={messages.agentsFeature.closeTab(tab.fileName)}
+                    size={13}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeTab(tab.filePath);
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+            {activeTab ? (
+              <>
+                <CodeBreadcrumb
+                  filePath={activeTab.filePath}
+                  tree={tree}
+                  onOpenFile={openFile}
+                />
+                <CodeContent
+                  tab={activeTab}
+                  contentFontSize={contentFontSize}
+                  messages={messages}
+                  theme={theme}
+                />
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </main>
     </section>
   );

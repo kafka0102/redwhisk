@@ -8,6 +8,7 @@ import {
 } from "../../shared/workspace/workspace-changes-view";
 import type {
   WorkspaceChangedFile,
+  WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
 } from "../../shared/workspace/workspace-commands";
 
@@ -18,6 +19,10 @@ interface CodeWorkspaceChangesViewProps {
   isUncommittedExpanded: boolean;
   onToggleUncommittedExpanded: () => void;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
+  onOpenCommittedChangedFile: (
+    commitHash: string,
+    file: WorkspaceCommitChangedFile,
+  ) => void;
   commitHistory: WorkspaceCommitRecord[];
   isCommitHistoryLoading: boolean;
   commitHistoryErrorMessage: string | null;
@@ -30,8 +35,8 @@ interface CodeWorkspaceChangesViewProps {
  * 代码工作区左侧栏「变更」视图。复用 Agent 会话变更面板的同款渲染件，保证两处
  * 「未提交 / 已提交」展示一致；本组件只负责在此处的折叠面板布局与数据接线。
  *
- * 已提交时间轴仅展示文件列表与提交元信息（与「文件列表 + 提交元信息」范围一致），
- * 点击已提交文件为空操作；diff / 历史版本内容查看不在本特性范围。
+ * 点击未提交 / 已提交变更文件均由父层回调触发右侧 diff 面板：未提交取工作区 diff，
+ * 已提交带 commitHash 取该提交版本 diff。
  */
 export function CodeWorkspaceChangesView({
   changes,
@@ -40,6 +45,7 @@ export function CodeWorkspaceChangesView({
   isUncommittedExpanded,
   onToggleUncommittedExpanded,
   onOpenChangedFile,
+  onOpenCommittedChangedFile,
   commitHistory,
   isCommitHistoryLoading,
   commitHistoryErrorMessage,
@@ -130,7 +136,7 @@ export function CodeWorkspaceChangesView({
               expandedCommitHashes={expandedCommitHashes}
               isLoading={isCommitHistoryLoading}
               isWorktree={isWorktree}
-              onOpenCommittedChangedFile={() => {}}
+              onOpenCommittedChangedFile={onOpenCommittedChangedFile}
               onToggleCommit={handleToggleCommit}
             />
           </div>

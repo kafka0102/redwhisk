@@ -17,6 +17,7 @@ const { editorThemeProp } = vi.hoisted(() => ({
 }));
 
 vi.mock("@monaco-editor/react", () => ({
+  DiffEditor: () => null,
   Editor: ({ theme }: { theme?: string }) => {
     editorThemeProp.current = theme;
     return null;
@@ -445,6 +446,8 @@ describe("CodeWorkspace", () => {
     );
 
     expect(screen.getByText("Changes View")).toBeInTheDocument();
+    // 变更视图主区渲染单 diff 面板空态（未选中变更文件）。
+    expect(screen.getByText("Select a changed file.")).toBeInTheDocument();
     // 文件树与文件树刷新按钮在 changes 视图下不渲染。
     expect(
       screen.queryByRole("button", { name: "Open file" }),
