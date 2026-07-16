@@ -36,13 +36,13 @@ import {
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
 import { DiffViewer } from "../../shared/workspace/diff-viewer";
+import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes-panels";
 import {
   codeWorkspaceStateCache,
   type CodeFileTab,
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
 import { useCodeWorkspaceDiff } from "./use-code-workspace-diff";
-import { CodeWorkspaceChangesView } from "../changes/code-workspace-changes-view";
 import {
   useChangesAutoRefresh,
   useWorktreeRunningSession,
@@ -564,7 +564,7 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
             onOpenStateChange={setOpenFolders}
           />
         ) : (
-          <CodeWorkspaceChangesView
+          <WorkspaceChangesPanels
             changes={workspaceChanges}
             changesErrorMessage={changesErrorMessage}
             isChangesLoading={isChangesLoading}

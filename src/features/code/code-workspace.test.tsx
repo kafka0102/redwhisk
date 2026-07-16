@@ -70,8 +70,8 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
 });
 
 // 变更视图渲染件以哨兵文本取代，聚焦「view=changes 时该分支被渲染」的接线断言。
-vi.mock("../changes/code-workspace-changes-view", () => ({
-  CodeWorkspaceChangesView: () => <div>Changes View</div>,
+vi.mock("../../shared/workspace/workspace-changes-panels", () => ({
+  WorkspaceChangesPanels: () => <div>Changes View</div>,
 }));
 
 // view=changes 时 CodeWorkspace 仍会调用本 hook，这里返回稳定空态避免触发未 mock 的 command。

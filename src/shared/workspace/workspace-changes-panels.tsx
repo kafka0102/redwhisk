@@ -1,18 +1,18 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 
-import { useI18n } from "../../shared/i18n/i18n";
+import { useI18n } from "../i18n/i18n";
 import {
   ChangedFileRow,
   CommittedChangesTimeline,
-} from "../../shared/workspace/workspace-changes-view";
+} from "./workspace-changes-view";
 import type {
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
-} from "../../shared/workspace/workspace-commands";
+} from "./workspace-commands";
 
-interface CodeWorkspaceChangesViewProps {
+interface WorkspaceChangesPanelsProps {
   changes: WorkspaceChangedFile[];
   isChangesLoading: boolean;
   changesErrorMessage: string | null;
@@ -32,13 +32,14 @@ interface CodeWorkspaceChangesViewProps {
 }
 
 /**
- * 代码工作区左侧栏「变更」视图。复用 Agent 会话变更面板的同款渲染件，保证两处
- * 「未提交 / 已提交」展示一致；本组件只负责在此处的折叠面板布局与数据接线。
+ * 「未提交 + 已提交」两折叠面板共享布局。代码工作区与 Agent 会话变更面板共用，
+ * 保证两侧渲染一致。面板级展开态（未提交 / 已提交）走 props，由各消费方父层持有
+ * （默认值因消费方而异）；per-commit 时间轴展开态由本组件内部自管。
  *
  * 点击未提交 / 已提交变更文件均由父层回调触发右侧 diff 面板：未提交取工作区 diff，
  * 已提交带 commitHash 取该提交版本 diff。
  */
-export function CodeWorkspaceChangesView({
+export function WorkspaceChangesPanels({
   changes,
   isChangesLoading,
   changesErrorMessage,
@@ -52,7 +53,7 @@ export function CodeWorkspaceChangesView({
   isWorktree,
   isCommittedExpanded,
   onToggleCommittedExpanded,
-}: CodeWorkspaceChangesViewProps) {
+}: WorkspaceChangesPanelsProps) {
   const { messages } = useI18n();
   const [expandedCommitHashes, setExpandedCommitHashes] = useState<Set<string>>(
     () => new Set(),
