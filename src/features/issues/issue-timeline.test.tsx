@@ -17,6 +17,16 @@ vi.mock("../agents/agent-visuals", () => ({
   getAgentLogoSrc: vi.fn((agentType: string) => `agent-logo:${agentType}`),
 }));
 
+vi.mock("../agents/message-stream/agent-markdown", () => ({
+  AgentMarkdown: (props: { children: string }) => (
+    <div data-testid="agent-markdown">{props.children}</div>
+  ),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+
 const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 
 function renderTimeline() {
@@ -90,5 +100,28 @@ describe("IssueTimeline", () => {
     const avatar = document.querySelector(".issue-timeline__avatar");
     expect(avatar).not.toBeNull();
     expect(avatar).toHaveAttribute("src", "agent-logo:codex");
+  });
+
+  it("renders the comment body for an agent comment entry", async () => {
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "issue_comment_added",
+          actor: {
+            name: "Codex",
+            avatarPath: null,
+            actorKind: "agent",
+            agentType: "codex",
+          },
+          commentBody: "已完成提交并验证通过",
+          createdAt: Date.now() - 120_000,
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText("已完成提交并验证通过")).toBeVisible();
+    expect(screen.getByTestId("agent-markdown")).toBeVisible();
   });
 });
