@@ -57,12 +57,12 @@ impl CompletionState {
         self.ignore_dirty || self.dirty_decision == Some(DirtyWorkspaceOption::Skip)
     }
 
-    fn into_phase(mut self, phase: IssueCompletionPhase) -> Self {
+    fn with_phase(mut self, phase: IssueCompletionPhase) -> Self {
         self.phase = phase;
         self
     }
 
-    fn into_phase_with_reason(
+    fn with_phase_and_reason(
         mut self,
         phase: IssueCompletionPhase,
         reason: impl Into<String>,
@@ -245,7 +245,7 @@ fn decide_dirty(
         DirtyWorkspaceOption::Skip => {
             let mut next = state
                 .clone()
-                .into_phase(IssueCompletionPhase::ReconcilingWorktree);
+                .with_phase(IssueCompletionPhase::ReconcilingWorktree);
             next.dirty_decision = Some(DirtyWorkspaceOption::Skip);
             next.actual_path = Some(world.actual_path.clone());
             reconcile(&next, world)
@@ -256,7 +256,7 @@ fn decide_dirty(
 fn prompt_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition {
     let mut next = state
         .clone()
-        .into_phase(IssueCompletionPhase::PromptingDirtyDecision);
+        .with_phase(IssueCompletionPhase::PromptingDirtyDecision);
     next.actual_path = Some(world.actual_path.clone());
     Transition {
         new_state: next,
@@ -267,7 +267,7 @@ fn prompt_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition 
 fn auto_committing(state: &CompletionState, world: &CompletionWorld) -> Transition {
     let mut next = state
         .clone()
-        .into_phase(IssueCompletionPhase::AutoCommitting);
+        .with_phase(IssueCompletionPhase::AutoCommitting);
     next.dirty_decision = Some(DirtyWorkspaceOption::AutoCommit);
     next.actual_path = Some(world.actual_path.clone());
     Transition {
@@ -292,7 +292,7 @@ fn detect_commit(
 ) -> Transition {
     let mut next = state
         .clone()
-        .into_phase(IssueCompletionPhase::ConfirmingContinueAfterCommit);
+        .with_phase(IssueCompletionPhase::ConfirmingContinueAfterCommit);
     next.actual_path = Some(world.actual_path.clone());
     Transition {
         new_state: next,
@@ -309,7 +309,7 @@ fn confirm_continue(state: &CompletionState, world: &CompletionWorld, proceed: b
     if proceed {
         let mut next = state
             .clone()
-            .into_phase(IssueCompletionPhase::ReconcilingWorktree);
+            .with_phase(IssueCompletionPhase::ReconcilingWorktree);
         next.continue_after_commit = Some(true);
         reconcile(&next, world)
     } else {
@@ -325,7 +325,7 @@ fn confirm_continue(state: &CompletionState, world: &CompletionWorld, proceed: b
 fn decide_cleanup(state: &CompletionState, world: &CompletionWorld, cleanup: bool) -> Transition {
     let mut next = state
         .clone()
-        .into_phase(IssueCompletionPhase::ReconcilingWorktree);
+        .with_phase(IssueCompletionPhase::ReconcilingWorktree);
     next.worktree_cleanup_decision = Some(cleanup);
     if cleanup {
         rebase_then_complete(&next, world)
@@ -342,7 +342,7 @@ fn reconcile(state: &CompletionState, world: &CompletionWorld) -> Transition {
         && world.missing_worktree_error.is_some()
     {
         return Transition {
-            new_state: state.clone().into_phase_with_reason(
+            new_state: state.clone().with_phase_and_reason(
                 IssueCompletionPhase::Blocked,
                 world.missing_worktree_error.clone().unwrap_or_default(),
             ),
@@ -358,18 +358,20 @@ fn reconcile(state: &CompletionState, world: &CompletionWorld) -> Transition {
             WorktreeOwner::Redwhisk => return rebase_then_complete(state, world),
             WorktreeOwner::External => {
                 // 尚无删除确认 → 等待用户决定。
-                if state.worktree_cleanup_decision.is_none() {
-                    let mut next = state
-                        .clone()
-                        .into_phase(IssueCompletionPhase::ConfirmingWorktreeCleanup);
-                    next.actual_path = Some(world.actual_path.clone());
-                    return Transition {
-                        new_state: next,
-                        effects: vec![],
-                    };
-                }
-                // 已确认不清理 → 直接完成；确认清理由 decide_cleanup 走 rebase 路径。
-                return complete(state, world);
+                return match state.worktree_cleanup_decision {
+                    Some(true) => rebase_then_complete(state, world),
+                    Some(false) => complete(state, world),
+                    None => {
+                        let mut next = state
+                            .clone()
+                            .with_phase(IssueCompletionPhase::ConfirmingWorktreeCleanup);
+                        next.actual_path = Some(world.actual_path.clone());
+                        Transition {
+                            new_state: next,
+                            effects: vec![],
+                        }
+                    }
+                };
             }
         }
     }
@@ -379,7 +381,7 @@ fn reconcile(state: &CompletionState, world: &CompletionWorld) -> Transition {
 fn rebase_then_complete(state: &CompletionState, world: &CompletionWorld) -> Transition {
     // 成功路径 provisional 终态 = Completed；rebase 失败时 service 按 on_failure 改写为 Blocked。
     Transition {
-        new_state: state.clone().into_phase(IssueCompletionPhase::Completed),
+        new_state: state.clone().with_phase(IssueCompletionPhase::Completed),
         effects: vec![
             Effect::AttemptRebaseAndCleanup {
                 on_failure: FailurePolicy::Block,
@@ -394,7 +396,7 @@ fn rebase_then_complete(state: &CompletionState, world: &CompletionWorld) -> Tra
 
 fn complete(state: &CompletionState, world: &CompletionWorld) -> Transition {
     Transition {
-        new_state: state.clone().into_phase(IssueCompletionPhase::Completed),
+        new_state: state.clone().with_phase(IssueCompletionPhase::Completed),
         effects: vec![Effect::CommitCompletion {
             snapshot: world.snapshot.clone(),
             option: world.attempt_option,
@@ -406,7 +408,7 @@ fn cancelled(state: &CompletionState, _world: &CompletionWorld, reason: &str) ->
     Transition {
         new_state: state
             .clone()
-            .into_phase_with_reason(IssueCompletionPhase::Cancelled, reason),
+            .with_phase_and_reason(IssueCompletionPhase::Cancelled, reason),
         effects: vec![],
     }
 }

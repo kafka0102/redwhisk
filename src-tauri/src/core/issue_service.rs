@@ -1098,10 +1098,23 @@ impl<'connection> IssueService<'connection> {
         agent_registry: &AgentSessionRegistry,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
         let actual = resolve_actual_execution_path(&input, &session, agent_registry);
-        let closed_fast_path = is_session_closed_out(&session)
+        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
+        let mut state = self.load_completion_state(issue.id)?;
+        if input.ignore_dirty == Some(true) {
+            state.ignore_dirty = true;
+        }
+        // cleanup 决策可在 Begin 首次调用时就给出（external worktree 直接选「不清理」完成），
+        // 折叠进 state 供 machine 的 reconcile 读取。
+        if input.worktree_cleanup_decision.is_some() {
+            state.worktree_cleanup_decision = input.worktree_cleanup_decision;
+        }
+        let event = derive_completion_event(&input, &state);
+        // closed 快速完成路径仅对 Begin 生效；非 Begin（ContinueConfirmed / CleanupDecided 等）
+        // 仍读真实快照，与既有 continue_after_commit 路径一致。
+        let closed_fast_path = matches!(event, CompletionEvent::Begin)
+            && is_session_closed_out(&session)
             && matches!(issue.status, IssueStatus::Review | IssueStatus::Running)
             && session.workspace_mode != WorkspaceMode::Worktree;
-        let detection_repo_path = completion_detection_repo_path(&project.repo_path, &session);
         let snapshot = if closed_fast_path {
             closed_session_completion_snapshot()
         } else {
@@ -1109,8 +1122,10 @@ impl<'connection> IssueService<'connection> {
                 .unwrap_or_else(|_| closed_session_completion_snapshot())
         };
 
-        // 前置守卫：Git operation 进行中 -> 记 blocked attempt，不持久化 flow。
-        if snapshot.operation_state != GitOperationState::None {
+        // 前置守卫：Begin 检测时 Git operation 进行中 -> 记 blocked attempt，不持久化 flow。
+        if matches!(event, CompletionEvent::Begin)
+            && snapshot.operation_state != GitOperationState::None
+        {
             let option = forced_option.unwrap_or(CompletionAttemptOption::CompleteManual);
             let transaction = self
                 .issue_repository
@@ -1147,20 +1162,10 @@ impl<'connection> IssueService<'connection> {
             snapshot,
             forced_option,
         );
-        let mut state = self.load_completion_state(issue.id)?;
-        if input.ignore_dirty == Some(true) {
-            state.ignore_dirty = true;
-        }
-        // cleanup 决策可在 Begin 首次调用时就给出（external worktree 直接选「不清理」完成），
-        // 折叠进 state 供 machine 的 reconcile 读取。
-        if input.worktree_cleanup_decision.is_some() {
-            state.worktree_cleanup_decision = input.worktree_cleanup_decision;
-        }
-        let event = derive_completion_event(&input, &state);
         let transition = completion_state_machine::advance(&state, &world, event).map_err(|_| {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前完成流程状态与请求不匹配。",
+                "current completion state mismatch",
             )
             .with_reason("completionStateMismatch")
         })?;
@@ -1317,15 +1322,7 @@ impl<'connection> IssueService<'connection> {
             .find_by_issue_id(issue_id)
             .map_err(issue_database_error)?;
         Ok(match flow {
-            Some(record) => CompletionState {
-                phase: record.phase,
-                dirty_decision: record.dirty_decision,
-                ignore_dirty: record.ignore_dirty,
-                worktree_cleanup_decision: record.worktree_cleanup_decision,
-                continue_after_commit: record.continue_after_commit,
-                actual_path: record.actual_path,
-                failure_reason: record.failure_reason,
-            },
+            Some(record) => completion_state_from_record(&record),
             None => CompletionState::detecting(),
         })
     }
@@ -1714,15 +1711,7 @@ impl<'connection> IssueService<'connection> {
         };
         if !snapshot.head.is_empty() && snapshot.head != pending.head_before {
             // 检测到新 commit：更新 attempt + phase → ConfirmingContinueAfterCommit。
-            let state = CompletionState {
-                phase: flow.phase,
-                dirty_decision: flow.dirty_decision,
-                ignore_dirty: flow.ignore_dirty,
-                worktree_cleanup_decision: flow.worktree_cleanup_decision,
-                continue_after_commit: flow.continue_after_commit,
-                actual_path: flow.actual_path.clone(),
-                failure_reason: flow.failure_reason.clone(),
-            };
+            let state = completion_state_from_record(&flow);
             let world = CompletionWorld {
                 issue_status: issue.status,
                 workspace_mode: session.workspace_mode,
@@ -3111,6 +3100,18 @@ fn issue_git_error(error: crate::git::status::GitStatusError) -> CommandError {
         "当前 Project 的 Git 状态不可用。",
     ).with_reason("gitStatusUnavailable")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+fn completion_state_from_record(record: &IssueCompletionFlowRecord) -> CompletionState {
+    CompletionState {
+        phase: record.phase,
+        dirty_decision: record.dirty_decision,
+        ignore_dirty: record.ignore_dirty,
+        worktree_cleanup_decision: record.worktree_cleanup_decision,
+        continue_after_commit: record.continue_after_commit,
+        actual_path: record.actual_path.clone(),
+        failure_reason: record.failure_reason.clone(),
+    }
 }
 
 fn gather_completion_world(
@@ -5528,6 +5529,71 @@ mod tests {
         assert_eq!(phase, "confirming_continue_after_commit");
         assert_eq!(attempt_result, "completed");
         assert_eq!(head_after_stored, head_after);
+    }
+
+    #[test]
+    fn complete_issue_flow_rebases_external_worktree_when_cleanup_confirmed_on_first_call() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        let target_branch = git_output(&repo_dir, &["branch", "--show-current"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                &target_branch,
+            ],
+        );
+        fs::write(worktree_path.join("base.txt"), "issue change\n").expect("write worktree change");
+        git(&worktree_path, &["add", "base.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'worktree',
+                     working_dir = ?1, workspace_path = ?1, workspace_branch = 'issue-16',
+                     target_branch = ?2, origin_branch = ?2, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![worktree_path.to_string_lossy().to_string(), target_branch],
+            )
+            .expect("update session to external worktree");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        // 首调即给 cleanup=true（未先经 ConfirmingWorktreeCleanup 提示）。
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: Some(true),
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        // cleanup=true -> rebase + 清理 worktree（不应跳过 rebase 直接完成）。
+        assert!(
+            !worktree_path.exists(),
+            "external worktree should be cleaned up after rebase"
+        );
     }
 
     fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
