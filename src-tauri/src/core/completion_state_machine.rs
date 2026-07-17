@@ -91,9 +91,9 @@ pub struct CompletionWorld {
     pub actual_path: String,
     pub drifted: bool,
     pub session_closed_out: bool,
-    /// RedWhisk worktree 缺失时，其分支是否尚未合入目标（`redwhisk_missing_worktree_is_closed_out` 为 Err）。
-    /// 仅 workspace_missing + Redwhisk 时有意义；其余情况 gatherer 置 false。
-    pub missing_worktree_not_closed_out: bool,
+    /// RedWhisk worktree 缺失且分支未合入时的 git 错误原文（`redwhisk_missing_worktree_is_closed_out` 的 Err）。
+    /// `None` 表示已合入或非该场景；`Some` 触发 Blocked 并作为 failure_reason 持久化。
+    pub missing_worktree_error: Option<String>,
     pub snapshot: GitSnapshot,
     pub attempt_option: CompletionAttemptOption,
 }
@@ -339,12 +339,12 @@ fn reconcile(state: &CompletionState, world: &CompletionWorld) -> Transition {
     // RedWhisk worktree 缺失且分支未合入 → 阻断。
     if world.workspace_missing
         && world.owner == WorktreeOwner::Redwhisk
-        && world.missing_worktree_not_closed_out
+        && world.missing_worktree_error.is_some()
     {
         return Transition {
             new_state: state.clone().into_phase_with_reason(
                 IssueCompletionPhase::Blocked,
-                "worktree_missing_not_closed_out",
+                world.missing_worktree_error.clone().unwrap_or_default(),
             ),
             effects: vec![],
         };
@@ -451,7 +451,7 @@ mod tests {
             actual_path: "/repo".to_string(),
             drifted: false,
             session_closed_out: false,
-            missing_worktree_not_closed_out: false,
+            missing_worktree_error: None,
             snapshot,
             attempt_option: CompletionAttemptOption::CompleteManual,
         }
@@ -733,9 +733,14 @@ mod tests {
     fn redwhisk_missing_worktree_blocks() {
         let mut w = worktree_world(WorktreeOwner::Redwhisk, false);
         w.workspace_missing = true;
-        w.missing_worktree_not_closed_out = true;
+        w.missing_worktree_error =
+            Some("RedWhisk worktree 路径缺失，但工作分支 issue-16 尚未合入 main。".to_string());
         let t = advance(&detecting(), &w, CompletionEvent::Begin).unwrap();
         assert_phase(&t, IssueCompletionPhase::Blocked);
+        assert_eq!(
+            t.new_state.failure_reason.as_deref(),
+            Some("RedWhisk worktree 路径缺失，但工作分支 issue-16 尚未合入 main。")
+        );
     }
 
     // ---- 非法组合 ----

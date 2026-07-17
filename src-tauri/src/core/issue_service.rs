@@ -1714,41 +1714,90 @@ impl<'connection> IssueService<'connection> {
         };
         if !snapshot.head.is_empty() && snapshot.head != pending.head_before {
             // 检测到新 commit：更新 attempt + phase → ConfirmingContinueAfterCommit。
-            let transaction = self
-                .issue_repository
-                .connection()
-                .unchecked_transaction()
-                .map_err(issue_database_error)?;
-            CompletionAttemptRepository::update_result_in_transaction(
-                &transaction,
-                pending.id,
-                &snapshot.head,
-                Some(&snapshot.head),
-                None,
-                CompletionAttemptResult::Completed,
+            let state = CompletionState {
+                phase: flow.phase,
+                dirty_decision: flow.dirty_decision,
+                ignore_dirty: flow.ignore_dirty,
+                worktree_cleanup_decision: flow.worktree_cleanup_decision,
+                continue_after_commit: flow.continue_after_commit,
+                actual_path: flow.actual_path.clone(),
+                failure_reason: flow.failure_reason.clone(),
+            };
+            let world = CompletionWorld {
+                issue_status: issue.status,
+                workspace_mode: session.workspace_mode,
+                workspace_missing: false,
+                owner: session.worktree_owner,
+                target_branch: None,
+                current_branch: None,
+                branch_mismatch: false,
+                actual_path: detection_path.to_string(),
+                drifted: false,
+                session_closed_out: false,
+                missing_worktree_error: None,
+                snapshot: snapshot.clone(),
+                attempt_option: CompletionAttemptOption::CompleteManual,
+            };
+            let transition = completion_state_machine::advance(
+                &state,
+                &world,
+                CompletionEvent::CommitDetected {
+                    head: snapshot.head.clone(),
+                    attempt_id: pending.id,
+                },
             )
-            .map_err(issue_database_error)?;
-            transaction.commit().map_err(issue_database_error)?;
-            info_kv(
-                "detect_agent_commit_completion",
-                "agent commit detected",
-                &[
-                    ("issueId", &issue.id.to_string()),
-                    ("sessionId", &session.id.to_string()),
-                    ("headBefore", &pending.head_before),
-                    ("headAfter", &snapshot.head),
-                ],
-            );
+            .map_err(|_| {
+                CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "current completion state mismatch",
+                )
+                .with_reason("completionStateMismatch")
+            })?;
+            for effect in &transition.effects {
+                if let Effect::RecordCompletionAttempt {
+                    result: completion_state_machine::CompletionAttemptResultForEffect::Completed,
+                    head,
+                    attempt_id: Some(id),
+                    ..
+                } = effect
+                {
+                    let transaction = self
+                        .issue_repository
+                        .connection()
+                        .unchecked_transaction()
+                        .map_err(issue_database_error)?;
+                    CompletionAttemptRepository::update_result_in_transaction(
+                        &transaction,
+                        *id,
+                        head,
+                        Some(head),
+                        None,
+                        CompletionAttemptResult::Completed,
+                    )
+                    .map_err(issue_database_error)?;
+                    transaction.commit().map_err(issue_database_error)?;
+                    info_kv(
+                        "detect_agent_commit_completion",
+                        "agent commit detected",
+                        &[
+                            ("issueId", &issue.id.to_string()),
+                            ("sessionId", &session.id.to_string()),
+                            ("headBefore", &pending.head_before),
+                            ("headAfter", head),
+                        ],
+                    );
+                }
+            }
             self.upsert_completion_flow(
                 issue.id,
                 Some(session.id),
-                IssueCompletionPhase::ConfirmingContinueAfterCommit,
-                false,
-                None,
-                None,
+                transition.new_state.phase,
+                transition.new_state.ignore_dirty,
+                transition.new_state.dirty_decision,
+                transition.new_state.worktree_cleanup_decision,
                 &session,
-                Some(detection_path),
-                None,
+                transition.new_state.actual_path.as_deref(),
+                transition.new_state.failure_reason.as_deref(),
             )?;
             return Ok(DetectAgentCommitCompletionResult {
                 outcome: DetectAgentCommitCompletionOutcome::CommitDetected,
@@ -3093,12 +3142,11 @@ fn gather_completion_world(
             .unwrap_or_else(|_| target_branch.clone().unwrap_or_default())
     };
     let branch_mismatch = target_branch.as_deref() != Some(current_branch.as_str());
-    let missing_worktree_not_closed_out =
-        if workspace_missing && owner == WorktreeOwner::Redwhisk {
-            redwhisk_missing_worktree_is_closed_out(repo_path, session).is_err()
-        } else {
-            false
-        };
+    let missing_worktree_error = if workspace_missing && owner == WorktreeOwner::Redwhisk {
+        redwhisk_missing_worktree_is_closed_out(repo_path, session).err()
+    } else {
+        None
+    };
     CompletionWorld {
         issue_status: issue.status,
         workspace_mode: session.workspace_mode,
@@ -3110,7 +3158,7 @@ fn gather_completion_world(
         actual_path: actual.path.clone(),
         drifted: actual.drifted,
         session_closed_out: is_session_closed_out(session),
-        missing_worktree_not_closed_out,
+        missing_worktree_error,
         snapshot,
         attempt_option: forced_option.unwrap_or(CompletionAttemptOption::CompleteManual),
     }
@@ -3924,7 +3972,9 @@ mod tests {
         ToolCallStatus,
     };
     use crate::types::issue::{
-        AdvanceIssueStatusInput, GetIssueTimelineInput, IssueTimelineActionType, IssueStatus,
+        AdvanceIssueStatusInput, DetectAgentCommitCompletionInput,
+        DetectAgentCommitCompletionOutcome, GetIssueTimelineInput, IssueTimelineActionType,
+        IssueStatus,
     };
     use crate::types::issue_action::IssueActionActor;
     use crate::types::issue_completion::{
@@ -5222,6 +5272,262 @@ mod tests {
 
         assert_eq!(result.action, CompleteIssueFlowAction::Completed);
         assert_eq!(result.issue.status, IssueStatus::Completed);
+    }
+
+    #[test]
+    fn complete_issue_flow_blocks_when_git_operation_in_progress() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        // 制造 merge 进行中状态。
+        fs::write(repo_dir.join(".git").join("MERGE_HEAD"), "dummy\n")
+            .expect("write MERGE_HEAD");
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'current_branch',
+                     working_dir = ?1, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update session to running");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        // git operation 进行中 -> 阻断，不持久化 flow，记 git_operation_blocked 审计。
+        assert_eq!(result.action, CompleteIssueFlowAction::Blocked);
+        assert!(result.flow.is_none());
+        let attempt_result: String = connection
+            .query_row(
+                "SELECT result FROM completion_attempts WHERE issue_id = 16 ORDER BY id DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("blocked attempt");
+        assert_eq!(attempt_result, "git_operation_blocked");
+    }
+
+    #[test]
+    fn complete_issue_flow_completes_when_continue_after_commit_confirmed() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        // 模拟 agent 已提交一个新 commit。
+        fs::write(repo_dir.join("committed.txt"), "done\n").expect("write committed file");
+        git(&repo_dir, &["add", "committed.txt"]);
+        git(&repo_dir, &["commit", "-m", "agent commit"]);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'current_branch',
+                     working_dir = ?1, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update session to running");
+        connection
+            .execute(
+                "INSERT INTO issue_completion_flows
+                   (issue_id, session_id, phase, ignore_dirty, dirty_decision,
+                    continue_after_commit, worktree_cleanup_decision, base_branch,
+                    workspace_branch, workspace_path, actual_path, failure_reason, updated_at)
+                 VALUES (16, 30, 'confirming_continue_after_commit', 0, NULL, NULL, NULL,
+                         NULL, NULL, NULL, NULL, NULL, 1)",
+                [],
+            )
+            .expect("seed confirming_continue_after_commit flow");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: Some(true),
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        assert_eq!(result.issue.status, IssueStatus::Completed);
+    }
+
+    #[test]
+    fn complete_issue_flow_blocks_when_redwhisk_worktree_missing_and_not_merged() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        let target_branch = git_output(&repo_dir, &["branch", "--show-current"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                &target_branch,
+            ],
+        );
+        fs::write(worktree_path.join("base.txt"), "issue change\n").expect("write worktree change");
+        git(&worktree_path, &["add", "base.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+        // 删除 worktree 目录 -> workspace_missing，但 issue-16 分支未合入 target。
+        fs::remove_dir_all(&worktree_path).expect("remove worktree dir");
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'worktree',
+                     working_dir = ?1, workspace_path = ?1, workspace_branch = 'issue-16',
+                     target_branch = ?2, origin_branch = ?2, worktree_owner = 'redwhisk'
+                 WHERE id = 30",
+                params![worktree_path.to_string_lossy().to_string(), target_branch],
+            )
+            .expect("update session to redwhisk worktree");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Blocked);
+        let failure_reason: String = connection
+            .query_row(
+                "SELECT failure_reason FROM issue_completion_flows WHERE issue_id = 16",
+                [],
+                |row| row.get(0),
+            )
+            .expect("flow failure_reason");
+        assert!(
+            failure_reason.contains("尚未合入"),
+            "failure_reason was: {failure_reason}"
+        );
+    }
+
+    #[test]
+    fn detect_agent_commit_completion_detects_new_commit_and_advances_to_confirm() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        let head_before = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+        // agent 提交一个新 commit。
+        fs::write(repo_dir.join("agent.txt"), "agent\n").expect("write agent file");
+        git(&repo_dir, &["add", "agent.txt"]);
+        git(&repo_dir, &["commit", "-m", "agent commit"]);
+        let head_after = git_output(&repo_dir, &["rev-parse", "HEAD"]);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'current_branch',
+                     working_dir = ?1, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update session to running");
+        connection
+            .execute(
+                "INSERT INTO issue_completion_flows
+                   (issue_id, session_id, phase, ignore_dirty, dirty_decision,
+                    continue_after_commit, worktree_cleanup_decision, base_branch,
+                    workspace_branch, workspace_path, actual_path, failure_reason, updated_at)
+                 VALUES (16, 30, 'auto_committing', 0, 'auto_commit', NULL, NULL,
+                         NULL, NULL, NULL, ?1, NULL, 1)",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("seed auto_committing flow");
+        connection
+            .execute(
+                "INSERT INTO completion_attempts
+                   (issue_id, session_id, option, head_before, head_after, commit_hash,
+                    failure_reason, changed_files_json, result, created_at)
+                 VALUES (16, 30, 'complete_manual', ?1, ?1, NULL, NULL, '[]', 'prompt_sent', 1)",
+                params![head_before],
+            )
+            .expect("seed prompt_sent attempt");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+                project_id: 1,
+                issue_id: 16,
+            })
+            .expect("detect");
+
+        assert_eq!(result.outcome, DetectAgentCommitCompletionOutcome::CommitDetected);
+        let (phase, attempt_result, head_after_stored): (String, String, String) = connection
+            .query_row(
+                "SELECT f.phase, a.result, a.head_after
+                 FROM issue_completion_flows f
+                 LEFT JOIN completion_attempts a ON a.issue_id = f.issue_id
+                 WHERE f.issue_id = 16
+                 ORDER BY a.id DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("flow + attempt");
+        assert_eq!(phase, "confirming_continue_after_commit");
+        assert_eq!(attempt_result, "completed");
+        assert_eq!(head_after_stored, head_after);
     }
 
     fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
