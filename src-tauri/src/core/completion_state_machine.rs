@@ -15,7 +15,6 @@
 //! 本步为 step 1：零接线、不改任何现有行为；machine 的单测只验证内部一致性。
 //! 完整接线与 wire 级 parity 校验在 step 3 完成（接线时以运行时行为为反馈补齐边界细节）。
 
-use crate::git::operation_state::GitOperationState;
 use crate::git::status::{GitChangedFile, GitSnapshot};
 use crate::types::agent_session::{WorkspaceMode, WorktreeOwner};
 use crate::types::completion_attempt::CompletionAttemptOption;
@@ -416,6 +415,7 @@ fn cancelled(state: &CompletionState, _world: &CompletionWorld, reason: &str) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::operation_state::GitOperationState;
 
     fn clean_snapshot() -> GitSnapshot {
         GitSnapshot {
