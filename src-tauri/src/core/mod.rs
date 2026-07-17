@@ -1,5 +1,6 @@
 pub mod agent_session_service;
 pub mod app_update;
+pub mod completion_state_machine;
 pub mod issue_service;
 pub mod local_data_service;
 pub mod project_service;
