@@ -2,7 +2,7 @@
 
 ## 状态
 
-提议。落实 [ADR-0001](./0001-core-architecture-boundaries.md) 对结构化 provider 的边界：provider 私有协议不得越层；消费侧已有 `AgentSessionHandle`，本 ADR 补齐**构造侧** seam。
+已采纳。落实 [ADR-0001](./0001-core-architecture-boundaries.md) 对结构化 provider 的边界：provider 私有协议不得越层；消费侧已有 `AgentSessionHandle`，本 ADR 补齐**构造侧** seam。
 
 ## 背景
 

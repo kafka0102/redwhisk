@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use rusqlite::{params, Transaction};
 
 use crate::agent::agent_event_broadcaster::{AgentEventBroadcaster, TURN_GRACE_MS};
-use crate::agent::codex_app_server::session::CodexMode;
+use crate::local_data_path::user_home_from_data_dir;
 use crate::agent::codex_config;
 use crate::agent::provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,
@@ -64,7 +64,6 @@ const SESSION_LOG_DIR_NAME: &str = "session-logs";
 const SESSION_RUNTIME_LOG_DIR_NAME: &str = "runtime";
 const SESSION_ARCHIVE_LOG_DIR_NAME: &str = "archive";
 const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
-const CODEX_DEFAULT_MODE_ID: &str = "full-access";
 const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
 const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
@@ -798,7 +797,7 @@ impl<'connection> AgentSessionService<'connection> {
                 },
                 resume_thread_id: None,
                 broadcaster: broadcaster.clone(),
-                config_home: data_dir.parent().map(|path| path.to_path_buf()),
+                config_home: user_home_from_data_dir(data_dir),
             },
             agent_registry,
             broadcaster,
@@ -1883,7 +1882,7 @@ impl AgentSessionService<'_> {
                 },
                 resume_thread_id: input.resume_from_codex_session_id.clone(),
                 broadcaster: broadcaster.clone(),
-                config_home: data_dir.parent().map(|path| path.to_path_buf()),
+                config_home: user_home_from_data_dir(data_dir),
             },
             agent_registry,
             broadcaster,
@@ -2082,7 +2081,7 @@ impl AgentSessionService<'_> {
                 },
                 resume_thread_id: Some(thread_id.clone()),
                 broadcaster: broadcaster.clone(),
-                config_home: _data_dir.parent().map(|path| path.to_path_buf()),
+                config_home: user_home_from_data_dir(_data_dir),
             },
         ) {
             Ok(started) => started,
@@ -3210,10 +3209,6 @@ fn read_codex_model_from_data_dir(data_dir: &Path) -> Option<String> {
     data_dir
         .parent()
         .and_then(codex_config::read_model_from_home)
-}
-
-fn codex_mode_from_structured_input(mode: Option<&str>) -> Option<CodexMode> {
-    CodexMode::from_id(mode.unwrap_or(CODEX_DEFAULT_MODE_ID))
 }
 
 fn build_log_path(
@@ -4359,11 +4354,10 @@ mod tests {
     use super::{
         agent_command_with_default_args, build_issue_archive_log_path,
         build_issue_runtime_structured_log_path, build_issue_session_archive,
-        build_structured_command_snapshot, codex_mode_from_structured_input,
-        command_supports_prompt_argument,
+        build_structured_command_snapshot, command_supports_prompt_argument,
         detect_codex_session_id_from_home, latest_output_from_session_log,
         normalize_submitted_prompt, preferred_session_cwd, read_timeline_from_session_log,
-        should_restore_redwhisk_worktree, AgentSessionService, CodexMode,
+        should_restore_redwhisk_worktree, AgentSessionService,
     };
     use crate::agent::provider_factory::{resolve_codex_mode, PlannedCodexMode};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
@@ -4526,8 +4520,8 @@ mod tests {
     #[test]
     fn structured_codex_session_defaults_to_full_access() {
         assert_eq!(
-            codex_mode_from_structured_input(None),
-            Some(CodexMode::FullAccess)
+            resolve_codex_mode(None, false).expect("mode"),
+            PlannedCodexMode::FullAccess
         );
     }
 
