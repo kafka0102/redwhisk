@@ -4020,7 +4020,9 @@ mod tests {
         AdvanceIssueStatusInput, GetIssueTimelineInput, IssueTimelineActionType, IssueStatus,
     };
     use crate::types::issue_action::IssueActionActor;
-    use crate::types::issue_completion::{CompleteIssueFlowAction, CompleteIssueFlowInput};
+    use crate::types::issue_completion::{
+        CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
+    };
     use rusqlite::{params, Connection};
     use std::fs;
     use std::path::Path;
@@ -4966,6 +4968,181 @@ mod tests {
         );
         assert!(result.message.contains("目标分支工作区存在未提交改动"));
         assert!(result.message.contains("工作区："));
+    }
+
+    #[test]
+    fn complete_issue_flow_prompts_dirty_decision_for_dirty_running_session() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        fs::write(repo_dir.join("dirty.txt"), "dirty\n").expect("write dirty file");
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'current_branch',
+                     working_dir = ?1, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update session to running current-branch");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::PromptDirtyDecision);
+        let phase: String = connection
+            .query_row(
+                "SELECT phase FROM issue_completion_flows WHERE issue_id = 16",
+                [],
+                |row| row.get(0),
+            )
+            .expect("flow phase");
+        assert_eq!(phase, "prompting_dirty_decision");
+    }
+
+    #[test]
+    fn complete_issue_flow_auto_commit_records_prompt_sent_when_handle_absent() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+        fs::write(repo_dir.join("dirty.txt"), "dirty\n").expect("write dirty file");
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'current_branch',
+                     working_dir = ?1, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![repo_dir.to_string_lossy().to_string()],
+            )
+            .expect("update session to running current-branch");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: Some(DirtyWorkspaceOption::AutoCommit),
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        // 无 live handle（空 registry）时跳过 send_message，仍记 PromptSent 审计 + 挂起 flow。
+        assert_eq!(result.action, CompleteIssueFlowAction::WaitingAutoCommit);
+        let (phase, attempt_result): (String, String) = connection
+            .query_row(
+                "SELECT f.phase, a.result
+                 FROM issue_completion_flows f
+                 LEFT JOIN completion_attempts a ON a.issue_id = f.issue_id
+                 WHERE f.issue_id = 16
+                 ORDER BY a.id DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("flow + attempt");
+        assert_eq!(phase, "auto_committing");
+        assert_eq!(attempt_result, "prompt_sent");
+    }
+
+    #[test]
+    fn complete_issue_flow_prompts_worktree_cleanup_for_external_mismatched_worktree() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        let target_branch = git_output(&repo_dir, &["branch", "--show-current"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                &target_branch,
+            ],
+        );
+        fs::write(worktree_path.join("base.txt"), "issue change\n").expect("write worktree change");
+        git(&worktree_path, &["add", "base.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'worktree',
+                     working_dir = ?1, workspace_path = ?1, workspace_branch = 'issue-16',
+                     target_branch = ?2, origin_branch = ?2, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![worktree_path.to_string_lossy().to_string(), target_branch],
+            )
+            .expect("update session to external worktree");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::ConfirmWorktreeCleanup);
+        let phase: String = connection
+            .query_row(
+                "SELECT phase FROM issue_completion_flows WHERE issue_id = 16",
+                [],
+                |row| row.get(0),
+            )
+            .expect("flow phase");
+        assert_eq!(phase, "confirming_worktree_cleanup");
     }
 
     fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
