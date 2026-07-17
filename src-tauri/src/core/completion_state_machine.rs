@@ -91,6 +91,9 @@ pub struct CompletionWorld {
     pub actual_path: String,
     pub drifted: bool,
     pub session_closed_out: bool,
+    /// RedWhisk worktree 缺失时，其分支是否尚未合入目标（`redwhisk_missing_worktree_is_closed_out` 为 Err）。
+    /// 仅 workspace_missing + Redwhisk 时有意义；其余情况 gatherer 置 false。
+    pub missing_worktree_not_closed_out: bool,
     pub snapshot: GitSnapshot,
     pub attempt_option: CompletionAttemptOption,
 }
@@ -179,16 +182,18 @@ pub fn advance(
     event: CompletionEvent,
 ) -> Result<Transition, InvalidTransition> {
     match (state.phase, event) {
-        (phase, CompletionEvent::Begin) if !phase.is_terminal() => {
+        // Begin 可从任意非 Completed phase 触发（含从 Cancelled / Blocked 恢复再检测）；
+        // 仅 Completed 是真正不可重入的终态。
+        (phase, CompletionEvent::Begin) if phase != IssueCompletionPhase::Completed => {
             Ok(begin_detection(state, world))
         }
         (
             IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::PromptingDirtyDecision,
             CompletionEvent::DirtyDecided(option),
         ) => Ok(decide_dirty(state, world, option)),
-        // Cancel 是全局取消：从任意非终态 phase 接受（对齐既有宽松取消语义）。
+        // Cancel 是全局取消：从任意非 Completed phase 接受（对齐既有宽松取消语义）。
         (phase, CompletionEvent::DirtyDecided(DirtyWorkspaceOption::Cancel))
-            if !phase.is_terminal() =>
+            if phase != IssueCompletionPhase::Completed =>
         {
             Ok(cancelled(state, world, "user_cancelled"))
         }
@@ -221,21 +226,8 @@ fn begin_detection(state: &CompletionState, world: &CompletionWorld) -> Transiti
     {
         return complete(state, world);
     }
-    if world.snapshot.operation_state != GitOperationState::None {
-        // Git 进行中操作阻断：记一条 blocked attempt，不持久化 flow。
-        return Transition {
-            new_state: state.clone().into_phase_with_reason(
-                IssueCompletionPhase::Blocked,
-                format_git_operation_block(world.snapshot.operation_state),
-            ),
-            effects: vec![Effect::RecordCompletionAttempt {
-                result: CompletionAttemptResultForEffect::Completed,
-                head: world.snapshot.head.clone(),
-                changed_files: world.snapshot.changed_files.clone(),
-                attempt_id: None,
-            }],
-        };
-    }
+    // Git operation 进行中由 driver 作前置守卫拦截（记 blocked attempt、不持久化 flow），
+    // 不作为 machine 迁移；调用方保证 world.snapshot.operation_state == None。
     if !world.snapshot.is_clean && !state.dirty_already_skipped() {
         return prompt_dirty(state, world);
     }
@@ -347,7 +339,7 @@ fn reconcile(state: &CompletionState, world: &CompletionWorld) -> Transition {
     // RedWhisk worktree 缺失且分支未合入 → 阻断。
     if world.workspace_missing
         && world.owner == WorktreeOwner::Redwhisk
-        && !world.session_closed_out
+        && world.missing_worktree_not_closed_out
     {
         return Transition {
             new_state: state.clone().into_phase_with_reason(
@@ -419,18 +411,6 @@ fn cancelled(state: &CompletionState, _world: &CompletionWorld, reason: &str) ->
     }
 }
 
-fn format_git_operation_block(state: GitOperationState) -> &'static str {
-    match state {
-        GitOperationState::None => "git_operation_none",
-        GitOperationState::MergeInProgress => "git_operation_merge",
-        GitOperationState::RebaseInProgress => "git_operation_rebase",
-        GitOperationState::CherryPickInProgress => "git_operation_cherry_pick",
-        GitOperationState::RevertInProgress => "git_operation_revert",
-        GitOperationState::SequencerInProgress => "git_operation_sequencer",
-        GitOperationState::Unmerged => "git_operation_unmerged",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,6 +451,7 @@ mod tests {
             actual_path: "/repo".to_string(),
             drifted: false,
             session_closed_out: false,
+            missing_worktree_not_closed_out: false,
             snapshot,
             attempt_option: CompletionAttemptOption::CompleteManual,
         }
@@ -526,18 +507,6 @@ mod tests {
         )
         .unwrap();
         assert_phase(&t, IssueCompletionPhase::Completed);
-    }
-
-    #[test]
-    fn begin_git_operation_blocks() {
-        let mut snap = clean_snapshot();
-        snap.operation_state = GitOperationState::MergeInProgress;
-        let t = advance(&detecting(), &world_base(snap), CompletionEvent::Begin).unwrap();
-        assert_phase(&t, IssueCompletionPhase::Blocked);
-        assert!(matches!(
-            t.effects[0],
-            Effect::RecordCompletionAttempt { .. }
-        ));
     }
 
     #[test]
@@ -764,6 +733,7 @@ mod tests {
     fn redwhisk_missing_worktree_blocks() {
         let mut w = worktree_world(WorktreeOwner::Redwhisk, false);
         w.workspace_missing = true;
+        w.missing_worktree_not_closed_out = true;
         let t = advance(&detecting(), &w, CompletionEvent::Begin).unwrap();
         assert_phase(&t, IssueCompletionPhase::Blocked);
     }
@@ -781,7 +751,7 @@ mod tests {
     }
 
     #[test]
-    fn begin_rejected_from_terminal() {
+    fn begin_rejected_only_from_completed() {
         let mut state = detecting();
         state.phase = IssueCompletionPhase::Completed;
         let res = advance(
@@ -790,5 +760,18 @@ mod tests {
             CompletionEvent::Begin,
         );
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn begin_recovers_from_cancelled() {
+        let mut state = detecting();
+        state.phase = IssueCompletionPhase::Cancelled;
+        let t = advance(
+            &state,
+            &world_base(clean_snapshot()),
+            CompletionEvent::Begin,
+        )
+        .unwrap();
+        assert_phase(&t, IssueCompletionPhase::Completed);
     }
 }

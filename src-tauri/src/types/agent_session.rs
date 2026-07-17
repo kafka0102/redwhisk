@@ -4,7 +4,7 @@ use crate::types::agent_profile::AgentType;
 use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use crate::types::issue::IssueStatus;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceMode {
     CurrentBranch,
