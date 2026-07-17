@@ -313,10 +313,8 @@ pub struct WorktreeReconcileRequest<'a> {
 ///
 /// 当 workspace 路径不存在时视为 no-op（与历史完成流自由函数一致）。
 pub fn reconcile_worktree(request: WorktreeReconcileRequest<'_>) -> Result<(), GitWorktreeError> {
+    // 路径不存在时 no-op，与历史完成流自由函数一致；分支名为空则继续走 git（失败由调用方 block），不做静默成功。
     if !request.workspace_path.exists() {
-        return Ok(());
-    }
-    if request.workspace_branch.trim().is_empty() || request.target_branch.trim().is_empty() {
         return Ok(());
     }
 
@@ -346,7 +344,7 @@ pub enum MissingWorktreeAssessment {
     },
 }
 
-/// 评估「RedWhisk worktree 路径缺失」时是否可视为已关闭。
+/// 在 worktree 路径缺失场景下，评估工作分支是否可视为 closed-out（不存在或已合入目标分支）。
 pub fn assess_missing_worktree(
     repo_path: impl AsRef<Path>,
     target_branch: &str,

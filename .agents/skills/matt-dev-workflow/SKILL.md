@@ -65,7 +65,7 @@ disable-model-invocation: true
 
 ## 阶段 3 — 按 frontier 逐张 /implement（硬性，禁止主会话降级）
 
-> **核心约束**：阶段 3 的实现工作 = 对每张 frontier ticket **完整运行 `/implement` skill**。  
+> **核心约束**：阶段 3 的实现工作 = 对每张 frontier ticket **完整运行 `/implement` skill**。
 > 主会话（orchestrator）**不得**以「赶进度 / 工具慢 / 子代理半成品」为由，在主上下文里直接改业务代码并 commit 冒充 implement。
 
 ### 3.1 每张票的强制形态
@@ -93,12 +93,12 @@ frontier 上**每一张** ticket：
 
 ### 3.2 单票 green 定义（缺一不可）
 
-- [ ] 验收标准全部满足  
-- [ ] `/tdd` 在约定 seam 上执行（非「先写光实现再补测」）  
-- [ ] 本票要求的全量测试通过  
-- [ ] `/code-review` Standards + Spec **均通过**（或仅剩已记录的非阻断 nit，且不违反 AGENTS 门禁）  
-- [ ] 已 commit，工作区无本票残留改动  
-- [ ] 子代理回报完整  
+- [ ] 验收标准全部满足
+- [ ] `/tdd` 在约定 seam 上执行（非「先写光实现再补测」）
+- [ ] 本票要求的全量测试通过
+- [ ] `/code-review` Standards + Spec **均通过**（或仅剩已记录的非阻断 nit，且不违反 AGENTS 门禁）
+- [ ] 已 commit，工作区无本票残留改动
+- [ ] 子代理回报完整
 
 任一项缺失 → 该票 **not green**，不得进入下一张，也不得进入最终验收「全部完成」口径。
 
@@ -106,28 +106,28 @@ frontier 上**每一张** ticket：
 
 **允许（编排）**
 
-- 写 spec / tickets、定分支、更新 ticket Status 注释  
-- spawn / wait / 核验子代理结果  
-- 跑只读核验命令（`git status`、`git log`、复跑测试确认子代理声称）  
-- 按停止条件汇总交用户  
+- 写 spec / tickets、定分支、更新 ticket Status 注释
+- spawn / wait / 核验子代理结果
+- 跑只读核验命令（`git status`、`git log`、复跑测试确认子代理声称）
+- 按停止条件汇总交用户
 
 **禁止（除非走 3.4 恢复协议）**
 
-- 主会话直接实现 ticket 业务代码  
-- 跳过 `/tdd`、`/code-review`、全量测试  
-- 子代理未 commit 时主会话代 commit 半成品并标 done  
-- 「先全部实现，最后统一 review / 测试」  
-- 因 wait 超时、shell 默认超时、子代理慢，就改在主会话手写  
+- 主会话直接实现 ticket 业务代码
+- 跳过 `/tdd`、`/code-review`、全量测试
+- 子代理未 commit 时主会话代 commit 半成品并标 done
+- 「先全部实现，最后统一 review / 测试」
+- 因 wait 超时、shell 默认超时、子代理慢，就改在主会话手写
 
 ### 3.4 子代理失败时的恢复协议（唯一合法降级）
 
 仅当子代理 **明确失败 / 超时 / 半成品残留** 时，主会话按序处理，**禁止静默接手写完**：
 
-1. **记录失败**：ticket `## Comments` 写明失败形态（超时 / 测试红 / review 不过 / 半成品路径）。  
-2. **清理或保全**：若工作区有半成品，要么 `git stash` / 丢弃到可复现状态，要么在评论中列出未提交文件；不得无说明混进下一尝试。  
-3. **重派一次**全新子代理，提示中附上失败原因与半成品状态，仍要求完整 `/implement`。  
-4. **第二次仍失败** → **停止整个自动阶段**，上浮该票 + 两次失败原因 + 已 green 前序结果，交用户裁决。  
-5. **禁止**主会话在第二次失败后自行写完并宣称流程成功。  
+1. **记录失败**：ticket `## Comments` 写明失败形态（超时 / 测试红 / review 不过 / 半成品路径）。
+2. **清理或保全**：若工作区有半成品，要么 `git stash` / 丢弃到可复现状态，要么在评论中列出未提交文件；不得无说明混进下一尝试。
+3. **重派一次**全新子代理，提示中附上失败原因与半成品状态，仍要求完整 `/implement`。
+4. **第二次仍失败** → **停止整个自动阶段**，上浮该票 + 两次失败原因 + 已 green 前序结果，交用户裁决。
+5. **禁止**主会话在第二次失败后自行写完并宣称流程成功。
 
 唯一例外：用户在停止后明确说「主会话接手实现这张票」——那是用户指令，不再算本 skill 的无人阶段。
 
@@ -135,17 +135,17 @@ frontier 上**每一张** ticket：
 
 下列情况 **不是** 跳过 `/implement` 的理由：
 
-- `wait_agent` / 长测命令超时 → 换后台跑 + 轮询，或拉长等待；仍失败走 3.4  
-- 子代理只交了部分文件 → 重派或停止，不主会话补完冒充 green  
-- 「相关测试已绿」→ 不能代替本票全量测试与 code-review  
+- `wait_agent` / 长测命令超时 → 换后台跑 + 轮询，或拉长等待；仍失败走 3.4
+- 子代理只交了部分文件 → 重派或停止，不主会话补完冒充 green
+- 「相关测试已绿」→ 不能代替本票全量测试与 code-review
 
 ### 3.6 全流程结束后的总 gate（主会话）
 
 所有 ticket green 后，主会话再跑一次：
 
-- 仓库 AGENTS 门禁要求的验证（本任务改动语言对应项）  
-- `git status --short` 无任务残留  
-- 最终验收汇总（见下）  
+- 仓库 AGENTS 门禁要求的验证（本任务改动语言对应项）
+- `git status --short` 无任务残留
+- 最终验收汇总（见下）
 
 若发现某票其实缺 review / 缺全量测，**回溯该票**为 not green，走 3.4 或交用户，不得在汇总里写成全部完成。
 
@@ -153,21 +153,21 @@ frontier 上**每一张** ticket：
 
 ## 停止条件（命中即停下交用户，绝不强行推进）
 
-- grill 决策需 runnable 答案 → 已在阶段 0 处理。  
-- 前置 setup 未就绪 → 停，让用户先跑 setup。  
-- grill → tickets 阶段逼近 smart zone（~120k）→ `/handoff`，在 fresh session 续跑，不降级硬撑。  
-- 某张 ticket：测试红且子代理无法在范围内修好，或 `/code-review` 不过且无法自决修复 → **停整个自动阶段**，上浮该票 + 失败原因 + 已 commit 的前序结果。  
-- 3.4 恢复协议第二次仍失败 → 同上停止。  
-- 不跳过、不强提交坏代码、不留 `@ts-ignore` / `@ts-nocheck` / `eslint-disable` / 跳过测试。  
+- grill 决策需 runnable 答案 → 已在阶段 0 处理。
+- 前置 setup 未就绪 → 停，让用户先跑 setup。
+- grill → tickets 阶段逼近 smart zone（~120k）→ `/handoff`，在 fresh session 续跑，不降级硬撑。
+- 某张 ticket：测试红且子代理无法在范围内修好，或 `/code-review` 不过且无法自决修复 → **停整个自动阶段**，上浮该票 + 失败原因 + 已 commit 的前序结果。
+- 3.4 恢复协议第二次仍失败 → 同上停止。
+- 不跳过、不强提交坏代码、不留 `@ts-ignore` / `@ts-nocheck` / `eslint-disable` / 跳过测试。
 - **不**把主会话手写实现当成自动阶段成功。
 
 ## 最终验收（汇总交用户）
 
 自动阶段结束（全部 green，或被停止条件打断）后，一次性汇总：
 
-- spec 路径、tickets 清单 + 各自状态（含是否完整 `/implement`：tdd / 全量测 / code-review / commit）  
-- 每张票：交付、测试、**review 结论**、commit、改动文件  
-- 整体 diff（`git diff <base>..HEAD`）与文件列表  
-- 若中途停下：卡点、原因、建议下一步  
+- spec 路径、tickets 清单 + 各自状态（含是否完整 `/implement`：tdd / 全量测 / code-review / commit）
+- 每张票：交付、测试、**review 结论**、commit、改动文件
+- 整体 diff（`git diff <base>..HEAD`）与文件列表
+- 若中途停下：卡点、原因、建议下一步
 
 验收（合并 / 继续 / 返工）由用户决定；不替用户 merge / push。
