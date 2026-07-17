@@ -25,8 +25,24 @@ Agent 最终答复中由 `<issue-comment>` 包围的精简交付内容；它是�
 _Avoid_: 原始最终答复、会话转录
 
 **完成流程**：
-Issue 从待验收标记为已完成的多步状态机流程；以 Issue 实际执行路径、未提交改动与 worktree 所有权为决策依据，经检测、dirty 三选（自动提交 / 不提交 / 取消）、自动提交后确认、worktree 对账与清理等阶段推进。phase 迁移由纯状态机模块决定，副作用以 effect 枚举由 service 解释执行；`detecting_workspace` 与 `reconciling_worktree` 是单次 command 内穿越的瞬态逻辑态（不持久化）。
+Issue 从待验收标记为已完成的多步状态机流程；以实际执行路径、未提交改动与 Worktree 所有权为决策依据，经检测、dirty 三选（自动提交 / 不提交 / 取消）、自动提交后确认、Worktree 对账等阶段推进。phase 迁移由纯状态机模块决定，副作用以 effect 枚举由 service 解释执行；`detecting_workspace` 与 `reconciling_worktree` 是单次 command 内穿越的瞬态逻辑态（不持久化）。
 _Avoid_: completion policy、手动 / 自动提交二分
+
+**Worktree 所有权**：
+某一 Agent worktree 由谁负责自动清理：RedWhisk 托管，或外部 / 用户提供。仅 RedWhisk 托管的 worktree 在完成流程中可被自动对账清理；外部 worktree 需用户确认。
+_Avoid_: workspace mode、session 工作目录归属
+
+**实际执行路径**：
+Issue 完成时认定的 session 真实工作目录；用于未提交改动检测、Worktree 漂移判定与完成弹框预填。路径来源优先级由完成编排决定，不由 git 层决定。
+_Avoid_: working_dir 快照、codex cwd 裸字段
+
+**Worktree 漂移**：
+实际执行路径相对 session 启动快照发生变化，且该路径位于附加 git worktree 上；漂移后按外部 worktree 处理所有权。
+_Avoid_: 路径不同、branch mismatch
+
+**Worktree 对账**：
+将 worktree 工作分支合入目标分支并清理该 worktree 及其工作分支的收尾动作；不包含是否应对账的策略决策。
+_Avoid_: 仅 rebase、仅 delete worktree、merge policy
 
 **Issue 动作**：
 构成 Issue 时间轴的一条不可变事实，具有明确操作者、可选评论关联、稳定动作类型及版本化展示参数。
