@@ -14,10 +14,12 @@ use serde_json::{json, Value};
 use rusqlite::{params, Transaction};
 
 use crate::agent::agent_event_broadcaster::{AgentEventBroadcaster, TURN_GRACE_MS};
-use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
-use crate::agent::codex_app_server::session::CodexMode;
-use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::local_data_path::user_home_from_data_dir;
 use crate::agent::codex_config;
+use crate::agent::provider_factory::{
+    AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,
+    StartedSession, ThreadIdBackfill,
+};
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyCommandMode, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
@@ -62,7 +64,6 @@ const SESSION_LOG_DIR_NAME: &str = "session-logs";
 const SESSION_RUNTIME_LOG_DIR_NAME: &str = "runtime";
 const SESSION_ARCHIVE_LOG_DIR_NAME: &str = "archive";
 const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
-const CODEX_DEFAULT_MODE_ID: &str = "full-access";
 const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
 const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
@@ -170,22 +171,14 @@ impl<'connection> AgentSessionService<'connection> {
         let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
         // 当前 Codex / Claude 均走结构化路径；pty_sessions 保留给未来非结构化降级路径。
         let _ = pty_sessions;
-        match launch.profile.agent_type {
-            AgentType::Codex => self.start_structured_issue_agent_session(
-                data_dir.as_ref(),
-                input,
-                launch,
-                agent_registry,
-                broadcaster,
-            ),
-            AgentType::Claude => self.start_structured_claude_issue_agent_session(
-                data_dir.as_ref(),
-                input,
-                launch,
-                agent_registry,
-                broadcaster,
-            ),
-        }
+        self.start_structured_issue_agent_session(
+            data_dir.as_ref(),
+            input,
+            launch,
+            agent_registry,
+            broadcaster,
+            &DefaultAgentSessionProviderFactory,
+        )
     }
 
     /// 查询 Issue 最近一次 worktree 模式 session 的残留状态。
@@ -625,6 +618,7 @@ impl<'connection> AgentSessionService<'connection> {
         launch: SessionLaunchContext,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
+        factory: &dyn AgentSessionProviderFactory,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
         let issue = self
@@ -783,295 +777,97 @@ impl<'connection> AgentSessionService<'connection> {
         // 把"running 但不在 registry"的 session 误判为重启遗留并标记 stopped。
         // mark_starting 让 contains 返回 true，reconcile 据此跳过；register 真实
         // handle 时自动清除该标记，失败路径需显式 unmark。
-        agent_registry.mark_starting(result.session_id);
-        let mode = codex_mode_from_profile(&launch.profile)?;
-        let config = CodexSessionConfig {
-            project_id: input.project_id,
-            session_id: result.session_id,
-            binary: launch.command_snapshot.clone(),
-            cwd: launch.working_dir.clone(),
-            mode,
-            broadcaster: broadcaster.clone(),
-            resume_thread_id: None,
-            model: read_codex_model_from_data_dir(data_dir.as_ref()),
-            effort: read_codex_reasoning_effort_from_data_dir(data_dir.as_ref()),
-        };
-        let codex_handle = match CodexSessionHandle::start(config) {
-            Ok(handle) => handle,
-            Err(error) => {
-                agent_registry.unmark_starting(result.session_id);
-                self.cleanup_owned_worktree(input.project_id, &launch);
-                let _ = self.rollback_failed_structured_issue_session(
-                    input.project_id,
-                    input.issue_id,
-                    result.session_id,
-                );
-                return Err(agent_session_error_to_command_error(error.into()));
-            }
-        };
-        let thread_id = codex_handle.thread_id().ok_or_else(|| {
-            agent_registry.unmark_starting(result.session_id);
-            CommandError::new(
-                CommandErrorCode::AgentSessionStreamFailed,
-                "Agent 会话启动后未拿到 threadId。",
-            )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", result.session_id),
-            )
-        })?;
-        if let Err(error) = self
-            .agent_session_repository
-            .update_codex_session_id(result.session_id, &thread_id)
-            .map_err(agent_session_database_error)
-        {
-            agent_registry.unmark_starting(result.session_id);
-            return Err(error);
-        }
-
-        broadcaster.register_session(result.session_id);
-        let handle: Arc<dyn AgentSessionHandle> = Arc::new(codex_handle);
-        // 首条派发消息标记为 initial turn 来源；写 source 同时清空 current_turn_id，
-        // 待 TurnStarted 回流时由 broadcaster 写入真实 turn_id（completion turn 自动
-        // 评论提取依赖此配对）。
-        let _ = self
-            .agent_session_repository
-            .update_current_turn_source(result.session_id, "initial");
-        if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
-            agent_registry.unmark_starting(result.session_id);
-            handle.shutdown();
-            self.cleanup_owned_worktree(input.project_id, &launch);
-            let _ = self.rollback_failed_structured_issue_session(
-                input.project_id,
-                input.issue_id,
-                result.session_id,
-            );
-            return Err(agent_session_error_to_command_error(error));
-        }
-        agent_registry.register(result.session_id, handle);
-        remove_session_log_file(previous_archive_path.as_deref());
-
+        self.finish_structured_issue_provider_start(
+            factory,
+            AgentSessionStartRequest {
+                agent_type: launch.profile.agent_type.clone(),
+                project_id: input.project_id,
+                session_id: result.session_id,
+                binary: launch.command_snapshot.clone(),
+                cwd: launch.working_dir.clone(),
+                mode_id: Some(launch.profile.mode.clone()),
+                dangerous: launch.profile.dangerous,
+                model: match launch.profile.agent_type {
+                    AgentType::Codex => read_codex_model_from_data_dir(data_dir),
+                    AgentType::Claude => None,
+                },
+                effort: match launch.profile.agent_type {
+                    AgentType::Codex => read_codex_reasoning_effort_from_data_dir(data_dir),
+                    AgentType::Claude => None,
+                },
+                resume_thread_id: None,
+                broadcaster: broadcaster.clone(),
+                config_home: user_home_from_data_dir(data_dir),
+            },
+            agent_registry,
+            broadcaster,
+            &prompt_snapshot,
+            input.project_id,
+            input.issue_id,
+            result.session_id,
+            &launch,
+            previous_archive_path.as_deref(),
+        )?;
         Ok(result)
     }
 
-    /// 启动 Claude（结构化流）关联 Issue 的 Agent Session。
+    /// DB commit 之后的共享启动后半段（issue 结构化路径）。
     ///
-    /// 与 `start_structured_issue_agent_session`（Codex）对称，复用同一套事务
-    /// 骨架（校验 issue、insert session、改 issue 状态、记审计事件），仅替换
-    /// Codex 特化部分：无 codex mode / reasoning effort，改用
-    /// `ClaudeSessionHandle`，session_id 复用 `codex_session_id` 列。
+    /// mark_starting → factory.start → thread_id 回填 → broadcast/register →
+    /// initial prompt；失败 unmark/shutdown/rollback/清理自有 worktree。
     #[allow(clippy::too_many_arguments)]
-    fn start_structured_claude_issue_agent_session(
+    fn finish_structured_issue_provider_start(
         &self,
-        data_dir: &Path,
-        input: StartAgentSessionInput,
-        launch: SessionLaunchContext,
+        factory: &dyn AgentSessionProviderFactory,
+        request: AgentSessionStartRequest,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
-    ) -> Result<StartAgentSessionResult, CommandError> {
-        let prompt_snapshot = validate_prompt_snapshot(&input.prompt_snapshot)?;
-        let issue = self
-            .issue_repository
-            .find_by_id(input.issue_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
-                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
-            })?;
-
-        if issue.project_id != input.project_id {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Issue 不属于当前 Project。",
-            ).with_reason("issueNotInProject")
-            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
-            .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
-        }
-
-        if let Some(existing_session) = self
-            .agent_session_repository
-            .find_by_issue_id(input.issue_id)
-            .map_err(agent_session_database_error)?
-        {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionAlreadyExists,
-                "当前 Issue 已存在关联 Agent Session。",
-            )
-            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
-            .with_detail(
-                ErrorDetail::new("AgentSession")
-                    .with_value("sessionId", existing_session.id)
-                    .with_value(
-                        "status",
-                        format!("{:?}", existing_session.status).to_lowercase(),
-                    ),
-            ));
-        }
-
-        if issue.status != IssueStatus::Backlog {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "只有 backlog Issue 可以启动 Agent Session。",
-            ).with_reason("onlyBacklogCanStart")
-            .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
-            .with_detail(
-                ErrorDetail::new("IssueStatus")
-                    .with_value("status", format!("{:?}", issue.status).to_lowercase()),
-            ));
-        }
-
-        let previous_archive_path =
-            self.previous_issue_archive_log_path(data_dir, input.issue_id)?;
-        let pending_log_path =
-            build_pending_structured_log_path(data_dir, input.project_id, launch.started_at)?;
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(agent_session_database_error)?;
-
-        let transaction_result: Result<StartAgentSessionResult, rusqlite::Error> = (|| {
-            let session = AgentSessionRepository::insert_in_transaction(
-                &transaction,
-                input.project_id,
-                issue.id,
-                input.agent_profile_id,
-                input.workflow_skill_name.as_deref(),
-                &launch.working_dir,
-                &launch.command_snapshot,
-                &prompt_snapshot,
-                &launch.workspace_mode,
-                launch.target_branch.as_deref(),
-                launch.workspace_branch.as_deref(),
-                launch.workspace_path.as_deref(),
-                launch.origin_branch.as_deref(),
-                launch.worktree_owner,
-                launch.worktree_root_path.as_deref(),
-                launch.worktree_setup_command.as_deref(),
-                &pending_log_path,
-                launch.started_at,
-            )?;
-            let structured_log_path = build_issue_runtime_structured_log_path(
-                data_dir,
-                input.project_id,
-                issue.number,
-                session.number,
-            )
-            .map_err(command_error_to_sqlite)?;
-            let session = AgentSessionRepository::update_log_path_in_transaction(
-                &transaction,
-                session.id,
-                &structured_log_path,
-            )?
-            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-
-            let updated_issue = IssueRepository::update_status_in_transaction(
-                &transaction,
-                input.project_id,
-                issue.id,
-                IssueStatus::Running,
-            )?
-            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-
-            let session_event_payload = json!({
-                "sessionId": session.id,
-                "issueId": issue.id,
-                "agentProfileId": input.agent_profile_id,
-                "status": "running",
-                "structuredStream": true,
-                "logPath": session.log_path,
-            })
-            .to_string();
-            EventRepository::insert_session_event_in_transaction(
-                &transaction,
-                session.id,
-                SessionEventType::SessionStarted,
-                &session_event_payload,
-                launch.started_at,
-            )?;
-
-            let issue_action_payload = json!({
-                "sessionId": session.id,
-                "fromStatus": "backlog",
-                "toStatus": "running",
-                "agentProfileId": input.agent_profile_id,
-            })
-            .to_string();
-            EventRepository::insert_issue_action_in_transaction(
-                &transaction,
-                issue.id,
-                IssueActionType::AgentSessionStarted,
-                &issue_action_payload,
-                updated_issue.updated_at,
-                IssueActionActor::User { profile_id: 1 },
-            )?;
-
-            transaction.commit()?;
-
-            Ok(StartAgentSessionResult {
-                session_id: session.id,
-                issue_id: issue.id,
-            })
-        })();
-
-        let result = transaction_result.map_err(|error| {
-            agent_session_transaction_error_for_issue(
-                self.issue_repository.connection(),
-                error,
-                input.issue_id,
-            )
-        })?;
-        // 同 codex 路径：DB 已 commit（running），后续 handle.start + send_message
-        // 期间需防并发 reconcile 误判，mark_starting 让 contains 返回 true。
-        agent_registry.mark_starting(result.session_id);
-
-        let config = ClaudeSessionConfig {
-            project_id: input.project_id,
-            session_id: result.session_id,
-            binary: launch.command_snapshot.clone(),
-            cwd: launch.working_dir.clone(),
-            model: None,
-            broadcaster: broadcaster.clone(),
-            resume_session_id: None,
-        };
-        let claude_handle = match ClaudeSessionHandle::start(config) {
-            Ok(handle) => handle,
+        prompt_snapshot: &str,
+        project_id: i64,
+        issue_id: i64,
+        session_id: i64,
+        launch: &SessionLaunchContext,
+        previous_archive_path: Option<&str>,
+    ) -> Result<(), CommandError> {
+        // DB 事务已 commit（session 为 running），后续 handle 启动 + send_message
+        // 仍耗时。mark_starting 让 contains 返回 true，reconcile 据此跳过；
+        // register 真实 handle 时自动清除，失败路径需显式 unmark。
+        agent_registry.mark_starting(session_id);
+        let started = match start_provider_session(factory, request) {
+            Ok(started) => started,
             Err(error) => {
-                agent_registry.unmark_starting(result.session_id);
-                self.cleanup_owned_worktree(input.project_id, &launch);
-                let _ = self.rollback_failed_structured_issue_session(
-                    input.project_id,
-                    input.issue_id,
-                    result.session_id,
-                );
-                return Err(agent_session_error_to_command_error(error.into()));
+                agent_registry.unmark_starting(session_id);
+                self.cleanup_owned_worktree(project_id, launch);
+                let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
+                return Err(error);
             }
         };
+        if let Err(error) =
+            persist_started_session_thread_id(&self.agent_session_repository, session_id, &started)
+        {
+            agent_registry.unmark_starting(session_id);
+            started.handle.shutdown();
+            self.cleanup_owned_worktree(project_id, launch);
+            let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
+            return Err(error);
+        }
 
-        broadcaster.register_session(result.session_id);
-        let handle: Arc<dyn AgentSessionHandle> = Arc::new(claude_handle);
-        // 同 codex 路径：首条派发消息标记为 initial turn 来源。
+        broadcaster.register_session(session_id);
+        let handle = started.handle;
+        // 首条派发消息标记为 initial turn 来源；写 source 同时清空 current_turn_id。
         let _ = self
             .agent_session_repository
-            .update_current_turn_source(result.session_id, "initial");
-        if let Err(error) = handle.send_message(prompt_snapshot, Vec::new()) {
-            agent_registry.unmark_starting(result.session_id);
+            .update_current_turn_source(session_id, "initial");
+        if let Err(error) = handle.send_message(prompt_snapshot.to_string(), Vec::new()) {
+            agent_registry.unmark_starting(session_id);
             handle.shutdown();
-            self.cleanup_owned_worktree(input.project_id, &launch);
-            let _ = self.rollback_failed_structured_issue_session(
-                input.project_id,
-                input.issue_id,
-                result.session_id,
-            );
+            self.cleanup_owned_worktree(project_id, launch);
+            let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
             return Err(agent_session_error_to_command_error(error));
         }
-        agent_registry.register(result.session_id, handle);
-        remove_session_log_file(previous_archive_path.as_deref());
-
-        // Claude 首轮 send_message 在后台异步产生 session_id，此处无法同步回填。
-        // 会话标识由 broadcaster 在 `ThreadStarted` 事件回流时统一写入
-        // codex_session_id 列（见 agent_event_broadcaster::persist_stream_event），
-        // 保证崩溃后 resume 续接能拿到标识。
-        Ok(result)
+        agent_registry.register(session_id, handle);
+        remove_session_log_file(previous_archive_path);
+        Ok(())
     }
 
     fn rollback_failed_structured_issue_session(
@@ -2060,121 +1856,75 @@ impl AgentSessionService<'_> {
         // 各失败路径需显式 unmark。
         agent_registry.mark_starting(session_id);
 
-        // 按 agent 类型分发：Codex / Claude 各自的 handle 启动 + 注册。
-        let thread_id = match agent_type {
-            AgentType::Codex => {
-                let mode =
-                    codex_mode_from_structured_input(input.mode.as_deref()).ok_or_else(|| {
-                        agent_registry.unmark_starting(session_id);
-                        CommandError::new(
-                            CommandErrorCode::AgentSessionValidationFailed,
-                            "不支持的协作模式。",
-                        ).with_reason("unsupportedCollaborationMode")
-                        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-                        .with_detail(
-                            ErrorDetail::new("Value").with_value("mode", input.mode.clone()),
-                        )
-                    })?;
-                let config = CodexSessionConfig {
-                    project_id: input.project_id,
-                    session_id,
-                    binary: command_snapshot.clone(),
-                    cwd: cwd.clone(),
-                    mode,
-                    broadcaster: broadcaster.clone(),
-                    resume_thread_id: input.resume_from_codex_session_id.clone(),
-                    model: input
+        let thread_id = self.finish_structured_standalone_provider_start(
+            &DefaultAgentSessionProviderFactory,
+            AgentSessionStartRequest {
+                agent_type: agent_type.clone(),
+                project_id: input.project_id,
+                session_id,
+                binary: command_snapshot.clone(),
+                cwd: cwd.clone(),
+                mode_id: input.mode.clone(),
+                dangerous: false,
+                model: match agent_type {
+                    AgentType::Codex => input
                         .model
                         .clone()
-                        .or_else(|| read_codex_model_from_data_dir(data_dir.as_ref())),
-                    effort: input
+                        .or_else(|| read_codex_model_from_data_dir(data_dir)),
+                    AgentType::Claude => input.model.clone(),
+                },
+                effort: match agent_type {
+                    AgentType::Codex => input
                         .effort
                         .clone()
-                        .or_else(|| read_codex_reasoning_effort_from_data_dir(data_dir.as_ref())),
-                };
-                let codex_handle = match CodexSessionHandle::start(config) {
-                    Ok(handle) => handle,
-                    Err(error) => {
-                        agent_registry.unmark_starting(session_id);
-                        let _ = self.rollback_failed_structured_standalone_session(session_id);
-                        return Err(agent_session_error_to_command_error(error.into()));
-                    }
-                };
-                let thread_id = match codex_handle.thread_id() {
-                    Some(thread_id) => thread_id,
-                    None => {
-                        agent_registry.unmark_starting(session_id);
-                        codex_handle.shutdown();
-                        let _ = self.rollback_failed_structured_standalone_session(session_id);
-                        return Err(CommandError::new(
-                            CommandErrorCode::AgentSessionStreamFailed,
-                            "Agent 会话启动后未拿到 threadId。",
-                        )
-                        .with_detail(
-                            ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
-                        ));
-                    }
-                };
-                // 回填 codex_session_id（agent threadId）。
-                if let Err(error) = self
-                    .agent_session_repository
-                    .update_codex_session_id(session_id, &thread_id)
-                    .map_err(agent_session_database_error)
-                {
-                    agent_registry.unmark_starting(session_id);
-                    codex_handle.shutdown();
-                    let _ = self.rollback_failed_structured_standalone_session(session_id);
-                    return Err(error);
-                }
-                broadcaster.register_session(session_id);
-                agent_registry.register(session_id, Arc::new(codex_handle));
-                thread_id
-            }
-            AgentType::Claude => {
-                let config = ClaudeSessionConfig {
-                    project_id: input.project_id,
-                    session_id,
-                    binary: command_snapshot.clone(),
-                    cwd: cwd.clone(),
-                    model: input.model.clone(),
-                    broadcaster: broadcaster.clone(),
-                    resume_session_id: input.resume_from_codex_session_id.clone(),
-                };
-                let claude_handle = match ClaudeSessionHandle::start(config) {
-                    Ok(handle) => handle,
-                    Err(error) => {
-                        agent_registry.unmark_starting(session_id);
-                        let _ = self.rollback_failed_structured_standalone_session(session_id);
-                        return Err(agent_session_error_to_command_error(error.into()));
-                    }
-                };
-                let thread_id = claude_handle.thread_id();
-                // resume 续接场景：resume_session_id 非空时回填 DB 列。
-                if let Some(claude_session_id) = thread_id.as_ref() {
-                    if let Err(error) = self
-                        .agent_session_repository
-                        .update_codex_session_id(session_id, claude_session_id)
-                        .map_err(agent_session_database_error)
-                    {
-                        agent_registry.unmark_starting(session_id);
-                        claude_handle.shutdown();
-                        let _ = self.rollback_failed_structured_standalone_session(session_id);
-                        return Err(error);
-                    }
-                }
-                broadcaster.register_session(session_id);
-                agent_registry.register(session_id, Arc::new(claude_handle));
-                // 新建场景下首轮 session_id 由后续 send_message 异步产生，
-                // 由 broadcaster 在 ThreadStarted 回流时回填 codex_session_id 列；
-                // resume 场景下已有 session_id。二者均允许 thread_id 为 None。
-                thread_id.unwrap_or_default()
-            }
-        };
+                        .or_else(|| read_codex_reasoning_effort_from_data_dir(data_dir)),
+                    AgentType::Claude => None,
+                },
+                resume_thread_id: input.resume_from_codex_session_id.clone(),
+                broadcaster: broadcaster.clone(),
+                config_home: user_home_from_data_dir(data_dir),
+            },
+            agent_registry,
+            broadcaster,
+            session_id,
+        )?;
 
         Ok(StartStructuredAgentSessionResult {
             session_id,
             thread_id,
         })
+    }
+
+    /// DB commit 之后的 standalone 启动后半段（无 initial prompt）。
+    fn finish_structured_standalone_provider_start(
+        &self,
+        factory: &dyn AgentSessionProviderFactory,
+        request: AgentSessionStartRequest,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+        session_id: i64,
+    ) -> Result<String, CommandError> {
+        // 调用方已 mark_starting；失败路径 unmark + soft-delete session。
+        let started = match start_provider_session(factory, request) {
+            Ok(started) => started,
+            Err(error) => {
+                agent_registry.unmark_starting(session_id);
+                let _ = self.rollback_failed_structured_standalone_session(session_id);
+                return Err(error);
+            }
+        };
+        if let Err(error) =
+            persist_started_session_thread_id(&self.agent_session_repository, session_id, &started)
+        {
+            agent_registry.unmark_starting(session_id);
+            started.handle.shutdown();
+            let _ = self.rollback_failed_structured_standalone_session(session_id);
+            return Err(error);
+        }
+        let thread_id = started.thread_id.clone().unwrap_or_default();
+        broadcaster.register_session(session_id);
+        agent_registry.register(session_id, started.handle);
+        Ok(thread_id)
     }
 
     fn rollback_failed_structured_standalone_session(
@@ -2295,7 +2045,7 @@ impl AgentSessionService<'_> {
         };
         let cwd = self.resolve_session_cwd_for_resume(&session)?;
 
-        // 通过 profile 判断 agent 类型，分发到对应 handle。
+        // 通过 profile 判定 agent 类型，构造走 provider factory。
         let profile = self
             .agent_profile_repository
             .find_profile_by_id(session.agent_profile_id)
@@ -2310,77 +2060,58 @@ impl AgentSessionService<'_> {
                         .with_value("agentProfileId", session.agent_profile_id),
                 )
             })?;
-        let resumed_thread_id = match profile.agent_type {
-            AgentType::Codex => {
-                let mode = codex_mode_from_structured_input(None).ok_or_else(|| {
-                    CommandError::new(
-                        CommandErrorCode::AgentSessionValidationFailed,
-                        "不支持的协作模式。",
-                    ).with_reason("unsupportedCollaborationMode")
-                    .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-                })?;
-                let config = CodexSessionConfig {
-                    project_id: input.project_id,
-                    session_id: session.id,
-                    binary,
-                    cwd,
-                    mode,
-                    broadcaster: broadcaster.clone(),
-                    resume_thread_id: Some(thread_id.clone()),
-                    model: read_codex_model_from_data_dir(_data_dir),
-                    effort: read_codex_reasoning_effort_from_data_dir(_data_dir),
-                };
-                let codex_handle = CodexSessionHandle::start(config)
-                    .map_err(|error| agent_session_error_to_command_error(error.into()))?;
-                let resumed = codex_handle.thread_id().ok_or_else(|| {
-                    CommandError::new(
-                        CommandErrorCode::AgentSessionStreamFailed,
-                        "Agent 会话启动后未拿到 threadId。",
-                    )
-                    .with_detail(
-                        ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
-                    )
-                })?;
-                // mark_resumed 即将把 DB 改为 running，需先 mark_starting 防并发 reconcile
-                // 误判（DB running 但 registry 未注册的窗口）。register 时自动清除。
-                agent_registry.mark_starting(session.id);
-                if let Err(error) = self.mark_structured_session_resumed(&session, &resumed) {
-                    agent_registry.unmark_starting(session.id);
-                    codex_handle.shutdown();
-                    return Err(error);
-                }
-                broadcaster.register_session(session.id);
-                agent_registry.register(session.id, Arc::new(codex_handle));
-                resumed
-            }
-            AgentType::Claude => {
-                let config = ClaudeSessionConfig {
-                    project_id: input.project_id,
-                    session_id: session.id,
-                    binary,
-                    cwd,
-                    model: None,
-                    broadcaster: broadcaster.clone(),
-                    resume_session_id: Some(thread_id.clone()),
-                };
-                let claude_handle = ClaudeSessionHandle::start(config)
-                    .map_err(|error| agent_session_error_to_command_error(error.into()))?;
-                let resumed = claude_handle
-                    .thread_id()
-                    .unwrap_or_else(|| thread_id.clone());
-                // mark_resumed 即将把 DB 改为 running，需先 mark_starting 防并发 reconcile
-                // 误判（DB running 但 registry 未注册的窗口）。register 时自动清除。
-                agent_registry.mark_starting(session.id);
-                if let Err(error) = self.mark_structured_session_resumed(&session, &resumed) {
-                    agent_registry.unmark_starting(session.id);
-                    claude_handle.shutdown();
-                    return Err(error);
-                }
-                broadcaster.register_session(session.id);
-                agent_registry.register(session.id, Arc::new(claude_handle));
-                resumed
+        agent_registry.mark_starting(session.id);
+        let started = match start_provider_session(
+            &DefaultAgentSessionProviderFactory,
+            AgentSessionStartRequest {
+                agent_type: profile.agent_type.clone(),
+                project_id: input.project_id,
+                session_id: session.id,
+                binary,
+                cwd,
+                mode_id: None,
+                dangerous: false,
+                model: match profile.agent_type {
+                    AgentType::Codex => read_codex_model_from_data_dir(_data_dir),
+                    AgentType::Claude => None,
+                },
+                effort: match profile.agent_type {
+                    AgentType::Codex => read_codex_reasoning_effort_from_data_dir(_data_dir),
+                    AgentType::Claude => None,
+                },
+                resume_thread_id: Some(thread_id.clone()),
+                broadcaster: broadcaster.clone(),
+                config_home: user_home_from_data_dir(_data_dir),
+            },
+        ) {
+            Ok(started) => started,
+            Err(error) => {
+                agent_registry.unmark_starting(session.id);
+                return Err(error);
             }
         };
+        let resumed_thread_id = started
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| thread_id.clone());
+        if started.backfill == ThreadIdBackfill::Required && started.thread_id.is_none() {
+            agent_registry.unmark_starting(session.id);
+            started.handle.shutdown();
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionStreamFailed,
+                "Agent 会话启动后未拿到 threadId。",
+            )
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
+            ));
+        }
+        if let Err(error) = self.mark_structured_session_resumed(&session, &resumed_thread_id) {
+            agent_registry.unmark_starting(session.id);
+            started.handle.shutdown();
+            return Err(error);
+        }
+        broadcaster.register_session(session.id);
+        agent_registry.register(session.id, started.handle);
 
         Ok(ResumeStructuredAgentSessionResult {
             session_id: session.id,
@@ -2970,6 +2701,57 @@ fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandErro
     Ok(trimmed.to_string())
 }
 
+
+/// 经可注入 factory 启动 provider 会话（构造侧 seam，ADR-0011）。
+///
+/// 将 `UnsupportedMode` 映射为校验失败，其余走 `agent_session_error_to_command_error`。
+fn start_provider_session(
+    factory: &dyn AgentSessionProviderFactory,
+    request: AgentSessionStartRequest,
+) -> Result<StartedSession, CommandError> {
+    factory.start(request).map_err(|error| match error {
+        AgentSessionError::UnsupportedMode(mode) => CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "不支持的 Codex 协作模式。",
+        )
+        .with_reason("unsupportedCodexMode")
+        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+        .with_detail(ErrorDetail::new("Value").with_value("mode", mode)),
+        other => agent_session_error_to_command_error(other),
+    })
+}
+
+/// 按 `StartedSession.backfill` 声明写回 thread id；service 不按 agent_type 分支。
+fn persist_started_session_thread_id(
+    repository: &AgentSessionRepository<'_>,
+    session_id: i64,
+    started: &StartedSession,
+) -> Result<(), CommandError> {
+    match started.backfill {
+        ThreadIdBackfill::Required => {
+            let thread_id = started.thread_id.as_deref().ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionStreamFailed,
+                    "Agent 会话启动后未拿到 threadId。",
+                )
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+            })?;
+            repository
+                .update_codex_session_id(session_id, thread_id)
+                .map_err(agent_session_database_error)?;
+        }
+        ThreadIdBackfill::WhenPresent => {
+            if let Some(thread_id) = started.thread_id.as_deref() {
+                repository
+                    .update_codex_session_id(session_id, thread_id)
+                    .map_err(agent_session_database_error)?;
+            }
+        }
+        ThreadIdBackfill::DeferToStream => {}
+    }
+    Ok(())
+}
+
 /// 把 `AgentSessionError` 转成 `CommandError`。
 ///
 /// agent 进程未运行 → `AgentSessionNotRunning`；协议层错误 / 不支持的
@@ -3427,31 +3209,6 @@ fn read_codex_model_from_data_dir(data_dir: &Path) -> Option<String> {
     data_dir
         .parent()
         .and_then(codex_config::read_model_from_home)
-}
-
-fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, CommandError> {
-    let normalized = profile.mode.trim();
-    if let Some(mode) = CodexMode::from_id(normalized) {
-        return Ok(mode);
-    }
-
-    match normalized {
-        "" | "default" => Ok(CodexMode::FullAccess),
-        "auto" => Ok(CodexMode::Auto),
-        "full-auto" | "danger-full-access" | "dangerous" => Ok(CodexMode::FullAccess),
-        "read_only" => Ok(CodexMode::ReadOnly),
-        _ if profile.dangerous => Ok(CodexMode::FullAccess),
-        _ => Err(CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "不支持的 Codex 协作模式。",
-        ).with_reason("unsupportedCodexMode")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-        .with_detail(ErrorDetail::new("Value").with_value("mode", profile.mode.clone()))),
-    }
-}
-
-fn codex_mode_from_structured_input(mode: Option<&str>) -> Option<CodexMode> {
-    CodexMode::from_id(mode.unwrap_or(CODEX_DEFAULT_MODE_ID))
 }
 
 fn build_log_path(
@@ -4597,12 +4354,12 @@ mod tests {
     use super::{
         agent_command_with_default_args, build_issue_archive_log_path,
         build_issue_runtime_structured_log_path, build_issue_session_archive,
-        build_structured_command_snapshot, codex_mode_from_profile,
-        codex_mode_from_structured_input, command_supports_prompt_argument,
+        build_structured_command_snapshot, command_supports_prompt_argument,
         detect_codex_session_id_from_home, latest_output_from_session_log,
         normalize_submitted_prompt, preferred_session_cwd, read_timeline_from_session_log,
-        should_restore_redwhisk_worktree, AgentSessionService, CodexMode,
+        should_restore_redwhisk_worktree, AgentSessionService,
     };
+    use crate::agent::provider_factory::{resolve_codex_mode, PlannedCodexMode};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
     use crate::db::agent_session_repository::AgentSessionRepository;
@@ -4746,31 +4503,25 @@ mod tests {
 
     #[test]
     fn codex_profile_default_mode_uses_full_access() {
-        let mut profile = test_agent_profile(AgentType::Codex, "codex");
-        profile.mode = "default".to_string();
-
         assert_eq!(
-            codex_mode_from_profile(&profile).expect("mode"),
-            CodexMode::FullAccess
+            resolve_codex_mode(Some("default"), false).expect("mode"),
+            PlannedCodexMode::FullAccess
         );
     }
 
     #[test]
     fn codex_profile_empty_mode_uses_full_access() {
-        let mut profile = test_agent_profile(AgentType::Codex, "codex");
-        profile.mode = String::new();
-
         assert_eq!(
-            codex_mode_from_profile(&profile).expect("mode"),
-            CodexMode::FullAccess
+            resolve_codex_mode(Some(""), false).expect("mode"),
+            PlannedCodexMode::FullAccess
         );
     }
 
     #[test]
     fn structured_codex_session_defaults_to_full_access() {
         assert_eq!(
-            codex_mode_from_structured_input(None),
-            Some(CodexMode::FullAccess)
+            resolve_codex_mode(None, false).expect("mode"),
+            PlannedCodexMode::FullAccess
         );
     }
 
@@ -7116,6 +6867,405 @@ mod tests {
             "starting 标记的 session 不应被 reconcile 误杀"
         );
     }
+
+
+    struct ControllableHandle {
+        thread_id: Option<String>,
+        send_error: Option<String>,
+        shutdown_count: Arc<std::sync::Mutex<u32>>,
+    }
+
+    impl AgentSessionHandle for ControllableHandle {
+        fn send_message(
+            &self,
+            _text: String,
+            _attachments: Vec<AgentMessageAttachment>,
+        ) -> Result<(), AgentSessionError> {
+            if let Some(message) = &self.send_error {
+                return Err(AgentSessionError::Protocol(message.clone()));
+            }
+            Ok(())
+        }
+
+        fn cancel_turn(&self) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn respond_permission(
+            &self,
+            _request_id: &str,
+            _decision: AgentPermissionDecision,
+        ) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn set_model(&self, _model_id: String) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn set_effort(&self, _effort: Option<String>) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn set_mode(&self, _mode_id: &str) -> Result<(), AgentSessionError> {
+            Ok(())
+        }
+
+        fn list_models(&self) -> Result<Vec<AgentModel>, AgentSessionError> {
+            Ok(Vec::new())
+        }
+
+        fn list_modes(&self) -> Vec<AgentMode> {
+            Vec::new()
+        }
+
+        fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
+            Ok(Vec::new())
+        }
+
+        fn shutdown(&self) {
+            *self.shutdown_count.lock().expect("lock") += 1;
+        }
+
+        fn thread_id(&self) -> Option<String> {
+            self.thread_id.clone()
+        }
+    }
+
+    struct ScriptedProviderFactory {
+        result: std::sync::Mutex<Option<Result<crate::agent::provider_factory::StartedSession, AgentSessionError>>>,
+    }
+
+    impl crate::agent::provider_factory::AgentSessionProviderFactory for ScriptedProviderFactory {
+        fn start(
+            &self,
+            _request: crate::agent::provider_factory::AgentSessionStartRequest,
+        ) -> Result<crate::agent::provider_factory::StartedSession, AgentSessionError> {
+            self.result
+                .lock()
+                .expect("lock")
+                .take()
+                .expect("factory result already consumed")
+        }
+    }
+
+    fn issue_launch_context() -> super::SessionLaunchContext {
+        super::SessionLaunchContext {
+            profile: test_agent_profile(AgentType::Codex, "codex"),
+            working_dir: std::env::temp_dir().to_string_lossy().to_string(),
+            log_path: "/tmp/redwhisk-test.log".to_string(),
+            command_snapshot: "codex".to_string(),
+            started_at: current_millis(),
+            workspace_mode: WorkspaceMode::CurrentBranch,
+            target_branch: None,
+            workspace_branch: None,
+            workspace_path: None,
+            origin_branch: None,
+            worktree_owner: WorktreeOwner::External,
+            worktree_root_path: None,
+            worktree_setup_command: None,
+        }
+    }
+
+    fn seed_running_issue_session(connection: &Connection, issue_id: i64, session_id: i64) {
+        insert_session_list_row(
+            connection,
+            session_id,
+            Some(issue_id),
+            Some("running issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            100,
+            None,
+        );
+    }
+
+    fn base_start_request(
+        broadcaster: &crate::agent::agent_event_broadcaster::AgentEventBroadcaster,
+        session_id: i64,
+    ) -> crate::agent::provider_factory::AgentSessionStartRequest {
+        crate::agent::provider_factory::AgentSessionStartRequest {
+            agent_type: AgentType::Codex,
+            project_id: 1,
+            session_id,
+            binary: "codex".to_string(),
+            cwd: std::env::temp_dir().to_string_lossy().to_string(),
+            mode_id: Some("full-access".to_string()),
+            dangerous: false,
+            model: None,
+            effort: None,
+            resume_thread_id: None,
+            broadcaster: broadcaster.clone(),
+            config_home: None,
+        }
+    }
+
+    #[test]
+    fn finish_issue_provider_start_rolls_back_when_factory_fails() {
+        let connection = setup_session_list_database();
+        seed_running_issue_session(&connection, 50, 500);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = ScriptedProviderFactory {
+            result: std::sync::Mutex::new(Some(Err(AgentSessionError::NotRunning(
+                "spawn failed".into(),
+            )))),
+        };
+        let launch = issue_launch_context();
+        let error = service
+            .finish_structured_issue_provider_start(
+                &factory,
+                base_start_request(&broadcaster, 500),
+                &registry,
+                &broadcaster,
+                "do work",
+                1,
+                50,
+                500,
+                &launch,
+                None,
+            )
+            .expect_err("factory failure should surface");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
+        assert!(!registry.contains(500));
+        // soft delete 后 find_by_id 过滤 del；以 issue 回到 backlog 为准。
+        assert!(
+            AgentSessionRepository::new(&connection)
+                .find_by_id(500)
+                .expect("query")
+                .is_none()
+        );
+        let issue = IssueRepository::new(&connection)
+            .find_by_id(50)
+            .expect("issue query")
+            .expect("issue");
+        assert_eq!(format!("{:?}", issue.status).to_lowercase(), "backlog");
+    }
+
+    #[test]
+    fn finish_issue_provider_start_rolls_back_when_required_thread_id_missing() {
+        let connection = setup_session_list_database();
+        seed_running_issue_session(&connection, 51, 501);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let shutdown_count = Arc::new(std::sync::Mutex::new(0));
+        let factory = ScriptedProviderFactory {
+            result: std::sync::Mutex::new(Some(Ok(crate::agent::provider_factory::StartedSession {
+                handle: Arc::new(ControllableHandle {
+                    thread_id: None,
+                    send_error: None,
+                    shutdown_count: Arc::clone(&shutdown_count),
+                }),
+                thread_id: None,
+                backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
+            }))),
+        };
+        let launch = issue_launch_context();
+        let error = service
+            .finish_structured_issue_provider_start(
+                &factory,
+                base_start_request(&broadcaster, 501),
+                &registry,
+                &broadcaster,
+                "do work",
+                1,
+                51,
+                501,
+                &launch,
+                None,
+            )
+            .expect_err("missing thread id should fail");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionStreamFailed);
+        assert!(!registry.contains(501));
+        assert_eq!(*shutdown_count.lock().expect("lock"), 1);
+        let issue = IssueRepository::new(&connection)
+            .find_by_id(51)
+            .expect("issue query")
+            .expect("issue");
+        assert_eq!(format!("{:?}", issue.status).to_lowercase(), "backlog");
+    }
+
+    #[test]
+    fn finish_issue_provider_start_rolls_back_when_initial_send_fails() {
+        let connection = setup_session_list_database();
+        seed_running_issue_session(&connection, 52, 502);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let shutdown_count = Arc::new(std::sync::Mutex::new(0));
+        let factory = ScriptedProviderFactory {
+            result: std::sync::Mutex::new(Some(Ok(crate::agent::provider_factory::StartedSession {
+                handle: Arc::new(ControllableHandle {
+                    thread_id: Some("thread-1".into()),
+                    send_error: Some("send failed".into()),
+                    shutdown_count: Arc::clone(&shutdown_count),
+                }),
+                thread_id: Some("thread-1".into()),
+                backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
+            }))),
+        };
+        let launch = issue_launch_context();
+        let error = service
+            .finish_structured_issue_provider_start(
+                &factory,
+                base_start_request(&broadcaster, 502),
+                &registry,
+                &broadcaster,
+                "do work",
+                1,
+                52,
+                502,
+                &launch,
+                None,
+            )
+            .expect_err("send failure should fail");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionStreamFailed);
+        assert!(!registry.contains(502));
+        assert_eq!(*shutdown_count.lock().expect("lock"), 1);
+        let issue = IssueRepository::new(&connection)
+            .find_by_id(52)
+            .expect("issue query")
+            .expect("issue");
+        assert_eq!(format!("{:?}", issue.status).to_lowercase(), "backlog");
+    }
+
+    #[test]
+    fn finish_issue_provider_start_registers_handle_on_success() {
+        let connection = setup_session_list_database();
+        seed_running_issue_session(&connection, 53, 503);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = ScriptedProviderFactory {
+            result: std::sync::Mutex::new(Some(Ok(crate::agent::provider_factory::StartedSession {
+                handle: Arc::new(ControllableHandle {
+                    thread_id: Some("thread-ok".into()),
+                    send_error: None,
+                    shutdown_count: Arc::new(std::sync::Mutex::new(0)),
+                }),
+                thread_id: Some("thread-ok".into()),
+                backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
+            }))),
+        };
+        let launch = issue_launch_context();
+        service
+            .finish_structured_issue_provider_start(
+                &factory,
+                base_start_request(&broadcaster, 503),
+                &registry,
+                &broadcaster,
+                "do work",
+                1,
+                53,
+                503,
+                &launch,
+                None,
+            )
+            .expect("success");
+        assert!(registry.get(503).is_some());
+        let session = AgentSessionRepository::new(&connection)
+            .find_by_id(503)
+            .expect("query")
+            .expect("session");
+        assert_eq!(session.codex_session_id.as_deref(), Some("thread-ok"));
+        assert_eq!(session.status, AgentSessionStatus::Running);
+        let issue = IssueRepository::new(&connection)
+            .find_by_id(53)
+            .expect("issue query")
+            .expect("issue");
+        assert_eq!(format!("{:?}", issue.status).to_lowercase(), "running");
+    }
+
+
+    #[test]
+    fn finish_standalone_provider_start_rolls_back_when_factory_fails() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            600,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            100,
+            None,
+        );
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        registry.mark_starting(600);
+        let factory = ScriptedProviderFactory {
+            result: std::sync::Mutex::new(Some(Err(AgentSessionError::NotRunning(
+                "spawn failed".into(),
+            )))),
+        };
+        let error = service
+            .finish_structured_standalone_provider_start(
+                &factory,
+                base_start_request(&broadcaster, 600),
+                &registry,
+                &broadcaster,
+                600,
+            )
+            .expect_err("should fail");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
+        assert!(!registry.contains(600));
+        assert!(
+            AgentSessionRepository::new(&connection)
+                .find_by_id(600)
+                .expect("query")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn resume_structured_session_short_circuits_when_already_registered() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            601,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Stopped,
+            100,
+            Some(200),
+        );
+        // 写入可续接 thread id
+        connection
+            .execute(
+                "UPDATE agent_sessions SET codex_session_id = 'thread-resume', status = 'stopped' WHERE id = 601",
+                [],
+            )
+            .expect("set thread id");
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        registry.register(
+            601,
+            Arc::new(ControllableHandle {
+                thread_id: Some("thread-active".into()),
+                send_error: None,
+                shutdown_count: Arc::new(std::sync::Mutex::new(0)),
+            }),
+        );
+        let result = service
+            .resume_structured_agent_session(
+                std::env::temp_dir().as_path(),
+                crate::types::agent_session::ResumeStructuredAgentSessionInput {
+                    project_id: 1,
+                    session_id: 601,
+                },
+                &registry,
+                &broadcaster,
+            )
+            .expect("resume short circuit");
+        assert_eq!(result.session_id, 601);
+        assert_eq!(result.thread_id, "thread-active");
+    }
+
 
     fn branch_exists(repo_dir: &Path, branch: &str) -> bool {
         let output = Command::new("git")
