@@ -18,6 +18,10 @@ use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
 use crate::agent::codex_config;
+use crate::agent::provider_factory::{
+    AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,
+    StartedSession, ThreadIdBackfill,
+};
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyCommandMode, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
@@ -784,20 +788,25 @@ impl<'connection> AgentSessionService<'connection> {
         // mark_starting 让 contains 返回 true，reconcile 据此跳过；register 真实
         // handle 时自动清除该标记，失败路径需显式 unmark。
         agent_registry.mark_starting(result.session_id);
-        let mode = codex_mode_from_profile(&launch.profile)?;
-        let config = CodexSessionConfig {
-            project_id: input.project_id,
-            session_id: result.session_id,
-            binary: launch.command_snapshot.clone(),
-            cwd: launch.working_dir.clone(),
-            mode,
-            broadcaster: broadcaster.clone(),
-            resume_thread_id: None,
-            model: read_codex_model_from_data_dir(data_dir.as_ref()),
-            effort: read_codex_reasoning_effort_from_data_dir(data_dir.as_ref()),
-        };
-        let codex_handle = match CodexSessionHandle::start(config) {
-            Ok(handle) => handle,
+        // 构造侧走 provider factory（ADR-0010）；本路径为首条生产接线。
+        let started = match start_provider_session(
+            &DefaultAgentSessionProviderFactory,
+            AgentSessionStartRequest {
+                agent_type: AgentType::Codex,
+                project_id: input.project_id,
+                session_id: result.session_id,
+                binary: launch.command_snapshot.clone(),
+                cwd: launch.working_dir.clone(),
+                mode_id: Some(launch.profile.mode.clone()),
+                dangerous: launch.profile.dangerous,
+                model: read_codex_model_from_data_dir(data_dir.as_ref()),
+                effort: read_codex_reasoning_effort_from_data_dir(data_dir.as_ref()),
+                resume_thread_id: None,
+                broadcaster: broadcaster.clone(),
+                config_home: data_dir.parent().map(|path| path.to_path_buf()),
+            },
+        ) {
+            Ok(started) => started,
             Err(error) => {
                 agent_registry.unmark_starting(result.session_id);
                 self.cleanup_owned_worktree(input.project_id, &launch);
@@ -806,30 +815,25 @@ impl<'connection> AgentSessionService<'connection> {
                     input.issue_id,
                     result.session_id,
                 );
-                return Err(agent_session_error_to_command_error(error.into()));
+                return Err(error);
             }
         };
-        let thread_id = codex_handle.thread_id().ok_or_else(|| {
-            agent_registry.unmark_starting(result.session_id);
-            CommandError::new(
-                CommandErrorCode::AgentSessionStreamFailed,
-                "Agent 会话启动后未拿到 threadId。",
-            )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", result.session_id),
-            )
-        })?;
-        if let Err(error) = self
-            .agent_session_repository
-            .update_codex_session_id(result.session_id, &thread_id)
-            .map_err(agent_session_database_error)
+        if let Err(error) =
+            persist_started_session_thread_id(&self.agent_session_repository, result.session_id, &started)
         {
             agent_registry.unmark_starting(result.session_id);
+            started.handle.shutdown();
+            self.cleanup_owned_worktree(input.project_id, &launch);
+            let _ = self.rollback_failed_structured_issue_session(
+                input.project_id,
+                input.issue_id,
+                result.session_id,
+            );
             return Err(error);
         }
 
         broadcaster.register_session(result.session_id);
-        let handle: Arc<dyn AgentSessionHandle> = Arc::new(codex_handle);
+        let handle = started.handle;
         // 首条派发消息标记为 initial turn 来源；写 source 同时清空 current_turn_id，
         // 待 TurnStarted 回流时由 broadcaster 写入真实 turn_id（completion turn 自动
         // 评论提取依赖此配对）。
@@ -1024,6 +1028,7 @@ impl<'connection> AgentSessionService<'connection> {
         // 期间需防并发 reconcile 误判，mark_starting 让 contains 返回 true。
         agent_registry.mark_starting(result.session_id);
 
+        // TODO(02): 合并 issue 后半段，改走 AgentSessionProviderFactory（见 ADR-0010 / 票 01）。
         let config = ClaudeSessionConfig {
             project_id: input.project_id,
             session_id: result.session_id,
@@ -2060,6 +2065,7 @@ impl AgentSessionService<'_> {
         // 各失败路径需显式 unmark。
         agent_registry.mark_starting(session_id);
 
+        // TODO(02/03): standalone 后半段改走 AgentSessionProviderFactory（ADR-0010 / 票 01 已引入 seam）。
         // 按 agent 类型分发：Codex / Claude 各自的 handle 启动 + 注册。
         let thread_id = match agent_type {
             AgentType::Codex => {
@@ -2310,6 +2316,7 @@ impl AgentSessionService<'_> {
                         .with_value("agentProfileId", session.agent_profile_id),
                 )
             })?;
+        // TODO(03): resume 构造改走同一 AgentSessionProviderFactory（ADR-0010 / 票 01）。
         let resumed_thread_id = match profile.agent_type {
             AgentType::Codex => {
                 let mode = codex_mode_from_structured_input(None).ok_or_else(|| {
@@ -2970,6 +2977,57 @@ fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandErro
     Ok(trimmed.to_string())
 }
 
+
+/// 经可注入 factory 启动 provider 会话（构造侧 seam，ADR-0010）。
+///
+/// 将 `UnsupportedMode` 映射为校验失败，其余走 `agent_session_error_to_command_error`。
+fn start_provider_session(
+    factory: &dyn AgentSessionProviderFactory,
+    request: AgentSessionStartRequest,
+) -> Result<StartedSession, CommandError> {
+    factory.start(request).map_err(|error| match error {
+        AgentSessionError::UnsupportedMode(mode) => CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "不支持的 Codex 协作模式。",
+        )
+        .with_reason("unsupportedCodexMode")
+        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
+        .with_detail(ErrorDetail::new("Value").with_value("mode", mode)),
+        other => agent_session_error_to_command_error(other),
+    })
+}
+
+/// 按 `StartedSession.backfill` 声明写回 thread id；service 不按 agent_type 分支。
+fn persist_started_session_thread_id(
+    repository: &AgentSessionRepository<'_>,
+    session_id: i64,
+    started: &StartedSession,
+) -> Result<(), CommandError> {
+    match started.backfill {
+        ThreadIdBackfill::Required => {
+            let thread_id = started.thread_id.as_deref().ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionStreamFailed,
+                    "Agent 会话启动后未拿到 threadId。",
+                )
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+            })?;
+            repository
+                .update_codex_session_id(session_id, thread_id)
+                .map_err(agent_session_database_error)?;
+        }
+        ThreadIdBackfill::WhenPresent => {
+            if let Some(thread_id) = started.thread_id.as_deref() {
+                repository
+                    .update_codex_session_id(session_id, thread_id)
+                    .map_err(agent_session_database_error)?;
+            }
+        }
+        ThreadIdBackfill::DeferToStream => {}
+    }
+    Ok(())
+}
+
 /// 把 `AgentSessionError` 转成 `CommandError`。
 ///
 /// agent 进程未运行 → `AgentSessionNotRunning`；协议层错误 / 不支持的
@@ -3427,27 +3485,6 @@ fn read_codex_model_from_data_dir(data_dir: &Path) -> Option<String> {
     data_dir
         .parent()
         .and_then(codex_config::read_model_from_home)
-}
-
-fn codex_mode_from_profile(profile: &AgentProfileRow) -> Result<CodexMode, CommandError> {
-    let normalized = profile.mode.trim();
-    if let Some(mode) = CodexMode::from_id(normalized) {
-        return Ok(mode);
-    }
-
-    match normalized {
-        "" | "default" => Ok(CodexMode::FullAccess),
-        "auto" => Ok(CodexMode::Auto),
-        "full-auto" | "danger-full-access" | "dangerous" => Ok(CodexMode::FullAccess),
-        "read_only" => Ok(CodexMode::ReadOnly),
-        _ if profile.dangerous => Ok(CodexMode::FullAccess),
-        _ => Err(CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "不支持的 Codex 协作模式。",
-        ).with_reason("unsupportedCodexMode")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-        .with_detail(ErrorDetail::new("Value").with_value("mode", profile.mode.clone()))),
-    }
 }
 
 fn codex_mode_from_structured_input(mode: Option<&str>) -> Option<CodexMode> {
@@ -4597,12 +4634,13 @@ mod tests {
     use super::{
         agent_command_with_default_args, build_issue_archive_log_path,
         build_issue_runtime_structured_log_path, build_issue_session_archive,
-        build_structured_command_snapshot, codex_mode_from_profile,
-        codex_mode_from_structured_input, command_supports_prompt_argument,
+        build_structured_command_snapshot, codex_mode_from_structured_input,
+        command_supports_prompt_argument,
         detect_codex_session_id_from_home, latest_output_from_session_log,
         normalize_submitted_prompt, preferred_session_cwd, read_timeline_from_session_log,
         should_restore_redwhisk_worktree, AgentSessionService, CodexMode,
     };
+    use crate::agent::provider_factory::{resolve_codex_mode, PlannedCodexMode};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
     use crate::db::agent_session_repository::AgentSessionRepository;
@@ -4746,23 +4784,17 @@ mod tests {
 
     #[test]
     fn codex_profile_default_mode_uses_full_access() {
-        let mut profile = test_agent_profile(AgentType::Codex, "codex");
-        profile.mode = "default".to_string();
-
         assert_eq!(
-            codex_mode_from_profile(&profile).expect("mode"),
-            CodexMode::FullAccess
+            resolve_codex_mode(Some("default"), false).expect("mode"),
+            PlannedCodexMode::FullAccess
         );
     }
 
     #[test]
     fn codex_profile_empty_mode_uses_full_access() {
-        let mut profile = test_agent_profile(AgentType::Codex, "codex");
-        profile.mode = String::new();
-
         assert_eq!(
-            codex_mode_from_profile(&profile).expect("mode"),
-            CodexMode::FullAccess
+            resolve_codex_mode(Some(""), false).expect("mode"),
+            PlannedCodexMode::FullAccess
         );
     }
 
