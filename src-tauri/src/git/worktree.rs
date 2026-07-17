@@ -299,6 +299,181 @@ pub fn restore_worktree_for_branch(
     Ok(())
 }
 
+
+/// Narrow inputs for Worktree 对账（不含 owner 策略）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorktreeReconcileRequest<'a> {
+    pub repo_path: &'a Path,
+    pub workspace_path: &'a Path,
+    pub workspace_branch: &'a str,
+    pub target_branch: &'a str,
+}
+
+/// 将 worktree 工作分支合入目标分支并清理 worktree（中性对账，不解读所有权）。
+///
+/// 当 workspace 路径不存在时视为 no-op（与历史完成流自由函数一致）。
+pub fn reconcile_worktree(request: WorktreeReconcileRequest<'_>) -> Result<(), GitWorktreeError> {
+    if !request.workspace_path.exists() {
+        return Ok(());
+    }
+    if request.workspace_branch.trim().is_empty() || request.target_branch.trim().is_empty() {
+        return Ok(());
+    }
+
+    rebase_and_fast_forward(
+        request.repo_path,
+        request.workspace_path,
+        request.target_branch,
+        request.workspace_branch,
+    )?;
+    cleanup_worktree(
+        request.repo_path,
+        request.workspace_path.to_string_lossy().as_ref(),
+        request.workspace_branch,
+    )?;
+    Ok(())
+}
+
+/// 路径缺失时的 closed-out 评估结果（不含用户可见文案）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MissingWorktreeAssessment {
+    /// 工作分支不存在，或已合入目标分支。
+    ClosedOut,
+    /// 工作分支仍在且尚未合入目标分支。
+    NotMerged {
+        workspace_branch: String,
+        target_branch: String,
+    },
+}
+
+/// 评估「RedWhisk worktree 路径缺失」时是否可视为已关闭。
+pub fn assess_missing_worktree(
+    repo_path: impl AsRef<Path>,
+    target_branch: &str,
+    workspace_branch: &str,
+) -> Result<MissingWorktreeAssessment, GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    if !branch_exists(&repo_path, workspace_branch)? {
+        return Ok(MissingWorktreeAssessment::ClosedOut);
+    }
+    if is_branch_merged(&repo_path, target_branch, workspace_branch)? {
+        return Ok(MissingWorktreeAssessment::ClosedOut);
+    }
+    Ok(MissingWorktreeAssessment::NotMerged {
+        workspace_branch: workspace_branch.to_string(),
+        target_branch: target_branch.to_string(),
+    })
+}
+
+/// merge / 对账失败的结构化分类（稳定 reason，无中文 message）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeBlockClassification {
+    TargetDirty { path: String, files: String },
+    WorkspaceDirty { path: String, files: String },
+    MergeConflict,
+    GitCommandFailed,
+}
+
+impl MergeBlockClassification {
+    pub fn reason(&self) -> &'static str {
+        match self {
+            Self::TargetDirty { .. } => "target_worktree_dirty",
+            Self::WorkspaceDirty { .. } => "workspace_worktree_dirty",
+            Self::MergeConflict => "merge_conflict",
+            Self::GitCommandFailed => "git_command_failed",
+        }
+    }
+}
+
+/// 将 [`GitWorktreeError`] 分类为稳定 merge-block reason + 结构字段。
+pub fn classify_merge_block(error: &GitWorktreeError) -> MergeBlockClassification {
+    match error {
+        GitWorktreeError::DirtyWorktree { role, path, files } => match role {
+            GitWorktreeDirtyRole::Target => MergeBlockClassification::TargetDirty {
+                path: path.clone(),
+                files: files.clone(),
+            },
+            GitWorktreeDirtyRole::Workspace => MergeBlockClassification::WorkspaceDirty {
+                path: path.clone(),
+                files: files.clone(),
+            },
+        },
+        GitWorktreeError::GitCommandFailed { command, message }
+            if is_likely_merge_conflict(command, message) =>
+        {
+            MergeBlockClassification::MergeConflict
+        }
+        _ => MergeBlockClassification::GitCommandFailed,
+    }
+}
+
+fn is_likely_merge_conflict(command: &str, message: &str) -> bool {
+    (command.contains(" rebase ") || command.contains(" merge "))
+        && (message.contains("CONFLICT")
+            || message.contains("could not apply")
+            || message.contains("Automatic merge failed")
+            || message.contains("fix conflicts"))
+}
+
+/// 实际路径上的 worktree / 漂移事实（不含路径来源优先级）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionPathFacts {
+    pub in_worktree: bool,
+    pub worktree_branch: Option<String>,
+    pub drifted: bool,
+}
+
+/// 基于实际路径与启动快照计算 worktree/漂移事实。
+pub fn inspect_execution_path(
+    actual_path: &str,
+    startup_path: &str,
+) -> ExecutionPathFacts {
+    if actual_path.trim().is_empty() {
+        return ExecutionPathFacts {
+            in_worktree: false,
+            worktree_branch: None,
+            drifted: false,
+        };
+    }
+
+    let in_worktree = is_additional_worktree(actual_path).unwrap_or(false);
+    let worktree_branch = if in_worktree {
+        current_branch(actual_path).ok()
+    } else {
+        None
+    };
+    let drifted = in_worktree && actual_path != startup_path;
+
+    ExecutionPathFacts {
+        in_worktree,
+        worktree_branch,
+        drifted,
+    }
+}
+
+/// 本地分支 `refs/heads/{branch}` 是否存在。
+pub fn branch_exists(
+    repo_path: impl AsRef<Path>,
+    branch: &str,
+) -> Result<bool, GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let branch_ref = format!("refs/heads/{branch}");
+    let output = command::run_git_raw(
+        &repo_path,
+        &["show-ref", "--verify", "--quiet", branch_ref.as_str()],
+    )
+    .map_err(GitWorktreeError::from)?;
+
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(GitWorktreeError::GitCommandFailed {
+            command: format!("git show-ref --verify --quiet {branch_ref}"),
+            message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        }),
+    }
+}
+
 fn list_worktree_branches(
     repo_path: &Path,
     current_branch: &str,
@@ -564,6 +739,180 @@ mod tests {
             current_branch(&worktree_path).expect("current branch"),
             "issue-16"
         );
+    }
+
+
+    #[test]
+    fn classify_merge_block_maps_dirty_roles_and_conflict() {
+        let target = GitWorktreeError::DirtyWorktree {
+            role: GitWorktreeDirtyRole::Target,
+            path: "/repo".into(),
+            files: "a.txt".into(),
+        };
+        let workspace = GitWorktreeError::DirtyWorktree {
+            role: GitWorktreeDirtyRole::Workspace,
+            path: "/wt".into(),
+            files: "b.txt".into(),
+        };
+        let conflict = GitWorktreeError::GitCommandFailed {
+            command: "git rebase main".into(),
+            message: "CONFLICT (content): merge conflict in file".into(),
+        };
+        let other = GitWorktreeError::GitCommandFailed {
+            command: "git status".into(),
+            message: "boom".into(),
+        };
+
+        assert_eq!(
+            classify_merge_block(&target),
+            MergeBlockClassification::TargetDirty {
+                path: "/repo".into(),
+                files: "a.txt".into(),
+            }
+        );
+        assert_eq!(classify_merge_block(&target).reason(), "target_worktree_dirty");
+        assert_eq!(
+            classify_merge_block(&workspace),
+            MergeBlockClassification::WorkspaceDirty {
+                path: "/wt".into(),
+                files: "b.txt".into(),
+            }
+        );
+        assert_eq!(
+            classify_merge_block(&workspace).reason(),
+            "workspace_worktree_dirty"
+        );
+        assert_eq!(
+            classify_merge_block(&conflict),
+            MergeBlockClassification::MergeConflict
+        );
+        assert_eq!(classify_merge_block(&conflict).reason(), "merge_conflict");
+        assert_eq!(
+            classify_merge_block(&other),
+            MergeBlockClassification::GitCommandFailed
+        );
+        assert_eq!(classify_merge_block(&other).reason(), "git_command_failed");
+    }
+
+    #[test]
+    fn assess_missing_worktree_closed_out_when_branch_absent_or_merged() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+
+        assert_eq!(
+            assess_missing_worktree(&repo_dir, "main", "issue-99").expect("assess"),
+            MissingWorktreeAssessment::ClosedOut
+        );
+
+        git(&repo_dir, &["checkout", "-b", "issue-7"]);
+        write_file(&repo_dir, "feat.txt", "feat\n");
+        git(&repo_dir, &["add", "feat.txt"]);
+        git(&repo_dir, &["commit", "-m", "feat"]);
+        git(&repo_dir, &["checkout", "main"]);
+        git(&repo_dir, &["merge", "--ff-only", "issue-7"]);
+
+        assert_eq!(
+            assess_missing_worktree(&repo_dir, "main", "issue-7").expect("assess merged"),
+            MissingWorktreeAssessment::ClosedOut
+        );
+    }
+
+    #[test]
+    fn assess_missing_worktree_not_merged_when_branch_diverges() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+        git(&repo_dir, &["checkout", "-b", "issue-8"]);
+        write_file(&repo_dir, "feat.txt", "feat\n");
+        git(&repo_dir, &["add", "feat.txt"]);
+        git(&repo_dir, &["commit", "-m", "feat"]);
+        git(&repo_dir, &["checkout", "main"]);
+
+        assert_eq!(
+            assess_missing_worktree(&repo_dir, "main", "issue-8").expect("assess"),
+            MissingWorktreeAssessment::NotMerged {
+                workspace_branch: "issue-8".into(),
+                target_branch: "main".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn inspect_execution_path_detects_drift_into_additional_worktree() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-9");
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-9",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+
+        let startup = repo_dir.to_string_lossy().to_string();
+        let actual = worktree_path.to_string_lossy().to_string();
+        let facts = inspect_execution_path(&actual, &startup);
+        assert!(facts.in_worktree);
+        assert_eq!(facts.worktree_branch.as_deref(), Some("issue-9"));
+        assert!(facts.drifted);
+
+        let same = inspect_execution_path(&startup, &startup);
+        assert!(!same.in_worktree);
+        assert!(!same.drifted);
+    }
+
+    #[test]
+    fn reconcile_worktree_fast_forwards_and_removes_workspace() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-10");
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "base.txt", "base\n");
+        git(&repo_dir, &["add", "base.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-10",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+        write_file(&worktree_path, "feature.txt", "feature\n");
+        git(&worktree_path, &["add", "feature.txt"]);
+        git(&worktree_path, &["commit", "-m", "feature"]);
+
+        reconcile_worktree(WorktreeReconcileRequest {
+            repo_path: &repo_dir,
+            workspace_path: &worktree_path,
+            workspace_branch: "issue-10",
+            target_branch: "main",
+        })
+        .expect("reconcile");
+
+        assert!(!worktree_path.exists());
+        assert!(!branch_exists(&repo_dir, "issue-10").expect("branch gone"));
+        assert_eq!(current_branch(&repo_dir).expect("branch"), "main");
+        assert!(repo_dir.join("feature.txt").is_file());
     }
 
     fn create_repo(repo_dir: &Path) {
