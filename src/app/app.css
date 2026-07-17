@@ -65,6 +65,27 @@ button:focus-visible {
   background: var(--color-surface);
 }
 
+.project-opening {
+  display: grid;
+  grid-template-rows: 40px 1fr;
+  min-height: 100vh;
+  background: var(--color-app);
+}
+
+.project-opening__window-header {
+  min-height: 40px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.project-opening__status {
+  align-self: center;
+  justify-self: center;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
 .local-data-status-stack {
   position: fixed;
   top: 12px;

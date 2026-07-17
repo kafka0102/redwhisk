@@ -304,6 +304,34 @@ function ProjectApp() {
     [createProjectDraft],
   );
 
+  const isOpeningUrlProject = new URLSearchParams(window.location.search).has(
+    "projectId",
+  );
+  // 新窗口以 ?projectId=X 启动时，selectedProject 初始为 null，首帧会渲染 ProjectHome
+  // （项目列表），openProject IPC resolve 后才切到 AppShell——用户看到“项目列表一闪而过
+  // 再出现目标项目窗口”。这段加载窗口内改渲染轻量加载占位，避免项目列表页被绘出。
+  const isUrlProjectLoading =
+    isOpeningUrlProject &&
+    !selectedProject &&
+    !projectOpenError &&
+    !localDataError;
+
+  if (isUrlProjectLoading) {
+    return (
+      <I18nProvider initialLocale={getDefaultLocale()}>
+        <main className="project-opening">
+          <header
+            className="project-opening__window-header"
+            data-tauri-drag-region
+          />
+          <p className="project-opening__status" role="status">
+            {translate("app.openingProject")}
+          </p>
+        </main>
+      </I18nProvider>
+    );
+  }
+
   if (!selectedProject) {
     const statusMessages = [
       {

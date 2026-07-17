@@ -22,6 +22,7 @@ import {
   openProjectWindow,
   validateProjectRepoPath,
   type ProjectListResponse,
+  type ProjectRecord,
 } from "../features/project/project-commands";
 import { resetIssuePageStateCacheForTests } from "../features/issues/issues-activity-cache";
 
@@ -470,6 +471,43 @@ describe("App project entry", () => {
         { name: "当前项目 RedWhisk" },
         { timeout: 3000 },
       ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not flash the project list page while opening a project window by projectId", async () => {
+    // 回归：新窗口以 ?projectId=X 启动时 selectedProject 初始为 null，首帧会渲染
+    // ProjectHome（项目列表），openProject IPC resolve 后才切到 AppShell，
+    // 用户看到“项目列表一闪而过再出现目标项目窗口”。用 pending 的 openProject
+    // 把加载窗口拉长到可观测，断言加载期间项目列表页（“搜索项目”搜索框）不出现。
+    window.history.replaceState(null, "", "/?projectId=1");
+
+    let resolveOpenProject: (project: ProjectRecord) => void = () => {};
+    openProjectMock.mockImplementation(
+      () =>
+        new Promise<ProjectRecord>((resolve) => {
+          resolveOpenProject = resolve;
+        }),
+    );
+
+    render(<App />);
+
+    expect(
+      screen.queryByRole("searchbox", { name: "搜索项目" }),
+    ).not.toBeInTheDocument();
+
+    // 等 openProject 真正被调用，确保 resolveOpenProject 已接到真实 resolve
+    await waitFor(() => expect(openProjectMock).toHaveBeenCalled());
+
+    resolveOpenProject({
+      id: 1,
+      name: "RedWhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_628_400_000,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
   });
 
