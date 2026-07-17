@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::process::Command;
 
 use thiserror::Error;
 
+use crate::git::command::{self, GitCommandError};
 use crate::types::session_workspace::CodeWorkspaceRoot;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +52,17 @@ impl std::fmt::Display for GitWorktreeDirtyRole {
         match self {
             Self::Target => formatter.write_str("target"),
             Self::Workspace => formatter.write_str("workspace"),
+        }
+    }
+}
+
+impl From<GitCommandError> for GitWorktreeError {
+    fn from(error: GitCommandError) -> Self {
+        match error {
+            GitCommandError::Failed { command, message } => Self::GitCommandFailed { command, message },
+            GitCommandError::OutputInvalid { command, message } => {
+                Self::GitOutputInvalid { command, message }
+            }
         }
     }
 }
@@ -162,14 +175,11 @@ pub fn is_branch_merged(
     merged_branch: &str,
 ) -> Result<bool, GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
-    let output = Command::new("git")
-        .args(["merge-base", "--is-ancestor", merged_branch, base_branch])
-        .current_dir(&repo_path)
-        .output()
-        .map_err(|error| GitWorktreeError::GitCommandFailed {
-            command: "git merge-base --is-ancestor".to_string(),
-            message: error.to_string(),
-        })?;
+    let output = command::run_git_raw(
+        &repo_path,
+        &["merge-base", "--is-ancestor", merged_branch, base_branch],
+    )
+    .map_err(map_ancestor_command_error)?;
 
     match output.status.code() {
         Some(0) => Ok(true),
@@ -385,32 +395,19 @@ fn unique_worktree_path(root: &Path, issue_number: i64) -> PathBuf {
 }
 
 fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitWorktreeError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo_path)
-        .output()
-        .map_err(|error| GitWorktreeError::GitCommandFailed {
-            command: format_git_command(args),
-            message: error.to_string(),
-        })?;
-
-    if !output.status.success() {
-        return Err(GitWorktreeError::GitCommandFailed {
-            command: format_git_command(args),
-            message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        });
-    }
-
-    String::from_utf8(output.stdout)
+    command::run_git(repo_path, args)
         .map(|value| value.trim().to_string())
-        .map_err(|error| GitWorktreeError::GitOutputInvalid {
-            command: format_git_command(args),
-            message: error.to_string(),
-        })
+        .map_err(GitWorktreeError::from)
 }
 
-fn format_git_command(args: &[&str]) -> String {
-    format!("git {}", args.join(" "))
+fn map_ancestor_command_error(error: GitCommandError) -> GitWorktreeError {
+    match error {
+        GitCommandError::Failed { message, .. } => GitWorktreeError::GitCommandFailed {
+            command: "git merge-base --is-ancestor".to_string(),
+            message,
+        },
+        other => other.into(),
+    }
 }
 
 #[cfg(test)]

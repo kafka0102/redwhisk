@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::git::command::{self, GitCommandError};
 use crate::git::operation_state::{detect_operation_state, GitOperationState};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -43,6 +43,17 @@ pub enum GitStatusError {
     GitOutputInvalid { command: String, message: String },
     #[error("git status porcelain output was invalid: {0}")]
     GitStatusParseFailed(String),
+}
+
+impl From<GitCommandError> for GitStatusError {
+    fn from(error: GitCommandError) -> Self {
+        match error {
+            GitCommandError::Failed { command, message } => Self::GitCommandFailed { command, message },
+            GitCommandError::OutputInvalid { command, message } => {
+                Self::GitOutputInvalid { command, message }
+            }
+        }
+    }
 }
 
 pub fn read_git_snapshot(repo_path: impl AsRef<Path>) -> Result<GitSnapshot, GitStatusError> {
@@ -174,45 +185,19 @@ fn path_bytes_to_string(path: &[u8]) -> String {
 }
 
 fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitStatusError> {
-    let output = run_git_bytes(repo_path, args)?;
-
-    String::from_utf8(output)
-        .map(|value| value.trim_end_matches(['\r', '\n']).to_string())
-        .map_err(|error| GitStatusError::GitOutputInvalid {
-            command: format_git_command(args),
-            message: error.to_string(),
-        })
+    command::run_git(repo_path, args).map_err(GitStatusError::from)
 }
 
 fn run_git_bytes(repo_path: &Path, args: &[&str]) -> Result<Vec<u8>, GitStatusError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo_path)
-        .output()
-        .map_err(|error| GitStatusError::GitCommandFailed {
-            command: format_git_command(args),
-            message: error.to_string(),
-        })?;
-
-    if !output.status.success() {
-        return Err(GitStatusError::GitCommandFailed {
-            command: format_git_command(args),
-            message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        });
-    }
-
-    Ok(output.stdout)
+    command::run_git_bytes(repo_path, args).map_err(GitStatusError::from)
 }
 
 fn is_ancestor(repo_path: &Path, ancestor: &str, descendant: &str) -> Result<bool, GitStatusError> {
-    let output = Command::new("git")
-        .args(["merge-base", "--is-ancestor", ancestor, descendant])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|error| GitStatusError::GitCommandFailed {
-            command: "git merge-base --is-ancestor".to_string(),
-            message: error.to_string(),
-        })?;
+    let output = command::run_git_raw(
+        repo_path,
+        &["merge-base", "--is-ancestor", ancestor, descendant],
+    )
+    .map_err(map_ancestor_command_error)?;
 
     match output.status.code() {
         Some(0) => Ok(true),
@@ -224,8 +209,14 @@ fn is_ancestor(repo_path: &Path, ancestor: &str, descendant: &str) -> Result<boo
     }
 }
 
-fn format_git_command(args: &[&str]) -> String {
-    format!("git {}", args.join(" "))
+fn map_ancestor_command_error(error: GitCommandError) -> GitStatusError {
+    match error {
+        GitCommandError::Failed { message, .. } => GitStatusError::GitCommandFailed {
+            command: "git merge-base --is-ancestor".to_string(),
+            message,
+        },
+        other => other.into(),
+    }
 }
 
 #[cfg(test)]
