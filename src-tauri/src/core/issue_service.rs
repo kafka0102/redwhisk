@@ -5145,6 +5145,178 @@ mod tests {
         assert_eq!(phase, "confirming_worktree_cleanup");
     }
 
+    #[test]
+    fn complete_issue_flow_cancels_when_continue_after_commit_declined() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_git_repo(&repo_dir);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "INSERT INTO issue_completion_flows
+                   (issue_id, session_id, phase, ignore_dirty, dirty_decision,
+                    continue_after_commit, worktree_cleanup_decision, base_branch,
+                    workspace_branch, workspace_path, actual_path, failure_reason, updated_at)
+                 VALUES (16, 30, 'confirming_continue_after_commit', 0, NULL, NULL, NULL,
+                         NULL, NULL, NULL, NULL, NULL, 1)",
+                [],
+            )
+            .expect("seed confirming_continue_after_commit flow");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: Some(false),
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Cancelled);
+        let phase: String = connection
+            .query_row(
+                "SELECT phase FROM issue_completion_flows WHERE issue_id = 16",
+                [],
+                |row| row.get(0),
+            )
+            .expect("flow phase");
+        assert_eq!(phase, "cancelled");
+    }
+
+    #[test]
+    fn complete_issue_flow_completes_when_external_worktree_cleanup_declined() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        let target_branch = git_output(&repo_dir, &["branch", "--show-current"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                &target_branch,
+            ],
+        );
+        fs::write(worktree_path.join("base.txt"), "issue change\n").expect("write worktree change");
+        git(&worktree_path, &["add", "base.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'worktree',
+                     working_dir = ?1, workspace_path = ?1, workspace_branch = 'issue-16',
+                     target_branch = ?2, origin_branch = ?2, worktree_owner = 'external'
+                 WHERE id = 30",
+                params![worktree_path.to_string_lossy().to_string(), target_branch],
+            )
+            .expect("update session to external worktree");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: Some(false),
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        assert_eq!(result.issue.status, IssueStatus::Completed);
+    }
+
+    #[test]
+    fn complete_issue_flow_completes_redwhisk_worktree_after_clean_rebase() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-16");
+        create_git_repo(&repo_dir);
+        let target_branch = git_output(&repo_dir, &["branch", "--show-current"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-16",
+                worktree_path.to_string_lossy().as_ref(),
+                &target_branch,
+            ],
+        );
+        fs::write(worktree_path.join("base.txt"), "issue change\n").expect("write worktree change");
+        git(&worktree_path, &["add", "base.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue change"]);
+
+        let connection = setup_issue_completion_database(&repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET status = 'running', closed_at = NULL, workspace_mode = 'worktree',
+                     working_dir = ?1, workspace_path = ?1, workspace_branch = 'issue-16',
+                     target_branch = ?2, origin_branch = ?2, worktree_owner = 'redwhisk'
+                 WHERE id = 30",
+                params![worktree_path.to_string_lossy().to_string(), target_branch],
+            )
+            .expect("update session to redwhisk worktree");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                temp_dir.path().join("data"),
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        assert_eq!(result.issue.status, IssueStatus::Completed);
+    }
+
     fn setup_issue_completion_database(repo_dir: &Path) -> Connection {
         let connection = Connection::open_in_memory().expect("open database");
         MigrationRunner::default()
