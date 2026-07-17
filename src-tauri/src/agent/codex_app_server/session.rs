@@ -122,6 +122,8 @@ pub struct CodexSessionConfig {
     pub model: Option<String>,
     /// 初始 reasoning effort，由模型能力声明。
     pub effort: Option<String>,
+    /// 用户 home，用于 set_model/set_effort 写 provider 配置；None 时回退 `$HOME`。
+    pub config_home: Option<std::path::PathBuf>,
 }
 
 /// 会话级共享状态（Arc + Mutex，供 notification handler 线程访问）。
@@ -156,6 +158,12 @@ struct SessionState {
 struct PendingPermission {
     /// 通过此 sender 把用户决策送回 server→client request handler。
     sender: std::sync::mpsc::Sender<PermissionDecision>,
+}
+
+fn resolve_config_home(config_home: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    config_home
+        .map(|path| path.to_path_buf())
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
 }
 
 /// Codex session 句柄。
@@ -349,8 +357,12 @@ impl CodexSessionHandle {
         Ok(())
     }
 
-    /// 切换模型。下一次 turn/start 会带上新 model。
+    /// 切换模型。下一次 turn/start 会带上新 model；并持久化到 codex 配置。
     pub fn set_model(&self, model_id: String) -> Result<(), CodexAppServerError> {
+        if let Some(home) = resolve_config_home(self.config.config_home.as_deref()) {
+            crate::agent::codex_config::write_model_to_home(&home, &model_id)
+                .map_err(CodexAppServerError::Io)?;
+        }
         {
             let mut state = self
                 .state
@@ -366,8 +378,14 @@ impl CodexSessionHandle {
         Ok(())
     }
 
-    /// 切换 reasoning effort（Think 模式）。
+    /// 切换 reasoning effort（Think 模式）；Some 时持久化到 codex 配置。
     pub fn set_effort(&self, effort: Option<String>) -> Result<(), CodexAppServerError> {
+        if let Some(effort_value) = effort.as_deref() {
+            if let Some(home) = resolve_config_home(self.config.config_home.as_deref()) {
+                crate::agent::codex_config::write_reasoning_effort_to_home(&home, effort_value)
+                    .map_err(CodexAppServerError::Io)?;
+            }
+        }
         {
             let mut state = self
                 .state
@@ -1642,5 +1660,83 @@ done
                 ],
             }]
         );
+    }
+
+    fn mock_codex_binary(temp_dir: &tempfile::TempDir) -> String {
+        let script_path = temp_dir.path().join("mock-codex.sh");
+        fs::write(
+            &script_path,
+            r#"#!/bin/sh
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*)
+      id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"id":%s,"result":{"serverInfo":{"name":"mock"}}}\n' "$id"
+      ;;
+    *'"method":"initialized"'*)
+      ;;
+    *'"method":"thread/start"'*)
+      id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"id":%s,"result":{"thread":{"id":"thr-test"}}}\n' "$id"
+      ;;
+  esac
+done
+"#,
+        )
+        .expect("write mock script");
+        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("chmod");
+        script_path
+            .to_str()
+            .expect("script path should be valid utf-8")
+            .to_string()
+    }
+
+    fn test_handle_with_config_home(
+        binary: &str,
+        config_home: std::path::PathBuf,
+    ) -> CodexSessionHandle {
+        CodexSessionHandle::start(CodexSessionConfig {
+            project_id: 1,
+            session_id: 1,
+            binary: binary.into(),
+            cwd: "/tmp".into(),
+            mode: CodexMode::FullAccess,
+            broadcaster: AgentEventBroadcaster::new(),
+            resume_thread_id: None,
+            model: None,
+            effort: None,
+            config_home: Some(config_home),
+        })
+        .expect("start mock codex handle")
+    }
+
+    #[test]
+    fn set_model_persists_to_config_home() {
+        let temp_dir = tempdir().expect("temp dir");
+        let home = tempdir().expect("config home");
+        let binary = mock_codex_binary(&temp_dir);
+        let handle = test_handle_with_config_home(&binary, home.path().to_path_buf());
+        CodexSessionHandle::set_model(&handle, "gpt-5.5".into()).expect("set model");
+        assert_eq!(
+            crate::agent::codex_config::read_model_from_home(home.path()).as_deref(),
+            Some("gpt-5.5")
+        );
+        handle.shutdown();
+    }
+
+    #[test]
+    fn set_effort_persists_to_config_home() {
+        let temp_dir = tempdir().expect("temp dir");
+        let home = tempdir().expect("config home");
+        let binary = mock_codex_binary(&temp_dir);
+        let handle = test_handle_with_config_home(&binary, home.path().to_path_buf());
+        CodexSessionHandle::set_effort(&handle, Some("high".into())).expect("set effort");
+        assert_eq!(
+            crate::agent::codex_config::read_reasoning_effort_from_home(home.path()).as_deref(),
+            Some("high")
+        );
+        handle.shutdown();
     }
 }

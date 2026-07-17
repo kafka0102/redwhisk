@@ -48,6 +48,12 @@ const STREAM_JSON_ARGS: &[&str] = &[
     "bypassPermissions",
 ];
 
+fn resolve_config_home(config_home: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    config_home
+        .map(|path| path.to_path_buf())
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+}
+
 /// session 启动配置。
 #[derive(Clone)]
 pub struct ClaudeSessionConfig {
@@ -61,6 +67,8 @@ pub struct ClaudeSessionConfig {
     pub broadcaster: AgentEventBroadcaster,
     /// 续接已存在的 Claude session_id；为 None 时新建。
     pub resume_session_id: Option<String>,
+    /// 用户 home，用于 set_model 写 provider 配置；None 时回退 `$HOME`。
+    pub config_home: Option<std::path::PathBuf>,
 }
 
 /// 会话级共享状态（Arc + Mutex，供 message handler 线程访问）。
@@ -301,8 +309,12 @@ impl ClaudeSessionHandle {
         Ok(())
     }
 
-    /// 切换模型。下一次 `send_message` 会带上新 model。
+    /// 切换模型。下一次 `send_message` 会带上新 model；并持久化到 claude 配置。
     pub fn set_model(&self, model_id: String) -> Result<(), ClaudeStreamingError> {
+        if let Some(home) = resolve_config_home(self.config.config_home.as_deref()) {
+            crate::agent::claude_config::write_model_to_home(&home, &model_id)
+                .map_err(ClaudeStreamingError::Io)?;
+        }
         {
             let mut state = self
                 .state
@@ -2418,6 +2430,26 @@ mod tests {
         }))
     }
 
+    #[test]
+    fn set_model_persists_to_config_home() {
+        let temp = tempfile::tempdir().expect("temp");
+        let mut config = test_config();
+        config.config_home = Some(temp.path().to_path_buf());
+        let handle = ClaudeSessionHandle::start(config).expect("start");
+        ClaudeSessionHandle::set_model(&handle, "opus".into()).expect("set model");
+        let written = crate::agent::claude_config::read_settings_from_home(temp.path())
+            .expect("settings written");
+        assert_eq!(written.model.as_deref(), Some("opus"));
+    }
+
+    #[test]
+    fn set_effort_still_unsupported_for_claude() {
+        let handle = ClaudeSessionHandle::start(test_config()).expect("start");
+        let err = AgentSessionHandle::set_effort(&handle, Some("high".into()))
+            .expect_err("unsupported");
+        assert!(matches!(err, AgentSessionError::UnsupportedMode(_)));
+    }
+
     fn test_config() -> ClaudeSessionConfig {
         ClaudeSessionConfig {
             project_id: 1,
@@ -2427,6 +2459,7 @@ mod tests {
             model: None,
             broadcaster: AgentEventBroadcaster::new(),
             resume_session_id: None,
+            config_home: None,
         }
     }
 

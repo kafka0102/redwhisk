@@ -617,54 +617,9 @@ pub async fn set_agent_model(
     tauri::async_runtime::spawn_blocking(move || {
         let database = open_agent_session_database(&app)?;
         let service = build_agent_session_service(&database.connection);
-        let agent_type = service.find_session_agent_type(input.project_id, input.session_id)?;
+        service.find_project_session_record(input.project_id, input.session_id)?;
         let handle = require_structured_handle(&agent_sessions, input.session_id)?;
-        // 把用户切换后的模型持久化回 provider 配置，保证下次 spawn
-        // （以及应用重启后）沿用同一模型。
-        let home_dir = if matches!(agent_type, AgentType::Claude | AgentType::Codex) {
-            Some(app.path().home_dir().map_err(|error| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionPersistenceFailed,
-                    "Agent 配置保存失败。",
-                )
-                .with_reason("configSaveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            })?)
-        } else {
-            None
-        };
-        if matches!(agent_type, AgentType::Claude) {
-            claude_config::write_model_to_home(
-                home_dir
-                    .as_deref()
-                    .expect("Claude model persistence requires home dir"),
-                &input.model_id,
-            )
-            .map_err(|error| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionPersistenceFailed,
-                    "Agent 配置保存失败。",
-                )
-                .with_reason("configSaveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            })?;
-        }
-        if matches!(agent_type, AgentType::Codex) {
-            codex_config::write_model_to_home(
-                home_dir
-                    .as_deref()
-                    .expect("Codex model persistence requires home dir"),
-                &input.model_id,
-            )
-            .map_err(|error| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionPersistenceFailed,
-                    "Agent 配置保存失败。",
-                )
-                .with_reason("configSaveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            })?;
-        }
+        // 模型写盘由 handle adapter 内部完成（ADR-0010）。
         handle
             .set_model(input.model_id)
             .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
@@ -693,24 +648,7 @@ pub async fn set_agent_thinking(
         let service = build_agent_session_service(&database.connection);
         service.find_project_session_record(input.project_id, input.session_id)?;
         let handle = require_structured_handle(&agent_sessions, input.session_id)?;
-        if let Some(effort) = input.effort.as_deref() {
-            let home_dir = app.path().home_dir().map_err(|error| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionPersistenceFailed,
-                    "Agent 配置保存失败。",
-                )
-                .with_reason("configSaveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            })?;
-            codex_config::write_reasoning_effort_to_home(&home_dir, effort).map_err(|error| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionPersistenceFailed,
-                    "Agent 配置保存失败。",
-                )
-                .with_reason("configSaveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            })?;
-        }
+        // effort 写盘由 handle adapter 内部完成（ADR-0010）；Claude 仍返回不支持。
         handle
             .set_effort(input.effort)
             .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)

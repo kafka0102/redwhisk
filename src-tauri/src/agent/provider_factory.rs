@@ -187,9 +187,8 @@ fn start_codex_session(
         resume_thread_id: request.resume_thread_id,
         model: request.model,
         effort: request.effort,
+        config_home: request.config_home,
     };
-    // config_home 留给票 04 注入 adapter 配置写盘路径。
-    let _ = request.config_home;
 
     let handle = CodexSessionHandle::start(config).map_err(AgentSessionError::from)?;
     let thread_id = handle.thread_id();
@@ -212,8 +211,8 @@ fn start_claude_session(
         model: request.model,
         broadcaster: request.broadcaster,
         resume_session_id: request.resume_thread_id,
+        config_home: request.config_home,
     };
-    let _ = request.config_home;
     let _ = request.effort;
     let _ = request.mode_id;
     let _ = request.dangerous;
@@ -486,5 +485,34 @@ mod tests {
         assert_eq!(started.thread_id.as_deref(), Some("resume-sess"));
         assert_eq!(started.backfill, ThreadIdBackfill::WhenPresent);
         assert_eq!(started.handle.thread_id().as_deref(), Some("resume-sess"));
+    }
+
+    #[test]
+    fn default_factory_claude_handle_persists_model_to_config_home() {
+        let temp = tempfile::tempdir().expect("temp");
+        let factory = DefaultAgentSessionProviderFactory;
+        let mut request = base_request(AgentType::Claude);
+        request.config_home = Some(temp.path().to_path_buf());
+        let started = factory.start(request).expect("start");
+        started
+            .handle
+            .set_model("sonnet".into())
+            .expect("set model");
+        let settings = crate::agent::claude_config::read_settings_from_home(temp.path())
+            .expect("settings");
+        assert_eq!(settings.model.as_deref(), Some("sonnet"));
+    }
+
+    #[test]
+    fn claude_handle_rejects_effort_via_trait() {
+        let factory = DefaultAgentSessionProviderFactory;
+        let started = factory
+            .start(base_request(AgentType::Claude))
+            .expect("start");
+        let err = started
+            .handle
+            .set_effort(Some("high".into()))
+            .expect_err("unsupported");
+        assert!(matches!(err, AgentSessionError::UnsupportedMode(_)));
     }
 }
