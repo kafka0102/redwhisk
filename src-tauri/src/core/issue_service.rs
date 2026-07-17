@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
@@ -32,8 +31,9 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::{read_git_snapshot, GitSnapshot};
 use crate::git::worktree::{
-    cleanup_worktree, current_branch, is_additional_worktree, is_branch_merged,
-    rebase_and_fast_forward, GitWorktreeDirtyRole, GitWorktreeError,
+    assess_missing_worktree, classify_merge_block, current_branch, inspect_execution_path,
+    reconcile_worktree, MergeBlockClassification, MissingWorktreeAssessment,
+    WorktreeReconcileRequest, GitWorktreeError,
 };
 use crate::logging::{info_kv, CommandResultExt};
 use crate::types::agent_session::{
@@ -1263,8 +1263,8 @@ impl<'connection> IssueService<'connection> {
                 Effect::AttemptRebaseAndCleanup {
                     on_failure: FailurePolicy::Block,
                 } => {
-                    if let Err(error) = rebase_fast_forward_and_cleanup(repo_path, &session) {
-                        merge_block = Some(describe_worktree_merge_block(&error));
+                    if let Err(error) = reconcile_session_worktree(repo_path, &session) {
+                        merge_block = Some(merge_block_from_worktree_error(&error));
                         new_state.phase = IssueCompletionPhase::Blocked;
                         new_state.failure_reason = Some(error.to_string());
                         break;
@@ -2882,10 +2882,10 @@ fn open_issue_database(
     Ok(database)
 }
 
-fn rebase_fast_forward_and_cleanup(
+fn reconcile_session_worktree(
     repo_path: &str,
     session: &AgentSessionRecord,
-) -> Result<(), crate::git::worktree::GitWorktreeError> {
+) -> Result<(), GitWorktreeError> {
     let Some(target_branch) = session
         .origin_branch
         .as_deref()
@@ -2899,13 +2899,13 @@ fn rebase_fast_forward_and_cleanup(
     let Some(workspace_path) = session.workspace_path.as_deref() else {
         return Ok(());
     };
-    if !Path::new(workspace_path).exists() {
-        return Ok(());
-    }
 
-    rebase_and_fast_forward(repo_path, workspace_path, target_branch, workspace_branch)?;
-    cleanup_worktree(repo_path, workspace_path, workspace_branch)?;
-    Ok(())
+    reconcile_worktree(WorktreeReconcileRequest {
+        repo_path: Path::new(repo_path),
+        workspace_path: Path::new(workspace_path),
+        workspace_branch,
+        target_branch,
+    })
 }
 
 struct WorktreeMergeBlockDescription {
@@ -2913,43 +2913,32 @@ struct WorktreeMergeBlockDescription {
     message: String,
 }
 
-fn describe_worktree_merge_block(error: &GitWorktreeError) -> WorktreeMergeBlockDescription {
-    match error {
-        GitWorktreeError::DirtyWorktree { role, path, files } => match role {
-            GitWorktreeDirtyRole::Target => WorktreeMergeBlockDescription {
-                reason: "target_worktree_dirty".to_string(),
-                message: format!(
-                    "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先在目标分支工作区提交、暂存或丢弃这些改动：{files}。工作区：{path}"
-                ),
-            },
-            GitWorktreeDirtyRole::Workspace => WorktreeMergeBlockDescription {
-                reason: "workspace_worktree_dirty".to_string(),
-                message: format!(
-                    "Agent worktree 存在未提交改动，无法自动合入目标分支。请先提交或处理这些改动：{files}。工作区：{path}"
-                ),
-            },
-        },
-        GitWorktreeError::GitCommandFailed { command, message }
-            if is_likely_merge_conflict(command, message) =>
-        {
-            WorktreeMergeBlockDescription {
-                reason: "merge_conflict".to_string(),
-                message: "Agent worktree 合并发生冲突，请手动处理冲突。".to_string(),
-            }
-        }
-        _ => WorktreeMergeBlockDescription {
-            reason: "git_command_failed".to_string(),
-            message: format!("Agent worktree 合入失败：{error}"),
-        },
+fn merge_block_from_worktree_error(error: &GitWorktreeError) -> WorktreeMergeBlockDescription {
+    let classification = classify_merge_block(error);
+    WorktreeMergeBlockDescription {
+        reason: classification.reason().to_string(),
+        message: merge_block_message(&classification, error),
     }
 }
 
-fn is_likely_merge_conflict(command: &str, message: &str) -> bool {
-    (command.contains(" rebase ") || command.contains(" merge "))
-        && (message.contains("CONFLICT")
-            || message.contains("could not apply")
-            || message.contains("Automatic merge failed")
-            || message.contains("fix conflicts"))
+fn merge_block_message(
+    classification: &MergeBlockClassification,
+    error: &GitWorktreeError,
+) -> String {
+    match classification {
+        MergeBlockClassification::TargetDirty { path, files } => format!(
+            "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先在目标分支工作区提交、暂存或丢弃这些改动：{files}。工作区：{path}"
+        ),
+        MergeBlockClassification::WorkspaceDirty { path, files } => format!(
+            "Agent worktree 存在未提交改动，无法自动合入目标分支。请先提交或处理这些改动：{files}。工作区：{path}"
+        ),
+        MergeBlockClassification::MergeConflict => {
+            "Agent worktree 合并发生冲突，请手动处理冲突。".to_string()
+        }
+        MergeBlockClassification::GitCommandFailed => {
+            format!("Agent worktree 合入失败：{error}")
+        }
+    }
 }
 
 fn redwhisk_missing_worktree_is_closed_out(
@@ -2965,56 +2954,28 @@ fn redwhisk_missing_worktree_is_closed_out(
         .workspace_branch
         .as_deref()
         .ok_or_else(|| "缺失 RedWhisk worktree 的工作分支元数据。".to_string())?;
-    if !branch_exists(repo_path, workspace_branch)? {
-        return Ok(());
-    }
-    match is_branch_merged(repo_path, target_branch, workspace_branch) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(format!(
+
+    match assess_missing_worktree(repo_path, target_branch, workspace_branch) {
+        Ok(MissingWorktreeAssessment::ClosedOut) => Ok(()),
+        Ok(MissingWorktreeAssessment::NotMerged {
+            workspace_branch,
+            target_branch,
+        }) => Err(format!(
             "RedWhisk worktree 路径缺失，但工作分支 {workspace_branch} 尚未合入 {target_branch}。"
         )),
         Err(error) => Err(error.to_string()),
     }
 }
 
-fn branch_exists(repo_path: &str, branch: &str) -> Result<bool, String> {
-    let branch_ref = format!("refs/heads/{branch}");
-    let output = Command::new("git")
-        .args(["show-ref", "--verify", "--quiet", branch_ref.as_str()])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    match output.status.code() {
-        Some(0) => Ok(true),
-        Some(1) => Ok(false),
-        _ => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
-    }
-}
-
 fn read_current_branch(repo_path: &str) -> Result<String, CommandError> {
-    let output = Command::new("git")
-        .args(["branch", "--show-current"])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "当前 Project 的 Git 状态不可用。",
-            ).with_reason("gitStatusUnavailable")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
-    if !output.status.success() {
-        return Err(CommandError::new(
+    current_branch(repo_path).map_err(|error| {
+        CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "当前 Project 的 Git 状态不可用。",
-        ).with_reason("gitStatusUnavailable")
-        .with_detail(ErrorDetail::new("Cause").with_value(
-            "message",
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        )));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        )
+        .with_reason("gitStatusUnavailable")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })
 }
 
 fn completion_session_close_reason(option: CompletionAttemptOption) -> &'static str {
@@ -3341,21 +3302,14 @@ fn resolve_actual_execution_path(
         };
     }
 
-    let in_worktree = is_additional_worktree(&path).unwrap_or(false);
-    let worktree_branch = if in_worktree {
-        current_branch(&path).ok()
-    } else {
-        None
-    };
-    // 漂移：实际路径与启动快照不同，且实际路径位于某 worktree。
-    let drifted = in_worktree && path != startup_path;
+    let facts = inspect_execution_path(&path, &startup_path);
 
     ActualExecutionPath {
         path,
         source,
-        in_worktree,
-        worktree_branch,
-        drifted,
+        in_worktree: facts.in_worktree,
+        worktree_branch: facts.worktree_branch,
+        drifted: facts.drifted,
     }
 }
 
