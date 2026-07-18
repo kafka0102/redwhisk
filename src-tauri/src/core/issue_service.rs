@@ -14,7 +14,7 @@ use crate::core::agent_session_service::{
     IssueSessionArchive,
 };
 use crate::core::completion_state_machine::{
-    self, CompletionEvent, CompletionState, CompletionWorld, Effect, FailurePolicy, Transition,
+    self, CompletionEvent, CompletionState, CompletionWorld, Transition,
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -64,7 +64,7 @@ use crate::types::issue_completion::{
 use crate::types::session_event::SessionEventType;
 
 pub struct IssueService<'connection> {
-    issue_repository: IssueRepository<'connection>,
+    pub(crate) issue_repository: IssueRepository<'connection>,
     issue_attachment_repository: IssueAttachmentRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
     data_dir: PathBuf,
@@ -1192,124 +1192,25 @@ impl<'connection> IssueService<'connection> {
         transition: Transition,
         agent_registry: &AgentSessionRegistry,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
-        let mut new_state = transition.new_state;
-        let mut completed_issue: Option<IssueRecord> = None;
-        let mut merge_block: Option<WorktreeMergeBlockDescription> = None;
-
-        for effect in &transition.effects {
-            match effect {
-                Effect::InjectCommitPrompt => {
-                    let completion_prompt =
-                        build_agent_commit_completion_prompt(&issue.title, &world.snapshot.head);
-                    let _ = AgentSessionRepository::new(self.issue_repository.connection())
-                        .update_current_turn_source(session.id, "completion");
-                    if let Some(handle) = agent_registry.get(session.id) {
-                        handle
-                            .send_message(completion_prompt, Vec::new())
-                            .map_err(
-                                crate::core::agent_session_service::agent_session_error_to_command_error,
-                            )?;
-                    }
-                }
-                Effect::RecordCompletionAttempt {
-                    result: completion_state_machine::CompletionAttemptResultForEffect::PromptSent,
-                    head,
-                    changed_files,
-                    attempt_id: None,
-                } => {
-                    let changed_files_json =
-                        serde_json::to_string(changed_files).map_err(|error| {
-                            CommandError::new(
-                                CommandErrorCode::IssuePersistenceFailed,
-                                "Agent Commit 审计保存失败。",
-                            )
-                            .with_reason("auditSaveFailed")
-                            .with_detail(
-                                ErrorDetail::new("Cause")
-                                    .with_value("message", error.to_string()),
-                            )
-                        })?;
-                    let recorded_at = current_epoch_millis()?;
-                    let transaction = self
-                        .issue_repository
-                        .connection()
-                        .unchecked_transaction()
-                        .map_err(issue_database_error)?;
-                    CompletionAttemptRepository::insert_in_transaction(
-                        &transaction,
-                        issue.id,
-                        session.id,
-                        world.attempt_option,
-                        head,
-                        head,
-                        None,
-                        None,
-                        &changed_files_json,
-                        CompletionAttemptResult::PromptSent,
-                        recorded_at,
-                    )
-                    .map_err(issue_database_error)?;
-                    transaction.commit().map_err(issue_database_error)?;
-                    info_kv(
-                        "complete_issue_flow",
-                        "agent auto-commit prompt sent",
-                        &[
-                            ("issueId", &issue.id.to_string()),
-                            ("sessionId", &session.id.to_string()),
-                            ("headBefore", head),
-                        ],
-                    );
-                }
-                Effect::AttemptRebaseAndCleanup {
-                    on_failure: FailurePolicy::Block,
-                } => {
-                    if let Err(error) = reconcile_session_worktree(repo_path, &session) {
-                        merge_block = Some(merge_block_from_worktree_error(&error));
-                        new_state.phase = IssueCompletionPhase::Blocked;
-                        new_state.failure_reason = Some(error.to_string());
-                        break;
-                    }
-                }
-                Effect::CommitCompletion { snapshot, option } => {
-                    let completed = self.complete_issue_flow_transaction(
-                        &issue,
-                        &session,
-                        snapshot,
-                        *option,
-                        None,
-                        None,
-                        new_state.dirty_already_skipped(),
-                    )?;
-                    completed_issue = Some(completed);
-                }
-                _ => {}
-            }
-        }
-
-        let action = phase_to_completion_action(new_state.phase);
-        let result_issue = completed_issue.unwrap_or_else(|| issue.clone());
-        // Completed 由 CommitCompletion 事务内清 flow；其余 phase upsert 持久化。
-        let flow_record = if new_state.phase == IssueCompletionPhase::Completed {
-            None
-        } else {
-            Some(self.upsert_completion_flow(
-                issue.id,
-                Some(session.id),
-                new_state.phase,
-                new_state.ignore_dirty,
-                new_state.dirty_decision,
-                new_state.worktree_cleanup_decision,
-                &session,
-                new_state.actual_path.as_deref(),
-                new_state.failure_reason.as_deref(),
-            )?)
+        let ctx = crate::core::completion_effect_interpreter::EffectContext {
+            repo_path,
+            issue: &issue,
+            session: &session,
+            world,
+            agent_registry,
         };
-        let message = completion_message(new_state.phase, merge_block.as_ref());
-        let merge_block_reason = merge_block.as_ref().map(|block| block.reason.clone());
+        let outcome = self.interpret_effects(&ctx, transition)?;
+
+        let action = phase_to_completion_action(outcome.new_state.phase);
+        let result_issue = outcome
+            .completed_issue
+            .unwrap_or_else(|| issue.clone());
+        let message = completion_message(outcome.new_state.phase, outcome.merge_block.as_ref());
+        let merge_block_reason = outcome.merge_block.as_ref().map(|block| block.reason.clone());
         Ok(self.flow_result_with_merge_block(
             action,
             result_issue,
-            flow_record,
+            outcome.flow_record,
             message,
             merge_block_reason,
             actual,
@@ -1382,7 +1283,7 @@ impl<'connection> IssueService<'connection> {
         self.drive_completion_flow(input, &project, issue, session, forced_option, agent_registry)
     }
 
-    fn complete_issue_flow_transaction(
+    pub(crate) fn complete_issue_flow_transaction(
         &self,
         issue: &IssueRecord,
         session: &AgentSessionRecord,
@@ -1553,7 +1454,7 @@ impl<'connection> IssueService<'connection> {
         self.hydrate_issue(completed_issue)
     }
 
-    fn upsert_completion_flow(
+    pub(crate) fn upsert_completion_flow(
         &self,
         issue_id: i64,
         session_id: Option<i64>,
@@ -1742,52 +1643,20 @@ impl<'connection> IssueService<'connection> {
                 )
                 .with_reason("completionStateMismatch")
             })?;
-            for effect in &transition.effects {
-                if let Effect::RecordCompletionAttempt {
-                    result: completion_state_machine::CompletionAttemptResultForEffect::Completed,
-                    head,
-                    attempt_id: Some(id),
-                    ..
-                } = effect
-                {
-                    let transaction = self
-                        .issue_repository
-                        .connection()
-                        .unchecked_transaction()
-                        .map_err(issue_database_error)?;
-                    CompletionAttemptRepository::update_result_in_transaction(
-                        &transaction,
-                        *id,
-                        head,
-                        Some(head),
-                        None,
-                        CompletionAttemptResult::Completed,
-                    )
-                    .map_err(issue_database_error)?;
-                    transaction.commit().map_err(issue_database_error)?;
-                    info_kv(
-                        "detect_agent_commit_completion",
-                        "agent commit detected",
-                        &[
-                            ("issueId", &issue.id.to_string()),
-                            ("sessionId", &session.id.to_string()),
-                            ("headBefore", &pending.head_before),
-                            ("headAfter", head),
-                        ],
-                    );
-                }
+            // detect 路径的迁移（CommitDetected）只产 RecordCompletionAttempt{Completed}，
+            // 不触及 InjectCommitPrompt / AttemptRebaseAndCleanup，故 registry / repo_path
+            // 不会被读取；占位空 registry 与 detection_path 仅保持 EffectContext 形态一致。
+            let detect_registry = AgentSessionRegistry::new();
+            {
+                let ctx = crate::core::completion_effect_interpreter::EffectContext {
+                    repo_path: detection_path,
+                    issue: &issue,
+                    session: &session,
+                    world: &world,
+                    agent_registry: &detect_registry,
+                };
+                self.interpret_effects(&ctx, transition)?;
             }
-            self.upsert_completion_flow(
-                issue.id,
-                Some(session.id),
-                transition.new_state.phase,
-                transition.new_state.ignore_dirty,
-                transition.new_state.dirty_decision,
-                transition.new_state.worktree_cleanup_decision,
-                &session,
-                transition.new_state.actual_path.as_deref(),
-                transition.new_state.failure_reason.as_deref(),
-            )?;
             return Ok(DetectAgentCommitCompletionResult {
                 outcome: DetectAgentCommitCompletionOutcome::CommitDetected,
                 issue: self.hydrate_issue(issue)?,
@@ -2882,7 +2751,7 @@ fn open_issue_database(
     Ok(database)
 }
 
-fn reconcile_session_worktree(
+pub(crate) fn reconcile_session_worktree(
     repo_path: &str,
     session: &AgentSessionRecord,
 ) -> Result<(), GitWorktreeError> {
@@ -2908,12 +2777,14 @@ fn reconcile_session_worktree(
     })
 }
 
-struct WorktreeMergeBlockDescription {
-    reason: String,
-    message: String,
+pub(crate) struct WorktreeMergeBlockDescription {
+    pub(crate) reason: String,
+    pub(crate) message: String,
 }
 
-fn merge_block_from_worktree_error(error: &GitWorktreeError) -> WorktreeMergeBlockDescription {
+pub(crate) fn merge_block_from_worktree_error(
+    error: &GitWorktreeError,
+) -> WorktreeMergeBlockDescription {
     let classification = classify_merge_block(error);
     WorktreeMergeBlockDescription {
         reason: classification.reason().to_string(),
@@ -3050,7 +2921,7 @@ fn issue_not_found(issue_id: i64) -> CommandError {
         .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
 }
 
-fn issue_database_error(error: rusqlite::Error) -> CommandError {
+pub(crate) fn issue_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
@@ -3343,7 +3214,7 @@ fn workspace_mode_to_str(mode: &WorkspaceMode) -> &'static str {
     }
 }
 
-fn build_agent_commit_completion_prompt(issue_title: &str, head: &str) -> String {
+pub(crate) fn build_agent_commit_completion_prompt(issue_title: &str, head: &str) -> String {
     format!(
         "请获取本次修改相关的代码，检查当前 Issue 涉及的文件变更；只暂存并提交与本次 Issue 直接相关的文件，不要提交无关改动。\n\
 Issue: {issue_title}\n\
@@ -3503,7 +3374,7 @@ fn format_git_operation_state(state: GitOperationState) -> &'static str {
     }
 }
 
-fn current_epoch_millis() -> Result<i64, CommandError> {
+pub(crate) fn current_epoch_millis() -> Result<i64, CommandError> {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| {

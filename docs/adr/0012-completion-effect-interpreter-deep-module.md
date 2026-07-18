@@ -17,7 +17,7 @@ Issue 完成流程的 phase 迁移决策已抽为纯深 module `completion_state
 
 1. **抬升一个 effect 解释深 module**：在 `IssueService` 上新增 `pub(crate) fn interpret_effects(&self, ctx: &EffectContext, transition: Transition) -> Result<InterpretationOutcome, CommandError>`。两个完成流程入口在 `advance()` 之后都调它，取代各自内嵌的 loop + upsert 尾巴。
 2. **边界只取 effect 解释**：module 拥有 effect 循环 + `FailurePolicy::Block` 的相位改写语义（rebase 失败 → `new_state.phase = Blocked` 并停执剩余 effect）+ flow upsert（含「Completed 跳过 upsert」迁移不变式）。纯 `advance()` 不动；调用方各自的事件派生 / 前置守卫（closed-fast-path、git-op 守卫、phase 门控、head 比较）与 world 构造留在原入口。
-3. **中性 Outcome**：`InterpretationOutcome { new_state, completed_issue, merge_block, flow_record }`；`CompleteIssueFlowResult` / `DetectAgentCommitCompletionResult` 的结果塑形与文案是视图投影，留调用方。入参以 `EffectContext` 打包（`repo_path` / `issue` / `session` / `actual` / `world` / `agent_registry`）。
+3. **中性 Outcome**：`InterpretationOutcome { new_state, completed_issue, merge_block, flow_record }`；`CompleteIssueFlowResult` / `DetectAgentCommitCompletionResult` 的结果塑形与文案是视图投影，留调用方。入参以 `EffectContext` 打包解释器实际读取的字段（`repo_path` / `issue` / `session` / `world` / `agent_registry`）；`actual` 仅调用方投影用，不入 ctx。
 4. **不新增 trait port**：可测依赖按 local-substitutable 处理——复用内存 SQLite + temp git repo + 已有 fake `AgentSessionHandle`（ADR-0011）。git reconcile 保持对 `git/worktree` 的直接调用；不为单 adapter 立假想 seam，与 ADR-0010 收敛 git seam 同向。
 5. **落点**：新文件 `src-tauri/src/core/completion_effect_interpreter.rs`，`impl IssueService` 块（复用 `self` 的 repo 与 `complete_issue_flow_transaction` / `upsert_completion_flow`）+ 同文件 `#[cfg(test)] mod tests`。纯状态机文件零改动。
 6. **行为冻结**：不改 phase / effect 语义、前端协议、dirty / External 产品策略；唯一结构性变化是 `_ => {}` 删除（match 在共享处穷尽），不改变今天任何可观测输出。`detect_agent_commit_completion` 手搓的 dummy `CompletionWorld` 良性但属 `advance()` 输入，本次不收口，留 follow-up。
