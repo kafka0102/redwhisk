@@ -4,6 +4,7 @@ pub mod app_state;
 pub mod commands;
 pub mod core;
 pub mod db;
+pub mod features;
 pub mod git;
 pub mod local_data_path;
 pub mod logging;
