@@ -28,6 +28,7 @@
 - [RedWhisk 设计系统指南](./architecture-design/design-guide.md)
 - [Settings 页面布局规范](./architecture-design/settings-page-layout.md)
 - [前端大型组件拆分规则](./architecture-design/frontend-large-component-splitting-rules.md)
+- [后端 Rust 大文件拆分规则](./architecture-design/backend-large-file-splitting-rules.md)
 - [后端 feature-first 重构方案（执行计划）](./architecture-design/backend-feature-first-refactor.md)
 
 ## 领域、数据与质量
@@ -52,6 +53,7 @@
 | 改动类型                      | 必读文档                                                                    | 追加阅读                           |
 | ----------------------------- | --------------------------------------------------------------------------- | ---------------------------------- |
 | TypeScript / TSX              | 工程规范、编码风格、[项目代码地图](./architecture-design/project-map.md)    | [测试策略](./testing/strategy.md)  |
+| Rust（`src-tauri/**/*.rs`）   | [后端 Rust 大文件拆分规则](./architecture-design/backend-large-file-splitting-rules.md)、Agent 开发规则 | [项目代码地图](./architecture-design/project-map.md) |
 | UI、页面或组件                | 上述 TypeScript 文档、设计系统指南、大型组件拆分规则                        | Settings 页面布局规范、i18n 章节   |
 | Tauri command、DTO、event     | [Tauri 契约](./architecture-design/tauri-contract.md)                       | Agent 开发规则、测试策略           |
 | Issue、Session 或完成流程     | [领域状态机](./domain/state-machine.md)                                     | 数据模型、Worktree 与 Git 生命周期 |

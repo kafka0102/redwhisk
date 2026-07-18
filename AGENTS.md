@@ -56,12 +56,15 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 ```
 
 > 不得把领域逻辑塞进泛化 `utils`。
+>
+> `scripts/`：仓库级脚本（构建、发版、`check-rust-file-size.sh` 单文件大小门禁等）。
 
 ## 4. 按任务类型读 docs
 
 执行任务前先读 `docs/README.md` 和本文件；再按任务叠加阅读：
 
 - 改动 TypeScript / TSX / JavaScript：读取 `docs/standards/engineering-spec.md`、`docs/standards/coding-style.md`。
+- 改动 Rust（`src-tauri/**/*.rs`）：读取 `docs/architecture-design/backend-large-file-splitting-rules.md`、`docs/architecture-design/agent-development-rules.md`「后端 Rust 文件复杂度」章节。
 - 改动 UI、页面或组件：在前端代码规范外，额外读取 `docs/architecture-design/design-guide.md`、`docs/architecture-design/frontend-large-component-splitting-rules.md`。涉及 Settings 时，额外读取 `docs/architecture-design/settings-page-layout.md`。
 - 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
 - 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
@@ -76,6 +79,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 2. `pnpm lint`
 3. `pnpm typecheck`
 4. `pnpm test` — 改了运行时行为 / 分支 / 数据流 / 渲染 / 测试依赖实现时必跑；纯类型或纯样式改动可豁免，但须在最终说明写明豁免理由。
+5. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/**/*.rs`）后必跑；越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。
 
 纯文档改动（`docs/**`、`*.md`、`AGENTS.md`、`CLAUDE.md`）豁免 lint / typecheck / test，但须复查内部相对链接、索引与引用是否一致（如 `rg -n "目标路径" docs`）。
 
@@ -85,6 +89,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - `git status --short` 无残留本次任务相关的未提交文件。
 - 无新增 `@ts-ignore` / `@ts-nocheck` / `eslint-disable` / 跳过测试。
 - 每一处 diff 可追溯到用户请求、项目文档或验证失败。
+- 改动 Rust 时，`scripts/check-rust-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
 
 > 本门禁是 `docs/architecture-design/agent-development-rules.md`「测试与验证规则」与 `docs/standards/{coding-style,git-workflow}.md` 的执行入口；冲突时以本门禁命令顺序为准。
 
