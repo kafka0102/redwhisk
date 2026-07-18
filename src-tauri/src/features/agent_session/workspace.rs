@@ -1274,7 +1274,9 @@ fn language_from_path(path: &str) -> Option<String> {
         Some("json") => Some("json".to_string()),
         Some("kt") | Some("kts") => Some("kotlin".to_string()),
         Some("md") => Some("markdown".to_string()),
+        Some("php") => Some("php".to_string()),
         Some("py") => Some("python".to_string()),
+        Some("rb") => Some("ruby".to_string()),
         Some("rs") => Some("rust".to_string()),
         Some("swift") => Some("swift".to_string()),
         Some("ts") => Some("typescript".to_string()),
@@ -1308,8 +1310,11 @@ mod tests {
             Some("kotlin".to_string()),
         );
         assert_eq!(language_from_path("pom.xml"), Some("xml".to_string()));
+        assert_eq!(language_from_path("index.php"), Some("php".to_string()));
+        assert_eq!(language_from_path("app.rb"), Some("ruby".to_string()));
 
         // 已有映射回归
+        assert_eq!(language_from_path("main.rs"), Some("rust".to_string()));
         assert_eq!(
             language_from_path("a.ts"),
             Some("typescript".to_string()),
