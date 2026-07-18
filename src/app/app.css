@@ -4874,6 +4874,13 @@ button:focus-visible {
   visibility: hidden;
 }
 
+.session-file-tree__status {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
 .session-file-tree__icon--ts,
 .session-file-tree__icon--tsx,
 .session-file-tree__icon--js,

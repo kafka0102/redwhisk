@@ -1,6 +1,5 @@
 import { Editor } from "@monaco-editor/react";
-import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, ChevronRight, Folder, RefreshCw, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, X } from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -28,11 +27,8 @@ import {
   type FileTreeOpenState,
 } from "../../shared/workspace/file-tree-panel";
 import {
-  CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
-  getProjectWorktreeFileTree,
   readProjectWorktreeFile,
   type CodeWorkspaceRoot,
-  type CodeWorkspaceRootsUpdatedEvent,
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
 import { DiffViewer } from "../../shared/workspace/diff-viewer";
@@ -43,6 +39,8 @@ import {
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
 import { useCodeWorkspaceDiff } from "./use-code-workspace-diff";
+import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
+import { useCodeWorkspaceRoots } from "./use-code-workspace-roots";
 import {
   useChangesAutoRefresh,
   useWorktreeRunningSession,
@@ -67,25 +65,10 @@ interface CodeWorkspaceProps {
 export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
   const cachedState = codeWorkspaceStateCache.get(projectId);
-  const [workspaceRoots, setWorkspaceRoots] =
-    useState<CodeWorkspaceRoot[]>(roots);
   const [selectedRootPath, setSelectedRootPath] = useState<string | null>(
     () =>
       cachedState?.selectedRootPath ?? selectInitialRoot(roots)?.path ?? null,
   );
-  const [tree, setTree] = useState<WorkspaceFileTreeNode[]>(
-    () => cachedState?.tree ?? [],
-  );
-  const [treeError, setTreeError] = useState<string | null>(
-    () => cachedState?.treeError ?? null,
-  );
-  const [treeLoaded, setTreeLoaded] = useState(
-    () => cachedState?.treeLoaded ?? false,
-  );
-  const [isTreeLoading, setIsTreeLoading] = useState(
-    () => !(cachedState?.treeLoaded ?? false),
-  );
-  const [isTreeRefreshing, setIsTreeRefreshing] = useState(false);
   const [openFolders, setOpenFolders] = useState<FileTreeOpenState>(
     () => cachedState?.openFolders ?? {},
   );
@@ -109,8 +92,15 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   const openFilePathsRef = useRef(
     new Set((cachedState?.tabs ?? []).map((tab) => tab.filePath)),
   );
-  const treeRequestSequenceRef = useRef(0);
   const fileNotFoundMessage = messages.agentsFeature.fileNotFound;
+
+  // 分支下拉数据：首帧用 roots 快照，挂载拉取 + 事件 + 定时轮询接管，
+  // 修正「在其它 Activity 期间 worktree 增删导致快照过期、分支缺失」。
+  const { roots: workspaceRoots } = useCodeWorkspaceRoots(
+    projectId,
+    roots,
+    true,
+  );
 
   const selectedRoot = useMemo(
     () =>
@@ -119,6 +109,8 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     [selectedRootPath, workspaceRoots],
   );
 
+  const selectedRootWorkspacePath = selectedRoot?.path ?? null;
+
   useEffect(() => {
     codeWorkspaceStateCache.set(projectId, {
       activePath,
@@ -126,9 +118,6 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
       selectedRootPath,
       sidebarWidth,
       tabs,
-      tree,
-      treeError,
-      treeLoaded,
       uncommittedChangesExpanded,
       committedChangesExpanded,
     });
@@ -139,35 +128,9 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     selectedRootPath,
     sidebarWidth,
     tabs,
-    tree,
-    treeError,
-    treeLoaded,
     uncommittedChangesExpanded,
     committedChangesExpanded,
   ]);
-
-  useEffect(() => {
-    let isDisposed = false;
-    let unlisten: (() => void) | null = null;
-    void listen<CodeWorkspaceRootsUpdatedEvent>(
-      CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
-      (event) => {
-        if (event.payload.projectId === projectId) {
-          setWorkspaceRoots(event.payload.roots);
-        }
-      },
-    ).then((nextUnlisten) => {
-      if (isDisposed) {
-        nextUnlisten();
-      } else {
-        unlisten = nextUnlisten;
-      }
-    });
-    return () => {
-      isDisposed = true;
-      unlisten?.();
-    };
-  }, [projectId]);
 
   useEffect(
     () => () => {
@@ -175,12 +138,6 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     },
     [],
   );
-
-  const selectedRootWorkspacePath = selectedRoot?.path ?? null;
-  const translateRef = useRef(t);
-  useEffect(() => {
-    translateRef.current = t;
-  }, [t]);
 
   // 变更视图数据：进入变更视图或切换工作区时拉取一次；条件轮询由下方
   // useChangesAutoRefresh 按可见性 × running turn 驱动，复用本 hook 的 refresh*。
@@ -226,92 +183,14 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     clear: clearDiff,
   } = useCodeWorkspaceDiff(projectId, selectedRootWorkspacePath);
 
-  // 已缓存且加载过的树直接复用，切页回来不强制重拉；换 root / 手动刷新另走入口。
-  // setState 放进 Promise 微任务，避免 react-hooks/set-state-in-effect。
-  // 依赖仅用 path 字符串 + treeLoaded，避免 t / root 对象引用抖动触发重复请求。
-  useEffect(() => {
-    if (!selectedRootWorkspacePath || treeLoaded) return;
-
-    let isCurrent = true;
-    const requestSequence = treeRequestSequenceRef.current + 1;
-    treeRequestSequenceRef.current = requestSequence;
-    const workspacePath = selectedRootWorkspacePath;
-
-    void Promise.resolve()
-      .then(() => {
-        if (!isCurrent) return null;
-        setIsTreeLoading(true);
-        setTreeError(null);
-        return getProjectWorktreeFileTree({
-          projectId,
-          workspacePath,
-        });
-      })
-      .then((response) => {
-        if (
-          !isCurrent ||
-          treeRequestSequenceRef.current !== requestSequence ||
-          !response
-        ) {
-          return;
-        }
-        setTree(response.nodes);
-        setTreeError(null);
-        setTreeLoaded(true);
-      })
-      .catch((error) => {
-        if (!isCurrent || treeRequestSequenceRef.current !== requestSequence) {
-          return;
-        }
-        setTreeError(translateRef.current(error));
-        setTreeLoaded(true);
-      })
-      .finally(() => {
-        if (!isCurrent || treeRequestSequenceRef.current !== requestSequence) {
-          return;
-        }
-        setIsTreeLoading(false);
-        setIsTreeRefreshing(false);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [projectId, selectedRootWorkspacePath, treeLoaded]);
-
-  const refreshTree = useCallback(() => {
-    if (!selectedRootWorkspacePath || isTreeLoading || isTreeRefreshing) {
-      return;
-    }
-
-    const requestSequence = treeRequestSequenceRef.current + 1;
-    treeRequestSequenceRef.current = requestSequence;
-    const workspacePath = selectedRootWorkspacePath;
-
-    setIsTreeRefreshing(true);
-    setTreeError(null);
-
-    void getProjectWorktreeFileTree({
+  // files 视图文件树数据源：VS Code 式自动检测——进入视图 / 切根强制拉取，可见时
+  // 5s 定时轮询（signature 去重），变更数据驱动文件树 A/M/D 徽标。轮询替代手动刷新。
+  const { tree, treeError, isTreeLoading, changedFileKinds } =
+    useCodeWorkspaceFileTree(
       projectId,
-      workspacePath,
-    })
-      .then((response) => {
-        if (treeRequestSequenceRef.current !== requestSequence) return;
-        setTree(response.nodes);
-        setTreeError(null);
-        setTreeLoaded(true);
-      })
-      .catch((error) => {
-        if (treeRequestSequenceRef.current !== requestSequence) return;
-        setTreeError(translateRef.current(error));
-        setTreeLoaded(true);
-      })
-      .finally(() => {
-        if (treeRequestSequenceRef.current !== requestSequence) return;
-        setIsTreeLoading(false);
-        setIsTreeRefreshing(false);
-      });
-  }, [isTreeLoading, isTreeRefreshing, projectId, selectedRootWorkspacePath]);
+      selectedRootWorkspacePath,
+      view === "files",
+    );
 
   // 切回代码页时复检已打开文件：缓存内容先展示，再异步校验是否被删除。
   useEffect(() => {
@@ -372,21 +251,42 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount/root revalidation
   }, [fileNotFoundMessage, projectId, selectedRoot?.path, t]);
 
-  const selectRoot = (root: CodeWorkspaceRoot) => {
-    openFilePathsRef.current.clear();
-    activePathRef.current = null;
-    treeRequestSequenceRef.current += 1;
-    setSelectedRootPath(root.path);
-    setTabs([]);
-    setActivePath(null);
-    setTree([]);
-    setTreeError(null);
-    setTreeLoaded(false);
-    setIsTreeLoading(true);
-    setIsTreeRefreshing(false);
-    setOpenFolders({});
-    clearDiff();
-  };
+  const selectRoot = useCallback(
+    (root: CodeWorkspaceRoot) => {
+      openFilePathsRef.current.clear();
+      activePathRef.current = null;
+      setSelectedRootPath(root.path);
+      setTabs([]);
+      setActivePath(null);
+      setOpenFolders({});
+      clearDiff();
+      // 文件树由 useCodeWorkspaceFileTree 在 workspacePath 变化时自动重拉。
+    },
+    [clearDiff],
+  );
+
+  // 异常处理：选中的 worktree 分支被删（roots 更新后不再存在）→ 自动切到默认分支
+  // （项目根，即当前分支）；默认分支也不存在 → 清空选中与已打开内容，显示为空。
+  // selectedRootPath 已为 null 时保持空态，不再自动挑选，避免与「显示为空」诉求冲突。
+  // setState 放进微任务，避免 react-hooks/set-state-in-effect。
+  useEffect(() => {
+    if (selectedRootPath === null || workspaceRoots.length === 0) return;
+    if (workspaceRoots.some((root) => root.path === selectedRootPath)) return;
+    const projectRoot = workspaceRoots.find((root) => root.isProjectRoot);
+    void Promise.resolve().then(() => {
+      if (projectRoot) {
+        selectRoot(projectRoot);
+      } else {
+        openFilePathsRef.current.clear();
+        activePathRef.current = null;
+        setSelectedRootPath(null);
+        setTabs([]);
+        setActivePath(null);
+        setOpenFolders({});
+        clearDiff();
+      }
+    });
+  }, [workspaceRoots, selectedRootPath, selectRoot, clearDiff]);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.filePath === activePath) ?? null,
@@ -532,29 +432,10 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          {view === "files" ? (
-            <button
-              aria-label={messages.agentsFeature.refreshFileTree}
-              className="code-workspace__refresh"
-              disabled={!selectedRoot || isTreeLoading || isTreeRefreshing}
-              type="button"
-              onClick={refreshTree}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                className={
-                  isTreeRefreshing
-                    ? "code-workspace__refresh-icon--spin"
-                    : undefined
-                }
-                size={15}
-                strokeWidth={1.8}
-              />
-            </button>
-          ) : null}
         </div>
         {view === "files" ? (
           <FileTreePanel
+            changedFileKinds={changedFileKinds}
             errorMessage={treeError}
             fileTree={tree}
             initialOpenState={openFolders}
@@ -885,7 +766,9 @@ function findNode(
 function selectInitialRoot(
   roots: CodeWorkspaceRoot[],
 ): CodeWorkspaceRoot | null {
-  return roots.find((root) => root.isProjectRoot) ?? roots[0] ?? null;
+  // 默认分支 = 项目根（即仓库当前分支）；项目根不存在时返回 null（显示为空），
+  // 不回退到 roots[0]，与「默认分支不存在则显示为空」诉求一致。
+  return roots.find((root) => root.isProjectRoot) ?? null;
 }
 
 function resolveFileLoadErrorMessage(

@@ -17,7 +17,14 @@ import type { CSSProperties } from "react";
 import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
 
-import type { WorkspaceFileTreeNode } from "./workspace-commands";
+import type {
+  WorkspaceChangeKind,
+  WorkspaceFileTreeNode,
+} from "./workspace-commands";
+import {
+  getChangeKindStatusClassName,
+  getChangeKindStatusLabel,
+} from "./workspace-change-status";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -43,6 +50,8 @@ export interface FileTreePanelProps {
   onOpenStateChange?: (openState: FileTreeOpenState) => void;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
+  /** 文件路径 → 变更类型（git status），用于在文件名右侧绘制 A/M/D 等状态徽标。 */
+  changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
 }
 
 interface FileTreeContextMenuState {
@@ -65,6 +74,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   onOpenFile,
   onOpenStateChange,
   workspacePath,
+  changedFileKinds,
 }: FileTreePanelProps) {
   const { messages } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -130,11 +140,12 @@ export const FileTreePanel = memo(function FileTreePanel({
     (props: NodeRendererProps<WorkspaceFileTreeNode>) => (
       <FileTreeRow
         {...props}
+        changedFileKinds={changedFileKinds}
         onOpenFile={onOpenFile}
         onContextMenuNode={handleContextMenuNode}
       />
     ),
-    [handleContextMenuNode, onOpenFile],
+    [changedFileKinds, handleContextMenuNode, onOpenFile],
   );
 
   const handleCopy = useCallback(
@@ -236,6 +247,7 @@ export const FileTreePanel = memo(function FileTreePanel({
 });
 
 interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
+  changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onContextMenuNode: (
     node: WorkspaceFileTreeNode,
@@ -246,6 +258,7 @@ interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
 
 function FileTreeRow({
   node,
+  changedFileKinds,
   onOpenFile,
   onContextMenuNode,
   style,
@@ -306,7 +319,22 @@ function FileTreeRow({
       />
       <FileTypeIcon fileName={node.data.name} />
       <span>{node.data.name}</span>
+      {changedFileKinds?.has(node.data.path) ? (
+        <FileTreeStatusBadge kind={changedFileKinds.get(node.data.path)!} />
+      ) : null}
     </button>
+  );
+}
+
+/** 文件树行尾的变更状态徽标：复用变更视图的 A/M/D 字样与配色（绿 A、金黄 M、红 D）。 */
+export function FileTreeStatusBadge({ kind }: { kind: WorkspaceChangeKind }) {
+  return (
+    <span
+      aria-label={getChangeKindStatusLabel(kind)}
+      className={`session-file-tree__status ${getChangeKindStatusClassName(kind)}`}
+    >
+      {getChangeKindStatusLabel(kind)}
+    </span>
   );
 }
 

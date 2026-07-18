@@ -4,11 +4,15 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import {
+  getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
 } from "../../shared/workspace/workspace-commands";
-import { resetCodeWorkspaceStateCacheForTests } from "./code-workspace-cache";
+import {
+  codeWorkspaceStateCache,
+  resetCodeWorkspaceStateCacheForTests,
+} from "./code-workspace-cache";
 import { CodeWorkspace } from "./code-workspace";
 
 // 捕获 Monaco Editor 实际接收到的 theme prop，用于断言代码浏览器跟随应用明暗主题。
@@ -26,6 +30,7 @@ vi.mock("@monaco-editor/react", () => ({
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
+  getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
   listCodeWorkspaceRoots: vi.fn(),
   readProjectWorktreeFile: vi.fn(),
@@ -120,24 +125,33 @@ describe("CodeWorkspace", () => {
     resetCodeWorkspaceStateCacheForTests();
     editorThemeProp.current = undefined;
     window.localStorage.clear();
+    vi.mocked(listCodeWorkspaceRoots).mockReset();
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots });
     vi.mocked(getProjectWorktreeFileTree).mockReset();
     vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
       nodes: [],
+      signature: "empty",
+    });
+    vi.mocked(getProjectWorktreeChanges).mockReset();
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [],
       signature: "empty",
     });
     vi.mocked(readProjectWorktreeFile).mockReset();
     vi.mocked(readProjectWorktreeFile).mockResolvedValue(fileContent);
   });
 
-  it("uses the workspace snapshot returned when the project opened", () => {
+  it("renders the workspace snapshot immediately and refreshes roots on mount", () => {
     render(
       <I18nProvider initialLocale="en">
         <CodeWorkspace projectId={1} roots={roots} view="files" />
       </I18nProvider>,
     );
 
+    // 首帧用 roots 快照立即渲染当前分支，消除等待 IPC 的空窗。
     expect(screen.getByText("main")).toBeInTheDocument();
-    expect(listCodeWorkspaceRoots).not.toHaveBeenCalled();
+    // 挂载即主动拉取最新 roots，修正其它 Activity 期间 worktree 增删导致的快照过期。
+    expect(listCodeWorkspaceRoots).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the content area empty when no file is open", () => {
@@ -264,61 +278,14 @@ describe("CodeWorkspace", () => {
     expect(alert).toHaveClass("code-workspace__file-error");
   });
 
-  it("reuses the cached file tree after remounting without refetching", async () => {
-    const treeNodes = [
-      {
-        id: "src",
-        name: "src",
-        path: "src",
-        kind: "directory" as const,
-        children: [],
-      },
-    ];
-    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
-      nodes: treeNodes,
-      signature: "sig-1",
-    });
-
-    const view = render(
-      <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} view="files" />
-      </I18nProvider>,
-    );
-
-    await waitFor(() => {
-      expect(getProjectWorktreeFileTree).toHaveBeenCalled();
-    });
-    // 等待首轮加载结束，确保 treeLoaded 写入缓存。
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Refresh file tree" }),
-      ).toBeEnabled();
-    });
-
-    view.unmount();
-    vi.mocked(getProjectWorktreeFileTree).mockClear();
-
-    render(
-      <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} view="files" />
-      </I18nProvider>,
-    );
-
-    expect(getProjectWorktreeFileTree).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Refresh file tree" }),
-    ).toBeEnabled();
-  });
-
-  it("refetches the file tree when the refresh button is clicked", async () => {
-    const user = userEvent.setup();
+  it("fetches the file tree and change badges on mount via auto-refresh", async () => {
     vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
       nodes: [
         {
           id: "src",
           name: "src",
           path: "src",
-          kind: "directory",
+          kind: "directory" as const,
           children: [],
         },
       ],
@@ -331,34 +298,61 @@ describe("CodeWorkspace", () => {
       </I18nProvider>,
     );
 
+    // files 视图挂载即自动拉取文件树与变更（徽标数据），替代手动刷新。
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Refresh file tree" }),
-      ).toBeEnabled();
+      expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
     });
-
-    vi.mocked(getProjectWorktreeFileTree).mockClear();
-    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
-      nodes: [
-        {
-          id: "lib",
-          name: "lib",
-          path: "lib",
-          kind: "directory",
-          children: [],
-        },
-      ],
-      signature: "sig-2",
-    });
-
-    await user.click(screen.getByRole("button", { name: "Refresh file tree" }));
-
     await waitFor(() => {
-      expect(getProjectWorktreeFileTree).toHaveBeenCalledTimes(1);
+      expect(getProjectWorktreeChanges).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
     });
-    expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
-      projectId: 1,
-      workspacePath: "/tmp/redwhisk",
+  });
+
+  it("switches to the default branch when the selected worktree disappears", async () => {
+    const allRoots = [
+      { branch: "main", path: "/tmp/redwhisk", isProjectRoot: true },
+      {
+        branch: "issue-1",
+        path: "/tmp/redwhisk.wt/issue-1",
+        isProjectRoot: false,
+      },
+    ];
+    // 预设缓存：用户上次选中的是 issue-1 worktree。
+    codeWorkspaceStateCache.set(1, {
+      activePath: null,
+      openFolders: {},
+      selectedRootPath: "/tmp/redwhisk.wt/issue-1",
+      sidebarWidth: 400,
+      tabs: [],
+      uncommittedChangesExpanded: true,
+      committedChangesExpanded: true,
+    });
+    // 挂载时 roots hook 拉回的 roots 已不含 issue-1（worktree 被删除）。
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({
+      roots: [allRoots[0]],
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeWorkspace projectId={1} roots={allRoots} view="files" />
+      </I18nProvider>,
+    );
+
+    // 选中分支被删 → 自动切到默认分支（项目根 main），下拉显示 main。
+    await waitFor(() => {
+      expect(screen.getByText("main")).toBeInTheDocument();
+    });
+    // 文件树按切换后的 workspacePath（项目根）重新拉取。
+    await waitFor(() => {
+      expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
     });
   });
 
@@ -423,7 +417,7 @@ describe("CodeWorkspace", () => {
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
   });
 
-  it("renders the file tree and the refresh button under view='files'", () => {
+  it("renders the file tree under view='files' without a manual refresh button", () => {
     render(
       <I18nProvider initialLocale="en">
         <CodeWorkspace projectId={1} roots={roots} view="files" />
@@ -433,12 +427,13 @@ describe("CodeWorkspace", () => {
     expect(
       screen.getByRole("button", { name: "Open file" }),
     ).toBeInTheDocument();
+    // 刷新按钮已移除：文件树由 VS Code 式自动检测轮询维护。
     expect(
-      screen.getByRole("button", { name: "Refresh file tree" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Refresh file tree" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("renders the changes view without a refresh button under view='changes'", () => {
+  it("renders the changes view without a file tree or refresh button", () => {
     render(
       <I18nProvider initialLocale="en">
         <CodeWorkspace projectId={1} roots={roots} view="changes" />
@@ -448,7 +443,7 @@ describe("CodeWorkspace", () => {
     expect(screen.getByText("Changes View")).toBeInTheDocument();
     // 变更视图主区渲染单 diff 面板空态（未选中变更文件）。
     expect(screen.getByText("Select a changed file.")).toBeInTheDocument();
-    // 文件树与文件树刷新按钮在 changes 视图下不渲染。
+    // 文件树与刷新按钮在 changes 视图下不渲染。
     expect(
       screen.queryByRole("button", { name: "Open file" }),
     ).not.toBeInTheDocument();

@@ -3,7 +3,8 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
-import { FileTreePanel } from "./file-tree-panel";
+import type { WorkspaceChangeKind } from "./workspace-commands";
+import { FileTreePanel, FileTreeStatusBadge } from "./file-tree-panel";
 
 const treeHeights: number[] = [];
 const treeRowRenderers: ReactNode[] = [];
@@ -179,3 +180,20 @@ describe("FileTreePanel", () => {
 function renderWithI18n(component: ReactNode) {
   return render(<I18nProvider fixedLocale="en">{component}</I18nProvider>);
 }
+
+describe("FileTreeStatusBadge", () => {
+  it.each([
+    ["added", "A", "session-commit-file__status--added"],
+    ["untracked", "A", "session-commit-file__status--added"],
+    ["modified", "M", "session-commit-file__status--modified"],
+    ["deleted", "D", "session-commit-file__status--deleted"],
+  ] as const)(
+    "renders the %s status with letter %s and matching color class",
+    (kind, letter, colorClass) => {
+      render(<FileTreeStatusBadge kind={kind as WorkspaceChangeKind} />);
+      const badge = screen.getByText(letter);
+      expect(badge).toHaveClass("session-file-tree__status");
+      expect(badge).toHaveClass(colorClass);
+    },
+  );
+});

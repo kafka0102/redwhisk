@@ -1,7 +1,4 @@
-import type {
-  WorkspaceFileContent,
-  WorkspaceFileTreeNode,
-} from "../../shared/workspace/workspace-commands";
+import type { WorkspaceFileContent } from "../../shared/workspace/workspace-commands";
 
 export interface CodeFileTab {
   content: WorkspaceFileContent | null;
@@ -22,10 +19,6 @@ export interface CachedCodeWorkspaceState {
   selectedRootPath: string | null;
   sidebarWidth: number;
   tabs: CodeFileTab[];
-  tree: WorkspaceFileTreeNode[];
-  treeError: string | null;
-  /** 当前 root 是否已成功/失败加载过树；用于避免切页回来强制重拉。 */
-  treeLoaded: boolean;
   /** 「变更」视图下「未提交变更」折叠面板是否展开，默认展开。 */
   uncommittedChangesExpanded: boolean;
   /** 「变更」视图下「已提交变更」折叠面板是否展开，默认展开。 */

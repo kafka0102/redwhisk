@@ -11,11 +11,14 @@ import { useState } from "react";
 import { useI18n } from "../i18n/i18n";
 import type {
   WorkspaceChangedFile,
-  WorkspaceChangeKind,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
   WorkspaceCommitStatus,
 } from "./workspace-commands";
+import {
+  getChangeKindStatusClassName,
+  getChangeKindStatusLabel,
+} from "./workspace-change-status";
 
 interface CommittedChangesTimelineProps {
   commits: WorkspaceCommitRecord[];
@@ -234,42 +237,6 @@ export function ChangedFileRow({
 function getParentPath(filePath: string): string {
   const lastSlashIndex = filePath.lastIndexOf("/");
   return lastSlashIndex >= 0 ? filePath.slice(0, lastSlashIndex) : "";
-}
-
-function getChangeKindStatusLabel(kind: WorkspaceChangeKind): string {
-  switch (kind) {
-    case "added":
-    case "untracked":
-      return "A";
-    case "deleted":
-      return "D";
-    case "renamed":
-      return "R";
-    case "copied":
-      return "C";
-    case "binary":
-      return "X";
-    case "modified":
-      return "M";
-  }
-}
-
-function getChangeKindStatusClassName(kind: WorkspaceChangeKind): string {
-  switch (kind) {
-    case "modified":
-      return "session-commit-file__status--modified";
-    case "added":
-    case "untracked":
-      return "session-commit-file__status--added";
-    case "renamed":
-      return "session-commit-file__status--renamed";
-    case "copied":
-      return "session-commit-file__status--copied";
-    case "deleted":
-      return "session-commit-file__status--deleted";
-    case "binary":
-      return "session-commit-file__status--unknown";
-  }
 }
 
 function renderCommitFileIcon(status: WorkspaceCommitStatus) {
