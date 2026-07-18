@@ -3,4 +3,5 @@
 
 pub mod app_update;
 pub mod project;
+pub mod project_terminal;
 pub mod settings;

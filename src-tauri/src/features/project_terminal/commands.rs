@@ -3,7 +3,7 @@ use tauri::State;
 
 use crate::agent::pty_session_manager::TerminalBackgroundTheme;
 use crate::app_state::AppState;
-use crate::core::project_terminal_service::ProjectTerminalService;
+use super::service::ProjectTerminalService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,

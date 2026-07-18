@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::agent::pty_session_manager::PtySessionManager;
-use crate::core::project_terminal_service::{ProjectTerminalRegistry, ProjectTerminalService};
+use crate::features::project_terminal::{ProjectTerminalRegistry, ProjectTerminalService};
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;

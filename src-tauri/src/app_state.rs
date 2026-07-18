@@ -5,7 +5,7 @@ use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::agent_skill::index::AgentSkillIndex;
 use crate::core::local_data_service::LocalDataService;
-use crate::core::project_terminal_service::ProjectTerminalRegistry;
+use crate::features::project_terminal::ProjectTerminalRegistry;
 
 pub struct AppState {
     pub agent_skills: AgentSkillIndex,

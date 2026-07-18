@@ -43,7 +43,7 @@ pub fn run() {
             // 先初始化全局 Logger，后续启动流程即可记录关键操作与错误日志。
             Logger::init(data_dir.clone());
             // 启动即清空所有终端历史日志，软件再次打开不保留上次会话输出。
-            core::project_terminal_service::purge_terminal_log_dir(&data_dir);
+            features::project_terminal::purge_terminal_log_dir(&data_dir);
             let app_handle = app.handle().clone();
             let latest_output_writer = LatestOutputWriter::new(data_dir);
             let state = app.state::<AppState>();
@@ -73,23 +73,23 @@ pub fn run() {
             features::project::commands::open_project_window,
             features::project::commands::update_project_settings,
             features::project::commands::validate_project_repo_path,
-            commands::project_terminal_commands::create_project_terminal,
-            commands::project_terminal_commands::create_temporary_project_terminal,
-            commands::project_terminal_commands::list_project_terminals,
-            commands::project_terminal_commands::read_project_terminal,
-            commands::project_terminal_commands::write_project_terminal,
-            commands::project_terminal_commands::restore_project_terminal,
-            commands::project_terminal_commands::subscribe_project_terminal_output,
-            commands::project_terminal_commands::unsubscribe_project_terminal_output,
-            commands::project_terminal_commands::resize_project_terminal,
-            commands::project_terminal_commands::close_project_terminal,
-            commands::project_terminal_commands::update_project_terminal_config,
-            commands::project_terminal_commands::delete_project_terminal_config,
-            commands::project_terminal_commands::list_project_terminal_shortcut_commands,
-            commands::project_terminal_commands::save_project_terminal_shortcut_command,
-            commands::project_terminal_commands::delete_project_terminal_shortcut_command,
-            commands::project_terminal_commands::read_project_terminal_cwd,
-            commands::project_terminal_commands::set_app_theme,
+            features::project_terminal::commands::create_project_terminal,
+            features::project_terminal::commands::create_temporary_project_terminal,
+            features::project_terminal::commands::list_project_terminals,
+            features::project_terminal::commands::read_project_terminal,
+            features::project_terminal::commands::write_project_terminal,
+            features::project_terminal::commands::restore_project_terminal,
+            features::project_terminal::commands::subscribe_project_terminal_output,
+            features::project_terminal::commands::unsubscribe_project_terminal_output,
+            features::project_terminal::commands::resize_project_terminal,
+            features::project_terminal::commands::close_project_terminal,
+            features::project_terminal::commands::update_project_terminal_config,
+            features::project_terminal::commands::delete_project_terminal_config,
+            features::project_terminal::commands::list_project_terminal_shortcut_commands,
+            features::project_terminal::commands::save_project_terminal_shortcut_command,
+            features::project_terminal::commands::delete_project_terminal_shortcut_command,
+            features::project_terminal::commands::read_project_terminal_cwd,
+            features::project_terminal::commands::set_app_theme,
             commands::issue_commands::list_issues,
             commands::issue_commands::create_issue,
             commands::issue_commands::update_issue,
