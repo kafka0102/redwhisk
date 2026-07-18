@@ -123,8 +123,10 @@ check_allowlist_no_new_files() {
 }
 
 collect_changed_rust_files() {
-  git -C "$REPO_ROOT" diff --name-only HEAD -- '*.rs' 2>/dev/null || true
-  git -C "$REPO_ROOT" ls-files --others --exclude-standard -- '*.rs' 2>/dev/null || true
+  # pathspec 用目录前缀 src-tauri/src（不用 '*.rs' 全仓匹配，否则会波及 src-tauri/tests/ 等测试文件；
+  # 也不用 'src-tauri/src/*.rs'，git pathspec 的 * 不跨 /，会漏掉子目录）。非 .rs 由 report_file 守卫过滤。
+  git -C "$REPO_ROOT" diff --name-only HEAD -- src-tauri/src 2>/dev/null || true
+  git -C "$REPO_ROOT" ls-files --others --exclude-standard -- src-tauri/src 2>/dev/null || true
 }
 
 usage() {
@@ -168,6 +170,7 @@ case "$mode" in
     while IFS= read -r f; do
       report_file "$f"
     done < <(find "$SRC_ROOT" -name '*.rs' -type f | sort)
+    printf '未豁免超阈值: %s 个（报告模式，不阻断）\n' "$VIOL"
     exit 0
     ;;
   files)
