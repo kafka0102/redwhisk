@@ -12,7 +12,7 @@ use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::app_state::AppState;
-use crate::core::agent_session_service::AgentSessionService;
+use super::service::AgentSessionService;
 use crate::features::issue::{analyze_attachment, sanitize_attachment_file_name};
 use crate::logging::CommandResultExt;
 use crate::types::agent_profile::AgentType;
@@ -123,7 +123,7 @@ pub async fn start_agent_session(
             &agent_sessions,
             &agent_event_broadcaster,
         )?;
-        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(
+        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(
             &app,
             &event_data_dir,
             project_id,
@@ -376,7 +376,7 @@ pub async fn start_structured_agent_session(
             Some(result.session_id),
             "session_started",
         );
-        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(
+        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(
             &app,
             &event_data_dir,
             project_id,
@@ -419,7 +419,7 @@ pub async fn resume_structured_agent_session(
             Some(result.session_id),
             "session_resumed",
         );
-        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(
+        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(
             &app,
             &event_data_dir,
             project_id,
@@ -515,7 +515,7 @@ pub async fn send_agent_message(
         let _ = service.record_follow_up_turn_source(input.session_id);
         handle
             .send_message(input.message, input.attachments)
-            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
+            .map_err(super::service::agent_session_error_to_command_error)
     })
     .await
     .map_err(|error| {
@@ -551,7 +551,7 @@ pub async fn cancel_agent_turn(
                 Ok(())
             }
             Err(error) => {
-                Err(crate::core::agent_session_service::agent_session_error_to_command_error(error))
+                Err(super::service::agent_session_error_to_command_error(error))
             }
         }
     })
@@ -593,7 +593,7 @@ pub async fn respond_agent_permission(
             })?;
         handle
             .respond_permission(&input.request_id, decision)
-            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
+            .map_err(super::service::agent_session_error_to_command_error)
     })
     .await
     .map_err(|error| {
@@ -622,7 +622,7 @@ pub async fn set_agent_model(
         // 模型写盘由 handle adapter 内部完成（ADR-0011）。
         handle
             .set_model(input.model_id)
-            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
+            .map_err(super::service::agent_session_error_to_command_error)
     })
     .await
     .map_err(|error| {
@@ -651,7 +651,7 @@ pub async fn set_agent_thinking(
         // effort 写盘由 handle adapter 内部完成（ADR-0011）；Claude 仍返回不支持。
         handle
             .set_effort(input.effort)
-            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
+            .map_err(super::service::agent_session_error_to_command_error)
     })
     .await
     .map_err(|error| {
@@ -679,7 +679,7 @@ pub async fn set_agent_mode(
         let handle = require_structured_handle(&agent_sessions, input.session_id)?;
         handle
             .set_mode(&input.mode_id)
-            .map_err(crate::core::agent_session_service::agent_session_error_to_command_error)
+            .map_err(super::service::agent_session_error_to_command_error)
     })
     .await
     .map_err(|error| {

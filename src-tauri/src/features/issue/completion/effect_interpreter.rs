@@ -11,7 +11,7 @@
 //! - 可测依赖按 local-substitutable：内存 SQLite + temp git + fake `AgentSessionHandle`。
 
 use crate::agent::session_registry::AgentSessionRegistry;
-use crate::core::agent_session_service::agent_session_error_to_command_error;
+use crate::features::agent_session::agent_session_error_to_command_error;
 use crate::features::issue::completion::state_machine::{
     CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
     Transition,

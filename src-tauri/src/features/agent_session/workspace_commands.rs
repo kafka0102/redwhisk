@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 
 use crate::app_state::AppState;
-use crate::core::session_workspace_service::SessionWorkspaceService;
+use super::workspace::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,

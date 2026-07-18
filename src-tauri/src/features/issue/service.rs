@@ -8,7 +8,7 @@ use rusqlite::OptionalExtension;
 
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
-use crate::core::agent_session_service::{
+use crate::features::agent_session::{
     build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
     IssueSessionArchive,
 };
@@ -479,7 +479,7 @@ impl<'connection> IssueService<'connection> {
             .map_err(issue_database_error)?
             .unwrap_or_default();
 
-        let Some(text) = crate::core::agent_session_service::read_last_assistant_text_for_turn(
+        let Some(text) = crate::features::agent_session::read_last_assistant_text_for_turn(
             &session.log_path,
             turn_id,
         ) else {
@@ -2743,7 +2743,7 @@ mod tests {
     use super::IssueService;
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::agent::session_registry::AgentSessionRegistry;
-    use crate::core::agent_session_service::build_issue_archive_log_path;
+    use crate::features::agent_session::build_issue_archive_log_path;
     use crate::db::issue_repository::IssueRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
@@ -2868,7 +2868,7 @@ mod tests {
 
     #[test]
     fn read_last_assistant_text_for_turn_returns_last_match() {
-        use crate::core::agent_session_service::read_last_assistant_text_for_turn;
+        use crate::features::agent_session::read_last_assistant_text_for_turn;
         let temp = tempdir().expect("temp dir");
         let log = temp.path().join("session.log");
         let line = |turn_id: &str, text: &str| -> String {

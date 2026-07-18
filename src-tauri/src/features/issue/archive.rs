@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::core::agent_session_service::IssueSessionArchive;
+use crate::features::agent_session::IssueSessionArchive;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
 
 use crate::app_state::AppState;
-use crate::core::agent_session_service::AgentSessionService;
+use super::service::AgentSessionService;
 use crate::types::agent_session::AgentSessionListResponse;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 

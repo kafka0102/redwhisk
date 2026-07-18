@@ -5,7 +5,7 @@ use crate::agent::session_registry::AgentSessionRegistry;
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::core::agent_session_service::AgentSessionService;
+use crate::features::agent_session::AgentSessionService;
 use super::service::IssueService;
 use crate::types::agent_session::AgentSessionStatus;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -426,7 +426,7 @@ pub async fn delete_issue(
             shutdown_runtime_session(&pty_sessions, &agent_sessions, session_id);
         }
 
-        crate::core::agent_session_service::remove_session_log_file(
+        crate::features::agent_session::remove_session_log_file(
             result.linked_session_log_path.as_deref(),
         );
 
@@ -480,7 +480,7 @@ pub async fn delete_issue_worktree(
     let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let result = AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)?;
-        crate::commands::session_workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
+        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
         Ok(result)
     })
     .await
