@@ -16,11 +16,12 @@ use crate::features::issue::completion::state_machine::{
     CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
     Transition,
 };
-use crate::features::issue::service::{
-    build_agent_commit_completion_prompt, current_epoch_millis, issue_database_error,
-    merge_block_from_worktree_error, reconcile_session_worktree, IssueService,
-    WorktreeMergeBlockDescription,
+use crate::features::issue::completion::flow::{
+    build_agent_commit_completion_prompt, current_epoch_millis,
+    merge_block_from_worktree_error, reconcile_session_worktree, WorktreeMergeBlockDescription,
 };
+use crate::features::issue::service::IssueService;
+use crate::features::issue::validation::issue_database_error;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::logging::info_kv;

@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
@@ -18,29 +17,22 @@ use crate::features::issue::completion::state_machine::{
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
-use crate::db::connection::DatabaseConfig;
 use crate::db::event_repository::EventRepository;
 use crate::db::issue_attachment_repository::IssueAttachmentRepository;
 use crate::db::issue_completion_flow_repository::{
     IssueCompletionFlowRecordInput, IssueCompletionFlowRepository,
 };
 use crate::db::issue_repository::IssueRepository;
-use crate::db::migrations::MigrationRunner;
-use crate::db::project_label_repository::{ProjectLabelRepository, ProjectLabelRow};
+use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::{read_git_snapshot, GitSnapshot};
-use crate::git::worktree::{
-    assess_missing_worktree, classify_merge_block, current_branch, inspect_execution_path,
-    reconcile_worktree, MergeBlockClassification, MissingWorktreeAssessment,
-    WorktreeReconcileRequest, GitWorktreeError,
-};
 use crate::logging::{info_kv, CommandResultExt};
 use crate::types::agent_session::{
     AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::completion_attempt::{
-    CompletionAttemptOption, CompletionAttemptRecord, CompletionAttemptResult,
+    CompletionAttemptOption, CompletionAttemptResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -48,9 +40,9 @@ use crate::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput,
     DeleteIssueResult, DeleteIssueWorktreeCleanup, DetectAgentCommitCompletionInput,
     DetectAgentCommitCompletionOutcome, DetectAgentCommitCompletionResult,
-    ExportIssueAttachmentInput, GetIssueSummaryInput, GetIssueTimelineInput, IssueAttachmentInput,
-    IssueAttachmentKind, IssueAttachmentPreview, IssueAttachmentRecord, IssueLabelRecord,
-    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryCompletionInfo, IssueSummaryRecord,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, GetIssueTimelineInput,
+    IssueAttachmentKind, IssueAttachmentPreview, IssueLabelRecord,
+    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryRecord,
     IssueTimelineActionType, IssueTimelineActor, IssueTimelineEntry, IssueTimelineResponse,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
@@ -63,6 +55,30 @@ use crate::types::issue_completion::{
 };
 use crate::types::session_event::SessionEventType;
 
+use super::archive::{
+    cleanup_runtime_issue_log, infer_data_dir_from_connection, open_issue_database,
+    rollback_issue_archive,
+};
+use super::attachment::{
+    analyze_attachment, cleanup_created_files, delete_attachment_files,
+    extract_issue_comment_from_assistant_text, infer_display_name, issue_io_error,
+    parse_attachment_ids, persist_new_attachments, read_previewable_text_file,
+    rewrite_attachment_tokens, save_issue_attachment_draft_in_data_dir, ResolvedAttachmentSource,
+};
+use super::completion::flow::{
+    ActualExecutionPath, build_agent_commit_completion_prompt, closed_session_completion_snapshot,
+    completion_detection_repo_path, completion_message, completion_session_close_reason,
+    completion_state_from_record, current_epoch_millis, current_epoch_millis_for_db,
+    derive_completion_event, format_agent_session_status_for_summary, format_git_operation_state,
+    gather_completion_world, is_session_closed_out, issue_status_to_str,
+    legacy_completion_flow_action_error, phase_to_completion_action, record_blocked_completion_attempt,
+    resolve_actual_execution_path, resolve_issue_summary_completion, workspace_mode_to_str,
+};
+use super::validation::{
+    invalid_issue_label, is_issue_label_accessible, issue_database_error, issue_git_error,
+    issue_not_found, serialize_label_ids, to_issue_label_record, validate_title,
+};
+
 pub struct IssueService<'connection> {
     pub(crate) issue_repository: IssueRepository<'connection>,
     issue_attachment_repository: IssueAttachmentRepository<'connection>,
@@ -74,24 +90,6 @@ struct AgentCommitContext {
     issue: IssueRecord,
     linked_session_id: i64,
     snapshot: GitSnapshot,
-}
-
-struct NewAttachmentPersistence {
-    temp_token: String,
-    attachment_id: i64,
-}
-
-pub(crate) struct AttachmentAnalysis {
-    pub(crate) kind: IssueAttachmentKind,
-    pub(crate) is_previewable: bool,
-}
-
-struct ResolvedAttachmentSource {
-    attachment_id: Option<i64>,
-    display_name: String,
-    absolute_path: String,
-    kind: IssueAttachmentKind,
-    is_previewable: bool,
 }
 
 impl<'connection> IssueService<'connection> {
@@ -2683,30 +2681,6 @@ impl<'connection> IssueService<'connection> {
     }
 }
 
-fn rollback_issue_archive(archive: Option<&IssueSessionArchive>) {
-    let Some(archive) = archive else {
-        return;
-    };
-    remove_issue_log_file(&archive.archive_path);
-}
-
-fn cleanup_runtime_issue_log(archive: Option<&IssueSessionArchive>) {
-    let Some(archive) = archive else {
-        return;
-    };
-    if archive.runtime_path != archive.archive_path {
-        remove_issue_log_file(&archive.runtime_path);
-    }
-}
-
-fn remove_issue_log_file(path: &str) {
-    match fs::remove_file(path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => {}
-    }
-}
-
 /// 仅当 session 为 RedWhisk 管理且具备完整 worktree 路径/分支信息时返回清理上下文。
 fn redwhisk_worktree_cleanup_from_session(
     repo_path: &str,
@@ -2727,798 +2701,6 @@ fn redwhisk_worktree_cleanup_from_session(
     })
 }
 
-fn infer_data_dir_from_connection(connection: &rusqlite::Connection) -> PathBuf {
-    connection
-        .path()
-        .filter(|path| !path.is_empty())
-        .and_then(|path| Path::new(path).parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from(".redwhisk"))
-}
-
-fn open_issue_database(
-    data_dir: impl AsRef<Path>,
-) -> Result<crate::db::connection::Database, CommandError> {
-    let database = DatabaseConfig::new(data_dir)
-        .open()
-        .map_err(CommandError::from)?;
-    MigrationRunner::default()
-        .run(&database.connection)
-        .map_err(|error| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
-
-    Ok(database)
-}
-
-pub(crate) fn reconcile_session_worktree(
-    repo_path: &str,
-    session: &AgentSessionRecord,
-) -> Result<(), GitWorktreeError> {
-    let Some(target_branch) = session
-        .origin_branch
-        .as_deref()
-        .or(session.target_branch.as_deref())
-    else {
-        return Ok(());
-    };
-    let Some(workspace_branch) = session.workspace_branch.as_deref() else {
-        return Ok(());
-    };
-    let Some(workspace_path) = session.workspace_path.as_deref() else {
-        return Ok(());
-    };
-
-    reconcile_worktree(WorktreeReconcileRequest {
-        repo_path: Path::new(repo_path),
-        workspace_path: Path::new(workspace_path),
-        workspace_branch,
-        target_branch,
-    })
-}
-
-pub(crate) struct WorktreeMergeBlockDescription {
-    pub(crate) reason: String,
-    pub(crate) message: String,
-}
-
-pub(crate) fn merge_block_from_worktree_error(
-    error: &GitWorktreeError,
-) -> WorktreeMergeBlockDescription {
-    let classification = classify_merge_block(error);
-    WorktreeMergeBlockDescription {
-        reason: classification.reason().to_string(),
-        message: merge_block_message(&classification, error),
-    }
-}
-
-fn merge_block_message(
-    classification: &MergeBlockClassification,
-    error: &GitWorktreeError,
-) -> String {
-    match classification {
-        MergeBlockClassification::TargetDirty { path, files } => format!(
-            "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先在目标分支工作区提交、暂存或丢弃这些改动：{files}。工作区：{path}"
-        ),
-        MergeBlockClassification::WorkspaceDirty { path, files } => format!(
-            "Agent worktree 存在未提交改动，无法自动合入目标分支。请先提交或处理这些改动：{files}。工作区：{path}"
-        ),
-        MergeBlockClassification::MergeConflict => {
-            "Agent worktree 合并发生冲突，请手动处理冲突。".to_string()
-        }
-        MergeBlockClassification::GitCommandFailed => {
-            format!("Agent worktree 合入失败：{error}")
-        }
-    }
-}
-
-fn redwhisk_missing_worktree_is_closed_out(
-    repo_path: &str,
-    session: &AgentSessionRecord,
-) -> Result<(), String> {
-    let target_branch = session
-        .origin_branch
-        .as_deref()
-        .or(session.target_branch.as_deref())
-        .ok_or_else(|| "缺失 RedWhisk worktree 的目标分支元数据。".to_string())?;
-    let workspace_branch = session
-        .workspace_branch
-        .as_deref()
-        .ok_or_else(|| "缺失 RedWhisk worktree 的工作分支元数据。".to_string())?;
-
-    match assess_missing_worktree(repo_path, target_branch, workspace_branch) {
-        Ok(MissingWorktreeAssessment::ClosedOut) => Ok(()),
-        Ok(MissingWorktreeAssessment::NotMerged {
-            workspace_branch,
-            target_branch,
-        }) => Err(format!(
-            "RedWhisk worktree 路径缺失，但工作分支 {workspace_branch} 尚未合入 {target_branch}。"
-        )),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-fn read_current_branch(repo_path: &str) -> Result<String, CommandError> {
-    current_branch(repo_path).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::IssueValidationFailed,
-            "当前 Project 的 Git 状态不可用。",
-        )
-        .with_reason("gitStatusUnavailable")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
-}
-
-fn completion_session_close_reason(option: CompletionAttemptOption) -> &'static str {
-    match option {
-        CompletionAttemptOption::CompleteManual => "manual_completion",
-        CompletionAttemptOption::CompleteClean => "clean_completion",
-    }
-}
-
-fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> CommandError {
-    let (message, reason) = match action {
-        CompleteIssueFlowAction::PromptDirtyDecision => ("当前仓库存在未提交改动，不能直接完成。", "dirtyRepoCannotComplete"),
-        CompleteIssueFlowAction::Blocked => ("当前 Git 正在进行中的操作阻止直接完成。", "gitOperationBlocking"),
-        _ => ("Issue 完成必须通过 complete_issue_flow 继续处理。", "mustUseCompletionFlow"),
-    };
-    CommandError::new(CommandErrorCode::IssueValidationFailed, message)
-        .with_reason(reason)
-        .with_detail(ErrorDetail::new("CompletionFlow").with_value("action", format!("{action:?}")))
-}
-
-fn validate_title(title: &str) -> Result<String, CommandError> {
-    let trimmed = title.trim();
-    if trimmed.is_empty() {
-        return Err(CommandError::new(
-            CommandErrorCode::IssueValidationFailed,
-            "Issue title 不能为空。",
-        ).with_reason("titleRequired")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "title")));
-    }
-
-    Ok(trimmed.to_string())
-}
-
-fn serialize_label_ids(label_ids: &[i64]) -> Result<String, CommandError> {
-    serde_json::to_string(label_ids).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
-}
-
-fn invalid_issue_label(label_id: i64, project_id: i64) -> CommandError {
-    CommandError::new(
-        CommandErrorCode::IssueValidationFailed,
-        "Issue labels 配置无效。",
-    ).with_reason("labelsInvalid")
-    .with_detail(ErrorDetail::new("IssueLabel").with_value("labelId", label_id))
-    .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
-}
-
-fn is_issue_label_accessible(project_id: i64, label: &ProjectLabelRow) -> bool {
-    match label.scope {
-        crate::types::project_label::ProjectLabelScope::Global => true,
-        crate::types::project_label::ProjectLabelScope::Project => {
-            label.project_id == Some(project_id)
-        }
-    }
-}
-
-fn to_issue_label_record(label: ProjectLabelRow) -> IssueLabelRecord {
-    IssueLabelRecord {
-        id: label.id,
-        name: label.name,
-        scope: label.scope,
-        project_id: label.project_id,
-        color: label.color,
-        workflow_skill: label.workflow_skill,
-    }
-}
-
-fn issue_not_found(issue_id: i64) -> CommandError {
-    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
-        .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
-}
-
-pub(crate) fn issue_database_error(error: rusqlite::Error) -> CommandError {
-    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-}
-
-fn issue_git_error(error: crate::git::status::GitStatusError) -> CommandError {
-    CommandError::new(
-        CommandErrorCode::IssueValidationFailed,
-        "当前 Project 的 Git 状态不可用。",
-    ).with_reason("gitStatusUnavailable")
-    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-}
-
-fn completion_state_from_record(record: &IssueCompletionFlowRecord) -> CompletionState {
-    CompletionState {
-        phase: record.phase,
-        dirty_decision: record.dirty_decision,
-        ignore_dirty: record.ignore_dirty,
-        worktree_cleanup_decision: record.worktree_cleanup_decision,
-        continue_after_commit: record.continue_after_commit,
-        actual_path: record.actual_path.clone(),
-        failure_reason: record.failure_reason.clone(),
-    }
-}
-
-fn gather_completion_world(
-    repo_path: &str,
-    issue: &IssueRecord,
-    session: &AgentSessionRecord,
-    actual: &ActualExecutionPath,
-    snapshot: GitSnapshot,
-    forced_option: Option<CompletionAttemptOption>,
-) -> CompletionWorld {
-    let workspace_missing = session.workspace_mode == WorkspaceMode::Worktree
-        && session
-            .workspace_path
-            .as_deref()
-            .is_some_and(|workspace_path| !Path::new(workspace_path).exists());
-    let owner = if actual.drifted {
-        WorktreeOwner::External
-    } else {
-        session.worktree_owner
-    };
-    let target_branch = session
-        .origin_branch
-        .clone()
-        .or_else(|| session.target_branch.clone());
-    let current_branch = if workspace_missing {
-        target_branch.clone().unwrap_or_default()
-    } else {
-        read_current_branch(&session.working_dir)
-            .unwrap_or_else(|_| target_branch.clone().unwrap_or_default())
-    };
-    let branch_mismatch = target_branch.as_deref() != Some(current_branch.as_str());
-    let missing_worktree_error = if workspace_missing && owner == WorktreeOwner::Redwhisk {
-        redwhisk_missing_worktree_is_closed_out(repo_path, session).err()
-    } else {
-        None
-    };
-    CompletionWorld {
-        issue_status: issue.status,
-        workspace_mode: session.workspace_mode,
-        workspace_missing,
-        owner,
-        target_branch,
-        current_branch: Some(current_branch),
-        branch_mismatch,
-        actual_path: actual.path.clone(),
-        drifted: actual.drifted,
-        session_closed_out: is_session_closed_out(session),
-        missing_worktree_error,
-        snapshot,
-        attempt_option: forced_option.unwrap_or(CompletionAttemptOption::CompleteManual),
-    }
-}
-
-fn derive_completion_event(
-    input: &CompleteIssueFlowInput,
-    state: &CompletionState,
-) -> CompletionEvent {
-    if state.phase == IssueCompletionPhase::ConfirmingContinueAfterCommit
-        && input.continue_after_commit.is_some()
-    {
-        return CompletionEvent::ContinueConfirmed {
-            proceed: input.continue_after_commit.unwrap(),
-        };
-    }
-    if state.phase == IssueCompletionPhase::ConfirmingWorktreeCleanup
-        && input.worktree_cleanup_decision.is_some()
-    {
-        return CompletionEvent::CleanupDecided {
-            cleanup: input.worktree_cleanup_decision.unwrap(),
-        };
-    }
-    if input.dirty_decision == Some(DirtyWorkspaceOption::Cancel) {
-        return CompletionEvent::DirtyDecided(DirtyWorkspaceOption::Cancel);
-    }
-    if matches!(
-        state.phase,
-        IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::PromptingDirtyDecision
-    ) && input.dirty_decision.is_some()
-    {
-        return CompletionEvent::DirtyDecided(input.dirty_decision.unwrap());
-    }
-    CompletionEvent::Begin
-}
-
-fn phase_to_completion_action(phase: IssueCompletionPhase) -> CompleteIssueFlowAction {
-    match phase {
-        IssueCompletionPhase::Completed => CompleteIssueFlowAction::Completed,
-        IssueCompletionPhase::Cancelled => CompleteIssueFlowAction::Cancelled,
-        IssueCompletionPhase::Blocked => CompleteIssueFlowAction::Blocked,
-        IssueCompletionPhase::PromptingDirtyDecision => CompleteIssueFlowAction::PromptDirtyDecision,
-        IssueCompletionPhase::AutoCommitting => CompleteIssueFlowAction::WaitingAutoCommit,
-        IssueCompletionPhase::ConfirmingWorktreeCleanup => {
-            CompleteIssueFlowAction::ConfirmWorktreeCleanup
-        }
-        IssueCompletionPhase::ConfirmingContinueAfterCommit => {
-            CompleteIssueFlowAction::ConfirmContinueAfterCommit
-        }
-        // 瞬态：单次 command 内穿越，不应作为终态出现；保守映射为 Completed。
-        IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::ReconcilingWorktree => {
-            CompleteIssueFlowAction::Completed
-        }
-    }
-}
-
-fn completion_message(
-    phase: IssueCompletionPhase,
-    merge_block: Option<&WorktreeMergeBlockDescription>,
-) -> String {
-    match phase {
-        IssueCompletionPhase::Completed => "Issue 已完成。".to_string(),
-        IssueCompletionPhase::Cancelled => "完成已取消，Issue 保持待验收。".to_string(),
-        IssueCompletionPhase::Blocked => match merge_block {
-            Some(block) => block.message.clone(),
-            None => "Agent worktree 缺失且无法确认分支已合入，请手动处理。".to_string(),
-        },
-        IssueCompletionPhase::PromptingDirtyDecision => {
-            "当前工作区存在未提交改动，请选择自动提交 / 不提交 / 取消。".to_string()
-        }
-        IssueCompletionPhase::AutoCommitting => {
-            "已请求 Agent 自动提交，请在 session 中完成提交后再次确认。".to_string()
-        }
-        IssueCompletionPhase::ConfirmingWorktreeCleanup => {
-            "当前使用外部 worktree，请确认是否合并并删除该 worktree。".to_string()
-        }
-        IssueCompletionPhase::ConfirmingContinueAfterCommit => {
-            "代码已提交成功。确定继续标记完成吗？".to_string()
-        }
-        IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::ReconcilingWorktree => {
-            "Issue 已完成。".to_string()
-        }
-    }
-}
-
-fn completion_detection_repo_path(project_repo_path: &str, session: &AgentSessionRecord) -> String {
-    if session.workspace_mode == WorkspaceMode::Worktree
-        && session
-            .workspace_path
-            .as_deref()
-            .is_some_and(|workspace_path| !Path::new(workspace_path).exists())
-    {
-        return project_repo_path.to_string();
-    }
-
-    session.working_dir.clone()
-}
-
-/// 完成时解析出的实际执行路径来源。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ActualPathSource {
-    /// 结构化 codex session 最近一条 shell 命令的 cwd（best-effort）。
-    CodexCwd,
-    /// session 启动记录的 `workspace_path`/`working_dir` 快照（PTY 或 cwd 不可得时）。
-    StartupSnapshot,
-    /// 用户在弹框中手填覆盖。
-    UserProvided,
-}
-
-/// 完成时解析出的 session 实际执行路径。
-///
-/// 用于：①未提交改动检测与漂移判定的路径基准；②前端弹框预填分支名；
-/// ③识别「current branch 启动但运行中漂移到新 worktree」的第三种情况。
-///
-/// `source`/`in_worktree`/`worktree_branch` 当前由单测与 Impl-D（合并基准）/前端
-/// （弹框预填）消费，非 test 构建仅写不读，故允许 dead_code。
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct ActualExecutionPath {
-    /// 解析出的实际路径（已去空白）。
-    pub path: String,
-    pub source: ActualPathSource,
-    /// 该路径是否位于附加 worktree（`--git-dir` 与 `--git-common-dir` 不同）。
-    pub in_worktree: bool,
-    /// 该 worktree 的 checkout 分支（非 worktree 时为 `None`）。
-    pub worktree_branch: Option<String>,
-    /// 实际路径与启动快照不同且位于 worktree → 运行中漂移到新 worktree。
-    pub drifted: bool,
-}
-
-/// 解析 session 完成时的实际执行路径（分层回退）。
-///
-/// 优先级：用户弹框手填 `input.actual_path` > 活跃结构化 session 的 `last_known_cwd`
-/// > 启动记录 `workspace_path`/`working_dir`。PTY session 与关闭的 session 取不到
-/// live cwd，回退启动快照。拿到路径后再判断是否在 worktree、是否相对启动路径漂移。
-fn resolve_actual_execution_path(
-    input: &CompleteIssueFlowInput,
-    session: &AgentSessionRecord,
-    agent_registry: &AgentSessionRegistry,
-) -> ActualExecutionPath {
-    let startup_path = session
-        .workspace_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .or_else(|| {
-            let working_dir = session.working_dir.trim();
-            (!working_dir.is_empty()).then_some(working_dir)
-        })
-        .unwrap_or_default()
-        .to_string();
-
-    let (path, source) = if let Some(user_path) = input
-        .actual_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-    {
-        (user_path.to_string(), ActualPathSource::UserProvided)
-    } else if let Some(cwd) = agent_registry
-        .get(session.id)
-        .and_then(|handle| handle.last_known_cwd())
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-    {
-        (cwd.to_string(), ActualPathSource::CodexCwd)
-    } else {
-        (startup_path.clone(), ActualPathSource::StartupSnapshot)
-    };
-
-    if path.is_empty() {
-        return ActualExecutionPath {
-            path,
-            source,
-            in_worktree: false,
-            worktree_branch: None,
-            drifted: false,
-        };
-    }
-
-    let facts = inspect_execution_path(&path, &startup_path);
-
-    ActualExecutionPath {
-        path,
-        source,
-        in_worktree: facts.in_worktree,
-        worktree_branch: facts.worktree_branch,
-        drifted: facts.drifted,
-    }
-}
-
-fn is_session_closed_out(session: &AgentSessionRecord) -> bool {
-    session.status != AgentSessionStatus::Running || session.closed_at.is_some()
-}
-
-fn closed_session_completion_snapshot() -> GitSnapshot {
-    GitSnapshot {
-        head: String::new(),
-        status_porcelain: String::new(),
-        changed_files: Vec::new(),
-        operation_state: GitOperationState::None,
-        is_clean: true,
-    }
-}
-
-fn issue_status_to_str(status: &IssueStatus) -> &'static str {
-    match status {
-        IssueStatus::Backlog => "backlog",
-        IssueStatus::Running => "running",
-        IssueStatus::Review => "review",
-        IssueStatus::Completed => "completed",
-    }
-}
-
-fn workspace_mode_to_str(mode: &WorkspaceMode) -> &'static str {
-    match mode {
-        WorkspaceMode::CurrentBranch => "current_branch",
-        WorkspaceMode::Worktree => "worktree",
-    }
-}
-
-pub(crate) fn build_agent_commit_completion_prompt(issue_title: &str, head: &str) -> String {
-    format!(
-        "请获取本次修改相关的代码，检查当前 Issue 涉及的文件变更；只暂存并提交与本次 Issue 直接相关的文件，不要提交无关改动。\n\
-Issue: {issue_title}\n\
-当前 HEAD: {head}\n\
-要求：\n\
-- 只包含当前 Issue 直接相关文件\n\
-- 不要提交无关改动\n\
-- 先自检再提交\n\
-- 使用中文 Conventional Commit\n\
-- 完成后请回复 commit hash、提交结果与验证命令\n\
-- 完成后在答复正文顶层用 <issue-comment>精简中文交付摘要</issue-comment> 输出本次交付内容（做了什么 / 结果 / 验证命令），该标签会被系统提取为 Issue 评论；不要把标签放进代码块或对其转义\n"
-    )
-}
-
-fn record_blocked_completion_attempt(
-    transaction: &rusqlite::Transaction<'_>,
-    issue_id: i64,
-    session_id: i64,
-    option: CompletionAttemptOption,
-    head: &str,
-    failure_reason: &str,
-    operation_state: GitOperationState,
-    message: &str,
-) -> rusqlite::Result<CompletionAttemptRecord> {
-    let changed_files_json = json!({
-        "blockedBy": "git_operation",
-        "state": format_git_operation_state(operation_state),
-        "message": message,
-    })
-    .to_string();
-
-    CompletionAttemptRepository::insert_in_transaction(
-        transaction,
-        issue_id,
-        session_id,
-        option,
-        head,
-        head,
-        None,
-        Some(failure_reason),
-        &changed_files_json,
-        CompletionAttemptResult::GitOperationBlocked,
-        current_epoch_millis_for_db()?,
-    )
-}
-
-fn summary_completion_from_attempt(attempt: CompletionAttemptRecord) -> IssueSummaryCompletionInfo {
-    IssueSummaryCompletionInfo {
-        option: attempt.option.as_str().to_string(),
-        result: attempt.result.as_str().to_string(),
-        commit_hash: attempt.commit_hash,
-        failure_reason: attempt.failure_reason,
-        head_before: Some(attempt.head_before),
-        head_after: Some(attempt.head_after),
-        changed_files_json: Some(attempt.changed_files_json),
-        created_at: attempt.created_at,
-        source: "completion_attempt".to_string(),
-    }
-}
-
-fn latest_completion_from_issue_action(
-    connection: &rusqlite::Connection,
-    issue_id: i64,
-) -> Result<Option<IssueSummaryCompletionInfo>, CommandError> {
-    let issue_completed_action = EventRepository::new(connection)
-        .list_issue_actions(issue_id)
-        .map_err(issue_database_error)?
-        .into_iter()
-        .find(|action| action.action_type == IssueActionType::IssueCompleted);
-
-    let Some(action) = issue_completed_action else {
-        return Ok(None);
-    };
-
-    let payload =
-        serde_json::from_str::<serde_json::Value>(&action.payload_json).map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::IssuePersistenceFailed,
-                "Issue Summary 解析失败。",
-            ).with_reason("summaryParseFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            .with_detail(ErrorDetail::new("IssueAction").with_value("issueId", issue_id))
-        })?;
-
-    let option = payload
-        .get("option")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("unknown")
-        .to_string();
-
-    Ok(Some(IssueSummaryCompletionInfo {
-        option,
-        result: "completed".to_string(),
-        commit_hash: None,
-        failure_reason: None,
-        head_before: None,
-        head_after: None,
-        changed_files_json: None,
-        created_at: action.created_at,
-        source: "issue_action_fallback".to_string(),
-    }))
-}
-
-fn resolve_issue_summary_completion(
-    connection: &rusqlite::Connection,
-    issue_id: i64,
-    attempts: &[CompletionAttemptRecord],
-    diagnostics: &mut Vec<String>,
-) -> Result<Option<IssueSummaryCompletionInfo>, CommandError> {
-    let completed_attempt = attempts
-        .iter()
-        .find(|attempt| attempt.result == CompletionAttemptResult::Completed)
-        .cloned();
-
-    if let Some(attempt) = completed_attempt {
-        return Ok(Some(summary_completion_from_attempt(attempt)));
-    }
-
-    if attempts.is_empty() {
-        diagnostics.push("缺少 CompletionAttempt 记录，已回退到 Issue 完成事件推断。".to_string());
-    } else {
-        diagnostics.push(
-            "未找到可代表最终 completed 的 CompletionAttempt，已回退到 Issue 完成事件推断。"
-                .to_string(),
-        );
-    }
-
-    latest_completion_from_issue_action(connection, issue_id)
-}
-
-fn format_agent_session_status_for_summary(status: &AgentSessionStatus) -> &'static str {
-    match status {
-        AgentSessionStatus::Running => "running",
-        AgentSessionStatus::Closed => "closed",
-        AgentSessionStatus::Crashed => "crashed",
-        AgentSessionStatus::Stopped => "stopped",
-    }
-}
-
-fn current_epoch_millis_for_db() -> rusqlite::Result<i64> {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| rusqlite::Error::InvalidQuery)?;
-
-    i64::try_from(duration.as_millis()).map_err(|_| rusqlite::Error::InvalidQuery)
-}
-
-fn format_git_operation_state(state: GitOperationState) -> &'static str {
-    match state {
-        GitOperationState::None => "none",
-        GitOperationState::MergeInProgress => "merge_in_progress",
-        GitOperationState::RebaseInProgress => "rebase_in_progress",
-        GitOperationState::CherryPickInProgress => "cherry_pick_in_progress",
-        GitOperationState::RevertInProgress => "revert_in_progress",
-        GitOperationState::SequencerInProgress => "sequencer_in_progress",
-        GitOperationState::Unmerged => "unmerged",
-    }
-}
-
-pub(crate) fn current_epoch_millis() -> Result<i64, CommandError> {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
-
-    i64::try_from(duration.as_millis()).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
-}
-
-fn persist_new_attachments(
-    transaction: &rusqlite::Transaction<'_>,
-    data_dir: &Path,
-    issue_id: i64,
-    issue_number: i64,
-    attachments: &[IssueAttachmentInput],
-) -> Result<(Vec<NewAttachmentPersistence>, Vec<PathBuf>), CommandError> {
-    let mut persisted = Vec::new();
-    let mut created_files = Vec::new();
-
-    for attachment in attachments {
-        let Some(source_path) = attachment.source_path.as_ref() else {
-            continue;
-        };
-        let Some(temp_token) = attachment.temp_token.as_ref() else {
-            continue;
-        };
-
-        let source = PathBuf::from(source_path);
-        let metadata = fs::metadata(&source).map_err(|error| {
-            cleanup_created_files(&created_files);
-            issue_io_error(error)
-        })?;
-        if !metadata.is_file() {
-            cleanup_created_files(&created_files);
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "附件源文件不存在。",
-            ).with_reason("attachmentSourceNotFound"));
-        }
-
-        let display_name = attachment.display_name.trim();
-        let display_name = if display_name.is_empty() {
-            infer_display_name(&source)
-        } else {
-            display_name.to_string()
-        };
-        let created_at = current_epoch_millis()?;
-        let placeholder_name = format!(
-            "pending-{}-{}",
-            created_at,
-            sanitize_attachment_file_name(&display_name)
-        );
-        let relative_path =
-            format!(".redwhisk/issues/{issue_number}/attachments/{placeholder_name}");
-        let absolute_path = data_dir
-            .join("issues")
-            .join(issue_number.to_string())
-            .join("attachments")
-            .join(&placeholder_name);
-        if let Some(parent) = absolute_path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                cleanup_created_files(&created_files);
-                issue_io_error(error)
-            })?;
-        }
-        fs::copy(&source, &absolute_path).map_err(|error| {
-            cleanup_created_files(&created_files);
-            issue_io_error(error)
-        })?;
-        created_files.push(absolute_path.clone());
-
-        let analysis = analyze_attachment(&display_name, attachment.mime_type.as_deref());
-        let inserted = IssueAttachmentRepository::insert_in_transaction(
-            transaction,
-            issue_id,
-            &display_name,
-            &placeholder_name,
-            &relative_path,
-            &absolute_path.to_string_lossy(),
-            attachment.mime_type.as_deref(),
-            i64::try_from(metadata.len()).map_err(|_| {
-                cleanup_created_files(&created_files);
-                CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-            })?,
-            analysis.kind,
-            analysis.is_previewable,
-            created_at,
-        )
-        .map_err(|error| {
-            cleanup_created_files(&created_files);
-            issue_database_error(error)
-        })?;
-
-        persisted.push(NewAttachmentPersistence {
-            temp_token: temp_token.clone(),
-            attachment_id: inserted.id,
-        });
-    }
-
-    Ok((persisted, created_files))
-}
-
-fn save_issue_attachment_draft_in_data_dir(
-    data_dir: &Path,
-    input: SaveIssueAttachmentDraftInput,
-) -> Result<SaveIssueAttachmentDraftResult, CommandError> {
-    let source = PathBuf::from(&input.source_path);
-    let metadata = fs::metadata(&source).map_err(issue_io_error)?;
-    if !metadata.is_file() {
-        return Err(CommandError::new(
-            CommandErrorCode::IssueValidationFailed,
-            "附件源文件不存在。",
-        ).with_reason("attachmentSourceNotFound"));
-    }
-
-    let display_name = input.display_name.trim();
-    let display_name = if display_name.is_empty() {
-        infer_display_name(&source)
-    } else {
-        display_name.to_string()
-    };
-    let stored_name = format!(
-        "{}-{}",
-        current_epoch_millis()?,
-        sanitize_attachment_file_name(&display_name)
-    );
-    let draft_dir = data_dir.join("issue-attachment-drafts");
-    fs::create_dir_all(&draft_dir).map_err(issue_io_error)?;
-    let destination = draft_dir.join(stored_name);
-    fs::copy(&source, &destination).map_err(issue_io_error)?;
-
-    let analysis = analyze_attachment(&display_name, None);
-    Ok(SaveIssueAttachmentDraftResult {
-        path: destination.to_string_lossy().to_string(),
-        display_name,
-        kind: analysis.kind,
-        is_previewable: analysis.is_previewable,
-    })
-}
-
 // 将 description 中的临时附件标记 `{{issue-attachment-temp:token}}` 重写为持久化
 // 标记 `{{issue-attachment:id}}`。
 //
@@ -3527,43 +2709,6 @@ fn save_issue_attachment_draft_in_data_dir(
 // 2. 图片占位符：Markdown 图片语法 `![alt]({{issue-attachment-temp:token}})`，
 //    其 URL 部分即该 token 子串，替换后得到 `![alt]({{issue-attachment:id}})`。
 // 每个临时 token 都必须在 description 中出现（无论哪种形态），否则视为缺失附件标记。
-fn rewrite_attachment_tokens(
-    description: &str,
-    attachments: &[NewAttachmentPersistence],
-) -> Result<String, CommandError> {
-    let mut rewritten = description.to_string();
-    for attachment in attachments {
-        let from = format!("{{{{issue-attachment-temp:{}}}}}", attachment.temp_token);
-        let to = format!("{{{{issue-attachment:{}}}}}", attachment.attachment_id);
-        if !rewritten.contains(&from) {
-            return Err(CommandError::new(
-                CommandErrorCode::IssueValidationFailed,
-                "Issue description 缺少附件标记。",
-            ).with_reason("descriptionMissingAttachmentMarker"));
-        }
-        rewritten = rewritten.replace(&from, &to);
-    }
-    Ok(rewritten)
-}
-
-fn parse_attachment_ids(description: &str) -> HashSet<i64> {
-    let mut result = HashSet::new();
-    let needle = "{{issue-attachment:";
-    let mut remaining = description;
-
-    while let Some(start) = remaining.find(needle) {
-        let token = &remaining[start + needle.len()..];
-        let Some(end) = token.find("}}") else {
-            break;
-        };
-        if let Ok(id) = token[..end].parse::<i64>() {
-            result.insert(id);
-        }
-        remaining = &token[end + 2..];
-    }
-
-    result
-}
 
 fn update_issue_title_and_description_in_transaction(
     transaction: &rusqlite::Transaction<'_>,
@@ -3591,197 +2736,6 @@ fn update_issue_title_and_description_in_transaction(
     }
 
     IssueRepository::find_by_id_in_transaction(transaction, issue_id)
-}
-
-pub(crate) fn analyze_attachment(
-    display_name: &str,
-    mime_type: Option<&str>,
-) -> AttachmentAnalysis {
-    let extension = Path::new(display_name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let mime_type = mime_type.unwrap_or_default().to_ascii_lowercase();
-
-    if matches!(
-        extension.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg"
-    ) || mime_type.starts_with("image/")
-    {
-        return AttachmentAnalysis {
-            kind: IssueAttachmentKind::Image,
-            is_previewable: true,
-        };
-    }
-
-    if extension == "pdf" || mime_type == "application/pdf" {
-        return AttachmentAnalysis {
-            kind: IssueAttachmentKind::Pdf,
-            is_previewable: false,
-        };
-    }
-
-    if matches!(extension.as_str(), "doc" | "docx") {
-        return AttachmentAnalysis {
-            kind: IssueAttachmentKind::Word,
-            is_previewable: false,
-        };
-    }
-
-    if matches!(
-        extension.as_str(),
-        "txt"
-            | "md"
-            | "markdown"
-            | "json"
-            | "yaml"
-            | "yml"
-            | "toml"
-            | "rs"
-            | "ts"
-            | "tsx"
-            | "js"
-            | "jsx"
-            | "css"
-            | "html"
-            | "xml"
-            | "sh"
-            | "sql"
-    ) || mime_type.starts_with("text/")
-        || mime_type.contains("json")
-        || mime_type.contains("xml")
-    {
-        return AttachmentAnalysis {
-            kind: IssueAttachmentKind::Text,
-            is_previewable: true,
-        };
-    }
-
-    AttachmentAnalysis {
-        kind: IssueAttachmentKind::Generic,
-        is_previewable: false,
-    }
-}
-
-fn infer_display_name(path: &Path) -> String {
-    path.file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("attachment")
-        .to_string()
-}
-
-pub(crate) fn sanitize_attachment_file_name(value: &str) -> String {
-    let sanitized = value
-        .chars()
-        .map(|char| {
-            if char.is_ascii_alphanumeric() || matches!(char, '.' | '-' | '_') {
-                char
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
-    let trimmed = sanitized.trim_matches('-');
-    if trimmed.is_empty() {
-        "attachment".to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
-fn cleanup_created_files(paths: &[PathBuf]) {
-    for path in paths {
-        let _ = fs::remove_file(path);
-    }
-}
-
-fn delete_attachment_files(attachments: &[IssueAttachmentRecord]) -> Result<(), CommandError> {
-    for attachment in attachments {
-        let path = Path::new(&attachment.absolute_path);
-        if path.exists() {
-            fs::remove_file(path).map_err(issue_io_error)?;
-        }
-    }
-    Ok(())
-}
-
-fn read_previewable_text_file(path: &str) -> Result<String, CommandError> {
-    const MAX_PREVIEW_BYTES: u64 = 256 * 1024;
-    let metadata = fs::metadata(path).map_err(issue_io_error)?;
-    if metadata.len() > MAX_PREVIEW_BYTES {
-        return Err(CommandError::new(
-            CommandErrorCode::IssueValidationFailed,
-            "附件过大，暂不支持预览。",
-        ).with_reason("attachmentTooLarge"));
-    }
-
-    fs::read_to_string(path).map_err(issue_io_error)
-}
-
-/// 从 Agent 助手答复正文提取首个 `<issue-comment>` 标签内容；无匹配返回 None。
-///
-/// 不做容错：标签出现在 fenced code block（``` / ~~~）内或被反斜杠转义时不识别，
-/// 缺闭合标签不识别，空内容不识别。依赖 `build_agent_commit_completion_prompt`
-/// 约束 Agent 把标签写在答复正文顶层。
-pub(crate) fn extract_issue_comment_from_assistant_text(text: &str) -> Option<String> {
-    const START_TAG: &str = "<issue-comment>";
-    const END_TAG: &str = "</issue-comment>";
-
-    let bytes = text.as_bytes();
-    let mut cursor = 0usize;
-
-    loop {
-        let rel = text[cursor..].find(START_TAG)?;
-        let start_idx = cursor + rel;
-
-        // 跳过位于 fenced code block 内的标签：扫描标签前缀统计 fence 切换次数。
-        if is_inside_code_fence(&text[..start_idx]) {
-            cursor = start_idx + START_TAG.len();
-            continue;
-        }
-        // 跳过被反斜杠转义的标签（`\<issue-comment>`）。
-        if start_idx > 0 && bytes[start_idx - 1] == b'\\' {
-            cursor = start_idx + START_TAG.len();
-            continue;
-        }
-
-        let after_start = start_idx + START_TAG.len();
-        let end_rel = text[after_start..].find(END_TAG)?;
-        let content = &text[after_start..after_start + end_rel];
-        let trimmed = content.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-        return Some(trimmed.to_string());
-    }
-}
-
-/// 统计 `prefix` 文本中 fenced code block（``` / ~~~）的嵌套状态：返回 true 表示
-/// 当前位置（紧接 prefix 之后）落在未闭合的代码块内。
-fn is_inside_code_fence(prefix: &str) -> bool {
-    let mut in_fence = false;
-    let mut fence_marker: &str = "";
-    for line in prefix.lines() {
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("```").or_else(|| trimmed.strip_prefix("~~~")) {
-            let _ = rest; // fence 后缀（语言标注或空）不影响切换
-            let marker = &trimmed[..3];
-            if !in_fence {
-                in_fence = true;
-                fence_marker = marker;
-            } else if marker == fence_marker {
-                in_fence = false;
-                fence_marker = "";
-            }
-        }
-    }
-    in_fence
-}
-
-fn issue_io_error(error: std::io::Error) -> CommandError {
-    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
 #[cfg(test)]
@@ -5568,7 +4522,7 @@ mod tests {
 
     #[test]
     fn rewrite_attachment_tokens_handles_bare_and_image_placeholder_tokens() {
-        use super::{rewrite_attachment_tokens, NewAttachmentPersistence};
+        use crate::features::issue::attachment::{rewrite_attachment_tokens, NewAttachmentPersistence};
 
         let attachments = vec![
             NewAttachmentPersistence {
@@ -5597,7 +4551,7 @@ mod tests {
 
     #[test]
     fn rewrite_attachment_tokens_errors_when_image_token_missing() {
-        use super::{rewrite_attachment_tokens, NewAttachmentPersistence};
+        use crate::features::issue::attachment::{rewrite_attachment_tokens, NewAttachmentPersistence};
 
         let attachments = vec![NewAttachmentPersistence {
             temp_token: "draft-img-1".to_string(),
@@ -5611,7 +4565,7 @@ mod tests {
 
     // ---- resolve_actual_execution_path 单测（Impl-C：路径解析与漂移捕获）----
 
-    use super::{resolve_actual_execution_path, ActualPathSource};
+    use crate::features::issue::completion::flow::{resolve_actual_execution_path, ActualPathSource};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::types::agent_session::{
         AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
