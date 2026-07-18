@@ -1,4 +1,3 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   useEffect,
@@ -20,15 +19,12 @@ import {
   listIssues,
   markIssueReview,
   previewIssueAttachment,
-  saveIssueAttachmentDraft,
   updateIssue,
   type CompleteIssueFlowResult,
   type DirtyWorkspaceOption,
   type IssueStatus,
   type IssueAttachmentRecord,
-  type IssueAttachmentPreviewRecord,
   type IssueRecord,
-  type IssueStatusTotals,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-form/issue-attachment-preview-dialog";
 import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion/issue-completion-dirty-workspace-dialog";
@@ -39,6 +35,30 @@ import {
   type DialogMode,
   type IssueFormState,
 } from "./issue-activity-types";
+import {
+  type LaneLoadStateMap,
+  type LaneTotalsMap,
+  INITIAL_LANE_LOAD_STATE,
+  INITIAL_LANE_TOTALS,
+  computeLaneLoadState,
+  deriveLaneTotals,
+  mergeIssues,
+  shiftLaneTotals,
+  sortIssuesByIdDesc,
+} from "./issue-lane-helpers";
+import {
+  buildDraftAttachment,
+  buildIssueDescription,
+  canRunIssueFor,
+  formatLocalTimestamp,
+  getIssueStatusLabel,
+  issueStatusRank,
+  issueToForm,
+  markdownToExcerpt,
+  mergeIssue,
+  serializeAttachments,
+  toAttachmentPreviewState,
+} from "./issue-form/issue-description-serializer";
 import { IssueEditablePage } from "./issue-detail/issue-editable-page";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
 import { IssueReadOnlyPage } from "./issue-detail/issue-read-only-page";
@@ -70,110 +90,6 @@ import {
   getIssueOpenRequestId,
   type IssueOpenRequest,
 } from "./issue-open-request";
-
-const ISSUE_STATUSES: readonly IssueStatus[] = [
-  "backlog",
-  "running",
-  "review",
-  "completed",
-];
-
-interface LaneLoadState {
-  /** 已为该甬道加载的条数，作为下一页的 offset。 */
-  loadedCount: number;
-  hasMore: boolean;
-  isLoadingMore: boolean;
-}
-
-type LaneLoadStateMap = Record<IssueStatus, LaneLoadState>;
-
-type LaneTotalsMap = Record<IssueStatus, number>;
-
-const INITIAL_LANE_TOTALS: LaneTotalsMap = ISSUE_STATUSES.reduce(
-  (acc, status) => {
-    acc[status] = 0;
-    return acc;
-  },
-  {} as LaneTotalsMap,
-);
-
-const INITIAL_LANE_LOAD_STATE: LaneLoadStateMap = ISSUE_STATUSES.reduce(
-  (acc, status) => {
-    acc[status] = { loadedCount: 0, hasMore: false, isLoadingMore: false };
-    return acc;
-  },
-  {} as LaneLoadStateMap,
-);
-
-/** 把后端返回的各状态总数落到甬道计数；后端未返回时按已加载条数兜底。 */
-function deriveLaneTotals(
-  statusTotals: IssueStatusTotals | undefined,
-  issues: IssueRecord[],
-): LaneTotalsMap {
-  if (statusTotals) {
-    return {
-      backlog: statusTotals.backlog,
-      running: statusTotals.running,
-      review: statusTotals.review,
-      completed: statusTotals.completed,
-    };
-  }
-  return ISSUE_STATUSES.reduce((acc, status) => {
-    acc[status] = issues.filter((issue) => issue.status === status).length;
-    return acc;
-  }, {} as LaneTotalsMap);
-}
-
-/**
- * 单个 Issue 状态发生迁移（含新增/删除）时，按 (prev, next) 平移甬道总数。
- * prev 与 next 状态相同（如仅编辑内容）时为空操作。
- */
-function shiftLaneTotals(
-  totals: LaneTotalsMap,
-  prev: IssueRecord | null | undefined,
-  next: IssueRecord | null | undefined,
-): LaneTotalsMap {
-  if (prev?.status === next?.status) {
-    return totals;
-  }
-  const result = { ...totals };
-  if (prev) {
-    result[prev.status] = Math.max(0, result[prev.status] - 1);
-  }
-  if (next) {
-    result[next.status] = result[next.status] + 1;
-  }
-  return result;
-}
-
-/** 根据首屏返回的扁平列表，计算每个甬道的分页状态。 */
-function computeLaneLoadState(issues: IssueRecord[]): LaneLoadStateMap {
-  return ISSUE_STATUSES.reduce((acc, status) => {
-    const count = issues.filter((issue) => issue.status === status).length;
-    acc[status] = {
-      loadedCount: count,
-      hasMore: count >= ISSUE_PAGE_SIZE,
-      isLoadingMore: false,
-    };
-    return acc;
-  }, {} as LaneLoadStateMap);
-}
-
-/** 追加下一页数据，按 id 去重，保留既有顺序。 */
-function mergeIssues(
-  current: IssueRecord[],
-  next: IssueRecord[],
-): IssueRecord[] {
-  const existingIds = new Set(current.map((issue) => issue.id));
-  return sortIssuesByIdDesc([
-    ...current,
-    ...next.filter((issue) => !existingIds.has(issue.id)),
-  ]);
-}
-
-function sortIssuesByIdDesc(issues: IssueRecord[]): IssueRecord[] {
-  return [...issues].sort((left, right) => right.id - left.id);
-}
 
 interface IssuesActivityProps {
   projectId: number;
@@ -1670,226 +1586,4 @@ class WorktreeMergeConflictError extends Error {
 
 interface WorktreeMergeConflictSessionDetail extends WorktreeMergeDetail {
   sessionId?: number | null;
-}
-
-function issueToForm(issue: IssueRecord): IssueFormState {
-  const parsed = parseIssueDescription(
-    issue.description,
-    issue.attachments ?? [],
-  );
-  return {
-    title: issue.title,
-    description: parsed.description,
-    attachments: parsed.attachments,
-    labelIds: (issue.labels ?? []).map((label) => label.id),
-  };
-}
-
-function mergeIssue(
-  currentIssues: IssueRecord[],
-  nextIssue: IssueRecord,
-): IssueRecord[] {
-  const remainingIssues = currentIssues.filter(
-    (issue) => issue.id !== nextIssue.id,
-  );
-
-  return sortIssuesByIdDesc([nextIssue, ...remainingIssues]);
-}
-
-function formatLocalTimestamp(epochMilliseconds: number): string {
-  return new Date(epochMilliseconds).toLocaleString();
-}
-
-function markdownToExcerpt(markdown: string): string {
-  return markdown
-    .replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/```([\s\S]*?)```/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/^\s{0,3}(#{1,6}|\d+\.|[-*+]|>)\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
-    .replace(/~~([^~]+)~~/g, "$1")
-    .replace(/\n+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildIssueDescription(
-  description: string,
-  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-): string {
-  const trimmedDescription = description.trimEnd();
-  // 以裸 token 子串去重：图片附件在描述中以 ![alt](token) 形式存在时也命中，
-  // 避免因 alt 文本不同而重复追加同一 token。
-  const missingTokens = attachments
-    .filter(
-      (attachment) =>
-        !trimmedDescription.includes(getAttachmentRawToken(attachment)),
-    )
-    .map(formatAttachmentDescriptionToken);
-
-  if (missingTokens.length === 0) {
-    return trimmedDescription;
-  }
-
-  if (trimmedDescription.length === 0) {
-    return missingTokens.join("\n");
-  }
-
-  return `${trimmedDescription}\n\n${missingTokens.join("\n")}`;
-}
-
-function getAttachmentRawToken(
-  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
-): string {
-  if ("id" in attachment) {
-    return `{{issue-attachment:${attachment.id}}}`;
-  }
-
-  return `{{issue-attachment-temp:${attachment.token}}}`;
-}
-
-function formatAttachmentDescriptionToken(
-  attachment: IssueAttachmentRecord | IssueAttachmentDraft,
-): string {
-  const token =
-    "id" in attachment
-      ? `{{issue-attachment:${attachment.id}}}`
-      : `{{issue-attachment-temp:${attachment.token}}}`;
-
-  // 图片附件以 Markdown 图片语法承载 token（URL 即 token 占位符），编辑器与
-  // 只读页据此内联渲染；非图片附件以裸 token 行承载（编辑器正文不显示，
-  // 仅由底部卡片区展示）。两种形态都包含 token 子串，满足 Rust 硬约束。
-  if (attachment.kind === "image") {
-    return `![${attachment.displayName}](${token})`;
-  }
-
-  return token;
-}
-
-function serializeAttachments(
-  attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-): Array<{
-  attachmentId?: number | null;
-  tempToken?: string | null;
-  sourcePath?: string | null;
-  displayName: string;
-  mimeType?: string | null;
-}> {
-  return attachments.map((attachment) =>
-    "id" in attachment
-      ? {
-          attachmentId: attachment.id,
-          displayName: attachment.displayName,
-          mimeType: attachment.mimeType ?? null,
-        }
-      : {
-          tempToken: attachment.token,
-          sourcePath: attachment.sourcePath,
-          displayName: attachment.displayName,
-          mimeType: attachment.mimeType ?? null,
-        },
-  );
-}
-
-function parseIssueDescription(
-  description: string,
-  attachments: IssueAttachmentRecord[],
-): {
-  description: string;
-  attachments: IssueAttachmentRecord[];
-} {
-  const tokenMatches = Array.from(
-    description.matchAll(/\{\{issue-attachment:(\d+)\}\}/g),
-  );
-  const positionById = new Map<number, number>();
-  tokenMatches.forEach((match, index) => {
-    positionById.set(Number(match[1]), index);
-  });
-
-  const orderedAttachments = [...attachments].sort((left, right) => {
-    const leftIndex = positionById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-    const rightIndex = positionById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
-    return leftIndex - rightIndex;
-  });
-
-  const visibleDescription = description
-    .replace(/^\s*\{\{issue-attachment(?:-temp)?:[^}]+\}\}\s*$/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  return {
-    description: visibleDescription,
-    attachments: orderedAttachments,
-  };
-}
-
-async function buildDraftAttachment(
-  sourcePath: string,
-): Promise<IssueAttachmentDraft> {
-  const displayName = sourcePath.split(/[\\/]/).pop() ?? sourcePath;
-  const draft = await saveIssueAttachmentDraft({
-    sourcePath,
-    displayName,
-  });
-  return {
-    token: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    displayName: draft.displayName,
-    sourcePath: draft.path,
-    kind: draft.kind,
-    isPreviewable: draft.isPreviewable,
-    absolutePath: draft.path,
-  };
-}
-
-function canRunIssueFor(
-  issue: Pick<IssueRecord, "status" | "linkedSessionId">,
-): boolean {
-  return issue.status === "backlog" && issue.linkedSessionId == null;
-}
-
-function issueStatusRank(status: IssueStatus): number {
-  switch (status) {
-    case "backlog":
-      return 0;
-    case "running":
-      return 1;
-    case "review":
-      return 2;
-    case "completed":
-      return 3;
-  }
-}
-
-function getIssueStatusLabel(
-  status: IssueStatus,
-  messages: ReturnType<typeof useI18n>["messages"],
-): string {
-  switch (status) {
-    case "backlog":
-      return messages.issues.backlog;
-    case "running":
-      return messages.issues.inProgress;
-    case "review":
-      return messages.issues.review;
-    case "completed":
-      return messages.issues.done;
-  }
-}
-
-function toAttachmentPreviewState(
-  preview: IssueAttachmentPreviewRecord,
-): AttachmentPreviewState {
-  return {
-    displayName: preview.displayName,
-    kind: preview.kind,
-    textContent: preview.textContent,
-    imageSrc: preview.absolutePath
-      ? convertFileSrc(preview.absolutePath)
-      : null,
-  };
 }
