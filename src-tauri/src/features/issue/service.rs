@@ -13,7 +13,7 @@ use crate::core::agent_session_service::{
     build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
     IssueSessionArchive,
 };
-use crate::core::completion_state_machine::{
+use crate::features::issue::completion::state_machine::{
     self, CompletionEvent, CompletionState, CompletionWorld, Transition,
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
@@ -1086,7 +1086,7 @@ impl<'connection> IssueService<'connection> {
     }
 
     /// 完成流程驱动：gather world -> advance -> 执行 effects -> 持久化 -> 投影结果。
-    /// 决策（phase 迁移）由纯 [`completion_state_machine::advance`] 决定；副作用以 Effect
+    /// 决策（phase 迁移）由纯 [`state_machine::advance`] 决定；副作用以 Effect
     /// 枚举表达、由本方法解释执行；action / 文案在边界投影。
     fn drive_completion_flow(
         &self,
@@ -1162,7 +1162,7 @@ impl<'connection> IssueService<'connection> {
             snapshot,
             forced_option,
         );
-        let transition = completion_state_machine::advance(&state, &world, event).map_err(|_| {
+        let transition = state_machine::advance(&state, &world, event).map_err(|_| {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "current completion state mismatch",
@@ -1192,7 +1192,7 @@ impl<'connection> IssueService<'connection> {
         transition: Transition,
         agent_registry: &AgentSessionRegistry,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
-        let ctx = crate::core::completion_effect_interpreter::EffectContext {
+        let ctx = crate::features::issue::completion::effect_interpreter::EffectContext {
             repo_path,
             issue: &issue,
             session: &session,
@@ -1628,7 +1628,7 @@ impl<'connection> IssueService<'connection> {
                 snapshot: snapshot.clone(),
                 attempt_option: CompletionAttemptOption::CompleteManual,
             };
-            let transition = completion_state_machine::advance(
+            let transition = state_machine::advance(
                 &state,
                 &world,
                 CompletionEvent::CommitDetected {
@@ -1648,7 +1648,7 @@ impl<'connection> IssueService<'connection> {
             // 不会被读取；占位空 registry 与 detection_path 仅保持 EffectContext 形态一致。
             let detect_registry = AgentSessionRegistry::new();
             {
-                let ctx = crate::core::completion_effect_interpreter::EffectContext {
+                let ctx = crate::features::issue::completion::effect_interpreter::EffectContext {
                     repo_path: detection_path,
                     issue: &issue,
                     session: &session,

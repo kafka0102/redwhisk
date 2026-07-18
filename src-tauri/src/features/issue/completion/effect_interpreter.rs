@@ -12,11 +12,11 @@
 
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::core::agent_session_service::agent_session_error_to_command_error;
-use crate::core::completion_state_machine::{
+use crate::features::issue::completion::state_machine::{
     CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
     Transition,
 };
-use crate::core::issue_service::{
+use crate::features::issue::service::{
     build_agent_commit_completion_prompt, current_epoch_millis, issue_database_error,
     merge_block_from_worktree_error, reconcile_session_worktree, IssueService,
     WorktreeMergeBlockDescription,
@@ -239,12 +239,12 @@ mod tests {
 
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::agent::session_registry::AgentSessionRegistry;
-    use crate::core::completion_effect_interpreter::EffectContext;
-    use crate::core::completion_state_machine::{
+    use crate::features::issue::completion::effect_interpreter::EffectContext;
+    use crate::features::issue::completion::state_machine::{
         CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
         Transition,
     };
-    use crate::core::issue_service::IssueService;
+    use crate::features::issue::service::IssueService;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::completion_attempt_repository::CompletionAttemptRepository;
     use crate::db::issue_completion_flow_repository::IssueCompletionFlowRepository;

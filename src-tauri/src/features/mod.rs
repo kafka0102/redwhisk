@@ -2,6 +2,7 @@
 // 详见 docs/architecture-design/backend-feature-first-refactor.md 与 ADR-0013。
 
 pub mod app_update;
+pub mod issue;
 pub mod project;
 pub mod project_terminal;
 pub mod settings;

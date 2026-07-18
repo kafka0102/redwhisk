@@ -6,7 +6,7 @@ use tauri::State;
 
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
-use crate::core::issue_service::IssueService;
+use super::service::IssueService;
 use crate::types::agent_session::AgentSessionStatus;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{

@@ -25,7 +25,7 @@ use crate::agent::pty_session_manager::{
 };
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
-use crate::core::issue_service::IssueService;
+use crate::features::issue::IssueService;
 use crate::db::agent_profile_repository::{AgentProfileRepository, AgentProfileRow};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;

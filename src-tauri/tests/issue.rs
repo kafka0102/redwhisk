@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
-use redwhisk_lib::core::issue_service::IssueService;
+use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::completion_attempt_repository::CompletionAttemptRepository;

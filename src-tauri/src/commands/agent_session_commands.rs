@@ -13,7 +13,7 @@ use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::app_state::AppState;
 use crate::core::agent_session_service::AgentSessionService;
-use crate::core::issue_service::{analyze_attachment, sanitize_attachment_file_name};
+use crate::features::issue::{analyze_attachment, sanitize_attachment_file_name};
 use crate::logging::CommandResultExt;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{

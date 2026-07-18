@@ -7,7 +7,7 @@ use redwhisk_lib::agent::pty_session_manager::{
 use redwhisk_lib::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
 use redwhisk_lib::core::agent_session_service::AgentSessionService;
-use redwhisk_lib::core::issue_service::IssueService;
+use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
@@ -3366,7 +3366,7 @@ fn insert_issue_with_title(
     status: &str,
     title: &str,
 ) -> i64 {
-    let service = redwhisk_lib::core::issue_service::IssueService::new(
+    let service = redwhisk_lib::features::issue::IssueService::new(
         IssueRepository::new(connection),
         ProjectRepository::new(connection),
     );
