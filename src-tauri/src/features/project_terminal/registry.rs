@@ -42,7 +42,7 @@ impl ProjectTerminalRegistry {
         }
     }
 
-    pub fn allocate_session_id(&self) -> i64 {
+    pub(super) fn allocate_session_id(&self) -> i64 {
         self.next_session_id.fetch_sub(1, Ordering::SeqCst)
     }
 
@@ -143,7 +143,7 @@ impl ProjectTerminalRegistry {
         Ok(removed)
     }
 
-    pub fn mark_inactive(&self, session_id: i64) {
+    pub(super) fn mark_inactive(&self, session_id: i64) {
         if let Ok(mut sessions) = self.sessions.lock() {
             if let Some(session) = sessions.get_mut(&session_id) {
                 session.is_active = false;
