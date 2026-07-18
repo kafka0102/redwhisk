@@ -1,0 +1,16 @@
+# 前端单文件大小白名单（存量超阈值待拆分 backlog）
+# 格式: <相对仓库根路径> # <行数> lines, registered 2026-07-18
+# 仅登记"本次改动前已超阈值"的存量文件；新建文件禁止加入（脚本会报错）。
+# 阈值: 常规 500 / 编排容器(*-activity.tsx under features/*, app/app.tsx) 800 / 硬上限 1000。
+src/features/issues/issues-activity.tsx # 1895 lines, registered 2026-07-18
+src/features/agents/agents-activity.tsx # 1883 lines, registered 2026-07-18
+src/features/agents/message-stream/agent-message-cards.tsx # 895 lines, registered 2026-07-18
+src/features/agents/use-session-workspace-cache.ts # 775 lines, registered 2026-07-18
+src/features/issues/issue-run-dialog.tsx # 733 lines, registered 2026-07-18
+src/features/agents/message-stream/message-stream-reducer.ts # 720 lines, registered 2026-07-18
+src/components/ui/rich-text-editor.tsx # 706 lines, registered 2026-07-18
+src/features/issues/issue-read-only-page.tsx # 593 lines, registered 2026-07-18
+src/shared/i18n/messages.ts # 584 lines, registered 2026-07-18
+src/features/issues/issue-commands.ts # 569 lines, registered 2026-07-18
+src/features/settings/project-settings-activity.tsx # 805 lines, registered 2026-07-18
+src/features/code/code-workspace.tsx # 788 lines, registered 2026-07-18
