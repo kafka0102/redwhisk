@@ -1,4 +1,3 @@
-import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   useEffect,
   useMemo,
@@ -14,16 +13,13 @@ import {
   createIssue,
   deleteIssue,
   deleteIssueWorktree,
-  exportIssueAttachment,
   getIssueWorktreeStatus,
   listIssues,
   markIssueReview,
-  previewIssueAttachment,
   updateIssue,
   type CompleteIssueFlowResult,
   type DirtyWorkspaceOption,
   type IssueStatus,
-  type IssueAttachmentRecord,
   type IssueRecord,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-form/issue-attachment-preview-dialog";
@@ -47,7 +43,6 @@ import {
   sortIssuesByIdDesc,
 } from "./issue-lane-helpers";
 import {
-  buildDraftAttachment,
   buildIssueDescription,
   canRunIssueFor,
   formatLocalTimestamp,
@@ -57,8 +52,9 @@ import {
   markdownToExcerpt,
   mergeIssue,
   serializeAttachments,
-  toAttachmentPreviewState,
 } from "./issue-form/issue-description-serializer";
+import { useIssueAttachments } from "./use-issue-attachments";
+import { useIssueRunDialog } from "./use-issue-run-dialog";
 import { IssueEditablePage } from "./issue-detail/issue-editable-page";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
 import { IssueReadOnlyPage } from "./issue-detail/issue-read-only-page";
@@ -72,7 +68,6 @@ import {
 } from "./issue-completion/issue-completion-helpers";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
-import type { IssueAttachmentDraft } from "./issue-form/issue-description-editor";
 import { issuePageStateCache } from "./issues-activity-cache";
 import {
   injectAgentSessionPrompt,
@@ -123,13 +118,6 @@ export function IssuesActivity({
     hasRequestedIssue ? "edit" : (cachedPageState?.dialogMode ?? null),
   );
   const [isReadOnlyEditRequested, setIsReadOnlyEditRequested] = useState(false);
-  const [runDialogIssue, setRunDialogIssue] = useState<Pick<
-    IssueRecord,
-    "id" | "number" | "title" | "description" | "attachments" | "labels"
-  > | null>(null);
-  // 启动 Agent Session 期间显示阻塞式 LoadingDialog 并隐藏 Run Dialog，
-  // 避免 Run Dialog overlay 与 Radix LoadingDialog overlay 同时挂载（见 4df1948）。
-  const [isStartingSession, setIsStartingSession] = useState(false);
   // 删除 Issue / 切换状态期间显示阻塞式 LoadingDialog，避免用户误以为提交无响应。
   const [isDeletingIssue, setIsDeletingIssue] = useState(false);
   const [isAdvancingStatus, setIsAdvancingStatus] = useState(false);
@@ -176,7 +164,6 @@ export function IssuesActivity({
   const cardRefs = useRef(new Map<number, HTMLButtonElement>());
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
-  const runDialogTriggerRef = useRef<HTMLElement | null>(null);
   const dirtyWorkspaceDecisionRef = useRef<
     ((decision: DirtyWorkspaceOption, branchName: string | null) => void) | null
   >(null);
@@ -678,146 +665,38 @@ export function IssuesActivity({
     });
   }
 
-  function openRunDialog(
-    issue: Pick<
-      IssueRecord,
-      | "id"
-      | "number"
-      | "title"
-      | "description"
-      | "attachments"
-      | "labels"
-      | "status"
-      | "linkedSessionId"
-    >,
-    trigger: HTMLElement | null,
-  ) {
-    if (!canRunIssueFor(issue)) {
-      return;
-    }
-
-    runDialogTriggerRef.current = trigger;
-    setRunDialogIssue(issue);
-  }
-
-  async function confirmRunIssueFromEditPage(trigger: HTMLElement | null) {
-    if (!selectedIssue || !canRunIssueFor(selectedIssue) || isSaving) {
-      return;
-    }
-
-    const issueToRun = selectedIssue;
-    const isConfirmed = await confirm({
-      message: messages.issues.confirmRunIssue,
-    });
-
-    if (!isConfirmed) {
-      return;
-    }
-
-    setDialogErrorMessage(null);
-    setTitleError(null);
-    setIsSaving(true);
-    const requestProjectId = projectId;
-
-    try {
-      const updatedIssue = await saveSelectedIssueDraft(
-        requestProjectId,
-        issueToRun.id,
-      );
-      if (activeProjectIdRef.current !== requestProjectId) {
-        return;
-      }
-
-      setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
-      setSelectedIssueId(updatedIssue.id);
-      setForm(issueToForm(updatedIssue));
-      openRunDialog(updatedIssue, trigger);
-    } catch (error) {
-      if (activeProjectIdRef.current === requestProjectId) {
-        setDialogErrorMessage(getCommandErrorMessage(error, t));
-      }
-    } finally {
-      if (activeProjectIdRef.current === requestProjectId) {
-        setIsSaving(false);
-      }
-    }
-  }
-
-  function openLinkedSession() {
-    if (!selectedIssue?.linkedSessionId) {
-      return;
-    }
-
-    setDialogErrorMessage(null);
-    setTitleError(null);
-    setRunDialogIssue(null);
-    setDialogMode(null);
-    setIsReadOnlyEditRequested(false);
-    setForm(EMPTY_FORM);
-    // 跳转到 session 页面会触发 IssuesActivity 卸载，依赖 dialogMode 变化的
-    // 缓存清理 effect 不会执行，需在此同步清缓存，确保返回 issues 标签时回到
-    // 看板而非只读 Issue 页。
-    issuePageStateCache.delete(projectId);
-    onOpenAgentsActivity?.(selectedIssue.linkedSessionId);
-  }
-
-  function closeRunDialog() {
-    setRunDialogIssue(null);
-    if (runDialogTriggerRef.current?.isConnected) {
-      runDialogTriggerRef.current.focus();
-    }
-  }
-
-  async function handleRunStarted(result: {
-    issueId: number;
-    sessionId?: number | null;
-  }) {
-    // 成功路径：关闭阻塞式 LoadingDialog 并卸载 Run Dialog。
-    setIsStartingSession(false);
-    setRunDialogIssue(null);
-    setDialogErrorMessage(null);
-    setTitleError(null);
-    setDialogMode(null);
-    setIsReadOnlyEditRequested(false);
-    setForm(EMPTY_FORM);
-    let resolvedSessionId = result.sessionId ?? null;
-
-    try {
-      const response = await listIssues({
-        projectId,
-        perStatusLimit: ISSUE_PAGE_SIZE,
-      });
-      if (activeProjectIdRef.current !== projectId) {
-        return;
-      }
-
-      setIssues(response.issues);
-      setLaneLoadState(computeLaneLoadState(response.issues));
-      setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
-      setSelectedIssueId(result.issueId);
-      if (resolvedSessionId == null) {
-        resolvedSessionId =
-          response.issues.find((issue) => issue.id === result.issueId)
-            ?.linkedSessionId ?? null;
-      }
-    } catch (error) {
-      if (activeProjectIdRef.current === projectId) {
-        setErrorMessage(getCommandErrorMessage(error, t));
-      }
-    } finally {
-      if (
-        activeProjectIdRef.current === projectId &&
-        resolvedSessionId != null
-      ) {
-        onOpenAgentsActivity?.(resolvedSessionId);
-      } else if (
-        activeProjectIdRef.current === projectId &&
-        result.sessionId == null
-      ) {
-        setErrorMessage(t("issues.agentSessionOpenMissing"));
-      }
-    }
-  }
+  const {
+    runDialogIssue,
+    isStartingSession,
+    setRunDialogIssue,
+    setIsStartingSession,
+    openRunDialog,
+    confirmRunIssueFromEditPage,
+    openLinkedSession,
+    closeRunDialog,
+    handleRunStarted,
+  } = useIssueRunDialog({
+    projectId,
+    selectedIssue,
+    isSaving,
+    activeProjectIdRef,
+    setIssues,
+    setSelectedIssueId,
+    setForm,
+    setDialogErrorMessage,
+    setTitleError,
+    setIsSaving,
+    setDialogMode,
+    setIsReadOnlyEditRequested,
+    setLaneLoadState,
+    setLaneTotals,
+    setErrorMessage,
+    saveSelectedIssueDraft,
+    confirm,
+    t,
+    messages,
+    onOpenAgentsActivity,
+  });
 
   const isBacklogDialog =
     dialogMode === "create" || selectedIssue?.status === "backlog";
@@ -859,110 +738,19 @@ export function IssuesActivity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issuesReturnSignal]);
 
-  async function handleSelectAttachment(
-    filter?: "image" | "file",
-  ): Promise<IssueAttachmentDraft | null> {
-    const selectedPath = await open({
-      directory: false,
-      multiple: false,
-      title:
-        filter === "image"
-          ? messages.richText.image
-          : messages.issues.addAttachment,
-      filters:
-        filter === "image"
-          ? [
-              {
-                name: messages.issues.imageFilterName,
-                extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
-              },
-            ]
-          : undefined,
-    });
-
-    if (typeof selectedPath !== "string") {
-      return null;
-    }
-
-    try {
-      const attachment = await buildDraftAttachment(selectedPath);
-      setForm((currentForm) => ({
-        ...currentForm,
-        attachments: [...currentForm.attachments, attachment],
-      }));
-      return attachment;
-    } catch (error) {
-      setDialogErrorMessage(getCommandErrorMessage(error, t));
-      return null;
-    }
-  }
-
-  function handleRemoveAttachment(
-    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
-  ) {
-    setForm((currentForm) => ({
-      ...currentForm,
-      attachments: currentForm.attachments.filter((item) =>
-        "id" in attachment
-          ? !("id" in item && item.id === attachment.id)
-          : !("token" in item && item.token === attachment.token),
-      ),
-    }));
-  }
-
-  async function handlePreviewAttachment(
-    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
-  ) {
-    try {
-      const preview = await previewIssueAttachment(
-        "id" in attachment
-          ? {
-              projectId,
-              attachmentId: attachment.id,
-            }
-          : {
-              projectId,
-              sourcePath: attachment.sourcePath,
-              displayName: attachment.displayName,
-            },
-      );
-      setAttachmentPreview(toAttachmentPreviewState(preview));
-    } catch (error) {
-      setDialogErrorMessage(getCommandErrorMessage(error, t));
-    }
-  }
-
-  async function handleDownloadAttachment(
-    attachment: IssueAttachmentRecord | IssueAttachmentDraft,
-  ) {
-    const targetPath = await save({
-      defaultPath: attachment.displayName,
-      title: `Save ${attachment.displayName}`,
-    });
-
-    if (typeof targetPath !== "string") {
-      return;
-    }
-
-    try {
-      await exportIssueAttachment(
-        "id" in attachment
-          ? {
-              projectId,
-              attachmentId: attachment.id,
-              targetPath,
-            }
-          : {
-              projectId,
-              sourcePath: attachment.sourcePath,
-              displayName: attachment.displayName,
-              targetPath,
-            },
-      );
-    } catch (error) {
-      setDialogErrorMessage(getCommandErrorMessage(error, t));
-    }
-  }
+  const {
+    selectAttachment: handleSelectAttachment,
+    removeAttachment: handleRemoveAttachment,
+    previewAttachment: handlePreviewAttachment,
+    downloadAttachment: handleDownloadAttachment,
+  } = useIssueAttachments({
+    projectId,
+    setForm,
+    setAttachmentPreview,
+    setDialogErrorMessage,
+    t,
+    messages,
+  });
 
   async function handleAdvanceStatus(targetStatus: IssueStatus) {
     if (!selectedIssue || isSaving) {
