@@ -1390,7 +1390,7 @@ mod tests {
     use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
     use crate::agent::pty_session_manager::PtySessionManager;
-    use crate::core::project_service::ProjectService;
+    use crate::features::project::ProjectService;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::connection::DatabaseConfig;
     use crate::db::project_repository::ProjectRepository;

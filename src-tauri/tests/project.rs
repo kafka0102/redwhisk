@@ -1,5 +1,5 @@
 use redwhisk_lib::agent::pty_session_manager::PtySessionManager;
-use redwhisk_lib::core::project_service::ProjectService;
+use redwhisk_lib::features::project::ProjectService;
 use redwhisk_lib::core::project_terminal_service::{
     ProjectTerminalRegistry, ProjectTerminalService,
 };

@@ -2,7 +2,7 @@ use tauri::{Manager, State};
 
 use crate::app_state::AppState;
 use crate::commands::agent_skill_commands::trigger_project_skill_refresh;
-use crate::core::project_service::ProjectService;
+use super::service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,

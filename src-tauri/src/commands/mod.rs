@@ -3,7 +3,6 @@ pub mod agent_skill_commands;
 pub mod app_update_commands;
 pub mod core_commands;
 pub mod issue_commands;
-pub mod project_commands;
 pub mod project_terminal_commands;
 pub mod session_monitor_commands;
 pub mod session_workspace_commands;

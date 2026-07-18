@@ -5,7 +5,7 @@ use tauri::{Emitter, State};
 use crate::agent_skill::index::AgentSkillIndex;
 use crate::agent_skill::service::AgentSkillService;
 use crate::app_state::AppState;
-use crate::core::project_service::ProjectService;
+use crate::features::project::ProjectService;
 use crate::types::agent_skill::{
     AgentSkillListResponse, AgentSkillScope, AgentSkillsUpdatedEvent, ListAgentSkillsInput,
     RefreshAgentSkillsInput,
