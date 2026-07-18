@@ -1,11 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { I18nProvider } from "../../shared/i18n/i18n";
-import { getIssueTimeline } from "./issue-commands";
+import { I18nProvider } from "../../../shared/i18n/i18n";
+import { getIssueTimeline } from "../issue-commands";
 import { IssueTimeline } from "./issue-timeline";
 
-vi.mock("./issue-commands", () => ({
+vi.mock("../issue-commands", () => ({
   getIssueTimeline: vi.fn(),
 }));
 
@@ -13,11 +13,11 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn((path: string) => `asset://${path}`),
 }));
 
-vi.mock("../agents/agent-visuals", () => ({
+vi.mock("../../agents/agent-visuals", () => ({
   getAgentLogoSrc: vi.fn((agentType: string) => `agent-logo:${agentType}`),
 }));
 
-vi.mock("../agents/message-stream/agent-markdown", () => ({
+vi.mock("../../agents/message-stream/agent-markdown", () => ({
   AgentMarkdown: (props: { children: string }) => (
     <div data-testid="agent-markdown">{props.children}</div>
   ),

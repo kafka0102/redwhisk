@@ -18,24 +18,24 @@ import {
   type ProjectGitBranchListResult,
   type StartAgentSessionResult,
   type WorkspaceMode,
-} from "./issue-commands";
+} from "../issue-commands";
 import {
   listAgentProfiles,
   listSavedAgentSkills,
   type AgentProfileRecord,
   type SavedAgentSkillRecord,
-} from "../settings/settings-commands";
+} from "../../settings/settings-commands";
 import {
   listAgentSessions,
   type AgentSessionListItem,
   type WorkspaceMode as SessionWorkspaceMode,
-} from "../agents/agent-session-commands";
+} from "../../agents/agent-session-commands";
 import {
   getCommandErrorMessage,
   toCommandError,
   type CommandError,
-} from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+} from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";

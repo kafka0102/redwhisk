@@ -1,7 +1,7 @@
 import { Download, Eye, Paperclip, Trash2 } from "lucide-react";
 
 import { useI18n } from "@/shared/i18n/i18n";
-import type { IssueAttachmentRecord } from "./issue-commands";
+import type { IssueAttachmentRecord } from "../issue-commands";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 
 interface IssueAttachmentListProps {

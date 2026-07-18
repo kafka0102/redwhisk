@@ -1,5 +1,5 @@
 import type { IssueAttachmentRecord } from "./issue-commands";
-import type { IssueAttachmentDraft } from "./issue-description-editor";
+import type { IssueAttachmentDraft } from "./issue-form/issue-description-editor";
 
 export interface IssueFormState {
   title: string;

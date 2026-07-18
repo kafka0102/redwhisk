@@ -1,5 +1,5 @@
-import type { AgentProfileRecord } from "../settings/settings-commands";
-import type { IssueRecord } from "./issue-commands";
+import type { AgentProfileRecord } from "../../settings/settings-commands";
+import type { IssueRecord } from "../issue-commands";
 
 export interface RunPromptSource {
   id:

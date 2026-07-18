@@ -1,4 +1,4 @@
-import type { IssueFormState } from "./issue-activity-types";
+import type { IssueFormState } from "../issue-activity-types";
 
 type IssueFormAttachment = IssueFormState["attachments"][number];
 

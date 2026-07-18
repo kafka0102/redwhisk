@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { IssueFormState } from "./issue-activity-types";
+import type { IssueFormState } from "../issue-activity-types";
 import { isIssueFormDirty } from "./issue-form-dirty";
 
 type Attachment = IssueFormState["attachments"][number];

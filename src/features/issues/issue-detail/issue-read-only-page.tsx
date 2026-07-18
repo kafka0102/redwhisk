@@ -29,13 +29,13 @@ import type {
   IssueLabelRecord,
   IssueRecord,
   IssueStatus,
-} from "./issue-commands";
-import type { IssueFormState } from "./issue-activity-types";
-import type { IssueAttachmentDraft } from "./issue-description-editor";
+} from "../issue-commands";
+import type { IssueFormState } from "../issue-activity-types";
+import type { IssueAttachmentDraft } from "../issue-form/issue-description-editor";
 import { IssueReadonlySessionPanel } from "./issue-readonly-session-panel";
-import { IssueSurfaceHeader } from "./issue-surface-header";
+import { IssueSurfaceHeader } from "../issue-surface-header";
 import { IssueTimeline } from "./issue-timeline";
-import { useI18n } from "../../shared/i18n/i18n";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface IssueReadOnlyPageProps {
   form: IssueFormState;

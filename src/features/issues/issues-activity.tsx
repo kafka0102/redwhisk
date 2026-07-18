@@ -30,8 +30,8 @@ import {
   type IssueRecord,
   type IssueStatusTotals,
 } from "./issue-commands";
-import { IssueAttachmentPreviewDialog } from "./issue-attachment-preview-dialog";
-import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion-dirty-workspace-dialog";
+import { IssueAttachmentPreviewDialog } from "./issue-form/issue-attachment-preview-dialog";
+import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion/issue-completion-dirty-workspace-dialog";
 import {
   EMPTY_FORM,
   ISSUE_PAGE_SIZE,
@@ -39,20 +39,20 @@ import {
   type DialogMode,
   type IssueFormState,
 } from "./issue-activity-types";
-import { IssueEditablePage } from "./issue-editable-page";
-import { isIssueFormDirty } from "./issue-form-dirty";
-import { IssueReadOnlyPage } from "./issue-read-only-page";
+import { IssueEditablePage } from "./issue-detail/issue-editable-page";
+import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
+import { IssueReadOnlyPage } from "./issue-detail/issue-read-only-page";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
-import { IssueRunDialog } from "./issue-run-dialog";
+import { IssueRunDialog } from "./issue-run/issue-run-dialog";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import {
   buildWorktreeMergeConflictPrompt,
   type WorktreeMergeDetail,
-} from "./issue-completion-helpers";
+} from "./issue-completion/issue-completion-helpers";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
-import type { IssueAttachmentDraft } from "./issue-description-editor";
+import type { IssueAttachmentDraft } from "./issue-form/issue-description-editor";
 import { issuePageStateCache } from "./issues-activity-cache";
 import {
   injectAgentSessionPrompt,

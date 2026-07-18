@@ -108,7 +108,7 @@ vi.mock("../../shared/toast", () => ({
   },
 }));
 
-vi.mock("./issue-description-editor", () => ({
+vi.mock("./issue-form/issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     attachments = [],
     ariaLabel,

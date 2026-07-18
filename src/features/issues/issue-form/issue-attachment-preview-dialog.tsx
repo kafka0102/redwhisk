@@ -1,5 +1,5 @@
-import type { AttachmentPreviewState } from "./issue-activity-types";
-import { useI18n } from "../../shared/i18n/i18n";
+import type { AttachmentPreviewState } from "../issue-activity-types";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface IssueAttachmentPreviewDialogProps {
   preview: AttachmentPreviewState;

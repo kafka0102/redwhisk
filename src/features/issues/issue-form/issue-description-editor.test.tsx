@@ -3,13 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { I18nProvider } from "../../shared/i18n/i18n";
+import { I18nProvider } from "../../../shared/i18n/i18n";
 
 import {
   IssueDescriptionEditor,
   type IssueAttachmentDraft,
 } from "./issue-description-editor";
-import type { IssueAttachmentRecord } from "./issue-commands";
+import type { IssueAttachmentRecord } from "../issue-commands";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn((path: string) => `asset://${path}`),

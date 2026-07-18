@@ -12,17 +12,17 @@ import { Button } from "@/components/ui/button";
 import { ConfirmContent } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useI18n } from "../../shared/i18n/i18n";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 import type {
   IssueAttachmentRecord,
   IssueLabelRecord,
   IssueRecord,
-} from "./issue-commands";
-import type { DialogMode, IssueFormState } from "./issue-activity-types";
-import type { IssueAttachmentDraft } from "./issue-description-editor";
-import { IssueDescriptionEditor } from "./issue-description-editor";
-import { IssueSurfaceHeader } from "./issue-surface-header";
+} from "../issue-commands";
+import type { DialogMode, IssueFormState } from "../issue-activity-types";
+import type { IssueAttachmentDraft } from "../issue-form/issue-description-editor";
+import { IssueDescriptionEditor } from "../issue-form/issue-description-editor";
+import { IssueSurfaceHeader } from "../issue-surface-header";
 
 interface IssueEditablePageProps {
   mode: DialogMode;

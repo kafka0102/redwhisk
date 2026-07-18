@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getIssueSummary, type IssueSummaryRecord } from "./issue-commands";
-import { getCommandErrorMessage } from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+import { getIssueSummary, type IssueSummaryRecord } from "../issue-commands";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface IssueSummaryDialogProps {
   issueId: number;

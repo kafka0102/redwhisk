@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import defaultUserProfile from "@/assets/images/default_user_profile.png";
 
-import { AgentMarkdown } from "../agents/message-stream/agent-markdown";
-import { getAgentLogoSrc } from "../agents/agent-visuals";
-import { useI18n } from "../../shared/i18n/i18n";
+import { AgentMarkdown } from "../../agents/message-stream/agent-markdown";
+import { getAgentLogoSrc } from "../../agents/agent-visuals";
+import { useI18n } from "../../../shared/i18n/i18n";
 import {
   getIssueTimeline,
   type IssueTimelineActor,
   type IssueTimelineEntry,
-} from "./issue-commands";
+} from "../issue-commands";
 
 interface IssueTimelineProps {
   projectId: number;

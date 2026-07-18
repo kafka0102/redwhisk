@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import {
   listAgentSessions,
   type AgentSessionListItem,
-} from "../agents/agent-session-commands";
-import { formatProcessingDuration } from "../agents/agent-session-formatters";
-import { getCommandErrorMessage } from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+} from "../../agents/agent-session-commands";
+import { formatProcessingDuration } from "../../agents/agent-session-formatters";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface IssueReadonlySessionPanelProps {
   linkedSessionId: number | null;

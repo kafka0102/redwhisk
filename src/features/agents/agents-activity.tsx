@@ -78,7 +78,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
-import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion-helpers";
+import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion/issue-completion-helpers";
 import {
   getSessionReturnState,
   setSessionReturnState,

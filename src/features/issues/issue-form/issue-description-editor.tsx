@@ -6,10 +6,10 @@ import {
   type RichTextAttachment,
   type RichTextEditorLabels,
 } from "@/components/ui/rich-text-editor";
-import { useI18n } from "../../shared/i18n/i18n";
-import type { I18nMessages } from "../../shared/i18n/messages";
+import { useI18n } from "../../../shared/i18n/i18n";
+import type { I18nMessages } from "../../../shared/i18n/messages";
 
-import type { IssueAttachmentRecord } from "./issue-commands";
+import type { IssueAttachmentRecord } from "../issue-commands";
 
 export interface IssueAttachmentDraft {
   token: string;
