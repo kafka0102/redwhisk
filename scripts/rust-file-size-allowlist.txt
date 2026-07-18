@@ -1,0 +1,29 @@
+# Rust 单文件大小白名单（存量超阈值待拆分 backlog）
+# 格式: <相对仓库根路径> # <行数> lines, registered 2026-07-18
+# 仅登记“本次改动前已超阈值”的存量文件；新建文件禁止加入（脚本会报错）。
+# 阈值: 常规 500 / 编排主文件(service.rs|commands.rs under features/*) 800 / 硬上限 1000。
+src-tauri/src/agent/agent_event_broadcaster.rs # 790 lines, registered 2026-07-18
+src-tauri/src/agent/claude_streaming/event_mapper.rs # 515 lines, registered 2026-07-18
+src-tauri/src/agent/claude_streaming/message.rs # 744 lines, registered 2026-07-18
+src-tauri/src/agent/claude_streaming/session.rs # 2623 lines, registered 2026-07-18
+src-tauri/src/agent/claude_streaming/transport.rs # 612 lines, registered 2026-07-18
+src-tauri/src/agent/codex_app_server/session.rs # 1742 lines, registered 2026-07-18
+src-tauri/src/agent/codex_app_server/thread_item.rs # 763 lines, registered 2026-07-18
+src-tauri/src/agent/codex_app_server/transport.rs # 865 lines, registered 2026-07-18
+src-tauri/src/agent/command_detector.rs # 535 lines, registered 2026-07-18
+src-tauri/src/agent/provider_factory.rs # 518 lines, registered 2026-07-18
+src-tauri/src/agent/pty_session_manager.rs # 1025 lines, registered 2026-07-18
+src-tauri/src/db/agent_session_repository.rs # 1571 lines, registered 2026-07-18
+src-tauri/src/db/issue_repository.rs # 1029 lines, registered 2026-07-18
+src-tauri/src/db/migrations.rs # 573 lines, registered 2026-07-18
+src-tauri/src/features/agent_session/commands.rs # 914 lines, registered 2026-07-18
+src-tauri/src/features/agent_session/service.rs # 5860 lines, registered 2026-07-18
+src-tauri/src/features/agent_session/timeline.rs # 605 lines, registered 2026-07-18
+src-tauri/src/features/agent_session/workspace.rs # 1737 lines, registered 2026-07-18
+src-tauri/src/features/issue/completion/effect_interpreter.rs # 878 lines, registered 2026-07-18
+src-tauri/src/features/issue/completion/flow.rs # 602 lines, registered 2026-07-18
+src-tauri/src/features/issue/completion/state_machine.rs # 784 lines, registered 2026-07-18
+src-tauri/src/features/issue/service.rs # 4739 lines, registered 2026-07-18
+src-tauri/src/features/project_terminal/service.rs # 2790 lines, registered 2026-07-18
+src-tauri/src/features/settings/service.rs # 1018 lines, registered 2026-07-18
+src-tauri/src/git/worktree.rs # 942 lines, registered 2026-07-18
