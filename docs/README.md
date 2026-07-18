@@ -28,6 +28,7 @@
 - [RedWhisk 设计系统指南](./architecture-design/design-guide.md)
 - [Settings 页面布局规范](./architecture-design/settings-page-layout.md)
 - [前端大型组件拆分规则](./architecture-design/frontend-large-component-splitting-rules.md)
+- [后端 feature-first 重构方案（执行计划）](./architecture-design/backend-feature-first-refactor.md)
 
 ## 领域、数据与质量
 
