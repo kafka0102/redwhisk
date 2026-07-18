@@ -13,7 +13,7 @@ pub mod types;
 use agent::latest_output_writer::LatestOutputWriter;
 use app_state::AppState;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use commands::agent_skill_commands::trigger_global_skill_refresh;
+use features::settings::agent_skill_commands::trigger_global_skill_refresh;
 use core::local_data_service::LocalDataService;
 use local_data_path::redwhisk_data_dir;
 use logging::Logger;
@@ -64,8 +64,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::agent_skill_commands::list_agent_skills,
-            commands::agent_skill_commands::refresh_agent_skills,
+            features::settings::agent_skill_commands::list_agent_skills,
+            features::settings::agent_skill_commands::refresh_agent_skills,
             commands::core_commands::initialize_local_data,
             features::project::commands::create_project,
             features::project::commands::list_projects,
@@ -138,21 +138,21 @@ pub fn run() {
             commands::session_monitor_commands::close_session_monitor_window,
             commands::session_monitor_commands::open_monitored_agent_session,
             commands::session_monitor_commands::list_monitored_agent_sessions,
-            commands::settings_commands::detect_codex_command,
-            commands::settings_commands::test_agent_command,
-            commands::settings_commands::list_agent_profiles,
-            commands::settings_commands::save_agent_profile,
-            commands::settings_commands::delete_agent_profile,
-            commands::settings_commands::list_project_labels,
-            commands::settings_commands::save_project_label,
-            commands::settings_commands::delete_project_label,
-            commands::settings_commands::list_saved_agent_skills,
-            commands::settings_commands::save_saved_agent_skill,
-            commands::settings_commands::delete_saved_agent_skill,
-            commands::settings_commands::get_user_profile,
-            commands::settings_commands::update_user_profile,
-            commands::app_update_commands::get_update_status,
-            commands::app_update_commands::dismiss_update_prompt
+            features::settings::commands::detect_codex_command,
+            features::settings::commands::test_agent_command,
+            features::settings::commands::list_agent_profiles,
+            features::settings::commands::save_agent_profile,
+            features::settings::commands::delete_agent_profile,
+            features::settings::commands::list_project_labels,
+            features::settings::commands::save_project_label,
+            features::settings::commands::delete_project_label,
+            features::settings::commands::list_saved_agent_skills,
+            features::settings::commands::save_saved_agent_skill,
+            features::settings::commands::delete_saved_agent_skill,
+            features::settings::commands::get_user_profile,
+            features::settings::commands::update_user_profile,
+            features::app_update::commands::get_update_status,
+            features::app_update::commands::dismiss_update_prompt
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

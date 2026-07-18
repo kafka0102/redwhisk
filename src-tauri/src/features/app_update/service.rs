@@ -282,7 +282,7 @@ fn update_database_error(error: impl ToString) -> CommandError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::app_update::github::{LatestRelease, LatestReleaseFetchError};
+    use crate::features::app_update::github::{LatestRelease, LatestReleaseFetchError};
     use crate::db::migrations::MigrationRunner;
     use chrono::TimeZone;
     use rusqlite::Connection;

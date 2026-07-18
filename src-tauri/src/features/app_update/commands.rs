@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Emitter, State};
 
 use crate::app_state::AppState;
-use crate::core::app_update::{dismiss_update_prompt_in_data_dir, get_update_status_in_data_dir};
+use super::{dismiss_update_prompt_in_data_dir, get_update_status_in_data_dir};
 use crate::types::app_update::{DismissUpdatePromptInput, GetUpdateStatusInput, UpdateStatus};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 

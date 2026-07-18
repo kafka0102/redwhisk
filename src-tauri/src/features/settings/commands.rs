@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::core::settings_service::SettingsService;
+use super::service::SettingsService;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, DeleteAgentProfileInput,
     ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
@@ -132,7 +132,7 @@ pub fn get_user_profile(
     state: State<'_, AppState>,
 ) -> Result<UserProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
-    crate::core::user_profile_service::UserProfileService::get_profile_in_data_dir(data_dir)
+    super::user_profile::UserProfileService::get_profile_in_data_dir(data_dir)
 }
 
 #[tauri::command]
@@ -142,7 +142,7 @@ pub fn update_user_profile(
     input: UpdateUserProfileInput,
 ) -> Result<UserProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
-    crate::core::user_profile_service::UserProfileService::update_profile_in_data_dir(
+    super::user_profile::UserProfileService::update_profile_in_data_dir(
         data_dir, input,
     )
 }
