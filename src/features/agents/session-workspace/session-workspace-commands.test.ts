@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { invokeCommand } from "../../shared/commands/command-client";
+import { invokeCommand } from "../../../shared/commands/command-client";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
   readProjectWorktreeDiff,
 } from "./session-workspace-commands";
 
-vi.mock("../../shared/commands/command-client", () => ({
+vi.mock("../../../shared/commands/command-client", () => ({
   invokeCommand: vi.fn(async (command: string) => ({ command })),
 }));
 

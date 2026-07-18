@@ -2,14 +2,14 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { I18nProvider } from "../../shared/i18n/i18n";
+import { I18nProvider } from "../../../shared/i18n/i18n";
 import { useSessionWorkspaceCache } from "./use-session-workspace-cache";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
 } from "./session-workspace-commands";
 
-vi.mock("./session-workspace-commands", () => ({
+vi.mock("../session-workspace/session-workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),

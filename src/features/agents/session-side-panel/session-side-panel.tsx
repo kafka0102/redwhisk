@@ -1,16 +1,16 @@
-import { SessionChangesPanel } from "./session-changes-panel";
-import { SessionFileTreePanel } from "./session-file-tree-panel";
+import { SessionChangesPanel } from "../session-workspace/session-changes-panel";
+import { SessionFileTreePanel } from "../session-workspace/session-file-tree-panel";
 import { SessionIssuePanel } from "./session-issue-panel";
-import type { LinkedSessionIssue } from "./agents-session-pane";
-import type { AgentSessionListItem } from "./agent-session-commands";
-import { useI18n } from "../../shared/i18n/i18n";
+import type { LinkedSessionIssue } from "../session-pane/agents-session-pane";
+import type { AgentSessionListItem } from "../agent-session-commands";
+import { useI18n } from "../../../shared/i18n/i18n";
 import type {
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
   WorkspaceChangedFile,
   WorkspaceFileTreeNode,
-} from "./session-workspace-commands";
-import type { SessionSidePanelTab } from "./session-workspace-types";
+} from "../session-workspace/session-workspace-commands";
+import type { SessionSidePanelTab } from "../session-workspace/session-workspace-types";
 
 interface SessionSidePanelProps {
   activeTab: SessionSidePanelTab;

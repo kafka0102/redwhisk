@@ -6,12 +6,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../components/ui";
+} from "../../../components/ui";
 import { SessionFileViewer } from "./session-file-viewer";
-import { DiffViewer } from "../../shared/workspace/diff-viewer";
-import { useI18n } from "../../shared/i18n/i18n";
-import type { AgentType } from "./agent-session-commands";
-import { getAgentLogoSrc } from "./agent-visuals";
+import { DiffViewer } from "../../../shared/workspace/diff-viewer";
+import { useI18n } from "../../../shared/i18n/i18n";
+import type { AgentType } from "../agent-session-commands";
+import { getAgentLogoSrc } from "../agent-visuals";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,

@@ -4,8 +4,8 @@ import {
   getCommandErrorMessage,
   toCommandError,
   type CommandError,
-} from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+} from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,

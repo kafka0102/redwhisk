@@ -2,10 +2,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentStreamEventEnvelope } from "./agent-stream-types";
+import type { AgentStreamEventEnvelope } from "../agent-stream-types";
 import { AgentSessionView } from "./agent-session-view";
-import { clearAgentMessageStreamCacheForTest } from "./message-stream/use-agent-message-stream";
-import { clearComposerDraftCacheForTest } from "./composer/use-agent-composer";
+import { clearAgentMessageStreamCacheForTest } from "../message-stream/use-agent-message-stream";
+import { clearComposerDraftCacheForTest } from "../composer/use-agent-composer";
 
 // vi.hoisted 让 mock 工厂与测试体共享同一份可变 listeners，便于推送事件。
 const mocks = vi.hoisted(() => ({
@@ -28,7 +28,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   ),
 }));
 
-vi.mock("./agent-session-commands", () => ({
+vi.mock("../agent-session-commands", () => ({
   readAgentTimeline: vi.fn(),
   resumeStructuredAgentSession: vi.fn(),
   sendAgentMessage: vi.fn(),
@@ -53,7 +53,7 @@ const {
   setAgentModel,
   setAgentThinking,
   listAgentModels,
-} = await import("./agent-session-commands");
+} = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
 const resumeStructuredAgentSessionMock = vi.mocked(
   resumeStructuredAgentSession,

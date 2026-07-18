@@ -5,4 +5,4 @@
 export {
   FileTreePanel as SessionFileTreePanel,
   type FileTreePanelProps as SessionFileTreePanelProps,
-} from "../../shared/workspace/file-tree-panel";
+} from "../../../shared/workspace/file-tree-panel";

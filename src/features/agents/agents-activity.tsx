@@ -41,7 +41,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
-import { AgentsSessionList } from "./agents-session-list";
+import { AgentsSessionList } from "./session-list/agents-session-list";
 import {
   listAgentProfiles,
   type AgentProfileRecord,
@@ -51,20 +51,20 @@ import {
   type LinkedSessionIssue,
   type SessionIssueTransition,
   type SessionWorkspaceEntry,
-} from "./agents-session-pane";
+} from "./session-pane/agents-session-pane";
 import { subscribeAgentSessionListChanged } from "./agent-session-events";
 import { getSessionIssueGroup } from "./agent-session-formatters";
-import { SessionSidePanel } from "./session-side-panel";
+import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import {
   createDefaultSessionInlineTerminalPanelState,
   type SessionInlineTerminalPanelState,
-} from "./session-inline-terminal-panel-state";
-import { SessionBrowserTab } from "./session-browser-tab";
-import { SessionTerminalTab } from "./session-terminal-tab";
-import type { SessionWorkspaceToolTab } from "./session-workspace-tabs";
-import type { SessionWorkspaceToolTabKind } from "./session-workspace-types";
-import { useSessionWorkspaceCache } from "./use-session-workspace-cache";
-import { useSessionPaneCache } from "./use-session-pane-cache";
+} from "./session-workspace/session-inline-terminal-panel-state";
+import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
+import { SessionTerminalTab } from "./session-workspace/session-terminal-tab";
+import type { SessionWorkspaceToolTab } from "./session-workspace/session-workspace-tabs";
+import type { SessionWorkspaceToolTabKind } from "./session-workspace/session-workspace-types";
+import { useSessionWorkspaceCache } from "./session-workspace/use-session-workspace-cache";
+import { useSessionPaneCache } from "./session-pane/use-session-pane-cache";
 import {
   closeProjectTerminal,
   createTemporaryProjectTerminal,
@@ -82,7 +82,7 @@ import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion-hel
 import {
   getSessionReturnState,
   setSessionReturnState,
-} from "./session-return-cache";
+} from "./session-pane/session-return-cache";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;

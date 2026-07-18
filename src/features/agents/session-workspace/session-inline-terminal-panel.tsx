@@ -1,8 +1,8 @@
 import { Maximize2, Minimize2, Plus, X } from "lucide-react";
 
-import { ProjectTerminal } from "../terminals/project-terminal";
+import { ProjectTerminal } from "../../terminals/project-terminal";
 import type { SessionInlineTerminalPanelState } from "./session-inline-terminal-panel-state";
-import { useI18n } from "../../shared/i18n/i18n";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface SessionInlineTerminalPanelProps {
   agentSessionId: number;

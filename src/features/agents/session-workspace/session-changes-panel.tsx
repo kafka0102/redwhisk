@@ -1,4 +1,4 @@
-import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes-panels";
+import { WorkspaceChangesPanels } from "../../../shared/workspace/workspace-changes-panels";
 import type {
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,

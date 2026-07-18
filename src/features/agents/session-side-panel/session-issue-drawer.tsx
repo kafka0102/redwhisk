@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { listIssues, type IssueRecord } from "../issues/issue-commands";
-import { getCommandErrorMessage } from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+import { listIssues, type IssueRecord } from "../../issues/issue-commands";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface SessionIssueDrawerProps {
   issueId: number;

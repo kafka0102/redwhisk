@@ -3,7 +3,7 @@ import type {
   WorkspaceChangedFile,
   WorkspaceFileContent,
 } from "./session-workspace-commands";
-import type { WorkspaceDiffTab } from "../../shared/workspace/diff-viewer";
+import type { WorkspaceDiffTab } from "../../../shared/workspace/diff-viewer";
 
 export interface SessionWorkspaceFile {
   fileName: string;

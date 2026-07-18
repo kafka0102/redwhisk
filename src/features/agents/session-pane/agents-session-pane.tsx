@@ -1,20 +1,20 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Ellipsis, PanelRightOpen, X } from "lucide-react";
 
-import type { AgentSessionListItem } from "./agent-session-commands";
+import type { AgentSessionListItem } from "../agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
-import { formatSessionTitle } from "./agent-session-formatters";
-import { Input } from "../../components/ui/input";
+import { formatSessionTitle } from "../agent-session-formatters";
+import { Input } from "../../../components/ui/input";
 import {
   SessionWorkspaceTabs,
   type SessionWorkspaceToolTab,
-} from "./session-workspace-tabs";
-import { useI18n } from "../../shared/i18n/i18n";
+} from "../session-workspace/session-workspace-tabs";
+import { useI18n } from "../../../shared/i18n/i18n";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
-} from "./session-workspace-types";
+} from "../session-workspace/session-workspace-types";
 
 export interface LinkedSessionIssue {
   issueId: number;

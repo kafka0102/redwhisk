@@ -10,7 +10,7 @@ import type {
   SessionWorkspaceFileTab,
 } from "./session-workspace-types";
 
-vi.mock("./agent-visuals", () => ({
+vi.mock("../agent-visuals", () => ({
   getAgentLogoSrc: vi.fn((agentType: string) => `/logos/${agentType}.svg`),
 }));
 

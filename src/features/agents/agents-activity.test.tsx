@@ -42,7 +42,14 @@ import {
   createTemporaryProjectTerminal,
 } from "../terminals/project-terminal-commands";
 import { toast } from "../../shared/toast";
-import appCss from "../../app/app.css?raw";
+import appCssRaw from "../../app/app.css?raw";
+
+const sharedStyleModules = import.meta.glob("../../shared/styles/*.css", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
+const appCss = appCssRaw + Object.values(sharedStyleModules).join("\n");
 import tokensCss from "../../shared/styles/tokens.css?raw";
 import {
   getProjectWorktreeChanges,
@@ -55,7 +62,7 @@ import {
   type WorkspaceChangedFile,
   type WorkspaceChangeKind,
   type WorkspaceFileTreeNode,
-} from "./session-workspace-commands";
+} from "./session-workspace/session-workspace-commands";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: vi.fn(),
@@ -83,7 +90,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 // mock AgentSessionView 为占位组件，避免在 agents-activity 测试中深渲染
 // message-stream / composer（它们有独立的测试覆盖）。
-vi.mock("./agent-session-view", () => ({
+vi.mock("./session-pane/agent-session-view", () => ({
   AgentSessionView: () =>
     createElement("div", {
       "aria-label": "Agent session message stream",
@@ -150,7 +157,7 @@ vi.mock("./agent-session-commands", () => ({
   sendAgentMessage: vi.fn(),
 }));
 
-vi.mock("./session-workspace-commands", () => ({
+vi.mock("./session-workspace/session-workspace-commands", () => ({
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { formatProcessingDuration } from "./agent-session-formatters";
+import { formatProcessingDuration } from "../agent-session-formatters";
 import { ExpandableText } from "./expandable-text";
-import type { AgentSessionListItem } from "./agent-session-commands";
-import { listIssues, type IssueRecord } from "../issues/issue-commands";
-import { getCommandErrorMessage } from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+import type { AgentSessionListItem } from "../agent-session-commands";
+import { listIssues, type IssueRecord } from "../../issues/issue-commands";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface SessionIssuePanelProps {
   issueId: number;

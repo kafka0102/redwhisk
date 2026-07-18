@@ -1,7 +1,7 @@
 import { Editor } from "@monaco-editor/react";
 
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
-import { useI18n } from "../../shared/i18n/i18n";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface SessionFileViewerProps {
   tab: SessionWorkspaceFileTab;

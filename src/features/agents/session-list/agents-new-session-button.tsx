@@ -2,8 +2,8 @@ import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
-import { useI18n } from "../../shared/i18n/i18n";
-import type { AgentProfileRecord } from "../settings/settings-commands";
+import { useI18n } from "../../../shared/i18n/i18n";
+import type { AgentProfileRecord } from "../../settings/settings-commands";
 
 interface AgentsNewSessionButtonProps {
   availableAgentProfiles: AgentProfileRecord[];

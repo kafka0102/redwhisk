@@ -18,7 +18,7 @@ export type {
   WorkspaceDiffContent,
   WorkspaceFileContent,
   WorkspaceFileTreeNode,
-} from "../../shared/workspace/workspace-commands";
+} from "../../../shared/workspace/workspace-commands";
 export {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   getProjectWorktreeChanges,
@@ -27,4 +27,4 @@ export {
   listCodeWorkspaceRoots,
   readProjectWorktreeDiff,
   readProjectWorktreeFile,
-} from "../../shared/workspace/workspace-commands";
+} from "../../../shared/workspace/workspace-commands";

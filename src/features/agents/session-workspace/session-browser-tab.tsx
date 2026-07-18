@@ -6,8 +6,8 @@ import {
   type FormEvent,
 } from "react";
 
-import { Input } from "../../components/ui";
-import { useI18n } from "../../shared/i18n/i18n";
+import { Input } from "../../../components/ui";
+import { useI18n } from "../../../shared/i18n/i18n";
 import {
   filterRecentBrowserUrls,
   loadRecentBrowserUrls,

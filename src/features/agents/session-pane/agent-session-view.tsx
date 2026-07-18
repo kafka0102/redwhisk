@@ -16,19 +16,19 @@
 
 import { useCallback, memo, useMemo } from "react";
 
-import { AgentComposer } from "./composer/agent-composer";
-import { getAgentCapabilities } from "./agent-capabilities";
-import { AgentMessageStreamView } from "./message-stream/agent-message-stream";
-import { useAgentMessageStream } from "./message-stream/use-agent-message-stream";
-import { PermissionCard } from "./message-stream/permission-card";
-import { useI18n } from "../../shared/i18n/i18n";
+import { AgentComposer } from "../composer/agent-composer";
+import { getAgentCapabilities } from "../agent-capabilities";
+import { AgentMessageStreamView } from "../message-stream/agent-message-stream";
+import { useAgentMessageStream } from "../message-stream/use-agent-message-stream";
+import { PermissionCard } from "../message-stream/permission-card";
+import { useI18n } from "../../../shared/i18n/i18n";
 import {
   resumeStructuredAgentSession,
   type AgentSessionStatus,
   type AgentType,
   type IssueStatus,
-} from "./agent-session-commands";
-import type { TurnStatus } from "./message-stream/message-stream-types";
+} from "../agent-session-commands";
+import type { TurnStatus } from "../message-stream/message-stream-types";
 
 // 计算 effective turnStatus：reducer 已 running 直接 running；否则在
 // canUseExternalTurnRunning 生效时用外部 isTurnRunning 维持 running（grace 期），

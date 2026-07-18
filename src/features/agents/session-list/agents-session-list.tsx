@@ -1,15 +1,15 @@
 import { GitBranch, LoaderCircle } from "lucide-react";
 import { memo, useMemo } from "react";
 
-import type { AgentSessionListItem } from "./agent-session-commands";
+import type { AgentSessionListItem } from "../agent-session-commands";
 import { AgentsNewSessionButton } from "./agents-new-session-button";
-import { formatAgentTypeLabel, getAgentLogoSrc } from "./agent-visuals";
+import { formatAgentTypeLabel, getAgentLogoSrc } from "../agent-visuals";
 import {
   formatSessionStatusLabel,
   formatSessionTitle,
-} from "./agent-session-formatters";
-import { useI18n } from "../../shared/i18n/i18n";
-import type { AgentProfileRecord } from "../settings/settings-commands";
+} from "../agent-session-formatters";
+import { useI18n } from "../../../shared/i18n/i18n";
+import type { AgentProfileRecord } from "../../settings/settings-commands";
 
 interface AgentsSessionListProps {
   availableAgentProfiles: AgentProfileRecord[];

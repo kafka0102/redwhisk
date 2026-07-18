@@ -1,5 +1,5 @@
-import { ProjectTerminal } from "../terminals/project-terminal";
-import { useI18n } from "../../shared/i18n/i18n";
+import { ProjectTerminal } from "../../terminals/project-terminal";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface SessionTerminalTabProps {
   projectId: number;

@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { I18nProvider } from "../../shared/i18n/i18n";
+import { I18nProvider } from "../../../shared/i18n/i18n";
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
 import { SessionFileViewer } from "./session-file-viewer";
 

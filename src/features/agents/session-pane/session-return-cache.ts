@@ -1,4 +1,4 @@
-import type { SessionSidePanelTab } from "./session-workspace-types";
+import type { SessionSidePanelTab } from "../session-workspace/session-workspace-types";
 
 interface SessionReturnState {
   selectedSessionId: number;

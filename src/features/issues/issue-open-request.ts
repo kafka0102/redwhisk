@@ -1,4 +1,4 @@
-import type { SessionSidePanelTab } from "../agents/session-workspace-types";
+import type { SessionSidePanelTab } from "../agents/session-workspace/session-workspace-types";
 
 export interface IssueOpenRequest {
   issueId: number;

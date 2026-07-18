@@ -1,26 +1,26 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../components/ui/select";
-import { Textarea } from "../../components/ui/textarea";
+} from "../../../components/ui/select";
+import { Textarea } from "../../../components/ui/textarea";
 import {
   sendAgentMessage,
   startStructuredAgentSession,
   type StartStructuredAgentSessionResult,
-} from "./agent-session-commands";
+} from "../agent-session-commands";
 import {
   listAgentProfiles,
   type AgentProfileRecord,
-} from "../settings/settings-commands";
-import { getCommandErrorMessage } from "../../shared/commands/command-error";
-import { useI18n } from "../../shared/i18n/i18n";
+} from "../../settings/settings-commands";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { useI18n } from "../../../shared/i18n/i18n";
 
 interface TemporarySessionDialogProps {
   projectId: number;

@@ -5,7 +5,7 @@
 src/features/issues/issues-activity.tsx # 1895 lines, registered 2026-07-18
 src/features/agents/agents-activity.tsx # 1883 lines, registered 2026-07-18
 src/features/agents/message-stream/agent-message-cards.tsx # 895 lines, registered 2026-07-18
-src/features/agents/use-session-workspace-cache.ts # 775 lines, registered 2026-07-18
+src/features/agents/session-workspace/use-session-workspace-cache.ts # 775 lines, registered 2026-07-18
 src/features/issues/issue-run-dialog.tsx # 733 lines, registered 2026-07-18
 src/features/agents/message-stream/message-stream-reducer.ts # 720 lines, registered 2026-07-18
 src/components/ui/rich-text-editor.tsx # 706 lines, registered 2026-07-18
