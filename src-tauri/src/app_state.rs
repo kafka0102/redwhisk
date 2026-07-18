@@ -4,7 +4,7 @@ use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::agent_skill::index::AgentSkillIndex;
-use crate::core::local_data_service::LocalDataService;
+use crate::local_data_service::LocalDataService;
 use crate::features::project_terminal::ProjectTerminalRegistry;
 
 pub struct AppState {
