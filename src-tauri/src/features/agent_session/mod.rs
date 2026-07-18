@@ -5,14 +5,21 @@
 pub mod commands;
 pub mod session_monitor_commands;
 pub mod workspace_commands;
+mod command_snapshot;
+mod launch;
+mod log_path;
 mod service;
+mod timeline;
+mod validation;
+mod worktree_setup;
 mod workspace;
 
 pub use service::AgentSessionService;
-pub(crate) use service::{
-    IssueSessionArchive, agent_session_error_to_command_error,
-    build_issue_session_archive, is_archived_issue_log_path,
-    read_last_assistant_text_for_turn, remove_session_log_file,
+pub(crate) use service::agent_session_error_to_command_error;
+pub(crate) use log_path::{
+    IssueSessionArchive, build_issue_session_archive, is_archived_issue_log_path,
+    remove_session_log_file,
 };
+pub(crate) use timeline::read_last_assistant_text_for_turn;
 #[cfg(test)]
-pub(crate) use service::build_issue_archive_log_path;
+pub(crate) use log_path::build_issue_archive_log_path;

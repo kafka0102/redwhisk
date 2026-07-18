@@ -1,10 +1,8 @@
-use std::env;
-use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -15,10 +13,9 @@ use rusqlite::{params, Transaction};
 
 use crate::agent::agent_event_broadcaster::{AgentEventBroadcaster, TURN_GRACE_MS};
 use crate::local_data_path::user_home_from_data_dir;
-use crate::agent::codex_config;
 use crate::agent::provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,
-    StartedSession, ThreadIdBackfill,
+    ThreadIdBackfill,
 };
 use crate::agent::pty_session_manager::{
     read_terminal_snapshot, PtyCommandMode, PtyExitStatus, PtySessionManager, PtySpawnRequest,
@@ -34,7 +31,7 @@ use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::worktree::{
-    cleanup_worktree, create_worktree_for_issue, list_local_branches, restore_worktree_for_branch,
+    cleanup_worktree, list_local_branches, restore_worktree_for_branch,
     GitBranchInfo,
 };
 use crate::types::agent_profile::{AgentScope, AgentType};
@@ -47,9 +44,6 @@ use crate::types::agent_session::{
     StartAgentSessionResult, StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
     UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
 };
-use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
-};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     CompleteIssueCleanInput, CompleteIssueManualInput, DeleteIssueWorktreeInput,
@@ -60,37 +54,35 @@ use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
-const SESSION_LOG_DIR_NAME: &str = "session-logs";
-const SESSION_RUNTIME_LOG_DIR_NAME: &str = "runtime";
-const SESSION_ARCHIVE_LOG_DIR_NAME: &str = "archive";
-const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
-const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
-const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
+
+use super::command_snapshot::{agent_command_with_default_args, build_structured_command_snapshot, ensure_codex_bypass_arg, read_codex_model_from_data_dir, read_codex_reasoning_effort_from_data_dir};
+use super::launch::{persist_started_session_thread_id, start_provider_session};
+use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
+use super::timeline::{is_empty_standalone_thread_timeline_error, latest_effort_from_session_log, latest_output_from_session_log, read_timeline_from_session_log};
+use super::validation::{validate_injected_prompt, validate_profile_not_deleted, validate_profile_scope, validate_prompt_snapshot, validate_session_title, validate_working_dir};
+use super::worktree_setup::run_worktree_setup_command;
+
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
 const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
 const ATTENTION_SNAPSHOT_MAX_BYTES: usize = 32_768;
-const TIMELINE_LOG_SNAPSHOT_MAX_BYTES: usize = 262_144;
-const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 const AGENT_SESSION_COMPLETED_LIST_LIMIT: usize = 50;
-#[cfg(unix)]
-const DEFAULT_SETUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
 
-struct SessionLaunchContext {
-    profile: AgentProfileRow,
-    working_dir: String,
-    log_path: String,
-    command_snapshot: String,
-    started_at: i64,
-    workspace_mode: WorkspaceMode,
-    target_branch: Option<String>,
-    workspace_branch: Option<String>,
-    workspace_path: Option<String>,
-    origin_branch: Option<String>,
-    worktree_owner: WorktreeOwner,
-    worktree_root_path: Option<String>,
-    worktree_setup_command: Option<String>,
+pub(super) struct SessionLaunchContext {
+    pub(super) profile: AgentProfileRow,
+    pub(super) working_dir: String,
+    pub(super) log_path: String,
+    pub(super) command_snapshot: String,
+    pub(super) started_at: i64,
+    pub(super) workspace_mode: WorkspaceMode,
+    pub(super) target_branch: Option<String>,
+    pub(super) workspace_branch: Option<String>,
+    pub(super) workspace_path: Option<String>,
+    pub(super) origin_branch: Option<String>,
+    pub(super) worktree_owner: WorktreeOwner,
+    pub(super) worktree_root_path: Option<String>,
+    pub(super) worktree_setup_command: Option<String>,
 }
 
 pub struct AgentSessionRuntimeListResult {
@@ -98,23 +90,11 @@ pub struct AgentSessionRuntimeListResult {
     pub pruned_runtime_session_ids: Vec<i64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct StructuredTimelineHistory {
-    items: Vec<AgentTimelineItem>,
-    effort: Option<String>,
-}
-
-pub(crate) struct IssueSessionArchive {
-    pub archive_path: String,
-    pub runtime_path: String,
-    pub latest_output: Option<String>,
-}
-
 pub struct AgentSessionService<'connection> {
-    issue_repository: IssueRepository<'connection>,
-    project_repository: ProjectRepository<'connection>,
-    agent_profile_repository: AgentProfileRepository<'connection>,
-    agent_session_repository: AgentSessionRepository<'connection>,
+    pub(super) issue_repository: IssueRepository<'connection>,
+    pub(super) project_repository: ProjectRepository<'connection>,
+    pub(super) agent_profile_repository: AgentProfileRepository<'connection>,
+    pub(super) agent_session_repository: AgentSessionRepository<'connection>,
 }
 
 impl<'connection> AgentSessionService<'connection> {
@@ -811,276 +791,6 @@ impl<'connection> AgentSessionService<'connection> {
         Ok(result)
     }
 
-    /// DB commit 之后的共享启动后半段（issue 结构化路径）。
-    ///
-    /// mark_starting → factory.start → thread_id 回填 → broadcast/register →
-    /// initial prompt；失败 unmark/shutdown/rollback/清理自有 worktree。
-    #[allow(clippy::too_many_arguments)]
-    fn finish_structured_issue_provider_start(
-        &self,
-        factory: &dyn AgentSessionProviderFactory,
-        request: AgentSessionStartRequest,
-        agent_registry: &AgentSessionRegistry,
-        broadcaster: &AgentEventBroadcaster,
-        prompt_snapshot: &str,
-        project_id: i64,
-        issue_id: i64,
-        session_id: i64,
-        launch: &SessionLaunchContext,
-        previous_archive_path: Option<&str>,
-    ) -> Result<(), CommandError> {
-        // DB 事务已 commit（session 为 running），后续 handle 启动 + send_message
-        // 仍耗时。mark_starting 让 contains 返回 true，reconcile 据此跳过；
-        // register 真实 handle 时自动清除，失败路径需显式 unmark。
-        agent_registry.mark_starting(session_id);
-        let started = match start_provider_session(factory, request) {
-            Ok(started) => started,
-            Err(error) => {
-                agent_registry.unmark_starting(session_id);
-                self.cleanup_owned_worktree(project_id, launch);
-                let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
-                return Err(error);
-            }
-        };
-        if let Err(error) =
-            persist_started_session_thread_id(&self.agent_session_repository, session_id, &started)
-        {
-            agent_registry.unmark_starting(session_id);
-            started.handle.shutdown();
-            self.cleanup_owned_worktree(project_id, launch);
-            let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
-            return Err(error);
-        }
-
-        broadcaster.register_session(session_id);
-        let handle = started.handle;
-        // 首条派发消息标记为 initial turn 来源；写 source 同时清空 current_turn_id。
-        let _ = self
-            .agent_session_repository
-            .update_current_turn_source(session_id, "initial");
-        if let Err(error) = handle.send_message(prompt_snapshot.to_string(), Vec::new()) {
-            agent_registry.unmark_starting(session_id);
-            handle.shutdown();
-            self.cleanup_owned_worktree(project_id, launch);
-            let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
-            return Err(agent_session_error_to_command_error(error));
-        }
-        agent_registry.register(session_id, handle);
-        remove_session_log_file(previous_archive_path);
-        Ok(())
-    }
-
-    fn rollback_failed_structured_issue_session(
-        &self,
-        project_id: i64,
-        issue_id: i64,
-        session_id: i64,
-    ) -> Result<(), CommandError> {
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(agent_session_database_error)?;
-        AgentSessionRepository::soft_delete_in_transaction(
-            &transaction,
-            session_id,
-            current_epoch_millis()?,
-        )
-        .map_err(agent_session_database_error)?;
-        IssueRepository::update_status_in_transaction(
-            &transaction,
-            project_id,
-            issue_id,
-            IssueStatus::Backlog,
-        )
-        .map_err(agent_session_database_error)?;
-        transaction.commit().map_err(agent_session_database_error)?;
-        Ok(())
-    }
-
-    /// Agent 进程启动失败时清理 Redwhisk 自建 worktree。
-    ///
-    /// 仅在「agent 未真正产出」的启动失败路径调用：此时 worktree 无成果需保留，
-    /// 清理可避免残留目录/分支卡死下次启动（分支已检出 → `git worktree add` 失败）。
-    /// 外部/当前分支（External）不动；best-effort：清理失败不阻塞错误返回。
-    fn cleanup_owned_worktree(&self, project_id: i64, launch: &SessionLaunchContext) {
-        if launch.worktree_owner != WorktreeOwner::Redwhisk {
-            return;
-        }
-        let (Some(workspace_path), Some(workspace_branch)) = (
-            launch.workspace_path.as_deref(),
-            launch.workspace_branch.as_deref(),
-        ) else {
-            return;
-        };
-        let Ok(project) = self.project_by_id(project_id) else {
-            return;
-        };
-        let _ = cleanup_worktree(&project.repo_path, workspace_path, workspace_branch);
-    }
-
-    fn prepare_issue_session_launch(
-        &self,
-        data_dir: &Path,
-        input: &StartAgentSessionInput,
-    ) -> Result<SessionLaunchContext, CommandError> {
-        let project = self.project_by_id(input.project_id)?;
-        let profile = self
-            .agent_profile_repository
-            .find_profile_by_id(input.agent_profile_id)
-            .map_err(agent_session_database_error)?
-            .ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentProfileValidationFailed,
-                    "Agent Profile 不存在。",
-                ).with_reason("profileNotFound")
-                .with_detail(
-                    ErrorDetail::new("AgentProfile")
-                        .with_value("agentProfileId", input.agent_profile_id),
-                )
-            })?;
-
-        validate_profile_not_deleted(&profile)?;
-        validate_profile_scope(&profile, input.project_id)?;
-
-        let started_at = current_epoch_millis()?;
-        let log_path = build_log_path(
-            data_dir,
-            input.project_id,
-            &format!("issue-{}", input.issue_id),
-            input.agent_profile_id,
-            started_at,
-        )?;
-        let command_snapshot = if profile.agent_type == AgentType::Codex {
-            build_structured_command_snapshot(&profile)
-        } else {
-            build_command_snapshot(&profile)
-        };
-        let branch_info =
-            list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
-        let workspace_mode = input
-            .workspace_mode
-            .clone()
-            .unwrap_or(WorkspaceMode::CurrentBranch);
-        let worktree_setup_command = Some(
-            input
-                .worktree_setup_command
-                .as_deref()
-                .unwrap_or(&project.worktree_setup_command)
-                .trim()
-                .to_string(),
-        );
-
-        match workspace_mode {
-            WorkspaceMode::CurrentBranch => Ok(SessionLaunchContext {
-                profile,
-                working_dir: validate_working_dir(&project.repo_path)?,
-                log_path,
-                command_snapshot,
-                started_at,
-                workspace_mode: WorkspaceMode::CurrentBranch,
-                target_branch: Some(branch_info.current_branch.clone()),
-                workspace_branch: Some(branch_info.current_branch.clone()),
-                workspace_path: Some(project.repo_path.clone()),
-                origin_branch: Some(branch_info.current_branch),
-                worktree_owner: WorktreeOwner::External,
-                worktree_root_path: None,
-                worktree_setup_command: worktree_setup_command.clone(),
-            }),
-            WorkspaceMode::Worktree => {
-                if let Some(existing) = self
-                    .agent_session_repository
-                    .find_latest_worktree_session_by_issue_id(input.issue_id)
-                    .map_err(agent_session_database_error)?
-                {
-                    if let Some(workspace_path) = existing.workspace_path.as_deref() {
-                        if Path::new(workspace_path).exists() {
-                            return Err(CommandError::new(
-                                CommandErrorCode::IssueWorktreeOccupied,
-                                "同名 worktree 已被占用，请删除后再运行。",
-                            )
-                            .with_detail(
-                                ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
-                            )
-                            .with_detail(
-                                ErrorDetail::new("Worktree")
-                                    .with_value("workspacePath", workspace_path),
-                            ));
-                        }
-                    }
-                }
-
-                let target_branch =
-                    resolve_target_branch(&branch_info, input.target_branch.as_deref())?;
-                let worktree_root_path = resolve_worktree_root_path(&project)?;
-                let issue_number = self
-                    .issue_repository
-                    .find_by_id(input.issue_id)
-                    .map_err(agent_session_database_error)?
-                    .ok_or_else(|| {
-                        CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
-                            .with_detail(
-                                ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
-                            )
-                    })?
-                    .number;
-                // 检测磁盘上残留的同名 worktree（如上次启动失败后未清理）。
-                // session 行检查（上方）覆盖有 session 记录的情况；此处补 disk 检测，
-                // 覆盖回滚后无 session 但 worktree 目录仍在的情况，给出清晰「占用」错误，
-                // 避免走到 create_worktree_for_issue 因分支已检出被误标成「进程启动失败」。
-                let primary_worktree_path =
-                    Path::new(&worktree_root_path).join(format!("issue-{issue_number}"));
-                if primary_worktree_path.exists() {
-                    return Err(CommandError::new(
-                        CommandErrorCode::IssueWorktreeOccupied,
-                        "同名 worktree 已被占用，请删除后再运行。",
-                    )
-                    .with_detail(
-                        ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
-                    )
-                    .with_detail(
-                        ErrorDetail::new("Worktree")
-                            .with_value("workspacePath", primary_worktree_path.to_string_lossy()),
-                    ));
-                }
-                let created = create_worktree_for_issue(
-                    &project.repo_path,
-                    &worktree_root_path,
-                    issue_number,
-                    &target_branch,
-                )
-                .map_err(worktree_create_error)?;
-                if let Err(error) = run_worktree_setup_command(
-                    &created.workspace_path,
-                    worktree_setup_command.as_deref(),
-                ) {
-                    let _ = cleanup_worktree(
-                        &project.repo_path,
-                        &created.workspace_path,
-                        &created.workspace_branch,
-                    );
-                    return Err(error);
-                }
-
-                Ok(SessionLaunchContext {
-                    profile,
-                    working_dir: created.workspace_path.clone(),
-                    log_path,
-                    command_snapshot,
-                    started_at,
-                    workspace_mode: WorkspaceMode::Worktree,
-                    target_branch: Some(created.target_branch),
-                    workspace_branch: Some(created.workspace_branch),
-                    workspace_path: Some(created.workspace_path),
-                    origin_branch: Some(branch_info.current_branch),
-                    worktree_owner: WorktreeOwner::Redwhisk,
-                    worktree_root_path: Some(created.worktree_root_path),
-                    worktree_setup_command,
-                })
-            }
-        }
-    }
-
     pub fn list_agent_sessions(
         &self,
         project_id: i64,
@@ -1229,7 +939,7 @@ impl<'connection> AgentSessionService<'connection> {
         self.project_by_id(project_id).map(|_| ())
     }
 
-    fn project_by_id(
+    pub(super) fn project_by_id(
         &self,
         project_id: i64,
     ) -> Result<crate::types::project::ProjectSummary, CommandError> {
@@ -2594,38 +2304,6 @@ impl AgentSessionService<'_> {
     }
 }
 
-fn validate_profile_scope(profile: &AgentProfileRow, project_id: i64) -> Result<(), CommandError> {
-    match profile.scope {
-        AgentScope::Global => Ok(()),
-        AgentScope::Project => {
-            if profile.project_id == Some(project_id) {
-                Ok(())
-            } else {
-                Err(CommandError::new(
-                    CommandErrorCode::AgentSessionValidationFailed,
-                    "项目级 Agent Profile 不属于当前 Project。",
-                ).with_reason("profileNotInProject")
-                .with_detail(
-                    ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile.id),
-                )
-                .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id)))
-            }
-        }
-    }
-}
-
-fn validate_profile_not_deleted(profile: &AgentProfileRow) -> Result<(), CommandError> {
-    if profile.del == 0 {
-        return Ok(());
-    }
-
-    Err(CommandError::new(
-        CommandErrorCode::AgentProfileValidationFailed,
-        "Agent Profile 已删除。",
-    ).with_reason("profileDeleted")
-    .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile.id)))
-}
-
 fn session_log_has_new_output(log_path: &str, last_active_at: i64) -> bool {
     let Ok(metadata) = fs::metadata(log_path) else {
         return false;
@@ -2661,7 +2339,7 @@ fn last_non_empty_terminal_line(snapshot: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn strip_terminal_control_sequences(snapshot: &str) -> String {
+pub(super) fn strip_terminal_control_sequences(snapshot: &str) -> String {
     let mut cleaned = String::with_capacity(snapshot.len());
     let mut chars = snapshot.chars().peekable();
 
@@ -2686,70 +2364,6 @@ fn strip_terminal_control_sequences(snapshot: &str) -> String {
     }
 
     cleaned
-}
-
-fn validate_prompt_snapshot(prompt_snapshot: &str) -> Result<String, CommandError> {
-    let trimmed = prompt_snapshot.trim();
-    if trimmed.is_empty() {
-        return Err(CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "最终 prompt 不能为空。",
-        ).with_reason("finalPromptRequired")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "promptSnapshot")));
-    }
-
-    Ok(trimmed.to_string())
-}
-
-
-/// 经可注入 factory 启动 provider 会话（构造侧 seam，ADR-0011）。
-///
-/// 将 `UnsupportedMode` 映射为校验失败，其余走 `agent_session_error_to_command_error`。
-fn start_provider_session(
-    factory: &dyn AgentSessionProviderFactory,
-    request: AgentSessionStartRequest,
-) -> Result<StartedSession, CommandError> {
-    factory.start(request).map_err(|error| match error {
-        AgentSessionError::UnsupportedMode(mode) => CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "不支持的 Codex 协作模式。",
-        )
-        .with_reason("unsupportedCodexMode")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "mode"))
-        .with_detail(ErrorDetail::new("Value").with_value("mode", mode)),
-        other => agent_session_error_to_command_error(other),
-    })
-}
-
-/// 按 `StartedSession.backfill` 声明写回 thread id；service 不按 agent_type 分支。
-fn persist_started_session_thread_id(
-    repository: &AgentSessionRepository<'_>,
-    session_id: i64,
-    started: &StartedSession,
-) -> Result<(), CommandError> {
-    match started.backfill {
-        ThreadIdBackfill::Required => {
-            let thread_id = started.thread_id.as_deref().ok_or_else(|| {
-                CommandError::new(
-                    CommandErrorCode::AgentSessionStreamFailed,
-                    "Agent 会话启动后未拿到 threadId。",
-                )
-                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
-            })?;
-            repository
-                .update_codex_session_id(session_id, thread_id)
-                .map_err(agent_session_database_error)?;
-        }
-        ThreadIdBackfill::WhenPresent => {
-            if let Some(thread_id) = started.thread_id.as_deref() {
-                repository
-                    .update_codex_session_id(session_id, thread_id)
-                    .map_err(agent_session_database_error)?;
-            }
-        }
-        ThreadIdBackfill::DeferToStream => {}
-    }
-    Ok(())
 }
 
 /// 把 `AgentSessionError` 转成 `CommandError`。
@@ -2831,45 +2445,7 @@ fn insert_structured_session_in_transaction(
         .ok_or(rusqlite::Error::QueryReturnedNoRows)
 }
 
-fn validate_session_title(title: &str) -> Result<String, CommandError> {
-    let trimmed = title.trim();
-    if trimmed.is_empty() {
-        return Err(CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "Session title 不能为空。",
-        ).with_reason("titleRequired")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "title")));
-    }
-
-    Ok(trimmed.to_string())
-}
-fn validate_injected_prompt(prompt: &str) -> Result<String, CommandError> {
-    let trimmed = prompt.trim();
-    if trimmed.is_empty() {
-        return Err(CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "注入的 prompt 不能为空。",
-        ).with_reason("injectedPromptRequired")
-        .with_detail(ErrorDetail::new("Field").with_value("name", "prompt")));
-    }
-
-    Ok(trimmed.to_string())
-}
-
-fn validate_working_dir(repo_path: &str) -> Result<String, CommandError> {
-    let path = Path::new(repo_path);
-    if !path.is_dir() {
-        return Err(CommandError::new(
-            CommandErrorCode::AgentSessionStartFailed,
-            "Project 工作目录不可访问。",
-        ).with_reason("projectWorkdirInaccessible")
-        .with_detail(ErrorDetail::new("WorkingDir").with_value("path", repo_path)));
-    }
-
-    Ok(path.to_string_lossy().to_string())
-}
-
-fn resolve_target_branch(
+pub(super) fn resolve_target_branch(
     branch_info: &GitBranchInfo,
     target_branch: Option<&str>,
 ) -> Result<String, CommandError> {
@@ -2893,7 +2469,7 @@ fn resolve_target_branch(
     .with_detail(ErrorDetail::new("GitBranch").with_value("targetBranch", target_branch)))
 }
 
-fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, CommandError> {
+pub(super) fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, CommandError> {
     let repo_path = Path::new(&project.repo_path);
     let repo_name = repo_path
         .file_name()
@@ -2929,1014 +2505,8 @@ fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<String, Comman
     Ok(path.to_string_lossy().to_string())
 }
 
-fn run_worktree_setup_command(
-    workspace_path: &str,
-    setup_command: Option<&str>,
-) -> Result<(), CommandError> {
-    let setup_command = setup_command
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let Some(setup_command) = setup_command else {
-        return Ok(());
-    };
-
-    let workspace = Path::new(workspace_path);
-    if !workspace.is_dir() {
-        return Err(CommandError::new(
-            CommandErrorCode::AgentSessionStartFailed,
-            "Worktree 初始化目录不可访问。",
-        ).with_reason("worktreeInitDirInaccessible")
-        .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path)));
-    }
-
-    if let Err(failure) = run_setup_command(workspace, setup_command) {
-        return Err(CommandError::new(
-            CommandErrorCode::AgentSessionStartFailed,
-            "Worktree 初始化命令执行失败。",
-        ).with_reason("worktreeInitCommandFailed")
-        .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path))
-        .with_detail(ErrorDetail::new("Command").with_value("command", setup_command))
-        .with_detail(ErrorDetail::new("Shell").with_value("shell", failure.shell))
-        .with_detail(ErrorDetail::new("ExitStatus").with_value("code", failure.exit_code))
-        .with_detail(ErrorDetail::new("Output").with_value("stderr", failure.stderr)));
-    }
-
-    Ok(())
-}
-
-#[derive(Debug)]
-struct SetupCommandFailure {
-    shell: String,
-    exit_code: i32,
-    stderr: String,
-}
-
-#[cfg(unix)]
-fn run_setup_command(workspace: &Path, setup_command: &str) -> Result<(), SetupCommandFailure> {
-    let preferred_shell = env::var("SHELL").ok();
-    run_setup_command_with_shells_and_env(
-        workspace,
-        setup_command,
-        &setup_shell_candidates(preferred_shell.as_deref()),
-        &[],
-    )
-}
-
-#[cfg(unix)]
-fn run_setup_command_with_shells_and_env(
-    workspace: &Path,
-    setup_command: &str,
-    shells: &[String],
-    environment_overrides: &[(&str, &OsStr)],
-) -> Result<(), SetupCommandFailure> {
-    let mut last_failure = None;
-
-    for shell in shells {
-        for shell_args in [["-lc"], ["-lic"]] {
-            match Command::new(&shell)
-                .args(shell_args)
-                .arg(setup_command)
-                .current_dir(workspace)
-                .envs(environment_overrides.iter().copied())
-                .output()
-            {
-                Ok(output) if output.status.success() => return Ok(()),
-                Ok(output) => {
-                    let failure = setup_command_failure(&shell, output);
-                    if !should_retry_setup_command(&failure) {
-                        return Err(failure);
-                    }
-                    last_failure = Some(failure);
-                }
-                Err(error) => {
-                    last_failure = Some(SetupCommandFailure {
-                        shell: shell.clone(),
-                        exit_code: -1,
-                        stderr: error.to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    Err(last_failure.unwrap_or_else(|| SetupCommandFailure {
-        shell: String::new(),
-        exit_code: -1,
-        stderr: "no shell candidates available".to_string(),
-    }))
-}
-
-#[cfg(unix)]
-fn setup_shell_candidates(preferred_shell: Option<&str>) -> Vec<String> {
-    let mut shells = Vec::with_capacity(DEFAULT_SETUP_SHELLS.len() + 1);
-    if let Some(shell) = preferred_shell {
-        let trimmed = shell.trim();
-        if !trimmed.is_empty() {
-            shells.push(trimmed.to_string());
-        }
-    }
-
-    for shell in DEFAULT_SETUP_SHELLS {
-        if shells.iter().any(|candidate| candidate == shell) {
-            continue;
-        }
-        shells.push(shell.to_string());
-    }
-
-    shells
-}
-
-#[cfg(not(unix))]
-fn run_setup_command(workspace: &Path, setup_command: &str) -> Result<(), SetupCommandFailure> {
-    match Command::new("cmd")
-        .args(["/C", setup_command])
-        .current_dir(workspace)
-        .output()
-    {
-        Ok(output) if output.status.success() => Ok(()),
-        Ok(output) => Err(setup_command_failure("cmd", output)),
-        Err(error) => Err(SetupCommandFailure {
-            shell: "cmd".to_string(),
-            exit_code: -1,
-            stderr: error.to_string(),
-        }),
-    }
-}
-
-fn setup_command_failure(shell: &str, output: Output) -> SetupCommandFailure {
-    SetupCommandFailure {
-        shell: shell.to_string(),
-        exit_code: output.status.code().map_or(-1, i32::from),
-        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-    }
-}
-
-fn should_retry_setup_command(failure: &SetupCommandFailure) -> bool {
-    failure.exit_code == -1 || failure.exit_code == 126 || failure.exit_code == 127
-}
-
-#[cfg(all(test, unix))]
-mod worktree_setup_command_tests {
-    use super::*;
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-
-    #[test]
-    fn setup_shell_candidates_keep_preferred_shell_first_without_duplicates() {
-        assert_eq!(
-            setup_shell_candidates(Some("/bin/zsh")),
-            vec![
-                "/bin/zsh".to_string(),
-                "/bin/bash".to_string(),
-                "/bin/sh".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn setup_shell_candidates_include_default_shells_without_preferred_shell() {
-        assert_eq!(
-            setup_shell_candidates(None),
-            vec![
-                "/bin/zsh".to_string(),
-                "/bin/bash".to_string(),
-                "/bin/sh".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn run_setup_command_loads_interactive_shell_path() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let home_dir = temp_dir.path().join("home");
-        let bin_dir = temp_dir.path().join("bin");
-        let workspace_dir = temp_dir.path().join("workspace");
-        let setup_command_path = bin_dir.join("redwhisk-test-setup");
-        fs::create_dir_all(&home_dir).expect("home dir");
-        fs::create_dir_all(&bin_dir).expect("bin dir");
-        fs::create_dir_all(&workspace_dir).expect("workspace dir");
-        fs::write(
-            &setup_command_path,
-            "#!/bin/sh\nprintf shell-setup > setup-marker.txt\n",
-        )
-        .expect("setup command");
-        fs::set_permissions(&setup_command_path, fs::Permissions::from_mode(0o755))
-            .expect("setup command executable");
-        fs::write(
-            home_dir.join(".zshrc"),
-            format!("export PATH=\"{}:$PATH\"\n", bin_dir.display()),
-        )
-        .expect("zshrc");
-
-        run_setup_command_with_shells_and_env(
-            &workspace_dir,
-            "redwhisk-test-setup",
-            &["/bin/zsh".to_string()],
-            &[
-                ("HOME", home_dir.as_os_str()),
-                ("ZDOTDIR", home_dir.as_os_str()),
-                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
-            ],
-        )
-        .expect("setup command");
-
-        assert_eq!(
-            fs::read_to_string(workspace_dir.join("setup-marker.txt")).expect("setup marker"),
-            "shell-setup"
-        );
-    }
-}
-
-fn build_command_snapshot(profile: &AgentProfileRow) -> String {
-    agent_command_with_default_args(profile)
-}
-
-fn build_structured_command_snapshot(profile: &AgentProfileRow) -> String {
-    profile.command.trim().to_string()
-}
-
-fn agent_command_with_default_args(profile: &AgentProfileRow) -> String {
-    match profile.agent_type {
-        AgentType::Codex => ensure_codex_bypass_arg(&profile.command),
-        AgentType::Claude => ensure_claude_bypass_permission_args(&profile.command),
-    }
-}
-
-fn ensure_codex_bypass_arg(command: &str) -> String {
-    append_missing_args(command, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
-}
-
-fn ensure_claude_bypass_permission_args(command: &str) -> String {
-    if command_has_arg(command, CLAUDE_PERMISSION_MODE_ARG) {
-        command.trim().to_string()
-    } else {
-        append_missing_args(
-            command,
-            &[CLAUDE_PERMISSION_MODE_ARG, CLAUDE_BYPASS_PERMISSIONS_MODE],
-        )
-    }
-}
-
-fn append_missing_args(command: &str, args: &[&str]) -> String {
-    let trimmed = command.trim();
-    let mut command_line = trimmed.to_string();
-
-    for arg in args {
-        if command_has_arg(trimmed, arg) {
-            continue;
-        }
-
-        if !command_line.is_empty() {
-            command_line.push(' ');
-        }
-        command_line.push_str(arg);
-    }
-
-    command_line
-}
-
-fn command_has_arg(command: &str, arg: &str) -> bool {
-    command.split_whitespace().any(|part| part == arg)
-}
-
-fn read_codex_reasoning_effort_from_data_dir(data_dir: &Path) -> Option<String> {
-    data_dir
-        .parent()
-        .and_then(codex_config::read_reasoning_effort_from_home)
-}
-
-fn read_codex_model_from_data_dir(data_dir: &Path) -> Option<String> {
-    data_dir
-        .parent()
-        .and_then(codex_config::read_model_from_home)
-}
-
-fn build_log_path(
-    data_dir: &Path,
-    project_id: i64,
-    session_name: &str,
-    agent_profile_id: i64,
-    started_at: i64,
-) -> Result<String, CommandError> {
-    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
-
-    let path = logs_dir.join(format!(
-        "{session_name}-profile-{agent_profile_id}-{started_at}.log"
-    ));
-    Ok(path.to_string_lossy().to_string())
-}
-
-fn session_log_root_dir(data_dir: &Path) -> PathBuf {
-    data_dir.join(SESSION_LOG_DIR_NAME)
-}
-
-fn runtime_session_log_project_dir(
-    data_dir: &Path,
-    project_id: i64,
-) -> Result<PathBuf, CommandError> {
-    let logs_dir = session_log_root_dir(data_dir)
-        .join(SESSION_RUNTIME_LOG_DIR_NAME)
-        .join(format!("project-{project_id}"));
-    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
-    Ok(logs_dir)
-}
-
-fn archive_session_log_project_dir(
-    data_dir: &Path,
-    project_id: i64,
-) -> Result<PathBuf, CommandError> {
-    let logs_dir = session_log_root_dir(data_dir)
-        .join(SESSION_ARCHIVE_LOG_DIR_NAME)
-        .join(format!("project-{project_id}"));
-    fs::create_dir_all(&logs_dir).map_err(agent_session_start_error)?;
-    Ok(logs_dir)
-}
-
-fn build_pending_structured_log_path(
-    data_dir: &Path,
-    project_id: i64,
-    started_at: i64,
-) -> Result<String, CommandError> {
-    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
-    let path = logs_dir.join(format!("pending-session-{started_at}.jsonl"));
-    Ok(path.to_string_lossy().to_string())
-}
-
-fn build_issue_runtime_structured_log_path(
-    data_dir: &Path,
-    project_id: i64,
-    issue_number: i64,
-    session_number: i64,
-) -> Result<String, CommandError> {
-    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
-    let path = logs_dir.join(format!(
-        "project-{project_id}-issue-{issue_number}-session-{session_number}.jsonl"
-    ));
-    Ok(path.to_string_lossy().to_string())
-}
-
-fn build_standalone_runtime_structured_log_path(
-    data_dir: &Path,
-    project_id: i64,
-    session_number: i64,
-) -> Result<String, CommandError> {
-    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
-    let path = logs_dir.join(format!(
-        "project-{project_id}-standalone-session-{session_number}.jsonl"
-    ));
-    Ok(path.to_string_lossy().to_string())
-}
-
-pub(crate) fn build_issue_archive_log_path(
-    data_dir: &Path,
-    project_id: i64,
-    issue_number: i64,
-    session_number: i64,
-) -> Result<String, CommandError> {
-    let logs_dir = archive_session_log_project_dir(data_dir, project_id)?;
-    let path = logs_dir.join(format!(
-        "archive-project-{project_id}-issue-{issue_number}-session-{session_number}.log"
-    ));
-    Ok(path.to_string_lossy().to_string())
-}
-
-pub(crate) fn is_archived_issue_log_path(data_dir: &Path, log_path: &str) -> bool {
-    let archive_root = session_log_root_dir(data_dir).join(SESSION_ARCHIVE_LOG_DIR_NAME);
-    Path::new(log_path).starts_with(&archive_root)
-}
-
-pub(crate) fn build_issue_session_archive(
-    data_dir: &Path,
-    project_id: i64,
-    issue_number: i64,
-    session_number: i64,
-    session_id: i64,
-    runtime_log_path: &str,
-) -> Result<IssueSessionArchive, CommandError> {
-    let history = read_timeline_from_log_path(runtime_log_path)?;
-    let items = history
-        .items
-        .into_iter()
-        .filter(should_archive_timeline_item)
-        .collect::<Vec<_>>();
-    let archive_path =
-        build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
-    let payload = items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            serde_json::to_string(&AgentStreamEventEnvelope {
-                project_id,
-                session_id,
-                seq: (index + 1) as u64,
-                epoch: "archive".to_string(),
-                event: AgentStreamEvent::Timeline {
-                    item: item.clone(),
-                    turn_id: None,
-                    seq: (index + 1) as u64,
-                    timestamp: 0,
-                },
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| agent_session_start_error(std::io::Error::other(error.to_string())))?
-        .join("\n");
-    let file_content = if payload.is_empty() {
-        String::new()
-    } else {
-        format!("{payload}\n")
-    };
-    fs::write(&archive_path, file_content).map_err(agent_session_start_error)?;
-
-    Ok(IssueSessionArchive {
-        archive_path,
-        runtime_path: runtime_log_path.to_string(),
-        latest_output: items
-            .iter()
-            .rev()
-            .find_map(latest_output_from_timeline_item),
-    })
-}
-
-/// 删除 session 日志文件（运行态结构化日志或 issue 归档日志）。
-/// 路径为空或文件不存在时静默跳过；删除失败不向上抛错，避免阻塞 session 软删流程。
-pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
-    let Some(log_path) = log_path else {
-        return;
-    };
-    let path = Path::new(log_path);
-    if !path.exists() {
-        return;
-    }
-    let _ = fs::remove_file(path);
-}
-
-fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
-    matches!(
-        item,
-        AgentTimelineItem::UserMessage { .. }
-            | AgentTimelineItem::AssistantMessage { .. }
-            | AgentTimelineItem::Error { .. }
-    )
-}
-
-fn read_timeline_from_session_log(
-    session: &crate::types::agent_session::AgentSessionRecord,
-) -> Result<StructuredTimelineHistory, CommandError> {
-    read_timeline_from_log_path(&session.log_path)
-}
-
-/// 按 `turn_id` 从 session log 读取该 turn 最后一条助手答复正文。
-/// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`
-/// 且 turn_id 等于入参的事件，取最后一条的 text。log 路径空或文件不可读返回 None。
-/// 供 completion turn 自动评论提取使用。
-pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -> Option<String> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
-
-    use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem};
-
-    if log_path.trim().is_empty() {
-        return None;
-    }
-    let file = File::open(log_path).ok()?;
-    BufReader::new(file)
-        .lines()
-        .filter_map(|line| line.ok())
-        .filter_map(|line| structured_events_from_log_line(&line))
-        .flatten()
-        .filter_map(|event| match event {
-            AgentStreamEvent::Timeline {
-                item,
-                turn_id: Some(t),
-                ..
-            } if t == turn_id => match item {
-                AgentTimelineItem::AssistantMessage { text, .. } => Some(text),
-                _ => None,
-            },
-            _ => None,
-        })
-        .last()
-}
-
 fn command_error_to_sqlite(error: CommandError) -> rusqlite::Error {
     rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(error.message)))
-}
-
-pub(crate) fn read_timeline_from_log_path(
-    log_path: &str,
-) -> Result<StructuredTimelineHistory, CommandError> {
-    if log_path.trim().is_empty() {
-        return Ok(StructuredTimelineHistory::default());
-    }
-
-    let path = Path::new(log_path);
-    if let Some(history) = read_structured_timeline_log(path)? {
-        return Ok(history);
-    }
-
-    let items = read_terminal_timeline_log(path)?;
-    Ok(StructuredTimelineHistory {
-        items,
-        effort: None,
-    })
-}
-
-fn read_structured_timeline_log(
-    path: &Path,
-) -> Result<Option<StructuredTimelineHistory>, CommandError> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Some(StructuredTimelineHistory::default()));
-        }
-        Err(error) => return Err(agent_session_start_error(error)),
-    };
-    let reader = BufReader::new(file);
-    let mut saw_structured_line = false;
-    let mut history = StructuredTimelineHistory::default();
-    let mut pending_reasoning_started_at: Option<i64> = None;
-
-    for line in reader.lines() {
-        let line = line.map_err(agent_session_start_error)?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        let Some(events) = structured_events_from_log_line(trimmed) else {
-            if saw_structured_line {
-                continue;
-            }
-            return Ok(None);
-        };
-        saw_structured_line = true;
-        for event in events {
-            match event {
-                AgentStreamEvent::Timeline {
-                    item, timestamp, ..
-                } => {
-                    if !matches!(item, AgentTimelineItem::Reasoning { .. }) {
-                        finalize_pending_reasoning_duration(
-                            &mut history.items,
-                            pending_reasoning_started_at.take(),
-                            timestamp,
-                        );
-                    }
-
-                    let starts_reasoning_without_duration = matches!(
-                        &item,
-                        AgentTimelineItem::Reasoning {
-                            duration_ms: None,
-                            ..
-                        }
-                    );
-                    let has_explicit_reasoning_duration = matches!(
-                        &item,
-                        AgentTimelineItem::Reasoning {
-                            duration_ms: Some(_),
-                            ..
-                        }
-                    );
-
-                    push_compacted_timeline_item(&mut history.items, item);
-
-                    if has_explicit_reasoning_duration {
-                        pending_reasoning_started_at = None;
-                    } else if starts_reasoning_without_duration
-                        && pending_reasoning_started_at.is_none()
-                        && timestamp > 0
-                    {
-                        pending_reasoning_started_at = Some(timestamp);
-                    }
-                }
-                AgentStreamEvent::EffortChanged { effort } => history.effort = effort,
-                _ => {}
-            }
-        }
-    }
-
-    if saw_structured_line {
-        Ok(Some(history))
-    } else {
-        Ok(None)
-    }
-}
-
-fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {
-    let stream = serde_json::Deserializer::from_str(line).into_iter::<Value>();
-    let mut saw_value = false;
-    let mut events = Vec::new();
-
-    for value in stream {
-        saw_value = true;
-        let value = value.ok()?;
-        events.push(stream_event_from_log_value(value)?);
-    }
-
-    saw_value.then_some(events)
-}
-
-fn finalize_pending_reasoning_duration(
-    items: &mut [AgentTimelineItem],
-    started_at: Option<i64>,
-    end_timestamp: i64,
-) {
-    let Some(started_at) = started_at else {
-        return;
-    };
-    if end_timestamp <= started_at {
-        return;
-    }
-    let Some(AgentTimelineItem::Reasoning { duration_ms, .. }) = items.last_mut() else {
-        return;
-    };
-    if duration_ms.is_none() {
-        *duration_ms = Some((end_timestamp - started_at) as u64);
-    }
-}
-
-fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentTimelineItem) {
-    match &item {
-        AgentTimelineItem::AssistantMessage {
-            message_id: Some(message_id),
-            ..
-        } => {
-            if let Some(index) = items.iter().rposition(|existing| {
-                matches!(
-                    existing,
-                    AgentTimelineItem::AssistantMessage {
-                        message_id: Some(existing_id),
-                        ..
-                    } if existing_id == message_id
-                )
-            }) {
-                items[index] = item;
-                return;
-            }
-        }
-        AgentTimelineItem::UserMessage {
-            message_id: Some(message_id),
-            ..
-        } => {
-            if let Some(index) = items.iter().rposition(|existing| {
-                matches!(
-                    existing,
-                    AgentTimelineItem::UserMessage {
-                        message_id: Some(existing_id),
-                        ..
-                    } if existing_id == message_id
-                )
-            }) {
-                items[index] = item;
-                return;
-            }
-        }
-        AgentTimelineItem::Reasoning { .. } => {
-            if matches!(items.last(), Some(AgentTimelineItem::Reasoning { .. })) {
-                if let Some(last) = items.last_mut() {
-                    let previous = last.clone();
-                    *last = merge_reasoning_timeline_item(previous, item);
-                    return;
-                }
-            }
-        }
-        AgentTimelineItem::ToolCall { call_id, .. } => {
-            if let Some(index) = items.iter().rposition(|existing| {
-                matches!(
-                    existing,
-                    AgentTimelineItem::ToolCall {
-                        call_id: existing_id,
-                        ..
-                    } if existing_id == call_id
-                )
-            }) {
-                let previous = items[index].clone();
-                items[index] = merge_tool_call_timeline_item(previous, item);
-                return;
-            }
-        }
-        AgentTimelineItem::Todo { .. } => {
-            if matches!(items.last(), Some(AgentTimelineItem::Todo { .. })) {
-                if let Some(last) = items.last_mut() {
-                    *last = item;
-                    return;
-                }
-            }
-        }
-        _ => {}
-    }
-
-    items.push(item);
-}
-
-fn merge_reasoning_timeline_item(
-    previous: AgentTimelineItem,
-    incoming: AgentTimelineItem,
-) -> AgentTimelineItem {
-    match (previous, incoming) {
-        (
-            AgentTimelineItem::Reasoning {
-                text: previous_text,
-                duration_ms: previous_duration_ms,
-            },
-            AgentTimelineItem::Reasoning {
-                text,
-                duration_ms: None,
-            },
-        ) if previous_duration_ms.is_some() && previous_text == text => {
-            AgentTimelineItem::Reasoning {
-                text,
-                duration_ms: previous_duration_ms,
-            }
-        }
-        (_, incoming) => incoming,
-    }
-}
-
-fn merge_tool_call_timeline_item(
-    previous: AgentTimelineItem,
-    incoming: AgentTimelineItem,
-) -> AgentTimelineItem {
-    match (previous, incoming) {
-        (
-            AgentTimelineItem::ToolCall {
-                call_id,
-                name: previous_name,
-                detail: previous_detail,
-                status: _,
-                error: _,
-            },
-            AgentTimelineItem::ToolCall {
-                name,
-                detail,
-                status,
-                error,
-                ..
-            },
-        ) => AgentTimelineItem::ToolCall {
-            call_id,
-            name: if should_preserve_existing_tool_name(&previous_name, &name) {
-                previous_name
-            } else {
-                name
-            },
-            detail: merge_tool_call_detail(previous_detail, detail),
-            status,
-            error,
-        },
-        (_, incoming) => incoming,
-    }
-}
-
-fn should_preserve_existing_tool_name(previous: &str, incoming: &str) -> bool {
-    !is_generic_tool_name(previous)
-        && (incoming.trim().is_empty() || is_generic_tool_name(incoming))
-}
-
-fn is_generic_tool_name(name: &str) -> bool {
-    name.trim().eq_ignore_ascii_case("tool")
-}
-
-fn merge_tool_call_detail(previous: ToolCallDetail, incoming: ToolCallDetail) -> ToolCallDetail {
-    if std::mem::discriminant(&previous) != std::mem::discriminant(&incoming) {
-        return incoming;
-    }
-
-    match (previous, incoming) {
-        (
-            ToolCallDetail::Shell {
-                command: previous_command,
-                output: previous_output,
-                exit_code: previous_exit_code,
-            },
-            ToolCallDetail::Shell {
-                command,
-                output,
-                exit_code,
-            },
-        ) => ToolCallDetail::Shell {
-            command: if command.is_empty() {
-                previous_command
-            } else {
-                command
-            },
-            output: output.or(previous_output),
-            exit_code: exit_code.or(previous_exit_code),
-        },
-        (
-            ToolCallDetail::Read {
-                path: previous_path,
-                content: previous_content,
-            },
-            ToolCallDetail::Read { path, content },
-        ) => ToolCallDetail::Read {
-            path: if path.is_empty() { previous_path } else { path },
-            content: content.or(previous_content),
-        },
-        (
-            ToolCallDetail::Edit {
-                path: previous_path,
-                diff: previous_diff,
-            },
-            ToolCallDetail::Edit { path, diff },
-        ) => ToolCallDetail::Edit {
-            path: if path.is_empty() { previous_path } else { path },
-            diff: diff.or(previous_diff),
-        },
-        (
-            ToolCallDetail::Write {
-                path: previous_path,
-                content: previous_content,
-            },
-            ToolCallDetail::Write { path, content },
-        ) => ToolCallDetail::Write {
-            path: if path.is_empty() { previous_path } else { path },
-            content: content.or(previous_content),
-        },
-        (
-            ToolCallDetail::Search {
-                query: previous_query,
-                mode: _previous_mode,
-                matches: previous_matches,
-            },
-            ToolCallDetail::Search {
-                query,
-                mode,
-                matches,
-            },
-        ) => ToolCallDetail::Search {
-            query: if query.is_empty() {
-                previous_query
-            } else {
-                query
-            },
-            mode,
-            matches: if matches.is_empty() {
-                previous_matches
-            } else {
-                matches
-            },
-        },
-        (
-            ToolCallDetail::SubAgent {
-                child_session_id: previous_child_session_id,
-            },
-            ToolCallDetail::SubAgent { child_session_id },
-        ) => ToolCallDetail::SubAgent {
-            child_session_id: child_session_id.or(previous_child_session_id),
-        },
-        (
-            ToolCallDetail::Plan {
-                text: previous_text,
-            },
-            ToolCallDetail::Plan { text },
-        ) => ToolCallDetail::Plan {
-            text: if text.is_empty() { previous_text } else { text },
-        },
-        (
-            ToolCallDetail::Unknown {
-                raw_input: previous_raw_input,
-                raw_output: previous_raw_output,
-            },
-            ToolCallDetail::Unknown {
-                raw_input,
-                raw_output,
-            },
-        ) => ToolCallDetail::Unknown {
-            raw_input: raw_input.or(previous_raw_input),
-            raw_output: raw_output.or(previous_raw_output),
-        },
-        (_, incoming) => incoming,
-    }
-}
-
-fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
-    if let Ok(envelope) = serde_json::from_value::<AgentStreamEventEnvelope>(value.clone()) {
-        return Some(envelope.event);
-    }
-
-    let event = value.get("event")?;
-    if let Ok(event) = serde_json::from_value::<AgentStreamEvent>(event.clone()) {
-        return Some(event);
-    }
-
-    match event.get("type").and_then(Value::as_str)? {
-        "timeline" => {
-            let item =
-                serde_json::from_value::<AgentTimelineItem>(event.get("item")?.clone()).ok()?;
-            Some(AgentStreamEvent::Timeline {
-                item,
-                turn_id: event
-                    .get("turnId")
-                    .and_then(Value::as_str)
-                    .map(String::from),
-                seq: 0,
-                timestamp: 0,
-            })
-        }
-        "effort_changed" => Some(AgentStreamEvent::EffortChanged {
-            effort: event
-                .get("effort")
-                .and_then(Value::as_str)
-                .map(String::from),
-        }),
-        _ => None,
-    }
-}
-
-fn latest_effort_from_session_log(
-    session: &crate::types::agent_session::AgentSessionRecord,
-) -> Option<String> {
-    let path = Path::new(&session.log_path);
-    read_structured_timeline_log(path)
-        .ok()
-        .flatten()
-        .and_then(|history| history.effort)
-}
-
-fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
-    message.contains("includeTurns is unavailable before first user message")
-        || message.contains("is not materialized yet")
-}
-
-fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, CommandError> {
-    let snapshot = match read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES) {
-        Ok(snapshot) => snapshot,
-        Err(error) if error.contains("No such file") || error.contains("not found") => {
-            return Ok(Vec::new());
-        }
-        Err(error) => return Err(agent_session_start_error(error)),
-    };
-    let text = strip_terminal_control_sequences(&snapshot)
-        .replace('\r', "\n")
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string();
-
-    if text.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    Ok(vec![AgentTimelineItem::AssistantMessage {
-        text,
-        message_id: Some("session-log".to_string()),
-    }])
-}
-
-fn latest_output_from_session_log(log_path: &str) -> Option<String> {
-    if log_path.trim().is_empty() {
-        return None;
-    }
-
-    let path = Path::new(log_path);
-    if let Ok(Some(history)) = read_structured_timeline_log(path) {
-        for item in history.items.iter().rev() {
-            if let Some(output) = latest_output_from_timeline_item(item) {
-                return Some(output);
-            }
-        }
-        return None;
-    }
-
-    let snapshot = read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES).ok()?;
-    latest_output_from_text(&strip_terminal_control_sequences(&snapshot).replace('\r', "\n"))
-}
-
-fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Option<String> {
-    use crate::types::agent_session_stream::ToolCallDetail;
-
-    let text = match item {
-        AgentTimelineItem::AssistantMessage { text, .. }
-        | AgentTimelineItem::UserMessage { text, .. }
-        | AgentTimelineItem::Reasoning { text, .. } => text.as_str(),
-        AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
-            ToolCallDetail::Shell { command, .. } => command.as_str(),
-            ToolCallDetail::Read { path, .. }
-            | ToolCallDetail::Edit { path, .. }
-            | ToolCallDetail::Write { path, .. } => path.as_str(),
-            ToolCallDetail::Search { query, .. } => query.as_str(),
-            ToolCallDetail::Plan { text } => text.as_str(),
-            ToolCallDetail::SubAgent { .. } | ToolCallDetail::Unknown { .. } => name.as_str(),
-        },
-        AgentTimelineItem::Todo { .. } => "Plan updated",
-        AgentTimelineItem::Error { message } => message.as_str(),
-        AgentTimelineItem::Compaction { .. } => "Context compacted",
-    };
-
-    latest_output_from_text(text)
-}
-
-fn latest_output_from_text(text: &str) -> Option<String> {
-    let latest_line = text
-        .lines()
-        .rev()
-        .map(str::trim)
-        .find(|line| !line.is_empty())?;
-    Some(latest_line.chars().take(LATEST_OUTPUT_MAX_CHARS).collect())
 }
 
 fn spawn_agent_process(
@@ -3997,7 +2567,7 @@ fn ensure_process_started(child: &mut Child, command: &str) -> Result<(), Comman
     Ok(())
 }
 
-fn current_epoch_millis() -> Result<i64, CommandError> {
+pub(super) fn current_epoch_millis() -> Result<i64, CommandError> {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(agent_session_start_error)?;
@@ -4011,7 +2581,7 @@ fn turn_still_running_by_grace(turn_ended_at: Option<i64>, now: i64) -> bool {
     }
 }
 
-fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
+pub(super) fn agent_session_database_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
         "Agent Session 启动失败。",
@@ -4053,7 +2623,7 @@ fn agent_session_transaction_error_for_issue(
     agent_session_database_error(error)
 }
 
-fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {
+pub(super) fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionStartFailed,
         "Agent 进程启动失败。",
@@ -4063,7 +2633,7 @@ fn agent_session_start_error(error: impl std::fmt::Display) -> CommandError {
 
 /// worktree 创建失败（如分支已检出、路径冲突等 git 错误）的专属错误。
 /// 与进程启动失败区分，避免把 git 错误误标成「Agent 进程启动失败。」。
-fn worktree_create_error(error: impl std::fmt::Display) -> CommandError {
+pub(super) fn worktree_create_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionStartFailed,
         "Agent Session 工作区创建失败。",
@@ -4352,12 +2922,19 @@ fn missing_session_workspace_error(
 #[cfg(test)]
 mod tests {
     use super::{
-        agent_command_with_default_args, build_issue_archive_log_path,
-        build_issue_runtime_structured_log_path, build_issue_session_archive,
-        build_structured_command_snapshot, command_supports_prompt_argument,
-        detect_codex_session_id_from_home, latest_output_from_session_log,
-        normalize_submitted_prompt, preferred_session_cwd, read_timeline_from_session_log,
-        should_restore_redwhisk_worktree, AgentSessionService,
+        command_supports_prompt_argument, detect_codex_session_id_from_home,
+        normalize_submitted_prompt, preferred_session_cwd, should_restore_redwhisk_worktree,
+        AgentSessionService,
+    };
+    use crate::features::agent_session::command_snapshot::{
+        agent_command_with_default_args, build_structured_command_snapshot,
+    };
+    use crate::features::agent_session::log_path::{
+        build_issue_archive_log_path, build_issue_runtime_structured_log_path,
+        build_issue_session_archive,
+    };
+    use crate::features::agent_session::timeline::{
+        latest_output_from_session_log, read_timeline_from_session_log,
     };
     use crate::agent::provider_factory::{resolve_codex_mode, PlannedCodexMode};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
