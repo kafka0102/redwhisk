@@ -465,7 +465,6 @@ export interface I18nMessages {
     issueDetailsTitle: string;
     fileTree: string;
     refreshChanges: string;
-    refreshFileTree: string;
     changes: string;
     files: string;
     uncommitted: string;
