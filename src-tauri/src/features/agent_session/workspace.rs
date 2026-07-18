@@ -1267,14 +1267,20 @@ fn hash_string(value: &str) -> String {
 fn language_from_path(path: &str) -> Option<String> {
     match Path::new(path).extension().and_then(|value| value.to_str()) {
         Some("css") => Some("css".to_string()),
+        Some("go") => Some("go".to_string()),
         Some("html") => Some("html".to_string()),
+        Some("java") => Some("java".to_string()),
         Some("js") | Some("mjs") | Some("cjs") => Some("javascript".to_string()),
         Some("json") => Some("json".to_string()),
+        Some("kt") | Some("kts") => Some("kotlin".to_string()),
         Some("md") => Some("markdown".to_string()),
+        Some("py") => Some("python".to_string()),
         Some("rs") => Some("rust".to_string()),
+        Some("swift") => Some("swift".to_string()),
         Some("ts") => Some("typescript".to_string()),
         Some("tsx") => Some("typescript".to_string()),
         Some("vue") => Some("html".to_string()),
+        Some("xml") => Some("xml".to_string()),
         Some("yaml") | Some("yml") => Some("yaml".to_string()),
         _ => None,
     }
@@ -1284,6 +1290,46 @@ fn language_from_path(path: &str) -> Option<String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn language_from_path_maps_supported_extensions() {
+        // 常用编程语言：返回的 language id 与 Monaco / VS Code 内核一致，
+        // 前端 Monaco Editor 据此启用语法高亮。
+        assert_eq!(language_from_path("main.py"), Some("python".to_string()));
+        assert_eq!(language_from_path("App.java"), Some("java".to_string()));
+        assert_eq!(language_from_path("main.go"), Some("go".to_string()));
+        assert_eq!(
+            language_from_path("ContentView.swift"),
+            Some("swift".to_string()),
+        );
+        assert_eq!(language_from_path("Lib.kt"), Some("kotlin".to_string()));
+        assert_eq!(
+            language_from_path("build.gradle.kts"),
+            Some("kotlin".to_string()),
+        );
+        assert_eq!(language_from_path("pom.xml"), Some("xml".to_string()));
+
+        // 已有映射回归
+        assert_eq!(
+            language_from_path("a.ts"),
+            Some("typescript".to_string()),
+        );
+        assert_eq!(
+            language_from_path("a.tsx"),
+            Some("typescript".to_string()),
+        );
+        assert_eq!(
+            language_from_path("a.js"),
+            Some("javascript".to_string()),
+        );
+        assert_eq!(language_from_path("a.json"), Some("json".to_string()));
+        assert_eq!(language_from_path("a.yaml"), Some("yaml".to_string()));
+        assert_eq!(language_from_path("a.yml"), Some("yaml".to_string()));
+
+        // 未识别扩展名 / 无扩展名 → None，Monaco 退化为纯文本
+        assert_eq!(language_from_path("README.txt"), None);
+        assert_eq!(language_from_path("Makefile"), None);
+    }
 
     #[test]
     fn safe_relative_path_rejects_absolute_and_parent_segments() {
