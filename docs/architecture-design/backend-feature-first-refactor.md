@@ -223,7 +223,7 @@ pub mod settings;
 | `docs/adr/0001-core-architecture-boundaries.md` | 第 22 行事实来源 | `src-tauri/src/core/` → `src-tauri/src/features/` |
 | `docs/architecture-design/worktree-git-lifecycle.md` | 第 3 行实现入口 | `core/agent_session_service.rs`、`core/issue_service.rs` 路径更新 |
 
-**不回写**：历史 ADR（0010/0011/0012）、`docs/superpowers/plans/*`、`docs/superpowers/specs/*` 里的 `core/` 路径——它们记录当时事实，按 ADR 规则保持不变。
+**不回写**：历史 ADR（0010-0015，即全部已归档 ADR）、`docs/superpowers/plans/*`、`docs/superpowers/specs/*` 里的 `core/` 路径——它们记录当时事实，按 ADR 规则保持不变。
 
 ## 九、风险与回滚
 

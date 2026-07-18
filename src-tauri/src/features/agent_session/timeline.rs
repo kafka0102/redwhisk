@@ -48,11 +48,6 @@ pub(super) fn read_timeline_from_session_log(
 /// 且 turn_id 等于入参的事件，取最后一条的 text。log 路径空或文件不可读返回 None。
 /// 供 completion turn 自动评论提取使用。
 pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -> Option<String> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
-
-    use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem};
-
     if log_path.trim().is_empty() {
         return None;
     }

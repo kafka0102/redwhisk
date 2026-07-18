@@ -6,7 +6,7 @@ use redwhisk_lib::agent::pty_session_manager::{
 };
 use redwhisk_lib::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
-use redwhisk_lib::core::agent_session_service::AgentSessionService;
+use redwhisk_lib::features::agent_session::AgentSessionService;
 use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
