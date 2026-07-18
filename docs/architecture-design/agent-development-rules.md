@@ -31,10 +31,10 @@
 - `src/components/ui/`：基础 UI primitive。
 - `src/shared/{i18n,layout,paths,styles}/`：国际化、布局状态、路径与全局 token。
 
-Rust 按 command adapter、core service、repository、类型和外部能力分层：
+Rust 按 command adapter、feature service、repository、类型和外部能力分层：
 
 - `src-tauri/src/commands/`：Tauri command adapter，只做参数承接、状态注入和错误映射，不承载业务状态机。
-- `src-tauri/src/core/`：业务 service、状态流转、事务编排。
+- `src-tauri/src/features/`：业务 service、状态流转、事务编排。
 - `src-tauri/src/db/`：连接、migration、repository 和 SQL 映射。
 - `src-tauri/src/types/`：跨边界 DTO、状态枚举和 command error。
 - `src-tauri/src/agent/`：Codex/Claude provider、command 检测、PTY session 管理和结构化事件广播。

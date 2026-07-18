@@ -6,13 +6,13 @@
 
 | 能力                                    | 前端入口                            | 跨边界与 Rust 核心                                                                              | 持久化                                                                   |
 | --------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 应用壳、窗口 surface、Activity 路由     | `src/app/`                          | `src-tauri/src/commands/project_commands.rs`、`session_monitor_commands.rs`                     | `projects`                                                               |
-| 项目创建、切换与设置                    | `src/features/project/`             | `core/project_service.rs`                                                                       | `projects`                                                               |
-| Issue、附件、标签与完成流程             | `src/features/issues/`              | `commands/issue_commands.rs`、`core/issue_service.rs`                                           | `issues`、`issue_attachments`、`issue_actions`、`issue_completion_flows` |
-| 智能体会话、消息流、权限与工作区查看器  | `src/features/agents/`              | `commands/agent_session_commands.rs`、`core/agent_session_service.rs`                           | `agent_sessions`、`session_events`                                       |
+| 应用壳、窗口 surface、Activity 路由     | `src/app/`                          | `features/project/commands.rs`、`features/agent_session/session_monitor_commands.rs`                     | `projects`                                                               |
+| 项目创建、切换与设置                    | `src/features/project/`             | `features/project/service.rs`                                                                       | `projects`                                                               |
+| Issue、附件、标签与完成流程             | `src/features/issues/`              | `features/issue/commands.rs`、`features/issue/service.rs`                                           | `issues`、`issue_attachments`、`issue_actions`、`issue_completion_flows` |
+| 智能体会话、消息流、权限与工作区查看器  | `src/features/agents/`              | `features/agent_session/commands.rs`、`features/agent_session/service.rs`                           | `agent_sessions`、`session_events`                                       |
 | Agent provider 协议适配                 | 无直接 UI 入口                      | `src-tauri/src/agent/codex_app_server/`、`agent/claude_streaming/`、`agent/session_handle.rs`   | session 快照与运行时日志                                                 |
-| 项目终端与快捷命令                      | `src/features/terminals/`           | `commands/project_terminal_commands.rs`、`core/project_terminal_service.rs`                     | `project_terminal_configs`、`project_terminal_shortcut_commands`         |
-| 项目/全局设置、配置、标签、保存的 skill | `src/features/settings/`            | `commands/settings_commands.rs`、`commands/agent_skill_commands.rs`、`core/settings_service.rs` | `agent_profiles`、`project_labels`、`saved_agent_skills`                 |
+| 项目终端与快捷命令                      | `src/features/terminals/`           | `features/project_terminal/commands.rs`、`features/project_terminal/service.rs`                     | `project_terminal_configs`、`project_terminal_shortcut_commands`         |
+| 项目/全局设置、配置、标签、保存的 skill | `src/features/settings/`            | `features/settings/commands.rs`、`features/settings/agent_skill_commands.rs`、`features/settings/service.rs` | `agent_profiles`、`project_labels`、`saved_agent_skills`                 |
 | 基础 UI、i18n、命令错误和全局样式       | `src/components/ui/`、`src/shared/` | 前端边界；`types/errors.rs` 定义错误契约                                                        | locale JSON、浏览器偏好                                                  |
 
 ## 分层与依赖方向
@@ -20,14 +20,14 @@
 ```text
 React feature / shared command wrapper
         ↓ Tauri command（参数承接、状态注入、错误映射）
-Rust core service（业务规则、状态流转、事务编排）
+features/<feature>/service（业务规则、状态流转、事务编排）
         ↓
 repository / git / agent provider / PTY / 文件系统
         ↓
 SQLite、Git worktree、子进程、~/.redwhisk
 ```
 
-`commands/` 不承载业务状态机；`core/` 不让前端绕过；`db/` 只负责连接、migration、SQL 映射。新增共享逻辑必须归属明确领域，不能扩充 `src/lib/utils.ts`。
+`commands/` 不承载业务状态机；`features/<feature>/` 不让前端绕过；`db/` 只负责连接、migration、SQL 映射。新增共享逻辑必须归属明确领域，不能扩充 `src/lib/utils.ts`。
 
 ## 按改动定位
 
@@ -35,7 +35,7 @@ SQLite、Git worktree、子进程、~/.redwhisk
 | ------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
 | 页面或交互                      | 本文、设计指南、i18n 规则                               | 相邻 feature、对应 `*-commands.ts`、组件测试                         |
 | Tauri command / DTO / event     | [Tauri 契约](./tauri-contract.md)                       | Rust command、`generate_handler!`、前端 wrapper、Rust/前端类型、测试 |
-| Issue 或会话状态                | [状态机](../domain/state-machine.md)                    | core service、审计表、相关 dialog 与列表                             |
+| Issue 或会话状态                | [状态机](../domain/state-machine.md)                    | features/<feature>/service、审计表、相关 dialog 与列表                             |
 | SQLite / repository / migration | [数据模型](../domain/data-model.md)                     | migration runner、repository、DTO、历史升级测试                      |
 | Codex / Claude 会话             | [Provider 协议](./agent-provider-protocol.md)           | `AgentSessionHandle`、事件归一化、timeline reducer、权限与取消路径   |
 | Worktree / 完成流程             | [Worktree 与 Git 生命周期](./worktree-git-lifecycle.md) | `git/worktree.rs`、完成 flow、Issue UI、清理与阻断路径               |

@@ -27,7 +27,7 @@
 - 提交表头 + 每提交变更文件：单次 `git log --name-status`，提交头用 NUL 分隔、其后跟该提交的 name-status 行；
 - 批量祖先判定：单次 `git rev-list <ref>` 取可达集合，成员判定代替逐条 `git merge-base --is-ancestor`。
 
-**反例**：`src-tauri/src/core/session_workspace_service.rs::read_workspace_commit_history` 历史上的逐提交 `diff-tree` / `merge-base`。已批量化。
+**反例**：`src-tauri/src/features/agent_session/workspace.rs::read_workspace_commit_history` 历史上的逐提交 `diff-tree` / `merge-base`。已批量化。
 
 ## 3. 按需过滤，禁止拉全量再前端过滤
 

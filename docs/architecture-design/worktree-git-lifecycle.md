@@ -1,6 +1,6 @@
 # Worktree 与 Git 生命周期
 
-本文档约束 Issue 在当前分支或隔离 worktree 中执行及其完成流程。实现入口为 `src-tauri/src/git/worktree.rs`、`core/agent_session_service.rs`、`core/issue_service.rs` 与 `types/issue_completion.rs`。
+本文档约束 Issue 在当前分支或隔离 worktree 中执行及其完成流程。实现入口为 `src-tauri/src/git/worktree.rs`、`features/agent_session/service.rs`、`features/issue/service.rs` 与 `types/issue_completion.rs`。
 
 ## 执行空间
 

@@ -19,4 +19,4 @@
 
 ## 事实来源
 
-`src-tauri/src/core/`、`db/`、`commands/`、`agent/`、`git/`，以及 [项目代码地图](../architecture-design/project-map.md)。
+`src-tauri/src/features/`、`db/`、`commands/`、`agent/`、`git/`，以及 [项目代码地图](../architecture-design/project-map.md)。
