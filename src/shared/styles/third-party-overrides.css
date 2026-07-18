@@ -1,0 +1,313 @@
+/* Toast styles */
+.toaster {
+  top: 100px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+}
+
+.sonner-toast {
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sonner-toast[data-type="error"] {
+  background: var(--color-danger-muted);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.sonner-toast[data-type="success"] {
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.sonner-toast[data-type="info"] {
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.sonner-toast[data-type="warning"] {
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.sonner-toast [data-icon] {
+  flex-shrink: 0;
+}
+
+.sonner-toast [data-content] {
+  flex: 1;
+  min-width: 0;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 4px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font: inherit;
+}
+
+.rich-text-editor__toolbar .ql-formats {
+  margin-right: 0;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow button,
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 3px 6px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow button:hover,
+.rich-text-editor__toolbar.ql-toolbar.ql-snow button.ql-active,
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker-label:hover,
+.rich-text-editor__toolbar.ql-toolbar.ql-snow
+  .ql-picker.ql-expanded
+  .ql-picker-label {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow button svg {
+  float: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+/* Quill snow 主题会用内置 SVG 替换 .ql-bold 等按钮的图标，其 .ql-stroke / .ql-fill
+   在 quill.snow.css 中被硬编码为 #444 / #ccc，dark 模式下与工具栏背景对比不足、难以
+   辨识。这里改用 currentColor，使这些内置图标跟随按钮 color（--color-text-muted），
+   与未被替换的附件图标（lucide，stroke=currentColor）保持一致。 */
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-stroke,
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-stroke-miter {
+  stroke: currentColor;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-fill {
+  fill: currentColor;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker {
+  height: 26px;
+  color: var(--color-text-muted);
+  font: inherit;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker-label {
+  border: 0;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker-options {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: 0 10px 22px var(--color-popover-shadow);
+  color: var(--color-text);
+}
+
+.rich-text-editor__surface.ql-container.ql-snow {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.rich-text-editor__surface .ql-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--content-font-size);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rich-text-editor__surface .ql-editor.ql-blank::before {
+  left: 8px;
+  right: 8px;
+  color: var(--color-text-muted);
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.rich-text-editor__surface
+  .ql-editor.rich-text-editor__input-pending.ql-blank::before {
+  opacity: 0;
+}
+
+.rich-text-editor__surface .ql-editor h1,
+.rich-text-editor__surface .ql-editor h2 {
+  margin: 0 0 8px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.rich-text-editor__surface .ql-editor h1 {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.rich-text-editor__surface .ql-editor h2 {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.rich-text-editor__surface .ql-editor p,
+.rich-text-editor__surface .ql-editor ol,
+.rich-text-editor__surface .ql-editor ul {
+  margin: 0 0 8px;
+}
+
+.rich-text-editor__surface .ql-editor code {
+  padding: 1px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: var(--content-font-size);
+}
+
+.rich-text-editor__surface .ql-editor .ql-code-block-container {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+}
+
+.rich-text-editor__surface .ql-editor .ql-code-block {
+  color: var(--color-text);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: var(--content-font-size);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.rich-text-editor__surface .ql-editor p:last-child,
+.rich-text-editor__surface .ql-editor ol:last-child,
+.rich-text-editor__surface .ql-editor ul:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-editor__surface .ql-editor img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  margin: 8px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  object-fit: contain;
+}
+
+.rich-text-editor__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 128px;
+  padding: 8px;
+  overflow: auto;
+  border-top: 1px solid var(--color-border);
+}
+
+.rich-text-editor__attachment-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+}
+
+.rich-text-editor__attachment-card--image {
+  background: var(--color-surface);
+}
+
+.rich-text-editor__attachment-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rich-text-editor__attachment-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 32px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.rich-text-editor__attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rich-text-editor__attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rich-text-editor__attachment-action {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.rich-text-editor__attachment-action:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}

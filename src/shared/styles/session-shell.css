@@ -1,0 +1,439 @@
+.agents-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  background: var(--color-app);
+}
+
+.agents-workspace--with-side-panel {
+  grid-template-columns: minmax(0, 1fr) 8px var(
+      --session-side-panel-width,
+      400px
+    );
+}
+
+.session-side-panel-splitter {
+  position: relative;
+  min-height: 0;
+  cursor: col-resize;
+  background: var(--color-surface);
+}
+
+.session-side-panel-splitter::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--color-border);
+  content: "";
+}
+
+.session-side-panel-splitter:hover::before,
+.session-side-panel-splitter:focus-visible::before {
+  background: var(--color-border-strong);
+}
+
+.session-side-panel-splitter:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-focus-ring);
+}
+
+.agents-terminal-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.agents-terminal-host {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 实例池中单个 session 的 workspace 宿主：包裹整个 `SessionWorkspaceTabs`
+   （tab 栏 + 内容），常驻挂载、用 hidden 切换显隐。用 grid 单行布局让内部的
+   `SessionWorkspaceTabs` 撑满宿主高度，复用 .agents-terminal-host 的暗色背景。 */
+.agents-terminal-host.session-workspace-host {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* 显式覆盖 [hidden]：display:grid 会压过 UA 的 [hidden]{display:none}，
+   需手动恢复，否则非当前 session 的 workspace 不会隐藏而互相堆叠。 */
+.agents-terminal-host.session-workspace-host[hidden] {
+  display: none;
+}
+
+.agents-session-main-stack {
+  display: grid;
+  grid-row: 3;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+:root[data-theme="dark"] .agents-terminal-pane {
+  background: var(--color-surface-muted);
+}
+
+:root[data-theme="dark"] .agents-terminal-host {
+  background: #050506;
+}
+
+.agents-session-toolbar {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--activity-header-height);
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.agents-session-toolbar__copy {
+  min-width: 0;
+}
+
+.agents-session-toolbar__copy h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.32;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agents-session-toolbar__title-edit {
+  display: grid;
+  grid-template-columns: minmax(160px, 320px) 28px 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.agents-session-toolbar__title-input {
+  height: 28px;
+  min-width: 0;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+
+.agents-session-toolbar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.agents-session-toolbar__split-action {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.agents-session-toolbar__split-menu {
+  position: relative;
+  display: flex;
+}
+
+.agents-session-toolbar__action {
+  flex: 0 0 auto;
+  min-width: 88px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.agents-session-toolbar__icon-action {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.agents-session-toolbar__icon-action:hover,
+.agents-session-toolbar__icon-action:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.agents-session-toolbar__icon-action[aria-pressed="true"] {
+  background: var(--color-accent-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.agents-session-toolbar__action:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.agents-session-toolbar__action--split-main {
+  min-width: 78px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.agents-session-toolbar__action--split-toggle {
+  min-width: 30px;
+  padding: 0 8px;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.agents-session-toolbar__action--danger {
+  min-height: 30px;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-danger);
+}
+
+.agents-session-toolbar__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 2;
+  display: grid;
+  min-width: 120px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
+}
+
+.agents-session-toolbar__menu-item {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.agents-session-toolbar__menu-item:hover,
+.agents-session-toolbar__menu-item:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.agents-session-toolbar__menu-item--danger {
+  color: var(--color-danger);
+}
+
+.agents-session-status-stack {
+  grid-row: 2;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 12px;
+}
+
+.agents-session-status-stack:empty {
+  display: none;
+}
+
+.session-workspace-tabs {
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.session-workspace-tabs__list {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  min-width: 0;
+  padding: 4px 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  overflow-x: auto;
+}
+
+.session-workspace-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  max-width: 220px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-border);
+  border-bottom-color: var(--color-surface);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  margin-bottom: -1px;
+  margin-right: -1px;
+  min-width: 0;
+}
+
+.session-workspace-tabs__tab[aria-selected="true"] {
+  border-top-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.session-workspace-tabs__add {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  margin: 0 0 4px 6px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.session-workspace-tabs__add:hover,
+.session-workspace-tabs__add:focus-visible,
+.session-workspace-tabs__add[data-popup-open] {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.session-workspace-tabs__menu {
+  width: auto;
+  min-width: 132px;
+}
+
+.session-workspace-tabs__closable-tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 260px;
+  height: 34px;
+  margin-bottom: -1px;
+  margin-right: -1px;
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-border);
+  border-bottom-color: var(--color-surface);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.session-workspace-tabs__closable-tab--selected {
+  border-top-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.session-workspace-tabs__closable-tab .session-workspace-tabs__tab {
+  flex: 1 1 auto;
+  height: 100%;
+  max-width: none;
+  margin-bottom: 0;
+  padding-right: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.session-workspace-tabs__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-workspace-tabs__close {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-right: 6px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-subtle);
+}
+
+.session-workspace-tabs__agent-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.session-workspace-tabs__close:hover,
+.session-workspace-tabs__close:focus-visible {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.session-workspace-tabs__content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 常驻渲染的 tab 内容容器：所有 pane 同时挂载，仅可见的那个撑满高度，
+   hidden 的通过 [hidden] 属性 display:none 不占空间。
+   用 grid 单行布局确保可见 pane 撑满父容器，避免多个常驻 pane 垂直堆叠。 */
+.session-workspace-tabs__pane {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.session-workspace-tabs__pane[hidden] {
+  display: none;
+}
+
+.expandable-text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.expandable-text__content--clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.expandable-text__toggle {
+  justify-self: start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.expandable-text__toggle:hover {
+  text-decoration: underline;
+}

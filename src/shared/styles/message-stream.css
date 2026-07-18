@@ -1,0 +1,777 @@
+/* ===========================================================================
+   结构化消息流（agent-message-stream）
+   黑白灰优先、13px body、1px 边框、无阴影、状态不只靠颜色。
+   =========================================================================== */
+
+.agents-message-stream {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: color-mix(
+    in srgb,
+    var(--color-app) 96%,
+    var(--color-surface-muted)
+  );
+}
+
+.agents-session-view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.agents-session-view__permissions {
+  display: grid;
+  gap: 8px;
+  width: auto;
+  margin: 0 18px 8px;
+}
+
+.agents-session-view__permissions:empty {
+  display: none;
+}
+
+.agents-message-stream__scroll {
+  display: grid;
+  align-content: start;
+  gap: calc(var(--content-font-size) * 0.7);
+  flex: 1;
+  min-height: 0;
+  padding: 28px 18px 18px;
+  overflow-y: auto;
+}
+
+.agents-message-stream__empty,
+.agents-message-stream__error {
+  margin: 0;
+  padding: 24px 12px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.agents-message-stream__error {
+  color: var(--color-danger);
+}
+
+.agents-message-stream__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100%;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.agents-message-stream__running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agents-message-stream__running span {
+  animation: agents-message-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+/* 异常中断提示：turn 在工具完成后被提前掐断、无收尾消息时展示，提示用户可重发继续。 */
+.agents-message-stream__interrupted {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 8px;
+  background: var(--color-danger-muted);
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agents-message__spinner {
+  animation: agents-message-spin 900ms linear infinite;
+}
+
+@keyframes agents-message-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes agents-message-thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agents-message__spinner,
+  .agents-message-stream__running span {
+    animation: none;
+  }
+}
+
+/* 长内容跳转按钮：浮在消息流右下角、composer 上方，半透明圆形。 */
+.agents-message-stream__nav {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-muted);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.agents-message-stream__nav:hover {
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  color: var(--color-text);
+}
+
+.agents-message-stream__nav:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agents-message-stream__nav {
+    transition: none;
+  }
+}
+
+/* 消息条目通用 */
+.agents-message__entry {
+  min-width: 0;
+  width: 100%;
+  margin: 0 auto;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+
+.agents-message__entry--user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.agents-message__entry--assistant,
+.agents-message__entry--reasoning,
+.agents-message__entry--tool,
+.agents-message__entry--todo,
+.agents-message__entry--error,
+.agents-message__entry--compaction,
+.agents-message__entry--running,
+.agents-message__entry--interrupted {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* 气泡 */
+.agents-message__bubble {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--content-font-size);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.agents-message__bubble--user {
+  max-width: min(620px, 86%);
+  padding: 8px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-dialog);
+  background: var(--color-surface-muted);
+}
+
+.agents-message__bubble--assistant {
+  background: transparent;
+}
+
+.agents-message__text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Markdown 容器 */
+.agents-message__markdown {
+  font-size: var(--content-font-size);
+  line-height: 1.58;
+}
+
+.agents-message__markdown p {
+  margin: 0 0 0.6em;
+}
+
+.agents-message__markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.agents-message__markdown ul,
+.agents-message__markdown ol {
+  margin: 0 0 0.6em;
+  padding-left: 1.5em;
+}
+
+.agents-message__markdown li {
+  margin-top: 0.15em;
+}
+
+.agents-message__markdown li:first-child {
+  margin-top: 0;
+}
+
+.agents-message__ordered-list {
+  list-style-type: decimal;
+}
+
+.agents-message__unordered-list {
+  list-style-type: disc;
+}
+
+/* 标题字号以 em 相对正文缩放：全局字号调大时同步放大，始终保持层级；
+   原硬编码 13px 会在字号 ≥14 时让标题小于正文，已弃用。 */
+.agents-message__markdown h1,
+.agents-message__markdown h2,
+.agents-message__markdown h3,
+.agents-message__markdown h4,
+.agents-message__markdown h5,
+.agents-message__markdown h6 {
+  margin: 0.7em 0 0.3em;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.agents-message__markdown h1:first-child,
+.agents-message__markdown h2:first-child,
+.agents-message__markdown h3:first-child,
+.agents-message__markdown h4:first-child,
+.agents-message__markdown h5:first-child,
+.agents-message__markdown h6:first-child {
+  margin-top: 0;
+}
+
+.agents-message__markdown h1 {
+  font-size: 1.3em;
+}
+
+.agents-message__markdown h2 {
+  font-size: 1.2em;
+}
+
+.agents-message__markdown h3 {
+  font-size: 1.1em;
+}
+
+.agents-message__markdown h4,
+.agents-message__markdown h5,
+.agents-message__markdown h6 {
+  font-size: 1em;
+}
+
+.agents-message__markdown a {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.agents-message__code-inline {
+  padding: 0 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--content-font-size);
+}
+
+.agents-message__code-block {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-panel);
+  overflow-x: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--content-font-size);
+  line-height: 1.45;
+}
+
+.agents-message__code-block code {
+  font-family: inherit;
+}
+
+/* 推理折叠 */
+.agents-message__reasoning {
+  width: 100%;
+  color: var(--color-text-muted);
+}
+
+.agents-message__reasoning-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 2px 0;
+  color: var(--color-text-muted);
+  font-size: var(--content-font-size);
+  cursor: pointer;
+  list-style: none;
+}
+
+.agents-message__reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agents-message__reasoning-text {
+  margin: 0;
+  padding: 6px 0 0 19px;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--content-font-size);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.agents-message__summary-chevron {
+  transition: transform 150ms ease;
+}
+
+details[open] > summary .agents-message__summary-chevron {
+  transform: rotate(180deg);
+}
+
+/* 工具调用卡片 */
+.agents-message__tool {
+  width: 100%;
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+
+.agents-message__tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+}
+
+.agents-message__tool-details > .agents-message__tool-header {
+  cursor: pointer;
+  list-style: none;
+}
+
+.agents-message__tool-details
+  > .agents-message__tool-header::-webkit-details-marker {
+  display: none;
+}
+
+.agents-message__tool-name {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.agents-message__tool-icon {
+  position: relative;
+  display: inline-grid;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  place-items: center;
+}
+
+.agents-message__tool-type-icon,
+.agents-message__tool-expand-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.agents-message__tool-expand-icon {
+  opacity: 0;
+}
+
+.agents-message__tool--expandable:hover .agents-message__tool-type-icon,
+.agents-message__tool-details:focus-within .agents-message__tool-type-icon,
+.agents-message__tool-details[open] .agents-message__tool-type-icon {
+  opacity: 0;
+}
+
+.agents-message__tool--expandable:hover .agents-message__tool-expand-icon,
+.agents-message__tool-details:focus-within .agents-message__tool-expand-icon,
+.agents-message__tool-details[open] .agents-message__tool-expand-icon {
+  opacity: 1;
+}
+
+.agents-message__tool-details[open] .agents-message__tool-expand-icon {
+  transform: rotate(90deg);
+}
+
+.agents-message__tool-name svg,
+.agents-message__tool-icon svg {
+  flex: 0 0 auto;
+}
+
+.agents-message__tool-display-name {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.agents-message__tool-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agents-message__tool-status {
+  flex: 0 0 auto;
+  height: 18px;
+  border-radius: var(--radius-control);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.agents-message__tool-body {
+  display: grid;
+  gap: 6px;
+  padding: 3px 0 0 20px;
+  min-width: 0;
+}
+
+.agents-message__command,
+.agents-message__path {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--content-font-size);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.agents-message__tool-output {
+  width: 100%;
+}
+
+.agents-message__output {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  max-height: 280px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-panel);
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--content-font-size);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agents-message__truncated {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.agents-message__command--details,
+.agents-message__path--details {
+  margin-top: 6px;
+}
+
+.agents-message__output--diff {
+  color: var(--color-text-muted);
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+}
+
+.agents-message__diff-code {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.agents-message__diff-line {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  min-height: 17px;
+  padding: 0 8px;
+}
+
+.agents-message__diff-line--add {
+  background: rgba(36, 148, 71, 0.12);
+}
+
+.agents-message__diff-line--delete {
+  background: rgba(180, 35, 24, 0.1);
+}
+
+.agents-message__diff-line--hunk {
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+}
+
+.agents-message__diff-line--meta {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__diff-prefix {
+  color: var(--color-text-subtle);
+  user-select: none;
+}
+
+.agents-message__diff-line--add .agents-message__diff-prefix {
+  color: var(--color-lane-review-marker);
+}
+
+.agents-message__diff-line--delete .agents-message__diff-prefix {
+  color: var(--color-danger);
+}
+
+.agents-message__diff-content {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agents-message__syntax--comment {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__syntax--decorator,
+.agents-message__syntax--keyword {
+  color: #7c4dff;
+}
+
+.agents-message__syntax--function {
+  color: #0b6fcb;
+}
+
+.agents-message__syntax--literal,
+.agents-message__syntax--number {
+  color: #9a5b00;
+}
+
+.agents-message__syntax--property,
+.agents-message__syntax--type,
+.agents-message__syntax--variable {
+  color: #9950b8;
+}
+
+.agents-message__syntax--string {
+  color: #237a3b;
+}
+
+.agents-message__syntax--operator {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__exit-code {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.agents-message__tool-error {
+  margin: 6px 0 0;
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.agents-message__search-query,
+.agents-message__sub-agent,
+.agents-message__plan {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agents-message__search-details {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 7px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-panel);
+}
+
+.agents-message__search-query {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.agents-message__detail-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.agents-message__detail-label {
+  color: var(--color-text-subtle);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.agents-message__search-empty {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
+.agents-message__search-matches {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+.agents-message__search-matches code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.agents-message__search-link {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.agents-message__search-link:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+/* Todo 清单 */
+.agents-message__todo {
+  max-width: min(720px, 100%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.agents-message__todo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agents-message__todo-list {
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.agents-message__todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.agents-message__todo-check {
+  flex: 0 0 auto;
+  width: 14px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agents-message__todo-item--done .agents-message__todo-text {
+  color: var(--color-text-subtle);
+  text-decoration: line-through;
+}
+
+.agents-message__todo-text {
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* 错误卡片 */
+.agents-message__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(720px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.agents-message__error p {
+  margin: 0;
+  word-break: break-word;
+}
+
+/* 压缩横幅 */
+.agents-message__compaction {
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  text-align: center;
+}

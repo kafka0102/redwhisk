@@ -1,0 +1,723 @@
+.session-viewer-state {
+  min-height: 100%;
+  margin: 0;
+  padding: 12px;
+  background: var(--color-surface-panel);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.session-viewer-state h3 {
+  margin: 0 0 6px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.32;
+}
+
+.session-viewer-state p {
+  margin: 0;
+}
+
+.session-file-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-surface-panel);
+}
+
+.session-file-viewer__status {
+  min-width: 0;
+  overflow: hidden;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-side-panel {
+  display: grid;
+  grid-template-rows: var(--activity-header-height) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-surface);
+}
+
+.session-side-panel__tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--activity-header-height);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.session-side-panel__tab {
+  min-width: 66px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-icon);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 15px;
+}
+
+.session-side-panel__tab[aria-selected="true"] {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.session-side-panel__content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-issue-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.session-issue-panel__card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.session-issue-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-issue-panel__action {
+  flex: none;
+}
+
+.session-issue-panel__issue-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.32;
+}
+
+.session-issue-panel__meta-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.session-issue-panel__meta-row {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.session-issue-panel__meta-row dt,
+.session-issue-panel__meta-row span {
+  margin: 0;
+  color: var(--color-text-subtle);
+}
+
+.session-issue-panel__meta-row dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.session-issue-panel__log-path {
+  display: block;
+  min-width: 0;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.session-changes-panel {
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.session-side-panel__filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px 0 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.session-change-filter {
+  min-width: 0;
+}
+
+.session-change-filter__list {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0;
+}
+
+.session-change-filter__tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.session-change-filter__tab:hover,
+.session-change-filter__tab:focus-visible {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.session-change-filter__tab[data-active] {
+  color: var(--color-text);
+}
+
+.session-side-panel__refresh {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.session-side-panel__refresh:hover,
+.session-side-panel__refresh:focus-visible {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.session-changes-panel__list,
+.session-commit-timeline,
+.session-file-tree {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.session-change-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.session-change-row:hover,
+.session-change-row:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.session-change-row__name {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.session-change-row__name > span:first-child {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-change-row__path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-change-row__actions {
+  display: inline-grid;
+  align-items: center;
+  grid-template-columns: minmax(0, auto) 22px;
+  justify-content: flex-end;
+  column-gap: 6px;
+  min-width: 82px;
+}
+
+.session-change-row--deleted .session-change-row__name > span:first-child {
+  text-decoration: line-through;
+}
+
+.session-change-row__stats {
+  display: inline-flex;
+  min-width: 52px;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.session-change-row__status {
+  justify-self: end;
+}
+
+.session-change-row__added {
+  color: #16803a;
+}
+
+.session-change-row__deleted {
+  color: #c01818;
+}
+
+.session-change-row__tooltip {
+  position: absolute;
+  left: 12px;
+  bottom: -26px;
+  z-index: 5;
+  width: max-content;
+  max-width: 80vw;
+  overflow: hidden;
+  padding: 4px 7px;
+  border-radius: var(--radius-control);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-timeline {
+  margin: 0;
+  padding: 8px 0 18px;
+  list-style: none;
+}
+
+.session-commit-timeline__item {
+  position: relative;
+  min-width: 0;
+  padding-left: 30px;
+}
+
+.session-commit-timeline__rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 15px;
+  width: 1px;
+  background: #5fa8ff;
+}
+
+.session-commit-timeline__dot {
+  position: absolute;
+  top: 11px;
+  left: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5fa8ff;
+}
+
+.session-commit-timeline__dot--pushed {
+  background: #7c3aed;
+}
+
+.session-commit-timeline__dot--other-worktree {
+  background: #f59e0b;
+}
+
+.session-commit-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 31px;
+  padding: 0 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.session-commit-row:hover,
+.session-commit-row:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.session-commit-row__content {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.session-commit-row__message {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-row__author {
+  flex: 0 0 auto;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.session-commit-row__remote-tag {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.session-commit-row__remote-tag > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-files {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0 0 6px;
+  list-style: none;
+}
+
+.session-commit-file {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.session-commit-file:hover,
+.session-commit-file:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.session-commit-file__icon {
+  color: #4a9eff;
+}
+
+.session-commit-file__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-commit-file__name {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-file__path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-file__tooltip {
+  position: absolute;
+  left: 12px;
+  bottom: -26px;
+  z-index: 5;
+  width: max-content;
+  max-width: 80vw;
+  overflow: hidden;
+  padding: 4px 7px;
+  border-radius: var(--radius-control);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-commit-file__status {
+  justify-self: end;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.session-commit-file__status--modified {
+  color: #b98b2f;
+}
+
+.session-commit-file__status--added,
+.session-commit-file__status--renamed,
+.session-commit-file__status--copied {
+  color: #16803a;
+}
+
+.session-commit-file__status--deleted {
+  color: #c01818;
+}
+
+.session-commit-file__status--type-changed,
+.session-commit-file__status--unmerged,
+.session-commit-file__status--unknown {
+  color: var(--color-text-muted);
+}
+
+.session-side-panel__empty {
+  margin: 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.session-file-tree {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  /* react-arborist 内部已虚拟化滚动，容器层覆盖 grouped 规则的 `overflow: auto`，
+     避免出现双层滚动条；空态/错误态文案较短，不需要外层滚动。 */
+  overflow: hidden;
+  padding: 6px 0 18px;
+}
+
+.session-file-tree__viewport {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.session-file-tree__arborist {
+  min-width: 0;
+}
+
+.session-file-tree__folder,
+.session-file-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
+  /* 右键打开自定义菜单时，避免浏览器在文件名上留下文本选区高亮。
+     文件名复制已由右键菜单项承担，行内文本无需被直接选中。 */
+  user-select: none;
+}
+
+.session-file-tree__row--ignored {
+  color: var(--color-text-subtle);
+}
+
+.session-file-tree__folder {
+  padding-left: calc(6px + var(--tree-depth, 0) * 12px);
+  color: var(--color-text-muted);
+}
+
+.session-file-tree__row {
+  padding-left: calc(26px + var(--tree-depth, 0) * 12px);
+}
+
+.session-file-tree__row:hover,
+.session-file-tree__row:focus-visible,
+.session-file-tree__folder:hover,
+.session-file-tree__folder:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+/* dark 下与侧栏列表（agents-session-row 等）选中/悬停统一为 #48494f，
+   避免亮色 #f7f8fa 背景叠加浅色文字造成白底白字不可读。 */
+:root[data-theme="dark"] .session-file-tree__row:hover,
+:root[data-theme="dark"] .session-file-tree__row:focus-visible,
+:root[data-theme="dark"] .session-file-tree__folder:hover,
+:root[data-theme="dark"] .session-file-tree__folder:focus-visible {
+  background: #48494f;
+}
+
+.session-file-tree__icon {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.session-file-tree__chevron {
+  flex: 0 0 13px;
+  color: var(--color-text-subtle);
+}
+
+.session-file-tree__chevron--placeholder {
+  visibility: hidden;
+}
+
+.session-file-tree__status {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.session-file-tree__icon--ts,
+.session-file-tree__icon--tsx,
+.session-file-tree__icon--js,
+.session-file-tree__icon--jsx {
+  color: #2563eb;
+}
+
+.session-file-tree__icon--json,
+.session-file-tree__icon--jsonc,
+.session-file-tree__icon--lock {
+  color: #c99700;
+}
+
+.session-file-tree__icon--vue,
+.session-file-tree__icon--svelte,
+.session-file-tree__icon--html {
+  color: #16a34a;
+}
+
+.session-file-tree__icon--css,
+.session-file-tree__icon--scss,
+.session-file-tree__icon--sass,
+.session-file-tree__icon--less {
+  color: #7c3aed;
+}
+
+.session-file-tree__icon--rs,
+.session-file-tree__icon--go,
+.session-file-tree__icon--py,
+.session-file-tree__icon--java,
+.session-file-tree__icon--kt,
+.session-file-tree__icon--swift {
+  color: #b45309;
+}
+
+.session-file-tree__icon--md,
+.session-file-tree__icon--mdx,
+.session-file-tree__icon--txt {
+  color: #475569;
+}
+
+.session-file-tree__icon--png,
+.session-file-tree__icon--jpg,
+.session-file-tree__icon--jpeg,
+.session-file-tree__icon--gif,
+.session-file-tree__icon--webp,
+.session-file-tree__icon--svg {
+  color: #1681d9;
+}
+
+.session-file-tree__icon--zip,
+.session-file-tree__icon--gz,
+.session-file-tree__icon--tar {
+  color: #65a30d;
+}
+
+.session-file-tree__icon--sh,
+.session-file-tree__icon--zsh,
+.session-file-tree__icon--bash {
+  color: #249447;
+}
+
+.session-file-tree__icon--toml,
+.session-file-tree__icon--yaml,
+.session-file-tree__icon--yml,
+.session-file-tree__icon--env {
+  color: #5f6368;
+}

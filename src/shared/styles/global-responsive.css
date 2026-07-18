@@ -1,0 +1,173 @@
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    overflow: auto;
+  }
+
+  .local-data-status-stack {
+    position: static;
+    max-width: none;
+    padding: 12px 20px 0;
+  }
+
+  .project-list-shell {
+    padding: 16px 20px 20px;
+  }
+
+  .project-home__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-shell {
+    grid-template-columns: 48px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  .workbench__header {
+    align-items: center;
+    padding-left: 86px;
+  }
+
+  .activity-surface--issues {
+    padding: 0 0 16px;
+  }
+
+  .activity-surface--agents {
+    grid-template-columns:
+      minmax(230px, var(--agents-sidebar-width, 230px))
+      8px minmax(0, 1fr);
+  }
+
+  .activity-surface--terminals {
+    grid-template-columns:
+      minmax(230px, var(--project-terminals-sidebar-width, 230px))
+      8px minmax(0, 1fr);
+  }
+
+  .agents-workspace--with-side-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-side-panel-splitter {
+    display: none;
+  }
+
+  .session-side-panel {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+  }
+
+  .issues-kanban {
+    grid-template-columns: repeat(4, minmax(200px, 1fr));
+    overflow: auto hidden;
+  }
+
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-menu {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: 16px;
+    padding: 0 0 12px;
+    overflow-x: auto;
+  }
+
+  .settings-splitter {
+    display: none;
+  }
+
+  .project-terminals-splitter {
+    display: none;
+  }
+
+  .settings-content {
+    padding-top: 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .project-terminals-sidebar {
+    grid-auto-rows: auto;
+  }
+
+  .project-terminals-workspace__surface {
+    padding: 12px;
+  }
+
+  .settings-section__header,
+  .settings-section__body {
+    width: 100%;
+  }
+
+  .issue-lane {
+    min-width: 200px;
+  }
+
+  .issue-dialog-overlay {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .issue-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    min-height: 0;
+  }
+
+  .issue-dialog__body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .issue-page__body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .issue-page__body--readonly-fullscreen {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .issue-page__side {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+    padding-top: 14px;
+    padding-left: 0;
+    overflow: visible;
+  }
+
+  .issue-page__side--readonly {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+    padding: 10px;
+    overflow: visible;
+  }
+
+  .issue-dialog__side {
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+    padding-top: 12px;
+    padding-left: 0;
+  }
+
+  .global-settings-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .global-settings-dialog__body {
+    grid-template-columns: 1fr;
+  }
+}
