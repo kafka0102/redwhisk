@@ -63,6 +63,14 @@ pub fn run() {
             trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // 窗口关闭后清除其项目归属，避免切换菜单把已不存在的窗口当作「已打开」而无法新建。
+            if let tauri::WindowEvent::Destroyed = event {
+                if let Some(state) = window.try_state::<AppState>() {
+                    state.forget_window(window.label());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             features::settings::agent_skill_commands::list_agent_skills,
             features::settings::agent_skill_commands::refresh_agent_skills,

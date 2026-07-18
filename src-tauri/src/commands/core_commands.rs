@@ -5,7 +5,7 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::local_data::LocalDataStatus;
 
 #[tauri::command]
-pub fn initialize_local_data(
+pub async fn initialize_local_data(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<LocalDataStatus, CommandError> {

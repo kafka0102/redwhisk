@@ -67,13 +67,23 @@ pub fn delete_agent_profile(
 }
 
 #[tauri::command]
-pub fn list_project_labels(
+pub async fn list_project_labels(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     input: ListProjectLabelsInput,
 ) -> Result<ProjectLabelListResponse, CommandError> {
-    let data_dir = prepare_settings_data_dir(&app, &state)?;
-    SettingsService::list_project_labels_in_data_dir(data_dir, input)
+    let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
+        CommandError::new(CommandErrorCode::SettingsPersistenceFailed, "设置保存失败。")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+    tauri::async_runtime::spawn_blocking(move || {
+        SettingsService::list_project_labels_in_data_dir(data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandErrorCode::SettingsPersistenceFailed, "设置查询失败。")
+            .with_reason("queryFailed")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]

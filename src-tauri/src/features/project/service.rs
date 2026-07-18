@@ -70,12 +70,6 @@ impl<'connection> ProjectService<'connection> {
         Ok(populate_code_workspaces(self.project_available_for_open(input.project_id)?))
     }
 
-    pub fn record_project_opened(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
-        self.repository
-            .update_last_opened_at(project_id)
-            .map_err(project_database_error)
-    }
-
     pub fn update_project_settings(
         &self,
         input: UpdateProjectSettingsInput,
@@ -176,13 +170,15 @@ impl<'connection> ProjectService<'connection> {
         Ok(project)
     }
 
-    pub fn record_project_opened_in_data_dir(
+    /// 轻量打开：仅校验项目可打开并返回记录（供 `open_project_window` 取标题用），
+    /// 不做恢复终端 / worktree 探测 / 更新 last_opened —— 这些由新窗口启动后的 `open_project` 完成。
+    pub fn project_for_window_in_data_dir(
         data_dir: impl AsRef<Path>,
-        project_id: i64,
+        input: OpenProjectInput,
     ) -> Result<ProjectSummary, CommandError> {
-        let database = open_project_database(data_dir)?;
+        let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
-        ProjectService::new(repository).record_project_opened(project_id)
+        ProjectService::new(repository).project_available_for_open(input.project_id)
     }
 
     pub fn update_project_settings_in_data_dir(
