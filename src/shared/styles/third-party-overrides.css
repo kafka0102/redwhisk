@@ -114,6 +114,20 @@
   border: 0;
 }
 
+/* Quill snow 主题把段落类型选择器 .ql-header 硬编码为 width:98px：14px 字号下
+   英文标签 "Normal text" 文本约 80px，扣除 label 内边距 12px 与右侧 18px 折叠
+   箭头后可用宽度不足，::before 文本会换行成两行、撑高工具栏。这里放宽到容纳最长
+   英文标签并留余量，并对标签文本加 white-space:nowrap，杜绝任何语言下意外换行。 */
+.rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker.ql-header {
+  width: 140px;
+}
+
+.rich-text-editor__toolbar.ql-toolbar.ql-snow
+  .ql-picker.ql-header
+  .ql-picker-label::before {
+  white-space: nowrap;
+}
+
 .rich-text-editor__toolbar.ql-toolbar.ql-snow .ql-picker-options {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
