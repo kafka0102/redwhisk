@@ -12,39 +12,44 @@ export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type WorkspaceMode = "current_branch" | "worktree";
+// Rust WorktreeOwner 枚举（redwhisk / external）序列化为 snake_case 字面量。
+// AgentSessionListItem.worktreeOwner 与之同 shape，前端 UI 据此区分 RedWhisk 管理 vs 外部 worktree。
+export type WorktreeOwner = "redwhisk" | "external";
 
 export interface AgentSessionListItem {
   sessionId: number;
   /** 项目内 session 自增编号（用于日志命名等，不在 UI 展示）。 */
   number: number;
-  projectId?: number;
+  projectId: number;
   issueId: number | null;
   /** 关联 Issue 的项目内编号（展示用）；与全局 issueId 区分。无关联 Issue 时为 null。 */
   issueNumber: number | null;
   issueTitle: string | null;
-  issueStatus?: IssueStatus | null;
-  agentProfileId?: number;
-  agentProfileName?: string | null;
-  workflowSkillName?: string | null;
-  canCompleteClean?: boolean;
-  canCompleteAgentCommit?: boolean;
+  issueStatus: IssueStatus | null;
+  agentProfileId: number;
+  agentProfileName: string;
+  workflowSkillName: string | null;
+  canCompleteClean: boolean;
+  canCompleteAgentCommit: boolean;
   title: string | null;
   agentType: AgentType;
   status: AgentSessionStatus;
   attention: AgentSessionAttention;
-  isTurnRunning?: boolean;
-  workspaceMode?: WorkspaceMode;
-  workingDir?: string;
-  workspacePath?: string | null;
-  originBranch?: string | null;
-  workspaceBranch?: string | null;
-  logPath?: string | null;
-  latestOutput?: string | null;
+  isTurnRunning: boolean;
+  workspaceMode: WorkspaceMode;
+  workingDir: string;
+  workspacePath: string | null;
+  originBranch: string | null;
+  workspaceBranch: string | null;
+  // Rust WorktreeOwner（Redwhisk / External）→ "redwhisk" / "external"。
+  worktreeOwner: WorktreeOwner;
+  logPath: string;
+  latestOutput: string | null;
   lastActiveAt: number;
   startedAt: number;
   closedAt: number | null;
-  processingMs?: number;
-  lastOutputAt?: number | null;
+  processingMs: number;
+  lastOutputAt: number | null;
 }
 
 export interface AgentSessionListResponse {
@@ -73,6 +78,7 @@ export interface InjectAgentSessionPromptInput {
 
 export interface InjectAgentSessionPromptResult {
   sessionId: number;
+  // Rust codex_session_id: Option<String> 无 skip_serializing_if，键始终存在。
   codexSessionId: string | null;
 }
 
@@ -200,7 +206,7 @@ export interface SendAgentMessageInput {
   sessionId: number;
   message: string;
   /** 随消息发送的已落盘附件；空数组表示纯文本消息。 */
-  attachments: AgentMessageAttachment[];
+  attachments?: AgentMessageAttachment[];
 }
 
 export interface CancelAgentTurnInput {

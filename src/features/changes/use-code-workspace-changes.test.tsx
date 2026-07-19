@@ -20,6 +20,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const changedFile = {
   filePath: "src/a.ts",
+  oldPath: null,
   fileName: "a.ts",
   kind: "modified" as const,
   status: "M",

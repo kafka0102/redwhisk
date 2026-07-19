@@ -90,6 +90,7 @@ describe("FileTreePanel", () => {
               path: "src",
               kind: "directory",
               children: [],
+              isIgnored: false,
             },
           ]}
           isLoading={false}
@@ -149,6 +150,7 @@ describe("FileTreePanel", () => {
         path: "src",
         kind: "directory" as const,
         children: [],
+        isIgnored: false,
       },
     ];
     const onOpenFile = vi.fn();

@@ -26,6 +26,7 @@ const fileTab: SessionWorkspaceFileTab = {
     isBinary: false,
     isTooLarge: false,
     language: "typescript",
+    modifiedAt: null,
     sizeBytes: 24,
   },
   isLoading: false,

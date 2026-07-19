@@ -150,6 +150,7 @@ const projectLabel: ProjectLabelRecord = {
   projectId: 1,
   color: "#E11D48",
   workflowSkill: "codex-project",
+  del: 0,
 };
 
 const globalLabel: ProjectLabelRecord = {
@@ -159,6 +160,7 @@ const globalLabel: ProjectLabelRecord = {
   projectId: null,
   color: "#3B82F6",
   workflowSkill: null,
+  del: 0,
 };
 
 describe("ProjectSettingsActivity", () => {
@@ -633,6 +635,7 @@ describe("ProjectSettingsActivity", () => {
               projectId: 1,
               color: "#E11D48",
               workflowSkill: null,
+              del: 0,
             },
             {
               id: 11,
@@ -641,6 +644,7 @@ describe("ProjectSettingsActivity", () => {
               projectId: 1,
               color: "#E11D48",
               workflowSkill: null,
+              del: 0,
             },
           ],
         };
@@ -655,6 +659,7 @@ describe("ProjectSettingsActivity", () => {
             projectId: null,
             color: "#3B82F6",
             workflowSkill: null,
+            del: 0,
           },
           {
             id: 13,
@@ -663,6 +668,7 @@ describe("ProjectSettingsActivity", () => {
             projectId: null,
             color: "#3B82F6",
             workflowSkill: null,
+            del: 0,
           },
         ],
       };

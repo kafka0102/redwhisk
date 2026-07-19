@@ -239,14 +239,14 @@
     },
     "CompleteIssueFlowInput": {
       "fields": {
-        "actualPath": "required",
-        "branchName": "required",
-        "continueAfterCommit": "required",
-        "dirtyDecision": "required",
-        "ignoreDirty": "required",
+        "actualPath": "optional",
+        "branchName": "optional",
+        "continueAfterCommit": "optional",
+        "dirtyDecision": "optional",
+        "ignoreDirty": "optional",
         "issueId": "required",
         "projectId": "required",
-        "worktreeCleanupDecision": "required"
+        "worktreeCleanupDecision": "optional"
       }
     },
     "CompleteIssueFlowResult": {
@@ -433,10 +433,10 @@
     },
     "ExportIssueAttachmentInput": {
       "fields": {
-        "attachmentId": "required",
-        "displayName": "required",
+        "attachmentId": "optional",
+        "displayName": "optional",
         "projectId": "required",
-        "sourcePath": "required",
+        "sourcePath": "optional",
         "targetPath": "required"
       }
     },
@@ -460,7 +460,7 @@
     },
     "GetUpdateStatusInput": {
       "fields": {
-        "forceRefresh": "required"
+        "forceRefresh": "optional"
       }
     },
     "InjectAgentSessionPromptInput": {
@@ -657,19 +657,19 @@
     },
     "ListAgentProfilesInput": {
       "fields": {
-        "projectId": "required",
+        "projectId": "optional",
         "scope": "required"
       }
     },
     "ListAgentSkillsInput": {
       "fields": {
-        "agentType": "required",
-        "projectId": "required"
+        "agentType": "optional",
+        "projectId": "optional"
       }
     },
     "ListProjectLabelsInput": {
       "fields": {
-        "projectId": "required",
+        "projectId": "optional",
         "scope": "required"
       }
     },
@@ -695,8 +695,8 @@
     },
     "ListSavedAgentSkillsInput": {
       "fields": {
-        "projectId": "required",
-        "scope": "required"
+        "projectId": "optional",
+        "scope": "optional"
       }
     },
     "LocalDataStatus": {
@@ -731,10 +731,10 @@
     },
     "PreviewIssueAttachmentInput": {
       "fields": {
-        "attachmentId": "required",
-        "displayName": "required",
+        "attachmentId": "optional",
+        "displayName": "optional",
         "projectId": "required",
-        "sourcePath": "required"
+        "sourcePath": "optional"
       }
     },
     "ProjectGitBranchListInput": {
@@ -824,17 +824,17 @@
     "ProjectWorkspaceInput": {
       "fields": {
         "projectId": "required",
-        "sessionId": "required",
-        "workspacePath": "required"
+        "sessionId": "optional",
+        "workspacePath": "optional"
       }
     },
     "ProjectWorkspacePathInput": {
       "fields": {
-        "commitHash": "required",
+        "commitHash": "optional",
         "filePath": "required",
         "projectId": "required",
-        "sessionId": "required",
-        "workspacePath": "required"
+        "sessionId": "optional",
+        "workspacePath": "optional"
       }
     },
     "ProjectWorktreeChangesResponse": {
@@ -882,7 +882,7 @@
     },
     "ReadProjectTerminalInput": {
       "fields": {
-        "maxBytes": "required",
+        "maxBytes": "optional",
         "projectId": "required",
         "sessionId": "required"
       }
@@ -896,7 +896,7 @@
     },
     "RefreshAgentSkillsInput": {
       "fields": {
-        "projectId": "required"
+        "projectId": "optional"
       }
     },
     "ResizeProjectTerminalInput": {
@@ -963,10 +963,10 @@
         "command": "required",
         "dangerous": "required",
         "defaultSkill": "required",
-        "id": "required",
+        "id": "optional",
         "mode": "required",
         "name": "required",
-        "projectId": "required",
+        "projectId": "optional",
         "promptTemplate": "required",
         "scope": "required"
       }
@@ -988,26 +988,26 @@
     "SaveProjectLabelInput": {
       "fields": {
         "color": "required",
-        "id": "required",
+        "id": "optional",
         "name": "required",
-        "projectId": "required",
+        "projectId": "optional",
         "scope": "required",
-        "workflowSkill": "required"
+        "workflowSkill": "optional"
       }
     },
     "SaveProjectTerminalShortcutCommandInput": {
       "fields": {
         "command": "required",
-        "id": "required",
+        "id": "optional",
         "projectId": "required",
         "sortOrder": "required"
       }
     },
     "SaveSavedAgentSkillInput": {
       "fields": {
-        "id": "required",
+        "id": "optional",
         "name": "required",
-        "projectId": "required",
+        "projectId": "optional",
         "scope": "required",
         "skillPaths": "required"
       }
@@ -1047,7 +1047,7 @@
     },
     "SendAgentMessageInput": {
       "fields": {
-        "attachments": "required",
+        "attachments": "optional",
         "message": "required",
         "projectId": "required",
         "sessionId": "required"
@@ -1091,7 +1091,7 @@
     },
     "SetAgentThinkingInput": {
       "fields": {
-        "effort": "required",
+        "effort": "optional",
         "projectId": "required",
         "sessionId": "required"
       }
@@ -1102,10 +1102,10 @@
         "issueId": "required",
         "projectId": "required",
         "promptSnapshot": "required",
-        "targetBranch": "required",
-        "workflowSkillName": "required",
-        "workspaceMode": "required",
-        "worktreeSetupCommand": "required"
+        "targetBranch": "optional",
+        "workflowSkillName": "optional",
+        "workspaceMode": "optional",
+        "worktreeSetupCommand": "optional"
       }
     },
     "StartAgentSessionResult": {
@@ -1116,14 +1116,14 @@
     },
     "StartStructuredAgentSessionInput": {
       "fields": {
-        "agentProfileId": "required",
-        "agentType": "required",
-        "effort": "required",
-        "mode": "required",
-        "model": "required",
+        "agentProfileId": "optional",
+        "agentType": "optional",
+        "effort": "optional",
+        "mode": "optional",
+        "model": "optional",
         "projectId": "required",
-        "resumeFromCodexSessionId": "required",
-        "title": "required"
+        "resumeFromCodexSessionId": "optional",
+        "title": "optional"
       }
     },
     "StartStructuredAgentSessionResult": {
@@ -1210,8 +1210,8 @@
     },
     "UpdateUserProfileInput": {
       "fields": {
-        "avatarSourcePath": "required",
-        "name": "required"
+        "avatarSourcePath": "optional",
+        "name": "optional"
       }
     },
     "UserProfileRecord": {

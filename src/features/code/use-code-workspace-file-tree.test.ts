@@ -39,7 +39,7 @@ const treeMock = vi.mocked(getProjectWorktreeFileTree);
 const changesMock = vi.mocked(getProjectWorktreeChanges);
 
 const treeNodes: WorkspaceFileTreeNode[] = [
-  { id: "a.ts", name: "a.ts", path: "a.ts", kind: "file" },
+  { id: "a.ts", name: "a.ts", path: "a.ts", kind: "file", isIgnored: false },
 ];
 
 function setVisibility(visible: boolean) {
@@ -147,8 +147,20 @@ describe("useCodeWorkspaceFileTree", () => {
     expect(result.current.tree).toEqual(treeNodes);
 
     const newTree: WorkspaceFileTreeNode[] = [
-      { id: "a.ts", name: "a.ts", path: "a.ts", kind: "file" },
-      { id: "c.ts", name: "c.ts", path: "c.ts", kind: "file" },
+      {
+        id: "a.ts",
+        name: "a.ts",
+        path: "a.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+      {
+        id: "c.ts",
+        name: "c.ts",
+        path: "c.ts",
+        kind: "file",
+        isIgnored: false,
+      },
     ];
     treeMock.mockResolvedValue({ nodes: newTree, signature: "t2" });
 

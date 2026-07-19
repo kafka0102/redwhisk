@@ -37,6 +37,7 @@ interface IssuesKanbanProps {
       | "title"
       | "description"
       | "attachments"
+      | "labels"
       | "status"
       | "linkedSessionId"
     >,
@@ -187,6 +188,7 @@ function IssueCard({
       | "title"
       | "description"
       | "attachments"
+      | "labels"
       | "status"
       | "linkedSessionId"
     >,

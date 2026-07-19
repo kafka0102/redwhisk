@@ -1,6 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import {
+  type IssueAttachmentDraftInput,
   type IssueAttachmentPreviewRecord,
   type IssueAttachmentRecord,
   type IssueRecord,
@@ -116,21 +117,18 @@ function formatAttachmentDescriptionToken(
 
 function serializeAttachments(
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>,
-): Array<{
-  attachmentId?: number | null;
-  tempToken?: string | null;
-  sourcePath?: string | null;
-  displayName: string;
-  mimeType?: string | null;
-}> {
+): IssueAttachmentDraftInput[] {
   return attachments.map((attachment) =>
     "id" in attachment
       ? {
           attachmentId: attachment.id,
+          tempToken: null,
+          sourcePath: null,
           displayName: attachment.displayName,
           mimeType: attachment.mimeType ?? null,
         }
       : {
+          attachmentId: null,
           tempToken: attachment.token,
           sourcePath: attachment.sourcePath,
           displayName: attachment.displayName,

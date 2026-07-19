@@ -27,7 +27,7 @@ export interface AgentProfileRecord {
 
 export interface ListAgentProfilesInput {
   scope: AgentScope;
-  projectId: number | null;
+  projectId?: number | null;
 }
 
 export interface SaveAgentProfileInput {
@@ -36,7 +36,7 @@ export interface SaveAgentProfileInput {
   agentType: AgentType;
   command: string;
   scope: AgentScope;
-  projectId: number | null;
+  projectId?: number | null;
   mode: string;
   dangerous: boolean;
   defaultSkill: string;
@@ -83,6 +83,9 @@ export interface ProjectLabelRecord {
   projectId: number | null;
   color: string;
   workflowSkill: string | null;
+  // Rust ProjectLabelRecord.del: i64（始终序列化）；前端不直接消费，
+  // 但需声明字段以维持 Rust→TS 契约对齐（parity gate）。
+  del: number;
 }
 
 export interface SavedAgentSkillPath {
@@ -102,7 +105,7 @@ export interface SaveSavedAgentSkillInput {
   id?: number;
   name: string;
   scope: AgentSkillScope;
-  projectId: number | null;
+  projectId?: number | null;
   skillPaths: SavedAgentSkillPath[];
 }
 
@@ -121,7 +124,7 @@ export interface DeleteSavedAgentSkillInput {
 
 export interface ListProjectLabelsInput {
   scope: ProjectLabelScope;
-  projectId: number | null;
+  projectId?: number | null;
 }
 
 // 全局 Label 与项目级 Label 同名（大小写不敏感，与后端 find_duplicate_name 的 lower() 一致）
@@ -149,9 +152,9 @@ export interface SaveProjectLabelInput {
   id?: number;
   name: string;
   scope: ProjectLabelScope;
-  projectId: number | null;
+  projectId?: number | null;
   color: string;
-  workflowSkill: string | null;
+  workflowSkill?: string | null;
 }
 
 export interface DeleteProjectLabelInput {

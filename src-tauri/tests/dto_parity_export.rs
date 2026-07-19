@@ -85,7 +85,6 @@ fn is_skipped(attrs: &[syn::Attribute]) -> bool {
     false
 }
 
-#[allow(dead_code)]
 fn field_has_default(attrs: &[syn::Attribute]) -> bool {
     let mut hit = false;
     for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
@@ -120,9 +119,16 @@ fn field_has_skip_serializing_if(attrs: &[syn::Attribute]) -> bool {
     hit
 }
 
-// 注：`is_option` 与 `field_has_default` 在序列化语义重写后不再驱动 optional 判定。
-// 保留 `field_has_default` 供未来反序列化方向（TS→Rust 输入 DTO）的扩展使用；
-// plain `Option<T>` 的判定已交给 `skip_serializing_if` 单一信号。
+fn is_option(ty: &syn::Type) -> bool {
+    let syn::Type::Path(tp) = ty else {
+        return false;
+    };
+    tp.path
+        .segments
+        .last()
+        .map(|s| s.ident == "Option")
+        .unwrap_or(false)
+}
 
 /// per-field `#[serde(rename = "...")]`，若存在返回其值。
 fn field_rename(attrs: &[syn::Attribute]) -> Option<String> {
@@ -159,6 +165,35 @@ fn derives_serde(attrs: &[syn::Attribute]) -> bool {
         }
     }
     false
+}
+
+/// struct 是否仅 derive `Deserialize`（无 Serialize）。
+///
+/// Deserialize-only 表示「输入 DTO」：前端写、后端读。
+/// 这类结构体在 wire 上由发送方（前端）决定键是否存在：
+/// - `Option<T>`：键可以缺失（serde 反序列化 None）；
+/// - `#[serde(default)]`：键可以缺失（用默认值填充）。
+/// 因此对 Deserialize-only struct，Option<T> / default 字段都标记为 optional，
+/// 与前端 TS 习惯用 `field?: ...` 一致。
+fn is_deserialize_only(attrs: &[syn::Attribute]) -> bool {
+    let mut has_ser = false;
+    let mut has_de = false;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("derive")) {
+        if let Ok(list) = attr.meta.require_list() {
+            if let Ok(paths) =
+                list.parse_args_with(Punctuated::<syn::Path, Token![,]>::parse_terminated)
+            {
+                for p in paths {
+                    if p.is_ident("Serialize") {
+                        has_ser = true;
+                    } else if p.is_ident("Deserialize") {
+                        has_de = true;
+                    }
+                }
+            }
+        }
+    }
+    has_de && !has_ser
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +250,10 @@ fn parse_struct(item: &ItemStruct) -> Option<(String, StructSig)> {
         return None;
     }
     let rename_all = extract_rename_all(&item.attrs);
+    // Deserialize-only 表示「输入 DTO」（前端写、后端读）。这类结构体的 Option<T> /
+    // #[serde(default)] 字段在 wire 上键可以缺失，对应 TS 习惯的 `field?: ...`。
+    // 否则按序列化语义判定（skip_serializing_if 是唯一可选信号）。
+    let is_input_dto = is_deserialize_only(&item.attrs);
     let mut fields: BTreeMap<String, FieldOptionality> = BTreeMap::new();
     if let syn::Fields::Named(named) = &item.fields {
         for f in &named.named {
@@ -232,7 +271,16 @@ fn parse_struct(item: &ItemStruct) -> Option<(String, StructSig)> {
             // - `Vec<T>` 无 skip：始终写出键（值可能为空数组）→ required
             // - 任何类型 + skip_serializing_if：键可能缺失 → optional
             // `#[serde(default)]` 只影响反序列化，不影响序列化输出，不计入。
-            let optional = field_has_skip_serializing_if(&f.attrs);
+            //
+            // 例外：Deserialize-only（输入 DTO）的 Option<T> / default 字段在 wire 上
+            // 由发送方决定键是否存在，前端 TS 用 `field?: ...` 表达，标记为 optional。
+            let optional = if is_input_dto {
+                field_has_skip_serializing_if(&f.attrs)
+                    || is_option(&f.ty)
+                    || field_has_default(&f.attrs)
+            } else {
+                field_has_skip_serializing_if(&f.attrs)
+            };
             fields.insert(
                 name,
                 if optional {

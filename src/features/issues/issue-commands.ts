@@ -19,9 +19,13 @@ export interface IssueAttachmentRecord {
   id: number;
   issueId: number;
   displayName: string;
+  // Rust IssueAttachmentRecord.stored_name: String（始终序列化）；前端不直接消费，
+  // 但需声明字段以维持 Rust→TS 契约对齐（parity gate）。
+  storedName: string;
   relativePath: string;
   absolutePath: string;
-  mimeType?: string | null;
+  // Rust mime_type 是 Option<String> 无 skip_serializing_if，序列化为 null 或字符串。
+  mimeType: string | null;
   fileSize: number;
   kind: IssueAttachmentKind;
   isPreviewable: boolean;
@@ -29,19 +33,23 @@ export interface IssueAttachmentRecord {
 }
 
 export interface IssueAttachmentDraftInput {
-  attachmentId?: number | null;
-  tempToken?: string | null;
-  sourcePath?: string | null;
+  // Rust IssueAttachmentInput 的所有 Option 字段均无 skip_serializing_if，
+  // 序列化时键始终存在（值为 null 或具体值），TS 端用 T | null 镜像。
+  attachmentId: number | null;
+  tempToken: string | null;
+  sourcePath: string | null;
   displayName: string;
-  mimeType?: string | null;
+  mimeType: string | null;
 }
 
 export interface IssueAttachmentPreviewRecord {
-  attachmentId?: number | null;
+  attachmentId: number | null;
   displayName: string;
   kind: IssueAttachmentKind;
-  textContent?: string | null;
-  absolutePath?: string | null;
+  // Rust IssueAttachmentPreview.is_previewable: bool（始终序列化）。
+  isPreviewable: boolean;
+  textContent: string | null;
+  absolutePath: string | null;
 }
 
 export interface IssueRecord {
@@ -51,14 +59,14 @@ export interface IssueRecord {
   projectId: number;
   title: string;
   description: string;
-  attachments?: IssueAttachmentRecord[];
-  labels?: IssueLabelRecord[];
+  attachments: IssueAttachmentRecord[];
+  labels: IssueLabelRecord[];
   status: IssueStatus;
-  linkedSessionId?: number | null;
-  linkedSessionStatus?: AgentSessionStatus | null;
-  linkedSessionAttention?: AgentSessionAttention | null;
-  linkedSessionLogPath?: string | null;
-  linkedSessionLatestOutput?: string | null;
+  linkedSessionId: number | null;
+  linkedSessionStatus: AgentSessionStatus | null;
+  linkedSessionAttention: AgentSessionAttention | null;
+  linkedSessionLogPath: string | null;
+  linkedSessionLatestOutput: string | null;
   createdAt: number;
   updatedAt: number;
   /** 进入当前 status 的时刻（epoch 毫秒）；仅在状态迁移时刷新。 */
@@ -88,7 +96,7 @@ export type IssueTimelineActionType =
 
 export interface IssueTimelineActor {
   name: string;
-  avatarPath?: string | null;
+  avatarPath: string | null;
   /** 操作者类型：`user` 或 `agent`，前端按此切换头像来源。 */
   actorKind: string;
   /** Agent 操作者的类型（如 `codex` / `claude`）；用户操作者为 `undefined`。 */
@@ -128,8 +136,8 @@ export interface CreateIssueInput {
   projectId: number;
   title: string;
   description: string;
-  attachments?: IssueAttachmentDraftInput[];
-  labelIds?: number[];
+  attachments: IssueAttachmentDraftInput[];
+  labelIds: number[];
 }
 
 export interface UpdateIssueInput {
@@ -137,8 +145,8 @@ export interface UpdateIssueInput {
   issueId: number;
   title: string;
   description: string;
-  attachments?: IssueAttachmentDraftInput[];
-  labelIds?: number[];
+  attachments: IssueAttachmentDraftInput[];
+  labelIds: number[];
 }
 
 export interface MarkIssueReviewInput {
@@ -195,7 +203,8 @@ export interface DeleteIssueWorktreeCleanup {
 
 export interface DeleteIssueResult {
   issueId: number;
-  linkedSessionId?: number | null;
+  linkedSessionId: number | null;
+  // Rust 带 skip_serializing_if = "Option::is_none"：键可能缺失，TS 用 ?。
   linkedSessionLogPath?: string | null;
   worktreeCleanup?: DeleteIssueWorktreeCleanup | null;
 }
@@ -209,8 +218,8 @@ export interface GetIssueWorktreeStatusInput {
 export interface IssueWorktreeStatusResult {
   exists: boolean;
   canDelete: boolean;
-  workspacePath?: string | null;
-  workspaceBranch?: string | null;
+  workspacePath: string | null;
+  workspaceBranch: string | null;
 }
 
 export interface DeleteIssueWorktreeInput {
@@ -221,7 +230,7 @@ export interface DeleteIssueWorktreeInput {
 export interface DeleteIssueWorktreeResult {
   issueId: number;
   deleted: boolean;
-  workspacePath?: string | null;
+  workspacePath: string | null;
 }
 
 export interface PreviewIssueAttachmentInput {
@@ -254,7 +263,7 @@ export interface SaveIssueAttachmentDraftResult {
 export interface AgentCommitChangedFileSummary {
   status: string;
   path: string;
-  oldPath?: string | null;
+  oldPath: string | null;
 }
 
 export interface AgentCommitCompletionPreview {
@@ -270,7 +279,7 @@ export interface AgentCommitCompletionPreview {
 export interface SendAgentCommitPromptResult {
   issueId: number;
   sessionId: number;
-  codexSessionId?: string | null;
+  codexSessionId: string | null;
 }
 
 export type DetectAgentCommitCompletionOutcome =
@@ -329,54 +338,54 @@ export interface CompleteIssueFlowInput {
 export interface IssueCompletionFlowRecord {
   id: number;
   issueId: number;
-  sessionId?: number | null;
+  sessionId: number | null;
   phase: IssueCompletionPhase;
   ignoreDirty: boolean;
-  dirtyDecision?: DirtyWorkspaceOption | null;
-  continueAfterCommit?: boolean | null;
-  worktreeCleanupDecision?: boolean | null;
-  baseBranch?: string | null;
-  workspaceBranch?: string | null;
-  workspacePath?: string | null;
-  actualPath?: string | null;
-  failureReason?: string | null;
+  dirtyDecision: DirtyWorkspaceOption | null;
+  continueAfterCommit: boolean | null;
+  worktreeCleanupDecision: boolean | null;
+  baseBranch: string | null;
+  workspaceBranch: string | null;
+  workspacePath: string | null;
+  actualPath: string | null;
+  failureReason: string | null;
   updatedAt: number;
 }
 
 export interface CompleteIssueFlowResult {
   action: CompleteIssueFlowAction;
   issue: IssueRecord;
-  flow?: IssueCompletionFlowRecord | null;
+  flow: IssueCompletionFlowRecord | null;
   message: string;
-  mergeBlockReason?: string | null;
+  mergeBlockReason: string | null;
   /** 弹框预填的基线分支（origin / workspace 分支）。 */
-  targetBranch?: string | null;
-  workspaceBranch?: string | null;
-  workspacePath?: string | null;
+  targetBranch: string | null;
+  workspaceBranch: string | null;
+  workspacePath: string | null;
   /** 完成时解析出的实际执行路径。 */
-  actualPath?: string | null;
+  actualPath: string | null;
   /** 实际路径与启动快照不同（运行中漂移到新 worktree）。 */
   drifted: boolean;
-  sessionId?: number | null;
+  sessionId: number | null;
 }
 
 export interface IssueSummaryCompletionInfo {
   option: string;
   result: string;
-  commitHash?: string | null;
-  failureReason?: string | null;
-  headBefore?: string | null;
-  headAfter?: string | null;
-  changedFilesJson?: string | null;
+  commitHash: string | null;
+  failureReason: string | null;
+  headBefore: string | null;
+  headAfter: string | null;
+  changedFilesJson: string | null;
   createdAt: number;
   source: string;
 }
 
 export interface IssueSummaryRecord {
   issue: IssueRecord;
-  sessionStartedAt?: number | null;
-  sessionClosedAt?: number | null;
-  completion?: IssueSummaryCompletionInfo | null;
+  sessionStartedAt: number | null;
+  sessionClosedAt: number | null;
+  completion: IssueSummaryCompletionInfo | null;
   diagnostics: string[];
 }
 
@@ -392,7 +401,7 @@ export interface StartAgentSessionInput {
 }
 
 export interface StartAgentSessionResult {
-  sessionId?: number | null;
+  sessionId: number | null;
   issueId: number;
 }
 

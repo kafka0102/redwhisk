@@ -21,6 +21,7 @@ const diffTab: WorkspaceDiffTab = {
   filePath: "a.ts",
   diff: {
     filePath: "a.ts",
+    oldPath: null,
     kind: "modified",
     language: "typescript",
     originalContent: "const value = 1;",

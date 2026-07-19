@@ -16,10 +16,14 @@ export interface WorkspaceFileTreeNode {
   name: string;
   path: string;
   kind: "directory" | "file";
+  // Rust children: Vec<WorkspaceFileTreeNode> 带 skip_serializing_if = "Vec::is_empty"，
+  // 空数组时键缺失 → TS 用 ? 表达可选。
   children?: WorkspaceFileTreeNode[];
+  // Rust size_bytes / modified_at: Option<_> 带 skip_serializing_if = "Option::is_none"。
   sizeBytes?: number;
   modifiedAt?: number;
-  isIgnored?: boolean;
+  // Rust is_ignored: bool 无 skip，始终序列化 → TS 必须为 required。
+  isIgnored: boolean;
 }
 
 export interface ProjectWorktreeFileTreeResponse {
@@ -29,9 +33,9 @@ export interface ProjectWorktreeFileTreeResponse {
 
 export interface WorkspaceFileContent {
   filePath: string;
-  language?: string | null;
+  language: string | null;
   content: string;
-  modifiedAt?: number | null;
+  modifiedAt: number | null;
   sizeBytes: number;
   isBinary: boolean;
   isTooLarge: boolean;
@@ -94,7 +98,7 @@ export type WorkspaceChangeKind =
 
 export interface WorkspaceChangedFile {
   filePath: string;
-  oldPath?: string | null;
+  oldPath: string | null;
   fileName: string;
   kind: WorkspaceChangeKind;
   status: string;
@@ -117,7 +121,7 @@ export type WorkspaceCommitStatus =
 
 export interface WorkspaceCommitChangedFile {
   filePath: string;
-  oldPath?: string | null;
+  oldPath: string | null;
   fileName: string;
   kind: WorkspaceChangeKind;
   status: WorkspaceCommitStatus;
@@ -148,9 +152,9 @@ export interface ProjectWorktreeCommitHistoryResponse {
 
 export interface WorkspaceDiffContent {
   filePath: string;
-  oldPath?: string | null;
+  oldPath: string | null;
   kind: WorkspaceChangeKind;
-  language?: string | null;
+  language: string | null;
   originalContent: string;
   modifiedContent: string;
   isBinary: boolean;

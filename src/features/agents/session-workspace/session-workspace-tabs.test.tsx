@@ -29,6 +29,7 @@ describe("SessionWorkspaceTabs", () => {
       change: {
         fileName: "changes.ts",
         filePath: "src/changes.ts",
+        oldPath: null,
         kind: "modified",
         status: "M",
         additions: 3,

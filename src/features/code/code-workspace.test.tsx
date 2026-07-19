@@ -287,6 +287,7 @@ describe("CodeWorkspace", () => {
           path: "src",
           kind: "directory" as const,
           children: [],
+          isIgnored: false,
         },
       ],
       signature: "sig-1",
@@ -365,18 +366,21 @@ describe("CodeWorkspace", () => {
           name: "src",
           path: "src",
           kind: "directory",
+          isIgnored: false,
           children: [
             {
               id: "src/sub",
               name: "sub",
               path: "src/sub",
               kind: "directory",
+              isIgnored: false,
               children: [
                 {
                   id: "src/sub/deep.ts",
                   name: "deep.ts",
                   path: "src/sub/deep.ts",
                   kind: "file",
+                  isIgnored: false,
                 },
               ],
             },

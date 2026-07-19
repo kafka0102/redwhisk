@@ -40,6 +40,7 @@ const committedFile: WorkspaceCommitChangedFile = {
 
 const diffContent: WorkspaceDiffContent = {
   filePath: "src/a.ts",
+  oldPath: null,
   kind: "modified",
   language: "typescript",
   originalContent: "old",

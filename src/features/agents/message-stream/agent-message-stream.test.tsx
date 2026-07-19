@@ -23,7 +23,7 @@ function setupStream(
   items: Parameters<typeof readAgentTimelineMock.mockResolvedValue>[0]["items"],
 ) {
   readAgentTimelineMock.mockReset();
-  readAgentTimelineMock.mockResolvedValue({ items });
+  readAgentTimelineMock.mockResolvedValue({ items, effort: null });
 }
 
 function createMessageStreamState(
@@ -68,6 +68,7 @@ describe("AgentMessageStream", () => {
         { type: "user_message", text: "你好", messageId: "u1" },
         { type: "assistant_message", text: "你好！", messageId: "a1" },
       ],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={2} />);
     await waitFor(() => {
@@ -150,6 +151,7 @@ describe("AgentMessageStream", () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
       items: [{ type: "reasoning", text: "我先想想" }],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={3} />);
     await waitFor(() => {
@@ -179,6 +181,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={4} />);
     await waitFor(() => {
@@ -214,6 +217,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={13} />);
     await waitFor(() => {
@@ -246,6 +250,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
 
     render(<AgentMessageStream projectId={1} sessionId={11} />);
@@ -282,6 +287,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
     const { container } = render(
       <AgentMessageStream projectId={1} sessionId={14} />,
@@ -327,6 +333,7 @@ describe("AgentMessageStream", () => {
           status: "running",
         },
       ],
+      effort: null,
     });
     const { container } = render(
       <AgentMessageStream projectId={1} sessionId={10} />,
@@ -357,6 +364,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={11} />);
     await waitFor(() => {
@@ -400,6 +408,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={12} />);
     await waitFor(() => {
@@ -432,6 +441,7 @@ describe("AgentMessageStream", () => {
           status: "completed",
         },
       ],
+      effort: null,
     });
     const { container } = render(
       <AgentMessageStream projectId={1} sessionId={15} />,
@@ -463,6 +473,7 @@ describe("AgentMessageStream", () => {
           ],
         },
       ],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={5} />);
     await waitFor(() => {
@@ -476,6 +487,7 @@ describe("AgentMessageStream", () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
       items: [{ type: "error", message: "出错了" }],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={6} />);
     await waitFor(() => {
@@ -487,6 +499,7 @@ describe("AgentMessageStream", () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
       items: [{ type: "compaction", status: "completed" }],
+      effort: null,
     });
     render(<AgentMessageStream projectId={1} sessionId={7} />);
     await waitFor(() => {
@@ -513,6 +526,7 @@ describe("AgentMessageStream", () => {
           messageId: "a1",
         },
       ],
+      effort: null,
     });
     const { container } = render(
       <AgentMessageStream projectId={1} sessionId={9} />,
