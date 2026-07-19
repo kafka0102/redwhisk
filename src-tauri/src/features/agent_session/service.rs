@@ -1,7 +1,5 @@
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -56,6 +54,9 @@ use crate::types::session_event::SessionEventType;
 
 
 use super::command_snapshot::build_structured_command_snapshot;
+use super::codex_session_id_capture::{
+    command_supports_prompt_argument, should_attempt_codex_session_capture,
+};
 use crate::agent::descriptor_for;
 use super::launch::{persist_started_session_thread_id, start_provider_session};
 use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
@@ -65,8 +66,6 @@ use super::worktree_setup::run_worktree_setup_command;
 
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
-const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
-const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
 const ATTENTION_SNAPSHOT_MAX_BYTES: usize = 32_768;
 const AGENT_SESSION_COMPLETED_LIST_LIMIT: usize = 50;
 
@@ -2671,36 +2670,14 @@ fn normalize_submitted_prompt(prompt: &str) -> String {
     format!("{prompt}\r")
 }
 
-fn should_attempt_codex_session_capture(command: &str) -> bool {
-    let Some(program) = command.split_whitespace().next() else {
-        return false;
-    };
-
-    Path::new(program)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.eq_ignore_ascii_case("codex"))
-        .unwrap_or(false)
-}
-
-fn command_supports_prompt_argument(command: &str) -> bool {
-    should_attempt_codex_session_capture(command)
-}
-
 fn refresh_codex_session_id_in_data_dir(
     data_dir: &Path,
     session_id: i64,
     working_dir: &str,
     started_at: i64,
 ) -> Option<String> {
-    let codex_home = resolve_codex_home()?;
-    let detected = detect_codex_session_id_from_home(
-        &codex_home,
-        working_dir,
-        started_at,
-        CODEX_SESSION_CAPTURE_TOTAL_MS,
-        CODEX_SESSION_CAPTURE_INTERVAL_MS,
-    )?;
+    let codex_home = super::codex_session_id_capture::resolve_codex_home()?;
+    let detected = super::codex_session_id_capture::resolve(&codex_home, working_dir, started_at)?;
 
     let database = DatabaseConfig::new(data_dir).open().ok()?;
     MigrationRunner::default().run(&database.connection).ok()?;
@@ -2709,157 +2686,6 @@ fn refresh_codex_session_id_in_data_dir(
         .update_codex_session_id(session_id, &detected)
         .ok()??;
     session.codex_session_id
-}
-
-fn resolve_codex_home() -> Option<PathBuf> {
-    std::env::var_os("CODEX_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".codex")))
-}
-
-fn detect_codex_session_id_from_home(
-    codex_home: &Path,
-    working_dir: &str,
-    started_at: i64,
-    total_ms: u64,
-    interval_ms: u64,
-) -> Option<String> {
-    let attempts = std::cmp::max(1, total_ms / interval_ms);
-
-    for attempt in 0..attempts {
-        if let Some(session_id) = detect_codex_session_id_once(codex_home, working_dir, started_at)
-        {
-            return Some(session_id);
-        }
-
-        if attempt + 1 < attempts {
-            thread::sleep(Duration::from_millis(interval_ms));
-        }
-    }
-
-    None
-}
-
-fn detect_codex_session_id_once(
-    codex_home: &Path,
-    working_dir: &str,
-    started_at: i64,
-) -> Option<String> {
-    let session_index = codex_home.join("session_index.jsonl");
-    let lines = fs::read_to_string(session_index).ok()?;
-    let session_roots = collect_session_roots(codex_home);
-
-    for line in lines.lines().rev().take(20) {
-        let Some(session_id) = serde_json::from_str::<Value>(line).ok().and_then(|value| {
-            value
-                .get("id")
-                .and_then(|value| value.as_str())
-                .map(str::to_string)
-        }) else {
-            continue;
-        };
-
-        let Some(session_file) = find_session_file_by_id(&session_roots, &session_id) else {
-            continue;
-        };
-        if !is_recent_enough(&session_file, started_at) {
-            continue;
-        }
-
-        if session_file_matches_working_dir(&session_file, &session_id, working_dir) {
-            return Some(session_id);
-        }
-    }
-
-    None
-}
-
-fn collect_session_roots(codex_home: &Path) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    let top_level_sessions = codex_home.join("sessions");
-    if top_level_sessions.is_dir() {
-        roots.push(top_level_sessions);
-    }
-
-    let profiles_dir = codex_home.join("profiles");
-    if let Ok(entries) = fs::read_dir(profiles_dir) {
-        for entry in entries.flatten() {
-            let sessions_dir = entry.path().join("sessions");
-            if sessions_dir.is_dir() {
-                roots.push(sessions_dir);
-            }
-        }
-    }
-
-    roots
-}
-
-fn find_session_file_by_id(roots: &[PathBuf], session_id: &str) -> Option<PathBuf> {
-    for root in roots {
-        if let Some(path) = find_session_file_in_dir(root, session_id) {
-            return Some(path);
-        }
-    }
-
-    None
-}
-
-fn find_session_file_in_dir(root: &Path, session_id: &str) -> Option<PathBuf> {
-    let entries = fs::read_dir(root).ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(found) = find_session_file_in_dir(&path, session_id) {
-                return Some(found);
-            }
-            continue;
-        }
-
-        let file_name = path.file_name()?.to_str()?;
-        if file_name.contains(session_id) {
-            return Some(path);
-        }
-    }
-
-    None
-}
-
-fn is_recent_enough(path: &Path, started_at: i64) -> bool {
-    let modified_at = fs::metadata(path)
-        .ok()
-        .and_then(|metadata| metadata.modified().ok())
-        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-        .map(|duration| duration.as_millis() as i64);
-
-    modified_at
-        .map(|modified_at| modified_at >= started_at.saturating_sub(60_000))
-        .unwrap_or(false)
-}
-
-fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: &str) -> bool {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let mut reader = BufReader::new(file);
-    let mut first_line = String::new();
-    if reader.read_line(&mut first_line).is_err() {
-        return false;
-    }
-
-    let payload = match serde_json::from_str::<Value>(&first_line) {
-        Ok(payload) => payload,
-        Err(_) => return false,
-    };
-
-    payload
-        .get("payload")
-        .and_then(|payload| payload.as_object())
-        .map(|payload| {
-            payload.get("id").and_then(|value| value.as_str()) == Some(session_id)
-                && payload.get("cwd").and_then(|value| value.as_str()) == Some(working_dir)
-        })
-        .unwrap_or(false)
 }
 
 fn preferred_session_cwd(session: &crate::types::agent_session::AgentSessionRecord) -> String {
@@ -2905,7 +2731,6 @@ fn missing_session_workspace_error(
 #[cfg(test)]
 mod tests {
     use super::{
-        command_supports_prompt_argument, detect_codex_session_id_from_home,
         normalize_submitted_prompt, preferred_session_cwd, should_restore_redwhisk_worktree,
         AgentSessionService,
     };
@@ -3007,16 +2832,6 @@ mod tests {
         assert_eq!(normalize_submitted_prompt("hello"), "hello\r");
         assert_eq!(normalize_submitted_prompt("hello\n"), "hello\n");
         assert_eq!(normalize_submitted_prompt("hello\r"), "hello\r");
-    }
-
-    #[test]
-    fn command_supports_prompt_argument_only_for_codex_binary() {
-        assert!(command_supports_prompt_argument("/usr/local/bin/codex"));
-        assert!(command_supports_prompt_argument("codex"));
-        assert!(command_supports_prompt_argument(
-            "codex --dangerously-bypass-approvals-and-sandbox"
-        ));
-        assert!(!command_supports_prompt_argument("/tmp/echo-stdin.sh"));
     }
 
     #[test]
@@ -3654,68 +3469,6 @@ mod tests {
 
         assert!(result.items.is_empty());
         assert_eq!(result.effort, None);
-    }
-
-    #[test]
-    fn detect_codex_session_id_from_home_matches_recent_session_file_by_working_dir() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let codex_home = temp_dir.path();
-        let session_id = "019d8b4d-2998-7913-889d-fb3c32971610";
-        let working_dir = "/tmp/redwhisk";
-        let started_at = current_millis();
-
-        fs::write(
-            codex_home.join("session_index.jsonl"),
-            format!(
-                "{{\"id\":\"{session_id}\",\"thread_name\":\"test\",\"updated_at\":\"2026-06-07T00:00:00Z\"}}\n"
-            ),
-        )
-        .expect("write session index");
-
-        let session_file = codex_home
-            .join("profiles")
-            .join("test")
-            .join("sessions")
-            .join("2026")
-            .join("06")
-            .join("07")
-            .join(format!("rollout-2026-06-07T00-00-00-{session_id}.jsonl"));
-        create_session_file(&session_file, session_id, working_dir);
-
-        let detected = detect_codex_session_id_from_home(codex_home, working_dir, started_at, 1, 1);
-
-        assert_eq!(detected.as_deref(), Some(session_id));
-    }
-
-    #[test]
-    fn detect_codex_session_id_from_home_ignores_session_for_other_working_dir() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let codex_home = temp_dir.path();
-        let session_id = "019d8b4d-2998-7913-889d-fb3c32971610";
-        let started_at = current_millis();
-
-        fs::write(
-            codex_home.join("session_index.jsonl"),
-            format!(
-                "{{\"id\":\"{session_id}\",\"thread_name\":\"test\",\"updated_at\":\"2026-06-07T00:00:00Z\"}}\n"
-            ),
-        )
-        .expect("write session index");
-
-        let session_file = codex_home
-            .join("profiles")
-            .join("test")
-            .join("sessions")
-            .join("2026")
-            .join("06")
-            .join("07")
-            .join(format!("rollout-2026-06-07T00-00-00-{session_id}.jsonl"));
-        create_session_file(&session_file, session_id, "/tmp/other-project");
-
-        let detected =
-            detect_codex_session_id_from_home(codex_home, "/tmp/redwhisk", started_at, 1, 1);
-
-        assert_eq!(detected, None);
     }
 
     #[test]
@@ -4763,20 +4516,6 @@ mod tests {
 
         assert_eq!(cwd, repo_dir.to_string_lossy());
         assert!(!worktree_path.exists());
-    }
-
-    fn create_session_file(path: &Path, session_id: &str, working_dir: &str) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create session dir");
-        }
-
-        fs::write(
-            path,
-            format!(
-                "{{\"timestamp\":\"2026-06-07T00:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"{session_id}\",\"cwd\":\"{working_dir}\"}}}}\n"
-            ),
-        )
-        .expect("write session file");
     }
 
     fn test_session_record(log_path: &str) -> AgentSessionRecord {

@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod session_monitor_commands;
 pub mod workspace_commands;
+mod codex_session_id_capture;
 mod command_snapshot;
 mod launch;
 mod log_path;
