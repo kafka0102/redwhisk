@@ -5,9 +5,10 @@ import {
   listAgentSessions,
 } from "../agents/agent-session-commands";
 import {
+  AGENT_SESSION_LIST_CHANGED_EVENT,
   type AgentSessionListChangedEvent,
-  subscribeAgentSessionListChanged,
 } from "../agents/agent-session-events";
+import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const RUNNING_SESSION_FALLBACK_POLL_MS = 5_000;
@@ -39,7 +40,6 @@ export function useWorktreeRunningSession(
     let isDisposed = false;
     let debounceTimer: number | null = null;
     let fallbackTimer: number | null = null;
-    let unlisten: (() => void) | null = null;
 
     const recompute = () => {
       void listAgentSessions(projectId, { status: "running" })
@@ -66,24 +66,19 @@ export function useWorktreeRunningSession(
       RUNNING_SESSION_FALLBACK_POLL_MS,
     );
 
-    void subscribeAgentSessionListChanged(
-      (event: AgentSessionListChangedEvent) => {
+    const unsubscribe = subscribeTauriEvent<AgentSessionListChangedEvent>(
+      AGENT_SESSION_LIST_CHANGED_EVENT,
+      (event) => {
         if (event.projectId !== projectId) return;
         scheduleRecompute();
       },
-    ).then((nextUnlisten) => {
-      if (isDisposed) {
-        nextUnlisten();
-      } else {
-        unlisten = nextUnlisten;
-      }
-    });
+    );
 
     return () => {
       isDisposed = true;
       if (debounceTimer !== null) window.clearTimeout(debounceTimer);
       if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
-      unlisten?.();
+      unsubscribe();
     };
   }, [projectId, workspacePath, enabled]);
 

@@ -6,7 +6,6 @@ import {
   type FormEvent,
 } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { listen } from "@tauri-apps/api/event";
 
 import { AppShell } from "./app-shell";
 import { resolveAppSurface } from "./app-surface";
@@ -39,6 +38,7 @@ import {
   type OpenAgentSessionEventPayload,
 } from "../features/agents/session-notifications/session-monitor-commands";
 import { getCommandErrorMessage } from "../shared/commands/command-error";
+import { subscribeTauriEvent } from "../shared/tauri-event/use-tauri-event";
 
 export interface ProjectSummary {
   id: number;
@@ -142,7 +142,6 @@ function ProjectApp() {
 
   useEffect(() => {
     let isDisposed = false;
-    let unlisten: (() => void) | null = null;
     let requestId = 0;
 
     async function openProjectForAgentSession(
@@ -182,26 +181,17 @@ function ProjectApp() {
       }
     }
 
-    async function subscribeOpenAgentSession() {
-      unlisten = await listen<OpenAgentSessionEventPayload>(
-        OPEN_AGENT_SESSION_EVENT,
-        (event) => {
-          requestId += 1;
-          void openProjectForAgentSession(event.payload, requestId);
-        },
-      );
-
-      if (isDisposed) {
-        unlisten();
-        unlisten = null;
-      }
-    }
-
-    void subscribeOpenAgentSession();
+    const unsubscribe = subscribeTauriEvent<OpenAgentSessionEventPayload>(
+      OPEN_AGENT_SESSION_EVENT,
+      (payload) => {
+        requestId += 1;
+        void openProjectForAgentSession(payload, requestId);
+      },
+    );
 
     return () => {
       isDisposed = true;
-      unlisten?.();
+      unsubscribe();
     };
   }, [selectedProject?.id, translate]);
 

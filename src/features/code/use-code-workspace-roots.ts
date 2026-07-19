@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 
+import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   listCodeWorkspaceRoots,
@@ -56,33 +56,17 @@ export function useCodeWorkspaceRoots(
   useEffect(() => {
     if (!enabled) return;
 
-    let isDisposed = false;
-    let unlisten: (() => void) | null = null;
-
     fetchRoots();
 
-    void listen<CodeWorkspaceRootsUpdatedEvent>(
+    return subscribeTauriEvent<CodeWorkspaceRootsUpdatedEvent>(
       CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
-      (event) => {
-        if (event.payload.projectId !== projectId) return;
+      (payload) => {
+        if (payload.projectId !== projectId) return;
         setRoots((current) =>
-          hasSameRoots(current, event.payload.roots)
-            ? current
-            : event.payload.roots,
+          hasSameRoots(current, payload.roots) ? current : payload.roots,
         );
       },
-    ).then((nextUnlisten) => {
-      if (isDisposed) {
-        nextUnlisten();
-      } else {
-        unlisten = nextUnlisten;
-      }
-    });
-
-    return () => {
-      isDisposed = true;
-      unlisten?.();
-    };
+    );
   }, [projectId, enabled, fetchRoots]);
 
   // 可见性监听：enabled 期间同步真实可见性，visibilitychange 时更新。

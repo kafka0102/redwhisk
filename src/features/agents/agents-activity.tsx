@@ -39,6 +39,7 @@ import {
 } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { AgentsSessionList } from "./session-list/agents-session-list";
@@ -52,7 +53,10 @@ import {
   type SessionIssueTransition,
   type SessionWorkspaceEntry,
 } from "./session-pane/agents-session-pane";
-import { subscribeAgentSessionListChanged } from "./agent-session-events";
+import {
+  AGENT_SESSION_LIST_CHANGED_EVENT,
+  type AgentSessionListChangedEvent,
+} from "./agent-session-events";
 import { getSessionIssueGroup } from "./agent-session-formatters";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import {
@@ -227,7 +231,6 @@ export function AgentsActivity({
 
   useEffect(() => {
     let isMounted = true;
-    let unlisten: (() => void) | null = null;
     let refreshTimer: number | null = null;
     let isRefreshInFlight = false;
     let hasPendingRefresh = false;
@@ -287,25 +290,22 @@ export function AgentsActivity({
     }
 
     void loadSessions(true);
-    void subscribeAgentSessionListChanged((event) => {
-      if (event.projectId !== projectId) {
-        return;
-      }
-      scheduleEventRefresh();
-    }).then((nextUnlisten) => {
-      if (!isMounted) {
-        nextUnlisten();
-        return;
-      }
-      unlisten = nextUnlisten;
-    });
+    const unsubscribe = subscribeTauriEvent<AgentSessionListChangedEvent>(
+      AGENT_SESSION_LIST_CHANGED_EVENT,
+      (event) => {
+        if (event.projectId !== projectId) {
+          return;
+        }
+        scheduleEventRefresh();
+      },
+    );
 
     return () => {
       isMounted = false;
       if (refreshTimer !== null) {
         window.clearTimeout(refreshTimer);
       }
-      unlisten?.();
+      unsubscribe();
     };
   }, [applySessionListOverlays, projectId, t]);
 

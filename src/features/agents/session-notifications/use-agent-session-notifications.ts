@@ -2,12 +2,14 @@ import { useEffect, useRef } from "react";
 
 import { playNotificationSound } from "../../../shared/audio/notification-sound";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { useTauriEvent } from "../../../shared/tauri-event/use-tauri-event";
 import {
   listAgentSessions,
   readAgentTimeline,
 } from "../agent-session-commands";
 import type { AgentSessionListItem } from "../agent-session-commands";
-import { subscribeAgentSessionStream } from "../message-stream/agent-stream-events";
+import type { AgentStreamEventEnvelope } from "../agent-stream-types";
+import { AGENT_SESSION_STREAM_EVENT } from "../message-stream/agent-stream-events";
 import {
   createAgentSessionNotificationIntent,
   type AgentSessionNotificationIntent,
@@ -44,69 +46,40 @@ export function useAgentSessionNotifications({
     sessionStatusByIdRef.current.clear();
   }, [projectId]);
 
-  useEffect(() => {
-    let isDisposed = false;
-    let unlisten: (() => void) | null = null;
-
-    async function initialize() {
-      try {
-        unlisten = await subscribeAgentSessionStream((envelope) => {
-          if (envelope.projectId !== projectId) {
-            return;
-          }
-
-          const intent = createAgentSessionNotificationIntent(envelope, {
-            copy: messages.agentNotifications,
-            projectName,
-          });
-          if (!intent) {
-            return;
-          }
-          // [notify] 诊断：流式通知事件（turn_completed/turn_failed/permission_requested）。
-          if (notifiedKeysRef.current.has(intent.key)) {
-            console.info(
-              `[notify] stream 重复跳过 type=${envelope.event.type} key=${intent.key}`,
-            );
-            return;
-          }
-
-          notifiedKeysRef.current.add(intent.key);
-          console.info(
-            `[notify] stream 命中 type=${envelope.event.type} key=${intent.key}`,
-          );
-          // 每轮 turn 完成播放一次提示音：声音针对 session，不受窗口聚焦门控，
-          // 即使用户盯着窗口也能听到；偏好关闭时静默。
-          if (
-            envelope.event.type === "turn_completed" &&
-            notificationReminder
-          ) {
-            playNotificationSound();
-          }
-          void deliverNotification(intent, transport);
-        });
-
-        if (isDisposed) {
-          unlisten();
-          unlisten = null;
-        }
-      } catch {
-        // 通知订阅失败不影响主工作台，后续刷新会重新读取 session 历史。
+  useTauriEvent<AgentStreamEventEnvelope>(
+    AGENT_SESSION_STREAM_EVENT,
+    (envelope) => {
+      if (envelope.projectId !== projectId) {
+        return;
       }
-    }
 
-    void initialize();
+      const intent = createAgentSessionNotificationIntent(envelope, {
+        copy: messages.agentNotifications,
+        projectName,
+      });
+      if (!intent) {
+        return;
+      }
+      // [notify] 诊断：流式通知事件（turn_completed/turn_failed/permission_requested）。
+      if (notifiedKeysRef.current.has(intent.key)) {
+        console.info(
+          `[notify] stream 重复跳过 type=${envelope.event.type} key=${intent.key}`,
+        );
+        return;
+      }
 
-    return () => {
-      isDisposed = true;
-      unlisten?.();
-    };
-  }, [
-    messages.agentNotifications,
-    notificationReminder,
-    projectId,
-    projectName,
-    transport,
-  ]);
+      notifiedKeysRef.current.add(intent.key);
+      console.info(
+        `[notify] stream 命中 type=${envelope.event.type} key=${intent.key}`,
+      );
+      // 每轮 turn 完成播放一次提示音：声音针对 session，不受窗口聚焦门控，
+      // 即使用户盯着窗口也能听到；偏好关闭时静默。
+      if (envelope.event.type === "turn_completed" && notificationReminder) {
+        playNotificationSound();
+      }
+      void deliverNotification(intent, transport);
+    },
+  );
 
   useEffect(() => {
     let isDisposed = false;

@@ -1,4 +1,3 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -10,6 +9,7 @@ import {
   type UpdateStatus,
 } from "../../shared/commands/app-update-commands";
 import { isCommandError } from "../../shared/commands/command-error";
+import { useTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
@@ -69,7 +69,6 @@ export function useUpdateStatus(): {
   }, []);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
     let cancelled = false;
 
     void Promise.resolve().then(() => {
@@ -79,29 +78,19 @@ export function useUpdateStatus(): {
       void refreshQuietly();
     });
 
-    void listen<unknown>(UPDATE_PROMPT_CHANGED_EVENT, (event) => {
-      if (cancelled) {
-        return;
-      }
-      if (isUpdateStatus(event.payload)) {
-        setStatus(event.payload);
-        setCheckError(null);
-        return;
-      }
-      void refreshQuietly();
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-
     return () => {
       cancelled = true;
-      unlisten?.();
     };
   }, [refreshQuietly]);
+
+  useTauriEvent<unknown>(UPDATE_PROMPT_CHANGED_EVENT, (payload) => {
+    if (isUpdateStatus(payload)) {
+      setStatus(payload);
+      setCheckError(null);
+      return;
+    }
+    void refreshQuietly();
+  });
 
   const dismiss = useCallback(async (action: DismissUpdatePromptAction) => {
     try {

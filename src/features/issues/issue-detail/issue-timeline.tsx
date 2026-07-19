@@ -1,5 +1,4 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 
 import defaultUserProfile from "@/assets/images/default_user_profile.png";
@@ -7,6 +6,7 @@ import defaultUserProfile from "@/assets/images/default_user_profile.png";
 import { AgentMarkdown } from "../../agents/message-stream/agent-markdown";
 import { getAgentLogoSrc } from "../../agents/agent-visuals";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { useTauriEvent } from "../../../shared/tauri-event/use-tauri-event";
 import {
   getIssueTimeline,
   type IssueTimelineActor,
@@ -60,23 +60,15 @@ export function IssueTimeline({ projectId, issueId }: IssueTimelineProps) {
 
   // 评论自动发表后后端广播 issue-timeline-changed，据此刷新当前 Issue 的时间轴
   //（payload 未带 issueId 时也刷新，作为兜底）。
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    void listen<{ issueId?: number | null }>(
-      "issue-timeline-changed",
-      (event) => {
-        const changedIssueId = event.payload?.issueId;
-        if (changedIssueId == null || changedIssueId === issueId) {
-          reload();
-        }
-      },
-    ).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, [issueId, reload]);
+  useTauriEvent<{ issueId?: number | null } | undefined>(
+    "issue-timeline-changed",
+    (payload) => {
+      const changedIssueId = payload?.issueId;
+      if (changedIssueId == null || changedIssueId === issueId) {
+        reload();
+      }
+    },
+  );
 
   if (timeline.key !== timelineKey || timeline.entries.length === 0) {
     return null;
