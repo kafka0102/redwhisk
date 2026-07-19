@@ -4,6 +4,8 @@
 
 采纳（实现由后续 spec / tickets 驱动）。部分延伸 [ADR-0005](./0005-extract-shared-workspace-changes-view.md) 第 4 条关于「代码工作区侧不做轮询」的描述，但不推翻其核心决策。
 
+> 「单一 CodeWorkspace + 受控 view + 跨 code/changes 共享选中根与缓存」的实现方案已被 [ADR-0018](./0018-code-changes-independent-activities.md) 修订为两个完全独立的 Activity；本 ADR 的「条件轮询」「不复制编辑器逻辑」等决策仍然有效。
+
 ## 背景
 
 当前「变更」视图是「代码」Activity（`src/features/code/code-workspace.tsx`）左侧栏的一个 viewType，与「文件」通过左上下拉切换。变更视图的渲染件已按 ADR-0005 抽取为共享模块，数据由 `useCodeWorkspaceChanges`（以 `workspacePath` 为键）在进入视图时拉取一次、支持手动刷新，不做轮询。

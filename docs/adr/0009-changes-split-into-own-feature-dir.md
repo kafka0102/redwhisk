@@ -4,6 +4,8 @@
 
 采纳。延伸 [ADR-0008](./0008-changes-promoted-to-activity-with-conditional-polling.md) 的文件归属，不改变其「两侧复用同一 CodeWorkspace 外壳」的核心决策。
 
+> 「外壳与 cache 留 `features/code/`」「两侧复用同一 CodeWorkspace 外壳」已被 [ADR-0018](./0018-code-changes-independent-activities.md) 修订；变更专属件归属 `features/changes/` 仍然有效。
+
 ## 背景
 
 ADR-0008 把「变更」提升为顶层 Activity 时，为避免重复数百行编辑器逻辑，刻意让 code / changes 两个 Activity 复用同一 `CodeWorkspace`（受控 `view`），变更相关的渲染件与数据 hook 一并放在 `src/features/code/`。此后变更侧新增了 `useWorktreeRunningSession`（running 检测）与条件轮询，变更专属代码量与职责已独立成面，继续塞在 `code/` 下让「代码」feature 承载了不属于它的变更轮询 / running 检测逻辑，目录与职责边界模糊。
