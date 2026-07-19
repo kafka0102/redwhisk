@@ -99,3 +99,15 @@ _Avoid_: 暂存 / 提交 / 编辑入口、diff 内容查看、跨根聚合、无
 **Session 输入草稿**：
 用户在 Agent Session 输入框中输入但尚未发送的文本；按所属 Session 隔离保留，跨工作台页面切换不丢失，发送成功或所属 Session 被删除后清除，关闭应用后不保留。
 _Avoid_: 输入缓存、消息草稿、composer 缓存
+
+**内置智能体自动播种**：
+应用启动时异步检测本机是否安装 codex/claude/opencode/grok 命令，对已安装且库中该 agentType 无任何记录（含软删）的，自动插入一条默认开启的全局 Agent profile；软删后因记录留存不再重复播种。检测仅启动时执行，不提供手动刷新。
+_Avoid_: 强制每次出现的播种、盲插未安装项、手动检测按钮
+
+**Agent 展示形式**（displayMode）：
+某 Agent profile 的输出在 UI 上的呈现方式，取值 json 或 tui；判定以 RedWhisk 当前是否已接入该 agentType 的 JSON 解析器为准——已接入（codex/claude）默认 json 且可在 json/tui 间切换，未接入（opencode/grok）锁定 tui 且隐藏切换。本期仅作数据记录与表单/表格展示，不驱动后端渲染切换；TUI 渲染与 opencode/grok 解析器留后续。
+_Avoid_: 纯 UI 别名、按 CLI 能力判定
+
+**Agent 启用状态**（enabled）：
+某 Agent profile 是否处于可用状态的布尔标记，默认启用；禁用的 profile 在 Agent 表中以浅灰行底区分并排序置末，且在「启动 Agent 会话」的选择列表中隐藏。本期启用状态仅前端过滤、后端不做启动校验。
+_Avoid_: 软删标记 del、dangerous 模式标记
