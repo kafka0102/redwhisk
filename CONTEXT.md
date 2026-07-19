@@ -48,6 +48,10 @@ _Avoid_: 仅 rebase、仅 delete worktree、merge policy
 构成 Issue 时间轴的一条不可变事实，具有明确操作者、可选评论关联、稳定动作类型及版本化展示参数。
 _Avoid_: 无结构动态、纯日志
 
+**状态进入时间**：
+某一 Issue 进入其当前 `status`（`backlog` / `running` / `review` / `completed`）的时刻，持久化为 `issues.status_changed_at`；仅在状态迁移时刷新，与任意字段更新都会刷新的 `updated_at` 职责分离。看板四个甬道统一以它为降序排序键，分别表达完成 / 开始运行 / 开始 review / 进入 backlog 的语义。
+_Avoid_: updated_at、最近活动时间
+
 **动作渲染注册表**：
 将稳定的 Issue 动作类型映射为国际化文案模板与展示组件的集中定义；模板不作为业务数据存储。
 _Avoid_: 数据库存储模板、页面内分散分支
