@@ -37,20 +37,14 @@ import {
 import { useSessionToolTabs } from "./use-session-tool-tabs";
 import { useAgentSessionList } from "./use-agent-session-list";
 import { useAgentSessionCompletionFlow } from "./use-agent-session-completion-flow";
+import { AgentCompletionPreviewDialog } from "./agent-completion-preview-dialog";
+import { AgentMergePromptDialog } from "./agent-merge-prompt-dialog";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
 import { SessionTerminalTab } from "./session-workspace/session-terminal-tab";
 import type { SessionWorkspaceToolTab } from "./session-workspace/session-workspace-tabs";
 import { useSessionWorkspaceCache } from "./session-workspace/use-session-workspace-cache";
 import { useSessionPaneCache } from "./session-pane/use-session-pane-cache";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import {
   getSessionReturnState,
@@ -612,85 +606,14 @@ export function AgentsActivity({
       </section>
 
       {agentCommitPreview ? (
-        <div className="issue-dialog-overlay">
-          <div
-            aria-label={messages.agentsFeature.completionConfirmation}
-            aria-modal="true"
-            className="issue-dialog issue-dialog--compact"
-            role="dialog"
-          >
-            <div className="issue-dialog__header">
-              <h3>{messages.agentsFeature.completionConfirmation}</h3>
-              <button
-                aria-label={messages.agentsFeature.closeCompletionConfirmation}
-                className="issue-dialog__close"
-                type="button"
-                onClick={handleCloseAgentCommitPreview}
-              >
-                ×
-              </button>
-            </div>
-            <div className="issue-dialog__body issue-dialog__body--single">
-              <div className="issue-dialog__editor">
-                <section className="issue-dialog__panel">
-                  <h4>{messages.agentsFeature.gitSummary}</h4>
-                  <p>{messages.agentsFeature.head(agentCommitPreview.head)}</p>
-                  <p>
-                    {messages.agentsFeature.changedFilesCount(
-                      agentCommitPreview.changedFilesCount,
-                    )}
-                  </p>
-                  <p>
-                    {messages.agentsFeature.completionOption(
-                      agentCommitPreview.option,
-                    )}
-                  </p>
-                </section>
-                <section className="issue-dialog__panel">
-                  <h4>{messages.agentsFeature.changedFiles}</h4>
-                  {agentCommitPreview.changedFiles.length > 0 ? (
-                    <ul className="completion-preview__files">
-                      {agentCommitPreview.changedFiles.map((file) => (
-                        <li key={`${file.status}:${file.path}`}>
-                          <span>{file.status}</span>
-                          <code>{file.path}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>{messages.agentsFeature.noChangedFiles}</p>
-                  )}
-                </section>
-              </div>
-            </div>
-            <div className="issue-dialog__footer issue-dialog__footer--end">
-              <button
-                className="issues-button issues-button--primary"
-                disabled={isAgentCommitPreviewPending}
-                type="button"
-                onClick={() => void handleConfirmAgentCommit()}
-              >
-                {messages.agentsFeature.completionSubmitCode}
-              </button>
-              <button
-                className="issues-button"
-                disabled={isAgentCommitPreviewPending}
-                type="button"
-                onClick={() => void handleCompleteAgentCommitPreviewManually()}
-              >
-                {messages.agentsFeature.completionMarkDone}
-              </button>
-              <button
-                className="issues-button"
-                disabled={isAgentCommitPreviewPending}
-                type="button"
-                onClick={handleCloseAgentCommitPreview}
-              >
-                {messages.agentsFeature.completionCancel}
-              </button>
-            </div>
-          </div>
-        </div>
+        <AgentCompletionPreviewDialog
+          preview={agentCommitPreview}
+          isPending={isAgentCommitPreviewPending}
+          onClose={handleCloseAgentCommitPreview}
+          onConfirm={handleConfirmAgentCommit}
+          onCompleteManually={handleCompleteAgentCommitPreviewManually}
+          messages={messages}
+        />
       ) : null}
       <LoadingDialog
         closeLabel={messages.agentsFeature.closeCompletionLoading}
@@ -702,43 +625,13 @@ export function AgentsActivity({
           }
         }}
       />
-      <Dialog
+      <AgentMergePromptDialog
         open={mergePromptSessionId !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            handleCloseMergePrompt();
-          }
-        }}
-      >
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>
-              {messages.agentsFeature.mergeToBaseBranchQuestion}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              disabled={isSubmittingMergePrompt}
-              type="button"
-              variant="secondary"
-              onClick={handleCloseMergePrompt}
-            >
-              {messages.agentsFeature.mergeToBaseBranchNo}
-            </Button>
-            <Button
-              disabled={isSubmittingMergePrompt}
-              type="button"
-              onClick={() => {
-                void handleConfirmMergePrompt();
-              }}
-            >
-              {isSubmittingMergePrompt
-                ? messages.agentsFeature.submitting
-                : messages.agentsFeature.mergeToBaseBranchYes}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        isSubmitting={isSubmittingMergePrompt}
+        onClose={handleCloseMergePrompt}
+        onConfirm={handleConfirmMergePrompt}
+        messages={messages}
+      />
       {alertDialog}
       {confirmationDialog}
     </main>
