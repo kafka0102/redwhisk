@@ -275,6 +275,7 @@ describe("App project entry", () => {
         worktreeSetupCommand: project.worktreeSetupCommand,
         createdAt: project.createdAt,
         lastOpenedAt: 1_780_628_400_000,
+        codeWorkspaces: [],
       };
     });
     openProjectWindowMock.mockResolvedValue({
@@ -470,6 +471,7 @@ describe("App project entry", () => {
         worktreeSetupCommand: project.worktreeSetupCommand,
         createdAt: project.createdAt,
         lastOpenedAt: 1_780_628_400_000,
+        codeWorkspaces: [],
       };
     });
 
@@ -516,6 +518,7 @@ describe("App project entry", () => {
       worktreeSetupCommand: "",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_628_400_000,
+      codeWorkspaces: [],
     });
 
     expect(
@@ -861,6 +864,7 @@ describe("App project entry", () => {
       worktreeSetupCommand: "",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_581_600_000,
+      codeWorkspaces: [],
     });
 
     render(<App />);
@@ -1103,6 +1107,7 @@ describe("App project entry", () => {
       worktreeSetupCommand: "",
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_581_600_000,
+      codeWorkspaces: [],
     });
     openProjectWindowMock.mockResolvedValue({
       projectId: 4,

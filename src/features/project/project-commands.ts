@@ -49,7 +49,9 @@ export interface ProjectRecord {
   worktreeSetupCommand: string;
   createdAt: number;
   lastOpenedAt: number;
-  codeWorkspaces?: Array<{
+  // Rust ProjectSummary.code_workspaces 是 Vec<CodeWorkspaceRoot>，无 skip_serializing_if，
+  // 序列化时键始终存在（值可能为空数组）。前端 ProjectRecord.codeWorkspaces 与之同步。
+  codeWorkspaces: Array<{
     branch: string;
     path: string;
     isProjectRoot: boolean;

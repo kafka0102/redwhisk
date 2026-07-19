@@ -198,6 +198,7 @@ describe("ProjectSettingsActivity", () => {
       worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
+      codeWorkspaces: [],
     });
     validateProjectRepoPathMock.mockImplementation(async ({ repoPath }) => ({
       repoPath,
@@ -1051,6 +1052,7 @@ describe("ProjectSettingsActivity", () => {
       worktreeSetupCommand: "",
       createdAt: 1,
       lastOpenedAt: 2,
+      codeWorkspaces: [],
     });
 
     render(
@@ -1431,6 +1433,7 @@ describe("ProjectSettingsActivity", () => {
       worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
+      codeWorkspaces: [],
     });
 
     render(
@@ -1475,6 +1478,7 @@ describe("ProjectSettingsActivity", () => {
       worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
+      codeWorkspaces: [],
     });
 
     render(
