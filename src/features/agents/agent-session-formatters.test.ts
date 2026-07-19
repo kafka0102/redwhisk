@@ -32,38 +32,7 @@ describe("formatDuration", () => {
 });
 
 describe("formatProcessingDuration", () => {
-  const base: AgentSessionListItem = {
-    sessionId: 1,
-    number: 1,
-    projectId: 1,
-    issueId: null,
-    issueNumber: null,
-    issueTitle: null,
-    issueStatus: null,
-    agentProfileId: 1,
-    agentProfileName: "Test Profile",
-    workflowSkillName: null,
-    canCompleteClean: false,
-    canCompleteAgentCommit: false,
-    title: null,
-    agentType: "codex",
-    status: "closed",
-    attention: "none",
-    isTurnRunning: false,
-    workspaceMode: "current_branch",
-    workingDir: "/tmp/repo",
-    workspacePath: null,
-    originBranch: null,
-    workspaceBranch: null,
-    worktreeOwner: "redwhisk",
-    logPath: "/tmp/session.log",
-    latestOutput: null,
-    lastActiveAt: 0,
-    startedAt: 0,
-    closedAt: 0,
-    processingMs: 0,
-    lastOutputAt: null,
-  };
+  const base = makeSession();
 
   it("returns dash for null session", () => {
     expect(formatProcessingDuration(null, "zh")).toBe("-");
@@ -101,20 +70,13 @@ describe("formatProcessingDuration", () => {
   });
 });
 
-const runningBase: AgentSessionListItem = {
-  sessionId: 1,
-  number: 1,
+const runningBase = makeSession({
   issueId: 10,
   issueNumber: 1,
   issueTitle: "Merge conflict issue",
   agentType: "claude",
   status: "running",
-  attention: "none",
-  title: null,
-  lastActiveAt: 0,
-  startedAt: 0,
-  closedAt: 0,
-};
+});
 
 describe("isAgentTurnActivelyRunning", () => {
   it("is true when status running and isTurnRunning true", () => {
@@ -210,3 +172,41 @@ describe("session card reflects actual agent running over static issue status", 
     ).toBe("attention");
   });
 });
+
+function makeSession(
+  overrides: Partial<AgentSessionListItem> = {},
+): AgentSessionListItem {
+  return {
+    sessionId: 1,
+    number: 1,
+    projectId: 1,
+    issueId: null,
+    issueNumber: null,
+    issueTitle: null,
+    issueStatus: null,
+    agentProfileId: 1,
+    agentProfileName: "Test Profile",
+    workflowSkillName: null,
+    canCompleteClean: false,
+    canCompleteAgentCommit: false,
+    title: null,
+    agentType: "codex",
+    status: "closed",
+    attention: "none",
+    isTurnRunning: false,
+    workspaceMode: "current_branch",
+    workingDir: "/tmp/repo",
+    workspacePath: null,
+    originBranch: null,
+    workspaceBranch: null,
+    worktreeOwner: "redwhisk",
+    logPath: "/tmp/session.log",
+    latestOutput: null,
+    lastActiveAt: 0,
+    startedAt: 0,
+    closedAt: 0,
+    processingMs: 0,
+    lastOutputAt: null,
+    ...overrides,
+  };
+}
