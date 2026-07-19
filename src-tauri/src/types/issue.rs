@@ -372,6 +372,8 @@ pub struct IssueRecord {
     pub linked_session_latest_output: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// 进入当前 `status` 的时刻（epoch 毫秒）；仅在状态迁移时刷新，与 `updated_at` 职责分离。
+    pub status_changed_at: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -226,6 +226,7 @@ describe("App project entry", () => {
           status: "backlog" as const,
           createdAt: 1_780_632_000_000,
           updatedAt: 1_780_632_000_000,
+          statusChangedAt: 1_780_632_000_000,
         };
         currentIssues = [createdIssue, ...currentIssues];
         return createdIssue;
@@ -242,6 +243,7 @@ describe("App project entry", () => {
           status: "backlog" as const,
           createdAt: 1_780_632_000_000,
           updatedAt: 1_780_635_600_000,
+          statusChangedAt: 1_780_635_600_000,
         };
         currentIssues = currentIssues.map((issue) =>
           issue.id === issueId ? updatedIssue : issue,
@@ -760,6 +762,7 @@ describe("App project entry", () => {
         status: "backlog",
         createdAt: 1_780_632_000_000,
         updatedAt: 1_780_632_000_000,
+        statusChangedAt: 1_780_632_000_000,
       },
     ];
     render(<App />);

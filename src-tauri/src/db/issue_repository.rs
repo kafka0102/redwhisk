@@ -49,7 +49,8 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
     issues.label_ids,
     issues.created_at,
     issues.updated_at,
-    issues.number
+    issues.number,
+    issues.status_changed_at
  FROM issues";
 
 pub struct IssueRepository<'connection> {
@@ -70,7 +71,7 @@ impl<'connection> IssueRepository<'connection> {
             "{ISSUE_SELECT_COLUMNS}
              WHERE issues.project_id = ?1
                AND issues.del = 0
-             ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC"
+             ORDER BY issues.status_changed_at DESC, issues.created_at DESC, issues.id DESC"
         ))?;
 
         let issues = statement
@@ -102,7 +103,9 @@ impl<'connection> IssueRepository<'connection> {
             bindings.push(Value::Text(issue_status_to_str(&status).to_string()));
         }
 
-        sql.push_str(" ORDER BY issues.updated_at DESC, issues.created_at DESC, issues.id DESC");
+        sql.push_str(
+            " ORDER BY issues.status_changed_at DESC, issues.created_at DESC, issues.id DESC",
+        );
 
         // SQLite 要求 OFFSET 必须配合 LIMIT，因此仅在提供 limit 时附加分页子句。
         if let Some(limit) = limit {
@@ -201,7 +204,7 @@ impl<'connection> IssueRepository<'connection> {
             |row| row.get(0),
         )?;
         self.connection.execute(
-            "INSERT INTO issues (project_id, number, title, description, label_ids, status, created_at, updated_at)
+            "INSERT INTO issues (project_id, number, title, description, label_ids, status, created_at, updated_at, status_changed_at)
              VALUES (
                ?1,
                ?2,
@@ -209,6 +212,7 @@ impl<'connection> IssueRepository<'connection> {
                ?4,
                ?5,
                'backlog',
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )",
@@ -233,7 +237,7 @@ impl<'connection> IssueRepository<'connection> {
             |row| row.get(0),
         )?;
         transaction.execute(
-            "INSERT INTO issues (project_id, number, title, description, label_ids, status, created_at, updated_at)
+            "INSERT INTO issues (project_id, number, title, description, label_ids, status, created_at, updated_at, status_changed_at)
              VALUES (
                ?1,
                ?2,
@@ -241,6 +245,7 @@ impl<'connection> IssueRepository<'connection> {
                ?4,
                ?5,
                'backlog',
+               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
              )",
@@ -365,6 +370,10 @@ impl<'connection> IssueRepository<'connection> {
                  updated_at = MAX(
                    updated_at + 1,
                    CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 ),
+                 status_changed_at = MAX(
+                   status_changed_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
                  )
              WHERE id = ?2 AND project_id = ?3 AND del = 0",
             params![issue_status_to_str(&status), issue_id, project_id],
@@ -388,6 +397,10 @@ impl<'connection> IssueRepository<'connection> {
              SET status = 'review',
                  updated_at = MAX(
                    updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 ),
+                 status_changed_at = MAX(
+                   status_changed_at + 1,
                    CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
                  )
              WHERE id = ?1
@@ -423,6 +436,10 @@ impl<'connection> IssueRepository<'connection> {
              SET status = 'completed',
                  updated_at = MAX(
                    updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 ),
+                 status_changed_at = MAX(
+                   status_changed_at + 1,
                    CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
                  )
              WHERE id = ?1
@@ -516,6 +533,7 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
         created_at: row.get(11)?,
         updated_at: row.get(12)?,
         number: row.get(13)?,
+        status_changed_at: row.get(14)?,
     })
 }
 
@@ -568,7 +586,8 @@ mod tests {
     use crate::db::migrations::{
         AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
         ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
-        ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION, MigrationRunner,
+        ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION, ISSUES_STATUS_CHANGED_AT_MIGRATION_SQL,
+        ISSUES_STATUS_CHANGED_AT_MIGRATION_VERSION, MigrationRunner,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
     };
@@ -594,6 +613,16 @@ mod tests {
         MigrationRunner::runner_skipping(&[ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION])
             .run(&connection)
             .expect("run migrations up to 0036");
+        connection
+    }
+
+    // 跑到 0045（跳过 0046），用于验证 0046 的回填增量语义：先插入无 status_changed_at 列的
+    // 旧数据 + 对应 issue_actions 动作，再单独执行 0046 SQL，断言回填为最大状态动作 created_at。
+    fn connection_before_status_changed_at() -> Connection {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+        MigrationRunner::runner_skipping(&[ISSUES_STATUS_CHANGED_AT_MIGRATION_VERSION])
+            .run(&connection)
+            .expect("run migrations up to 0045");
         connection
     }
 
@@ -690,6 +719,60 @@ mod tests {
         connection
             .execute_batch(ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL)
             .expect("run 0037 migration sql");
+    }
+
+    fn run_status_changed_at_migration(connection: &Connection) {
+        connection
+            .execute_batch(ISSUES_STATUS_CHANGED_AT_MIGRATION_SQL)
+            .expect("run 0046 migration sql");
+    }
+
+    // 插入一条带显式 status_changed_at 的 issue（status_changed_at 列存在时使用）。
+    fn insert_issue_with_status_changed_at(
+        connection: &Connection,
+        project_id: i64,
+        number: i64,
+        title: &str,
+        created_at: i64,
+        status_changed_at: i64,
+    ) -> i64 {
+        connection
+            .execute(
+                "INSERT INTO issues (
+                   project_id, number, title, description, status,
+                   created_at, updated_at, status_changed_at
+                 )
+                 VALUES (?1, ?2, ?3, '', 'backlog', ?4, ?4, ?5)",
+                params![project_id, number, title, created_at, status_changed_at],
+            )
+            .expect("insert issue with status_changed_at");
+        connection.last_insert_rowid()
+    }
+
+    // 插入一条 issue_actions 行（仅原始 0005 四列；0041/0043 后续列走默认值或 NULL）。
+    fn insert_issue_action(
+        connection: &Connection,
+        issue_id: i64,
+        action_type: &str,
+        created_at: i64,
+    ) {
+        connection
+            .execute(
+                "INSERT INTO issue_actions (issue_id, action_type, payload_json, created_at)
+                 VALUES (?1, ?2, '{}', ?3)",
+                params![issue_id, action_type, created_at],
+            )
+            .expect("insert issue action");
+    }
+
+    fn status_changed_at_of(connection: &Connection, issue_id: i64) -> i64 {
+        connection
+            .query_row(
+                "SELECT status_changed_at FROM issues WHERE id = ?1",
+                params![issue_id],
+                |row| row.get(0),
+            )
+            .expect("read status_changed_at")
     }
 
     // 插入一条显式指定 number 的 issue，用于构造 0036 已回填的历史行（number > 0）。
@@ -1012,6 +1095,100 @@ mod tests {
             "issues",
             "uidx_issues_project_id_number"
         ));
+    }
+
+    #[test]
+    fn list_by_status_orders_by_status_changed_at_desc_with_created_at_id_tiebreakers() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        // 同状态 (backlog)，status_changed_at 单调不同：100 / 300 / 200 → 期望 300, 200, 100。
+        insert_issue_with_status_changed_at(&connection, 1, 1, "early", 1_000, 100);
+        insert_issue_with_status_changed_at(&connection, 1, 2, "latest", 1_200, 300);
+        insert_issue_with_status_changed_at(&connection, 1, 3, "middle", 1_100, 200);
+        // status_changed_at 相同（=500），按 created_at DESC：later(1_500) 先于 earlier(1_400)。
+        insert_issue_with_status_changed_at(&connection, 1, 4, "tie-earlier", 1_400, 500);
+        insert_issue_with_status_changed_at(&connection, 1, 5, "tie-later", 1_500, 500);
+
+        let repo = IssueRepository::new(&connection);
+        let issues = repo
+            .list_by_project_id_paged(1, Some(IssueStatus::Backlog), None, None)
+            .expect("list backlog paged");
+
+        let titles: Vec<&str> = issues.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec!["tie-later", "tie-earlier", "latest", "middle", "early"]
+        );
+    }
+
+    #[test]
+    fn migration_0046_backfills_status_changed_at_from_latest_status_action() {
+        let connection = connection_before_status_changed_at();
+        insert_project(&connection, 1, "p1");
+        // 历史 issue：created_at = updated_at = 100；列尚不存在，不能写 status_changed_at。
+        let with_actions = insert_issue_with_number(&connection, 1, 1, "with-actions", 100);
+        let no_actions = insert_issue_with_number(&connection, 1, 2, "no-actions", 200);
+
+        // 状态相关动作：created_at 100 / 500 / 800；最大值 800 为期望回填值。
+        insert_issue_action(&connection, with_actions, "agent_session_started", 500);
+        insert_issue_action(&connection, with_actions, "issue_status_changed", 800);
+        // issue_created 不在状态相关动作集合内，不影响回填。
+        insert_issue_action(&connection, with_actions, "issue_created", 100);
+        // issue_comment_added 同理不计入。
+        insert_issue_action(&connection, with_actions, "issue_comment_added", 900);
+
+        run_status_changed_at_migration(&connection);
+
+        // 取状态相关动作的最大 created_at（800），忽略 issue_created / issue_comment_added。
+        assert_eq!(status_changed_at_of(&connection, with_actions), 800);
+        // 无任何相关动作 → 退回 updated_at（= 200）。
+        assert_eq!(status_changed_at_of(&connection, no_actions), 200);
+    }
+
+    #[test]
+    fn update_status_advances_status_changed_at_but_title_edit_does_not() {
+        let mut connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        let repo = IssueRepository::new(&connection);
+        let issue = repo.insert(1, "title", "desc", "[]").expect("insert issue");
+        let initial_status_changed_at = issue.status_changed_at;
+
+        // 标题/描述更新不推进 status_changed_at（与 updated_at 职责分离）。
+        let edited = repo
+            .update_title_and_description(1, issue.id, "new-title", "new-desc", "[]")
+            .expect("update title")
+            .expect("issue present");
+        assert_eq!(
+            edited.status_changed_at, initial_status_changed_at,
+            "title edit must not advance status_changed_at"
+        );
+
+        // 状态迁移推进 status_changed_at；MAX(status_changed_at + 1, now) 保证至少 +1。
+        let advanced_status_changed_at = connection
+            .transaction()
+            .and_then(|transaction| {
+                let updated = IssueRepository::update_status_in_transaction(
+                    &transaction,
+                    1,
+                    issue.id,
+                    IssueStatus::Running,
+                )
+                .expect("advance status")
+                .expect("issue present");
+                transaction.commit()?;
+                Ok(updated.status_changed_at)
+            })
+            .expect("transaction");
+        assert!(
+            advanced_status_changed_at > initial_status_changed_at,
+            "status migration must advance status_changed_at"
+        );
+
+        // 透传：返回的 IssueRecord 字段非默认值（与 DB 真实值一致）。
+        assert_eq!(
+            status_changed_at_of(&connection, issue.id),
+            advanced_status_changed_at
+        );
     }
 
     fn column_exists(connection: &Connection, table: &str, column: &str) -> bool {

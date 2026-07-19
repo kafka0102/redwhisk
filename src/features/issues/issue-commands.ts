@@ -61,6 +61,8 @@ export interface IssueRecord {
   linkedSessionLatestOutput?: string | null;
   createdAt: number;
   updatedAt: number;
+  /** 进入当前 status 的时刻（epoch 毫秒）；仅在状态迁移时刷新。 */
+  statusChangedAt: number;
 }
 
 export interface IssueStatusTotals {

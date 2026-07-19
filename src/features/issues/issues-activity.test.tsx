@@ -262,6 +262,7 @@ const existingIssue: IssueRecord = {
   ],
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_632_000_000,
+  statusChangedAt: 1_780_632_000_000,
 };
 
 const runningIssue: IssueRecord = {
@@ -273,6 +274,7 @@ const runningIssue: IssueRecord = {
   status: "running",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_633_000_000,
+  statusChangedAt: 1_780_633_000_000,
 };
 
 const reviewIssue: IssueRecord = {
@@ -284,6 +286,7 @@ const reviewIssue: IssueRecord = {
   status: "review",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_634_000_000,
+  statusChangedAt: 1_780_634_000_000,
 };
 
 const completedIssue: IssueRecord = {
@@ -295,6 +298,7 @@ const completedIssue: IssueRecord = {
   status: "completed",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_635_000_000,
+  statusChangedAt: 1_780_635_000_000,
 };
 
 const linkedSessionIssue: IssueRecord = {
@@ -309,6 +313,7 @@ const linkedSessionIssue: IssueRecord = {
   linkedSessionAttention: "none",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_636_000_000,
+  statusChangedAt: 1_780_636_000_000,
 };
 
 const completedLinkedSessionIssue: IssueRecord = {
@@ -323,6 +328,7 @@ const completedLinkedSessionIssue: IssueRecord = {
   linkedSessionAttention: "none",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_637_000_000,
+  statusChangedAt: 1_780_637_000_000,
 };
 
 const attentionIssue: IssueRecord = {
@@ -337,6 +343,7 @@ const attentionIssue: IssueRecord = {
   linkedSessionAttention: "requested",
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_639_000_000,
+  statusChangedAt: 1_780_639_000_000,
 };
 
 const projectProfile = {
@@ -405,6 +412,7 @@ function completedFlowResult(issue: Partial<IssueRecord> & { id: number }) {
     linkedSessionAttention: "none",
     createdAt: issue.createdAt ?? 1_780_632_000_000,
     updatedAt: issue.updatedAt ?? 1_780_639_000_000,
+    statusChangedAt: issue.statusChangedAt ?? 1_780_639_000_000,
   };
   return {
     action: "completed" as const,
@@ -614,6 +622,7 @@ describe("IssuesActivity", () => {
       status: "backlog",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_640_000_000,
+      statusChangedAt: 1_780_640_000_000,
     });
 
     renderIssuesActivity();
@@ -1071,6 +1080,7 @@ describe("IssuesActivity", () => {
       status: "backlog",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_632_000_000,
+      statusChangedAt: 1_780_632_000_000,
     });
 
     renderIssuesActivity();
@@ -1118,6 +1128,7 @@ describe("IssuesActivity", () => {
       status: "backlog",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_632_000_000,
+      statusChangedAt: 1_780_632_000_000,
     });
 
     renderIssuesActivity();
@@ -1176,6 +1187,7 @@ describe("IssuesActivity", () => {
       status: "backlog",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_632_000_000,
+      statusChangedAt: 1_780_632_000_000,
     });
 
     renderIssuesActivity();
@@ -1227,6 +1239,7 @@ describe("IssuesActivity", () => {
       status: "backlog",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_632_000_000,
+      statusChangedAt: 1_780_632_000_000,
     });
 
     renderIssuesActivity();
@@ -1507,6 +1520,7 @@ describe("IssuesActivity", () => {
       status: "backlog",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_632_000_000,
+      statusChangedAt: 1_780_632_000_000,
     });
 
     await waitFor(() => expect(listIssuesMock).toHaveBeenCalledTimes(2));
@@ -1534,6 +1548,7 @@ describe("IssuesActivity", () => {
       labels: [projectLabel, globalLabel],
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_632_000_000,
+      statusChangedAt: 1_780_632_000_000,
     });
 
     renderIssuesActivity();

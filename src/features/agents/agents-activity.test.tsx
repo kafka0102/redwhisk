@@ -251,6 +251,7 @@ function completedFlowResult(issueId: number, projectId = 1) {
       linkedSessionAttention: "none" as const,
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_639_000_000,
+      statusChangedAt: 1_780_639_000_000,
     },
     flow: null,
     message: "Issue completed",
@@ -529,6 +530,7 @@ describe("AgentsActivity", () => {
           linkedSessionAttention: "none",
           createdAt: 1_780_637_000_000,
           updatedAt: 1_780_637_000_000,
+          statusChangedAt: 1_780_637_000_000,
         },
         {
           id: 21,
@@ -542,6 +544,7 @@ describe("AgentsActivity", () => {
           linkedSessionAttention: "none",
           createdAt: 1_780_638_000_000,
           updatedAt: 1_780_638_000_000,
+          statusChangedAt: 1_780_638_000_000,
         },
       ],
     });
@@ -557,6 +560,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+      statusChangedAt: 1_780_638_001_000,
     });
     completeIssueManualMock.mockResolvedValue({
       id: 22,
@@ -570,6 +574,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_639_000_000,
+      statusChangedAt: 1_780_639_000_000,
     });
     completeIssueCleanMock.mockResolvedValue({
       id: 22,
@@ -583,6 +588,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_632_000_000,
       updatedAt: 1_780_639_000_000,
+      statusChangedAt: 1_780_639_000_000,
     });
     detectAgentCommitCompletionMock.mockResolvedValue({
       outcome: "completed",
@@ -599,6 +605,7 @@ describe("AgentsActivity", () => {
         linkedSessionLogPath: "/tmp/session.log",
         createdAt: 1_780_632_000_000,
         updatedAt: 1_780_639_000_000,
+        statusChangedAt: 1_780_639_000_000,
       },
       message: "已检测到新的 commit，Issue 已完成。",
     });
@@ -626,6 +633,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_002_000,
+      statusChangedAt: 1_780_638_002_000,
     }));
     listAgentProfilesMock.mockReset();
     listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
@@ -3140,6 +3148,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+      statusChangedAt: 1_780_638_001_000,
     });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
@@ -3223,6 +3232,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+      statusChangedAt: 1_780_638_001_000,
     });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
@@ -3303,6 +3313,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+      statusChangedAt: 1_780_638_001_000,
     });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
@@ -3408,6 +3419,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+      statusChangedAt: 1_780_638_001_000,
     });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
@@ -3474,6 +3486,7 @@ describe("AgentsActivity", () => {
       linkedSessionAttention: "none",
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_001_000,
+      statusChangedAt: 1_780_638_001_000,
     });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
@@ -4345,6 +4358,7 @@ describe("AgentsActivity", () => {
         linkedSessionAttention: "none",
         createdAt: 1_780_637_000_000,
         updatedAt: 1_780_638_000_000,
+        statusChangedAt: 1_780_638_000_000,
       },
       flow: null,
       message:
@@ -4426,6 +4440,7 @@ describe("AgentsActivity", () => {
         linkedSessionAttention: "none",
         createdAt: 1_780_637_000_000,
         updatedAt: 1_780_638_000_000,
+        statusChangedAt: 1_780_638_000_000,
       },
       flow: null,
       message: "Agent worktree 合并被阻止，请手动处理冲突。",
@@ -5239,6 +5254,7 @@ describe("AgentsActivity", () => {
           linkedSessionAttention: "none",
           createdAt: 1_780_637_000_000,
           updatedAt: 1_780_637_000_000,
+          statusChangedAt: 1_780_637_000_000,
         },
       ],
     });
