@@ -114,6 +114,31 @@ impl<'connection> AgentSessionRepository<'connection> {
             .optional()
     }
 
+    /// 按 `(project_id, workspace_path)` 反查最新一条未软删 session。
+    ///
+    /// 用于 `session_id=None` 但 `workspace_path=Some` 的场景（code 变更页直接按
+    /// worktree 路径请求 commit history）：取该 worktree 最近一次 session 记录的
+    /// `target_branch` 作为分叉基。同一 worktree 可能被多次 session 复用，取最新
+    /// 一条（按 `started_at DESC, id DESC`）。无匹配返回 None，由调用方回退到
+    /// 启发式 `find_branch_base`。
+    pub fn find_latest_by_workspace_path(
+        &self,
+        project_id: i64,
+        workspace_path: &str,
+    ) -> rusqlite::Result<Option<AgentSessionRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+                 FROM agent_sessions
+                 WHERE project_id = ?1 AND workspace_path = ?2 AND del = 0
+                 ORDER BY started_at DESC, id DESC
+                 LIMIT 1",
+                params![project_id, workspace_path],
+                agent_session_from_row,
+            )
+            .optional()
+    }
+
     pub fn list_by_project_id(
         &self,
         project_id: i64,
@@ -1056,6 +1081,34 @@ mod tests {
             .expect("soft delete session");
     }
 
+    // 插入一条 worktree 模式 session（带 workspace_path + target_branch），用于
+    // find_latest_by_workspace_path 的命中 / 多条取最新 / 软删过滤 / 跨 project 隔离测试。
+    fn insert_worktree_session(
+        connection: &Connection,
+        id: i64,
+        project_id: i64,
+        number: i64,
+        workspace_path: &str,
+        target_branch: &str,
+        started_at: i64,
+        del: i64,
+    ) {
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, number, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   last_active_at, started_at, workspace_path, target_branch, del
+                 ) VALUES (
+                   ?1, ?2, ?3, 100, 'closed', 'none',
+                   '/tmp/repo', 'codex', '', '/tmp/s.log',
+                   ?4, ?4, ?5, ?6, ?7
+                 )",
+                params![id, project_id, number, started_at, workspace_path, target_branch, del],
+            )
+            .expect("insert worktree session");
+    }
+
     fn unique_index_exists(connection: &Connection, table: &str, index: &str) -> bool {
         connection
             .query_row(
@@ -1384,6 +1437,54 @@ mod tests {
         assert_eq!(rows[0].session_id, session.id);
         assert_eq!(rows[0].number, 1);
         assert_eq!(rows[0].issue_number, Some(1));
+    }
+
+    #[test]
+    fn find_latest_by_workspace_path_returns_latest_active_session_for_worktree() {
+        // code 变更页无 sessionId，按 workspace_path 反查 session 的 target_branch 作
+        // 分叉基。同一 worktree 可能被多次 session 复用，取 started_at 最新（次按 id）。
+        // 软删行过滤、不同 project 不串、无匹配返回 None。
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        insert_project(&connection, 2, "p2");
+        insert_agent_profile(&connection, 100);
+        let worktree = "/tmp/repo/worktrees/issue-1";
+        insert_worktree_session(&connection, 10, 1, 1, worktree, "main", 1_000, 0);
+        insert_worktree_session(&connection, 11, 1, 2, worktree, "main", 3_000, 0);
+        insert_worktree_session(&connection, 12, 1, 3, worktree, "main", 2_000, 0);
+
+        let latest = AgentSessionRepository::new(&connection)
+            .find_latest_by_workspace_path(1, worktree)
+            .expect("query latest by workspace path")
+            .expect("expected a matching session");
+        assert_eq!(latest.id, 11);
+        assert_eq!(latest.target_branch.as_deref(), Some("main"));
+        assert_eq!(latest.workspace_path.as_deref(), Some(worktree));
+
+        // 不同 project 不串。
+        assert!(
+            AgentSessionRepository::new(&connection)
+                .find_latest_by_workspace_path(2, worktree)
+                .expect("query cross project")
+                .is_none(),
+            "workspace_path 不应跨 project 命中"
+        );
+
+        // 软删的最新行被过滤，回落到下一条存活行。
+        insert_worktree_session(&connection, 13, 1, 4, worktree, "develop", 9_000, 1);
+        let after_soft_delete = AgentSessionRepository::new(&connection)
+            .find_latest_by_workspace_path(1, worktree)
+            .expect("query after soft delete")
+            .expect("软删行过滤后仍应命中存活行");
+        assert_eq!(after_soft_delete.id, 11);
+
+        // 无匹配返回 None。
+        assert!(
+            AgentSessionRepository::new(&connection)
+                .find_latest_by_workspace_path(1, "/tmp/repo/worktrees/issue-999")
+                .expect("query missing")
+                .is_none()
+        );
     }
 
     #[test]

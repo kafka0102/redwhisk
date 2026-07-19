@@ -91,6 +91,11 @@ pub struct ProjectWorktreeCommitHistoryResponse {
     // worktree 场景按 is_created_in_worktree 区分蓝/橘黄；非 worktree 场景按
     // is_pushed 区分紫/蓝。
     pub is_worktree: bool,
+    // worktree 场景下解析出的分叉基分支名（来自 session 的 target_branch 或启发式
+    // 候选），仅 worktree 且非主分支且成功解出 base 时为 Some。前端用它渲染首条
+    // 黄色提交右侧的黄色 base Tag。非 worktree / 主分支 / base 解析失败时为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

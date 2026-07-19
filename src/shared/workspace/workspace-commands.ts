@@ -148,6 +148,10 @@ export interface ProjectWorktreeCommitHistoryResponse {
   commits: WorkspaceCommitRecord[];
   signature: string;
   isWorktree: boolean;
+  // worktree 场景下解析出的分叉基分支名（来自 session 的 target_branch 或启发式
+  // 候选），仅 worktree 且非主分支且成功解出 base 时为 Some。前端用它渲染首条
+  // 黄色提交右侧的黄色 base Tag。非 worktree / 主分支 / base 解析失败时不返回。
+  baseBranch?: string | null;
 }
 
 export interface WorkspaceDiffContent {

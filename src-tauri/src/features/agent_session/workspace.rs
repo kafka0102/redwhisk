@@ -92,7 +92,11 @@ impl<'connection> SessionWorkspaceService<'connection> {
             input.session_id,
             input.workspace_path.as_deref(),
         )?;
-        let base_branch = self.resolve_session_base_branch(input.project_id, input.session_id);
+        let base_branch = self.resolve_session_base_branch(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        );
         read_workspace_commit_history(&root, base_branch.as_deref())
     }
 
@@ -100,17 +104,30 @@ impl<'connection> SessionWorkspaceService<'connection> {
     // 分叉基，避免 find_branch_base 落到固定候选列表里更旧的分支。session 不存在、不
     // 属于本 project、未记录 target_branch，或读取失败时返回 None，交由调用方回退到
     // 启发式。
+    //
+    // 两条解析路径：
+    // - `session_id=Some`：直接查该 session 的 target_branch（session 侧栏路径）。
+    // - `session_id=None` 且 `workspace_path=Some`：code 变更页无 sessionId，按
+    //   workspace_path 反查最新 session 取其 target_branch（与 session 侧栏语义对齐）。
     fn resolve_session_base_branch(
         &self,
         project_id: i64,
         session_id: Option<i64>,
+        workspace_path: Option<&str>,
     ) -> Option<String> {
-        let session_id = session_id?;
-        let session = self
-            .agent_session_repository
-            .find_by_id(session_id)
-            .ok()
-            .flatten()?;
+        let session = if let Some(session_id) = session_id {
+            self.agent_session_repository
+                .find_by_id(session_id)
+                .ok()
+                .flatten()?
+        } else if let Some(workspace_path) = workspace_path {
+            self.agent_session_repository
+                .find_latest_by_workspace_path(project_id, workspace_path)
+                .ok()
+                .flatten()?
+        } else {
+            return None;
+        };
         if session.project_id != project_id {
             return None;
         }
@@ -355,17 +372,26 @@ fn read_workspace_commit_history(
     // 提交）。base_branch 来自 session 记录的 target_branch（worktree 创建时的真实基
     // 分支），缺失时回退到 find_branch_base 的启发式。非 worktree 不计算该集合，
     // is_created_in_worktree 恒为 false。
-    let worktree_own_commits: Option<HashSet<String>> = if is_worktree {
-        match branch_name.as_deref() {
-            Some(branch) if !PRIMARY_BRANCHES.contains(&branch) => {
-                find_branch_base(root, branch, base_branch)?
-                    .and_then(|base| rev_list_range(root, &format!("{base}..HEAD")).ok())
+    //
+    // base_resolution 记录解出的 (merge-base hash, base 分支名)：name 来自 preferred
+    // 或 upstream 或启发式候选；仅 worktree 且非主分支且成功解出时回填到响应的
+    // base_branch，供前端渲染黄色 base Tag。
+    let (worktree_own_commits, base_resolution): (Option<HashSet<String>>, Option<(String, String)>) =
+        if is_worktree {
+            match branch_name.as_deref() {
+                Some(branch) if !PRIMARY_BRANCHES.contains(&branch) => {
+                    let resolved = find_branch_base(root, branch, base_branch)?;
+                    let own = resolved
+                        .as_ref()
+                        .and_then(|(base_hash, _)| rev_list_range(root, &format!("{base_hash}..HEAD")).ok());
+                    (own, resolved)
+                }
+                _ => (None, None),
             }
-            _ => None,
-        }
-    } else {
-        None
-    };
+        } else {
+            (None, None)
+        };
+    let base_branch_name = base_resolution.as_ref().map(|(_, name)| name.clone());
 
     let upstream = current_upstream(root)?;
 
@@ -455,6 +481,7 @@ fn read_workspace_commit_history(
         commits,
         signature,
         is_worktree,
+        base_branch: base_branch_name,
     })
 }
 
@@ -532,7 +559,7 @@ fn find_branch_base(
     root: &Path,
     current_branch: &str,
     preferred_base: Option<&str>,
-) -> Result<Option<String>, CommandError> {
+) -> Result<Option<(String, String)>, CommandError> {
     // 优先使用调用方指定的 base（worktree 创建时记录的 target_branch）。它是该 worktree
     // 分支真正的分叉点，避免落到固定候选列表里更旧的分支——例如仓库里存在落后于 main
     // 的 devlop 时，按候选顺序会先命中 devlop，导致 base 过旧、把 main 上继承下来的
@@ -540,7 +567,7 @@ fn find_branch_base(
     if let Some(preferred) = preferred_base {
         if preferred != current_branch {
             if let Some(base) = merge_base_against(root, preferred)? {
-                return Ok(Some(base));
+                return Ok(Some((base, preferred.to_string())));
             }
         }
     }
@@ -549,7 +576,7 @@ fn find_branch_base(
         let upstream = upstream.trim();
         if !upstream.is_empty() {
             if let Some(base) = merge_base_against(root, upstream)? {
-                return Ok(Some(base));
+                return Ok(Some((base, upstream.to_string())));
             }
         }
     }
@@ -559,7 +586,7 @@ fn find_branch_base(
             continue;
         }
         if let Some(base) = merge_base_against(root, candidate)? {
-            return Ok(Some(base));
+            return Ok(Some((base, candidate.to_string())));
         }
     }
 
@@ -1283,6 +1310,10 @@ fn language_from_path(path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::agent_session_repository::AgentSessionRepository;
+    use crate::db::migrations::MigrationRunner;
+    use crate::db::project_repository::ProjectRepository;
+    use rusqlite::params;
     use std::fs;
     use std::process::Command;
 
@@ -1690,6 +1721,105 @@ mod tests {
         assert!(history.is_worktree);
         assert_eq!(history.commits.len(), 3);
         assert_eq!(history.commits[0].message, "issue seven change");
+        assert!(history.commits[0].is_created_in_worktree);
+        assert_eq!(history.commits[1].message, "main two");
+        assert!(!history.commits[1].is_created_in_worktree);
+        assert_eq!(history.commits[2].message, "main one");
+        assert!(!history.commits[2].is_created_in_worktree);
+        // target_branch=main 作为 preferred base 命中，base_branch 回填为分支名 main，
+        // 供前端在首条黄色提交右侧渲染黄色 base Tag。
+        assert_eq!(history.base_branch.as_deref(), Some("main"));
+    }
+
+    #[test]
+    fn commit_history_via_workspace_path_resolves_session_target_branch() {
+        // 锁定用户报告的 bug：code 变更页请求 commit history 时 session_id=None，
+        // 按 workspace_path 反查最新 session 的 target_branch 作 base，使 base 分支提交
+        // 显示为黄色（is_created_in_worktree=false）并在响应回填 base_branch。这条路径
+        // 经过 public get_commit_history -> resolve_session_base_branch ->
+        // find_latest_by_workspace_path，是 session 侧栏之外的第二条入口。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_root = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-9");
+        fs::create_dir_all(&repo_root).expect("create repo dir");
+        init_git_repo(&repo_root);
+
+        fs::write(repo_root.join("main.txt"), "m1\n").expect("write main one");
+        git(&repo_root, &["add", "main.txt"]);
+        git(&repo_root, &["commit", "-m", "main one"]);
+        git(&repo_root, &["branch", "-M", "main"]);
+        fs::write(repo_root.join("main2.txt"), "m2\n").expect("write main two");
+        git(&repo_root, &["add", "main2.txt"]);
+        git(&repo_root, &["commit", "-m", "main two"]);
+
+        git(
+            &repo_root,
+            &[
+                "worktree",
+                "add",
+                "-B",
+                "issue-9",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+        fs::write(worktree_path.join("feature.txt"), "f\n").expect("write feature");
+        git(&worktree_path, &["add", "feature.txt"]);
+        git(&worktree_path, &["commit", "-m", "issue nine change"]);
+
+        // macOS 上临时目录经由 /var -> /private/var 符号链接，git worktree list 报告
+        // 规范化路径。resolve_workspace_root 按 git 报告的路径字符串逐字比对，故 DB 与
+        // 请求入参都须用规范形式，与 session launch 落盘时一致。
+        let worktree_canonical = worktree_path
+            .canonicalize()
+            .expect("canonicalize worktree path")
+            .to_string_lossy()
+            .to_string();
+
+        // DB：project.repo_path 指向主仓；session 记录 target_branch=main +
+        // workspace_path=该 worktree（与 session launch 创建 worktree 时记录一致）。
+        let connection = rusqlite::Connection::open_in_memory().expect("open in-memory database");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("run all migrations");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'p1', ?1, 0, 0)",
+                params![repo_root.to_string_lossy()],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, number, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   last_active_at, started_at, workspace_path, target_branch, del
+                 ) VALUES (
+                   1, 1, 1, 100, 'closed', 'none',
+                   '/tmp/repo', 'codex', '', '/tmp/s.log',
+                   1000, 1000, ?1, 'main', 0
+                 )",
+                params![&worktree_canonical],
+            )
+            .expect("insert session");
+
+        let service = SessionWorkspaceService::new(
+            ProjectRepository::new(&connection),
+            AgentSessionRepository::new(&connection),
+        );
+        let history = service
+            .get_commit_history(ProjectWorkspaceInput {
+                project_id: 1,
+                session_id: None,
+                workspace_path: Some(worktree_canonical.clone()),
+            })
+            .expect("read commit history via workspace path");
+
+        assert!(history.is_worktree);
+        assert_eq!(history.base_branch.as_deref(), Some("main"));
+        assert_eq!(history.commits.len(), 3);
+        assert_eq!(history.commits[0].message, "issue nine change");
         assert!(history.commits[0].is_created_in_worktree);
         assert_eq!(history.commits[1].message, "main two");
         assert!(!history.commits[1].is_created_in_worktree);
