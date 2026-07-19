@@ -39,7 +39,7 @@ import {
 import { CodeWorkspaceChangesView } from "../changes/code-workspace-changes-view";
 import { useCodeWorkspaceDiff } from "../changes/use-code-workspace-diff";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
-import { useCodeWorkspaceRoots } from "./use-code-workspace-roots";
+import { useCodeWorkspaceRoots } from "../../shared/workspace/use-code-workspace-roots";
 
 const MAX_FILE_TABS = 10;
 const DEFAULT_SIDEBAR_WIDTH = 400;

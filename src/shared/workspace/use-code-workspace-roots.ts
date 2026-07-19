@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
+import { subscribeTauriEvent } from "../tauri-event/use-tauri-event";
 import {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   listCodeWorkspaceRoots,
   type CodeWorkspaceRoot,
   type CodeWorkspaceRootsUpdatedEvent,
-} from "../../shared/workspace/workspace-commands";
+} from "./workspace-commands";
 
 const ROOTS_REFRESH_INTERVAL_MS = 15_000;
 

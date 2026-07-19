@@ -1,8 +1,8 @@
 import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CodeWorkspaceRoot } from "../../shared/workspace/workspace-commands";
-import type { CodeWorkspaceRootsUpdatedEvent } from "../../shared/workspace/workspace-commands";
+import type { CodeWorkspaceRoot } from "./workspace-commands";
+import type { CodeWorkspaceRootsUpdatedEvent } from "./workspace-commands";
 import { useCodeWorkspaceRoots } from "./use-code-workspace-roots";
 
 const eventMocks = vi.hoisted(() => ({
@@ -25,12 +25,12 @@ vi.mock("@tauri-apps/api/event", () => ({
   ),
 }));
 
-vi.mock("../../shared/workspace/workspace-commands", () => ({
+vi.mock("./workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
   listCodeWorkspaceRoots: vi.fn(),
 }));
 
-import { listCodeWorkspaceRoots } from "../../shared/workspace/workspace-commands";
+import { listCodeWorkspaceRoots } from "./workspace-commands";
 
 const listRootsMock = vi.mocked(listCodeWorkspaceRoots);
 
