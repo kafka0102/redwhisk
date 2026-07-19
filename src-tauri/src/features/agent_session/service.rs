@@ -55,7 +55,8 @@ use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
 
-use super::command_snapshot::{agent_command_with_default_args, build_structured_command_snapshot, ensure_codex_bypass_arg, read_codex_model_from_data_dir, read_codex_reasoning_effort_from_data_dir};
+use super::command_snapshot::build_structured_command_snapshot;
+use crate::agent::descriptor_for;
 use super::launch::{persist_started_session_thread_id, start_provider_session};
 use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
 use super::timeline::{is_empty_standalone_thread_timeline_error, latest_effort_from_session_log, latest_output_from_session_log, read_timeline_from_session_log};
@@ -757,6 +758,8 @@ impl<'connection> AgentSessionService<'connection> {
         // 把"running 但不在 registry"的 session 误判为重启遗留并标记 stopped。
         // mark_starting 让 contains 返回 true，reconcile 据此跳过；register 真实
         // handle 时自动清除该标记，失败路径需显式 unmark。
+        let runtime = descriptor_for(&launch.profile.agent_type)
+            .resolve_runtime_config(data_dir, None, None);
         self.finish_structured_issue_provider_start(
             factory,
             AgentSessionStartRequest {
@@ -767,14 +770,8 @@ impl<'connection> AgentSessionService<'connection> {
                 cwd: launch.working_dir.clone(),
                 mode_id: Some(launch.profile.mode.clone()),
                 dangerous: launch.profile.dangerous,
-                model: match launch.profile.agent_type {
-                    AgentType::Codex => read_codex_model_from_data_dir(data_dir),
-                    AgentType::Claude => None,
-                },
-                effort: match launch.profile.agent_type {
-                    AgentType::Codex => read_codex_reasoning_effort_from_data_dir(data_dir),
-                    AgentType::Claude => None,
-                },
+                model: runtime.model,
+                effort: runtime.effort,
                 resume_thread_id: None,
                 broadcaster: broadcaster.clone(),
                 config_home: user_home_from_data_dir(data_dir),
@@ -1566,6 +1563,8 @@ impl AgentSessionService<'_> {
         // 各失败路径需显式 unmark。
         agent_registry.mark_starting(session_id);
 
+        let runtime = descriptor_for(&agent_type)
+            .resolve_runtime_config(data_dir, input.model.as_deref(), input.effort.as_deref());
         let thread_id = self.finish_structured_standalone_provider_start(
             &DefaultAgentSessionProviderFactory,
             AgentSessionStartRequest {
@@ -1576,20 +1575,8 @@ impl AgentSessionService<'_> {
                 cwd: cwd.clone(),
                 mode_id: input.mode.clone(),
                 dangerous: false,
-                model: match agent_type {
-                    AgentType::Codex => input
-                        .model
-                        .clone()
-                        .or_else(|| read_codex_model_from_data_dir(data_dir)),
-                    AgentType::Claude => input.model.clone(),
-                },
-                effort: match agent_type {
-                    AgentType::Codex => input
-                        .effort
-                        .clone()
-                        .or_else(|| read_codex_reasoning_effort_from_data_dir(data_dir)),
-                    AgentType::Claude => None,
-                },
+                model: runtime.model,
+                effort: runtime.effort,
                 resume_thread_id: input.resume_from_codex_session_id.clone(),
                 broadcaster: broadcaster.clone(),
                 config_home: user_home_from_data_dir(data_dir),
@@ -1748,13 +1735,6 @@ impl AgentSessionService<'_> {
             });
         }
 
-        let binary = if session.command_snapshot.trim().is_empty() {
-            ensure_codex_bypass_arg("codex")
-        } else {
-            session.command_snapshot.clone()
-        };
-        let cwd = self.resolve_session_cwd_for_resume(&session)?;
-
         // 通过 profile 判定 agent 类型，构造走 provider factory。
         let profile = self
             .agent_profile_repository
@@ -1770,7 +1750,15 @@ impl AgentSessionService<'_> {
                         .with_value("agentProfileId", session.agent_profile_id),
                 )
             })?;
+        let descriptor = descriptor_for(&profile.agent_type);
+        let binary = if session.command_snapshot.trim().is_empty() {
+            descriptor.fallback_command_when_snapshot_empty()
+        } else {
+            session.command_snapshot.clone()
+        };
+        let cwd = self.resolve_session_cwd_for_resume(&session)?;
         agent_registry.mark_starting(session.id);
+        let runtime = descriptor.resolve_runtime_config(_data_dir, None, None);
         let started = match start_provider_session(
             &DefaultAgentSessionProviderFactory,
             AgentSessionStartRequest {
@@ -1781,14 +1769,8 @@ impl AgentSessionService<'_> {
                 cwd,
                 mode_id: None,
                 dangerous: false,
-                model: match profile.agent_type {
-                    AgentType::Codex => read_codex_model_from_data_dir(_data_dir),
-                    AgentType::Claude => None,
-                },
-                effort: match profile.agent_type {
-                    AgentType::Codex => read_codex_reasoning_effort_from_data_dir(_data_dir),
-                    AgentType::Claude => None,
-                },
+                model: runtime.model,
+                effort: runtime.effort,
                 resume_thread_id: Some(thread_id.clone()),
                 broadcaster: broadcaster.clone(),
                 config_home: user_home_from_data_dir(_data_dir),
@@ -2517,7 +2499,8 @@ fn spawn_agent_process(
 ) -> Result<Child, CommandError> {
     let log_file = File::create(log_path).map_err(agent_session_start_error)?;
     let stderr_file = log_file.try_clone().map_err(agent_session_start_error)?;
-    let command_line = agent_command_with_default_args(profile);
+    let command_line = descriptor_for(&profile.agent_type)
+        .build_command_snapshot_with_bypass(&profile.command);
     let (program, args) = split_agent_command_line(&command_line)?;
 
     let mut command = Command::new(program);
@@ -2926,9 +2909,7 @@ mod tests {
         normalize_submitted_prompt, preferred_session_cwd, should_restore_redwhisk_worktree,
         AgentSessionService,
     };
-    use crate::features::agent_session::command_snapshot::{
-        agent_command_with_default_args, build_structured_command_snapshot,
-    };
+    use crate::features::agent_session::command_snapshot::build_structured_command_snapshot;
     use crate::features::agent_session::log_path::{
         build_issue_archive_log_path, build_issue_runtime_structured_log_path,
         build_issue_session_archive,
@@ -3039,43 +3020,10 @@ mod tests {
     }
 
     #[test]
-    fn agent_command_with_default_args_adds_codex_bypass_flag() {
-        let profile = test_agent_profile(AgentType::Codex, "codex");
-
-        assert_eq!(
-            agent_command_with_default_args(&profile),
-            "codex --dangerously-bypass-approvals-and-sandbox"
-        );
-    }
-
-    #[test]
-    fn agent_command_with_default_args_keeps_existing_codex_bypass_flag() {
-        let profile = test_agent_profile(
-            AgentType::Codex,
-            "codex --dangerously-bypass-approvals-and-sandbox",
-        );
-
-        assert_eq!(
-            agent_command_with_default_args(&profile),
-            "codex --dangerously-bypass-approvals-and-sandbox"
-        );
-    }
-
-    #[test]
     fn structured_command_snapshot_keeps_codex_profile_command_unchanged() {
         let profile = test_agent_profile(AgentType::Codex, " codex-asxs ");
 
         assert_eq!(build_structured_command_snapshot(&profile), "codex-asxs");
-    }
-
-    #[test]
-    fn agent_command_with_default_args_adds_claude_permission_mode() {
-        let profile = test_agent_profile(AgentType::Claude, "claude");
-
-        assert_eq!(
-            agent_command_with_default_args(&profile),
-            "claude --permission-mode bypassPermissions"
-        );
     }
 
     #[test]
@@ -3099,16 +3047,6 @@ mod tests {
         assert_eq!(
             resolve_codex_mode(None, false).expect("mode"),
             PlannedCodexMode::FullAccess
-        );
-    }
-
-    #[test]
-    fn agent_command_with_default_args_keeps_existing_claude_permission_mode() {
-        let profile = test_agent_profile(AgentType::Claude, "claude --permission-mode auto");
-
-        assert_eq!(
-            agent_command_with_default_args(&profile),
-            "claude --permission-mode auto"
         );
     }
 

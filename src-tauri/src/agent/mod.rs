@@ -6,10 +6,14 @@ pub mod codex_config;
 pub mod command_detector;
 pub mod latest_output_writer;
 pub mod pty_session_manager;
+pub mod provider_descriptor;
 pub mod provider_factory;
 pub mod session_handle;
 pub mod session_registry;
 
+pub use provider_descriptor::{
+    AgentProviderDescriptor, ClaudeDescriptor, CodexDescriptor, RuntimeConfig, descriptor_for,
+};
 pub use provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,
     StartedSession, ThreadIdBackfill,

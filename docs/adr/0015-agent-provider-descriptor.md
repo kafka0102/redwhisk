@@ -2,7 +2,7 @@
 
 ## 状态
 
-草案（Draft）。依赖 [ADR-0013](./0013-feature-first-module-organization.md) 的 feature 边界；service 内 `match agent_type` 下沉在 P1 落地后推进。
+采纳（Accepted）。依赖 [ADR-0013](./0013-feature-first-module-organization.md) 的 feature 边界与 [ADR-0011](./0011-agent-session-provider-factory.md) 的构造侧抽象。
 
 ## 背景
 
@@ -25,12 +25,21 @@
 
 ## 决定
 
-1. **新增轻量 `AgentProviderDescriptor` trait**（`agent/` 层）：`agent_type()` / `capabilities()` / `resolve_runtime_config()` / `build_command_snapshot()`。
-2. **Codex / Claude 各自实现 Descriptor**，把现在散在 service 的 `read_codex_model_from_data_dir`、`ensure_claude_bypass_permission_args`、`build_structured_command_snapshot` 等搬进去。
-3. **service 通过 `descriptor_for(agent_type)` 查表替代 `match`**，service 内不再出现 `match agent_type`。
-4. **新增第 3 种 agent 时 service 零改动**：只加一个 `Descriptor` 实现 + 注册一行。
+1. **新增 `AgentProviderDescriptor` trait**（`agent/provider_descriptor.rs`），方法：
+   - `agent_type()` —— 对应枚举值；
+   - `resolve_runtime_config(data_dir, requested_model, requested_effort) -> RuntimeConfig` —— model / effort 解析（覆盖 service 3 处启动路径）；
+   - `build_command_snapshot_with_bypass(raw_command)` —— PTY 进程启动补 bypass（覆盖 `spawn_agent_process`）；
+   - `build_launch_command_snapshot(raw_command)` —— issue launch 路径（Codex structured trim / Claude CLI bypass）；
+   - `fallback_command_when_snapshot_empty()` —— resume 路径 `command_snapshot` 为空的兜底；
+   - `list_models(home_dir)` / `is_model_list_read_only(home_dir)` —— 模型列表与只读判定（覆盖 `list_agent_models`）。
+
+   草案列的 `capabilities()` **未引入**：所有能力差异（structured 选择、effort 支持、bypass 参数）已通过上述具体方法封装，调用方无需查询能力位（YAGNI）。
+2. **Codex / Claude 各自实现 Descriptor**：把散在 `features/agent_session/command_snapshot.rs` 的 `ensure_codex_bypass_arg` / `ensure_claude_bypass_permission_args` / `append_missing_args` / `command_has_arg`、`commands.rs` 的 `claude_models_from_home` 搬进 `agent/provider_descriptor.rs`。`build_structured_command_snapshot`（纯 trim，无 type 差异）留在 `command_snapshot.rs`。
+3. **service / command 通过 `descriptor_for(&agent_type)` 查表替代 `match`**；service / command 内不再出现按 provider 特性分支的 `match agent_type`。`list_agent_models` 的 home_dir 读取错误 reason 文案 match 保留——属 UI 本地化（`codexConfigReadFailed` / `claudeConfigReadFailed`），非特性差异。
+4. **新增第 3 种 agent 时 service / command 零改动**：只加一个 Descriptor 实现 + `descriptor_for` 注册一行。
 5. **`AgentSessionHandle` trait 不动**（设计良好）；`AgentSessionStartRequest` 的 `effort` / `mode_id` 字段差异是「中立请求参数化」的合理代价，保留。
-6. **演进路径**：2 种用 `match` 查表 → 3–5 种仍可 `match`（编译期穷尽性是优点）→ 6+ 种或动态注册才换 `HashMap`。当前**不引入注册表**（YAGNI）。
+6. **resume 兜底修正**：原 service resume 路径硬编码 `ensure_codex_bypass_arg("codex")`（对 Claude session 也会产出 codex 命令，潜在 bug）；下沉后按 `descriptor.fallback_command_when_snapshot_empty()` 取各自默认 binary + bypass。
+7. **演进路径**：2 种用 `match` 查表 → 3–5 种仍可 `match`（编译期穷尽性是优点）→ 6+ 种或动态注册才换 `HashMap`。当前**不引入注册表**（YAGNI）。
 
 ## 后果
 
@@ -49,6 +58,8 @@
 
 ## 事实来源
 
-- 抽象：`src-tauri/src/agent/{session_handle.rs,provider_factory.rs}`（[ADR-0011](./0011-agent-session-provider-factory.md)）。
-- 散落：`src-tauri/src/core/agent_session_service.rs:790,794,954,1869,1876,2074,2078,3159`。
-- 枚举：`src-tauri/src/types/agent_profile.rs:5`（`AgentType { Codex, Claude }`）。
+- 新增：`src-tauri/src/agent/provider_descriptor.rs`（trait + `CodexDescriptor` / `ClaudeDescriptor` + `descriptor_for` 查表 + 单测）。
+- 抽象基石：`src-tauri/src/agent/{session_handle.rs,provider_factory.rs}`（[ADR-0011](./0011-agent-session-provider-factory.md)），本 ADR 不动。
+- 原 match 下沉点（feature-first 后路径）：`src-tauri/src/features/agent_session/{service.rs,launch.rs,command_snapshot.rs,commands.rs}`。
+- 保留的 match：`src-tauri/src/agent/provider_factory.rs`（ADR-0011 构造路由）、`src-tauri/src/db/agent_profile_repository.rs`（DB 层），均属已良好抽象，不在本 ADR 范围。
+- 枚举：`src-tauri/src/types/agent_profile.rs`（`AgentType { Codex, Claude }`）。

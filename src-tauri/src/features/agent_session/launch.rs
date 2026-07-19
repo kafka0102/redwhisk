@@ -12,7 +12,6 @@ use crate::db::issue_repository::IssueRepository;
 use crate::git::worktree::{
     cleanup_worktree, create_worktree_for_issue, list_local_branches,
 };
-use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
@@ -23,7 +22,7 @@ use crate::types::issue::IssueStatus;
 
 
 
-use super::command_snapshot::{build_command_snapshot, build_structured_command_snapshot};
+use crate::agent::descriptor_for;
 use super::log_path::{build_log_path, remove_session_log_file};
 use super::validation::{validate_profile_not_deleted, validate_profile_scope, validate_working_dir};
 use super::worktree_setup::run_worktree_setup_command;
@@ -173,11 +172,8 @@ impl AgentSessionService<'_> {
             input.agent_profile_id,
             started_at,
         )?;
-        let command_snapshot = if profile.agent_type == AgentType::Codex {
-            build_structured_command_snapshot(&profile)
-        } else {
-            build_command_snapshot(&profile)
-        };
+        let command_snapshot = descriptor_for(&profile.agent_type)
+            .build_launch_command_snapshot(&profile.command);
         let branch_info =
             list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
         let workspace_mode = input
