@@ -110,7 +110,7 @@ export function IssueReadonlySessionPanel({
         value: formatProcessingDuration(session, locale),
       },
       {
-        label: messages.issueSummary.status,
+        label: messages.issueSummary.sessionStatus,
         value: formatSessionStatus(session?.status, messages),
       },
     ],

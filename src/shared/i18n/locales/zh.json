@@ -388,6 +388,7 @@
     "workflowSkill": "工作流技能",
     "developmentMode": "开发模式",
     "endedAt": "结束时间",
+    "totalDuration": "执行时长",
     "runtimeLogPath": "运行时日志",
     "archivedLogPath": "归档日志",
     "none": "无",

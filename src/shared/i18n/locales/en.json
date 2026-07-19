@@ -388,6 +388,7 @@
     "workflowSkill": "Workflow skill",
     "developmentMode": "Development mode",
     "endedAt": "Ended",
+    "totalDuration": "Execution duration",
     "runtimeLogPath": "Runtime log path",
     "archivedLogPath": "Archived log path",
     "none": "None",
