@@ -4231,7 +4231,8 @@ describe("AgentsActivity", () => {
       attachments: [],
       labels: [],
       linkedSessionLogPath: null,
-      linkedSessionLatestOutput: null,    });
+      linkedSessionLatestOutput: null,
+    });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
@@ -4352,7 +4353,8 @@ describe("AgentsActivity", () => {
       attachments: [],
       labels: [],
       linkedSessionLogPath: null,
-      linkedSessionLatestOutput: null,    });
+      linkedSessionLatestOutput: null,
+    });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
@@ -4469,7 +4471,8 @@ describe("AgentsActivity", () => {
       attachments: [],
       labels: [],
       linkedSessionLogPath: null,
-      linkedSessionLatestOutput: null,    });
+      linkedSessionLatestOutput: null,
+    });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
@@ -4610,7 +4613,8 @@ describe("AgentsActivity", () => {
       attachments: [],
       labels: [],
       linkedSessionLogPath: null,
-      linkedSessionLatestOutput: null,    });
+      linkedSessionLatestOutput: null,
+    });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
@@ -4696,7 +4700,8 @@ describe("AgentsActivity", () => {
       attachments: [],
       labels: [],
       linkedSessionLogPath: null,
-      linkedSessionLatestOutput: null,    });
+      linkedSessionLatestOutput: null,
+    });
 
     render(<AgentsActivity activeSessionId={302} projectId={1} />);
 
@@ -5928,7 +5933,8 @@ describe("AgentsActivity", () => {
         attachments: [],
         labels: [],
         linkedSessionLogPath: null,
-        linkedSessionLatestOutput: null,      },
+        linkedSessionLatestOutput: null,
+      },
       flow: null,
       message:
         "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先处理这些改动。",
@@ -6029,7 +6035,8 @@ describe("AgentsActivity", () => {
         attachments: [],
         labels: [],
         linkedSessionLogPath: null,
-        linkedSessionLatestOutput: null,      },
+        linkedSessionLatestOutput: null,
+      },
       flow: null,
       message: "Agent worktree 合并被阻止，请手动处理冲突。",
       mergeBlockReason: "merge_conflict",
@@ -7161,7 +7168,8 @@ describe("AgentsActivity", () => {
           statusChangedAt: 1_780_637_000_000,
           attachments: [],
           linkedSessionLogPath: null,
-          linkedSessionLatestOutput: null,        },
+          linkedSessionLatestOutput: null,
+        },
       ],
     });
 

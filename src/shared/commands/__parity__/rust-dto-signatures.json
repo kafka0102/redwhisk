@@ -569,6 +569,7 @@
         "number": "required",
         "projectId": "required",
         "status": "required",
+        "statusChangedAt": "required",
         "title": "required",
         "updatedAt": "required"
       }
