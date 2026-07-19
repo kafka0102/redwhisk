@@ -1,5 +1,6 @@
 import { AgentsActivity } from "../features/agents/agents-activity";
-import { CodeWorkspace } from "../features/code/code-workspace";
+import { ChangesActivity } from "../features/changes/changes-activity";
+import { CodeActivity } from "../features/code/code-activity";
 import { IssuesActivity } from "../features/issues/issues-activity";
 import {
   ProjectSettingsActivity,
@@ -82,22 +83,20 @@ export function ActivityRouter({
 
   if (activeActivity === "code") {
     return (
-      <CodeWorkspace
+      <CodeActivity
         key={projectId}
         projectId={projectId}
         roots={projectCodeWorkspaces}
-        view="files"
       />
     );
   }
 
   if (activeActivity === "changes") {
     return (
-      <CodeWorkspace
+      <ChangesActivity
         key={projectId}
         projectId={projectId}
         roots={projectCodeWorkspaces}
-        view="changes"
       />
     );
   }

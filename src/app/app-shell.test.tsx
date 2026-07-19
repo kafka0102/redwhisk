@@ -70,17 +70,15 @@ vi.mock("../features/agents/agents-activity", () => ({
   ),
 }));
 
-vi.mock("../features/code/code-workspace", () => ({
-  CodeWorkspace: ({
-    projectId,
-    view,
-  }: {
-    projectId: number;
-    view: "files" | "changes";
-  }) => (
-    <div>
-      code workspace {projectId} view:{view}
-    </div>
+vi.mock("../features/code/code-activity", () => ({
+  CodeActivity: ({ projectId }: { projectId: number }) => (
+    <div>code activity {projectId}</div>
+  ),
+}));
+
+vi.mock("../features/changes/changes-activity", () => ({
+  ChangesActivity: ({ projectId }: { projectId: number }) => (
+    <div>changes activity {projectId}</div>
   ),
 }));
 
@@ -381,7 +379,7 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(screen.getByRole("button", { name: "Code" }));
 
-    expect(screen.getByText("code workspace 1 view:files")).toBeInTheDocument();
+    expect(screen.getByText("code activity 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Code" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -401,7 +399,7 @@ describe("AppShell terminals activity persistence", () => {
     ]);
   });
 
-  it("opens the Changes activity between Code and Terminals with view=changes", async () => {
+  it("opens the independent Changes activity between Code and Terminals", async () => {
     const user = userEvent.setup();
     render(
       <AppShell
@@ -436,9 +434,7 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(changesButton);
 
-    expect(
-      screen.getByText("code workspace 1 view:changes"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("changes activity 1")).toBeInTheDocument();
     expect(changesButton).toHaveAttribute("aria-pressed", "true");
   });
 });
