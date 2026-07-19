@@ -46,3 +46,5 @@ opt-level = "s"
 
 [dev-dependencies]
 tempfile = "3.23.0"
+# DTO parity 签名导出器（src/types/*.rs 静态分析），仅 dev-dep，零生产依赖。
+syn = { version = "2", features = ["full", "extra-traits"] }
