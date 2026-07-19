@@ -182,6 +182,8 @@ fn save_global_agent_profile_resolves_command() {
             dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved agent profile");
 
@@ -223,6 +225,8 @@ fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
             dangerous: false,
             default_skill: "review".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved claude agent profile");
 
@@ -260,6 +264,8 @@ fn delete_agent_profile_marks_profile_deleted_and_excludes_from_lists() {
             dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved agent profile");
 
@@ -375,6 +381,8 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
             dangerous: false,
             default_skill: "review".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved claude profile after schema upgrade");
 
@@ -430,6 +438,8 @@ fn save_agent_profile_rejects_unavailable_command_without_persisting() {
             dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect_err("should fail without executable command");
 
@@ -483,6 +493,8 @@ fn project_scope_agent_only_visible_to_target_project() {
             dangerous: false,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved project profile");
 

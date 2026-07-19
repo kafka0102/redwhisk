@@ -151,6 +151,8 @@ where
                 input.dangerous,
                 input.default_skill.trim(),
                 input.prompt_template.trim(),
+                &input.display_mode,
+                input.enabled,
             )
             .map_err(settings_database_error)?;
 
@@ -607,6 +609,8 @@ fn agent_profile_record_from_row(
         default_skill: row.default_skill,
         prompt_template: row.prompt_template,
         del: row.del,
+        display_mode: row.display_mode,
+        enabled: row.enabled,
     }
 }
 
@@ -1011,6 +1015,8 @@ mod tests {
                 dangerous: true,
                 default_skill: "".to_string(),
                 prompt_template: "".to_string(),
+                display_mode: "json".to_string(),
+                enabled: true,
             })
             .expect("agent profile")
             .id

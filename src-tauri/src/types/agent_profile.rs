@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub enum AgentType {
     Codex,
     Claude,
+    OpenCode,
+    Grok,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +30,8 @@ pub struct AgentProfileRecord {
     pub default_skill: String,
     pub prompt_template: String,
     pub del: i64,
+    pub display_mode: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -43,6 +47,8 @@ pub struct SaveAgentProfileInput {
     pub dangerous: bool,
     pub default_skill: String,
     pub prompt_template: String,
+    pub display_mode: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

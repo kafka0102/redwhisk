@@ -811,6 +811,8 @@ fn start_structured_claude_issue_session_log_path_uses_number_segments() {
                 true,
                 "",
                 "",
+                "json",
+                true,
             )
             .expect("save claude profile");
         profile.id
@@ -1272,6 +1274,8 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("save profile");
     let service = AgentSessionService::new(
@@ -1382,6 +1386,8 @@ fn start_agent_session_in_worktree_mode_rejects_leftover_worktree_on_disk() {
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("save profile");
     let service = AgentSessionService::new(
@@ -1457,6 +1463,8 @@ fn start_agent_session_in_worktree_mode_runs_setup_command_before_agent_start() 
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("save profile");
     let service = AgentSessionService::new(
@@ -1521,6 +1529,8 @@ fn start_agent_session_in_worktree_mode_rejects_failed_setup_command_without_ses
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("save profile");
     let service = AgentSessionService::new(
@@ -1599,6 +1609,8 @@ fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_ove
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("save profile");
     let service = AgentSessionService::new(
@@ -1946,6 +1958,8 @@ fn agent_session_repository_reads_sessions_for_claude_profiles() {
             false,
             "review",
             "",
+            "json",
+            true,
         )
         .expect("save claude profile");
     insert_agent_session_row(
@@ -3537,6 +3551,8 @@ fn insert_agent_profile_with_command(
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("save profile");
     profile.id

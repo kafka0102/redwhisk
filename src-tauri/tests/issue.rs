@@ -4341,6 +4341,8 @@ fn insert_agent_profile(connection: &rusqlite::Connection) -> i64 {
             true,
             "bmad-dev-story",
             "",
+            "json",
+            true,
         )
         .expect("insert agent profile")
         .id

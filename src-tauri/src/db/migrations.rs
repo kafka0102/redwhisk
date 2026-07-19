@@ -150,6 +150,10 @@ const AGENT_SESSION_TURN_SOURCE_MIGRATION_SQL: &str =
 pub(crate) const ISSUES_STATUS_CHANGED_AT_MIGRATION_VERSION: &str = "0046_issues_status_changed_at";
 pub(crate) const ISSUES_STATUS_CHANGED_AT_MIGRATION_SQL: &str =
     include_str!("../../migrations/0046_issues_status_changed_at.sql");
+const AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION: &str =
+    "0047_agent_display_mode_enabled_and_opencode_grok";
+const AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0047_agent_display_mode_enabled_and_opencode_grok.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -412,6 +416,10 @@ fn default_migrations() -> Vec<Migration> {
             version: ISSUES_STATUS_CHANGED_AT_MIGRATION_VERSION,
             sql: ISSUES_STATUS_CHANGED_AT_MIGRATION_SQL,
         },
+        Migration {
+            version: AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION,
+            sql: AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_SQL,
+        },
     ]
 }
 
@@ -445,7 +453,9 @@ fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite
         return Ok(());
     }
 
-    if migration.version != ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION {
+    if migration.version != ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION
+        && migration.version != AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION
+    {
         return connection.execute_batch(migration.sql);
     }
 
