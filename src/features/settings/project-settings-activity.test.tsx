@@ -1427,6 +1427,8 @@ describe("ProjectSettingsActivity", () => {
       id: 1,
       name: "RedWhisk Desktop",
       repoPath: "/tmp/redwhisk",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
     });
@@ -1469,6 +1471,8 @@ describe("ProjectSettingsActivity", () => {
       id: 1,
       name: "RedWhisk",
       repoPath: "/tmp/other-repo",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
       createdAt: 1_780_624_800_000,
       lastOpenedAt: 1_780_628_400_000,
     });

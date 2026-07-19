@@ -403,15 +403,18 @@ function ProjectApp() {
 function toProjectSummary(
   project: ProjectRecord | ProjectListItem,
 ): ProjectSummary {
+  // ProjectListItem（Omit 了 codeWorkspaces）不带该字段；只有完整 ProjectRecord 才有。
+  const codeWorkspaces =
+    "codeWorkspaces" in project ? (project.codeWorkspaces ?? []) : [];
   return {
     id: project.id,
     name: project.name,
     path: project.repoPath,
-    worktreeLocation: project.worktreeLocation ?? "repo_sibling",
-    worktreeSetupCommand: project.worktreeSetupCommand ?? "",
+    worktreeLocation: project.worktreeLocation,
+    worktreeSetupCommand: project.worktreeSetupCommand,
     recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,
     status: "pathStatus" in project ? project.pathStatus : "available",
-    codeWorkspaces: project.codeWorkspaces ?? [],
+    codeWorkspaces,
   };
 }
 

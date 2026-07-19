@@ -31,6 +31,8 @@ export type ProjectWorktreeLocation =
   | "repo_internal"
   | "user_home";
 
+export type ProjectPathStatus = "available" | "missing";
+
 export interface UpdateProjectSettingsInput {
   projectId: number;
   name: string;
@@ -43,8 +45,8 @@ export interface ProjectRecord {
   id: number;
   name: string;
   repoPath: string;
-  worktreeLocation?: ProjectWorktreeLocation;
-  worktreeSetupCommand?: string;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
   createdAt: number;
   lastOpenedAt: number;
   codeWorkspaces?: Array<{
@@ -54,8 +56,8 @@ export interface ProjectRecord {
   }>;
 }
 
-export interface ProjectListItem extends ProjectRecord {
-  pathStatus: "available" | "missing";
+export interface ProjectListItem extends Omit<ProjectRecord, "codeWorkspaces"> {
+  pathStatus: ProjectPathStatus;
 }
 
 export interface ProjectListResponse {
