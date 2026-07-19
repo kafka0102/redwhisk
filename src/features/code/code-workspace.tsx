@@ -1,4 +1,3 @@
-import { Editor } from "@monaco-editor/react";
 import { ChevronDown, X } from "lucide-react";
 import {
   type CSSProperties,
@@ -16,10 +15,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/ui";
-import {
-  getCommandErrorMessage,
-  toCommandError,
-} from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import {
   FileTreePanel,
@@ -36,6 +31,11 @@ import {
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
 import { CodeBreadcrumb } from "./code-breadcrumb";
+import { CodeContent } from "./code-content";
+import {
+  resolveFileLoadErrorMessage,
+  selectInitialRoot,
+} from "./code-workspace-helpers";
 import { CodeWorkspaceChangesView } from "../changes/code-workspace-changes-view";
 import { useCodeWorkspaceDiff } from "../changes/use-code-workspace-diff";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
@@ -43,11 +43,6 @@ import { useCodeWorkspaceRoots } from "./use-code-workspace-roots";
 
 const MAX_FILE_TABS = 10;
 const DEFAULT_SIDEBAR_WIDTH = 400;
-const MISSING_FILE_ERROR_REASONS = new Set([
-  "filePathInaccessible",
-  "pathNotFile",
-  "workspaceFileReadFailed",
-]);
 
 interface CodeWorkspaceProps {
   projectId: number;
@@ -488,81 +483,4 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
       )}
     </section>
   );
-}
-
-function CodeContent({
-  tab,
-  contentFontSize,
-  messages,
-  theme,
-}: {
-  tab: CodeFileTab;
-  contentFontSize: number;
-  messages: ReturnType<typeof useI18n>["messages"];
-  theme: "light" | "dark";
-}) {
-  if (tab.isLoading) {
-    return (
-      <p className="session-viewer-state">
-        {messages.agentsFeature.loadingFile}
-      </p>
-    );
-  }
-  if (tab.errorMessage) {
-    return (
-      <p className="code-workspace__file-error" role="alert">
-        {tab.errorMessage}
-      </p>
-    );
-  }
-  if (!tab.content) {
-    return null;
-  }
-  if (tab.content.isBinary || tab.content.isTooLarge) {
-    return (
-      <p className="session-viewer-state">
-        {tab.content.isBinary
-          ? messages.agentsFeature.binaryPreviewUnavailable
-          : messages.agentsFeature.largeFilePreviewUnavailable}
-      </p>
-    );
-  }
-  return (
-    <Editor
-      height="100%"
-      theme={theme === "dark" ? "vs-dark" : "light"}
-      language={tab.content.language ?? undefined}
-      options={{
-        readOnly: true,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        fontSize: contentFontSize,
-      }}
-      value={tab.content.content}
-    />
-  );
-}
-
-function selectInitialRoot(
-  roots: CodeWorkspaceRoot[],
-): CodeWorkspaceRoot | null {
-  // 默认分支 = 项目根（即仓库当前分支）；项目根不存在时返回 null（显示为空），
-  // 不回退到 roots[0]，与「默认分支不存在则显示为空」诉求一致。
-  return roots.find((root) => root.isProjectRoot) ?? null;
-}
-
-function resolveFileLoadErrorMessage(
-  error: unknown,
-  fileNotFoundMessage: string,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  if (isMissingWorkspaceFileError(error)) {
-    return fileNotFoundMessage;
-  }
-  return getCommandErrorMessage(error, t);
-}
-
-function isMissingWorkspaceFileError(error: unknown): boolean {
-  const reason = toCommandError(error).reason;
-  return reason != null && MISSING_FILE_ERROR_REASONS.has(reason);
 }

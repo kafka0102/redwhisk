@@ -12,4 +12,3 @@ src/features/issues/issue-detail/issue-read-only-page.tsx # 593 lines, registere
 src/shared/i18n/messages.ts # 584 lines, registered 2026-07-18
 src/features/issues/issue-commands.ts # 569 lines, registered 2026-07-18
 src/features/settings/project-settings-activity.tsx # 805 lines, registered 2026-07-18
-src/features/code/code-workspace.tsx # 788 lines, registered 2026-07-18
