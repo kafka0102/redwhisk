@@ -4,11 +4,11 @@ use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
 use std::time::UNIX_EPOCH;
 
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::command::{self, GitCommandError};
 use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
@@ -1154,15 +1154,7 @@ fn is_binary_bytes(bytes: &[u8]) -> bool {
 }
 
 fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
-    let output = run_git_bytes(root, args)?;
-    String::from_utf8(output).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionValidationFailed,
-            "Git 输出不是 UTF-8。",
-        )
-        .with_reason("gitOutputNotUtf8")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
+    command::run_git(root, args).map_err(map_git_command_error)
 }
 
 fn run_git_owned(root: &Path, args: &[String]) -> Result<String, CommandError> {
@@ -1171,30 +1163,30 @@ fn run_git_owned(root: &Path, args: &[String]) -> Result<String, CommandError> {
 }
 
 fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(root)
-        .output()
-        .map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Git 命令执行失败。",
-            )
-            .with_reason("gitCommandFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
-    if !output.status.success() {
-        return Err(CommandError::new(
+    command::run_git_bytes(root, args).map_err(map_git_command_error)
+}
+
+// 把 git/command adapter 的低层错误映射到 workspace 对外的 CommandError，保持
+// ADR-0010 收敛前的 reason / message 契约：执行失败（spawn 失败或非零退出）走
+// gitCommandFailed，输出非 UTF-8 走 gitOutputNotUtf8。adapter 的 command 字段
+// 不回传前端，仅保留 message 作为 Cause 详情。镜像 git/worktree、git/status 的
+// From<GitCommandError> 收敛方式；CommandError 是跨 feature 通用类型，故用局部
+// 映射函数而非 impl From，避免给通用错误类型绑 git 专属转换。
+fn map_git_command_error(error: GitCommandError) -> CommandError {
+    match error {
+        GitCommandError::Failed { message, .. } => CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
             "Git 命令执行失败。",
         )
         .with_reason("gitCommandFailed")
-        .with_detail(ErrorDetail::new("Cause").with_value(
-            "message",
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        )));
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message)),
+        GitCommandError::OutputInvalid { message, .. } => CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "Git 输出不是 UTF-8。",
+        )
+        .with_reason("gitOutputNotUtf8")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message)),
     }
-    Ok(output.stdout)
 }
 
 fn workspace_persistence_error(error: rusqlite::Error) -> CommandError {
@@ -1292,6 +1284,7 @@ fn language_from_path(path: &str) -> Option<String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command;
 
     #[test]
     fn language_from_path_maps_supported_extensions() {
