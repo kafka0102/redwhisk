@@ -1145,6 +1145,7 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
     let mut snapshot = String::new();
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = manager.flush_log(result.session_id);
         snapshot = read_terminal_snapshot(std::path::Path::new(&session.log_path), 8_192)
             .expect("read snapshot");
         if snapshot.contains("please start working") {
@@ -3015,6 +3016,7 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
     let mut snapshot = String::new();
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = manager.flush_log(session_id);
         snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
         if snapshot.contains("please continue") {
             break;
@@ -3130,6 +3132,7 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
     let mut snapshot = String::new();
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = manager.flush_log(session_id);
         snapshot = read_terminal_snapshot(&log_path, 8_192).expect("read snapshot");
         if snapshot.contains("apply the requested fixes") {
             break;
