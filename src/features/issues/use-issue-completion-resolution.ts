@@ -141,19 +141,17 @@ export function useIssueCompletionResolution({
 
       if (result.action === "blocked") {
         hideCompletionLoadingDialog();
-        if (
-          result.mergeBlockReason &&
-          result.mergeBlockReason !== "merge_conflict"
-        ) {
-          throw new Error(result.message);
+        // 仅 worktree merge 冲突走 agent handoff；git_operation / target_worktree_dirty 等直接展示详细 message。
+        if (result.mergeBlockReason === "merge_conflict") {
+          throw new WorktreeMergeConflictError({
+            sessionId: result.sessionId,
+            targetBranch: result.targetBranch ?? undefined,
+            workspaceBranch: result.workspaceBranch ?? undefined,
+            workspacePath: result.workspacePath ?? undefined,
+            message: result.message,
+          });
         }
-        throw new WorktreeMergeConflictError({
-          sessionId: result.sessionId,
-          targetBranch: result.targetBranch ?? undefined,
-          workspaceBranch: result.workspaceBranch ?? undefined,
-          workspacePath: result.workspacePath ?? undefined,
-          message: result.message,
-        });
+        throw new Error(result.message);
       }
 
       if (result.action === "prompt_dirty_decision") {
@@ -169,12 +167,14 @@ export function useIssueCompletionResolution({
       }
 
       if (result.action === "waiting_auto_commit") {
-        const outcome = await waitForAgentCommit(requestProjectId, issueId);
-        if (outcome === "blocked") {
+        const detection = await waitForAgentCommit(requestProjectId, issueId);
+        if (detection.outcome === "blocked") {
           hideCompletionLoadingDialog();
-          throw new Error(messages.issues.completionGitOperationBlocked);
+          throw new Error(
+            detection.message || messages.issues.completionGitOperationBlocked,
+          );
         }
-        if (outcome === "no_commit_detected") {
+        if (detection.outcome === "no_commit_detected") {
           hideCompletionLoadingDialog();
           throw new Error(messages.issues.completionNoCommitDetected);
         }
@@ -239,7 +239,11 @@ export function useIssueCompletionResolution({
   async function waitForAgentCommit(
     requestProjectId: number,
     issueId: number,
-  ): Promise<"commit_detected" | "no_commit_detected" | "blocked"> {
+  ): Promise<
+    | { outcome: "commit_detected" }
+    | { outcome: "no_commit_detected" }
+    | { outcome: "blocked"; message: string }
+  > {
     const maxAttempts = 60;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       await delay(2000);
@@ -248,14 +252,14 @@ export function useIssueCompletionResolution({
         issueId,
       });
       if (detection.outcome === "commit_detected") {
-        return "commit_detected";
+        return { outcome: "commit_detected" };
       }
       if (detection.outcome === "git_operation_blocked") {
-        return "blocked";
+        return { outcome: "blocked", message: detection.message };
       }
       // no_commit_detected → 继续轮询。
     }
-    return "no_commit_detected";
+    return { outcome: "no_commit_detected" };
   }
 
   async function handOffWorktreeMergeConflict(

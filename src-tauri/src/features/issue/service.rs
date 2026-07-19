@@ -25,7 +25,7 @@ use crate::db::issue_completion_flow_repository::{
 use crate::db::issue_repository::IssueRepository;
 use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
-use crate::git::operation_state::{format_git_operation_state, GitOperationState};
+use crate::git::operation_state::{format_git_operation_state, git_operation_blocking_message, GitOperationBlockContext, GitOperationState};
 use crate::git::status::{read_git_snapshot, GitSnapshot};
 use crate::logging::{info_kv, CommandResultExt};
 use crate::types::agent_session::{
@@ -867,7 +867,10 @@ impl<'connection> IssueService<'connection> {
         if result.action == CompleteIssueFlowAction::Completed {
             Ok(result.issue)
         } else {
-            Err(legacy_completion_flow_action_error(result.action))
+            Err(legacy_completion_flow_action_error(
+                result.action,
+                &result.message,
+            ))
         }
     }
 
@@ -1015,7 +1018,10 @@ impl<'connection> IssueService<'connection> {
         if result.action == CompleteIssueFlowAction::Completed {
             Ok(result.issue)
         } else {
-            Err(legacy_completion_flow_action_error(result.action))
+            Err(legacy_completion_flow_action_error(
+                result.action,
+                &result.message,
+            ))
         }
     }
 
@@ -1134,6 +1140,11 @@ impl<'connection> IssueService<'connection> {
                 .unchecked_transaction()
                 .map_err(issue_database_error)?;
             let operation_state_str = format_git_operation_state(snapshot.operation_state);
+            let blocked_message = git_operation_blocking_message(
+                snapshot.operation_state,
+                GitOperationBlockContext::CompleteIssue,
+                Some(detection_repo_path.as_str()),
+            );
             CompletionAttemptRepository::record_blocked_in_transaction(
                 &transaction,
                 issue.id,
@@ -1142,16 +1153,18 @@ impl<'connection> IssueService<'connection> {
                 &snapshot.head,
                 operation_state_str,
                 operation_state_str,
-                "当前 Git 正在进行中的操作阻止 Issue 完成。",
+                &blocked_message,
                 current_epoch_millis_for_db().map_err(issue_database_error)?,
             )
             .map_err(issue_database_error)?;
             transaction.commit().map_err(issue_database_error)?;
-            return Ok(self.flow_result(
+            // merge_block_reason=git_operation：前端据此展示详细 message，而非误走 worktree 冲突 handoff。
+            return Ok(self.flow_result_with_merge_block(
                 CompleteIssueFlowAction::Blocked,
                 issue,
                 None,
-                "当前 Git 正在进行中的操作阻止 Issue 完成。".to_string(),
+                blocked_message,
+                Some("git_operation".to_string()),
                 &actual,
                 &session,
             ));
@@ -1497,18 +1510,6 @@ impl<'connection> IssueService<'connection> {
         Ok(flow)
     }
 
-    fn flow_result(
-        &self,
-        action: CompleteIssueFlowAction,
-        issue: IssueRecord,
-        flow: Option<IssueCompletionFlowRecord>,
-        message: String,
-        actual: &ActualExecutionPath,
-        session: &AgentSessionRecord,
-    ) -> CompleteIssueFlowResult {
-        self.flow_result_with_merge_block(action, issue, flow, message, None, actual, session)
-    }
-
     fn flow_result_with_merge_block(
         &self,
         action: CompleteIssueFlowAction,
@@ -1596,7 +1597,11 @@ impl<'connection> IssueService<'connection> {
             return Ok(DetectAgentCommitCompletionResult {
                 outcome: DetectAgentCommitCompletionOutcome::GitOperationBlocked,
                 issue: self.hydrate_issue(issue)?,
-                message: "当前 Git 正在进行中的操作阻止检测提交。".to_string(),
+                message: git_operation_blocking_message(
+                    snapshot.operation_state,
+                    GitOperationBlockContext::DetectCommit,
+                    Some(detection_path),
+                ),
             });
         }
         // 最近一次 PromptSent attempt 记录了弹框前 head；当前 head 不同即新 commit。
@@ -2085,7 +2090,11 @@ impl<'connection> IssueService<'connection> {
         if snapshot.operation_state != GitOperationState::None {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
-                "当前 Git 正在进行中的操作阻止 Agent Commit，请先手动处理 Git 状态。",
+                git_operation_blocking_message(
+                    snapshot.operation_state,
+                    GitOperationBlockContext::AgentCommit,
+                    Some(session.working_dir.as_str()),
+                ),
             ).with_reason("gitOperationBlockingCommit")
             .with_detail(ErrorDetail::new("GitOperation").with_value(
                 "state",
@@ -4104,6 +4113,22 @@ mod tests {
         // git operation 进行中 -> 阻断，不持久化 flow，记 git_operation_blocked 审计。
         assert_eq!(result.action, CompleteIssueFlowAction::Blocked);
         assert!(result.flow.is_none());
+        assert_eq!(result.merge_block_reason.as_deref(), Some("git_operation"));
+        assert!(
+            result.message.contains("合并 merge"),
+            "message: {}",
+            result.message
+        );
+        assert!(
+            result.message.contains("git status"),
+            "message: {}",
+            result.message
+        );
+        assert!(
+            result.message.contains(&repo_dir.to_string_lossy().to_string()),
+            "message should include working dir: {}",
+            result.message
+        );
         let attempt_result: String = connection
             .query_row(
                 "SELECT result FROM completion_attempts WHERE issue_id = 16 ORDER BY id DESC LIMIT 1",

@@ -20,11 +20,33 @@ use crate::types::issue_completion::{
     IssueCompletionPhase,
 };
 
-pub(crate) fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> CommandError {
-    let (message, reason) = match action {
-        CompleteIssueFlowAction::PromptDirtyDecision => ("当前仓库存在未提交改动，不能直接完成。", "dirtyRepoCannotComplete"),
-        CompleteIssueFlowAction::Blocked => ("当前 Git 正在进行中的操作阻止直接完成。", "gitOperationBlocking"),
-        _ => ("Issue 完成必须通过 complete_issue_flow 继续处理。", "mustUseCompletionFlow"),
+pub(crate) fn legacy_completion_flow_action_error(
+    action: CompleteIssueFlowAction,
+    flow_message: &str,
+) -> CommandError {
+    let (default_message, reason) = match action {
+        CompleteIssueFlowAction::PromptDirtyDecision => (
+            "当前仓库存在未提交改动，不能直接完成。",
+            "dirtyRepoCannotComplete",
+        ),
+        CompleteIssueFlowAction::Blocked => (
+            "当前 Git 正在进行中的操作阻止直接完成。请先在终端手动处理 Git 状态（如冲突合并、rebase --continue / --abort）后再重试。",
+            "gitOperationBlocking",
+        ),
+        _ => (
+            "Issue 完成必须通过 complete_issue_flow 继续处理。",
+            "mustUseCompletionFlow",
+        ),
+    };
+    // flow 结果已带详细说明时优先透传，避免丢失 operation 类型与工作目录。
+    let message = if !flow_message.trim().is_empty()
+        && matches!(
+            action,
+            CompleteIssueFlowAction::Blocked | CompleteIssueFlowAction::PromptDirtyDecision
+        ) {
+        flow_message
+    } else {
+        default_message
     };
     CommandError::new(CommandErrorCode::IssueValidationFailed, message)
         .with_reason(reason)

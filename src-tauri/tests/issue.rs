@@ -2022,7 +2022,16 @@ fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progres
         .expect_err("git operation should block complete");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
-    assert_eq!(error.message, "当前 Git 正在进行中的操作阻止直接完成。");
+    assert!(
+        error.message.contains("合并 merge") || error.message.contains("未合并冲突"),
+        "message: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("手动") || error.message.contains("git status"),
+        "message: {}",
+        error.message
+    );
 
     let stored_issue = IssueRepository::new(&database.connection)
         .find_by_id(issue.id)
