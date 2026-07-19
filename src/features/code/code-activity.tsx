@@ -316,6 +316,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
             onChange={setContentSearch}
             projectId={projectId}
             workspacePath={selectedRootWorkspacePath}
+            fileTree={tree}
             onOpenMatch={openMatchFromSearch}
           />
         ) : (

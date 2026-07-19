@@ -608,9 +608,9 @@
     "contentSearchMatchWholeWord": "全词匹配",
     "contentSearchUseRegex": "使用正则表达式",
     "contentSearchFilesToInclude": "要包含的文件",
-    "contentSearchFilesToIncludePlaceholder": "例如 *.ts, src/**",
+    "contentSearchFilesToIncludePlaceholder": "例如 *.ts, src/** — 回车添加",
     "contentSearchFilesToExclude": "要排除的文件",
-    "contentSearchFilesToExcludePlaceholder": "例如 node_modules, dist",
+    "contentSearchFilesToExcludePlaceholder": "例如 dist, **/*.test.ts — 回车添加",
     "contentSearchResults": "搜索结果",
     "contentSearchEmptyResults": "暂无结果，按回车搜索。",
     "contentSearchSearching": "搜索中…",
@@ -620,7 +620,11 @@
     "contentSearchMatchCount": "{{count}}",
     "contentSearchToggleFile": "展开/折叠 {{fileName}} 的结果",
     "contentSearchOpenMatch": "打开 {{fileName}} 第 {{lineNumber}} 行",
-    "contentSearchError": "搜索失败。"
+    "contentSearchError": "搜索失败。",
+    "contentSearchRemoveFilterTag": "移除 {{tag}}",
+    "contentSearchSuffixPicker": "常见文件后缀",
+    "contentSearchSuffixOption": ".{{suffix}}",
+    "contentSearchNoSuffixes": "暂无后缀统计"
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

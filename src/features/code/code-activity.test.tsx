@@ -319,8 +319,8 @@ describe("CodeActivity", () => {
       contentSearch: {
         collapsedFiles: {},
         errorMessage: null,
-        excludeText: "",
-        includeText: "",
+        excludeTags: [],
+        includeTags: [],
         isSearching: false,
         matchCase: false,
         matchWholeWord: false,
@@ -481,7 +481,11 @@ describe("CodeActivity", () => {
     await user.click(toggle);
     await user.type(screen.getByLabelText("Search"), "workspace");
     await user.click(screen.getByLabelText("Match Case"));
-    await user.type(screen.getByLabelText("files to include"), "*.ts");
+    const includeInput = screen
+      .getAllByLabelText("files to include")
+      .find((el) => el.tagName === "INPUT");
+    expect(includeInput).toBeTruthy();
+    await user.type(includeInput!, "*.ts{Enter}");
 
     await user.click(toggle);
     expect(
@@ -494,7 +498,7 @@ describe("CodeActivity", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByLabelText("files to include")).toHaveValue("*.ts");
+    expect(screen.getByText("*.ts")).toBeInTheDocument();
   });
 
   it("runs content search on Enter and opens a match at line", async () => {

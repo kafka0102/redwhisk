@@ -608,9 +608,9 @@
     "contentSearchMatchWholeWord": "Match Whole Word",
     "contentSearchUseRegex": "Use Regular Expression",
     "contentSearchFilesToInclude": "files to include",
-    "contentSearchFilesToIncludePlaceholder": "e.g. *.ts, src/**",
+    "contentSearchFilesToIncludePlaceholder": "e.g. *.ts, src/** — Enter to add",
     "contentSearchFilesToExclude": "files to exclude",
-    "contentSearchFilesToExcludePlaceholder": "e.g. node_modules, dist",
+    "contentSearchFilesToExcludePlaceholder": "e.g. dist, **/*.test.ts — Enter to add",
     "contentSearchResults": "Search results",
     "contentSearchEmptyResults": "No results yet. Press Enter to search.",
     "contentSearchSearching": "Searching…",
@@ -620,7 +620,11 @@
     "contentSearchMatchCount": "{{count}}",
     "contentSearchToggleFile": "Toggle results for {{fileName}}",
     "contentSearchOpenMatch": "Open {{fileName}} at line {{lineNumber}}",
-    "contentSearchError": "Search failed."
+    "contentSearchError": "Search failed.",
+    "contentSearchRemoveFilterTag": "Remove {{tag}}",
+    "contentSearchSuffixPicker": "Common file extensions",
+    "contentSearchSuffixOption": ".{{suffix}}",
+    "contentSearchNoSuffixes": "No extensions yet"
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

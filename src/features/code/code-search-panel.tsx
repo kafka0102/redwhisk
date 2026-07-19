@@ -15,7 +15,9 @@ import {
   searchProjectWorktreeContent,
   type WorkspaceContentSearchFileGroup,
   type WorkspaceContentSearchMatch,
+  type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
+import { CodeSearchFilterTags } from "./code-search-filter-tags";
 import type { CodeContentSearchState } from "./code-search-state";
 
 export interface CodeSearchPanelProps {
@@ -23,6 +25,8 @@ export interface CodeSearchPanelProps {
   onChange: (next: CodeContentSearchState) => void;
   projectId: number;
   workspacePath: string | null;
+  /** 当前代码根文件树 nodes；后缀下拉由其聚合，随 tree/signature 更新。 */
+  fileTree: readonly WorkspaceFileTreeNode[];
   onOpenMatch: (match: {
     fileName: string;
     filePath: string;
@@ -31,7 +35,7 @@ export interface CodeSearchPanelProps {
 }
 
 /**
- * 代码搜索侧栏：查询框、匹配选项、包含/排除行、回车搜索与分组结果。
+ * 代码搜索侧栏：查询框、匹配选项、包含/排除 Tag、回车搜索与分组结果。
  * 状态由上层缓存，便于与文件树互斥切换时保留输入与结果。
  */
 export function CodeSearchPanel({
@@ -39,6 +43,7 @@ export function CodeSearchPanel({
   onChange,
   projectId,
   workspacePath,
+  fileTree,
   onOpenMatch,
 }: CodeSearchPanelProps) {
   const { messages, t } = useI18n();
@@ -81,8 +86,8 @@ export function CodeSearchPanel({
         matchCase: state.matchCase,
         matchWholeWord: state.matchWholeWord,
         useRegex: state.useRegex,
-        include: parseFilterTags(state.includeText),
-        exclude: parseFilterTags(state.excludeText),
+        include: state.includeTags,
+        exclude: state.excludeTags,
       });
       patch({
         collapsedFiles: {},
@@ -171,33 +176,29 @@ export function CodeSearchPanel({
           </div>
         </div>
 
-        <div className="code-workspace__search-filter-row">
-          <label className="code-workspace__search-filter-label">
-            <span>{copy.contentSearchFilesToInclude}</span>
-            <Input
-              className="code-workspace__search-filter-input"
-              type="text"
-              value={state.includeText}
-              placeholder={copy.contentSearchFilesToIncludePlaceholder}
-              aria-label={copy.contentSearchFilesToInclude}
-              onChange={(event) => patch({ includeText: event.target.value })}
-            />
-          </label>
-        </div>
+        <CodeSearchFilterTags
+          tags={state.includeTags}
+          onChange={(includeTags) => patch({ includeTags })}
+          fileTree={fileTree}
+          label={copy.contentSearchFilesToInclude}
+          placeholder={copy.contentSearchFilesToIncludePlaceholder}
+          removeTagLabel={copy.contentSearchRemoveFilterTag}
+          suffixPickerLabel={copy.contentSearchSuffixPicker}
+          suffixOptionLabel={copy.contentSearchSuffixOption}
+          noSuffixesLabel={copy.contentSearchNoSuffixes}
+        />
 
-        <div className="code-workspace__search-filter-row">
-          <label className="code-workspace__search-filter-label">
-            <span>{copy.contentSearchFilesToExclude}</span>
-            <Input
-              className="code-workspace__search-filter-input"
-              type="text"
-              value={state.excludeText}
-              placeholder={copy.contentSearchFilesToExcludePlaceholder}
-              aria-label={copy.contentSearchFilesToExclude}
-              onChange={(event) => patch({ excludeText: event.target.value })}
-            />
-          </label>
-        </div>
+        <CodeSearchFilterTags
+          tags={state.excludeTags}
+          onChange={(excludeTags) => patch({ excludeTags })}
+          fileTree={fileTree}
+          label={copy.contentSearchFilesToExclude}
+          placeholder={copy.contentSearchFilesToExcludePlaceholder}
+          removeTagLabel={copy.contentSearchRemoveFilterTag}
+          suffixPickerLabel={copy.contentSearchSuffixPicker}
+          suffixOptionLabel={copy.contentSearchSuffixOption}
+          noSuffixesLabel={copy.contentSearchNoSuffixes}
+        />
       </form>
 
       <div
@@ -392,11 +393,4 @@ function SearchMatchRow({
       </button>
     </li>
   );
-}
-
-function parseFilterTags(text: string): string[] {
-  return text
-    .split(/[,，]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
 }

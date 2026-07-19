@@ -7,8 +7,10 @@ export type CodeSidebarMode = "fileTree" | "search";
 export interface CodeContentSearchState {
   collapsedFiles: Record<string, boolean>;
   errorMessage: string | null;
-  excludeText: string;
-  includeText: string;
+  /** 排除文件 glob tags（OR；与 include 同时命中时 exclude 优先）。 */
+  excludeTags: string[];
+  /** 包含文件 glob tags（OR；空 = 全部合格文件）。 */
+  includeTags: string[];
   isSearching: boolean;
   matchCase: boolean;
   matchWholeWord: boolean;
@@ -20,8 +22,8 @@ export interface CodeContentSearchState {
 export const DEFAULT_CODE_CONTENT_SEARCH_STATE: CodeContentSearchState = {
   collapsedFiles: {},
   errorMessage: null,
-  excludeText: "",
-  includeText: "",
+  excludeTags: [],
+  includeTags: [],
   isSearching: false,
   matchCase: false,
   matchWholeWord: false,

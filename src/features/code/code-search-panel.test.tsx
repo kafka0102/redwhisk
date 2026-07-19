@@ -4,6 +4,7 @@ import { useState } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
+import type { WorkspaceFileTreeNode } from "../../shared/workspace/workspace-commands";
 import { searchProjectWorktreeContent } from "../../shared/workspace/workspace-commands";
 import { CodeSearchPanel } from "./code-search-panel";
 import {
@@ -15,24 +16,72 @@ vi.mock("../../shared/workspace/workspace-commands", () => ({
   searchProjectWorktreeContent: vi.fn(),
 }));
 
+const SAMPLE_TREE: WorkspaceFileTreeNode[] = [
+  {
+    id: "src",
+    name: "src",
+    path: "src",
+    kind: "directory",
+    isIgnored: false,
+    children: [
+      {
+        id: "src/a.ts",
+        name: "a.ts",
+        path: "src/a.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+      {
+        id: "src/b.ts",
+        name: "b.ts",
+        path: "src/b.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+      {
+        id: "src/c.rs",
+        name: "c.rs",
+        path: "src/c.rs",
+        kind: "file",
+        isIgnored: false,
+      },
+    ],
+  },
+  {
+    id: "readme.md",
+    name: "readme.md",
+    path: "readme.md",
+    kind: "file",
+    isIgnored: false,
+  },
+];
+
 function StatefulPanel({
   initial = DEFAULT_CODE_CONTENT_SEARCH_STATE,
+  fileTree = SAMPLE_TREE,
   onOpenMatch = vi.fn(),
+  onChangeSpy,
 }: {
   initial?: CodeContentSearchState;
+  fileTree?: readonly WorkspaceFileTreeNode[];
   onOpenMatch?: (match: {
     fileName: string;
     filePath: string;
     lineNumber: number;
   }) => void;
+  onChangeSpy?: (next: CodeContentSearchState) => void;
 }) {
   const [state, setState] = useState(initial);
   return (
     <CodeSearchPanel
       state={state}
-      onChange={setState}
+      onChange={(next) => {
+        onChangeSpy?.(next);
+        setState(next);
+      }}
       projectId={1}
       workspacePath="/tmp/root"
+      fileTree={fileTree}
       onOpenMatch={onOpenMatch}
     />
   );
@@ -43,7 +92,7 @@ describe("CodeSearchPanel", () => {
     vi.mocked(searchProjectWorktreeContent).mockReset();
   });
 
-  it("renders query, match options, include/exclude rows and empty results", () => {
+  it("renders query, match options, include/exclude tag rows and empty results", () => {
     render(
       <I18nProvider initialLocale="en">
         <StatefulPanel />
@@ -54,15 +103,19 @@ describe("CodeSearchPanel", () => {
     expect(screen.getByLabelText("Match Case")).toBeInTheDocument();
     expect(screen.getByLabelText("Match Whole Word")).toBeInTheDocument();
     expect(screen.getByLabelText("Use Regular Expression")).toBeInTheDocument();
-    expect(screen.getByLabelText("files to include")).toBeInTheDocument();
-    expect(screen.getByLabelText("files to exclude")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("files to include").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByLabelText("files to exclude").length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByLabelText("Search results")).toBeInTheDocument();
     expect(
       screen.getByText("No results yet. Press Enter to search."),
     ).toBeInTheDocument();
   });
 
-  it("keeps query and match option state while editing", async () => {
+  it("adds include tags on Enter and does not auto-search", async () => {
     const user = userEvent.setup();
     render(
       <I18nProvider initialLocale="en">
@@ -70,20 +123,50 @@ describe("CodeSearchPanel", () => {
       </I18nProvider>,
     );
 
-    await user.type(screen.getByLabelText("Search"), "foo");
-    expect(screen.getByLabelText("Search")).toHaveValue("foo");
-
-    await user.click(screen.getByLabelText("Match Case"));
-    expect(screen.getByLabelText("Match Case")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-
-    await user.type(screen.getByLabelText("files to include"), "*.ts");
-    expect(screen.getByLabelText("files to include")).toHaveValue("*.ts");
+    const includeInput = screen
+      .getAllByLabelText("files to include")
+      .find((el) => el.tagName === "INPUT");
+    expect(includeInput).toBeTruthy();
+    await user.type(includeInput!, "src/**{Enter}");
+    expect(screen.getByText("src/**")).toBeInTheDocument();
+    expect(searchProjectWorktreeContent).not.toHaveBeenCalled();
   });
 
-  it("searches on Enter, renders stats and groups, and opens a match", async () => {
+  it("picks a suffix from the dropdown as **/*.<ext> tag", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <StatefulPanel />
+      </I18nProvider>,
+    );
+
+    const pickers = screen.getAllByLabelText("Common file extensions");
+    await user.click(pickers[0]);
+    await user.click(await screen.findByRole("menuitem", { name: ".ts" }));
+    expect(screen.getByText("**/*.ts")).toBeInTheDocument();
+    expect(searchProjectWorktreeContent).not.toHaveBeenCalled();
+  });
+
+  it("removes a filter tag without searching", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <StatefulPanel
+          initial={{
+            ...DEFAULT_CODE_CONTENT_SEARCH_STATE,
+            includeTags: ["**/*.ts"],
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("**/*.ts")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Remove **/*.ts"));
+    expect(screen.queryByText("**/*.ts")).not.toBeInTheDocument();
+    expect(searchProjectWorktreeContent).not.toHaveBeenCalled();
+  });
+
+  it("searches on Enter with include/exclude tags, renders stats and opens a match", async () => {
     const user = userEvent.setup();
     const onOpenMatch = vi.fn();
     vi.mocked(searchProjectWorktreeContent).mockResolvedValue({
@@ -105,7 +188,14 @@ describe("CodeSearchPanel", () => {
 
     render(
       <I18nProvider initialLocale="en">
-        <StatefulPanel onOpenMatch={onOpenMatch} />
+        <StatefulPanel
+          initial={{
+            ...DEFAULT_CODE_CONTENT_SEARCH_STATE,
+            includeTags: ["**/*.ts"],
+            excludeTags: ["**/*.test.ts"],
+          }}
+          onOpenMatch={onOpenMatch}
+        />
       </I18nProvider>,
     );
 
@@ -113,13 +203,21 @@ describe("CodeSearchPanel", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(searchProjectWorktreeContent).toHaveBeenCalled();
+      expect(searchProjectWorktreeContent).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        query: "foo",
+        matchCase: false,
+        matchWholeWord: false,
+        useRegex: false,
+        include: ["**/*.ts"],
+        exclude: ["**/*.test.ts"],
+      });
     });
     expect(
       await screen.findByText("1 files · 2 matches (truncated)"),
     ).toBeInTheDocument();
     expect(screen.getByText("app.ts")).toBeInTheDocument();
-    expect(screen.getByText("src/app.ts")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "Open app.ts at line 3" }),
@@ -152,5 +250,21 @@ describe("CodeSearchPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Invalid search regular expression.",
     );
+  });
+
+  it("keeps match option toggles without auto-search", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <StatefulPanel />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByLabelText("Match Case"));
+    expect(screen.getByLabelText("Match Case")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(searchProjectWorktreeContent).not.toHaveBeenCalled();
   });
 });

@@ -310,8 +310,103 @@
   font-weight: 400;
 }
 
-.code-workspace__search-filter-input {
-  height: 26px;
+.code-workspace__search-filter-field {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+
+.code-workspace__search-filter-tags {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.code-workspace__search-filter-tag {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 6px;
+  border-radius: calc(var(--radius-control) - 1px);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.code-workspace__search-filter-tag-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-workspace__search-filter-tag-remove {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.code-workspace__search-filter-tag-remove:hover,
+.code-workspace__search-filter-tag-remove:focus-visible {
+  background: var(--color-accent-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.code-workspace__search-filter-tag-input {
+  flex: 1;
+  min-width: 64px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  outline: none;
+}
+
+.code-workspace__search-filter-suffix-trigger {
+  display: inline-grid;
+  width: 26px;
+  height: 28px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.code-workspace__search-filter-suffix-trigger:hover,
+.code-workspace__search-filter-suffix-trigger:focus-visible {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.code-workspace__search-filter-suffix-menu {
+  min-width: 120px;
+}
+
+.code-workspace__search-filter-suffix-empty {
+  padding: 8px 10px;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 

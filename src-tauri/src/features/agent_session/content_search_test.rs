@@ -159,3 +159,42 @@ fn sample_input(query: &str) -> WorkspaceContentSearchInput {
         assert_eq!(result.files[0].matches.len(), MAX_MATCHES_PER_FILE);
         assert_eq!(result.match_count as usize, MAX_MATCHES_PER_FILE);
     }
+
+    #[test]
+    fn empty_include_and_exclude_means_all_eligible() {
+        let dir = tempdir().expect("tempdir");
+        write_file(dir.path(), "src/a.ts", "hit\n");
+        write_file(dir.path(), "docs/a.md", "hit\n");
+
+        let result = search_workspace_content(dir.path(), &sample_input("hit")).expect("all");
+        assert_eq!(result.file_count, 2);
+    }
+
+    #[test]
+    fn exclude_wins_over_include_when_both_match() {
+        let dir = tempdir().expect("tempdir");
+        write_file(dir.path(), "src/keep.ts", "hit\n");
+        write_file(dir.path(), "src/drop.test.ts", "hit\n");
+
+        let mut input = sample_input("hit");
+        input.include = vec!["**/*.ts".to_string()];
+        input.exclude = vec!["**/*.test.ts".to_string()];
+        let result = search_workspace_content(dir.path(), &input).expect("filtered");
+        assert_eq!(result.file_count, 1);
+        assert_eq!(result.files[0].file_path, "src/keep.ts");
+    }
+
+    #[test]
+    fn multiple_include_tags_are_or() {
+        let dir = tempdir().expect("tempdir");
+        write_file(dir.path(), "a.ts", "hit\n");
+        write_file(dir.path(), "b.rs", "hit\n");
+        write_file(dir.path(), "c.md", "hit\n");
+
+        let mut input = sample_input("hit");
+        input.include = vec!["**/*.ts".to_string(), "**/*.rs".to_string()];
+        let result = search_workspace_content(dir.path(), &input).expect("or include");
+        let mut paths: Vec<_> = result.files.iter().map(|f| f.file_path.as_str()).collect();
+        paths.sort();
+        assert_eq!(paths, vec!["a.ts", "b.rs"]);
+    }

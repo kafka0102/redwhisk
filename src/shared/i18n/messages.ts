@@ -511,6 +511,10 @@ export interface I18nMessages {
     contentSearchFilesToIncludePlaceholder: string;
     contentSearchFilesToExclude: string;
     contentSearchFilesToExcludePlaceholder: string;
+    contentSearchRemoveFilterTag: (tag: string) => string;
+    contentSearchSuffixPicker: string;
+    contentSearchSuffixOption: (suffix: string) => string;
+    contentSearchNoSuffixes: string;
     contentSearchResults: string;
     contentSearchEmptyResults: string;
     contentSearchSearching: string;
