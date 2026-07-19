@@ -25,11 +25,7 @@ import {
   type CodeWorkspaceRoot,
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
-import {
-  codeWorkspaceStateCache,
-  type CodeFileTab,
-  type CodeWorkspaceView,
-} from "./code-workspace-cache";
+import { codeWorkspaceCache, type CodeFileTab } from "./code-workspace-cache";
 import { CodeBreadcrumb } from "./code-breadcrumb";
 import { CodeContent } from "./code-content";
 import {
@@ -48,12 +44,12 @@ interface CodeWorkspaceProps {
   projectId: number;
   roots: CodeWorkspaceRoot[];
   /** 左栏视图：由父层 Activity 受控传入，「代码」传 "files"，「变更」传 "changes"。 */
-  view: CodeWorkspaceView;
+  view: "files" | "changes";
 }
 
 export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
-  const cachedState = codeWorkspaceStateCache.get(projectId);
+  const cachedState = codeWorkspaceCache.get(projectId);
   const [selectedRootPath, setSelectedRootPath] = useState<string | null>(
     () =>
       cachedState?.selectedRootPath ?? selectInitialRoot(roots)?.path ?? null,
@@ -70,12 +66,10 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   const [sidebarWidth, setSidebarWidth] = useState(
     () => cachedState?.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
   );
-  const [uncommittedChangesExpanded, setUncommittedChangesExpanded] = useState(
-    () => cachedState?.uncommittedChangesExpanded ?? true,
-  );
-  const [committedChangesExpanded, setCommittedChangesExpanded] = useState(
-    () => cachedState?.committedChangesExpanded ?? true,
-  );
+  const [uncommittedChangesExpanded, setUncommittedChangesExpanded] =
+    useState(true);
+  const [committedChangesExpanded, setCommittedChangesExpanded] =
+    useState(true);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const activePathRef = useRef<string | null>(cachedState?.activePath ?? null);
   const openFilePathsRef = useRef(
@@ -101,14 +95,12 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   const selectedRootWorkspacePath = selectedRoot?.path ?? null;
 
   useEffect(() => {
-    codeWorkspaceStateCache.set(projectId, {
+    codeWorkspaceCache.set(projectId, {
       activePath,
       openFolders,
       selectedRootPath,
       sidebarWidth,
       tabs,
-      uncommittedChangesExpanded,
-      committedChangesExpanded,
     });
   }, [
     activePath,
@@ -117,8 +109,6 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     selectedRootPath,
     sidebarWidth,
     tabs,
-    uncommittedChangesExpanded,
-    committedChangesExpanded,
   ]);
 
   useEffect(

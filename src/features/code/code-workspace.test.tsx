@@ -10,8 +10,8 @@ import {
   readProjectWorktreeFile,
 } from "../../shared/workspace/workspace-commands";
 import {
-  codeWorkspaceStateCache,
-  resetCodeWorkspaceStateCacheForTests,
+  codeWorkspaceCache,
+  resetCodeWorkspaceCacheForTests,
 } from "./code-workspace-cache";
 import { CodeWorkspace } from "./code-workspace";
 
@@ -94,7 +94,7 @@ const fileContent = {
 
 describe("CodeWorkspace", () => {
   beforeEach(() => {
-    resetCodeWorkspaceStateCacheForTests();
+    resetCodeWorkspaceCacheForTests();
     editorThemeProp.current = undefined;
     window.localStorage.clear();
     vi.mocked(listCodeWorkspaceRoots).mockReset();
@@ -296,14 +296,12 @@ describe("CodeWorkspace", () => {
       },
     ];
     // 预设缓存：用户上次选中的是 issue-1 worktree。
-    codeWorkspaceStateCache.set(1, {
+    codeWorkspaceCache.set(1, {
       activePath: null,
       openFolders: {},
       selectedRootPath: "/tmp/redwhisk.wt/issue-1",
       sidebarWidth: 400,
       tabs: [],
-      uncommittedChangesExpanded: true,
-      committedChangesExpanded: true,
     });
     // 挂载时 roots hook 拉回的 roots 已不含 issue-1（worktree 被删除）。
     vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({
