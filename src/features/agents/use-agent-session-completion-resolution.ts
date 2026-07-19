@@ -385,12 +385,12 @@ export function useAgentSessionCompletionResolution({
     try {
       // worktree session 关闭后 handle 会从 agent_registry 移除，直接注入会报
       // AgentSessionNotRunning。先 resume 重建 handle，再注入合并 prompt。
-      // resume 失败时继续尝试注入，让后端的 AgentSessionNotRunning 错误透传给用户。
+      // resume 失败（如工作区丢失、provider 不支持续接）时 handle 必然不在
+      // registry，inject 随后也会失败——这里让 resume 的具体错误直接冒泡到
+      // 下面的 catch 展示，比被 inject 的泛化 notRunning 错误掩盖更有利于排查。
       await resumeStructuredAgentSession({
         projectId,
         sessionId: mergePromptSessionId,
-      }).catch(() => {
-        /* 忽略 resume 错误，交给 inject 阶段统一报错 */
       });
       await injectAgentSessionPrompt({
         projectId,

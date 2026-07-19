@@ -4005,6 +4005,55 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("surfaces resume failure instead of silently swallowing it during merge handoff", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 526,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "blocked",
+      issue: reviewWithSession,
+      flow: null,
+      message: "Agent worktree 合并被阻止，请手动处理冲突。",
+      mergeBlockReason: "merge_conflict",
+      targetBranch: "dev",
+      workspaceBranch: "issue-526",
+      workspacePath: "/tmp/worktrees/issue-526",
+      actualPath: null,
+      drifted: false,
+      sessionId: 526,
+    });
+    // resume 重建 handle 失败（如工作区丢失）→ 不应静默吞掉后继续 inject。
+    resumeStructuredAgentSessionMock.mockRejectedValueOnce({
+      code: "RESUME_FAILURE_TEST",
+      message: "resume workspace missing",
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    // resume 失败 → 具体错误展示在对话框，inject 不被调用，不跳转 agents activity。
+    expect(
+      await screen.findByText("resume workspace missing"),
+    ).toBeInTheDocument();
+    expect(injectAgentSessionPromptMock).not.toHaveBeenCalled();
+    expect(onOpenAgentsActivity).not.toHaveBeenCalled();
+  });
+
   it("shows the specific worktree merge blocker instead of handing non-conflicts to the agent", async () => {
     const user = userEvent.setup();
     const onOpenAgentsActivity = vi.fn();

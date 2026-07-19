@@ -200,13 +200,24 @@ pub async fn inject_agent_session_prompt(
     })?;
     let pty_sessions = state.pty_sessions.clone();
     let agent_sessions = state.agent_sessions.clone();
+    let project_id = input.project_id;
     tauri::async_runtime::spawn_blocking(move || {
-        AgentSessionService::inject_session_prompt_in_data_dir(
+        let result = AgentSessionService::inject_session_prompt_in_data_dir(
             data_dir,
             input,
             &pty_sessions,
             &agent_sessions,
-        )
+        )?;
+        // 注入成功后 attention 已清除。结构化 session 还会经 TurnStarted 触发刷新，
+        // 但 PTY session 没有 turn 事件，这里统一广播，保证前端拿到最新状态
+        // （尤其 attention 由 requested 回落 none）。
+        emit_agent_session_list_changed(
+            &app,
+            project_id,
+            Some(result.session_id),
+            "session_prompt_injected",
+        );
+        Ok(result)
     })
     .await
     .map_err(|error| {
