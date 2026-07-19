@@ -298,8 +298,17 @@ describe("CodeActivity", () => {
     // 预设缓存：用户上次选中的是 issue-1 worktree。
     codeWorkspaceCache.set(1, {
       activePath: null,
+      contentSearch: {
+        excludeText: "",
+        includeText: "",
+        matchCase: false,
+        matchWholeWord: false,
+        query: "",
+        useRegex: false,
+      },
       openFolders: {},
       selectedRootPath: "/tmp/redwhisk.wt/issue-1",
+      sidebarMode: "fileTree",
       sidebarWidth: 400,
       tabs: [],
     });
@@ -405,5 +414,64 @@ describe("CodeActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Refresh file tree" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("toggles the content search sidebar from the branch bar and restores the file tree", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open file" }),
+    ).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Search in files" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
+
+    expect(
+      screen.queryByRole("button", { name: "Open file" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Content search")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(toggle);
+
+    expect(
+      screen.getByRole("button", { name: "Open file" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Content search")).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("preserves search query and match options when toggling tree and search", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Search in files" });
+    await user.click(toggle);
+    await user.type(screen.getByLabelText("Search"), "workspace");
+    await user.click(screen.getByLabelText("Match Case"));
+    await user.type(screen.getByLabelText("files to include"), "*.ts");
+
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "Open file" }),
+    ).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.getByLabelText("Search")).toHaveValue("workspace");
+    expect(screen.getByLabelText("Match Case")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByLabelText("files to include")).toHaveValue("*.ts");
   });
 });

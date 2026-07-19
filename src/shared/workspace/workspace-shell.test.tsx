@@ -109,4 +109,47 @@ describe("WorkspaceShell", () => {
 
     expect(onSelectRoot).toHaveBeenCalledWith(featureRoot);
   });
+
+  it("renders an optional branch-bar trailing slot without requiring it", () => {
+    const { rerender } = render(
+      <WorkspaceShell
+        ariaLabel="Code"
+        loadingBranchText="Loading"
+        roots={[projectRoot]}
+        selectedRoot={projectRoot}
+        onSelectRoot={() => {}}
+        sidebarWidth={400}
+        onBeginResize={() => {}}
+        sidebar={<div>sidebar content</div>}
+        main={<div>main content</div>}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Search in files" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <WorkspaceShell
+        ariaLabel="Code"
+        loadingBranchText="Loading"
+        roots={[projectRoot]}
+        selectedRoot={projectRoot}
+        onSelectRoot={() => {}}
+        sidebarWidth={400}
+        onBeginResize={() => {}}
+        branchBarTrailing={
+          <button type="button" aria-label="Search in files">
+            Search
+          </button>
+        }
+        sidebar={<div>sidebar content</div>}
+        main={<div>main content</div>}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Search in files" }),
+    ).toBeInTheDocument();
+  });
 });

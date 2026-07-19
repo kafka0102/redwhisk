@@ -598,7 +598,21 @@
     "permissionKindMode": "模式切换",
     "permissionKindOther": "权限请求",
     "permissionActionUnrecognized": "无法识别的审批动作：{{actionId}}",
-    "agentTypeAlt": "智能体类型：{{label}}"
+    "agentTypeAlt": "智能体类型：{{label}}",
+    "toggleContentSearch": "在文件中搜索",
+    "contentSearchPanel": "内容搜索",
+    "contentSearchQuery": "搜索",
+    "contentSearchQueryPlaceholder": "搜索",
+    "contentSearchMatchOptions": "匹配选项",
+    "contentSearchMatchCase": "区分大小写",
+    "contentSearchMatchWholeWord": "全词匹配",
+    "contentSearchUseRegex": "使用正则表达式",
+    "contentSearchFilesToInclude": "要包含的文件",
+    "contentSearchFilesToIncludePlaceholder": "例如 *.ts, src/**",
+    "contentSearchFilesToExclude": "要排除的文件",
+    "contentSearchFilesToExcludePlaceholder": "例如 node_modules, dist",
+    "contentSearchResults": "搜索结果",
+    "contentSearchEmptyResults": "暂无结果，按回车搜索。"
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

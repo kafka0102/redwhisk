@@ -598,7 +598,21 @@
     "permissionKindMode": "Mode switch",
     "permissionKindOther": "Permission request",
     "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}",
-    "agentTypeAlt": "Agent type: {{label}}"
+    "agentTypeAlt": "Agent type: {{label}}",
+    "toggleContentSearch": "Search in files",
+    "contentSearchPanel": "Content search",
+    "contentSearchQuery": "Search",
+    "contentSearchQueryPlaceholder": "Search",
+    "contentSearchMatchOptions": "Match options",
+    "contentSearchMatchCase": "Match Case",
+    "contentSearchMatchWholeWord": "Match Whole Word",
+    "contentSearchUseRegex": "Use Regular Expression",
+    "contentSearchFilesToInclude": "files to include",
+    "contentSearchFilesToIncludePlaceholder": "e.g. *.ts, src/**",
+    "contentSearchFilesToExclude": "files to exclude",
+    "contentSearchFilesToExcludePlaceholder": "e.g. node_modules, dist",
+    "contentSearchResults": "Search results",
+    "contentSearchEmptyResults": "No results yet. Press Enter to search."
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

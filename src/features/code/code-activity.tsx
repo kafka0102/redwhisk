@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
@@ -18,6 +18,12 @@ import {
 } from "../../shared/workspace/workspace-commands";
 import { CodeBreadcrumb } from "./code-breadcrumb";
 import { CodeContent } from "./code-content";
+import { CodeSearchPanel } from "./code-search-panel";
+import {
+  DEFAULT_CODE_CONTENT_SEARCH_STATE,
+  type CodeContentSearchState,
+  type CodeSidebarMode,
+} from "./code-search-state";
 import { type CodeFileTab, codeWorkspaceCache } from "./code-workspace-cache";
 import { resolveFileLoadErrorMessage } from "./code-workspace-helpers";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
@@ -45,6 +51,12 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const [openFolders, setOpenFolders] = useState<FileTreeOpenState>(
     () => cached?.openFolders ?? {},
   );
+  const [sidebarMode, setSidebarMode] = useState<CodeSidebarMode>(
+    () => cached?.sidebarMode ?? "fileTree",
+  );
+  const [contentSearch, setContentSearch] = useState<CodeContentSearchState>(
+    () => cached?.contentSearch ?? DEFAULT_CODE_CONTENT_SEARCH_STATE,
+  );
   const activePathRef = useRef<string | null>(cached?.activePath ?? null);
   const openFilePathsRef = useRef(
     new Set((cached?.tabs ?? []).map((tab) => tab.filePath)),
@@ -57,6 +69,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setTabs([]);
     setActivePath(null);
     setOpenFolders({});
+    setContentSearch(DEFAULT_CODE_CONTENT_SEARCH_STATE);
   }, []);
 
   const shell = useWorkspaceShell({
@@ -71,16 +84,20 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   useEffect(() => {
     codeWorkspaceCache.set(projectId, {
       activePath,
+      contentSearch,
       openFolders,
       selectedRootPath: shell.selectedRootPath,
+      sidebarMode,
       sidebarWidth: shell.sidebarWidth,
       tabs,
     });
   }, [
     activePath,
+    contentSearch,
     openFolders,
     projectId,
     shell.selectedRootPath,
+    sidebarMode,
     shell.sidebarWidth,
     tabs,
   ]);
@@ -254,17 +271,36 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       onSelectRoot={selectRoot}
       sidebarWidth={shell.sidebarWidth}
       onBeginResize={shell.beginResize}
+      branchBarTrailing={
+        <button
+          type="button"
+          className="code-workspace__refresh"
+          aria-label={messages.agentsFeature.toggleContentSearch}
+          aria-pressed={sidebarMode === "search"}
+          onClick={() =>
+            setSidebarMode((current) =>
+              current === "search" ? "fileTree" : "search",
+            )
+          }
+        >
+          <Search aria-hidden="true" size={14} strokeWidth={1.8} />
+        </button>
+      }
       sidebar={
-        <FileTreePanel
-          changedFileKinds={changedFileKinds}
-          errorMessage={treeError}
-          fileTree={tree}
-          initialOpenState={openFolders}
-          isLoading={isTreeLoading}
-          workspacePath={selectedRoot?.path}
-          onOpenFile={openFile}
-          onOpenStateChange={setOpenFolders}
-        />
+        sidebarMode === "search" ? (
+          <CodeSearchPanel state={contentSearch} onChange={setContentSearch} />
+        ) : (
+          <FileTreePanel
+            changedFileKinds={changedFileKinds}
+            errorMessage={treeError}
+            fileTree={tree}
+            initialOpenState={openFolders}
+            isLoading={isTreeLoading}
+            workspacePath={selectedRoot?.path}
+            onOpenFile={openFile}
+            onOpenStateChange={setOpenFolders}
+          />
+        )
       }
       main={
         <>

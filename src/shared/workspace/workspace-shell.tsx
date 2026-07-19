@@ -26,10 +26,15 @@ interface WorkspaceShellProps {
   sidebar: ReactNode;
   /** 主区内容（code: tabs+编辑器；changes: diff 查看器）。 */
   main: ReactNode;
+  /**
+   * 分支栏最右侧可选操作区（如代码 Activity 的内容搜索切换）。
+   * 省略时不渲染，避免 Changes 等 surface 出现多余入口。
+   */
+  branchBarTrailing?: ReactNode;
 }
 
 /**
- * 代码 / 变更两个 Activity 共享的无状态两栏布局：左侧分支下拉 + sidebar slot，
+ * 代码 / 变更两个 Activity 共享的无状态两栏布局：左侧分支下拉（可选 trailing）+ sidebar slot，
  * 右侧 main slot，中间可拖拽 splitter。复用既有 `code-workspace__*` CSS 类名。
  * 不持有任何跨 Activity 状态——roots / selectedRoot / onSelectRoot / sidebarWidth
  * 均由调用方（各自 Activity）传入。
@@ -44,6 +49,7 @@ export function WorkspaceShell({
   onBeginResize,
   sidebar,
   main,
+  branchBarTrailing,
 }: WorkspaceShellProps) {
   return (
     <section
@@ -69,6 +75,7 @@ export function WorkspaceShell({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          {branchBarTrailing}
         </div>
         {sidebar}
       </aside>

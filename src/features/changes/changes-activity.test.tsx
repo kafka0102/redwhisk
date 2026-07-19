@@ -65,6 +65,9 @@ describe("ChangesActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Open file" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Search in files" }),
+    ).not.toBeInTheDocument();
   });
 
   it("persists its own selected root independent of code cache", () => {
