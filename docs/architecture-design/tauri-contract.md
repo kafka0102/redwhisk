@@ -28,6 +28,8 @@
 
 新增 command 必须同时更新 Rust DTO、adapter、`generate_handler!`、前端 wrapper、类型和成功/失败路径测试；并同步更新本注册表对应行 + 错误码到前端 locale 的映射（见错误码边界表）。不要只在本表新增名称。
 
+> 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。
+
 ## Event 注册表
 
 | 事件                            | 载荷                                                                            | 生产者                        | 消费者与语义                                                 |
