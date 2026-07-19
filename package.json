@@ -10,6 +10,7 @@
     "lint": "eslint src eslint.config.js vite.config.ts vitest.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:parity": "vitest run src/shared/commands/__parity__",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "ui:add": "shadcn add",

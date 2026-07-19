@@ -30,6 +30,10 @@
 
 > 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。
 
+## Parity gate
+
+`src-tauri/tests/dto_parity_export.rs`（`cargo test`）解析 `src/types/*.rs` 生成 `src/shared/commands/__parity__/rust-dto-signatures.json`（提交进仓）；`src/shared/commands/__parity__/dto-parity.test.ts`（`pnpm test:parity`）解析全部 `*-commands.ts` 并对比。改 Rust DTO 后须重生成快照并 commit；改前端 `*-commands.ts` 后 `pnpm test` 自动校验。drift 表现为测试失败。类型名差异登记在 `name-mapping.ts`，前端不需 mirror 的 Rust 类型登记在 `rustOnlyAllowlist`（每条带注释说明）。
+
 ## Event 注册表
 
 | 事件                            | 载荷                                                                            | 生产者                        | 消费者与语义                                                 |

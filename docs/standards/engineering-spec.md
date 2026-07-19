@@ -79,6 +79,8 @@
 - 对应 `src/features/**/**-commands.ts` 或 `src/shared/commands/` 下的 TypeScript 类型
 - command client 或 feature 测试中的示例 payload
 
+改动 `src-tauri/src/types/*.rs` 或 `*-commands.ts` 后，须确保 `cargo test --test dto_parity_export` 与 `pnpm test:parity` 通过：前者重新生成 `src/shared/commands/__parity__/rust-dto-signatures.json` 快照并 commit，后者解析前端 `*-commands.ts` 与快照对比校验 parity。drift 表现为测试失败，详见 [Tauri 契约 - Parity gate](../architecture-design/tauri-contract.md#parity-gate)。
+
 禁止：
 
 - 只改 Rust DTO，不改前端类型
