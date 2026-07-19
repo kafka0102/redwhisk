@@ -50,7 +50,7 @@ export type AgentStreamEvent =
   | { type: "effort_changed"; effort: string | null };
 
 // ---------------------------------------------------------------------------
-// 广播载荷 envelope（对应 `AgentStreamEventEnvelope`）
+// 广播载荷 envelope
 // ---------------------------------------------------------------------------
 
 export interface AgentStreamEventEnvelope {

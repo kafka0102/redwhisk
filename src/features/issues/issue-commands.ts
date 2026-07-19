@@ -297,7 +297,7 @@ export interface DetectAgentCommitCompletionResult {
 /** dirty 工作区三选项。 */
 export type DirtyWorkspaceOption = "auto_commit" | "skip" | "cancel";
 
-/** 完成流程 phase（与后端 `IssueCompletionPhase` 对应）。 */
+/** 完成流程 phase。 */
 export type IssueCompletionPhase =
   | "detecting_workspace"
   | "prompting_dirty_decision"
