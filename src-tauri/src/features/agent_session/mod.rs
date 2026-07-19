@@ -13,6 +13,7 @@ mod service;
 mod timeline;
 mod validation;
 mod worktree_setup;
+mod content_search;
 mod workspace;
 
 pub use service::AgentSessionService;

@@ -612,7 +612,15 @@
     "contentSearchFilesToExclude": "要排除的文件",
     "contentSearchFilesToExcludePlaceholder": "例如 node_modules, dist",
     "contentSearchResults": "搜索结果",
-    "contentSearchEmptyResults": "暂无结果，按回车搜索。"
+    "contentSearchEmptyResults": "暂无结果，按回车搜索。",
+    "contentSearchSearching": "搜索中…",
+    "contentSearchNoMatches": "未找到结果。",
+    "contentSearchStats": "{{fileCount}} 个文件 · {{matchCount}} 个匹配",
+    "contentSearchStatsTruncated": "{{fileCount}} 个文件 · {{matchCount}} 个匹配（已截断）",
+    "contentSearchMatchCount": "{{count}}",
+    "contentSearchToggleFile": "展开/折叠 {{fileName}} 的结果",
+    "contentSearchOpenMatch": "打开 {{fileName}} 第 {{lineNumber}} 行",
+    "contentSearchError": "搜索失败。"
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {
@@ -724,7 +732,8 @@
       "unsupportedPermissionDecision": "不支持的权限决策。",
       "workspaceFileReadFailed": "工作区文件读取失败。",
       "workspaceMissingForModelList": "Agent Session 工作区不存在，模型列表不可用。",
-      "workspaceMissingForResume": "Agent Session 工作区不存在，无法恢复。"
+      "workspaceMissingForResume": "Agent Session 工作区不存在，无法恢复。",
+      "invalidSearchRegex": "搜索正则无效。"
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "附件不存在。",

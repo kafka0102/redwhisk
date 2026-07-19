@@ -15,7 +15,8 @@ use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
     ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
     ProjectWorktreeFileTreeResponse, WorkspaceChangeKind, WorkspaceChangedFile,
-    WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceDiffContent, WorkspaceFileContent,
+    WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceContentSearchInput,
+    WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
     WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
 };
 
@@ -81,6 +82,18 @@ impl<'connection> SessionWorkspaceService<'connection> {
             input.workspace_path.as_deref(),
         )?;
         read_workspace_file_tree(&root)
+    }
+
+    pub fn search_content(
+        &self,
+        input: WorkspaceContentSearchInput,
+    ) -> Result<WorkspaceContentSearchResponse, CommandError> {
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
+        super::content_search::search_workspace_content(&root, &input)
     }
 
     pub fn get_commit_history(

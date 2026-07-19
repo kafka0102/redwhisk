@@ -166,3 +166,57 @@ pub struct WorkspaceDiffContent {
     pub is_binary: bool,
     pub is_too_large: bool,
 }
+
+/// 工作区内容搜索入参：在当前代码根内按查询串做行级匹配。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceContentSearchInput {
+    pub project_id: i64,
+    pub session_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
+    pub query: String,
+    #[serde(default)]
+    pub match_case: bool,
+    #[serde(default)]
+    pub match_whole_word: bool,
+    #[serde(default)]
+    pub use_regex: bool,
+    /// 包含 glob 列表（多条 OR）；空 = 全部合格文件。v1 可先由前端传空，完整过滤见后续票。
+    #[serde(default)]
+    pub include: Vec<String>,
+    /// 排除 glob 列表（多条 OR，优先于 include）；空 = 不额外排除。
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceContentSearchMatch {
+    /// 1-based 行号。
+    pub line_number: u32,
+    pub line_text: String,
+    /// 行内首个匹配的起始列（0-based，按 UTF-8 字节偏移近似字符列）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub match_start: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub match_end: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceContentSearchFileGroup {
+    pub file_path: String,
+    pub file_name: String,
+    pub match_count: u32,
+    pub matches: Vec<WorkspaceContentSearchMatch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceContentSearchResponse {
+    pub files: Vec<WorkspaceContentSearchFileGroup>,
+    pub file_count: u32,
+    pub match_count: u32,
+    pub truncated: bool,
+}

@@ -17,7 +17,7 @@ import {
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
 import { CodeBreadcrumb } from "./code-breadcrumb";
-import { CodeContent } from "./code-content";
+import { CodeContent, type CodeRevealRequest } from "./code-content";
 import { CodeSearchPanel } from "./code-search-panel";
 import {
   DEFAULT_CODE_CONTENT_SEARCH_STATE,
@@ -57,6 +57,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const [contentSearch, setContentSearch] = useState<CodeContentSearchState>(
     () => cached?.contentSearch ?? DEFAULT_CODE_CONTENT_SEARCH_STATE,
   );
+  const [revealRequest, setRevealRequest] = useState<CodeRevealRequest | null>(
+    null,
+  );
   const activePathRef = useRef<string | null>(cached?.activePath ?? null);
   const openFilePathsRef = useRef(
     new Set((cached?.tabs ?? []).map((tab) => tab.filePath)),
@@ -70,6 +73,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setActivePath(null);
     setOpenFolders({});
     setContentSearch(DEFAULT_CODE_CONTENT_SEARCH_STATE);
+    setRevealRequest(null);
   }, []);
 
   const shell = useWorkspaceShell({
@@ -248,6 +252,25 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     [fileNotFoundMessage, projectId, selectedRoot, t],
   );
 
+  const openMatchFromSearch = useCallback(
+    (match: { fileName: string; filePath: string; lineNumber: number }) => {
+      openFile({
+        id: match.filePath,
+        kind: "file",
+        name: match.fileName,
+        path: match.filePath,
+        isIgnored: false,
+        children: [],
+      });
+      setRevealRequest({
+        filePath: match.filePath,
+        lineNumber: match.lineNumber,
+        token: Date.now(),
+      });
+    },
+    [openFile],
+  );
+
   const closeTab = (filePath: string) => {
     openFilePathsRef.current.delete(filePath);
     setTabs((currentTabs) => {
@@ -288,7 +311,13 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       }
       sidebar={
         sidebarMode === "search" ? (
-          <CodeSearchPanel state={contentSearch} onChange={setContentSearch} />
+          <CodeSearchPanel
+            state={contentSearch}
+            onChange={setContentSearch}
+            projectId={projectId}
+            workspacePath={selectedRootWorkspacePath}
+            onOpenMatch={openMatchFromSearch}
+          />
         ) : (
           <FileTreePanel
             changedFileKinds={changedFileKinds}
@@ -347,6 +376,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                 tab={activeTab}
                 contentFontSize={contentFontSize}
                 messages={messages}
+                revealRequest={revealRequest}
                 theme={theme}
               />
             </>

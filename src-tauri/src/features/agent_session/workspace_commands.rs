@@ -7,7 +7,8 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
     ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
-    ProjectWorktreeFileTreeResponse, WorkspaceDiffContent, WorkspaceFileContent,
+    ProjectWorktreeFileTreeResponse, WorkspaceContentSearchInput,
+    WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
 };
 
 pub const CODE_WORKSPACE_ROOTS_UPDATED_EVENT: &str = "code-workspace-roots-updated";
@@ -50,6 +51,16 @@ pub async fn get_project_worktree_file_tree(
 ) -> Result<ProjectWorktreeFileTreeResponse, CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
     run_workspace_blocking(data_dir, move |service| service.get_file_tree(input)).await
+}
+
+#[tauri::command]
+pub async fn search_project_worktree_content(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: WorkspaceContentSearchInput,
+) -> Result<WorkspaceContentSearchResponse, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.search_content(input)).await
 }
 
 #[tauri::command]

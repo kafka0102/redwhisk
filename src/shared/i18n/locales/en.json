@@ -612,7 +612,15 @@
     "contentSearchFilesToExclude": "files to exclude",
     "contentSearchFilesToExcludePlaceholder": "e.g. node_modules, dist",
     "contentSearchResults": "Search results",
-    "contentSearchEmptyResults": "No results yet. Press Enter to search."
+    "contentSearchEmptyResults": "No results yet. Press Enter to search.",
+    "contentSearchSearching": "Searching…",
+    "contentSearchNoMatches": "No results found.",
+    "contentSearchStats": "{{fileCount}} files · {{matchCount}} matches",
+    "contentSearchStatsTruncated": "{{fileCount}} files · {{matchCount}} matches (truncated)",
+    "contentSearchMatchCount": "{{count}}",
+    "contentSearchToggleFile": "Toggle results for {{fileName}}",
+    "contentSearchOpenMatch": "Open {{fileName}} at line {{lineNumber}}",
+    "contentSearchError": "Search failed."
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {
@@ -724,7 +732,8 @@
       "unsupportedPermissionDecision": "Unsupported permission decision.",
       "workspaceFileReadFailed": "Failed to read workspace file.",
       "workspaceMissingForModelList": "Agent Session workspace does not exist; model list is unavailable.",
-      "workspaceMissingForResume": "Agent Session workspace does not exist; cannot resume."
+      "workspaceMissingForResume": "Agent Session workspace does not exist; cannot resume.",
+      "invalidSearchRegex": "Invalid search regular expression."
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "Attachment not found.",

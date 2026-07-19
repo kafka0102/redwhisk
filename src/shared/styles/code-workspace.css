@@ -335,3 +335,115 @@
   background: var(--color-accent-muted);
   color: var(--color-text);
 }
+
+.code-workspace__search-form {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+}
+
+.code-workspace__search-results-error {
+  margin: 0;
+  padding: 12px;
+  color: var(--color-danger, #c0392b);
+  font-size: 12px;
+}
+
+.code-workspace__search-stats {
+  margin: 0;
+  padding: 8px 10px 4px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.code-workspace__search-file-list,
+.code-workspace__search-match-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.code-workspace__search-file-group {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.code-workspace__search-file-header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.code-workspace__search-file-header:hover,
+.code-workspace__search-file-header:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.code-workspace__search-file-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.code-workspace__search-file-name {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.code-workspace__search-file-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-workspace__search-file-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.code-workspace__search-match-row {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 8px 2px 28px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.code-workspace__search-match-row:hover,
+.code-workspace__search-match-row:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.code-workspace__search-match-line {
+  flex-shrink: 0;
+  min-width: 2ch;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.code-workspace__search-match-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

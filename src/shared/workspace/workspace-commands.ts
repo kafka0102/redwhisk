@@ -190,3 +190,45 @@ export function readProjectWorktreeDiff(
     input,
   });
 }
+
+export interface WorkspaceContentSearchInput {
+  projectId: number;
+  sessionId?: number | null;
+  workspacePath?: string | null;
+  query: string;
+  matchCase?: boolean;
+  matchWholeWord?: boolean;
+  useRegex?: boolean;
+  include?: string[];
+  exclude?: string[];
+}
+
+export interface WorkspaceContentSearchMatch {
+  lineNumber: number;
+  lineText: string;
+  matchStart?: number;
+  matchEnd?: number;
+}
+
+export interface WorkspaceContentSearchFileGroup {
+  filePath: string;
+  fileName: string;
+  matchCount: number;
+  matches: WorkspaceContentSearchMatch[];
+}
+
+export interface WorkspaceContentSearchResponse {
+  files: WorkspaceContentSearchFileGroup[];
+  fileCount: number;
+  matchCount: number;
+  truncated: boolean;
+}
+
+export function searchProjectWorktreeContent(
+  input: WorkspaceContentSearchInput,
+): Promise<WorkspaceContentSearchResponse> {
+  return invokeCommand<WorkspaceContentSearchResponse>(
+    "search_project_worktree_content",
+    { input },
+  );
+}

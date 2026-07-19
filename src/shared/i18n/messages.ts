@@ -513,6 +513,17 @@ export interface I18nMessages {
     contentSearchFilesToExcludePlaceholder: string;
     contentSearchResults: string;
     contentSearchEmptyResults: string;
+    contentSearchSearching: string;
+    contentSearchNoMatches: string;
+    contentSearchStats: (fileCount: number, matchCount: number) => string;
+    contentSearchStatsTruncated: (
+      fileCount: number,
+      matchCount: number,
+    ) => string;
+    contentSearchMatchCount: (count: number) => string;
+    contentSearchToggleFile: (fileName: string) => string;
+    contentSearchOpenMatch: (fileName: string, lineNumber: number) => string;
+    contentSearchError: string;
     addSessionTool: string;
     terminalTool: string;
     browserTool: string;

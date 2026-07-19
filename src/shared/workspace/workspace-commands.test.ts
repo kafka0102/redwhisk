@@ -5,6 +5,7 @@ import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
+  searchProjectWorktreeContent,
 } from "./workspace-commands";
 
 vi.mock("../commands/command-client", () => ({
@@ -28,6 +29,14 @@ describe("workspace commands", () => {
     await expect(listCodeWorkspaceRoots(1)).resolves.toEqual({
       command: "list_code_workspace_roots",
     });
+    await expect(
+      searchProjectWorktreeContent({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        query: "foo",
+        matchCase: true,
+      }),
+    ).resolves.toEqual({ command: "search_project_worktree_content" });
 
     expect(invokeCommandMock).toHaveBeenNthCalledWith(
       1,
@@ -43,6 +52,18 @@ describe("workspace commands", () => {
       3,
       "list_code_workspace_roots",
       { projectId: 1 },
+    );
+    expect(invokeCommandMock).toHaveBeenNthCalledWith(
+      4,
+      "search_project_worktree_content",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root",
+          query: "foo",
+          matchCase: true,
+        },
+      },
     );
   });
 });

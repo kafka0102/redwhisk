@@ -846,6 +846,7 @@
     },
     "ProjectWorktreeCommitHistoryResponse": {
       "fields": {
+        "baseBranch": "optional",
         "commits": "required",
         "isWorktree": "required",
         "signature": "required"
@@ -1267,6 +1268,43 @@
         "message": "required",
         "pushedTo": "optional",
         "shortHash": "required"
+      }
+    },
+    "WorkspaceContentSearchFileGroup": {
+      "fields": {
+        "fileName": "required",
+        "filePath": "required",
+        "matchCount": "required",
+        "matches": "required"
+      }
+    },
+    "WorkspaceContentSearchInput": {
+      "fields": {
+        "exclude": "optional",
+        "include": "optional",
+        "matchCase": "optional",
+        "matchWholeWord": "optional",
+        "projectId": "required",
+        "query": "required",
+        "sessionId": "optional",
+        "useRegex": "optional",
+        "workspacePath": "optional"
+      }
+    },
+    "WorkspaceContentSearchMatch": {
+      "fields": {
+        "lineNumber": "required",
+        "lineText": "required",
+        "matchEnd": "optional",
+        "matchStart": "optional"
+      }
+    },
+    "WorkspaceContentSearchResponse": {
+      "fields": {
+        "fileCount": "required",
+        "files": "required",
+        "matchCount": "required",
+        "truncated": "required"
       }
     },
     "WorkspaceDiffContent": {

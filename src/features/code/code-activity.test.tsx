@@ -8,6 +8,7 @@ import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
+  searchProjectWorktreeContent,
 } from "../../shared/workspace/workspace-commands";
 import {
   codeWorkspaceCache,
@@ -22,8 +23,23 @@ const { editorThemeProp } = vi.hoisted(() => ({
 
 vi.mock("@monaco-editor/react", () => ({
   DiffEditor: () => null,
-  Editor: ({ theme }: { theme?: string }) => {
+  Editor: ({
+    theme,
+    onMount,
+  }: {
+    theme?: string;
+    onMount?: (editor: {
+      revealLineInCenter: (line: number) => void;
+      setPosition: (pos: { lineNumber: number; column: number }) => void;
+      focus: () => void;
+    }) => void;
+  }) => {
     editorThemeProp.current = theme;
+    onMount?.({
+      revealLineInCenter: () => undefined,
+      setPosition: () => undefined,
+      focus: () => undefined,
+    });
     return null;
   },
 }));
@@ -34,6 +50,7 @@ vi.mock("../../shared/workspace/workspace-commands", () => ({
   getProjectWorktreeFileTree: vi.fn(),
   listCodeWorkspaceRoots: vi.fn(),
   readProjectWorktreeFile: vi.fn(),
+  searchProjectWorktreeContent: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -110,6 +127,7 @@ describe("CodeActivity", () => {
       signature: "empty",
     });
     vi.mocked(readProjectWorktreeFile).mockReset();
+    vi.mocked(searchProjectWorktreeContent).mockReset();
     vi.mocked(readProjectWorktreeFile).mockResolvedValue(fileContent);
   });
 
@@ -299,11 +317,15 @@ describe("CodeActivity", () => {
     codeWorkspaceCache.set(1, {
       activePath: null,
       contentSearch: {
+        collapsedFiles: {},
+        errorMessage: null,
         excludeText: "",
         includeText: "",
+        isSearching: false,
         matchCase: false,
         matchWholeWord: false,
         query: "",
+        results: null,
         useRegex: false,
       },
       openFolders: {},
@@ -473,5 +495,107 @@ describe("CodeActivity", () => {
       "true",
     );
     expect(screen.getByLabelText("files to include")).toHaveValue("*.ts");
+  });
+
+  it("runs content search on Enter and opens a match at line", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchProjectWorktreeContent).mockResolvedValue({
+      fileCount: 1,
+      matchCount: 1,
+      truncated: false,
+      files: [
+        {
+          filePath: "src/file.ts",
+          fileName: "file.ts",
+          matchCount: 1,
+          matches: [
+            {
+              lineNumber: 2,
+              lineText: "export const value = 1;",
+              matchStart: 0,
+              matchEnd: 6,
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Search in files" }));
+    const searchInput = screen.getByLabelText("Search");
+    await user.type(searchInput, "export");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(searchProjectWorktreeContent).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        query: "export",
+        matchCase: false,
+        matchWholeWord: false,
+        useRegex: false,
+        include: [],
+        exclude: [],
+      });
+    });
+
+    expect(await screen.findByText("1 files · 1 matches")).toBeInTheDocument();
+    expect(screen.getByText("export const value = 1;")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Open file.ts at line 2" }),
+    );
+    await waitFor(() => {
+      expect(readProjectWorktreeFile).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        filePath: "src/file.ts",
+      });
+    });
+    expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    // 侧栏仍保持搜索模式
+    expect(
+      screen.getByRole("button", { name: "Search in files" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("clears content search results when Enter is pressed on empty query", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchProjectWorktreeContent).mockResolvedValue({
+      fileCount: 1,
+      matchCount: 1,
+      truncated: false,
+      files: [
+        {
+          filePath: "src/file.ts",
+          fileName: "file.ts",
+          matchCount: 1,
+          matches: [{ lineNumber: 1, lineText: "foo" }],
+        },
+      ],
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Search in files" }));
+    await user.type(screen.getByLabelText("Search"), "foo");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("1 files · 1 matches")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Search"));
+    await user.keyboard("{Enter}");
+    expect(
+      await screen.findByText("No results yet. Press Enter to search."),
+    ).toBeInTheDocument();
+    expect(searchProjectWorktreeContent).toHaveBeenCalledTimes(1);
   });
 });
