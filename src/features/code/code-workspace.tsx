@@ -30,22 +30,16 @@ import {
   type CodeWorkspaceRoot,
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
-import { DiffViewer } from "../../shared/workspace/diff-viewer";
-import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes-panels";
 import {
   codeWorkspaceStateCache,
   type CodeFileTab,
   type CodeWorkspaceView,
 } from "./code-workspace-cache";
 import { CodeBreadcrumb } from "./code-breadcrumb";
-import { useCodeWorkspaceDiff } from "./use-code-workspace-diff";
+import { CodeWorkspaceChangesView } from "../changes/code-workspace-changes-view";
+import { useCodeWorkspaceDiff } from "../changes/use-code-workspace-diff";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 import { useCodeWorkspaceRoots } from "./use-code-workspace-roots";
-import {
-  useChangesAutoRefresh,
-  useWorktreeRunningSession,
-} from "../changes/use-changes-auto-refresh";
-import { useCodeWorkspaceChanges } from "../changes/use-code-workspace-changes";
 
 const MAX_FILE_TABS = 10;
 const DEFAULT_SIDEBAR_WIDTH = 400;
@@ -139,42 +133,10 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     [],
   );
 
-  // 变更视图数据：进入变更视图或切换工作区时拉取一次；条件轮询由下方
-  // useChangesAutoRefresh 按可见性 × running turn 驱动，复用本 hook 的 refresh*。
-  const {
-    changes: workspaceChanges,
-    isChangesLoading,
-    changesErrorMessage,
-    isChangesUnavailable,
-    commitHistory,
-    isCommitHistoryLoading,
-    commitHistoryErrorMessage,
-    isWorktree,
-    refreshChanges,
-    refreshCommitHistory,
-  } = useCodeWorkspaceChanges(
-    projectId,
-    selectedRootWorkspacePath,
-    view === "changes",
-  );
-
-  // 条件轮询：仅 changes 视图启用。running 标志经 listAgentSessions 全量过滤 +
-  // agent-session-list-changed 事件重算得出；files 视图 enabled=false 不订阅、不轮询。
-  const isWorktreeRunning = useWorktreeRunningSession(
-    projectId,
-    selectedRootWorkspacePath,
-    view === "changes",
-  );
-  useChangesAutoRefresh({
-    enabled: view === "changes",
-    running: isWorktreeRunning,
-    refreshChanges,
-    refreshCommitHistory,
-    isUnavailable: isChangesUnavailable,
-  });
-
-  // 变更页右侧单 diff 面板取数。view 切换不卸载本组件，diffTab 跨 code↔changes 保留；
+  // 变更页右侧单 diff 面板取数。view 切换不卸载本组件，diffTab 跨 code 与 changes 保留；
   // 切换 root 时由 selectRoot 调 clear() 清空（diff 绑定具体 workspacePath）。
+  // useCodeWorkspaceDiff 留外壳层实例化，diffTab / openDiffChange / openCommittedDiff
+  // 经 props 传入 CodeWorkspaceChangesView，以保留跨页 diff 语义（ticket「实现注意」）。
   const {
     diffTab,
     openChange: openDiffChange,
@@ -405,80 +367,75 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
     window.addEventListener("mouseup", onMouseUp);
   };
 
+  // 分支下拉：外壳持有 roots / selectedRoot / selectRoot（D2'），files / changes 两视图共用。
+  const branchBar = (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="code-workspace__branch">
+        <span>
+          {selectedRoot?.branch ?? messages.agentsFeature.loadingCode}
+        </span>
+        <ChevronDown aria-hidden="true" size={14} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {workspaceRoots.map((root) => (
+          <DropdownMenuItem key={root.path} onClick={() => selectRoot(root)}>
+            {root.branch}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <section
       className="code-workspace"
       aria-label={messages.agentsFeature.codeTab}
       style={{ "--code-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
-      <aside className="code-workspace__sidebar">
-        <div className="code-workspace__branch-bar">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="code-workspace__branch">
-              <span>
-                {selectedRoot?.branch ?? messages.agentsFeature.loadingCode}
-              </span>
-              <ChevronDown aria-hidden="true" size={14} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {workspaceRoots.map((root) => (
-                <DropdownMenuItem
-                  key={root.path}
-                  onClick={() => selectRoot(root)}
-                >
-                  {root.branch}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {view === "files" ? (
-          <FileTreePanel
-            changedFileKinds={changedFileKinds}
-            errorMessage={treeError}
-            fileTree={tree}
-            initialOpenState={openFolders}
-            isLoading={isTreeLoading}
-            workspacePath={selectedRoot?.path}
-            onOpenFile={openFile}
-            onOpenStateChange={setOpenFolders}
+      {view === "changes" ? (
+        <CodeWorkspaceChangesView
+          projectId={projectId}
+          selectedRootWorkspacePath={selectedRootWorkspacePath}
+          branchBar={branchBar}
+          sidebarWidth={sidebarWidth}
+          onBeginResize={beginResize}
+          uncommittedChangesExpanded={uncommittedChangesExpanded}
+          committedChangesExpanded={committedChangesExpanded}
+          onToggleUncommittedExpanded={() =>
+            setUncommittedChangesExpanded((current) => !current)
+          }
+          onToggleCommittedExpanded={() =>
+            setCommittedChangesExpanded((current) => !current)
+          }
+          diffTab={diffTab}
+          openDiffChange={openDiffChange}
+          openCommittedDiff={openCommittedDiff}
+        />
+      ) : (
+        <>
+          <aside className="code-workspace__sidebar">
+            <div className="code-workspace__branch-bar">{branchBar}</div>
+            <FileTreePanel
+              changedFileKinds={changedFileKinds}
+              errorMessage={treeError}
+              fileTree={tree}
+              initialOpenState={openFolders}
+              isLoading={isTreeLoading}
+              workspacePath={selectedRoot?.path}
+              onOpenFile={openFile}
+              onOpenStateChange={setOpenFolders}
+            />
+          </aside>
+          <div
+            className="code-workspace__splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuemin={230}
+            aria-valuemax={640}
+            aria-valuenow={sidebarWidth}
+            onMouseDown={beginResize}
           />
-        ) : (
-          <WorkspaceChangesPanels
-            changes={workspaceChanges}
-            changesErrorMessage={changesErrorMessage}
-            isChangesLoading={isChangesLoading}
-            isUncommittedExpanded={uncommittedChangesExpanded}
-            onOpenChangedFile={openDiffChange}
-            onOpenCommittedChangedFile={openCommittedDiff}
-            onToggleUncommittedExpanded={() =>
-              setUncommittedChangesExpanded((current) => !current)
-            }
-            commitHistory={commitHistory}
-            commitHistoryErrorMessage={commitHistoryErrorMessage}
-            isCommitHistoryLoading={isCommitHistoryLoading}
-            isWorktree={isWorktree}
-            isCommittedExpanded={committedChangesExpanded}
-            onToggleCommittedExpanded={() =>
-              setCommittedChangesExpanded((current) => !current)
-            }
-          />
-        )}
-      </aside>
-      <div
-        className="code-workspace__splitter"
-        role="separator"
-        aria-orientation="vertical"
-        aria-valuemin={230}
-        aria-valuemax={640}
-        aria-valuenow={sidebarWidth}
-        onMouseDown={beginResize}
-      />
-      <main className="code-workspace__main">
-        {view === "changes" ? (
-          <DiffViewer tab={diffTab} />
-        ) : (
-          <>
+          <main className="code-workspace__main">
             <div className="code-workspace__tabs" role="tablist">
               {tabs.map((tab) => (
                 <button
@@ -526,9 +483,9 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
                 />
               </>
             ) : null}
-          </>
-        )}
-      </main>
+          </main>
+        </>
+      )}
     </section>
   );
 }

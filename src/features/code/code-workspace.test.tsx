@@ -74,34 +74,6 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
   };
 });
 
-// 变更视图渲染件以哨兵文本取代，聚焦「view=changes 时该分支被渲染」的接线断言。
-vi.mock("../../shared/workspace/workspace-changes-panels", () => ({
-  WorkspaceChangesPanels: () => <div>Changes View</div>,
-}));
-
-// view=changes 时 CodeWorkspace 仍会调用本 hook，这里返回稳定空态避免触发未 mock 的 command。
-vi.mock("../changes/use-code-workspace-changes", () => ({
-  useCodeWorkspaceChanges: () => ({
-    changes: [],
-    isChangesLoading: false,
-    changesErrorMessage: null,
-    isChangesUnavailable: false,
-    commitHistory: [],
-    isCommitHistoryLoading: false,
-    commitHistoryErrorMessage: null,
-    isWorktree: false,
-    refreshChanges: () => {},
-    refreshCommitHistory: () => {},
-  }),
-}));
-
-// 条件轮询 hook 单独在 use-changes-auto-refresh.test.ts 覆盖；组件级测试以 no-op mock 隔离，
-// 避免 changes 视图渲染时触发真实 listAgentSessions / 事件订阅。
-vi.mock("../changes/use-changes-auto-refresh", () => ({
-  useWorktreeRunningSession: () => false,
-  useChangesAutoRefresh: () => {},
-}));
-
 const roots = [
   {
     branch: "main",
@@ -434,28 +406,6 @@ describe("CodeWorkspace", () => {
     // 刷新按钮已移除：文件树由 VS Code 式自动检测轮询维护。
     expect(
       screen.queryByRole("button", { name: "Refresh file tree" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("renders the changes view without a file tree or refresh button", () => {
-    render(
-      <I18nProvider initialLocale="en">
-        <CodeWorkspace projectId={1} roots={roots} view="changes" />
-      </I18nProvider>,
-    );
-
-    expect(screen.getByText("Changes View")).toBeInTheDocument();
-    // 变更视图主区渲染单 diff 面板空态（未选中变更文件）。
-    expect(screen.getByText("Select a changed file.")).toBeInTheDocument();
-    // 文件树与刷新按钮在 changes 视图下不渲染。
-    expect(
-      screen.queryByRole("button", { name: "Open file" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Refresh file tree" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Refresh changes" }),
     ).not.toBeInTheDocument();
   });
 });
