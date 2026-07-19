@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -20,10 +19,6 @@ import {
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import { clearComposerDraft } from "./composer/use-agent-composer";
-import {
-  DEFAULT_ACTIVITY_SIDEBAR_WIDTH,
-  SIDEBAR_RESIZE_STEP,
-} from "../../shared/layout/sidebar-width";
 import {
   completeIssueFlow,
   markIssueReview,
@@ -58,6 +53,13 @@ import {
   applySessionOverlays,
   getSessionTransitionPhase,
 } from "./agent-session-overlays";
+import {
+  AGENTS_SIDEBAR_MAX_WIDTH,
+  AGENTS_SIDEBAR_MIN_WIDTH,
+  SESSION_SIDE_PANEL_MAX_WIDTH,
+  SESSION_SIDE_PANEL_MIN_WIDTH,
+  useSplitterDrag,
+} from "./use-splitter-drag";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import {
   createDefaultSessionInlineTerminalPanelState,
@@ -89,12 +91,6 @@ import {
 } from "./session-pane/session-return-cache";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
-const AGENTS_SIDEBAR_DEFAULT_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
-const AGENTS_SIDEBAR_MIN_WIDTH = DEFAULT_ACTIVITY_SIDEBAR_WIDTH;
-const AGENTS_SIDEBAR_MAX_WIDTH = 450;
-const SESSION_SIDE_PANEL_DEFAULT_WIDTH = 400;
-const SESSION_SIDE_PANEL_MIN_WIDTH = 240;
-const SESSION_SIDE_PANEL_MAX_WIDTH = 560;
 const MAX_SESSION_TERMINAL_TABS = 10;
 // 实例池上限：与 use-agent-message-stream.ts 的 MAX_CACHED_SESSIONS 对齐，
 // 保证常驻 AgentSessionView 实例数量与消息流 state 缓存淘汰粒度一致。
@@ -120,7 +116,6 @@ export function AgentsActivity({
   projectId,
 }: AgentsActivityProps) {
   const { locale, messages, t } = useI18n();
-  const defaultSidebarWidth = AGENTS_SIDEBAR_DEFAULT_WIDTH;
   const { confirm, confirmationDialog } = useConfirmDialog();
   const { alertDialog, showAlert } = useAlertDialog();
   const showCommandErrorAlert = useCallback(
@@ -180,18 +175,14 @@ export function AgentsActivity({
   const [shouldLoadDeferredContent, setShouldLoadDeferredContent] =
     useState(false);
 
-  const [sidebarWidth, setSidebarWidth] = useState(defaultSidebarWidth);
-  const [sessionSidePanelWidth, setSessionSidePanelWidth] = useState(
-    SESSION_SIDE_PANEL_DEFAULT_WIDTH,
-  );
-  const dragStateRef = useRef<{
-    startWidth: number;
-    startX: number;
-  } | null>(null);
-  const sidePanelDragStateRef = useRef<{
-    startWidth: number;
-    startX: number;
-  } | null>(null);
+  const {
+    sidebarWidth,
+    sessionSidePanelWidth,
+    handleSidebarSplitterMouseDown,
+    handleSidebarSplitterKeyDown,
+    handleSidePanelSplitterMouseDown,
+    handleSidePanelSplitterKeyDown,
+  } = useSplitterDrag();
   const nextBrowserTabIdRef = useRef(1);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
   const completedIssueIdsRef = useRef<Set<number>>(new Set());
@@ -1003,46 +994,6 @@ export function AgentsActivity({
     }
   }
 
-  useEffect(() => {
-    function handleMouseMove(event: MouseEvent) {
-      const dragState = dragStateRef.current;
-      if (dragState) {
-        const deltaX = event.clientX - dragState.startX;
-        const nextWidth = Math.max(
-          AGENTS_SIDEBAR_MIN_WIDTH,
-          Math.min(AGENTS_SIDEBAR_MAX_WIDTH, dragState.startWidth + deltaX),
-        );
-        setSidebarWidth(nextWidth);
-      }
-
-      const sidePanelDragState = sidePanelDragStateRef.current;
-      if (sidePanelDragState) {
-        const deltaX = event.clientX - sidePanelDragState.startX;
-        const nextWidth = clampSessionSidePanelWidth(
-          sidePanelDragState.startWidth - deltaX,
-        );
-        setSessionSidePanelWidth(nextWidth);
-      }
-    }
-
-    function handleMouseUp() {
-      dragStateRef.current = null;
-      sidePanelDragStateRef.current = null;
-      window.document.body.style.cursor = "";
-      window.document.body.style.userSelect = "";
-    }
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-      window.document.body.style.cursor = "";
-      window.document.body.style.userSelect = "";
-    };
-  }, []);
-
   function setTerminalPanelState(
     sessionId: number,
     updater: (
@@ -1395,20 +1346,6 @@ export function AgentsActivity({
     workspaceCache.closeWorkspaceTabForSession(sessionId, tab);
   }
 
-  function handleSidePanelSplitterMouseDown(event: ReactMouseEvent) {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    sidePanelDragStateRef.current = {
-      startWidth: sessionSidePanelWidth,
-      startX: event.clientX,
-    };
-    window.document.body.style.cursor = "col-resize";
-    window.document.body.style.userSelect = "none";
-  }
-
   async function handleTemporarySessionStarted(
     result: StartStructuredAgentSessionResult,
   ) {
@@ -1477,35 +1414,8 @@ export function AgentsActivity({
         className="agents-splitter"
         role="separator"
         tabIndex={0}
-        onMouseDown={(event) => {
-          dragStateRef.current = {
-            startWidth: sidebarWidth,
-            startX: event.clientX,
-          };
-          window.document.body.style.cursor = "col-resize";
-          window.document.body.style.userSelect = "none";
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            setSidebarWidth((currentWidth) =>
-              Math.max(
-                AGENTS_SIDEBAR_MIN_WIDTH,
-                currentWidth - SIDEBAR_RESIZE_STEP,
-              ),
-            );
-          }
-
-          if (event.key === "ArrowRight") {
-            event.preventDefault();
-            setSidebarWidth((currentWidth) =>
-              Math.min(
-                AGENTS_SIDEBAR_MAX_WIDTH,
-                currentWidth + SIDEBAR_RESIZE_STEP,
-              ),
-            );
-          }
-        }}
+        onMouseDown={handleSidebarSplitterMouseDown}
+        onKeyDown={handleSidebarSplitterKeyDown}
       />
 
       <section
@@ -1568,35 +1478,7 @@ export function AgentsActivity({
               role="separator"
               tabIndex={0}
               onMouseDown={handleSidePanelSplitterMouseDown}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowLeft") {
-                  event.preventDefault();
-                  setSessionSidePanelWidth((currentWidth) =>
-                    clampSessionSidePanelWidth(
-                      currentWidth + SIDEBAR_RESIZE_STEP,
-                    ),
-                  );
-                }
-
-                if (event.key === "ArrowRight") {
-                  event.preventDefault();
-                  setSessionSidePanelWidth((currentWidth) =>
-                    clampSessionSidePanelWidth(
-                      currentWidth - SIDEBAR_RESIZE_STEP,
-                    ),
-                  );
-                }
-
-                if (event.key === "Home") {
-                  event.preventDefault();
-                  setSessionSidePanelWidth(SESSION_SIDE_PANEL_DEFAULT_WIDTH);
-                }
-
-                if (event.key === "End") {
-                  event.preventDefault();
-                  setSessionSidePanelWidth(SESSION_SIDE_PANEL_MAX_WIDTH);
-                }
-              }}
+              onKeyDown={handleSidePanelSplitterKeyDown}
             />
             <SessionSidePanel
               activeTab={sidePanelTab}
@@ -1799,13 +1681,6 @@ function isCleanWorktreeAgentCommitPreviewError(error: {
     error.details?.some(
       (detail) => detail["@type"] === "GitStatus" && detail.isClean === true,
     ) === true
-  );
-}
-
-function clampSessionSidePanelWidth(width: number) {
-  return Math.min(
-    SESSION_SIDE_PANEL_MAX_WIDTH,
-    Math.max(SESSION_SIDE_PANEL_MIN_WIDTH, width),
   );
 }
 
