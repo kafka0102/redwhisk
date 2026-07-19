@@ -10,7 +10,7 @@
 //   reasoning 则替换，否则 append），保证只剩最终完整推理。
 // - tool_call：按 callId upsert；item/started→running，item/completed→终态。
 // - todo：codex plan 渐进更新 → 若尾项是 todo 则替换，否则 append。
-// - user_message：按 messageId 或文本合并乐观消息与后端回显。
+// - user_message：按 messageId 或文本合并乐观消息与后端回显；同文不同次发送保留多条。
 // - error / compaction：直接 append。
 //
 // reducer 为纯函数，不依赖 React，便于单测。
@@ -133,18 +133,17 @@ export function messageStreamReducer(
       // 竞态保护：后端 timeline 事件经 requestAnimationFrame 异步 flush，而
       // sendAgentMessage 的 invoke 响应可能更慢——后端 user_message 回显可能先于
       // 乐观插入到达并被追加。此时乐观条目若再无条件追加会导致同一消息显示两次。
-      // 若已存在同文本的后端 user_message 条目（非 optimistic- 前缀），直接跳过：
-      // 后端条目携带 messageId，本就是更权威的最终态。
-      const echoedIndex = findLastIndex(
-        state.entries,
-        (entry) =>
-          entry.kind === "user_message" &&
-          !entry.id.startsWith("optimistic-") &&
-          entry.item.type === "user_message" &&
-          normalizeMessageText(entry.item.text) ===
-            normalizeMessageText(action.text),
-      );
-      if (echoedIndex >= 0) {
+      // 仅当「末条」已是同文后端回显时跳过；不可扫全量历史，否则多轮选择题
+      // 用户反复回复同一选项（如 "A"）时，后续乐观消息会被误吞。
+      const lastEntry = state.entries[state.entries.length - 1];
+      if (
+        lastEntry &&
+        lastEntry.kind === "user_message" &&
+        !lastEntry.id.startsWith("optimistic-") &&
+        lastEntry.item.type === "user_message" &&
+        normalizeMessageText(lastEntry.item.text) ===
+          normalizeMessageText(action.text)
+      ) {
         return state;
       }
       const localId = nextLocalId(state.entries);
@@ -352,15 +351,18 @@ function applyTimelineItem(
         });
       }
 
-      const duplicateIndex = findLastIndex(
-        entries,
-        (entry) =>
-          entry.kind === "user_message" &&
-          entry.item.type === "user_message" &&
-          normalizeMessageText(entry.item.text) ===
-            normalizeMessageText(item.text),
-      );
-      if (duplicateIndex >= 0) {
+      // 无 messageId 时仅抑制「紧邻末条」的同文回显，避免双写。
+      // 有 messageId 的条目：同 id 已在上方合并；不同 id 即使文案相同也是新发送
+      // （多轮选择题反复选 "A"），必须各自展示，不可按全文历史文本去重。
+      const lastEntry = entries[entries.length - 1];
+      if (
+        !messageId &&
+        lastEntry &&
+        lastEntry.kind === "user_message" &&
+        lastEntry.item.type === "user_message" &&
+        normalizeMessageText(lastEntry.item.text) ===
+          normalizeMessageText(item.text)
+      ) {
         return entries;
       }
 

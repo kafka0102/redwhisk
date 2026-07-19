@@ -361,6 +361,131 @@ describe("messageStreamReducer", () => {
       expect(state.entries).toHaveLength(1);
       expect(state.entries[0].id).toBe("u1");
     });
+
+    it("多轮回复同一选项文本时各自展示", () => {
+      // 交互式问答里用户常对多道题都选 "A"。同文不同 messageId 必须保留多条，
+      // 不能被全文历史文本去重吞掉。
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "A",
+          messageId: "u-a1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "下一题？",
+          messageId: "m1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "A",
+          messageId: "u-a2",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "再一题？",
+          messageId: "m2",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "A",
+          messageId: "u-a3",
+        }),
+      });
+
+      const userTexts = state.entries
+        .filter((entry) => entry.kind === "user_message")
+        .map((entry) => ({
+          id: entry.id,
+          text:
+            entry.item.type === "user_message" ? entry.item.text : undefined,
+        }));
+      expect(userTexts).toEqual([
+        { id: "u-a1", text: "A" },
+        { id: "u-a2", text: "A" },
+        { id: "u-a3", text: "A" },
+      ]);
+    });
+
+    it("历史已有同选项后仍可乐观插入新的同文回复", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "A",
+          messageId: "u-a1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "下一题？",
+          messageId: "m1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "OPTIMISTIC_USER_MESSAGE",
+        text: "A",
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "user_message",
+          text: "A",
+          messageId: "u-a2",
+        }),
+      });
+
+      const userEntries = state.entries.filter(
+        (entry) => entry.kind === "user_message",
+      );
+      expect(userEntries).toHaveLength(2);
+      expect(userEntries[0].id).toBe("u-a1");
+      expect(userEntries[1].id).toBe("u-a2");
+    });
+
+    it("hydrate 重放时保留多条同文 user_message", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [
+          { type: "user_message", text: "A", messageId: "u1" },
+          {
+            type: "assistant_message",
+            text: "Q2?",
+            messageId: "m1",
+          },
+          { type: "user_message", text: "A", messageId: "u2" },
+          { type: "user_message", text: "A", messageId: "u2" },
+          {
+            type: "assistant_message",
+            text: "Q3?",
+            messageId: "m2",
+          },
+          { type: "user_message", text: "A", messageId: "u3" },
+        ],
+      });
+
+      const userIds = state.entries
+        .filter((entry) => entry.kind === "user_message")
+        .map((entry) => entry.id);
+      expect(userIds).toEqual(["u1", "u2", "u3"]);
+    });
   });
 
   describe("reasoning 增量", () => {
