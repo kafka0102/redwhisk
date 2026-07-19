@@ -93,20 +93,32 @@ function computeLaneLoadState(issues: IssueRecord[]): LaneLoadStateMap {
   }, {} as LaneLoadStateMap);
 }
 
-/** 追加下一页数据，按 id 去重，保留既有顺序。 */
+/** 追加下一页数据，按 id 去重后按状态进入时间重排，与后端 ORDER BY 一致。 */
 function mergeIssues(
   current: IssueRecord[],
   next: IssueRecord[],
 ): IssueRecord[] {
   const existingIds = new Set(current.map((issue) => issue.id));
-  return sortIssuesByIdDesc([
+  return sortIssuesByStatusChangedAtDesc([
     ...current,
     ...next.filter((issue) => !existingIds.has(issue.id)),
   ]);
 }
 
-function sortIssuesByIdDesc(issues: IssueRecord[]): IssueRecord[] {
-  return [...issues].sort((left, right) => right.id - left.id);
+/**
+ * 按状态进入时间降序排序，与后端 `ORDER BY status_changed_at DESC,
+ * created_at DESC, id DESC` 对齐；保证跨页合并顺序稳定。
+ */
+function sortIssuesByStatusChangedAtDesc(issues: IssueRecord[]): IssueRecord[] {
+  return [...issues].sort((left, right) => {
+    if (left.statusChangedAt !== right.statusChangedAt) {
+      return right.statusChangedAt - left.statusChangedAt;
+    }
+    if (left.createdAt !== right.createdAt) {
+      return right.createdAt - left.createdAt;
+    }
+    return right.id - left.id;
+  });
 }
 
 export {
@@ -119,5 +131,5 @@ export {
   shiftLaneTotals,
   computeLaneLoadState,
   mergeIssues,
-  sortIssuesByIdDesc,
+  sortIssuesByStatusChangedAtDesc,
 };

@@ -12,7 +12,7 @@ import {
   type IssueFormState,
 } from "../issue-activity-types";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
-import { sortIssuesByIdDesc } from "../issue-lane-helpers";
+import { sortIssuesByStatusChangedAtDesc } from "../issue-lane-helpers";
 import type { useI18n } from "../../../shared/i18n/i18n";
 
 function issueToForm(issue: IssueRecord): IssueFormState {
@@ -36,7 +36,7 @@ function mergeIssue(
     (issue) => issue.id !== nextIssue.id,
   );
 
-  return sortIssuesByIdDesc([nextIssue, ...remainingIssues]);
+  return sortIssuesByStatusChangedAtDesc([nextIssue, ...remainingIssues]);
 }
 
 function formatLocalTimestamp(epochMilliseconds: number): string {

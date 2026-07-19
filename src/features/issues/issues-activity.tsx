@@ -24,7 +24,7 @@ import {
   computeLaneLoadState,
   deriveLaneTotals,
   mergeIssues,
-  sortIssuesByIdDesc,
+  sortIssuesByStatusChangedAtDesc,
 } from "./issue-lane-helpers";
 import {
   buildIssueDescription,
@@ -225,7 +225,7 @@ export function IssuesActivity({
             (issue) => issue.id === nextCachedState?.selectedIssueId,
           );
 
-        const sortedIssues = sortIssuesByIdDesc(response.issues);
+        const sortedIssues = sortIssuesByStatusChangedAtDesc(response.issues);
 
         setIssues(sortedIssues);
         setLaneLoadState(computeLaneLoadState(sortedIssues));
