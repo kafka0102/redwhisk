@@ -298,7 +298,9 @@ fn parse_enum(item: &ItemEnum) -> Option<(String, EnumSig)> {
     if !derives_serde(&item.attrs) {
         return None;
     }
-    let rename_all = extract_rename_all(&item.attrs).unwrap_or_else(|| "camelCase".into());
+    // serde 无 rename_all 时默认用变体名原样（Rust enum 变体惯例为 PascalCase），
+    // 不能 fallback 到 camelCase，否则会误转未来漏标 rename_all 的 enum。
+    let rename_all = extract_rename_all(&item.attrs).unwrap_or_else(|| "PascalCase".into());
     let variants = item
         .variants
         .iter()
