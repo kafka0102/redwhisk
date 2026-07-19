@@ -33,7 +33,7 @@ type Messages = ReturnType<typeof useI18n>["messages"];
 type Translate = ReturnType<typeof useI18n>["t"];
 type Confirm = ReturnType<typeof useConfirmDialog>["confirm"];
 
-type RunDialogIssue = Pick<
+export type RunDialogIssue = Pick<
   IssueRecord,
   | "id"
   | "number"
@@ -61,6 +61,7 @@ interface UseIssueRunDialogOptions {
   setLaneLoadState: Dispatch<SetStateAction<LaneLoadStateMap>>;
   setLaneTotals: Dispatch<SetStateAction<LaneTotalsMap>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
+  setRunDialogIssue: Dispatch<SetStateAction<RunDialogIssue | null>>;
   saveSelectedIssueDraft: (
     projectId: number,
     issueId: number,
@@ -87,15 +88,13 @@ export function useIssueRunDialog({
   setLaneLoadState,
   setLaneTotals,
   setErrorMessage,
+  setRunDialogIssue,
   saveSelectedIssueDraft,
   confirm,
   t,
   messages,
   onOpenAgentsActivity,
 }: UseIssueRunDialogOptions) {
-  const [runDialogIssue, setRunDialogIssue] = useState<RunDialogIssue | null>(
-    null,
-  );
   const [isStartingSession, setIsStartingSession] = useState(false);
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -228,9 +227,7 @@ export function useIssueRunDialog({
   }
 
   return {
-    runDialogIssue,
     isStartingSession,
-    setRunDialogIssue,
     setIsStartingSession,
     openRunDialog,
     confirmRunIssueFromEditPage,
