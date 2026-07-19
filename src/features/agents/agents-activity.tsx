@@ -54,6 +54,10 @@ import {
 } from "./session-pane/agents-session-pane";
 import { subscribeAgentSessionListChanged } from "./agent-session-events";
 import { getSessionIssueGroup } from "./agent-session-formatters";
+import {
+  applySessionOverlays,
+  getSessionTransitionPhase,
+} from "./agent-session-overlays";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import {
   createDefaultSessionInlineTerminalPanelState,
@@ -201,27 +205,13 @@ export function AgentsActivity({
   );
 
   const applySessionListOverlays = useCallback(
-    (nextSessions: AgentSessionListItem[]) => {
-      const reviewedIssueIds = reviewedIssueIdsRef.current;
-      const completedIssueIds = completedIssueIdsRef.current;
-      const closedSessionIds = closedSessionIdsRef.current;
-      if (
-        reviewedIssueIds.size === 0 &&
-        completedIssueIds.size === 0 &&
-        closedSessionIds.size === 0
-      ) {
-        return nextSessions;
-      }
-
-      return nextSessions.map((session) =>
-        applySessionOverlay(
-          session,
-          reviewedIssueIds,
-          completedIssueIds,
-          closedSessionIds,
-        ),
-      );
-    },
+    (nextSessions: AgentSessionListItem[]) =>
+      applySessionOverlays(
+        nextSessions,
+        reviewedIssueIdsRef.current,
+        completedIssueIdsRef.current,
+        closedSessionIdsRef.current,
+      ),
     [],
   );
 
@@ -1817,57 +1807,6 @@ function clampSessionSidePanelWidth(width: number) {
     SESSION_SIDE_PANEL_MAX_WIDTH,
     Math.max(SESSION_SIDE_PANEL_MIN_WIDTH, width),
   );
-}
-
-function applySessionOverlay(
-  session: AgentSessionListItem,
-  reviewedIssueIds: Set<number>,
-  completedIssueIds: Set<number>,
-  closedSessionIds: Set<number>,
-): AgentSessionListItem {
-  let nextSession = session;
-
-  if (
-    nextSession.issueId != null &&
-    reviewedIssueIds.has(nextSession.issueId) &&
-    nextSession.issueStatus === "running"
-  ) {
-    nextSession = { ...nextSession, issueStatus: "review" as const };
-  }
-
-  const shouldCloseSession = closedSessionIds.has(nextSession.sessionId);
-  const shouldCompleteIssue =
-    nextSession.issueId != null && completedIssueIds.has(nextSession.issueId);
-
-  if (!shouldCloseSession && !shouldCompleteIssue) {
-    return nextSession;
-  }
-
-  return {
-    ...nextSession,
-    status: shouldCloseSession ? "closed" : nextSession.status,
-    issueStatus: shouldCompleteIssue ? "completed" : nextSession.issueStatus,
-    closedAt: shouldCloseSession
-      ? Math.max(nextSession.closedAt ?? 0, nextSession.lastActiveAt)
-      : nextSession.closedAt,
-  };
-}
-
-function getSessionTransitionPhase(
-  session: AgentSessionListItem | null,
-): "running" | "review" | "completed" | null {
-  if (!session?.issueId || !session.issueStatus) {
-    return null;
-  }
-
-  switch (session.issueStatus) {
-    case "running":
-    case "review":
-    case "completed":
-      return session.issueStatus;
-    default:
-      return null;
-  }
 }
 
 function isTerminalToolTab(
