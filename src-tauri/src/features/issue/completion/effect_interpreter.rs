@@ -16,10 +16,11 @@ use crate::features::issue::completion::state_machine::{
     CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
     Transition,
 };
-use crate::features::issue::completion::flow::{
-    build_agent_commit_completion_prompt, current_epoch_millis,
+use crate::features::issue::completion::formatting::build_agent_commit_completion_prompt;
+use crate::features::issue::completion::git_reconcile::{
     merge_block_from_worktree_error, reconcile_session_worktree, WorktreeMergeBlockDescription,
 };
+use crate::features::issue::time::current_epoch_millis;
 use crate::features::issue::service::IssueService;
 use crate::features::issue::validation::issue_database_error;
 use crate::db::agent_session_repository::AgentSessionRepository;

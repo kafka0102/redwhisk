@@ -14,6 +14,18 @@ pub enum GitOperationState {
     Unmerged,
 }
 
+pub fn format_git_operation_state(state: GitOperationState) -> &'static str {
+    match state {
+        GitOperationState::None => "none",
+        GitOperationState::MergeInProgress => "merge_in_progress",
+        GitOperationState::RebaseInProgress => "rebase_in_progress",
+        GitOperationState::CherryPickInProgress => "cherry_pick_in_progress",
+        GitOperationState::RevertInProgress => "revert_in_progress",
+        GitOperationState::SequencerInProgress => "sequencer_in_progress",
+        GitOperationState::Unmerged => "unmerged",
+    }
+}
+
 pub fn detect_operation_state(git_dir: impl AsRef<Path>) -> GitOperationState {
     let git_dir = git_dir.as_ref();
 

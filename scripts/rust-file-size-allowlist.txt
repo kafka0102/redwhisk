@@ -21,7 +21,6 @@ src-tauri/src/features/agent_session/service.rs # 5860 lines, registered 2026-07
 src-tauri/src/features/agent_session/timeline.rs # 605 lines, registered 2026-07-18
 src-tauri/src/features/agent_session/workspace.rs # 1737 lines, registered 2026-07-18
 src-tauri/src/features/issue/completion/effect_interpreter.rs # 878 lines, registered 2026-07-18
-src-tauri/src/features/issue/completion/flow.rs # 602 lines, registered 2026-07-18
 src-tauri/src/features/issue/completion/state_machine.rs # 784 lines, registered 2026-07-18
 src-tauri/src/features/issue/service.rs # 4739 lines, registered 2026-07-18
 src-tauri/src/features/project_terminal/service.rs # 2790 lines, registered 2026-07-18

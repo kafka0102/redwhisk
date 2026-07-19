@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use serde_json::json;
 
 use crate::types::completion_attempt::{
     CompletionAttemptOption, CompletionAttemptRecord, CompletionAttemptResult,
@@ -80,6 +81,45 @@ impl<'connection> CompletionAttemptRepository<'connection> {
         }
 
         find_by_id_on_connection(transaction, id)
+    }
+
+    /// 记录一次因 Git 操作进行中而被阻止的完成尝试。
+    ///
+    /// `operation_state_str` 由调用方经 `format_git_operation_state` 格式化后传入，
+    /// 避免 db 层反向依赖 git 模块；同时用作 `changed_files_json` 的 `state` 字段。
+    /// `failure_reason` 与 `operation_state_str` 在当前调用点同源，保留独立参数以
+    /// 维持语义边界。`created_at` 由调用方提供，遵循 `insert_in_transaction` 既有契约。
+    pub fn record_blocked_in_transaction(
+        transaction: &Transaction<'_>,
+        issue_id: i64,
+        session_id: i64,
+        option: CompletionAttemptOption,
+        head: &str,
+        failure_reason: &str,
+        operation_state_str: &str,
+        message: &str,
+        created_at: i64,
+    ) -> rusqlite::Result<CompletionAttemptRecord> {
+        let changed_files_json = json!({
+            "blockedBy": "git_operation",
+            "state": operation_state_str,
+            "message": message,
+        })
+        .to_string();
+
+        Self::insert_in_transaction(
+            transaction,
+            issue_id,
+            session_id,
+            option,
+            head,
+            head,
+            None,
+            Some(failure_reason),
+            &changed_files_json,
+            CompletionAttemptResult::GitOperationBlocked,
+            created_at,
+        )
     }
 
     pub fn list_by_issue_id(

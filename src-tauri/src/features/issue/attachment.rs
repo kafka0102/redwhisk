@@ -8,7 +8,7 @@ use crate::types::issue::{
     IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentRecord,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
 };
-use super::completion::flow::current_epoch_millis;
+use super::time::current_epoch_millis;
 use super::validation::issue_database_error;
 
 pub(super) struct NewAttachmentPersistence {

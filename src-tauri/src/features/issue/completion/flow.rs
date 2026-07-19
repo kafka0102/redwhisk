@@ -1,140 +1,24 @@
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use serde_json::json;
 
 use crate::agent::session_registry::AgentSessionRegistry;
-use crate::db::completion_attempt_repository::CompletionAttemptRepository;
-use crate::db::event_repository::EventRepository;
+use crate::features::issue::completion::git_reconcile::{
+    read_current_branch, redwhisk_missing_worktree_is_closed_out,
+};
 use crate::features::issue::completion::state_machine::{
     CompletionEvent, CompletionState, CompletionWorld,
 };
-use crate::features::issue::validation::issue_database_error;
-use crate::git::operation_state::GitOperationState;
 use crate::git::status::GitSnapshot;
-use crate::git::worktree::{
-    assess_missing_worktree, classify_merge_block, current_branch, inspect_execution_path,
-    reconcile_worktree, GitWorktreeError, MergeBlockClassification, MissingWorktreeAssessment,
-    WorktreeReconcileRequest,
-};
+use crate::git::worktree::inspect_execution_path;
 use crate::types::agent_session::{
     AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
 };
-use crate::types::completion_attempt::{
-    CompletionAttemptOption, CompletionAttemptRecord, CompletionAttemptResult,
-};
+use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
-use crate::types::issue::{IssueRecord, IssueStatus, IssueSummaryCompletionInfo};
-use crate::types::issue_action::IssueActionType;
+use crate::types::issue::IssueRecord;
 use crate::types::issue_completion::{
-    CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
-    IssueCompletionFlowRecord, IssueCompletionPhase,
+    CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption, IssueCompletionFlowRecord,
+    IssueCompletionPhase,
 };
-
-pub(crate) fn reconcile_session_worktree(
-    repo_path: &str,
-    session: &AgentSessionRecord,
-) -> Result<(), GitWorktreeError> {
-    let Some(target_branch) = session
-        .origin_branch
-        .as_deref()
-        .or(session.target_branch.as_deref())
-    else {
-        return Ok(());
-    };
-    let Some(workspace_branch) = session.workspace_branch.as_deref() else {
-        return Ok(());
-    };
-    let Some(workspace_path) = session.workspace_path.as_deref() else {
-        return Ok(());
-    };
-
-    reconcile_worktree(WorktreeReconcileRequest {
-        repo_path: Path::new(repo_path),
-        workspace_path: Path::new(workspace_path),
-        workspace_branch,
-        target_branch,
-    })
-}
-
-pub(crate) struct WorktreeMergeBlockDescription {
-    pub(crate) reason: String,
-    pub(crate) message: String,
-}
-
-pub(crate) fn merge_block_from_worktree_error(
-    error: &GitWorktreeError,
-) -> WorktreeMergeBlockDescription {
-    let classification = classify_merge_block(error);
-    WorktreeMergeBlockDescription {
-        reason: classification.reason().to_string(),
-        message: merge_block_message(&classification, error),
-    }
-}
-
-fn merge_block_message(
-    classification: &MergeBlockClassification,
-    error: &GitWorktreeError,
-) -> String {
-    match classification {
-        MergeBlockClassification::TargetDirty { path, files } => format!(
-            "目标分支工作区存在未提交改动，无法合入 Agent worktree。请先在目标分支工作区提交、暂存或丢弃这些改动：{files}。工作区：{path}"
-        ),
-        MergeBlockClassification::WorkspaceDirty { path, files } => format!(
-            "Agent worktree 存在未提交改动，无法自动合入目标分支。请先提交或处理这些改动：{files}。工作区：{path}"
-        ),
-        MergeBlockClassification::MergeConflict => {
-            "Agent worktree 合并发生冲突，请手动处理冲突。".to_string()
-        }
-        MergeBlockClassification::GitCommandFailed => {
-            format!("Agent worktree 合入失败：{error}")
-        }
-    }
-}
-
-fn redwhisk_missing_worktree_is_closed_out(
-    repo_path: &str,
-    session: &AgentSessionRecord,
-) -> Result<(), String> {
-    let target_branch = session
-        .origin_branch
-        .as_deref()
-        .or(session.target_branch.as_deref())
-        .ok_or_else(|| "缺失 RedWhisk worktree 的目标分支元数据。".to_string())?;
-    let workspace_branch = session
-        .workspace_branch
-        .as_deref()
-        .ok_or_else(|| "缺失 RedWhisk worktree 的工作分支元数据。".to_string())?;
-
-    match assess_missing_worktree(repo_path, target_branch, workspace_branch) {
-        Ok(MissingWorktreeAssessment::ClosedOut) => Ok(()),
-        Ok(MissingWorktreeAssessment::NotMerged {
-            workspace_branch,
-            target_branch,
-        }) => Err(format!(
-            "RedWhisk worktree 路径缺失，但工作分支 {workspace_branch} 尚未合入 {target_branch}。"
-        )),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-fn read_current_branch(repo_path: &str) -> Result<String, CommandError> {
-    current_branch(repo_path).map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::IssueValidationFailed,
-            "当前 Project 的 Git 状态不可用。",
-        )
-        .with_reason("gitStatusUnavailable")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
-}
-
-pub(crate) fn completion_session_close_reason(option: CompletionAttemptOption) -> &'static str {
-    match option {
-        CompletionAttemptOption::CompleteManual => "manual_completion",
-        CompletionAttemptOption::CompleteClean => "clean_completion",
-    }
-}
 
 pub(crate) fn legacy_completion_flow_action_error(action: CompleteIssueFlowAction) -> CommandError {
     let (message, reason) = match action {
@@ -261,35 +145,6 @@ pub(crate) fn phase_to_completion_action(phase: IssueCompletionPhase) -> Complet
     }
 }
 
-pub(crate) fn completion_message(
-    phase: IssueCompletionPhase,
-    merge_block: Option<&WorktreeMergeBlockDescription>,
-) -> String {
-    match phase {
-        IssueCompletionPhase::Completed => "Issue 已完成。".to_string(),
-        IssueCompletionPhase::Cancelled => "完成已取消，Issue 保持待验收。".to_string(),
-        IssueCompletionPhase::Blocked => match merge_block {
-            Some(block) => block.message.clone(),
-            None => "Agent worktree 缺失且无法确认分支已合入，请手动处理。".to_string(),
-        },
-        IssueCompletionPhase::PromptingDirtyDecision => {
-            "当前工作区存在未提交改动，请选择自动提交 / 不提交 / 取消。".to_string()
-        }
-        IssueCompletionPhase::AutoCommitting => {
-            "已请求 Agent 自动提交，请在 session 中完成提交后再次确认。".to_string()
-        }
-        IssueCompletionPhase::ConfirmingWorktreeCleanup => {
-            "当前使用外部 worktree，请确认是否合并并删除该 worktree。".to_string()
-        }
-        IssueCompletionPhase::ConfirmingContinueAfterCommit => {
-            "代码已提交成功。确定继续标记完成吗？".to_string()
-        }
-        IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::ReconcilingWorktree => {
-            "Issue 已完成。".to_string()
-        }
-    }
-}
-
 pub(crate) fn completion_detection_repo_path(project_repo_path: &str, session: &AgentSessionRecord) -> String {
     if session.workspace_mode == WorkspaceMode::Worktree
         && session
@@ -331,7 +186,7 @@ pub(crate) struct ActualExecutionPath {
     pub in_worktree: bool,
     /// 该 worktree 的 checkout 分支（非 worktree 时为 `None`）。
     pub worktree_branch: Option<String>,
-    /// 实际路径与启动快照不同且位于 worktree → 运行中漂移到新 worktree。
+    /// 实际路径与启动快照不同且位于 worktree -> 运行中漂移到新 worktree。
     pub drifted: bool,
 }
 
@@ -399,204 +254,4 @@ pub(crate) fn resolve_actual_execution_path(
 
 pub(crate) fn is_session_closed_out(session: &AgentSessionRecord) -> bool {
     session.status != AgentSessionStatus::Running || session.closed_at.is_some()
-}
-
-pub(crate) fn closed_session_completion_snapshot() -> GitSnapshot {
-    GitSnapshot {
-        head: String::new(),
-        status_porcelain: String::new(),
-        changed_files: Vec::new(),
-        operation_state: GitOperationState::None,
-        is_clean: true,
-    }
-}
-
-pub(crate) fn issue_status_to_str(status: &IssueStatus) -> &'static str {
-    match status {
-        IssueStatus::Backlog => "backlog",
-        IssueStatus::Running => "running",
-        IssueStatus::Review => "review",
-        IssueStatus::Completed => "completed",
-    }
-}
-
-pub(crate) fn workspace_mode_to_str(mode: &WorkspaceMode) -> &'static str {
-    match mode {
-        WorkspaceMode::CurrentBranch => "current_branch",
-        WorkspaceMode::Worktree => "worktree",
-    }
-}
-
-pub(crate) fn build_agent_commit_completion_prompt(issue_title: &str, head: &str) -> String {
-    format!(
-        "请获取本次修改相关的代码，检查当前 Issue 涉及的文件变更；只暂存并提交与本次 Issue 直接相关的文件，不要提交无关改动。\n\
-Issue: {issue_title}\n\
-当前 HEAD: {head}\n\
-要求：\n\
-- 只包含当前 Issue 直接相关文件\n\
-- 不要提交无关改动\n\
-- 先自检再提交\n\
-- 使用中文 Conventional Commit\n\
-- 完成后请回复 commit hash、提交结果与验证命令\n\
-- 完成后在答复正文顶层用 <issue-comment>精简中文交付摘要</issue-comment> 输出本次交付内容（做了什么 / 结果 / 验证命令），该标签会被系统提取为 Issue 评论；不要把标签放进代码块或对其转义\n"
-    )
-}
-
-pub(crate) fn record_blocked_completion_attempt(
-    transaction: &rusqlite::Transaction<'_>,
-    issue_id: i64,
-    session_id: i64,
-    option: CompletionAttemptOption,
-    head: &str,
-    failure_reason: &str,
-    operation_state: GitOperationState,
-    message: &str,
-) -> rusqlite::Result<CompletionAttemptRecord> {
-    let changed_files_json = json!({
-        "blockedBy": "git_operation",
-        "state": format_git_operation_state(operation_state),
-        "message": message,
-    })
-    .to_string();
-
-    CompletionAttemptRepository::insert_in_transaction(
-        transaction,
-        issue_id,
-        session_id,
-        option,
-        head,
-        head,
-        None,
-        Some(failure_reason),
-        &changed_files_json,
-        CompletionAttemptResult::GitOperationBlocked,
-        current_epoch_millis_for_db()?,
-    )
-}
-
-fn summary_completion_from_attempt(attempt: CompletionAttemptRecord) -> IssueSummaryCompletionInfo {
-    IssueSummaryCompletionInfo {
-        option: attempt.option.as_str().to_string(),
-        result: attempt.result.as_str().to_string(),
-        commit_hash: attempt.commit_hash,
-        failure_reason: attempt.failure_reason,
-        head_before: Some(attempt.head_before),
-        head_after: Some(attempt.head_after),
-        changed_files_json: Some(attempt.changed_files_json),
-        created_at: attempt.created_at,
-        source: "completion_attempt".to_string(),
-    }
-}
-
-fn latest_completion_from_issue_action(
-    connection: &rusqlite::Connection,
-    issue_id: i64,
-) -> Result<Option<IssueSummaryCompletionInfo>, CommandError> {
-    let issue_completed_action = EventRepository::new(connection)
-        .list_issue_actions(issue_id)
-        .map_err(issue_database_error)?
-        .into_iter()
-        .find(|action| action.action_type == IssueActionType::IssueCompleted);
-
-    let Some(action) = issue_completed_action else {
-        return Ok(None);
-    };
-
-    let payload =
-        serde_json::from_str::<serde_json::Value>(&action.payload_json).map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::IssuePersistenceFailed,
-                "Issue Summary 解析失败。",
-            ).with_reason("summaryParseFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-            .with_detail(ErrorDetail::new("IssueAction").with_value("issueId", issue_id))
-        })?;
-
-    let option = payload
-        .get("option")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("unknown")
-        .to_string();
-
-    Ok(Some(IssueSummaryCompletionInfo {
-        option,
-        result: "completed".to_string(),
-        commit_hash: None,
-        failure_reason: None,
-        head_before: None,
-        head_after: None,
-        changed_files_json: None,
-        created_at: action.created_at,
-        source: "issue_action_fallback".to_string(),
-    }))
-}
-
-pub(crate) fn resolve_issue_summary_completion(
-    connection: &rusqlite::Connection,
-    issue_id: i64,
-    attempts: &[CompletionAttemptRecord],
-    diagnostics: &mut Vec<String>,
-) -> Result<Option<IssueSummaryCompletionInfo>, CommandError> {
-    let completed_attempt = attempts
-        .iter()
-        .find(|attempt| attempt.result == CompletionAttemptResult::Completed)
-        .cloned();
-
-    if let Some(attempt) = completed_attempt {
-        return Ok(Some(summary_completion_from_attempt(attempt)));
-    }
-
-    if attempts.is_empty() {
-        diagnostics.push("缺少 CompletionAttempt 记录，已回退到 Issue 完成事件推断。".to_string());
-    } else {
-        diagnostics.push(
-            "未找到可代表最终 completed 的 CompletionAttempt，已回退到 Issue 完成事件推断。"
-                .to_string(),
-        );
-    }
-
-    latest_completion_from_issue_action(connection, issue_id)
-}
-
-pub(crate) fn format_agent_session_status_for_summary(status: &AgentSessionStatus) -> &'static str {
-    match status {
-        AgentSessionStatus::Running => "running",
-        AgentSessionStatus::Closed => "closed",
-        AgentSessionStatus::Crashed => "crashed",
-        AgentSessionStatus::Stopped => "stopped",
-    }
-}
-
-pub(crate) fn current_epoch_millis_for_db() -> rusqlite::Result<i64> {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| rusqlite::Error::InvalidQuery)?;
-
-    i64::try_from(duration.as_millis()).map_err(|_| rusqlite::Error::InvalidQuery)
-}
-
-pub(crate) fn format_git_operation_state(state: GitOperationState) -> &'static str {
-    match state {
-        GitOperationState::None => "none",
-        GitOperationState::MergeInProgress => "merge_in_progress",
-        GitOperationState::RebaseInProgress => "rebase_in_progress",
-        GitOperationState::CherryPickInProgress => "cherry_pick_in_progress",
-        GitOperationState::RevertInProgress => "revert_in_progress",
-        GitOperationState::SequencerInProgress => "sequencer_in_progress",
-        GitOperationState::Unmerged => "unmerged",
-    }
-}
-
-pub(crate) fn current_epoch_millis() -> Result<i64, CommandError> {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
-
-    i64::try_from(duration.as_millis()).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })
 }

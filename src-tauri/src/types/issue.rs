@@ -385,6 +385,15 @@ pub enum IssueStatus {
     Completed,
 }
 
+pub fn issue_status_to_str(value: &IssueStatus) -> &'static str {
+    match value {
+        IssueStatus::Backlog => "backlog",
+        IssueStatus::Running => "running",
+        IssueStatus::Review => "review",
+        IssueStatus::Completed => "completed",
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewIssueAttachmentInput {

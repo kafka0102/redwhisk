@@ -3,7 +3,7 @@ use rusqlite::{
 };
 
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
-use crate::types::issue::{IssueRecord, IssueStatus, IssueStatusTotals};
+use crate::types::issue::{IssueRecord, IssueStatus, IssueStatusTotals, issue_status_to_str};
 
 const ISSUE_SELECT_COLUMNS: &str = "SELECT
     issues.id,
@@ -568,15 +568,6 @@ fn issue_status_from_str(value: &str) -> rusqlite::Result<IssueStatus> {
         "review" => Ok(IssueStatus::Review),
         "completed" => Ok(IssueStatus::Completed),
         _ => Err(rusqlite::Error::InvalidQuery),
-    }
-}
-
-fn issue_status_to_str(value: &IssueStatus) -> &'static str {
-    match value {
-        IssueStatus::Backlog => "backlog",
-        IssueStatus::Running => "running",
-        IssueStatus::Review => "review",
-        IssueStatus::Completed => "completed",
     }
 }
 

@@ -11,6 +11,13 @@ pub enum WorkspaceMode {
     Worktree,
 }
 
+pub fn workspace_mode_to_str(value: &WorkspaceMode) -> &'static str {
+    match value {
+        WorkspaceMode::CurrentBranch => "current_branch",
+        WorkspaceMode::Worktree => "worktree",
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorktreeOwner {
@@ -185,6 +192,15 @@ pub enum AgentSessionStatus {
     Closed,
     Crashed,
     Stopped,
+}
+
+pub fn format_agent_session_status_for_summary(status: &AgentSessionStatus) -> &'static str {
+    match status {
+        AgentSessionStatus::Running => "running",
+        AgentSessionStatus::Closed => "closed",
+        AgentSessionStatus::Crashed => "crashed",
+        AgentSessionStatus::Stopped => "stopped",
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

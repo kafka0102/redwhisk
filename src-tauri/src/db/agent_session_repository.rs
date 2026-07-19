@@ -3,6 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
+    workspace_mode_to_str,
 };
 use crate::types::issue::IssueStatus;
 
@@ -917,13 +918,6 @@ fn workspace_mode_from_str(value: &str) -> rusqlite::Result<WorkspaceMode> {
         "current_branch" => Ok(WorkspaceMode::CurrentBranch),
         "worktree" => Ok(WorkspaceMode::Worktree),
         _ => Err(rusqlite::Error::InvalidQuery),
-    }
-}
-
-fn workspace_mode_to_str(value: &WorkspaceMode) -> &'static str {
-    match value {
-        WorkspaceMode::CurrentBranch => "current_branch",
-        WorkspaceMode::Worktree => "worktree",
     }
 }
 

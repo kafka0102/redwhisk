@@ -3,6 +3,7 @@ pub mod completion;
 mod archive;
 mod attachment;
 mod service;
+mod time;
 mod validation;
 
 pub use service::IssueService;

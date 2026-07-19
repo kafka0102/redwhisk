@@ -2,11 +2,11 @@
 
 ## 状态
 
-草案（Draft）。依赖 [ADR-0013](./0013-feature-first-module-organization.md) 的 feature 边界落地；P1（feature-first 重组）完成后转采纳，并补执行清单。
+采纳（待执行；执行清单见下文）。[ADR-0013](./0013-feature-first-module-organization.md) 的 feature 边界已落地，本 ADR 由草案转采纳。
 
 ## 背景
 
-后端重构方案 P2。普查 `core/` 层直接碰 DB（`prepare` / `query_row` / `execute` / `rusqlite` / `Connection`）共 **215 处**，其中 `issue_service` **115 处**、`agent_session_service` **67 处**。`issue_service` 有 **12 处 `unchecked_transaction()`**，事务内直接 `prepare` / `execute` / `query_row`。
+后端重构方案 P2（feature-first 重组后的收尾阶段）。普查 `features/` 层直接碰 DB（`prepare` / `query_row` / `execute`）主要集中在：`features/issue/service.rs` **73 处**（含 10 处 `unchecked_transaction()`）、`features/agent_session/service.rs` **39 处**（含 10 处 `unchecked_transaction()`）、`features/project_terminal/service.rs` 1 处；事务内直接 `prepare` / `execute` / `query_row`。
 
 但 `db/` 层**已提供 30+ 个 `*_in_transaction(&Transaction)` 方法**：`issue_repository` 8 个、`agent_session_repository` 11 个，`issue_attachment` / `issue_completion_flow` / `completion_attempt` / `event` 各若干。手法已成熟，只是没有贯彻。
 
@@ -29,6 +29,23 @@
 | `features/<feature>/service` | 业务编排、事务边界声明、调 repository | ❌ 直接 `prepare` / `execute` / 裸 SQL |
 | `db/` repository | 所有 SQL、行 ↔ record 映射、单表与跨表事务 | 业务判断、文件 IO |
 
+## 执行清单
+
+逐 feature 推进，每步补集成测试钉死行为（`src-tauri/tests/<feature>.rs`）。repository 手法（`*_in_transaction(&Transaction)`）已成熟，迁移以「service 开事务传 `&Transaction`、SQL 全归 repository」为单元。
+
+### 已完成
+
+- **issue 完成流 blocked 写入收口**：`record_blocked_completion_attempt`（原 `features/issue/completion/flow.rs` 的 helper）下沉为 `CompletionAttemptRepository::record_blocked_in_transaction`，blocked attempt 的 `changed_files_json` 形状与 `GitOperationBlocked` 结果映射归 repository；调用方传已格式化的 `operation_state_str` 与 `created_at`，避免 db 层反向依赖 git 模块。
+
+### 待执行（按收益排序）
+
+1. **`features/issue/service.rs`（73 处 SQL / 10 事务块）**：逐事务块将内联 `prepare` / `execute` / `query_row` 迁至 `IssueRepository` / `EventRepository` / `IssueCompletionFlowRepository` 的 `*_in_transaction`，补缺失写方法；service 只开事务传 `&Transaction`。优先 `create_issue` / `update_issue` / `delete_issue` / `mark_issue_review` / `advance_issue_status_with_transaction` / `rollback_issue_to_backlog_with_transaction`。
+2. **`features/agent_session/service.rs`（39 处 SQL / 10 事务块）**：同手法迁至 `AgentSessionRepository`。
+3. **`features/project_terminal/service.rs`（1 处）**：收尾。
+4. **`repository.connection()` 访问器收敛**为「仅用于开事务 / 读 data_dir」，禁止 `prepare`。
+5. **`db/connection.rs` 扩展**：统一事务入口与 `rusqlite::Error -> CommandError` 转换，消除各 service 重复 `map_err(database_error)`。
+6. **文件 IO 收敛**：`read_previewable_text_file` / `delete_attachment_files` / `cleanup_created_files` 等收进 feature 内 `io` 模块或 `shared/fs`，service 不直接 `std::fs`。
+
 ## 后果
 
 - service 只见 record 与事务编排，SQL 全在 repository，可单测、可审计。
@@ -46,6 +63,6 @@
 
 ## 事实来源
 
-- 散落：`src-tauri/src/core/issue_service.rs`（115 处 SQL、12 处 `unchecked_transaction`）、`core/agent_session_service.rs`（67 处）。
+- 散落：`src-tauri/src/features/issue/service.rs`（73 处 SQL、10 处 `unchecked_transaction`）、`src-tauri/src/features/agent_session/service.rs`（39 处 SQL、10 处 `unchecked_transaction`）。
 - 先例：`src-tauri/src/db/{issue,agent_session,issue_attachment,issue_completion_flow,completion_attempt,event}_repository.rs` 的 `*_in_transaction`。
-- 连接：`src-tauri/src/db/connection.rs`（61 行，待扩展）。
+- 连接：`src-tauri/src/db/connection.rs`（待扩展统一事务入口与 `rusqlite::Error -> CommandError` 转换）。

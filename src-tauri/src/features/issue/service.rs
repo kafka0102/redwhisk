@@ -25,11 +25,12 @@ use crate::db::issue_completion_flow_repository::{
 use crate::db::issue_repository::IssueRepository;
 use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
-use crate::git::operation_state::GitOperationState;
+use crate::git::operation_state::{format_git_operation_state, GitOperationState};
 use crate::git::status::{read_git_snapshot, GitSnapshot};
 use crate::logging::{info_kv, CommandResultExt};
 use crate::types::agent_session::{
     AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
+    format_agent_session_status_for_summary, workspace_mode_to_str,
 };
 use crate::types::completion_attempt::{
     CompletionAttemptOption, CompletionAttemptResult,
@@ -46,7 +47,7 @@ use crate::types::issue::{
     IssueTimelineActionType, IssueTimelineActor, IssueTimelineEntry, IssueTimelineResponse,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
-    SendAgentCommitPromptResult, UpdateIssueInput,
+    SendAgentCommitPromptResult, UpdateIssueInput, issue_status_to_str,
 };
 use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::issue_completion::{
@@ -66,14 +67,16 @@ use super::attachment::{
     rewrite_attachment_tokens, save_issue_attachment_draft_in_data_dir, ResolvedAttachmentSource,
 };
 use super::completion::flow::{
-    ActualExecutionPath, build_agent_commit_completion_prompt, closed_session_completion_snapshot,
-    completion_detection_repo_path, completion_message, completion_session_close_reason,
-    completion_state_from_record, current_epoch_millis, current_epoch_millis_for_db,
-    derive_completion_event, format_agent_session_status_for_summary, format_git_operation_state,
-    gather_completion_world, is_session_closed_out, issue_status_to_str,
-    legacy_completion_flow_action_error, phase_to_completion_action, record_blocked_completion_attempt,
-    resolve_actual_execution_path, resolve_issue_summary_completion, workspace_mode_to_str,
+    ActualExecutionPath, completion_detection_repo_path, completion_state_from_record,
+    derive_completion_event, gather_completion_world, is_session_closed_out,
+    legacy_completion_flow_action_error, phase_to_completion_action, resolve_actual_execution_path,
 };
+use super::completion::formatting::{
+    build_agent_commit_completion_prompt, completion_message, completion_session_close_reason,
+};
+use super::completion::git_reconcile::closed_session_completion_snapshot;
+use super::completion::summary::resolve_issue_summary_completion;
+use super::time::{current_epoch_millis, current_epoch_millis_for_db};
 use super::validation::{
     invalid_issue_label, is_issue_label_accessible, issue_database_error, issue_git_error,
     issue_not_found, serialize_label_ids, to_issue_label_record, validate_title,
@@ -1130,15 +1133,17 @@ impl<'connection> IssueService<'connection> {
                 .connection()
                 .unchecked_transaction()
                 .map_err(issue_database_error)?;
-            record_blocked_completion_attempt(
+            let operation_state_str = format_git_operation_state(snapshot.operation_state);
+            CompletionAttemptRepository::record_blocked_in_transaction(
                 &transaction,
                 issue.id,
                 session.id,
                 option,
                 &snapshot.head,
-                format_git_operation_state(snapshot.operation_state),
-                snapshot.operation_state,
+                operation_state_str,
+                operation_state_str,
                 "当前 Git 正在进行中的操作阻止 Issue 完成。",
+                current_epoch_millis_for_db().map_err(issue_database_error)?,
             )
             .map_err(issue_database_error)?;
             transaction.commit().map_err(issue_database_error)?;
