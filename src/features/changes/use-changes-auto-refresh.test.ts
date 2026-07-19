@@ -243,7 +243,6 @@ describe("useChangesAutoRefresh", () => {
     renderHook(() =>
       useChangesAutoRefresh({
         enabled: true,
-        workspacePath: "/tmp/redwhisk",
         running: true,
         refreshChanges,
         refreshCommitHistory,
@@ -265,7 +264,6 @@ describe("useChangesAutoRefresh", () => {
     renderHook(() =>
       useChangesAutoRefresh({
         enabled: true,
-        workspacePath: "/tmp/redwhisk",
         running: false,
         refreshChanges,
         refreshCommitHistory,
@@ -283,7 +281,6 @@ describe("useChangesAutoRefresh", () => {
     renderHook(() =>
       useChangesAutoRefresh({
         enabled: true,
-        workspacePath: "/tmp/redwhisk",
         running: true,
         refreshChanges,
         refreshCommitHistory,
@@ -299,7 +296,6 @@ describe("useChangesAutoRefresh", () => {
     renderHook(() =>
       useChangesAutoRefresh({
         enabled: true,
-        workspacePath: "/tmp/redwhisk",
         running: true,
         refreshChanges,
         refreshCommitHistory,
@@ -322,7 +318,6 @@ describe("useChangesAutoRefresh", () => {
       ({ isUnavailable }: { isUnavailable: boolean }) =>
         useChangesAutoRefresh({
           enabled: true,
-          workspacePath: "/tmp/redwhisk",
           running: true,
           refreshChanges,
           refreshCommitHistory,
@@ -343,7 +338,6 @@ describe("useChangesAutoRefresh", () => {
     renderHook(() =>
       useChangesAutoRefresh({
         enabled: false,
-        workspacePath: "/tmp/redwhisk",
         running: true,
         refreshChanges,
         refreshCommitHistory,
@@ -354,22 +348,26 @@ describe("useChangesAutoRefresh", () => {
     expect(refreshChanges).not.toHaveBeenCalled();
   });
 
-  it("does not refresh on mount or when workspacePath changes (avoids redundant fetches)", async () => {
+  it("does not refresh on mount or when refresh identity changes (worktree switch avoids redundant fetches)", async () => {
+    const refreshChangesA = vi.fn() as unknown as () => void;
     const { rerender } = renderHook(
-      ({ workspacePath }: { workspacePath: string }) =>
+      ({ refreshChanges }: { refreshChanges: () => void }) =>
         useChangesAutoRefresh({
           enabled: true,
-          workspacePath,
           running: false,
           refreshChanges,
           refreshCommitHistory,
           isUnavailable: false,
         }),
-      { initialProps: { workspacePath: "/tmp/a" } },
+      { initialProps: { refreshChanges: refreshChangesA } },
     );
-    expect(refreshChanges).not.toHaveBeenCalled();
-    rerender({ workspacePath: "/tmp/b" });
-    // 切分支不主动补拉（useCodeWorkspaceChanges 已在切分支时拉取）。
-    expect(refreshChanges).not.toHaveBeenCalled();
+    expect(refreshChangesA).not.toHaveBeenCalled();
+
+    // 切换工作区 -> refresh identity 变化，refreshOnActivate=false 不补拉
+    // （useCodeWorkspaceChanges 已在切分支时拉取，signature 去重）。
+    const refreshChangesB = vi.fn() as unknown as () => void;
+    rerender({ refreshChanges: refreshChangesB });
+    expect(refreshChangesA).not.toHaveBeenCalled();
+    expect(refreshChangesB).not.toHaveBeenCalled();
   });
 });

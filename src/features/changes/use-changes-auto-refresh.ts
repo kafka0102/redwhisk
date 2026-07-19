@@ -9,6 +9,7 @@ import {
   type AgentSessionListChangedEvent,
 } from "../agents/agent-session-events";
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
+import { useConditionalPolling } from "../../shared/workspace/use-conditional-polling";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const RUNNING_SESSION_FALLBACK_POLL_MS = 5_000;
@@ -100,7 +101,6 @@ function hasRunningTurn(
 export interface UseChangesAutoRefreshOptions {
   /** 仅 changes 视图启用；files 视图传 false 不起任何定时器与监听。 */
   enabled: boolean;
-  workspacePath: string | null;
   /** 选中 worktree 上是否存在 running turn，由 useWorktreeRunningSession 提供。 */
   running: boolean;
   refreshChanges: () => void;
@@ -114,13 +114,12 @@ export interface UseChangesAutoRefreshOptions {
  * 每次 tick 同时刷新未提交变更与已提交历史。由隐藏恢复可见时立即补拉一次；
  * worktree 不可恢复（isUnavailable）→ 停轮询，待切分支重置 / 再次可见时重试。
  *
- * 不在挂载或 workspacePath 变化时主动补拉——useCodeWorkspaceChanges 已在进入
+ * 不在挂载或工作区切换时主动补拉——useCodeWorkspaceChanges 已在进入
  * 视图 / 切分支时各拉取一次（signature 去重），轮询 hook 只在「由隐藏恢复可见」
  * 与「定时 tick」时触发，避免制造冗余请求。
  */
 export function useChangesAutoRefresh({
   enabled,
-  workspacePath,
   running,
   refreshChanges,
   refreshCommitHistory,
@@ -166,16 +165,14 @@ export function useChangesAutoRefresh({
   }, [isVisible, enabled, isUnavailable, refresh]);
 
   // 档位定时器：可见且非 unavailable 时按 running 选 4s/8s；隐藏 → 不起定时器。
-  useEffect(() => {
-    if (!enabled || !isVisible || isUnavailable) return;
-    const interval = running
+  // refreshOnActivate=false：挂载 / 门控激活都不补拉（外层 useCodeWorkspaceChanges
+  // 已在进入视图 / 切分支时首拉；「由隐藏恢复可见」的补拉由上方 recovery effect 负责）。
+  useConditionalPolling({
+    refresh,
+    intervalMs: running
       ? CHANGES_REFRESH_INTERVAL_RUNNING_MS
-      : CHANGES_REFRESH_INTERVAL_IDLE_MS;
-    const timerId = window.setInterval(() => {
-      refresh();
-    }, interval);
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [enabled, isVisible, running, isUnavailable, workspacePath, refresh]);
+      : CHANGES_REFRESH_INTERVAL_IDLE_MS,
+    isActive: enabled && isVisible && !isUnavailable,
+    refreshOnActivate: false,
+  });
 }

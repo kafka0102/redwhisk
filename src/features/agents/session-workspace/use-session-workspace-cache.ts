@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import {
   getCommandErrorMessage,
@@ -6,6 +6,7 @@ import {
   type CommandError,
 } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
@@ -628,80 +629,37 @@ export function useSessionWorkspaceCache({
     [projectId, sessionId, updateCurrentCache, t],
   );
 
-  useEffect(() => {
-    if (!isSidePanelOpen || currentCache.sidePanelTab !== "changes") {
-      return;
-    }
-
-    // 仓库路径不可访问属于不可恢复错误：worktree 目录已被删除或移动，继续轮询只会
-    // 反复失败并让错误提示闪烁。此时停止自动刷新，交由用户手动操作；手动刷新成功
-    // 后 isChangesUnavailable 会被重置为 false，本 effect 随即恢复轮询。
-    if (currentCache.isChangesUnavailable) {
-      return;
-    }
-
-    void refreshChanges();
-    const intervalId = window.setInterval(
-      () => void refreshChanges(),
-      CHANGES_POLL_INTERVAL_MS,
-    );
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [
-    currentCache.sidePanelTab,
-    currentCache.isChangesUnavailable,
-    isSidePanelOpen,
-    refreshChanges,
-  ]);
+  // 仓库路径不可访问属于不可恢复错误：worktree 目录已被删除或移动，继续轮询只会
+  // 反复失败并让错误提示闪烁。此时停止自动刷新，交由用户手动操作；手动刷新成功
+  // 后 isChangesUnavailable 会被重置为 false，本 hook 随即恢复轮询。
+  useConditionalPolling({
+    refresh: refreshChanges,
+    intervalMs: CHANGES_POLL_INTERVAL_MS,
+    isActive:
+      isSidePanelOpen &&
+      currentCache.sidePanelTab === "changes" &&
+      !currentCache.isChangesUnavailable,
+  });
 
   // 已提交历史门控轮询：仅在「侧栏打开 + changes tab + 已提交面板展开 + 仓库可访问」
   // 时运行。进入即补拉一次并按 5s 间隔轮询；收起面板 / 切换 tab / 关闭侧栏立即停止。
   // 比未提交的 2s 慢一档：已提交历史变化频率低，且展开才意味着用户关心。仓库不可访问
   // 同样视为不可恢复错误，停止轮询（与 changes 轮询语义一致）。
-  useEffect(() => {
-    if (
-      !isSidePanelOpen ||
-      currentCache.sidePanelTab !== "changes" ||
-      !currentCache.committedChangesExpanded ||
-      currentCache.isChangesUnavailable
-    ) {
-      return;
-    }
+  useConditionalPolling({
+    refresh: refreshCommitHistory,
+    intervalMs: COMMIT_HISTORY_POLL_INTERVAL_MS,
+    isActive:
+      isSidePanelOpen &&
+      currentCache.sidePanelTab === "changes" &&
+      currentCache.committedChangesExpanded &&
+      !currentCache.isChangesUnavailable,
+  });
 
-    void refreshCommitHistory();
-    const intervalId = window.setInterval(
-      () => void refreshCommitHistory(),
-      COMMIT_HISTORY_POLL_INTERVAL_MS,
-    );
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [
-    currentCache.sidePanelTab,
-    currentCache.committedChangesExpanded,
-    currentCache.isChangesUnavailable,
-    isSidePanelOpen,
-    refreshCommitHistory,
-  ]);
-
-  useEffect(() => {
-    if (!isSidePanelOpen || currentCache.sidePanelTab !== "files") {
-      return;
-    }
-
-    void refreshFileTree();
-    const intervalId = window.setInterval(
-      () => void refreshFileTree(),
-      FILE_TREE_POLL_INTERVAL_MS,
-    );
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [currentCache.sidePanelTab, isSidePanelOpen, refreshFileTree]);
+  useConditionalPolling({
+    refresh: refreshFileTree,
+    intervalMs: FILE_TREE_POLL_INTERVAL_MS,
+    isActive: isSidePanelOpen && currentCache.sidePanelTab === "files",
+  });
 
   const toggleUncommittedChangesExpanded = useCallback(() => {
     updateCurrentCache((cache) => ({

@@ -167,7 +167,6 @@ export function CodeWorkspace({ projectId, roots, view }: CodeWorkspaceProps) {
   );
   useChangesAutoRefresh({
     enabled: view === "changes",
-    workspacePath: selectedRootWorkspacePath,
     running: isWorktreeRunning,
     refreshChanges,
     refreshCommitHistory,
