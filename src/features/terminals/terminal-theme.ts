@@ -6,6 +6,10 @@ import type { ITheme } from "@xterm/xterm";
  * light 模式必须保证 white / brightWhite 相对 background 有足够对比度：
  * 许多 TUI（含 Grok 输入框 caret、内部滚动条）用 ANSI white/brightWhite 画 UI，
  * 若映射为近白则在 light 背景上不可见；dark 模式无此问题。
+ *
+ * 不设置 selectionForeground：xterm 在选中时会把它强制覆盖到选区所有 cell，
+ * 抹平原本的 ANSI / truecolor 彩色文字（对齐 iTerm2 / VS Code「仅覆盖背景、
+ * 保留原色」的选中行为）。选区可读性由 selectionBackground 与各前景色的对比保证。
  */
 export function getTerminalTheme(theme: "light" | "dark"): ITheme {
   if (theme === "dark") {
@@ -15,7 +19,6 @@ export function getTerminalTheme(theme: "light" | "dark"): ITheme {
       cursorAccent: "#050506",
       foreground: "#f2f3f5",
       selectionBackground: "#25324a",
-      selectionForeground: "#f8fafc",
       selectionInactiveBackground: "#20242b",
       black: "#0f172a",
       red: "#f87171",
@@ -42,7 +45,6 @@ export function getTerminalTheme(theme: "light" | "dark"): ITheme {
     cursorAccent: "#ffffff",
     foreground: "#161515",
     selectionBackground: "#dbeafe",
-    selectionForeground: "#0f172a",
     selectionInactiveBackground: "#e5e7eb",
     black: "#0f172a",
     red: "#a12d24",

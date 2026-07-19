@@ -58,6 +58,14 @@ describe("terminal theme contrast (Grok light-mode visibility)", () => {
     }
   });
 
+  it("does not pin selectionForeground so selection keeps original text colors", () => {
+    // 设了 selectionForeground 时，xterm（core 与 webgl renderer）会把它强制覆盖
+    // 到选区所有 cell，抹平 ANSI / truecolor 彩色文字。不设则恢复 iTerm2 / VS Code
+    // 「仅覆盖背景、保留原色」的选中行为 —— 这是选中后文字不再统一变黑/变白的根因。
+    expect(getTerminalTheme("light").selectionForeground).toBeUndefined();
+    expect(getTerminalTheme("dark").selectionForeground).toBeUndefined();
+  });
+
   it("documents legacy light washout values fail the Grok symptom threshold", () => {
     // 修复前 light 调色板：white/brightWhite 贴白，TUI chrome 不可见
     const legacyWhite = "#d4d4d4";

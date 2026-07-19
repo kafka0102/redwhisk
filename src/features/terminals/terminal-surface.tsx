@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
+import { attachTerminalDragDrop } from "./terminal-drag-drop";
 import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
 import { writeTerminalHistory } from "./terminal-history-writer";
@@ -125,6 +126,9 @@ export function TerminalSurface({
         fontWeightBold: "bold",
         letterSpacing: 0,
         lineHeight: 1,
+        // 兜底 TUI 用 truecolor 画出的浅色前景（Codex / Claude Code 在 light 背景上
+        // 常见）：xterm 默认 1（不调整），低于该比值的 cell 前景会被动态提亮到可见。
+        minimumContrastRatio: 4.5,
         rightClickSelectsWord: false,
         scrollOnEraseInDisplay: true,
         scrollOnUserInput: true,
@@ -251,6 +255,17 @@ export function TerminalSurface({
     let statusTimer: number | null = null;
     let unlistenOutput: (() => void) | null = null;
     let desiredVisible = false;
+
+    // Tauri 默认拦截 HTML5 drop（dragDropEnabled:true），xterm 容器收不到浏览器
+    // drop 事件；改监听原生 webview 拖拽事件，落点命中终端宿主时把文件路径写入
+    // stdin —— 对齐 iTerm2 / Warp 拖入文件「插入路径」，使 Codex / Claude Code
+    // 输入框能接收拖入文件。
+    const disposeDragDrop = attachTerminalDragDrop({
+      host,
+      isDisposed: () => isDisposed,
+      shouldSuppressInput: () => suppressPtyInput,
+      onDropText: (text) => inputWriter.push(text),
+    });
 
     const pipelineTransport: TerminalTransport = {
       readSnapshot: (maxBytes) => transportRef.current.readSnapshot(maxBytes),
@@ -408,6 +423,7 @@ export function TerminalSurface({
       pipeline.dispose();
       inputWriter.dispose();
       unlistenOutput?.();
+      disposeDragDrop();
       if (statusTimer !== null) {
         window.clearInterval(statusTimer);
       }
