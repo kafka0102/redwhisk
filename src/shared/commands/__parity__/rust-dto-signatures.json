@@ -14,7 +14,7 @@
     },
     "AgentCommitChangedFileSummary": {
       "fields": {
-        "oldPath": "optional",
+        "oldPath": "required",
         "path": "required",
         "status": "required"
       }
@@ -84,7 +84,7 @@
         "id": "required",
         "mode": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "promptTemplate": "required",
         "scope": "required"
       }
@@ -97,29 +97,29 @@
         "attention": "required",
         "canCompleteAgentCommit": "required",
         "canCompleteClean": "required",
-        "closedAt": "optional",
+        "closedAt": "required",
         "isTurnRunning": "required",
-        "issueId": "optional",
-        "issueNumber": "optional",
-        "issueStatus": "optional",
-        "issueTitle": "optional",
+        "issueId": "required",
+        "issueNumber": "required",
+        "issueStatus": "required",
+        "issueTitle": "required",
         "lastActiveAt": "required",
-        "lastOutputAt": "optional",
-        "latestOutput": "optional",
+        "lastOutputAt": "required",
+        "latestOutput": "required",
         "logPath": "required",
         "number": "required",
-        "originBranch": "optional",
+        "originBranch": "required",
         "processingMs": "required",
         "projectId": "required",
         "sessionId": "required",
         "startedAt": "required",
         "status": "required",
-        "title": "optional",
-        "workflowSkillName": "optional",
+        "title": "required",
+        "workflowSkillName": "required",
         "workingDir": "required",
-        "workspaceBranch": "optional",
+        "workspaceBranch": "required",
         "workspaceMode": "required",
-        "workspacePath": "optional",
+        "workspacePath": "required",
         "worktreeOwner": "required"
       }
     },
@@ -132,36 +132,36 @@
       "fields": {
         "agentProfileId": "required",
         "attention": "required",
-        "closedAt": "optional",
-        "codexSessionId": "optional",
+        "closedAt": "required",
+        "codexSessionId": "required",
         "commandSnapshot": "required",
         "id": "required",
-        "issueId": "optional",
+        "issueId": "required",
         "lastActiveAt": "required",
-        "latestOutput": "optional",
+        "latestOutput": "required",
         "logPath": "required",
         "number": "required",
-        "originBranch": "optional",
+        "originBranch": "required",
         "projectId": "required",
         "promptSnapshot": "required",
         "startedAt": "required",
         "status": "required",
-        "targetBranch": "optional",
-        "title": "optional",
-        "workflowSkillName": "optional",
+        "targetBranch": "required",
+        "title": "required",
+        "workflowSkillName": "required",
         "workingDir": "required",
-        "workspaceBranch": "optional",
+        "workspaceBranch": "required",
         "workspaceMode": "required",
-        "workspacePath": "optional",
+        "workspacePath": "required",
         "worktreeOwner": "required",
-        "worktreeRootPath": "optional",
-        "worktreeSetupCommand": "optional"
+        "worktreeRootPath": "required",
+        "worktreeSetupCommand": "required"
       }
     },
     "AgentSkillListResponse": {
       "fields": {
         "globalStatus": "required",
-        "lastError": "optional",
+        "lastError": "required",
         "projectStatus": "required",
         "skills": "required"
       }
@@ -171,14 +171,14 @@
         "agentType": "required",
         "name": "required",
         "path": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required",
         "sourceRoot": "required"
       }
     },
     "AgentSkillsUpdatedEvent": {
       "fields": {
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required"
       }
     },
@@ -239,29 +239,29 @@
     },
     "CompleteIssueFlowInput": {
       "fields": {
-        "actualPath": "optional",
-        "branchName": "optional",
-        "continueAfterCommit": "optional",
-        "dirtyDecision": "optional",
-        "ignoreDirty": "optional",
+        "actualPath": "required",
+        "branchName": "required",
+        "continueAfterCommit": "required",
+        "dirtyDecision": "required",
+        "ignoreDirty": "required",
         "issueId": "required",
         "projectId": "required",
-        "worktreeCleanupDecision": "optional"
+        "worktreeCleanupDecision": "required"
       }
     },
     "CompleteIssueFlowResult": {
       "fields": {
         "action": "required",
-        "actualPath": "optional",
+        "actualPath": "required",
         "drifted": "required",
-        "flow": "optional",
+        "flow": "required",
         "issue": "required",
-        "mergeBlockReason": "optional",
+        "mergeBlockReason": "required",
         "message": "required",
-        "sessionId": "optional",
-        "targetBranch": "optional",
-        "workspaceBranch": "optional",
-        "workspacePath": "optional"
+        "sessionId": "required",
+        "targetBranch": "required",
+        "workspaceBranch": "required",
+        "workspacePath": "required"
       }
     },
     "CompleteIssueManualInput": {
@@ -273,9 +273,9 @@
     "CompletionAttemptRecord": {
       "fields": {
         "changedFilesJson": "required",
-        "commitHash": "optional",
+        "commitHash": "required",
         "createdAt": "required",
-        "failureReason": "optional",
+        "failureReason": "required",
         "headAfter": "required",
         "headBefore": "required",
         "id": "required",
@@ -287,9 +287,9 @@
     },
     "CreateIssueInput": {
       "fields": {
-        "attachments": "optional",
+        "attachments": "required",
         "description": "required",
-        "labelIds": "optional",
+        "labelIds": "required",
         "projectId": "required",
         "title": "required"
       }
@@ -355,7 +355,7 @@
     "DeleteIssueResult": {
       "fields": {
         "issueId": "required",
-        "linkedSessionId": "optional",
+        "linkedSessionId": "required",
         "linkedSessionLogPath": "optional",
         "worktreeCleanup": "optional"
       }
@@ -377,7 +377,7 @@
       "fields": {
         "deleted": "required",
         "issueId": "required",
-        "workspacePath": "optional"
+        "workspacePath": "required"
       }
     },
     "DeleteProjectLabelInput": {
@@ -394,7 +394,7 @@
     "DeleteProjectTerminalConfigResult": {
       "fields": {
         "configId": "required",
-        "sessionId": "optional"
+        "sessionId": "required"
       }
     },
     "DeleteProjectTerminalShortcutCommandInput": {
@@ -433,10 +433,10 @@
     },
     "ExportIssueAttachmentInput": {
       "fields": {
-        "attachmentId": "optional",
-        "displayName": "optional",
+        "attachmentId": "required",
+        "displayName": "required",
         "projectId": "required",
-        "sourcePath": "optional",
+        "sourcePath": "required",
         "targetPath": "required"
       }
     },
@@ -460,7 +460,7 @@
     },
     "GetUpdateStatusInput": {
       "fields": {
-        "forceRefresh": "optional"
+        "forceRefresh": "required"
       }
     },
     "InjectAgentSessionPromptInput": {
@@ -473,7 +473,7 @@
     },
     "InjectAgentSessionPromptResult": {
       "fields": {
-        "codexSessionId": "optional",
+        "codexSessionId": "required",
         "sessionId": "required"
       }
     },
@@ -488,21 +488,21 @@
     },
     "IssueAttachmentInput": {
       "fields": {
-        "attachmentId": "optional",
+        "attachmentId": "required",
         "displayName": "required",
-        "mimeType": "optional",
-        "sourcePath": "optional",
-        "tempToken": "optional"
+        "mimeType": "required",
+        "sourcePath": "required",
+        "tempToken": "required"
       }
     },
     "IssueAttachmentPreview": {
       "fields": {
-        "absolutePath": "optional",
-        "attachmentId": "optional",
+        "absolutePath": "required",
+        "attachmentId": "required",
         "displayName": "required",
         "isPreviewable": "required",
         "kind": "required",
-        "textContent": "optional"
+        "textContent": "required"
       }
     },
     "IssueAttachmentRecord": {
@@ -515,27 +515,27 @@
         "isPreviewable": "required",
         "issueId": "required",
         "kind": "required",
-        "mimeType": "optional",
+        "mimeType": "required",
         "relativePath": "required",
         "storedName": "required"
       }
     },
     "IssueCompletionFlowRecord": {
       "fields": {
-        "actualPath": "optional",
-        "baseBranch": "optional",
-        "continueAfterCommit": "optional",
-        "dirtyDecision": "optional",
-        "failureReason": "optional",
+        "actualPath": "required",
+        "baseBranch": "required",
+        "continueAfterCommit": "required",
+        "dirtyDecision": "required",
+        "failureReason": "required",
         "id": "required",
         "ignoreDirty": "required",
         "issueId": "required",
         "phase": "required",
-        "sessionId": "optional",
+        "sessionId": "required",
         "updatedAt": "required",
-        "workspaceBranch": "optional",
-        "workspacePath": "optional",
-        "worktreeCleanupDecision": "optional"
+        "workspaceBranch": "required",
+        "workspacePath": "required",
+        "worktreeCleanupDecision": "required"
       }
     },
     "IssueLabelRecord": {
@@ -543,9 +543,9 @@
         "color": "required",
         "id": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required",
-        "workflowSkill": "optional"
+        "workflowSkill": "required"
       }
     },
     "IssueListResponse": {
@@ -556,16 +556,16 @@
     },
     "IssueRecord": {
       "fields": {
-        "attachments": "optional",
+        "attachments": "required",
         "createdAt": "required",
         "description": "required",
         "id": "required",
-        "labels": "optional",
-        "linkedSessionAttention": "optional",
-        "linkedSessionId": "optional",
-        "linkedSessionLatestOutput": "optional",
-        "linkedSessionLogPath": "optional",
-        "linkedSessionStatus": "optional",
+        "labels": "required",
+        "linkedSessionAttention": "required",
+        "linkedSessionId": "required",
+        "linkedSessionLatestOutput": "required",
+        "linkedSessionLogPath": "required",
+        "linkedSessionStatus": "required",
         "number": "required",
         "projectId": "required",
         "status": "required",
@@ -583,12 +583,12 @@
     },
     "IssueSummaryCompletionInfo": {
       "fields": {
-        "changedFilesJson": "optional",
-        "commitHash": "optional",
+        "changedFilesJson": "required",
+        "commitHash": "required",
         "createdAt": "required",
-        "failureReason": "optional",
-        "headAfter": "optional",
-        "headBefore": "optional",
+        "failureReason": "required",
+        "headAfter": "required",
+        "headBefore": "required",
         "option": "required",
         "result": "required",
         "source": "required"
@@ -596,18 +596,18 @@
     },
     "IssueSummaryRecord": {
       "fields": {
-        "completion": "optional",
+        "completion": "required",
         "diagnostics": "required",
         "issue": "required",
-        "sessionClosedAt": "optional",
-        "sessionStartedAt": "optional"
+        "sessionClosedAt": "required",
+        "sessionStartedAt": "required"
       }
     },
     "IssueTimelineActor": {
       "fields": {
         "actorKind": "required",
         "agentType": "optional",
-        "avatarPath": "optional",
+        "avatarPath": "required",
         "name": "required"
       }
     },
@@ -628,8 +628,8 @@
       "fields": {
         "canDelete": "required",
         "exists": "required",
-        "workspaceBranch": "optional",
-        "workspacePath": "optional"
+        "workspaceBranch": "required",
+        "workspacePath": "required"
       }
     },
     "ListAgentModelsInput": {
@@ -657,19 +657,19 @@
     },
     "ListAgentProfilesInput": {
       "fields": {
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required"
       }
     },
     "ListAgentSkillsInput": {
       "fields": {
-        "agentType": "optional",
-        "projectId": "optional"
+        "agentType": "required",
+        "projectId": "required"
       }
     },
     "ListProjectLabelsInput": {
       "fields": {
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required"
       }
     },
@@ -695,14 +695,14 @@
     },
     "ListSavedAgentSkillsInput": {
       "fields": {
-        "projectId": "optional",
-        "scope": "optional"
+        "projectId": "required",
+        "scope": "required"
       }
     },
     "LocalDataStatus": {
       "fields": {
         "appliedVersions": "required",
-        "currentVersion": "optional",
+        "currentVersion": "required",
         "databaseExists": "required"
       }
     },
@@ -731,10 +731,10 @@
     },
     "PreviewIssueAttachmentInput": {
       "fields": {
-        "attachmentId": "optional",
-        "displayName": "optional",
+        "attachmentId": "required",
+        "displayName": "required",
         "projectId": "required",
-        "sourcePath": "optional"
+        "sourcePath": "required"
       }
     },
     "ProjectGitBranchListInput": {
@@ -759,9 +759,9 @@
         "del": "required",
         "id": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required",
-        "workflowSkill": "optional"
+        "workflowSkill": "required"
       }
     },
     "ProjectListItem": {
@@ -783,7 +783,7 @@
     },
     "ProjectSummary": {
       "fields": {
-        "codeWorkspaces": "optional",
+        "codeWorkspaces": "required",
         "createdAt": "required",
         "id": "required",
         "lastOpenedAt": "required",
@@ -824,17 +824,17 @@
     "ProjectWorkspaceInput": {
       "fields": {
         "projectId": "required",
-        "sessionId": "optional",
-        "workspacePath": "optional"
+        "sessionId": "required",
+        "workspacePath": "required"
       }
     },
     "ProjectWorkspacePathInput": {
       "fields": {
-        "commitHash": "optional",
+        "commitHash": "required",
         "filePath": "required",
         "projectId": "required",
-        "sessionId": "optional",
-        "workspacePath": "optional"
+        "sessionId": "required",
+        "workspacePath": "required"
       }
     },
     "ProjectWorktreeChangesResponse": {
@@ -864,7 +864,7 @@
     },
     "ReadAgentTimelineResult": {
       "fields": {
-        "effort": "optional",
+        "effort": "required",
         "items": "required"
       }
     },
@@ -876,13 +876,13 @@
     },
     "ReadProjectTerminalCwdResult": {
       "fields": {
-        "cwd": "optional",
+        "cwd": "required",
         "sessionId": "required"
       }
     },
     "ReadProjectTerminalInput": {
       "fields": {
-        "maxBytes": "optional",
+        "maxBytes": "required",
         "projectId": "required",
         "sessionId": "required"
       }
@@ -896,7 +896,7 @@
     },
     "RefreshAgentSkillsInput": {
       "fields": {
-        "projectId": "optional"
+        "projectId": "required"
       }
     },
     "ResizeProjectTerminalInput": {
@@ -963,10 +963,10 @@
         "command": "required",
         "dangerous": "required",
         "defaultSkill": "required",
-        "id": "optional",
+        "id": "required",
         "mode": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "promptTemplate": "required",
         "scope": "required"
       }
@@ -988,26 +988,26 @@
     "SaveProjectLabelInput": {
       "fields": {
         "color": "required",
-        "id": "optional",
+        "id": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required",
-        "workflowSkill": "optional"
+        "workflowSkill": "required"
       }
     },
     "SaveProjectTerminalShortcutCommandInput": {
       "fields": {
         "command": "required",
-        "id": "optional",
+        "id": "required",
         "projectId": "required",
         "sortOrder": "required"
       }
     },
     "SaveSavedAgentSkillInput": {
       "fields": {
-        "id": "optional",
+        "id": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required",
         "skillPaths": "required"
       }
@@ -1027,7 +1027,7 @@
       "fields": {
         "id": "required",
         "name": "required",
-        "projectId": "optional",
+        "projectId": "required",
         "scope": "required",
         "skillPaths": "required"
       }
@@ -1040,14 +1040,14 @@
     },
     "SendAgentCommitPromptResult": {
       "fields": {
-        "codexSessionId": "optional",
+        "codexSessionId": "required",
         "issueId": "required",
         "sessionId": "required"
       }
     },
     "SendAgentMessageInput": {
       "fields": {
-        "attachments": "optional",
+        "attachments": "required",
         "message": "required",
         "projectId": "required",
         "sessionId": "required"
@@ -1091,7 +1091,7 @@
     },
     "SetAgentThinkingInput": {
       "fields": {
-        "effort": "optional",
+        "effort": "required",
         "projectId": "required",
         "sessionId": "required"
       }
@@ -1102,10 +1102,10 @@
         "issueId": "required",
         "projectId": "required",
         "promptSnapshot": "required",
-        "targetBranch": "optional",
-        "workflowSkillName": "optional",
-        "workspaceMode": "optional",
-        "worktreeSetupCommand": "optional"
+        "targetBranch": "required",
+        "workflowSkillName": "required",
+        "workspaceMode": "required",
+        "worktreeSetupCommand": "required"
       }
     },
     "StartAgentSessionResult": {
@@ -1116,14 +1116,14 @@
     },
     "StartStructuredAgentSessionInput": {
       "fields": {
-        "agentProfileId": "optional",
-        "agentType": "optional",
-        "effort": "optional",
-        "mode": "optional",
-        "model": "optional",
+        "agentProfileId": "required",
+        "agentType": "required",
+        "effort": "required",
+        "mode": "required",
+        "model": "required",
         "projectId": "required",
-        "resumeFromCodexSessionId": "optional",
-        "title": "optional"
+        "resumeFromCodexSessionId": "required",
+        "title": "required"
       }
     },
     "StartStructuredAgentSessionResult": {
@@ -1164,10 +1164,10 @@
     },
     "UpdateIssueInput": {
       "fields": {
-        "attachments": "optional",
+        "attachments": "required",
         "description": "required",
         "issueId": "required",
-        "labelIds": "optional",
+        "labelIds": "required",
         "projectId": "required",
         "title": "required"
       }
@@ -1197,26 +1197,26 @@
     },
     "UpdateStatus": {
       "fields": {
-        "checkedAt": "optional",
+        "checkedAt": "required",
         "currentVersion": "required",
-        "errorCode": "optional",
+        "errorCode": "required",
         "hasUpdate": "required",
-        "ignoredVersion": "optional",
-        "latestVersion": "optional",
-        "releaseUrl": "optional",
+        "ignoredVersion": "required",
+        "latestVersion": "required",
+        "releaseUrl": "required",
         "shouldShowPrompt": "required",
-        "snoozeUntil": "optional"
+        "snoozeUntil": "required"
       }
     },
     "UpdateUserProfileInput": {
       "fields": {
-        "avatarSourcePath": "optional",
-        "name": "optional"
+        "avatarSourcePath": "required",
+        "name": "required"
       }
     },
     "UserProfileRecord": {
       "fields": {
-        "avatarPath": "optional",
+        "avatarPath": "required",
         "id": "required",
         "name": "required"
       }
@@ -1242,7 +1242,7 @@
         "isBinary": "required",
         "kind": "required",
         "metadataSignature": "required",
-        "oldPath": "optional",
+        "oldPath": "required",
         "status": "required"
       }
     },
@@ -1251,7 +1251,7 @@
         "fileName": "required",
         "filePath": "required",
         "kind": "required",
-        "oldPath": "optional",
+        "oldPath": "required",
         "status": "required"
       }
     },
@@ -1274,9 +1274,9 @@
         "isBinary": "required",
         "isTooLarge": "required",
         "kind": "required",
-        "language": "optional",
+        "language": "required",
         "modifiedContent": "required",
-        "oldPath": "optional",
+        "oldPath": "required",
         "originalContent": "required"
       }
     },
@@ -1286,14 +1286,14 @@
         "filePath": "required",
         "isBinary": "required",
         "isTooLarge": "required",
-        "language": "optional",
-        "modifiedAt": "optional",
+        "language": "required",
+        "modifiedAt": "required",
         "sizeBytes": "required"
       }
     },
     "WorkspaceFileTreeNode": {
       "fields": {
-        "children": "required",
+        "children": "optional",
         "id": "required",
         "isIgnored": "required",
         "kind": "required",

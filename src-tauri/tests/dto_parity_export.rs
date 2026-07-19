@@ -85,6 +85,7 @@ fn is_skipped(attrs: &[syn::Attribute]) -> bool {
     false
 }
 
+#[allow(dead_code)]
 fn field_has_default(attrs: &[syn::Attribute]) -> bool {
     let mut hit = false;
     for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
@@ -98,16 +99,30 @@ fn field_has_default(attrs: &[syn::Attribute]) -> bool {
     hit
 }
 
-fn is_option(ty: &syn::Type) -> bool {
-    let syn::Type::Path(tp) = ty else {
-        return false;
-    };
-    tp.path
-        .segments
-        .last()
-        .map(|s| s.ident == "Option")
-        .unwrap_or(false)
+/// 字段是否带 `#[serde(skip_serializing_if = "...")]`。
+///
+/// 这是判断「序列化时键是否可能缺失」的唯一可靠信号：
+/// - `Option<T>` 单独存在时 serde 仍会序列化为 `null`（键始终存在）；
+/// - `Vec<T>` 单独存在时始终序列化为数组（哪怕是空）；
+/// - 只有 `skip_serializing_if` 让 serde 在条件成立时省略键，TS 端才能用 `field?: ...`。
+fn field_has_skip_serializing_if(attrs: &[syn::Attribute]) -> bool {
+    let mut hit = false;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("skip_serializing_if") {
+                // 取一下 value 以推进解析；具体函数名不影响判定。
+                let _ = meta.value()?;
+                hit = true;
+            }
+            Ok(())
+        });
+    }
+    hit
 }
+
+// 注：`is_option` 与 `field_has_default` 在序列化语义重写后不再驱动 optional 判定。
+// 保留 `field_has_default` 供未来反序列化方向（TS→Rust 输入 DTO）的扩展使用；
+// plain `Option<T>` 的判定已交给 `skip_serializing_if` 单一信号。
 
 /// per-field `#[serde(rename = "...")]`，若存在返回其值。
 fn field_rename(attrs: &[syn::Attribute]) -> Option<String> {
@@ -212,7 +227,12 @@ fn parse_struct(item: &ItemStruct) -> Option<(String, StructSig)> {
                 Some("camelCase") => to_camel_case(&raw),
                 _ => raw.clone(),
             });
-            let optional = is_option(&f.ty) || field_has_default(&f.attrs);
+            // 「键在序列化时是否可能缺失」唯一信号是 skip_serializing_if：
+            // - `Option<T>` 无 skip：serde 始终写出键（值为 null）→ required
+            // - `Vec<T>` 无 skip：始终写出键（值可能为空数组）→ required
+            // - 任何类型 + skip_serializing_if：键可能缺失 → optional
+            // `#[serde(default)]` 只影响反序列化，不影响序列化输出，不计入。
+            let optional = field_has_skip_serializing_if(&f.attrs);
             fields.insert(
                 name,
                 if optional {
@@ -284,11 +304,12 @@ fn export_dto_signatures_writes_snapshot() {
         .get("ProjectSummary")
         .expect("ProjectSummary 存在");
     assert_eq!(project.fields.get("id"), Some(&FieldOptionality::Required));
-    // ProjectSummary.code_workspaces 带 #[serde(default)]（project.rs:61），
-    // 按规则记为 optional（前端 TS 须配 `codeWorkspaces?: ...` 才能对齐）。
+    // ProjectSummary.code_workspaces 是 `Vec<CodeWorkspaceRoot>` 带 `#[serde(default)]`
+    // 但无 `skip_serializing_if` —— 序列化时键始终存在（值为数组，可能为空）。
+    // 按序列化语义判定为 required（前端 TS 须配 `codeWorkspaces: ...` 才能对齐）。
     assert_eq!(
         project.fields.get("codeWorkspaces"),
-        Some(&FieldOptionality::Optional)
+        Some(&FieldOptionality::Required)
     );
     assert!(sigs.enums.contains_key("ProjectWorktreeLocation"));
     assert!(sigs.enums.contains_key("CommandErrorCode"));

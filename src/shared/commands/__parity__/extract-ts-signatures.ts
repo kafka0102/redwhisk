@@ -27,18 +27,61 @@ function collectInterfaceFields(
   return fields;
 }
 
-/** union 字面量类型（如 "a" | "b"）的变体。 */
+/** union 字面量类型（如 "a" | "b"）的变体。返回 null 表示非字面量 union。 */
 function collectUnionVariants(node: ts.TypeAliasDeclaration): string[] | null {
   if (!node.type || !ts.isUnionTypeNode(node.type)) {
     return null;
   }
-  return node.type.types
-    .map((t) =>
-      ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal)
-        ? t.literal.text
-        : null,
-    )
-    .filter((v): v is string => v !== null);
+  // 任一 member 不是字面量 → 视为非字面量 union（可能是判别 union），返回 null 让下游处理。
+  const variants: string[] = [];
+  for (const t of node.type.types) {
+    if (!ts.isLiteralTypeNode(t) || !ts.isStringLiteral(t.literal)) {
+      return null;
+    }
+    variants.push(t.literal.text);
+  }
+  return variants.length > 0 ? variants : null;
+}
+
+/**
+ * 判别 union（discriminated union）的 tag 字面量集合。
+ *
+ * 对应 Rust 的 `#[serde(tag = "type", rename_all = "snake_case")]` enum：
+ * 每个 union member 是 `{ type: "thread_started"; ... }` 形式的 type literal。
+ * 返回所有 member 的 `type` 字段字面量；若任一 member 没有 `type: <stringLiteral>`
+ * 属性则返回 null（视为非判别 union，不当作 enum）。
+ */
+function collectDiscriminatedUnionVariants(
+  node: ts.TypeAliasDeclaration,
+): string[] | null {
+  if (!node.type || !ts.isUnionTypeNode(node.type)) {
+    return null;
+  }
+  const variants: string[] = [];
+  for (const member of node.type.types) {
+    if (!ts.isTypeLiteralNode(member)) {
+      return null;
+    }
+    let tag: string | null = null;
+    for (const m of member.members) {
+      if (
+        ts.isPropertySignature(m) &&
+        m.name &&
+        ts.isIdentifier(m.name) &&
+        m.name.text === "type" &&
+        m.type &&
+        ts.isLiteralTypeNode(m.type) &&
+        ts.isStringLiteral(m.type.literal)
+      ) {
+        tag = m.type.literal.text;
+      }
+    }
+    if (tag === null) {
+      return null;
+    }
+    variants.push(tag);
+  }
+  return variants.length > 0 ? variants : null;
 }
 
 export function extractTsSignatures(filePath: string): TsSignatures {
@@ -62,7 +105,9 @@ export function extractTsSignatures(filePath: string): TsSignatures {
         fields: collectInterfaceFields(node, checker),
       };
     } else if (ts.isTypeAliasDeclaration(node)) {
-      const variants = collectUnionVariants(node);
+      // 先按字面量 union 解析（"a" | "b"）；否则尝试判别 union（{type: "a"} | {type: "b"}）。
+      const variants =
+        collectUnionVariants(node) ?? collectDiscriminatedUnionVariants(node);
       if (variants) {
         enums[node.name.text] = { variants };
       }
