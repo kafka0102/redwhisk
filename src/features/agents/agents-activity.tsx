@@ -13,9 +13,6 @@ import {
   listAgentSessions,
   resumeStructuredAgentSession,
   setAgentSessionAttention,
-  startStructuredAgentSession,
-  updateAgentSessionTitle,
-  type StartStructuredAgentSessionResult,
   type AgentSessionListItem,
 } from "./agent-session-commands";
 import { clearComposerDraft } from "./composer/use-agent-composer";
@@ -37,17 +34,13 @@ import { toast } from "../../shared/toast";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { AgentsSessionList } from "./session-list/agents-session-list";
-import {
-  listAgentProfiles,
-  type AgentProfileRecord,
-} from "../settings/settings-commands";
+import { type AgentProfileRecord } from "../settings/settings-commands";
 import {
   AgentsSessionPane,
   type LinkedSessionIssue,
   type SessionIssueTransition,
   type SessionWorkspaceEntry,
 } from "./session-pane/agents-session-pane";
-import { subscribeAgentSessionListChanged } from "./agent-session-events";
 import { getSessionIssueGroup } from "./agent-session-formatters";
 import {
   applySessionOverlays,
@@ -61,6 +54,7 @@ import {
   useSplitterDrag,
 } from "./use-splitter-drag";
 import { useSessionToolTabs } from "./use-session-tool-tabs";
+import { useAgentSessionList } from "./use-agent-session-list";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
 import { SessionTerminalTab } from "./session-workspace/session-terminal-tab";
@@ -82,7 +76,6 @@ import {
   setSessionReturnState,
 } from "./session-pane/session-return-cache";
 
-const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 // 实例池上限：与 use-agent-message-stream.ts 的 MAX_CACHED_SESSIONS 对齐，
 // 保证常驻 AgentSessionView 实例数量与消息流 state 缓存淘汰粒度一致。
 const MAX_CACHED_SESSION_VIEWS = 5;
@@ -186,134 +179,6 @@ export function AgentsActivity({
       ),
     [],
   );
-
-  useEffect(() => {
-    let isMounted = true;
-    let unlisten: (() => void) | null = null;
-    let refreshTimer: number | null = null;
-    let isRefreshInFlight = false;
-    let hasPendingRefresh = false;
-
-    async function loadSessions(showLoading: boolean) {
-      if (!showLoading && isRefreshInFlight) {
-        hasPendingRefresh = true;
-        return;
-      }
-      if (!showLoading) {
-        isRefreshInFlight = true;
-      }
-      if (showLoading) {
-        setIsLoading(true);
-      }
-      setErrorMessage(null);
-
-      try {
-        const response = await listAgentSessions(projectId);
-        if (!isMounted) {
-          return;
-        }
-
-        setAllSessions(applySessionListOverlays(response.sessions));
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(getCommandErrorMessage(error, t));
-      } finally {
-        if (!showLoading) {
-          isRefreshInFlight = false;
-          if (hasPendingRefresh && isMounted) {
-            hasPendingRefresh = false;
-            scheduleEventRefresh();
-          }
-        }
-        if (isMounted && showLoading) {
-          setIsLoading(false);
-          // session列表加载完成后，延迟加载非关键内容，确保UI先响应
-          window.requestIdleCallback(() => {
-            setShouldLoadDeferredContent(true);
-          });
-        }
-      }
-    }
-
-    function scheduleEventRefresh() {
-      if (refreshTimer !== null) {
-        return;
-      }
-      refreshTimer = window.setTimeout(() => {
-        refreshTimer = null;
-        void loadSessions(false);
-      }, SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS);
-    }
-
-    void loadSessions(true);
-    void subscribeAgentSessionListChanged((event) => {
-      if (event.projectId !== projectId) {
-        return;
-      }
-      scheduleEventRefresh();
-    }).then((nextUnlisten) => {
-      if (!isMounted) {
-        nextUnlisten();
-        return;
-      }
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      isMounted = false;
-      if (refreshTimer !== null) {
-        window.clearTimeout(refreshTimer);
-      }
-      unlisten?.();
-    };
-  }, [applySessionListOverlays, projectId, t]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadAgentProfiles() {
-      setIsLoadingAgentProfiles(true);
-      setHasAgentProfilesLoadError(false);
-
-      try {
-        const [projectResponse, globalResponse] = await Promise.all([
-          listAgentProfiles({ scope: "project", projectId }),
-          listAgentProfiles({ scope: "global", projectId: null }),
-        ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const mergedProfiles = [
-          ...projectResponse.profiles,
-          ...globalResponse.profiles,
-        ];
-        setAvailableAgentProfiles(mergedProfiles);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setAvailableAgentProfiles([]);
-        setHasAgentProfilesLoadError(true);
-        toast.error(getCommandErrorMessage(error, t));
-      } finally {
-        if (isMounted) {
-          setIsLoadingAgentProfiles(false);
-        }
-      }
-    }
-
-    void loadAgentProfiles();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId, t]);
 
   const currentSessionId = shouldLoadDeferredContent
     ? ((visibleSessions.some(
@@ -541,12 +406,28 @@ export function AgentsActivity({
       setIsCompletionLoadingDialogDismissed(false);
     }
   }
-  const refreshSessions = useCallback(async () => {
-    const response = await listAgentSessions(projectId);
-    const nextSessions = applySessionListOverlays(response.sessions);
-    setAllSessions(nextSessions);
-    return nextSessions;
-  }, [applySessionListOverlays, projectId]);
+  const { refreshSessions, createSession, handleRenameSessionTitle } =
+    useAgentSessionList({
+      projectId,
+      applySessionListOverlays,
+      selectedSession,
+      isCreatingSession,
+      setAllSessions,
+      setIsLoading,
+      setErrorMessage,
+      setShouldLoadDeferredContent,
+      setAvailableAgentProfiles,
+      setIsLoadingAgentProfiles,
+      setHasAgentProfilesLoadError,
+      setIsCreatingSession,
+      setIsRenamingSessionTitle,
+      setIsSessionSidePanelOpen,
+      setSelectedSessionId,
+      onSelectSession,
+      showCommandErrorAlert,
+      t,
+      messages,
+    });
 
   async function acknowledgeSessionAttention(sessionId: number) {
     const targetSession = allSessions.find(
@@ -1122,70 +1003,6 @@ export function AgentsActivity({
     }
     setMergePromptSessionId(null);
     setMergePromptContent(null);
-  }
-
-  async function handleRenameSessionTitle(sessionId: number, title: string) {
-    if (!selectedSession || selectedSession.sessionId !== sessionId) {
-      return;
-    }
-
-    setIsRenamingSessionTitle(true);
-    try {
-      const result = await updateAgentSessionTitle({
-        projectId,
-        sessionId,
-        title,
-      });
-      setAllSessions((currentSessions) =>
-        currentSessions.map((session) =>
-          session.sessionId === result.sessionId
-            ? {
-                ...session,
-                title: result.title,
-                lastActiveAt: session.lastActiveAt + 1,
-              }
-            : session,
-        ),
-      );
-      await refreshSessions();
-    } catch (error) {
-      showCommandErrorAlert(error);
-      throw error;
-    } finally {
-      setIsRenamingSessionTitle(false);
-    }
-  }
-
-  async function handleTemporarySessionStarted(
-    result: StartStructuredAgentSessionResult,
-  ) {
-    const response = await listAgentSessions(projectId);
-    setAllSessions(applySessionListOverlays(response.sessions));
-    setIsSessionSidePanelOpen(false);
-    setSelectedSessionId(result.sessionId);
-    onSelectSession?.(result.sessionId);
-  }
-
-  async function createSession(profile: AgentProfileRecord) {
-    if (isCreatingSession) {
-      return;
-    }
-
-    setIsCreatingSession(true);
-
-    try {
-      const result = await startStructuredAgentSession({
-        projectId,
-        title: messages.agentsFeature.temporarySessionDefaultTitle,
-        agentType: profile.agentType,
-        agentProfileId: profile.id,
-      });
-      await handleTemporarySessionStarted(result);
-    } catch (error) {
-      toast.error(getCommandErrorMessage(error, t));
-    } finally {
-      setIsCreatingSession(false);
-    }
   }
 
   return (
