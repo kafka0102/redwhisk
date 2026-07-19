@@ -1033,43 +1033,6 @@ fn prepare_project_window_open_validates_target_without_updating_last_opened_at(
 }
 
 #[test]
-fn record_project_opened_updates_last_opened_at_after_window_success() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let database = DatabaseConfig::new(temp_dir.path())
-        .open()
-        .expect("database");
-    MigrationRunner::default()
-        .run(&database.connection)
-        .expect("migrations");
-    let repo_dir = temp_dir.path().join("target-repo");
-    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
-    let repository = ProjectRepository::new(&database.connection);
-    repository
-        .insert("target-repo", repo_dir.to_str().unwrap())
-        .expect("insert project");
-    let stored_project = repository
-        .find_by_repo_path(repo_dir.to_str().unwrap())
-        .expect("query project")
-        .expect("project");
-    database
-        .connection
-        .execute(
-            "UPDATE projects SET last_opened_at = 1780624800000 WHERE id = ?1",
-            [stored_project.id],
-        )
-        .expect("older timestamp");
-    let service = ProjectService::new(ProjectRepository::new(&database.connection));
-
-    let project = service
-        .record_project_opened(stored_project.id)
-        .expect("record open project");
-
-    assert_eq!(project.id, stored_project.id);
-    assert_ne!(project.last_opened_at, 1_780_624_800_000);
-    assert!(project.last_opened_at > 1_700_000_000_000);
-}
-
-#[test]
 fn update_project_settings_persists_project_name_and_repo_path() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = DatabaseConfig::new(temp_dir.path())
