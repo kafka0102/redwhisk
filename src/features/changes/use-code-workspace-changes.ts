@@ -22,6 +22,9 @@ export interface UseCodeWorkspaceChangesResult {
   isCommitHistoryLoading: boolean;
   commitHistoryErrorMessage: string | null;
   isWorktree: boolean;
+  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
+  // 透传给变更面板渲染首条黄色提交右侧的黄色 base Tag（spec F3/F5）。
+  baseBranch: string | null;
   refreshChanges: () => void;
   refreshCommitHistory: () => void;
 }
@@ -55,6 +58,7 @@ export function useCodeWorkspaceChanges(
     string | null
   >(null);
   const [isWorktree, setIsWorktree] = useState(false);
+  const [baseBranch, setBaseBranch] = useState<string | null>(null);
   const changesRequestSequenceRef = useRef(0);
   const lastChangesSignatureRef = useRef<string | null>(null);
   const commitHistoryRequestSequenceRef = useRef(0);
@@ -142,6 +146,7 @@ export function useCodeWorkspaceChanges(
           if (!unchanged) {
             setCommitHistory(response.commits);
             setIsWorktree(response.isWorktree);
+            setBaseBranch(response.baseBranch ?? null);
           }
           setIsCommitHistoryLoading(false);
           setCommitHistoryErrorMessage(null);
@@ -185,6 +190,7 @@ export function useCodeWorkspaceChanges(
     isCommitHistoryLoading,
     commitHistoryErrorMessage,
     isWorktree,
+    baseBranch,
     refreshChanges,
     refreshCommitHistory,
   };

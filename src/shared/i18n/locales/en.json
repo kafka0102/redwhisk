@@ -498,6 +498,7 @@
     "committedTimeline": "Committed changes timeline",
     "committedChangesNotImplemented": "Committed changes are not implemented yet.",
     "pushedToRemote": "Pushed to remote",
+    "baseBranchTag": "Base branch",
     "loadingFileTree": "Loading file tree...",
     "noFiles": "No files.",
     "copyFileName": "Copy file name",

@@ -71,6 +71,7 @@ export function CodeWorkspaceChangesView({
     isCommitHistoryLoading,
     commitHistoryErrorMessage,
     isWorktree,
+    baseBranch,
     refreshChanges,
     refreshCommitHistory,
   } = useCodeWorkspaceChanges(projectId, selectedRootWorkspacePath, true);
@@ -106,6 +107,7 @@ export function CodeWorkspaceChangesView({
           commitHistoryErrorMessage={commitHistoryErrorMessage}
           isCommitHistoryLoading={isCommitHistoryLoading}
           isWorktree={isWorktree}
+          baseBranch={baseBranch}
           isCommittedExpanded={committedChangesExpanded}
           onToggleCommittedExpanded={onToggleCommittedExpanded}
         />

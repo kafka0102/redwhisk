@@ -5,6 +5,7 @@ import {
   FilePlus,
   FileX,
   Files,
+  GitBranch,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +27,10 @@ interface CommittedChangesTimelineProps {
   expandedCommitHashes: Set<string>;
   isWorktree: boolean;
   isLoading: boolean;
+  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
+  // 由父层从 getProjectWorktreeCommitHistory 响应透传，用于首条黄色提交右侧渲染
+  // 黄色 base Tag（spec F3/F5）。
+  baseBranch?: string | null;
   onOpenCommittedChangedFile: (
     commitHash: string,
     file: WorkspaceCommitChangedFile,
@@ -39,6 +44,7 @@ export function CommittedChangesTimeline({
   expandedCommitHashes,
   isWorktree,
   isLoading,
+  baseBranch,
   onOpenCommittedChangedFile,
   onToggleCommit,
 }: CommittedChangesTimelineProps) {
@@ -61,6 +67,20 @@ export function CommittedChangesTimeline({
   const firstPushedIndex = commits.findIndex(
     (commit) => commit.isPushed && commit.pushedTo,
   );
+  // base Tag 落在 worktree 模式下首条黄色提交（fork point / merge-base）。仅在
+  // baseBranch 提供时计算，否则保持 -1 完全不影响 pushed Tag 现状（spec F3）。
+  const firstBaseTagIndex = baseBranch
+    ? commits.findIndex((commit) => !commit.isCreatedInWorktree)
+    : -1;
+  const showBaseTagAt = firstBaseTagIndex >= 0 ? firstBaseTagIndex : -1;
+  // F4 共存：当首条黄色提交同时是首条已 push 提交时，base Tag 占右侧位，pushed Tag
+  // 顺延到其后首个已 push 提交；不同 commit 时各自显示；无 baseBranch 时不变。
+  let pushedTagIndex = firstPushedIndex;
+  if (showBaseTagAt >= 0 && showBaseTagAt === firstPushedIndex) {
+    pushedTagIndex = commits.findIndex(
+      (commit, i) => i > showBaseTagAt && commit.isPushed && commit.pushedTo,
+    );
+  }
 
   return (
     <ol
@@ -69,7 +89,8 @@ export function CommittedChangesTimeline({
     >
       {commits.map((commit, index) => {
         const isExpanded = expandedCommitHashes.has(commit.hash);
-        const showPushedTag = index === firstPushedIndex;
+        const showBaseTag = index === showBaseTagAt;
+        const showPushedTag = index === pushedTagIndex;
         return (
           <li className="session-commit-timeline__item" key={commit.hash}>
             <span className="session-commit-timeline__rail" aria-hidden="true">
@@ -91,6 +112,16 @@ export function CommittedChangesTimeline({
                   {commit.authorName}
                 </span>
               </span>
+              {showBaseTag && baseBranch ? (
+                <span
+                  aria-label={messages.agentsFeature.baseBranchTag}
+                  className="session-commit-row__base-tag"
+                  title={messages.agentsFeature.baseBranchTag}
+                >
+                  <GitBranch aria-hidden="true" size={11} strokeWidth={1.8} />
+                  <span>{baseBranch}</span>
+                </span>
+              ) : null}
               {showPushedTag ? (
                 <span
                   aria-label={messages.agentsFeature.pushedToRemote}

@@ -57,6 +57,9 @@ interface SessionWorkspaceCache {
   uncommittedChangesExpanded: boolean;
   commitHistory: WorkspaceCommitRecord[];
   isCommitFromWorktree: boolean;
+  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
+  // 透传到 SessionSidePanel -> SessionChangesPanel 渲染首条黄色提交右侧的黄色 base Tag。
+  baseBranch: string | null;
   commitHistoryErrorMessage: string | null;
   commitHistoryRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
@@ -85,6 +88,7 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   uncommittedChangesExpanded: true,
   commitHistory: [],
   isCommitFromWorktree: false,
+  baseBranch: null,
   commitHistoryErrorMessage: null,
   commitHistoryRequestSequence: 0,
   fileTab: null,
@@ -327,6 +331,7 @@ export function useSessionWorkspaceCache({
                   ? cache.commitHistory
                   : response.commits,
               isCommitFromWorktree: response.isWorktree,
+              baseBranch: response.baseBranch ?? null,
               isCommitHistoryLoading: false,
               commitHistoryErrorMessage: null,
               lastCommitHistorySignature: response.signature,
@@ -685,6 +690,7 @@ export function useSessionWorkspaceCache({
     committedChangesExpanded: currentCache.committedChangesExpanded,
     commitHistory: currentCache.commitHistory,
     isCommitFromWorktree: currentCache.isCommitFromWorktree,
+    baseBranch: currentCache.baseBranch,
     commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,

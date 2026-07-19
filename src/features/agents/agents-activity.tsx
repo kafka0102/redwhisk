@@ -554,6 +554,7 @@ export function AgentsActivity({
               changesErrorMessage={workspaceCache.changesErrorMessage}
               commitHistory={workspaceCache.commitHistory}
               isCommitFromWorktree={workspaceCache.isCommitFromWorktree}
+              baseBranch={workspaceCache.baseBranch}
               commitHistoryErrorMessage={
                 workspaceCache.commitHistoryErrorMessage
               }

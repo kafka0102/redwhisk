@@ -27,6 +27,9 @@ interface WorkspaceChangesPanelsProps {
   isCommitHistoryLoading: boolean;
   commitHistoryErrorMessage: string | null;
   isWorktree: boolean;
+  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
+  // 透传给 CommittedChangesTimeline 渲染首条黄色提交右侧的黄色 base Tag。
+  baseBranch?: string | null;
   isCommittedExpanded: boolean;
   onToggleCommittedExpanded: () => void;
 }
@@ -51,6 +54,7 @@ export function WorkspaceChangesPanels({
   isCommitHistoryLoading,
   commitHistoryErrorMessage,
   isWorktree,
+  baseBranch,
   isCommittedExpanded,
   onToggleCommittedExpanded,
 }: WorkspaceChangesPanelsProps) {
@@ -137,6 +141,7 @@ export function WorkspaceChangesPanels({
               expandedCommitHashes={expandedCommitHashes}
               isLoading={isCommitHistoryLoading}
               isWorktree={isWorktree}
+              baseBranch={baseBranch}
               onOpenCommittedChangedFile={onOpenCommittedChangedFile}
               onToggleCommit={handleToggleCommit}
             />

@@ -477,6 +477,7 @@ export interface I18nMessages {
     committedTimeline: string;
     committedChangesNotImplemented: string;
     pushedToRemote: string;
+    baseBranchTag: string;
     loadingFileTree: string;
     noFiles: string;
     copyFileName: string;

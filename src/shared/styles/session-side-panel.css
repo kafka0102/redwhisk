@@ -449,6 +449,33 @@
   white-space: nowrap;
 }
 
+/* base 分支 Tag：worktree 模式下首条黄色提交（fork point）右侧的分支名标记。复用
+   remote-tag 的定位 / 布局，背景黄 #f59e0b（与 --other-worktree 圆点同色），字色白。 */
+.session-commit-row__base-tag {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f59e0b;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.session-commit-row__base-tag > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-commit-files {
   display: grid;
   gap: 1px;

@@ -9,6 +9,9 @@ interface SessionChangesPanelProps {
   changes: WorkspaceChangedFile[];
   commitHistory: WorkspaceCommitRecord[];
   isWorktree: boolean;
+  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
+  // 透传给共享变更面板渲染首条黄色提交右侧的黄色 base Tag。
+  baseBranch?: string | null;
   commitHistoryErrorMessage: string | null;
   errorMessage: string | null;
   isCommitHistoryLoading: boolean;
@@ -28,6 +31,7 @@ export function SessionChangesPanel({
   changes,
   commitHistory,
   isWorktree,
+  baseBranch,
   commitHistoryErrorMessage,
   errorMessage,
   isCommitHistoryLoading,
@@ -51,6 +55,7 @@ export function SessionChangesPanel({
       isCommitHistoryLoading={isCommitHistoryLoading}
       commitHistoryErrorMessage={commitHistoryErrorMessage}
       isWorktree={isWorktree}
+      baseBranch={baseBranch}
       isCommittedExpanded={isCommittedExpanded}
       onToggleCommittedExpanded={onToggleCommittedExpanded}
       onOpenCommittedChangedFile={onOpenCommittedChangedFile}

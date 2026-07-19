@@ -18,6 +18,9 @@ interface SessionSidePanelProps {
   changesErrorMessage: string | null;
   commitHistory: WorkspaceCommitRecord[];
   isCommitFromWorktree: boolean;
+  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
+  // 透传给 SessionChangesPanel 渲染首条黄色提交右侧的黄色 base Tag。
+  baseBranch?: string | null;
   commitHistoryErrorMessage: string | null;
   fileTree: WorkspaceFileTreeNode[];
   fileTreeErrorMessage: string | null;
@@ -48,6 +51,7 @@ export function SessionSidePanel({
   changesErrorMessage,
   commitHistory,
   isCommitFromWorktree,
+  baseBranch,
   commitHistoryErrorMessage,
   fileTree,
   fileTreeErrorMessage,
@@ -119,6 +123,7 @@ export function SessionSidePanel({
             changes={changes}
             commitHistory={commitHistory}
             isWorktree={isCommitFromWorktree}
+            baseBranch={baseBranch}
             commitHistoryErrorMessage={commitHistoryErrorMessage}
             errorMessage={changesErrorMessage}
             isCommitHistoryLoading={isCommitHistoryLoading}
