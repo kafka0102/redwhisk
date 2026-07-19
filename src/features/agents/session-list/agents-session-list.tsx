@@ -7,6 +7,8 @@ import { formatAgentTypeLabel, getAgentLogoSrc } from "../agent-visuals";
 import {
   formatSessionStatusLabel,
   formatSessionTitle,
+  getSessionStatusTone,
+  shouldShowRunningSpinner,
 } from "../agent-session-formatters";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type { AgentProfileRecord } from "../../settings/settings-commands";
@@ -233,43 +235,6 @@ function SessionRows({
 
 function buildSessionStatusDotClassName(tone: string): string {
   return `agents-session-row__status-dot agents-session-row__status-dot--${tone}`;
-}
-
-function getSessionStatusTone(session: AgentSessionListItem): string {
-  if (session.status !== "running") {
-    return "done";
-  }
-
-  if (session.attention === "requested") {
-    return "attention";
-  }
-
-  if (session.issueStatus === "completed") {
-    return "done";
-  }
-
-  if (session.issueStatus === "review") {
-    return "review";
-  }
-
-  if (session.issueStatus === "running" && session.isTurnRunning === false) {
-    return "in-progress";
-  }
-
-  return "running";
-}
-
-function shouldShowRunningSpinner(session: AgentSessionListItem): boolean {
-  const isTurnRunning =
-    session.status === "running" &&
-    (session.isTurnRunning ?? session.status === "running");
-
-  return (
-    isTurnRunning &&
-    session.attention !== "requested" &&
-    session.issueStatus !== "review" &&
-    session.issueStatus !== "completed"
-  );
 }
 
 function formatSessionOutputLine(output: string | null | undefined): string {

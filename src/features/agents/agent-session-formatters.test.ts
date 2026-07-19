@@ -4,6 +4,9 @@ import type { AgentSessionListItem } from "./agent-session-commands";
 import {
   formatDuration,
   formatProcessingDuration,
+  getSessionStatusTone,
+  isAgentTurnActivelyRunning,
+  shouldShowRunningSpinner,
 } from "./agent-session-formatters";
 
 describe("formatDuration", () => {
@@ -95,5 +98,115 @@ describe("formatProcessingDuration", () => {
     expect(
       formatProcessingDuration({ ...base, processingMs: 184_000 }, "zh"),
     ).toBe("3分4秒");
+  });
+});
+
+const runningBase: AgentSessionListItem = {
+  sessionId: 1,
+  number: 1,
+  issueId: 10,
+  issueNumber: 1,
+  issueTitle: "Merge conflict issue",
+  agentType: "claude",
+  status: "running",
+  attention: "none",
+  title: null,
+  lastActiveAt: 0,
+  startedAt: 0,
+  closedAt: 0,
+};
+
+describe("isAgentTurnActivelyRunning", () => {
+  it("is true when status running and isTurnRunning true", () => {
+    expect(
+      isAgentTurnActivelyRunning({ ...runningBase, isTurnRunning: true }),
+    ).toBe(true);
+  });
+
+  it("is false when isTurnRunning false (turn idle)", () => {
+    expect(
+      isAgentTurnActivelyRunning({ ...runningBase, isTurnRunning: false }),
+    ).toBe(false);
+  });
+
+  it("is false when isTurnRunning undefined (legacy data)", () => {
+    expect(isAgentTurnActivelyRunning({ ...runningBase })).toBe(false);
+  });
+
+  it("is false when session is not running", () => {
+    expect(
+      isAgentTurnActivelyRunning({
+        ...runningBase,
+        status: "closed",
+        isTurnRunning: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("session card reflects actual agent running over static issue status", () => {
+  // 完成流程 worktree 合并冲突注入 prompt 后：issue 停在 review，但 agent
+  // 实际在跑解决冲突的 turn。card 应按实际运行展示 running。
+  it("status tone is running when turn actively running despite issueStatus review", () => {
+    expect(
+      getSessionStatusTone({
+        ...runningBase,
+        isTurnRunning: true,
+        issueStatus: "review",
+      }),
+    ).toBe("running");
+  });
+
+  it("spinner spins when turn actively running despite issueStatus review", () => {
+    expect(
+      shouldShowRunningSpinner({
+        ...runningBase,
+        isTurnRunning: true,
+        issueStatus: "review",
+      }),
+    ).toBe(true);
+  });
+
+  it("status tone is running when turn actively running despite issueStatus completed", () => {
+    expect(
+      getSessionStatusTone({
+        ...runningBase,
+        isTurnRunning: true,
+        issueStatus: "completed",
+      }),
+    ).toBe("running");
+  });
+
+  // 回归：turn idle（isTurnRunning false）时回落到静态 issue 状态展示。
+  it("status tone falls back to review when idle and issueStatus review", () => {
+    expect(
+      getSessionStatusTone({
+        ...runningBase,
+        isTurnRunning: false,
+        issueStatus: "review",
+      }),
+    ).toBe("review");
+  });
+
+  it("spinner does not spin when idle and issueStatus review", () => {
+    expect(
+      shouldShowRunningSpinner({
+        ...runningBase,
+        isTurnRunning: false,
+        issueStatus: "review",
+      }),
+    ).toBe(false);
+  });
+
+  // attention requested 仍优先于 running 展示（保持原语义）。
+  it("status tone is attention when requested even if turn actively running", () => {
+    expect(
+      getSessionStatusTone({
+        ...runningBase,
+        isTurnRunning: true,
+        attention: "requested",
+        issueStatus: "review",
+      }),
+    ).toBe("attention");
   });
 });
