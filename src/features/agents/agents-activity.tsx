@@ -60,21 +60,13 @@ import {
   SESSION_SIDE_PANEL_MIN_WIDTH,
   useSplitterDrag,
 } from "./use-splitter-drag";
+import { useSessionToolTabs } from "./use-session-tool-tabs";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
-import {
-  createDefaultSessionInlineTerminalPanelState,
-  type SessionInlineTerminalPanelState,
-} from "./session-workspace/session-inline-terminal-panel-state";
 import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
 import { SessionTerminalTab } from "./session-workspace/session-terminal-tab";
 import type { SessionWorkspaceToolTab } from "./session-workspace/session-workspace-tabs";
-import type { SessionWorkspaceToolTabKind } from "./session-workspace/session-workspace-types";
 import { useSessionWorkspaceCache } from "./session-workspace/use-session-workspace-cache";
 import { useSessionPaneCache } from "./session-pane/use-session-pane-cache";
-import {
-  closeProjectTerminal,
-  createTemporaryProjectTerminal,
-} from "../terminals/project-terminal-commands";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -91,14 +83,9 @@ import {
 } from "./session-pane/session-return-cache";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
-const MAX_SESSION_TERMINAL_TABS = 10;
 // 实例池上限：与 use-agent-message-stream.ts 的 MAX_CACHED_SESSIONS 对齐，
 // 保证常驻 AgentSessionView 实例数量与消息流 state 缓存淘汰粒度一致。
 const MAX_CACHED_SESSION_VIEWS = 5;
-
-interface SessionBrowserToolTab {
-  id: number;
-}
 
 interface AgentsActivityProps {
   activeSessionId: number | null;
@@ -161,11 +148,6 @@ export function AgentsActivity({
   );
   const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
-  const [terminalPanelStateBySessionId, setTerminalPanelStateBySessionId] =
-    useState<Record<number, SessionInlineTerminalPanelState>>({});
-  const [browserTabsBySessionId, setBrowserTabsBySessionId] = useState<
-    Record<number, SessionBrowserToolTab[]>
-  >({});
   // 分离allSessions和visibleSessions，优化性能
   const [allSessions, setAllSessions] = useState<AgentSessionListItem[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
@@ -183,7 +165,6 @@ export function AgentsActivity({
     handleSidePanelSplitterMouseDown,
     handleSidePanelSplitterKeyDown,
   } = useSplitterDrag();
-  const nextBrowserTabIdRef = useRef(1);
   const reviewedIssueIdsRef = useRef<Set<number>>(new Set());
   const completedIssueIdsRef = useRef<Set<number>>(new Set());
   const closedSessionIdsRef = useRef<Set<number>>(new Set());
@@ -372,22 +353,38 @@ export function AgentsActivity({
   });
   const { setSidePanelTab, setSidePanelTabForSession, sidePanelTab } =
     workspaceCache;
+  const {
+    terminalPanelStateBySessionId,
+    browserTabsBySessionId,
+    handleOpenTerminalPanelForSession,
+    handleCreateBrowserTabForSession,
+    handleCloseWorkspaceTab,
+    clearToolTabsForSession,
+  } = useSessionToolTabs({
+    projectId,
+    messages,
+    t,
+    workspaceCache,
+  });
 
-  useEffect(() => {
+  // 从缓存恢复离开时的侧栏状态（projectId / activeSessionId 变化，含首次挂载）。
+  // 用渲染期 state 调整替代 effect 内 setState，避开 react-hooks/set-state-in-effect。
+  const [prevRestoreKey, setPrevRestoreKey] = useState<string | null>(null);
+  const restoreKey = `${projectId}:${activeSessionId ?? ""}`;
+  if (restoreKey !== prevRestoreKey) {
+    setPrevRestoreKey(restoreKey);
     const cachedReturnState = getSessionReturnState(projectId);
-    if (!cachedReturnState) {
-      return;
+    if (cachedReturnState) {
+      if (activeSessionId == null) {
+        setSelectedSessionId(cachedReturnState.selectedSessionId);
+      }
+      setIsSessionSidePanelOpen(cachedReturnState.isSidePanelOpen);
+      setSidePanelTabForSession(
+        cachedReturnState.selectedSessionId,
+        cachedReturnState.sidePanelTab,
+      );
     }
-
-    if (activeSessionId == null) {
-      setSelectedSessionId(cachedReturnState.selectedSessionId);
-    }
-    setIsSessionSidePanelOpen(cachedReturnState.isSidePanelOpen);
-    setSidePanelTabForSession(
-      cachedReturnState.selectedSessionId,
-      cachedReturnState.sidePanelTab,
-    );
-  }, [activeSessionId, projectId, setSidePanelTabForSession]);
+  }
   // 判断某个 session 是否处于 open（运行中）状态：实例池据此跳过淘汰，
   // 避免 running session 的 handle 被 drop 导致 agent 进程被 kill
   //（典型场景：claude code 单轮进程被 shutdown 后报「客户端主动关闭」）。
@@ -533,11 +530,17 @@ export function AgentsActivity({
   const isCompletionLoadingDialogOpen =
     isCompletionCheckPending && !isCompletionLoadingDialogDismissed;
 
-  useEffect(() => {
+  // completion 检查结束（pending 转 false）时重置 dismiss 标志，供下次显示。
+  // 用渲染期 state 调整替代 effect 内 setState，避开 react-hooks/set-state-in-effect。
+  const [prevCompletionCheckPending, setPrevCompletionCheckPending] = useState(
+    isCompletionCheckPending,
+  );
+  if (isCompletionCheckPending !== prevCompletionCheckPending) {
+    setPrevCompletionCheckPending(isCompletionCheckPending);
     if (!isCompletionCheckPending) {
       setIsCompletionLoadingDialogDismissed(false);
     }
-  }, [isCompletionCheckPending]);
+  }
   const refreshSessions = useCallback(async () => {
     const response = await listAgentSessions(projectId);
     const nextSessions = applySessionListOverlays(response.sessions);
@@ -994,101 +997,6 @@ export function AgentsActivity({
     }
   }
 
-  function setTerminalPanelState(
-    sessionId: number,
-    updater: (
-      currentState: SessionInlineTerminalPanelState,
-    ) => SessionInlineTerminalPanelState | null,
-  ) {
-    setTerminalPanelStateBySessionId((currentStateBySessionId) => {
-      const currentState =
-        currentStateBySessionId[sessionId] ??
-        createDefaultSessionInlineTerminalPanelState();
-      const nextState = updater(currentState);
-      if (nextState === null) {
-        const { [sessionId]: _removedState, ...remainingStateBySessionId } =
-          currentStateBySessionId;
-        return remainingStateBySessionId;
-      }
-
-      return {
-        ...currentStateBySessionId,
-        [sessionId]: nextState,
-      };
-    });
-  }
-
-  async function createInlineTerminal(agentSessionId: number) {
-    const currentState = terminalPanelStateBySessionId[agentSessionId];
-    if (currentState?.isCreating) {
-      return;
-    }
-
-    if ((currentState?.terminals.length ?? 0) >= MAX_SESSION_TERMINAL_TABS) {
-      toast.error(messages.agentsFeature.sessionTerminalLimit);
-      return;
-    }
-
-    setTerminalPanelState(agentSessionId, (panelState) => ({
-      ...panelState,
-      errorMessage: null,
-      isCreating: true,
-    }));
-
-    try {
-      const terminal = await createTemporaryProjectTerminal({
-        projectId,
-        agentSessionId,
-      });
-      setTerminalPanelState(agentSessionId, (panelState) => ({
-        ...panelState,
-        activeTerminalSessionId: terminal.sessionId,
-        errorMessage: null,
-        isCreating: false,
-        isMaximized: false,
-        terminals: [
-          ...panelState.terminals,
-          {
-            terminalSessionId: terminal.sessionId,
-            name: terminal.name,
-            workingDir: terminal.workingDir,
-            launchCommand: terminal.launchCommand,
-          },
-        ],
-      }));
-      workspaceCache.selectWorkspaceTabForSession(
-        agentSessionId,
-        `terminal:${terminal.sessionId}`,
-      );
-    } catch (error) {
-      toast.error(getCommandErrorMessage(error, t));
-      setTerminalPanelState(agentSessionId, (panelState) => ({
-        ...panelState,
-        errorMessage: getCommandErrorMessage(error, t),
-        isCreating: false,
-      }));
-    }
-  }
-
-  function handleOpenTerminalPanelForSession(sessionId: number) {
-    void createInlineTerminal(sessionId);
-  }
-
-  function handleCreateBrowserTabForSession(sessionId: number) {
-    const browserTab: SessionBrowserToolTab = {
-      id: nextBrowserTabIdRef.current,
-    };
-    nextBrowserTabIdRef.current += 1;
-    setBrowserTabsBySessionId((currentTabsBySessionId) => ({
-      ...currentTabsBySessionId,
-      [sessionId]: [...(currentTabsBySessionId[sessionId] ?? []), browserTab],
-    }));
-    workspaceCache.selectWorkspaceTabForSession(
-      sessionId,
-      `browser:${browserTab.id}`,
-    );
-  }
-
   async function handleDeleteSession() {
     if (!selectedSession || selectedSession.issueId !== null) {
       return;
@@ -1111,14 +1019,7 @@ export function AgentsActivity({
       // 清除该 session 的输入草稿缓存：agent_sessions.id 无 AUTOINCREMENT 会复用，
       // 不清则旧草稿串入复用该 id 的新 session（ADR 0006）。
       clearComposerDraft(deletedSessionId);
-      setTerminalPanelStateBySessionId(
-        ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
-          remainingState,
-      );
-      setBrowserTabsBySessionId(
-        ({ [deletedSessionId]: _deletedState, ...remainingState }) =>
-          remainingState,
-      );
+      clearToolTabsForSession(deletedSessionId);
       setAllSessions((currentSessions) =>
         currentSessions.filter(
           (session) => session.sessionId !== deletedSessionId,
@@ -1253,97 +1154,6 @@ export function AgentsActivity({
     } finally {
       setIsRenamingSessionTitle(false);
     }
-  }
-
-  async function handleCloseInlineTerminal(
-    agentSessionId: number,
-    terminalSessionId: number,
-  ) {
-    setTerminalPanelState(agentSessionId, (panelState) => ({
-      ...panelState,
-      closingTerminalSessionIds: [
-        ...panelState.closingTerminalSessionIds,
-        terminalSessionId,
-      ],
-      errorMessage: null,
-    }));
-
-    try {
-      await closeProjectTerminal({ projectId, sessionId: terminalSessionId });
-      setTerminalPanelState(agentSessionId, (panelState) => {
-        const remainingTerminals = panelState.terminals.filter(
-          (terminal) => terminal.terminalSessionId !== terminalSessionId,
-        );
-        if (remainingTerminals.length === 0) {
-          return null;
-        }
-
-        const activeTerminalSessionId =
-          panelState.activeTerminalSessionId === terminalSessionId
-            ? remainingTerminals[0].terminalSessionId
-            : panelState.activeTerminalSessionId;
-
-        return {
-          ...panelState,
-          activeTerminalSessionId,
-          closingTerminalSessionIds:
-            panelState.closingTerminalSessionIds.filter(
-              (closingTerminalSessionId) =>
-                closingTerminalSessionId !== terminalSessionId,
-            ),
-          terminals: remainingTerminals,
-        };
-      });
-    } catch (error) {
-      setTerminalPanelState(agentSessionId, (panelState) => ({
-        ...panelState,
-        closingTerminalSessionIds: panelState.closingTerminalSessionIds.filter(
-          (closingTerminalSessionId) =>
-            closingTerminalSessionId !== terminalSessionId,
-        ),
-        errorMessage: getCommandErrorMessage(error, t),
-      }));
-    }
-  }
-
-  function handleCloseWorkspaceTab(
-    sessionId: number,
-    tab: Exclude<SessionWorkspaceToolTabKind | "file" | "changes", "session">,
-  ) {
-    if (isTerminalToolTab(tab)) {
-      void handleCloseInlineTerminal(
-        sessionId,
-        Number(tab.slice("terminal:".length)),
-      );
-      return;
-    }
-
-    if (isBrowserToolTab(tab)) {
-      const browserTabId = Number(tab.slice("browser:".length));
-
-      setBrowserTabsBySessionId((currentTabsBySessionId) => {
-        const remainingTabs = (currentTabsBySessionId[sessionId] ?? []).filter(
-          (browserTab) => browserTab.id !== browserTabId,
-        );
-        if (remainingTabs.length === 0) {
-          const { [sessionId]: _removed, ...remaining } =
-            currentTabsBySessionId;
-          return remaining;
-        }
-
-        return {
-          ...currentTabsBySessionId,
-          [sessionId]: remainingTabs,
-        };
-      });
-      const tabState = workspaceCache.getWorkspaceTabState(sessionId);
-      if (tabState.activeWorkspaceTab === tab) {
-        workspaceCache.selectWorkspaceTabForSession(sessionId, "session");
-      }
-      return;
-    }
-
-    workspaceCache.closeWorkspaceTabForSession(sessionId, tab);
   }
 
   async function handleTemporarySessionStarted(
@@ -1682,16 +1492,4 @@ function isCleanWorktreeAgentCommitPreviewError(error: {
       (detail) => detail["@type"] === "GitStatus" && detail.isClean === true,
     ) === true
   );
-}
-
-function isTerminalToolTab(
-  tab: Exclude<SessionWorkspaceToolTabKind | "file" | "changes", "session">,
-): tab is `terminal:${number}` {
-  return tab.startsWith("terminal:");
-}
-
-function isBrowserToolTab(
-  tab: Exclude<SessionWorkspaceToolTabKind | "file" | "changes", "session">,
-): tab is `browser:${number}` {
-  return tab.startsWith("browser:");
 }
