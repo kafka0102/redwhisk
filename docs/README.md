@@ -29,7 +29,7 @@
 - [Settings 页面布局规范](./architecture-design/settings-page-layout.md)
 - [前端大型组件拆分规则](./architecture-design/frontend-large-component-splitting-rules.md)
 - [后端 Rust 大文件拆分规则](./architecture-design/backend-large-file-splitting-rules.md)
-- [后端 feature-first 重构方案（执行计划）](./architecture-design/backend-feature-first-refactor.md)
+- [后端 feature-first 重构方案（已完成，历史执行计划）](./architecture-design/backend-feature-first-refactor.md)
 
 ## 领域、数据与质量
 
@@ -37,6 +37,12 @@
 - [数据模型与 Migration](./domain/data-model.md)
 - [测试与验证策略](./testing/strategy.md)
 - [架构决策记录](./adr/README.md)
+
+## Agent 技能与开发流程
+
+- [领域上下文布局](./agents/domain.md)
+- [Issue tracker 技能](./agents/issue-tracker.md)
+- [Triage 标签](./agents/triage-labels.md)
 
 ## 业务知识类
 
@@ -52,7 +58,7 @@
 
 | 改动类型                      | 必读文档                                                                                       | 追加阅读                           |
 | ----------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------- |
-| TypeScript / TSX              | 工程规范、编码风格、[项目代码地图](./architecture-design/project-map.md)    | [测试策略](./testing/strategy.md)  |
+| TypeScript / TSX              | 工程规范、编码风格、[前端大型组件拆分规则](./architecture-design/frontend-large-component-splitting-rules.md) | [项目代码地图](./architecture-design/project-map.md)、[测试策略](./testing/strategy.md) |
 | Rust（`src-tauri/**/*.rs`）   | [后端 Rust 大文件拆分规则](./architecture-design/backend-large-file-splitting-rules.md)、Agent 开发规则 | [项目代码地图](./architecture-design/project-map.md) |
 | UI、页面或组件                | 上述 TypeScript 文档、设计系统指南、大型组件拆分规则                        | Settings 页面布局规范、i18n 章节   |
 | Tauri command、DTO、event     | [Tauri 契约](./architecture-design/tauri-contract.md)                       | Agent 开发规则、测试策略           |
@@ -61,4 +67,5 @@
 | Codex 或 Claude provider      | [Agent Provider 协议](./architecture-design/agent-provider-protocol.md)     | Tauri 契约、状态机                 |
 | Worktree、Git 完成或清理      | [Worktree 与 Git 生命周期](./architecture-design/worktree-git-lifecycle.md) | 状态机、数据模型                   |
 | Git 提交                      | Git 工作流规范                                                              | 测试策略                           |
+| 发布或打包                    | 发布与打包规范                                                              | Git 工作流规范                     |
 | 后端命令、git 操作、轮询性能   | [性能与并发规范](./standards/performance.md)                                | Tauri 契约、Worktree 与 Git 生命周期 |

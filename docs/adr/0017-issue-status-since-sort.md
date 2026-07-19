@@ -2,7 +2,7 @@
 
 ## 状态
 
-采纳（spec / 实现待落地；见 `.scratch/issue-kanban-status-since-sort/`）。
+采纳（已实现）。
 
 ## 背景
 

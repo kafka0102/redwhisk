@@ -16,7 +16,7 @@
 | 改动                         | 至少新增/调整                                                | 建议运行                                                  |
 | ---------------------------- | ------------------------------------------------------------ | --------------------------------------------------------- |
 | TS/TSX 行为                  | 同 feature 或 command client 测试                            | `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test` |
-| Rust Core / repository / Git | 同模块 unit 或 `src-tauri/tests/`                            | `cd src-tauri && cargo fmt --check`、`cargo test`         |
+| Rust 后端 / repository / Git | 同模块 unit 或 `src-tauri/tests/`                            | `cargo test`         |
 | Tauri DTO / command          | Rust command/service 测试 + 前端 command client/feature 测试 | 两端相应测试                                              |
 | migration                    | migration runner 或 repository 升级测试                      | `cargo test`，并检查旧数据回填                            |
 | provider stream / reducer    | Rust event mapper + 前端 reducer/卡片测试                    | 相应 Rust 与 Vitest 测试                                  |

@@ -49,3 +49,5 @@
 - 启动/ resume 复制路径：`src-tauri/src/core/agent_session_service.rs`（`start_structured_*`、`resume_structured_agent_session`）
 - 配置写盘泄漏：`src-tauri/src/commands/agent_session_commands.rs`（`set_agent_model` / `set_agent_thinking`）
 - adapter：`src-tauri/src/agent/codex_app_server/session.rs`、`src-tauri/src/agent/claude_streaming/session.rs`
+
+> 注：上述 `core/`、`commands/` 路径已由 [ADR-0013](./0013-feature-first-module-organization.md) 迁移至 `features/`（`features/agent_session/service.rs`、`features/agent_session/commands.rs`）；按 ADR 规则不回写历史路径。

@@ -6,7 +6,7 @@
 
 ## 决定
 
-1. SQLite 是本地业务状态唯一事实源；React 仅通过 Tauri command 与 Rust Core 交互。
+1. SQLite 是本地业务状态唯一事实源；React 仅通过 Tauri command 与 Rust 后端交互。
 2. 前后端不用 HTTP REST 或 GraphQL；跨边界以显式 Rust DTO、Tauri command 和 event 实现。
 3. Codex 与 Claude 使用结构化 provider 输出并归一化为 `AgentStreamEvent`；项目终端才使用 PTY/xterm。
 4. Issue 可在当前分支或 RedWhisk 管理的 Git worktree 中执行；应用只自动清理自己拥有的 worktree。

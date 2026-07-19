@@ -2,6 +2,7 @@
 
 > 配套决策：[ADR-0013 后端业务模块按 feature 纵切，退役 core/](../adr/0013-feature-first-module-organization.md)。
 > 本文是 ADR-0013 的可执行清单：目标布局、文件迁移映射、改造规则、分步路线、验证与回滚。
+> **状态：已完成（S0–S7 全部落地，`core/` 已退役）。本文档作为历史执行计划保留；现行 feature-first 目录布局以 [project-map.md](./project-map.md) 与 `agent-development-rules.md`「目录边界」为准。**
 
 ## 一、目标与范围
 
@@ -108,7 +109,7 @@ feature 划分对齐前端 5 个 surface + `app_update`。`agent_skill/` 顶层�
 
 ## 四、大文件拆分（feature 内部分层）
 
-迁移即拆分机会。三个超大 service 在迁入 feature 目录时同步按职责聚簇拆为子文件，目标单文件 ≤ 500 行，编排主文件 ≤ 800。**拆分只搬代码、不改行为**，每个子文件落地后 `cargo test --lib` 守底。
+迁移即拆分机会。三个超大 service 在迁入 feature 目录时同步按职责聚簇拆为子文件，目标单文件 ≤ 500 行，编排主文件 ≤ 800。**拆分只搬代码、不改行为**，每个子文件落地后 `cargo test --lib` 守底。**以下拆分均已落地，子文件已就位（见各 feature 目录）。**
 
 ### 4.1 `features/agent_session/`（原 7283 行）
 
@@ -237,9 +238,9 @@ pub mod settings;
 
 ## 十、验收标准
 
-- [ ] `src-tauri/src/core/` 目录与 `pub mod core;` 已删除。
-- [ ] `rg -n "crate::core::" src-tauri` 无结果。
-- [ ] `rg -n "src-tauri/src/core" docs` 仅命中历史 ADR / plans（§八白名单）。
-- [ ] `cd src-tauri && cargo test --lib` 通过（相对迁移前基线无新增失败）。
-- [ ] 前端冒烟：项目创建、issue 完成流程、agent session 启动与 resume、终端、settings 均通路。
-- [ ] §八四个文档已同步，链接可达。
+- [x] `src-tauri/src/core/` 目录与 `pub mod core;` 已删除。
+- [x] `rg -n "crate::core::" src-tauri` 无结果。
+- [x] `rg -n "src-tauri/src/core" docs` 仅命中历史 ADR / plans（§八白名单）。
+- [x] `cd src-tauri && cargo test --lib` 通过（相对迁移前基线无新增失败）。
+- [x] 前端冒烟：项目创建、issue 完成流程、agent session 启动与 resume、终端、settings 均通路。
+- [x] §八四个文档已同步，链接可达。

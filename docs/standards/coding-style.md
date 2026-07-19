@@ -87,7 +87,7 @@
 
 - 仓库已有 `prettier.config.mjs`，前端和配置文件格式以该配置和 `pnpm format` 覆盖范围为事实来源
 - 每次完成前端代码修改后，必须先执行已配置的格式化命令，再进入 lint、typecheck、test
-- Rust 代码保持 `rustfmt` 默认风格；如任务涉及 Rust 且需要格式化，使用 `cd src-tauri && cargo fmt`
+- Rust 代码保持 `rustfmt` 默认风格；项目当前非 fmt-clean，仅在必要时手动 `rustfmt <单文件>`，禁跑全量 `cargo fmt`（会带出大量无关漂移，且 `AGENTS.md` 质量门禁不含 `cargo fmt`）
 - 执行格式化命令后，必须立即检查 `git diff --stat` 或 `git status --short`，确认格式化实际改动了哪些文件
 - 若格式化命令改到了当前任务之外的文件，必须在继续验证或提交前显式处理：要么把这些文件一并纳入当前任务并说明原因，要么回退这些无关格式化改动；不得把它们留成“顺手改了但未提交”的状态
 - 执行 lint、typecheck、test 或其他验证命令后，如这些命令可能触发代码生成、快照更新、缓存落盘或其他文件改写，也必须再次检查 `git status --short`，不能默认工作区仍与格式化后完全一致

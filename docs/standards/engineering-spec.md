@@ -38,8 +38,8 @@
 
 当前代码事实：
 
-- `tsconfig.json` 目前设置了 `baseUrl: "."`
-- `paths` 目前包含 `"@/*": ["src/*"]`
+- `tsconfig.json` 未设置 `baseUrl`，`paths` 以 tsconfig 所在目录为基准解析
+- `paths` 目前包含 `"@/*": ["./src/*"]`
 - 当前源码多数仍使用相对路径导入
 
 后续修改路径解析时必须遵守：

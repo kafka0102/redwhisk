@@ -1,6 +1,6 @@
 # 领域状态机
 
-本文档汇总会改变用户可见业务流程的稳定状态。字段定义和真实校验以 `src-tauri/src/types/`、core service 和 migration 为准。
+本文档汇总会改变用户可见业务流程的稳定状态。字段定义和真实校验以 `src-tauri/src/types/`、feature service（`src-tauri/src/features/**/service.rs`）和 migration 为准。
 
 ## Issue 与 Agent Session
 
@@ -14,13 +14,13 @@
 | Agent Session | `closed` / `crashed` / `stopped` | 终态事实                                                                     | 不自动完成关联 Issue                                      |
 | Attention     | `none` / `requested`             | `set_agent_session_attention`                                                | 仅会话提示状态，不是 Issue 状态                           |
 
-Issue 状态变化由 Rust Core 编排；前端不得直接写 SQLite 或伪造状态。新增状态变更必须同时写入 `issue_actions`、`session_events` 或完成记录中的适当审计事实。
+Issue 状态变化由 Rust 后端 编排；前端不得直接写 SQLite 或伪造状态。新增状态变更必须同时写入 `issue_actions`、`session_events` 或完成记录中的适当审计事实。
 
 ## Turn 与权限
 
 | 事实                   | 写入方                        | 前端职责                                                           |
 | ---------------------- | ----------------------------- | ------------------------------------------------------------------ |
-| `is_turn_running`      | Rust Core                     | 根据 stream event 显示处理中；不自行置位                           |
+| `is_turn_running`      | Rust 后端                     | 根据 stream event 显示处理中；不自行置位                           |
 | turn 完成/失败/取消    | provider → `AgentStreamEvent` | reducer 更新消息流与控件可用性                                     |
 | `permission_requested` | Codex provider                | 展示动作，调用 `respond_agent_permission`；Claude 不假定存在该事件 |
 | `seq` / `epoch`        | Rust broadcaster              | 用于去重、顺序和重建对齐                                           |
@@ -35,6 +35,6 @@ Issue 状态变化由 Rust Core 编排；前端不得直接写 SQLite 或伪造�
 
 1. 定义 Rust enum 与 serde 字符串值。
 2. 更新 SQLite CHECK / migration、repository 映射及历史数据策略。
-3. 在 Core service 显式校验迁移合法性，并写审计记录。
+3. 在 feature service 显式校验迁移合法性，并写审计记录。
 4. 同步前端 union、显示文本、i18n、命令/事件处理。
 5. 覆盖成功、非法迁移、重启/失败和数据回读。

@@ -47,11 +47,13 @@
 ```
 src/
   app/                                          应用入口、Activity 路由、Workbench shell
-  features/{project,issues,agents,settings}/    按 surface 组织的业务模块
-  shared/{commands,i18n,styles}/                Tauri command client、i18n、全局 token
+  features/{project,issues,agents,settings,changes,code,terminals,app-update}/  按 surface 组织的业务模块
+  shared/{commands,i18n,styles,layout,paths,tauri-event,workspace,audio}/  跨 feature 复用：command client、i18n、token、渲染件
   components/ui/                                基础 UI primitive（shadcn）
+  lib/                                          与领域无关的纯工具
 src-tauri/src/
-  commands/  core/  db/  types/  agent/  git/   Rust 分层（adapter→service→repository）
+  features/{project,issue,agent_session,project_terminal,settings,app_update}/  feature-first 业务模块（service/commands/子模块）
+  {agent,agent_skill,git,db,types,logging,commands}/  跨 feature 横切：provider、skill、git 工具、DB、DTO、日志、残留 shell 命令
 src-tauri/migrations/                           SQLite migrations（业务状态事实源）
 ```
 
@@ -69,6 +71,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
 - 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
 - 发布或打包：读取 `docs/standards/release-workflow.md`。
+- 涉及后端命令、git 操作或轮询性能：额外读取 `docs/standards/performance.md`。
 - 任务类型不明确：先读 `docs/README.md`，再按相关性选择。
 
 ## 5. 质量门禁（任务完成判定，缺一不可）
@@ -92,6 +95,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 每一处 diff 可追溯到用户请求、项目文档或验证失败。
 - 改动 Rust 时，`scripts/check-rust-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
 - 改动前端源码时，`scripts/check-frontend-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
+- 改动 Tauri command / event / 错误码时，复查 `docs/architecture-design/tauri-contract.md` 注册表与错误码分类是否同步。
 
 > 本门禁是 `docs/architecture-design/agent-development-rules.md`「测试与验证规则」与 `docs/standards/{coding-style,git-workflow}.md` 的执行入口；冲突时以本门禁命令顺序为准。
 

@@ -48,3 +48,5 @@ Issue 完成流程的 phase 迁移决策已抽为纯深 module `completion_state
 - 纯状态机（不改）：`src-tauri/src/core/completion_state_machine.rs`（`advance` / `Effect` / `Transition`）
 - 新深 module：`src-tauri/src/core/completion_effect_interpreter.rs`
 - 两入口接线：`src-tauri/src/core/issue_service.rs`（`apply_completion_transition`、`detect_agent_commit_completion`）
+
+> 注：上述 `core/` 路径已由 [ADR-0013](./0013-feature-first-module-organization.md) 迁移至 `features/`（`features/issue/service.rs`、`features/issue/completion/state_machine.rs`、`features/issue/completion/effect_interpreter.rs`）；按 ADR 规则不回写历史路径。

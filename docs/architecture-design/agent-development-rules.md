@@ -13,9 +13,9 @@
 - 前端：React 19、TypeScript、Vite、Vitest、ESLint、Prettier、Tailwind CSS 4。
 - 桌面核心：Tauri 2、Rust 2021、`rusqlite`、`portable-pty`。
 - 包管理：`pnpm`，当前不使用 Turbo 或多 package workspace。
-- 数据库：SQLite migrations 位于 `src-tauri/migrations/`，结构化业务状态由 Rust Core 读写。
+- 数据库：SQLite migrations 位于 `src-tauri/migrations/`，结构化业务状态由 Rust 后端 读写。
 - 前后端边界：Tauri command + Tauri event；不引入 HTTP REST/GraphQL。
-- Agent 会话：Codex 走 `codex app-server` JSON-RPC，Claude 走 `claude -p --output-format stream-json`；两者均由 Rust Core 归一化为结构化事件流，前端用同一消息流组件和底部 composer 输入。PTY + xterm.js 仅保留给 project terminal 等真正交互式终端。
+- Agent 会话：Codex 走 `codex app-server` JSON-RPC，Claude 走 `claude -p --output-format stream-json`；两者均由 Rust 后端 归一化为结构化事件流，前端用同一消息流组件和底部 composer 输入。PTY + xterm.js 仅保留给 project terminal 等真正交互式终端。
 
 ## 目录边界
 
@@ -27,13 +27,16 @@
 - `src/features/agents/`：Agents Activity、Session list、Codex 结构化消息流、composer 输入框、Issue Inspector。
 - `src/features/settings/`：Project Settings、Agent Profile 表单和 Settings command wrapper。
 - `src/features/terminals/`：Project Terminal、终端配置和快捷命令。
+- `src/features/app-update/`：应用版本检测与更新提示 badge、Release 外链引导。
+- `src/features/changes/`：Changes Activity，工作区变更条件轮询与渲染。
+- `src/features/code/`：Code Workspace Activity，代码工作区外壳与文件树。
 - `src/shared/commands/`：Tauri command client、统一 command error 处理。
 - `src/components/ui/`：基础 UI primitive。
-- `src/shared/{i18n,layout,paths,styles}/`：国际化、布局状态、路径与全局 token。
+- `src/shared/{i18n,layout,paths,styles,audio,tauri-event,workspace}/`：i18next 实例与 locale、布局工具、路径解析、全局 token、通知音效、Tauri event hook 封装、跨 feature 工作区渲染件；另有 `monaco-editor-setup.ts`、`toast.ts` 两个散文件。
 
 Rust 按 command adapter、feature service、repository、类型和外部能力分层：
 
-- `src-tauri/src/commands/`：Tauri command adapter，只做参数承接、状态注入和错误映射，不承载业务状态机。
+- `src-tauri/src/commands/`：仅保留 `core_commands.rs`（全局命令如 `initialize_local_data`）；业务命令 adapter 落在 `features/<feature>/commands.rs`（见下「feature 内部目录约定」），只做参数承接、状态注入和错误映射，不承载业务状态机。
 - `src-tauri/src/features/`：业务 service、状态流转、事务编排。
 - `src-tauri/src/db/`：连接、migration、repository 和 SQL 映射。
 - `src-tauri/src/types/`：跨边界 DTO、状态枚举和 command error。
@@ -43,6 +46,36 @@ Rust 按 command adapter、feature service、repository、类型和外部能力�
 - `src-tauri/src/logging/`：后端关键操作日志。
 
 不得把领域逻辑塞进泛化 `utils`。当前已有 `src/lib/utils.ts` 仅作为轻量 class 合并工具使用，新增共享逻辑必须放入有明确领域语义的模块。
+
+### feature 内部目录约定（后端）
+
+每个 `src-tauri/src/features/<feature>/` 目录遵循统一布局：
+
+- `mod.rs`：声明子模块，对外仅 `pub use service::<Service>`。
+- `service.rs`：业务编排主文件（struct + 主 `impl`），声明事务边界、调 repository，不直接写 SQL。
+- `commands.rs`：Tauri command adapter，注册到 `lib.rs` 的 `generate_handler!`；只做参数承接、状态注入、错误映射。
+- 按职责聚簇的子模块文件（如 `launch.rs`、`timeline.rs`、`validation.rs`、`archive.rs`、`attachment.rs`、`log_path.rs`、`registry.rs`、`workspace.rs` 等），通过 `mod.rs` 聚合。
+- 强相关的多文件可聚簇为子目录（如 `features/issue/completion/`、`features/app_update/{service,github,version}.rs`）。
+
+不得跨 feature 引用对方私有子模块；跨 feature 复用走 `pub use` 或横切模块（`db/`、`agent/`、`git/` 等）。
+
+### 后端分层与 SQL 边界
+
+后端按 command adapter、feature service、repository 分层，SQL 归 repository，事务编排归 service（详见 [ADR-0014](../adr/0014-service-repository-sql-boundary.md)）：
+
+| 层 | 允许 | 禁止 |
+| --- | --- | --- |
+| `commands/`、`features/*/commands.rs` | 参数校验、调 service、错误映射 | 碰 `rusqlite`、碰文件系统 |
+| `features/<feature>/service` | 业务编排、事务边界声明、调 repository | 直接 `prepare` / `execute` / 裸 SQL |
+| `db/` repository | 所有 SQL、行 ↔ record 映射、单表与跨表事务 | 业务判断、文件 IO |
+
+service 通过统一入口开 `Transaction`，把 `&Transaction` 传给 repository 的 `*_in_transaction` 方法；`repository.connection()` 仅用于开事务或读 data_dir，不得用于 `prepare`。ADR-0014 的 P2（SQL 全面收敛）尚未完成，存量 service 仍有直连 SQL；新代码必须遵守上述边界，不得新增 service 直连 SQL。
+
+### `shared/` 与 `lib/` 边界
+
+- `src/shared/`：放跨 feature 真实复用的非业务件，包括跨边界 command client、i18n、全局 token、布局工具、Tauri event hook、工作区渲染件、通知音效。仅当有第二个 feature 真实复用时才入 `shared/`，不得为预期复用提前下沉。
+- `src/lib/`：仅放与领域无关的纯工具（当前仅 `utils.ts` 的 `cn()`），不得扩充承载领域逻辑。
+- feature 私有件（UI、hook、工具）留在对应 `src/features/<feature>/` 内。
 
 ## 前端文件复杂度与组件化
 
@@ -93,7 +126,7 @@ SQLite 是核心业务状态的事实来源，React 不直接读写 SQLite。
 禁止：
 
 - 前端直接把 Issue 或 Agent Session 设置为 `running`、`review`、`completed`、`closed`。
-- 绕过 Rust Core 修改 SQLite。
+- 绕过 Rust 后端 修改 SQLite。
 - 用空字符串表达缺失值；缺失值使用 `null`，空集合使用 `[]`。
 - 添加与当前状态机冲突的新状态值。
 
@@ -158,7 +191,7 @@ Tauri event 只表示事实发生或终端输出，不发起业务写入。事�
 当前存在两条并列通道，按 session 类型分流：
 
 - `agent-session-terminal-output`：承载 PTY 原始字节流，仅用于 project terminal 等真正交互式终端。
-- `agent-session-stream-event`：承载 Codex 或 Claude session 的结构化 Agent 事件流（`AgentStreamEvent`），由 Rust Core 归一化 provider 输出后广播。
+- `agent-session-stream-event`：承载 Codex 或 Claude session 的结构化 Agent 事件流（`AgentStreamEvent`），由 Rust 后端 归一化 provider 输出后广播。
 
 终端输出规则：
 
@@ -175,7 +208,7 @@ Tauri event 只表示事实发生或终端输出，不发起业务写入。事�
 
 - 只能从 `backlog` Issue 启动。
 - 一个 Issue 最多关联一个 Agent Session。
-- 只有 provider 进程/PTY 成功启动后，Rust Core 才创建 Agent Session，并把 Issue 改为 `running`。
+- 只有 provider 进程/PTY 成功启动后，Rust 后端 才创建 Agent Session，并把 Issue 改为 `running`。
 - 启动失败时 Issue 保持 `backlog`，不得创建有效 Agent Session。
 
 Review 阶段：
@@ -201,7 +234,7 @@ Completed：
 完成流程统一以实际执行路径、未提交改动与 worktree 所有权决策，不再使用旧的 `manual` / `agent_auto_commit` policy。必须遵守：
 
 - 应用不得执行 `git add .`，不得静默提交全部改动。
-- 自动提交只能向关联 Agent 注入明确 completion prompt，再由 Rust Core 检测 Git 结果；prompt 必须要求验证及验证后的 `git status --short` 检查。
+- 自动提交只能向关联 Agent 注入明确 completion prompt，再由 Rust 后端 检测 Git 结果；prompt 必须要求验证及验证后的 `git status --short` 检查。
 - 若验证命令改写了当前 Issue 相关文件，必须在同一次提交中处理；无关文件必须先回退。
 - 检测到 Git operation、dirty workspace、外部 worktree 或 rebase/合并失败时，必须进入对应的确认或阻断流程，不得静默完成。
 - 仅 RedWhisk 所有的 worktree 可被应用自动清理。
@@ -244,7 +277,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 
 Codex 与 Claude session 均走结构化 provider，不走 PTY。职责边界如下：
 
-- Rust Core 负责 spawn provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播。
+- Rust 后端 负责 spawn provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播。
 - Codex 通过 `codex app-server` 的 NDJSON JSON-RPC 接入，维护 `threadId`、`currentTurnId`、待审批权限请求和 `seq`/`epoch` 游标；模型与 effort 经 `turn/start` 透传，token 用量来自 `thread/tokenUsage/updated`。
 - Claude 通过 `claude -p --output-format stream-json` 的单向 NDJSON 接入，每轮进程结束后以 session ID 恢复；它没有等价的 JSON-RPC 审批请求。
 - 附件（图片/文件）先落盘到 app data dir，再以本地路径随 provider 输入传递；不内联文件字节。
@@ -261,9 +294,9 @@ Codex 与 Claude session 均走结构化 provider，不走 PTY。职责边界如
 
 后续 Agent 不应继续按早期规划文档中的 `ProjectAgentOverride` 表实现新功能；涉及 Settings 数据模型时，以 `src-tauri/migrations/0007_restructure_agent_profiles.sql`、`src-tauri/src/types/agent_profile.rs` 和当前 repository/service 为准。
 
-Agent command 检测和测试由 Rust Core 完成，React 不直接执行 shell。command 不可用时，不得保存或启用会在启动时失败的 Agent Profile。
+Agent command 检测和测试由 Rust 后端 完成，React 不直接执行 shell。command 不可用时，不得保存或启用会在启动时失败的 Agent Profile。
 
-Agent command 检测必须考虑桌面应用启动环境与用户终端环境的差异。macOS 上从 Finder、Dock 或 Tauri 启动的进程通常不会继承交互终端中的 `PATH`、`nvm`、`rbenv` 等初始化结果；Rust Core 做 `command -v` 时不得只依赖当前进程环境。检测裸命令名（例如 `codex`）时，应优先保持非交互登录 shell 查询，并在失败时补充交互登录 shell 查询，以覆盖用户在 `.zshrc` 等交互 shell 启动脚本中配置的命令路径。
+Agent command 检测必须考虑桌面应用启动环境与用户终端环境的差异。macOS 上从 Finder、Dock 或 Tauri 启动的进程通常不会继承交互终端中的 `PATH`、`nvm`、`rbenv` 等初始化结果；Rust 后端 做 `command -v` 时不得只依赖当前进程环境。检测裸命令名（例如 `codex`）时，应优先保持非交互登录 shell 查询，并在失败时补充交互登录 shell 查询，以覆盖用户在 `.zshrc` 等交互 shell 启动脚本中配置的命令路径。
 
 ## 文案与国际化
 

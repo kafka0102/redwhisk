@@ -37,7 +37,8 @@
 
 大 feature 内部按 UI 边界做**语义聚簇子目录**，而非把每个组件单独建文件夹：
 
-- 延续 `features/agents/composer/`、`features/agents/message-stream/`、`features/agents/session-notifications/` 的先例，把一个业务区的整套生态（组件 + hooks + 类型 + 测试）装进一个子目录。
+- 延续 `features/agents/{composer,message-stream,session-notifications,session-list,session-pane,session-side-panel,session-workspace}/`、`features/issues/{issue-completion,issue-detail,issue-form,issue-run}/` 的先例，把一个业务区的整套生态（组件 + hooks + 类型 + 测试）装进一个子目录。
+- **何时建子目录、何时平铺**：当一组文件围绕同一 UI 边界形成完整生态、且文件数 ≥ 6 或存在多个独立 UI 边界时，按语义聚簇拆子目录；文件少且职责单一时平铺在 feature 根目录，不为凑结构建单文件子目录。
 - 不做「每个组件一个文件夹（内含 index + test）」式的无语义机械切分——它会让 feature 目录平摊出大量各装 1–2 文件的子目录，导航深度不降反升（见 [ADR 0013](../adr/0013-feature-first-module-organization.md) 对「无语义机械切分」的否决）。
 - 测试与源码 co-location（`.test.ts(x)` 与被测文件同目录），沿用 [测试策略](../testing/strategy.md) 既定布局。
 

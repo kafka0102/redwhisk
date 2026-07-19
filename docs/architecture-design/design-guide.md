@@ -198,28 +198,7 @@ import { Badge } from "@/components/ui";
 
 ### Layouts
 
-```tsx
-import { PageLayout, DialogLayout, SplitLayout, GridLayout } from "@/layouts";
-
-// Page layout
-<PageLayout title="My Page" subtitle="Subtitle here">
-  Content here
-</PageLayout>
-
-// Dialog layout
-<DialogLayout title="Dialog Title" onClose={() => {}}>
-  Content here
-</DialogLayout>
-
-// Split layout
-<SplitLayout left={<Sidebar />} right={<MainContent />} />
-
-// Grid layout
-<GridLayout gap="12px">
-  <Card>...</Card>
-  <Card>...</Card>
-</GridLayout>
-```
+项目未提供通用 `*Layout` primitive（`src/shared/layout/` 仅含布局工具 `sidebar-width`）。页面与对话框布局由各 feature 用 shadcn 组件（`Dialog`、`Sheet`、`ResizablePanel` 等）按需组合，不新增 `@/layouts` 别名。
 
 ## 禁止事项
 

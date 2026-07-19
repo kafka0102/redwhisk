@@ -8,13 +8,13 @@
 
 **为什么**：同步 `#[tauri::command] pub fn`，或在 async command 里直接阻塞，会占用 Tauri 的 async 运行时线程，导致并发命令被串行化。曾表现为进入「变更」页时 `getProjectWorktreeChanges` / `getProjectWorktreeCommitHistory` / `listAgentSessions` 三条命令同时卡约 7.5s 才一起返回。
 
-**做法**（参考 `src-tauri/src/commands/agent_session_commands.rs` 的 `prepare_*` + `spawn_blocking` 模式）：
+**做法**（参考 `src-tauri/src/features/agent_session/commands.rs` 的 `prepare_*` + `spawn_blocking` 模式）：
 
 - async 体内只做轻量准备：解析 `data_dir`、幂等 `local_data` 初始化、克隆 `Arc` 句柄；
 - 开库、迁移、git、service 调用全部放进 `spawn_blocking(move || { ... })`；
 - `State<'_, AppState>` 不可跨 `await`，所需字段在进入闭包前 `.clone()` 或提取为 owned（如 `PathBuf`）。
 
-**反例**：`src-tauri/src/commands/session_workspace_commands.rs` 历史上的 6 个同步 `pub fn`（开库 + 迁移 + git 全跑在运行时线程）。已改异步 + `spawn_blocking`。
+**反例**：`src-tauri/src/features/agent_session/workspace_commands.rs` 历史上的 6 个同步 `pub fn`（开库 + 迁移 + git 全跑在运行时线程）。已改异步 + `spawn_blocking`。
 
 ## 2. 批量取数，禁止 N+1 子进程 / 命令调用
 

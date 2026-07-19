@@ -29,6 +29,7 @@
 - `db/<entity>_repository.rs`：按实体拆为 `db/<feature>/<entity>.rs`。
 - `agent/<provider>/session.rs`：按协议阶段（握手、流式、收尾）或消息类型拆子模块。
 - 子模块通过 `mod.rs` 或文件级 `mod` 声明聚合，不得跨 feature 引用对方私有子模块。
+- feature 内部目录布局（`mod.rs` / `service.rs` / `commands.rs` / 子模块命名约定）详见 [Agent 开发通用规则](./agent-development-rules.md)「feature 内部目录约定（后端）」。
 
 ## 拆分纪律
 

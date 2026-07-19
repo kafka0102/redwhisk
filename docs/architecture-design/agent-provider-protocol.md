@@ -32,7 +32,7 @@ Composer / session UI
 ## 生命周期规则
 
 1. 启动 provider 成功后再创建可用 Agent Session，并更新关联 Issue 状态。
-2. `send_agent_message` 开始 turn；`is_turn_running` 仅由 Rust Core 维护。
+2. `send_agent_message` 开始 turn；`is_turn_running` 仅由 Rust 后端维护。
 3. 正常结束、失败和取消都通过统一 stream event 通知前端，并更新持久化 session 事实。
 4. `crashed` 表示 provider 进程异常；`stopped` 表示重启后无法恢复原运行中会话；两者均不自动完成 Issue。
 5. timeline 历史使用 `read_agent_timeline`；不能将截断 ANSI 日志作为结构化会话恢复方式。

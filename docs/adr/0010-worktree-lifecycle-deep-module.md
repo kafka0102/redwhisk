@@ -42,3 +42,5 @@
 - status 消费者：`src-tauri/src/git/status.rs`
 - 完成编排接线：`src-tauri/src/core/issue_service.rs`
 - 相关：完成状态机 `src-tauri/src/core/completion_state_machine.rs`（effect 语义本轮不改）
+
+> 注：上述 `core/` 路径已由 [ADR-0013](./0013-feature-first-module-organization.md) 迁移至 `features/`（`features/issue/service.rs`、`features/issue/completion/state_machine.rs`）；按 ADR 规则不回写历史路径。

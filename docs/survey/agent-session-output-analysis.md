@@ -4,7 +4,7 @@
 
 参考项目在 Agent Session 处理上的核心优势，是把 Codex App Server 的原始 JSON-RPC/notification 事件固定收敛在 daemon/provider 层完成归一化，前端只消费稳定的 timeline 协议。这样历史回放、实时流、工具调用、Markdown 渲染、搜索结果、计划卡片与权限审批都共享同一套结构化数据模型，不需要前端猜测原始 JSON 的形态，也不会把日志原文泄漏到用户界面。
 
-RedWhisk 当前已经具备相似方向：Rust Core 通过 `codex app-server` 接入，广播 `agent-session-stream-event`，前端用 `read_agent_timeline` + reducer 渲染结构化消息流。但从截图和代码事实看，历史日志兼容、实时去重、模型/Think 控件来源、工具详情展示仍有明显缺口。
+RedWhisk 当前已经具备相似方向：Rust 后端通过 `codex app-server` 接入，广播 `agent-session-stream-event`，前端用 `read_agent_timeline` + reducer 渲染结构化消息流。但从截图和代码事实看，历史日志兼容、实时去重、模型/Think 控件来源、工具详情展示仍有明显缺口。
 
 ## 参考项目的数据路径
 

@@ -12,6 +12,9 @@
 | 智能体会话、消息流、权限与工作区查看器  | `src/features/agents/`              | `features/agent_session/commands.rs`、`features/agent_session/service.rs`                           | `agent_sessions`、`session_events`                                       |
 | Agent provider 协议适配                 | 无直接 UI 入口                      | `src-tauri/src/agent/codex_app_server/`、`agent/claude_streaming/`、`agent/session_handle.rs`   | session 快照与运行时日志                                                 |
 | 项目终端与快捷命令                      | `src/features/terminals/`           | `features/project_terminal/commands.rs`、`features/project_terminal/service.rs`                     | `project_terminal_configs`、`project_terminal_shortcut_commands`         |
+| 应用版本检测与更新提示                  | `src/features/app-update/`           | `features/app_update/commands.rs`                                                                  | 无本地持久化（GitHub Release 外链引导）                                 |
+| 变更视图（Changes Activity）            | `src/features/changes/`              | `features/agent_session/workspace_commands.rs`、`git/`                                              | 无                                                                       |
+| 代码工作区（Code Workspace Activity）   | `src/features/code/`                 | `features/agent_session/workspace_commands.rs`（`list_code_workspace_roots`）、`git/`               | 无                                                                       |
 | 项目/全局设置、配置、标签、保存的 skill | `src/features/settings/`            | `features/settings/commands.rs`、`features/settings/agent_skill_commands.rs`、`features/settings/service.rs` | `agent_profiles`、`project_labels`、`saved_agent_skills`                 |
 | 基础 UI、i18n、命令错误和全局样式       | `src/components/ui/`、`src/shared/` | 前端边界；`types/errors.rs` 定义错误契约                                                        | locale JSON、浏览器偏好                                                  |
 
@@ -27,7 +30,7 @@ repository / git / agent provider / PTY / 文件系统
 SQLite、Git worktree、子进程、~/.redwhisk
 ```
 
-`commands/` 不承载业务状态机；`features/<feature>/` 不让前端绕过；`db/` 只负责连接、migration、SQL 映射。新增共享逻辑必须归属明确领域，不能扩充 `src/lib/utils.ts`。
+`commands/` 不承载业务状态机；`features/<feature>/` 不让前端绕过；`db/` 只负责连接、migration、SQL 映射。新增共享逻辑必须归属明确领域，不能扩充 `src/lib/utils.ts`。 `agent_skill/`、`logging/` 为跨 feature 横切能力，按顶层模块独立组织。
 
 ## 按改动定位
 
