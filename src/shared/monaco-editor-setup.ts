@@ -6,6 +6,8 @@ import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 
+import { registerPrismaLanguage } from "./monaco-prisma-language";
+
 interface MonacoEnvironmentConfig {
   getWorker: (_workerId: string, label: string) => Worker;
 }
@@ -45,6 +47,7 @@ export function configureMonacoEditor() {
   };
 
   loader.config({ monaco });
+  registerPrismaLanguage(monaco);
 
   // 项目内 Monaco 仅作只读代码查看（code-workspace / session-file-viewer / diff），
   // 关闭 TS/JS 语义诊断：默认 compilerOptions 未设 jsx，会把 tsx 里 JSX 对组件的引用

@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const loaderConfigMock = vi.hoisted(() => vi.fn());
 const typescriptDefaultsSetDiagnosticsMock = vi.hoisted(() => vi.fn());
 const javascriptDefaultsSetDiagnosticsMock = vi.hoisted(() => vi.fn());
+const languagesGetLanguagesMock = vi.hoisted(() => vi.fn(() => []));
+const languagesRegisterMock = vi.hoisted(() => vi.fn());
+const languagesSetMonarchTokensProviderMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@monaco-editor/react", () => ({
   loader: {
@@ -12,7 +15,11 @@ vi.mock("@monaco-editor/react", () => ({
 
 vi.mock("monaco-editor", () => ({
   editor: {},
-  languages: {},
+  languages: {
+    getLanguages: languagesGetLanguagesMock,
+    register: languagesRegisterMock,
+    setMonarchTokensProvider: languagesSetMonarchTokensProviderMock,
+  },
   typescript: {
     typescriptDefaults: {
       setDiagnosticsOptions: typescriptDefaultsSetDiagnosticsMock,
@@ -48,6 +55,10 @@ describe("configureMonacoEditor", () => {
     loaderConfigMock.mockClear();
     typescriptDefaultsSetDiagnosticsMock.mockClear();
     javascriptDefaultsSetDiagnosticsMock.mockClear();
+    languagesGetLanguagesMock.mockClear();
+    languagesRegisterMock.mockClear();
+    languagesSetMonarchTokensProviderMock.mockClear();
+    languagesGetLanguagesMock.mockReturnValue([]);
     delete (globalThis as { MonacoEnvironment?: unknown }).MonacoEnvironment;
     vi.resetModules();
   });
@@ -102,5 +113,23 @@ describe("configureMonacoEditor", () => {
     expect(javascriptDefaultsSetDiagnosticsMock).toHaveBeenCalledWith({
       noSemanticValidation: true,
     });
+  });
+
+  it("registers prisma language for schema highlighting", async () => {
+    const { configureMonacoEditor } = await import("./monaco-editor-setup");
+
+    configureMonacoEditor();
+
+    expect(languagesRegisterMock).toHaveBeenCalledWith({
+      id: "prisma",
+      extensions: [".prisma"],
+      aliases: ["Prisma", "prisma"],
+    });
+    expect(languagesSetMonarchTokensProviderMock).toHaveBeenCalledWith(
+      "prisma",
+      expect.objectContaining({
+        tokenizer: expect.any(Object),
+      }),
+    );
   });
 });

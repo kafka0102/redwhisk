@@ -1297,25 +1297,83 @@ fn hash_string(value: &str) -> String {
 }
 
 fn language_from_path(path: &str) -> Option<String> {
-    match Path::new(path).extension().and_then(|value| value.to_str()) {
-        Some("css") => Some("css".to_string()),
-        Some("go") => Some("go".to_string()),
-        Some("html") => Some("html".to_string()),
-        Some("java") => Some("java".to_string()),
-        Some("js") | Some("mjs") | Some("cjs") => Some("javascript".to_string()),
-        Some("json") => Some("json".to_string()),
-        Some("kt") | Some("kts") => Some("kotlin".to_string()),
-        Some("md") => Some("markdown".to_string()),
-        Some("php") => Some("php".to_string()),
-        Some("py") => Some("python".to_string()),
-        Some("rb") => Some("ruby".to_string()),
-        Some("rs") => Some("rust".to_string()),
-        Some("swift") => Some("swift".to_string()),
-        Some("ts") => Some("typescript".to_string()),
-        Some("tsx") => Some("typescript".to_string()),
-        Some("vue") => Some("html".to_string()),
-        Some("xml") => Some("xml".to_string()),
-        Some("yaml") | Some("yml") => Some("yaml".to_string()),
+    // 返回 Monaco / VS Code language id；前端只读查看器据此启用语法高亮。
+    // 扩展名大小写不敏感；无匹配时返回 None，Monaco 退化为纯文本。
+    let path = Path::new(path);
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    match file_name.as_str() {
+        "dockerfile" | "containerfile" => return Some("dockerfile".to_string()),
+        _ => {}
+    }
+    if file_name.starts_with("dockerfile.") || file_name.starts_with("containerfile.") {
+        return Some("dockerfile".to_string());
+    }
+
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())?;
+
+    match extension.as_str() {
+        "bat" | "cmd" => Some("bat".to_string()),
+        "bicep" => Some("bicep".to_string()),
+        "c" | "h" => Some("c".to_string()),
+        "cake" | "cs" | "csx" => Some("csharp".to_string()),
+        "cc" | "cpp" | "cxx" | "c++" | "hh" | "hpp" | "hxx" | "h++" => Some("cpp".to_string()),
+        "clj" | "cljc" | "cljs" | "edn" => Some("clojure".to_string()),
+        "coffee" => Some("coffeescript".to_string()),
+        "conf" | "cfg" | "gitconfig" | "ini" | "properties" | "toml" => Some("ini".to_string()),
+        "cshtml" | "razor" => Some("razor".to_string()),
+        "css" => Some("css".to_string()),
+        "dart" => Some("dart".to_string()),
+        "dockerfile" => Some("dockerfile".to_string()),
+        "ex" | "exs" => Some("elixir".to_string()),
+        "fs" | "fsi" | "fsx" | "fsscript" => Some("fsharp".to_string()),
+        "go" => Some("go".to_string()),
+        "gql" | "graphql" => Some("graphql".to_string()),
+        "handlebars" | "hbs" => Some("handlebars".to_string()),
+        "hcl" | "tf" | "tfvars" => Some("hcl".to_string()),
+        "htm" | "html" | "astro" | "svelte" | "vue" => Some("html".to_string()),
+        "jade" | "pug" => Some("pug".to_string()),
+        "java" => Some("java".to_string()),
+        "jl" => Some("julia".to_string()),
+        "js" | "cjs" | "jsx" | "mjs" => Some("javascript".to_string()),
+        "json" | "jsonc" => Some("json".to_string()),
+        "kt" | "kts" => Some("kotlin".to_string()),
+        "less" => Some("less".to_string()),
+        "lua" => Some("lua".to_string()),
+        "m" | "mm" => Some("objective-c".to_string()),
+        "markdown" | "md" => Some("markdown".to_string()),
+        "mdx" => Some("mdx".to_string()),
+        "perl" | "pl" | "pm" => Some("perl".to_string()),
+        "php" => Some("php".to_string()),
+        "prisma" => Some("prisma".to_string()),
+        "proto" => Some("proto".to_string()),
+        "ps1" | "psd1" | "psm1" => Some("powershell".to_string()),
+        "py" | "pyi" | "pyw" => Some("python".to_string()),
+        "r" | "rmd" => Some("r".to_string()),
+        "rb" => Some("ruby".to_string()),
+        "rs" => Some("rust".to_string()),
+        "sass" | "scss" => Some("scss".to_string()),
+        "sbt" | "sc" | "scala" => Some("scala".to_string()),
+        "sh" | "bash" | "fish" | "ksh" | "zsh" => Some("shell".to_string()),
+        "sol" => Some("sol".to_string()),
+        "sql" => Some("sql".to_string()),
+        "sv" | "svh" => Some("systemverilog".to_string()),
+        "svg" | "xml" | "xsl" | "xslt" | "plist" => Some("xml".to_string()),
+        "swift" => Some("swift".to_string()),
+        "ts" | "cts" | "mts" | "tsx" => Some("typescript".to_string()),
+        "tsp" => Some("typespec".to_string()),
+        "twig" => Some("twig".to_string()),
+        "v" | "vh" => Some("verilog".to_string()),
+        "vb" => Some("vb".to_string()),
+        "wgsl" => Some("wgsl".to_string()),
+        "yaml" | "yml" => Some("yaml".to_string()),
         _ => None,
     }
 }
@@ -1332,8 +1390,23 @@ mod tests {
 
     #[test]
     fn language_from_path_maps_supported_extensions() {
-        // 常用编程语言：返回的 language id 与 Monaco / VS Code 内核一致，
-        // 前端 Monaco Editor 据此启用语法高亮。
+        // 返回的 language id 与 Monaco / VS Code 内核一致（prisma 由前端注册）。
+        assert_eq!(language_from_path("main.c"), Some("c".to_string()));
+        assert_eq!(language_from_path("include/util.h"), Some("c".to_string()));
+        assert_eq!(language_from_path("main.cpp"), Some("cpp".to_string()));
+        assert_eq!(language_from_path("lib.cxx"), Some("cpp".to_string()));
+        assert_eq!(language_from_path("App.mm"), Some("objective-c".to_string()));
+        assert_eq!(language_from_path("ViewController.m"), Some("objective-c".to_string()));
+        assert_eq!(language_from_path("schema.sql"), Some("sql".to_string()));
+        assert_eq!(language_from_path("schema.prisma"), Some("prisma".to_string()));
+        assert_eq!(language_from_path("Main.cs"), Some("csharp".to_string()));
+        assert_eq!(language_from_path("script.sh"), Some("shell".to_string()));
+        assert_eq!(language_from_path("deploy.bash"), Some("shell".to_string()));
+        assert_eq!(language_from_path("Dockerfile"), Some("dockerfile".to_string()));
+        assert_eq!(
+            language_from_path("Dockerfile.prod"),
+            Some("dockerfile".to_string()),
+        );
         assert_eq!(language_from_path("main.py"), Some("python".to_string()));
         assert_eq!(language_from_path("App.java"), Some("java".to_string()));
         assert_eq!(language_from_path("main.go"), Some("go".to_string()));
@@ -1349,6 +1422,13 @@ mod tests {
         assert_eq!(language_from_path("pom.xml"), Some("xml".to_string()));
         assert_eq!(language_from_path("index.php"), Some("php".to_string()));
         assert_eq!(language_from_path("app.rb"), Some("ruby".to_string()));
+        assert_eq!(language_from_path("query.graphql"), Some("graphql".to_string()));
+        assert_eq!(language_from_path("main.proto"), Some("proto".to_string()));
+        assert_eq!(language_from_path("main.tf"), Some("hcl".to_string()));
+        assert_eq!(language_from_path("styles.scss"), Some("scss".to_string()));
+        assert_eq!(language_from_path("Component.jsx"), Some("javascript".to_string()));
+        assert_eq!(language_from_path("mod.mts"), Some("typescript".to_string()));
+        assert_eq!(language_from_path("Main.SQL"), Some("sql".to_string()));
 
         // 已有映射回归
         assert_eq!(language_from_path("main.rs"), Some("rust".to_string()));
