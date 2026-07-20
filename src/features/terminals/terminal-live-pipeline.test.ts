@@ -80,7 +80,6 @@ describe("TerminalLivePipeline", () => {
       writeHistory: (text) => {
         writes.push(`history:${text}`);
       },
-      onRestoreIncomplete: vi.fn(),
       onRestoreError: vi.fn(),
       onInactive: vi.fn(),
       onLiveReady: vi.fn(),
@@ -141,7 +140,6 @@ describe("TerminalLivePipeline", () => {
         await historyGate;
         writes.push(`history-end:${text}`);
       },
-      onRestoreIncomplete: vi.fn(),
       onRestoreError: vi.fn(),
       onInactive: vi.fn(),
       onLiveReady: vi.fn(),
@@ -177,7 +175,6 @@ describe("TerminalLivePipeline", () => {
       writeHistory: (text) => {
         writes.push(`history:${text}`);
       },
-      onRestoreIncomplete: vi.fn(),
       onRestoreError: vi.fn(),
       onInactive: vi.fn(),
       onLiveReady: vi.fn(),
@@ -209,7 +206,6 @@ describe("TerminalLivePipeline", () => {
         liveWrites.push(new TextDecoder().decode(bytes));
       },
       writeHistory: vi.fn(),
-      onRestoreIncomplete: vi.fn(),
       onRestoreError: vi.fn(),
       onInactive: vi.fn(),
       onLiveReady: vi.fn(),
@@ -229,7 +225,6 @@ describe("TerminalLivePipeline", () => {
     const pipeline = new TerminalLivePipeline(transport, {
       writeBytes: vi.fn(),
       writeHistory: vi.fn(),
-      onRestoreIncomplete: vi.fn(),
       onRestoreError: vi.fn(),
       onInactive: vi.fn(),
       onLiveReady: vi.fn(),
@@ -248,6 +243,32 @@ describe("TerminalLivePipeline", () => {
     });
   });
 
+  it("enters live ready even when restore snapshot is incomplete", async () => {
+    const onLiveReady = vi.fn();
+    const transport = createTransport({
+      restore: vi.fn(async () => ({
+        sequence: 7,
+        chunks: [],
+        isComplete: false,
+        isActive: true,
+      })),
+    });
+    const pipeline = new TerminalLivePipeline(transport, {
+      writeBytes: vi.fn(),
+      writeHistory: vi.fn(),
+      onRestoreError: vi.fn(),
+      onInactive: vi.fn(),
+      onLiveReady,
+      onPendingDropped: vi.fn(),
+    });
+
+    await pipeline.becomeVisible();
+
+    expect(pipeline.getPhase()).toBe("live");
+    expect(pipeline.getLatestSequence()).toBe(7);
+    expect(onLiveReady).toHaveBeenCalledTimes(1);
+  });
+
   it("passes restoreSequence to writeHistory", async () => {
     const metas: Array<{ restoreSequence: number }> = [];
     const transport = createTransport({
@@ -263,7 +284,6 @@ describe("TerminalLivePipeline", () => {
       writeHistory: (_text, meta) => {
         metas.push(meta);
       },
-      onRestoreIncomplete: vi.fn(),
       onRestoreError: vi.fn(),
       onInactive: vi.fn(),
       onLiveReady: vi.fn(),

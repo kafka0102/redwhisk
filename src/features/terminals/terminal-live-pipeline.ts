@@ -16,7 +16,6 @@ export interface TerminalLivePipelineCallbacks {
     text: string,
     meta: WriteTerminalHistoryMeta,
   ) => void | Promise<void>;
-  onRestoreIncomplete: () => void;
   onRestoreError: (error: unknown) => void;
   onInactive: () => void;
   onLiveReady: () => void;
@@ -117,12 +116,10 @@ export class TerminalLivePipeline {
         await this.safeSetLiveSubscription(false);
         return;
       }
-      if (!restoreResult.isComplete) {
-        this.callbacks.onRestoreIncomplete();
-      } else {
-        this.callbacks.onLiveReady();
-      }
 
+      // 历史一律从磁盘 log 回放；restore.isComplete 只表示内存缓冲是否自 session
+      // 起点完整，不影响可见内容与 live sequence 对齐，故不向用户展示噪音提示。
+      this.callbacks.onLiveReady();
       this.phase = "live";
       this.flushPendingEvents();
     } catch (error) {

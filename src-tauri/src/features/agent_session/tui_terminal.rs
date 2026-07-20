@@ -66,7 +66,8 @@ impl AgentSessionService<'_> {
             Ok(snapshot) => Ok(RestoreAgentSessionTerminalResult {
                 session_id: snapshot.session_id,
                 sequence: snapshot.sequence,
-                chunks: snapshot.chunks,
+                // 前端 catch-up 走磁盘 log，不消费 chunks；避免超大 IPC。
+                chunks: Vec::new(),
                 is_complete: snapshot.is_complete,
                 is_active: true,
             }),

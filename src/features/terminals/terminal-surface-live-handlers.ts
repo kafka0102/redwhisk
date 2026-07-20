@@ -76,12 +76,6 @@ export function createTerminalSurfaceLiveHandlers(
       );
       refreshInPlaceScrollHint();
     },
-    onRestoreIncomplete: () => {
-      deps.showStatusMessage(
-        "restore",
-        "Terminal restore snapshot is incomplete. Showing log tail; live output continues below.",
-      );
-    },
     onRestoreError: (error) => {
       deps.showStatusMessage("restore", getCommandErrorMessage(error, deps.t));
     },
@@ -89,9 +83,8 @@ export function createTerminalSurfaceLiveHandlers(
       deps.clearStatusMessage("inactive");
     },
     onLiveReady: () => {
-      if (deps.getStatusSource() === "restore") {
-        deps.clearStatusMessage("restore");
-      }
+      // 不限定 source：切 session 后 ref 可能已被清空，但仍需去掉粘住的 restore 文案。
+      deps.clearStatusMessage();
       refreshInPlaceScrollHint();
     },
     onPendingDropped: () => {

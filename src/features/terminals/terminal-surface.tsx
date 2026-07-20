@@ -58,6 +58,14 @@ export function TerminalSurface({
   const themeRef = useRef(theme);
   const contentFontSizeRef = useRef(contentFontSize);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusTransportKey, setStatusTransportKey] = useState(transportKey);
+  // transportKey 切换时组件实例会复用；在 render 阶段同步清掉上一 session 文案。
+  if (statusTransportKey !== transportKey) {
+    setStatusTransportKey(transportKey);
+    if (statusMessage !== null) {
+      setStatusMessage(null);
+    }
+  }
   const canBootXterm = supportsXtermRuntime();
 
   useEffect(() => {
@@ -256,6 +264,8 @@ export function TerminalSurface({
 
       return true;
     });
+
+    statusSourceRef.current = null;
 
     let isDisposed = false;
     let statusTimer: number | null = null;

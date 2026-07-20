@@ -489,7 +489,9 @@ impl<'connection> ProjectTerminalService<'connection> {
         Ok(RestoreProjectTerminalResult {
             session_id: snapshot.session_id,
             sequence: snapshot.sequence,
-            chunks: snapshot.chunks,
+            // 前端 catch-up 走磁盘 log，不消费 chunks；避免 Vec<u8> 以 JSON number[][]
+            // 做超大 IPC。sequence / is_complete / is_active 仍用于对齐与状态。
+            chunks: Vec::new(),
             is_complete: snapshot.is_complete,
             is_active: true,
         })

@@ -767,19 +767,29 @@ impl PtyRestoreBuffer {
 
     fn push(&mut self, sequence: u64, data: &[u8]) {
         self.latest_sequence = sequence;
-        if !self.is_complete {
+        if data.is_empty() {
             return;
         }
 
-        if self.total_bytes.saturating_add(data.len()) > RESTORE_BUFFER_MAX_BYTES {
+        // 单 chunk 超过上限时只保留尾部，并标记起点历史已丢失。
+        if data.len() > RESTORE_BUFFER_MAX_BYTES {
+            let start = data.len() - RESTORE_BUFFER_MAX_BYTES;
             self.chunks.clear();
-            self.total_bytes = 0;
+            self.chunks.push(data[start..].to_vec());
+            self.total_bytes = RESTORE_BUFFER_MAX_BYTES;
             self.is_complete = false;
             return;
         }
 
-        self.total_bytes += data.len();
         self.chunks.push(data.to_vec());
+        self.total_bytes = self.total_bytes.saturating_add(data.len());
+
+        // 环形裁剪：丢掉最旧 chunk，始终保留最近 RESTORE_BUFFER_MAX_BYTES。
+        while self.total_bytes > RESTORE_BUFFER_MAX_BYTES && !self.chunks.is_empty() {
+            let removed = self.chunks.remove(0);
+            self.total_bytes = self.total_bytes.saturating_sub(removed.len());
+            self.is_complete = false;
+        }
     }
 
     fn snapshot(&self, session_id: i64) -> PtyRestoreSnapshot {
@@ -960,6 +970,35 @@ mod tests {
     fn terminal_background_theme_color_fgbg_matches_palette() {
         assert_eq!(TerminalBackgroundTheme::Dark.color_fgbg(), "15;0");
         assert_eq!(TerminalBackgroundTheme::Light.color_fgbg(), "0;15");
+    }
+
+    #[test]
+    fn restore_buffer_starts_complete_and_empty() {
+        let buffer = super::PtyRestoreBuffer::new();
+        let snapshot = buffer.snapshot(1);
+        assert!(snapshot.is_complete);
+        assert_eq!(snapshot.sequence, 0);
+        assert!(snapshot.chunks.is_empty());
+    }
+
+    #[test]
+    fn restore_buffer_marks_incomplete_but_keeps_recent_tail() {
+        let mut buffer = super::PtyRestoreBuffer::new();
+        // 超过 1MiB 后应裁掉前缀，并继续接受新数据。
+        let chunk = vec![b'a'; 600_000];
+        buffer.push(1, &chunk);
+        buffer.push(2, &chunk);
+        buffer.push(3, b"tail");
+        assert!(!buffer.is_complete);
+        assert_eq!(buffer.latest_sequence, 3);
+        assert!(buffer.total_bytes <= super::RESTORE_BUFFER_MAX_BYTES);
+        assert!(buffer.total_bytes > 0);
+        let snapshot = buffer.snapshot(9);
+        assert!(!snapshot.is_complete);
+        assert_eq!(snapshot.sequence, 3);
+        assert!(!snapshot.chunks.is_empty());
+        let joined: Vec<u8> = snapshot.chunks.iter().flatten().copied().collect();
+        assert!(joined.ends_with(b"tail"));
     }
 
     #[test]
