@@ -553,6 +553,7 @@
     "contextCompacted": "Context compacted",
     "workspaceLabel": "Project terminals workspace",
     "terminalStatusBar": "Terminal status bar",
+    "inPlaceTuiScrollHint": "TUI is redrawing the current screen in place; earlier on-screen output may be overwritten and scrolling may be unavailable until more line output arrives.",
     "shortcutCommands": "Quick commands",
     "shortcutCommandsManage": "Manage quick commands",
     "shortcutCommandsEmpty": "No quick commands yet.",

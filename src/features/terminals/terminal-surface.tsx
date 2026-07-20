@@ -8,10 +8,8 @@ import { useEffect, useRef, useState } from "react";
 import { attachTerminalDragDrop } from "./terminal-drag-drop";
 import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
-import {
-  persistTerminalViewPosition,
-  writeTerminalHistoryPreservingView,
-} from "./terminal-history-writer";
+import { persistTerminalViewPosition } from "./terminal-history-writer";
+import { createTerminalSurfaceLiveHandlers } from "./terminal-surface-live-handlers";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
 import {
   isCopyShortcut,
@@ -30,6 +28,7 @@ type TerminalStatusSource =
   | "boot"
   | "input"
   | "inactive"
+  | "inplace"
   | "output"
   | "poll"
   | "resize"
@@ -50,7 +49,7 @@ export function TerminalSurface({
   transport,
   transportKey,
 }: TerminalSurfaceProps) {
-  const { theme, contentFontSize, t } = useI18n();
+  const { theme, contentFontSize, messages, t } = useI18n();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -285,47 +284,22 @@ export function TerminalSurface({
       write: (data) => transportRef.current.write(data),
     };
 
-    const pipeline = new TerminalLivePipeline(pipelineTransport, {
-      writeBytes: (bytes) => {
-        try {
-          terminal.write(bytes);
-          clearStatusMessage();
-        } catch (error) {
-          showStatusMessage("output", getCommandErrorMessage(error, t));
-        }
-      },
-      writeHistory: (text, meta) =>
-        writeTerminalHistoryPreservingView(
-          terminal,
-          text,
-          (suppressed) => {
-            suppressPtyInput = suppressed;
-          },
-          String(transportKey),
-          meta.restoreSequence,
-        ),
-      onRestoreIncomplete: () => {
-        showStatusMessage(
-          "restore",
-          "Terminal restore snapshot is incomplete. Showing log tail; live output continues below.",
-        );
-      },
-      onRestoreError: (error) => {
-        showStatusMessage("restore", getCommandErrorMessage(error, t));
-      },
-      onInactive: () => {
-        clearStatusMessage("inactive");
-      },
-      onLiveReady: () => {
-        clearStatusMessage();
-      },
-      onPendingDropped: () => {
-        showStatusMessage(
-          "restore",
-          "Terminal restore is taking longer than expected. Older live output was dropped while waiting for restore.",
-        );
-      },
-    });
+    const pipeline = new TerminalLivePipeline(
+      pipelineTransport,
+      createTerminalSurfaceLiveHandlers({
+        clearStatusMessage,
+        getIsDisposed: () => isDisposed,
+        getStatusSource: () => statusSourceRef.current,
+        inPlaceHintMessage: messages.agentsFeature.inPlaceTuiScrollHint,
+        setInputSuppressed: (suppressed) => {
+          suppressPtyInput = suppressed;
+        },
+        showStatusMessage,
+        t,
+        terminal,
+        transportKey,
+      }),
+    );
 
     const isLayoutVisible = (): boolean =>
       host.offsetWidth > 0 && host.offsetHeight > 0;
@@ -461,7 +435,12 @@ export function TerminalSurface({
       fitAddonRef.current = null;
       statusSourceRef.current = null;
     };
-  }, [canBootXterm, transportKey, t]);
+  }, [
+    canBootXterm,
+    messages.agentsFeature.inPlaceTuiScrollHint,
+    transportKey,
+    t,
+  ]);
 
   return (
     <div className={shellClassName}>
