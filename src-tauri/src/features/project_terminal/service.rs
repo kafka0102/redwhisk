@@ -1305,8 +1305,9 @@ mod tests {
             Some(&temp_dir.path().join("redwhisk.worktrees").to_string_lossy()),
             None,
             &temp_dir.path().join("agent-session.log").to_string_lossy(),
-            1,
-        )
+            "json",
+                        1,
+            )
         .expect("insert agent session");
         transaction.commit().expect("commit agent session");
 

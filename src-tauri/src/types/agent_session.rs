@@ -135,6 +135,7 @@ pub struct AgentSessionListItem {
     pub can_complete_agent_commit: bool,
     pub title: Option<String>,
     pub agent_type: AgentType,
+    pub display_mode: String,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
     pub is_turn_running: bool,
@@ -170,6 +171,7 @@ pub struct AgentSessionRecord {
     pub working_dir: String,
     pub command_snapshot: String,
     pub prompt_snapshot: String,
+    pub display_mode: String,
     pub workspace_mode: WorkspaceMode,
     pub target_branch: Option<String>,
     pub workspace_branch: Option<String>,
@@ -461,3 +463,4 @@ pub struct ReadAgentTimelineResult {
     pub items: Vec<AgentTimelineItem>,
     pub effort: Option<String>,
 }
+

@@ -342,6 +342,17 @@
   min-height: 0;
 }
 
+.agent-tui-session-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.agent-tui-session-shell .terminal-surface-shell {
+  min-height: 0;
+}
+
 .project-terminal-status-bar {
   display: flex;
   align-items: center;

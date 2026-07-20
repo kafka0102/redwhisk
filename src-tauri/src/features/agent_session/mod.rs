@@ -3,6 +3,8 @@
 // 详见 docs/architecture-design/backend-feature-first-refactor.md §四.1 与 ADR-0013。
 
 pub mod commands;
+pub mod tui_terminal_commands;
+mod tui_terminal;
 pub mod session_monitor_commands;
 pub mod workspace_commands;
 mod codex_session_id_capture;
@@ -25,3 +27,6 @@ pub(crate) use log_path::{
 pub(crate) use timeline::read_last_assistant_text_for_turn;
 #[cfg(test)]
 pub(crate) use log_path::build_issue_archive_log_path;
+
+#[cfg(test)]
+mod tui_start_tests;

@@ -154,6 +154,10 @@ const AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION: &str =
     "0047_agent_display_mode_enabled_and_opencode_grok";
 const AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_SQL: &str =
     include_str!("../../migrations/0047_agent_display_mode_enabled_and_opencode_grok.sql");
+const AGENT_SESSIONS_DISPLAY_MODE_MIGRATION_VERSION: &str =
+    "0048_agent_sessions_display_mode";
+const AGENT_SESSIONS_DISPLAY_MODE_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0048_agent_sessions_display_mode.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -419,6 +423,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION,
             sql: AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_DISPLAY_MODE_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_DISPLAY_MODE_MIGRATION_SQL,
         },
     ]
 }

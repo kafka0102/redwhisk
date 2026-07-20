@@ -3,6 +3,7 @@ import { Check, ChevronDown, Ellipsis, PanelRightOpen, X } from "lucide-react";
 
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { AgentSessionView } from "./agent-session-view";
+import { AgentTuiSessionView } from "./agent-tui-session-view";
 import { formatSessionTitle } from "../agent-session-formatters";
 import { Input } from "../../../components/ui/input";
 import {
@@ -45,6 +46,7 @@ export interface SessionWorkspaceEntry {
   sessionStatus: AgentSessionListItem["status"];
   issueStatus: NonNullable<AgentSessionListItem["issueStatus"]> | null;
   isTurnRunning: boolean;
+  displayMode: AgentSessionListItem["displayMode"];
   activeWorkspaceTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
@@ -448,15 +450,22 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
         fileTab={workspace.fileTab}
         sessionAgentType={workspace.agentType}
         sessionContent={
-          <AgentSessionView
-            projectId={projectId}
-            sessionId={workspace.sessionId}
-            agentType={workspace.agentType}
-            sessionStatus={workspace.sessionStatus}
-            issueStatus={workspace.issueStatus}
-            isTurnRunning={workspace.isTurnRunning}
-            isActive={isCurrent}
-          />
+          workspace.displayMode === "tui" ? (
+            <AgentTuiSessionView
+              projectId={projectId}
+              sessionId={workspace.sessionId}
+            />
+          ) : (
+            <AgentSessionView
+              projectId={projectId}
+              sessionId={workspace.sessionId}
+              agentType={workspace.agentType}
+              sessionStatus={workspace.sessionStatus}
+              issueStatus={workspace.issueStatus}
+              isTurnRunning={workspace.isTurnRunning}
+              isActive={isCurrent}
+            />
+          )
         }
         onCloseTab={(tab) => onCloseWorkspaceTab(workspace.sessionId, tab)}
         onCreateBrowserTab={() => onCreateBrowserTab(workspace.sessionId)}

@@ -456,6 +456,7 @@ export interface I18nMessages {
     /** 已完成 reasoning 块的标题文案，入参为持续秒数。 */
     reasoningDuration: (seconds: number) => string;
     structuredSessionView: string;
+    tuiSessionView: string;
     readOnlyCompletedIssue: string;
     permissionCard: string;
     sessionListControls: string;

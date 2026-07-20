@@ -77,6 +77,7 @@ function makeSession(
     canCompleteClean: false,
     canCompleteAgentCommit: false,
     agentType: "codex",
+    displayMode: "json",
     status: "running",
     attention: "none",
     isTurnRunning: true,
