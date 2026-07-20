@@ -98,23 +98,17 @@
   gap: 10px;
   width: 100%;
   padding: 8px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition:
-    background-color 160ms ease-out,
-    border-color 160ms ease-out;
+  transition: background-color 160ms ease-out;
 }
 
 .project-switcher__item:hover {
-  border-color: var(--color-border);
-}
-
-.project-switcher__item[data-current="true"] {
-  border-color: var(--color-accent);
+  background: var(--color-surface-muted);
 }
 
 .project-switcher__icon {

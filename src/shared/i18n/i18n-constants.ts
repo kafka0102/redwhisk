@@ -1,5 +1,6 @@
 export type Locale = "zh" | "en";
 export type ThemePreference = "light" | "dark" | "system";
+export type DocumentTheme = "light" | "dark";
 export type ContentFontSize = 13 | 14 | 15 | 16 | 18 | 20 | 22;
 
 export const DEFAULT_LOCALE: Locale = "zh";
@@ -21,6 +22,44 @@ export function getInitialThemePreference(): ThemePreference {
   } catch {
     return "light";
   }
+}
+
+export function resolveDocumentTheme(
+  preference: ThemePreference,
+  systemTheme: DocumentTheme,
+): DocumentTheme {
+  return preference === "system" ? systemTheme : preference;
+}
+
+export function getSystemDocumentTheme(): DocumentTheme {
+  try {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function"
+    ) {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+  } catch {
+    // matchMedia 不可用时回退 light。
+  }
+  return "light";
+}
+
+export function getBootstrapDocumentTheme(): DocumentTheme {
+  return resolveDocumentTheme(
+    getInitialThemePreference(),
+    getSystemDocumentTheme(),
+  );
+}
+
+export function applyBootstrapDocumentTheme(
+  root: HTMLElement = document.documentElement,
+): DocumentTheme {
+  const theme = getBootstrapDocumentTheme();
+  root.dataset.theme = theme;
+  return theme;
 }
 
 function isThemePreference(value: string | null): value is ThemePreference {

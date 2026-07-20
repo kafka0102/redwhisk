@@ -19,6 +19,7 @@ import {
   getInitialContentFontSize,
   getInitialNotificationReminder,
   getInitialThemePreference,
+  resolveDocumentTheme,
   THEME_STORAGE_KEY,
   type ContentFontSize,
   type Locale,
@@ -80,7 +81,7 @@ export function I18nProvider({
   const [notificationReminder, setNotificationReminderState] = useState(
     getInitialNotificationReminder,
   );
-  const theme = themePreference === "system" ? systemTheme : themePreference;
+  const theme = resolveDocumentTheme(themePreference, systemTheme);
 
   useEffect(() => {
     if (themePreference !== "system" || !canMatchDarkScheme()) {

@@ -1063,10 +1063,20 @@ describe("App project entry", () => {
     await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
 
     const switcher = screen.getByRole("menu", { name: "项目切换器" });
+    const currentItem = within(switcher).getByRole("menuitem", {
+      name: /RedWhisk/,
+    });
+    expect(currentItem).toHaveTextContent(
+      "/Users/kafka0102/workspace/kafka/redwhisk",
+    );
+    // 当前项仅以可访问标签/对勾标识，不依赖选中 border。
+    expect(within(currentItem).getByLabelText("当前项目")).toBeInTheDocument();
+    const otherItem = within(switcher).getByRole("menuitem", {
+      name: /Local Agents Lab/,
+    });
     expect(
-      within(switcher).getByRole("menuitem", { name: /RedWhisk/ }),
-    ).toHaveTextContent("/Users/kafka0102/workspace/kafka/redwhisk");
-    expect(within(switcher).getByLabelText("当前项目")).toBeInTheDocument();
+      within(otherItem).queryByLabelText("当前项目"),
+    ).not.toBeInTheDocument();
     expect(
       within(switcher).getByRole("menuitem", { name: /Local Agents Lab/ }),
     ).toHaveTextContent("路径不可用");
