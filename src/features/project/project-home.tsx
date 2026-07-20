@@ -8,11 +8,13 @@ interface ProjectHomeProps {
   projects: ProjectSummary[];
   onCreateProject: () => void;
   onProjectOpen: (project: ProjectSummary) => void;
+  onProjectsRefresh: () => Promise<void>;
 }
 
 export function ProjectHome({
   isCreatingProject,
   onCreateProject,
+  onProjectsRefresh,
   projects,
   onProjectOpen,
 }: ProjectHomeProps) {
@@ -41,6 +43,7 @@ export function ProjectHome({
         projects={projects}
         onCreateProject={onCreateProject}
         onProjectOpen={onProjectOpen}
+        onProjectsRefresh={onProjectsRefresh}
       />
     </main>
   );

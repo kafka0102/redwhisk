@@ -199,7 +199,11 @@
     "searchProjects": "搜索项目",
     "searchProjectsPlaceholder": "搜索项目",
     "selectGitRepository": "选择 Git 仓库",
-    "clearSearch": "清空搜索"
+    "clearSearch": "清空搜索",
+    "moreActions": "更多操作",
+    "removeFromList": "从列表中移除",
+    "removeFromListConfirmTitle": "从列表中移除",
+    "removeFromListConfirmMessage": "移除后项目数据不会删除，下次使用相同路径的仓库时可恢复显示，确定要移除该项目？"
   },
   "projectSwitcher": {
     "createProject": "创建项目",
@@ -207,7 +211,11 @@
     "currentProjectWithName": "当前项目 {{projectName}}",
     "menu": "项目切换器",
     "pathUnavailable": "路径不可用",
-    "status": "项目切换器状态"
+    "status": "项目切换器状态",
+    "moreActions": "更多操作",
+    "removeFromList": "从列表中移除",
+    "removeFromListConfirmTitle": "从列表中移除",
+    "removeFromListConfirmMessage": "移除后项目数据不会删除，下次使用相同路径的仓库时可恢复显示，确定要移除该项目？"
   },
   "createProject": {
     "create": "创建项目",

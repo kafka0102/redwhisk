@@ -199,7 +199,11 @@
     "searchProjects": "Search projects",
     "searchProjectsPlaceholder": "searching projects",
     "selectGitRepository": "Select Git Repository",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "moreActions": "More actions",
+    "removeFromList": "Remove from list",
+    "removeFromListConfirmTitle": "Remove from list",
+    "removeFromListConfirmMessage": "Removing this project will not delete its data. It will reappear when you open a repository at the same path. Remove this project from the list?"
   },
   "projectSwitcher": {
     "createProject": "Create Project",
@@ -207,7 +211,11 @@
     "currentProjectWithName": "Current project {{projectName}}",
     "menu": "Project Switcher",
     "pathUnavailable": "path unavailable",
-    "status": "Project switcher status"
+    "status": "Project switcher status",
+    "moreActions": "More actions",
+    "removeFromList": "Remove from list",
+    "removeFromListConfirmTitle": "Remove from list",
+    "removeFromListConfirmMessage": "Removing this project will not delete its data. It will reappear when you open a repository at the same path. Remove this project from the list?"
   },
   "createProject": {
     "create": "Create Project",

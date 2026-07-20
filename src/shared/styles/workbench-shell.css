@@ -140,6 +140,20 @@
   border-top: 1px solid var(--color-border);
 }
 
+.project-list__row-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-list__row-shell:hover .project-item-more,
+.project-list__row-shell:focus-within .project-item-more,
+.project-list__row-shell .project-item-more[aria-expanded="true"] {
+  opacity: 1;
+}
+
 .project-list__row {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);

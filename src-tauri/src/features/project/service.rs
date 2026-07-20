@@ -28,16 +28,48 @@ impl<'connection> ProjectService<'connection> {
         let validated_repo = validate_repo_path(&input.repo_path)?;
         let name = normalize_project_name(&input.name, &validated_repo.repo_path)?;
         validate_worktree_location(&validated_repo.repo_path, input.worktree_location)?;
+        let repo_path = validated_repo.repo_path.to_string_lossy().to_string();
+        let setup_command = input.worktree_setup_command.trim();
 
-        let project = self.repository
-            .insert_or_get_existing_for_path(
+        if let Some(existing) = self
+            .repository
+            .find_by_repo_path_including_removed(&repo_path)
+            .map_err(project_database_error)?
+        {
+            if existing.removed_at.is_some() {
+                let project = self
+                    .repository
+                    .restore_removed_with_settings(
+                        existing.id,
+                        &name,
+                        &repo_path,
+                        input.worktree_location,
+                        setup_command,
+                    )
+                    .map_err(project_database_error)?;
+                return Ok(populate_code_workspaces(project));
+            }
+            return Ok(populate_code_workspaces(existing));
+        }
+
+        let project = self
+            .repository
+            .insert_or_get_existing_with_settings(
                 &name,
-                &validated_repo.repo_path,
+                &repo_path,
                 input.worktree_location,
-                input.worktree_setup_command.trim(),
+                setup_command,
             )
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
+    }
+
+    pub fn remove_project_from_list(&self, project_id: i64) -> Result<(), CommandError> {
+        self.project_by_id(project_id)?;
+        self.repository
+            .mark_removed(project_id)
+            .map_err(project_database_error)?;
+        Ok(())
     }
 
     pub fn list_projects(&self) -> Result<ProjectListResponse, CommandError> {
@@ -128,6 +160,15 @@ impl<'connection> ProjectService<'connection> {
         let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).list_projects()
+    }
+
+    pub fn remove_project_from_list_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+    ) -> Result<(), CommandError> {
+        let database = open_project_database(data_dir.as_ref())?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectService::new(repository).remove_project_from_list(project_id)
     }
 
     /// 打开项目热路径：路径校验、更新 last_opened、探测 code workspaces。

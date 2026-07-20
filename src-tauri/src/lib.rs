@@ -88,6 +88,7 @@ pub fn run() {
             commands::core_commands::initialize_local_data,
             features::project::commands::create_project,
             features::project::commands::list_projects,
+            features::project::commands::remove_project_from_list,
             features::project::commands::open_project,
             features::project::commands::open_project_window,
             features::project::commands::update_project_settings,

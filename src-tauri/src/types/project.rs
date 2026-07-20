@@ -27,6 +27,12 @@ pub struct OpenProjectInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoveProjectFromListInput {
+    pub project_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateProjectSettingsInput {
     pub project_id: i64,
     pub name: String,
@@ -58,6 +64,8 @@ pub struct ProjectSummary {
     pub worktree_setup_command: String,
     pub created_at: i64,
     pub last_opened_at: i64,
+    #[serde(skip)]
+    pub removed_at: Option<i64>,
     #[serde(default)]
     pub code_workspaces: Vec<CodeWorkspaceRoot>,
 }

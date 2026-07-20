@@ -59,6 +59,7 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "last_opened_at",
             "worktree_location",
             "worktree_setup_command",
+            "removed_at",
         ],
     );
     assert_eq!(
@@ -329,6 +330,10 @@ fn project_integer_id_migration_converts_existing_text_schema() {
             "0022_agent_worktree_execution",
             include_str!("../migrations/0022_agent_worktree_execution.sql"),
         ),
+        (
+            "0049_projects_removed_at",
+            include_str!("../migrations/0049_projects_removed_at.sql"),
+        ),
     ]);
 
     runner.run(&database.connection).expect("migrations");
@@ -404,6 +409,10 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
         (
             "0022_agent_worktree_execution",
             include_str!("../migrations/0022_agent_worktree_execution.sql"),
+        ),
+        (
+            "0049_projects_removed_at",
+            include_str!("../migrations/0049_projects_removed_at.sql"),
         ),
     ]);
 
@@ -619,6 +628,75 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
     let second_project = service.create_project(input).expect("second project");
 
     assert_eq!(first_project.id, second_project.id);
+    let count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
+        .expect("project count");
+    assert_eq!(count, 1);
+}
+
+
+#[test]
+fn remove_project_from_list_hides_project_and_create_restores_same_id_with_updated_settings() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+    let created = service
+        .create_project(CreateProjectInput {
+            name: "sample-repo".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "echo setup".to_string(),
+        })
+        .expect("create project");
+
+    service
+        .remove_project_from_list(created.id)
+        .expect("remove project");
+
+    let listed = service.list_projects().expect("list after remove");
+    assert!(
+        listed
+            .projects
+            .iter()
+            .all(|project| project.id != created.id),
+        "removed project should not appear in list"
+    );
+
+    let restored = service
+        .create_project(CreateProjectInput {
+            name: "restored-name".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            worktree_location: ProjectWorktreeLocation::UserHome,
+            worktree_setup_command: "echo restored".to_string(),
+        })
+        .expect("restore project");
+
+    assert_eq!(restored.id, created.id);
+    assert_eq!(restored.name, "restored-name");
+    assert_eq!(
+        restored.worktree_location,
+        ProjectWorktreeLocation::UserHome
+    );
+    assert_eq!(restored.worktree_setup_command, "echo restored");
+    assert!(restored.removed_at.is_none());
+
+    let listed_after_restore = service.list_projects().expect("list after restore");
+    assert!(
+        listed_after_restore
+            .projects
+            .iter()
+            .any(|project| project.id == created.id),
+        "restored project should appear in list"
+    );
+
     let count: i64 = database
         .connection
         .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))

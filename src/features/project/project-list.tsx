@@ -7,12 +7,14 @@ import { Input } from "../../components/ui/input";
 import { useI18n } from "../../shared/i18n/i18n";
 import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 import { getProjectIconColor } from "./project-icon-color";
+import { ProjectRemoveMenu } from "./project-remove-menu";
 
 interface ProjectListProps {
   isCreatingProject: boolean;
   projects: ProjectSummary[];
   onCreateProject: () => void;
   onProjectOpen: (project: ProjectSummary) => void;
+  onProjectsRefresh: () => Promise<void>;
 }
 
 function getProjectInitial(name: string) {
@@ -25,6 +27,7 @@ export function ProjectList({
   isCreatingProject,
   onCreateProject,
   onProjectOpen,
+  onProjectsRefresh,
   projects,
 }: ProjectListProps) {
   const { messages } = useI18n();
@@ -84,31 +87,38 @@ export function ProjectList({
       >
         {visibleProjects.map((project) => (
           <li key={project.id} className="project-list__item">
-            <button
-              className="project-list__row"
-              type="button"
-              aria-label={messages.projectHome.openProject(project.name)}
-              onClick={() => onProjectOpen(project)}
-            >
-              <span
-                className="project-list__icon"
-                style={{ backgroundColor: getProjectIconColor(project) }}
-                aria-hidden="true"
+            <div className="project-list__row-shell">
+              <button
+                className="project-list__row"
+                type="button"
+                aria-label={messages.projectHome.openProject(project.name)}
+                onClick={() => onProjectOpen(project)}
               >
-                {getProjectInitial(project.name)}
-              </span>
-              <span className="project-list__body">
-                <span className="project-list__name">{project.name}</span>
-                <span className="project-list__path">
-                  {formatHomePathForDisplay(project.path)}
+                <span
+                  className="project-list__icon"
+                  style={{ backgroundColor: getProjectIconColor(project) }}
+                  aria-hidden="true"
+                >
+                  {getProjectInitial(project.name)}
                 </span>
-                {project.status === "missing" ? (
-                  <span className="project-list__meta">
-                    {messages.projectHome.pathUnavailable}
+                <span className="project-list__body">
+                  <span className="project-list__name">{project.name}</span>
+                  <span className="project-list__path">
+                    {formatHomePathForDisplay(project.path)}
                   </span>
-                ) : null}
-              </span>
-            </button>
+                  {project.status === "missing" ? (
+                    <span className="project-list__meta">
+                      {messages.projectHome.pathUnavailable}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+              <ProjectRemoveMenu
+                messagesSource="projectHome"
+                projectId={project.id}
+                onRemoved={onProjectsRefresh}
+              />
+            </div>
           </li>
         ))}
       </ul>

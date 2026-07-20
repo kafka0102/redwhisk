@@ -19,7 +19,25 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_repo_path(&self, repo_path: &str) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at FROM projects WHERE repo_path = ?1",
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                 FROM projects
+                 WHERE repo_path = ?1
+                   AND removed_at IS NULL",
+                params![repo_path],
+                project_from_row,
+            )
+            .optional()
+    }
+
+    pub fn find_by_repo_path_including_removed(
+        &self,
+        repo_path: &str,
+    ) -> rusqlite::Result<Option<ProjectSummary>> {
+        self.connection
+            .query_row(
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                 FROM projects
+                 WHERE repo_path = ?1",
                 params![repo_path],
                 project_from_row,
             )
@@ -29,7 +47,10 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at FROM projects WHERE id = ?1",
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                 FROM projects
+                 WHERE id = ?1
+                   AND removed_at IS NULL",
                 params![id],
                 project_from_row,
             )
@@ -38,8 +59,9 @@ impl<'connection> ProjectRepository<'connection> {
 
     pub fn list_recent(&self) -> rusqlite::Result<Vec<ProjectSummary>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at
+            "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
              FROM projects
+             WHERE removed_at IS NULL
              ORDER BY last_opened_at DESC, created_at DESC, name ASC",
         )?;
 
@@ -48,6 +70,69 @@ impl<'connection> ProjectRepository<'connection> {
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(projects)
+    }
+
+    pub fn mark_removed(&self, id: i64) -> rusqlite::Result<ProjectSummary> {
+        let updated = self.connection.execute(
+            "UPDATE projects
+             SET removed_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+             WHERE id = ?1
+               AND removed_at IS NULL",
+            params![id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        // 刚标记移除后 find_by_id 会过滤；用 including id 查询。
+        self.find_by_id_including_removed(id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    pub fn find_by_id_including_removed(
+        &self,
+        id: i64,
+    ) -> rusqlite::Result<Option<ProjectSummary>> {
+        self.connection
+            .query_row(
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                 FROM projects
+                 WHERE id = ?1",
+                params![id],
+                project_from_row,
+            )
+            .optional()
+    }
+
+    pub fn restore_removed_with_settings(
+        &self,
+        id: i64,
+        name: &str,
+        repo_path: &str,
+        worktree_location: ProjectWorktreeLocation,
+        worktree_setup_command: &str,
+    ) -> rusqlite::Result<ProjectSummary> {
+        let updated = self.connection.execute(
+            "UPDATE projects
+             SET name = ?1,
+                 repo_path = ?2,
+                 worktree_location = ?3,
+                 worktree_setup_command = ?4,
+                 removed_at = NULL,
+                 last_opened_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+             WHERE id = ?5",
+            params![
+                name,
+                repo_path,
+                project_worktree_location_to_str(&worktree_location),
+                worktree_setup_command,
+                id
+            ],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.find_by_id(id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
     pub fn insert(&self, name: &str, repo_path: &str) -> rusqlite::Result<ProjectSummary> {
@@ -142,7 +227,8 @@ impl<'connection> ProjectRepository<'connection> {
              SET name = ?1,
                  repo_path = ?2,
                  worktree_location = ?3,
-                 worktree_setup_command = ?4
+                 worktree_setup_command = ?4,
+                 removed_at = NULL
              WHERE id = ?5",
             params![
                 name,
@@ -274,6 +360,7 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary>
         worktree_setup_command: row.get(4)?,
         created_at: row.get(5)?,
         last_opened_at: row.get(6)?,
+        removed_at: row.get(7)?,
         code_workspaces: Vec::new(),
     })
 }

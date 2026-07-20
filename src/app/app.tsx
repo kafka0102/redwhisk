@@ -362,6 +362,7 @@ function ProjectApp() {
           projects={projects}
           onCreateProject={handleCreateProject}
           onProjectOpen={handleProjectOpen}
+          onProjectsRefresh={refreshProjects}
         />
         {createProjectDraft ? (
           <CreateProjectDialog

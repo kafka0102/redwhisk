@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ProjectSummary } from "../../app/app";
 import { openProjectWindow } from "./project-commands";
 import { getProjectIconColor } from "./project-icon-color";
+import { ProjectRemoveMenu } from "./project-remove-menu";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -141,46 +142,65 @@ export function ProjectSwitcher({
             </button>
           </div>
           <div className="project-switcher__list">
-            {projects.map((project) => (
-              <button
-                className="project-switcher__item"
-                key={project.id}
-                data-current={project.id === currentProject.id}
-                role="menuitem"
-                type="button"
-                title={project.path}
-                onClick={() => void handleProjectSelect(project)}
-              >
-                <span
-                  className="project-switcher__icon"
-                  style={{ background: getProjectIconColor(project) }}
-                  aria-hidden="true"
+            {projects.map((project) => {
+              const isCurrent = project.id === currentProject.id;
+              return (
+                <div
+                  className="project-switcher__item-shell"
+                  key={project.id}
+                  data-current={isCurrent}
                 >
-                  {projectInitial(project.name)}
-                </span>
-                <span className="project-switcher__item-body">
-                  <span className="project-switcher__item-name">
-                    {project.name}
-                  </span>
-                  <span className="project-switcher__item-path">
-                    {project.path}
-                  </span>
-                  {project.status === "missing" ? (
-                    <span className="project-switcher__item-status">
-                      {messages.projectSwitcher.pathUnavailable}
+                  <button
+                    className="project-switcher__item"
+                    data-current={isCurrent}
+                    role="menuitem"
+                    type="button"
+                    title={project.path}
+                    onClick={() => void handleProjectSelect(project)}
+                  >
+                    <span
+                      className="project-switcher__icon"
+                      style={{ background: getProjectIconColor(project) }}
+                      aria-hidden="true"
+                    >
+                      {projectInitial(project.name)}
                     </span>
+                    <span className="project-switcher__item-body">
+                      <span className="project-switcher__item-name">
+                        {project.name}
+                      </span>
+                      <span className="project-switcher__item-path">
+                        {project.path}
+                      </span>
+                      {project.status === "missing" ? (
+                        <span className="project-switcher__item-status">
+                          {messages.projectSwitcher.pathUnavailable}
+                        </span>
+                      ) : null}
+                    </span>
+                    {isCurrent ? (
+                      <Check
+                        aria-label={messages.projectSwitcher.currentProject}
+                        className="project-switcher__check"
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+                    ) : null}
+                  </button>
+                  {!isCurrent ? (
+                    <ProjectRemoveMenu
+                      messagesSource="projectSwitcher"
+                      projectId={project.id}
+                      onError={setError}
+                      onRemoved={async () => {
+                        setError(null);
+                        await onProjectsRefresh();
+                      }}
+                    />
                   ) : null}
-                </span>
-                {project.id === currentProject.id ? (
-                  <Check
-                    aria-label={messages.projectSwitcher.currentProject}
-                    className="project-switcher__check"
-                    size={18}
-                    strokeWidth={1.8}
-                  />
-                ) : null}
-              </button>
-            ))}
+                </div>
+              );
+            })}
           </div>
           {error ? (
             <p

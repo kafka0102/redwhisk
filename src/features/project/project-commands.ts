@@ -26,6 +26,10 @@ export interface OpenProjectInput {
   projectId: number;
 }
 
+export interface RemoveProjectFromListInput {
+  projectId: number;
+}
+
 export type ProjectWorktreeLocation =
   | "repo_sibling"
   | "repo_internal"
@@ -112,4 +116,10 @@ export function openProjectWindow(
   return invokeCommand<OpenProjectWindowResponse>("open_project_window", {
     input,
   });
+}
+
+export function removeProjectFromList(
+  input: RemoveProjectFromListInput,
+): Promise<void> {
+  return invokeCommand<void>("remove_project_from_list", { input });
 }
