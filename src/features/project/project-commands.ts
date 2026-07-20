@@ -30,6 +30,10 @@ export interface RemoveProjectFromListInput {
   projectId: number;
 }
 
+export interface DeleteProjectInput {
+  projectId: number;
+}
+
 export type ProjectWorktreeLocation =
   | "repo_sibling"
   | "repo_internal"
@@ -122,4 +126,8 @@ export function removeProjectFromList(
   input: RemoveProjectFromListInput,
 ): Promise<void> {
   return invokeCommand<void>("remove_project_from_list", { input });
+}
+
+export function deleteProject(input: DeleteProjectInput): Promise<void> {
+  return invokeCommand<void>("delete_project", { input });
 }

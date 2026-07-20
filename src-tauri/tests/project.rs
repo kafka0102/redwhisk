@@ -1455,3 +1455,177 @@ fn open_project_does_not_restore_terminals_on_hot_path() {
     assert_eq!(listed_after_restore.terminals.len(), 1);
     assert!(manager.contains(listed_after_restore.terminals[0].session_id));
 }
+
+
+#[test]
+fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let service = ProjectService::new(ProjectRepository::new(&database.connection));
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let created = service
+        .create_project(CreateProjectInput {
+            name: "sample-repo".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "echo setup".to_string(),
+        })
+        .expect("create project");
+
+    // 关联数据：硬删后应清理；同 path 再 create 不得恢复这些历史数据。
+    database
+        .connection
+        .execute(
+            "INSERT INTO project_labels (name, scope, project_id, color, workflow_skill, del)
+             VALUES ('ops', 'project', ?1, '#112233', NULL, 0)",
+            rusqlite::params![created.id],
+        )
+        .expect("insert project label");
+    database
+        .connection
+        .execute(
+            "INSERT INTO saved_agent_skills (name, scope, project_id, skill_paths_json, del, created_at, updated_at)
+             VALUES ('skill-a', 'project', ?1, '[]', 0, 1, 1)",
+            rusqlite::params![created.id],
+        )
+        .expect("insert saved skill");
+    database
+        .connection
+        .execute(
+            "INSERT INTO issues (project_id, title, description, status, created_at, updated_at)
+             VALUES (?1, 'old-issue', '', 'backlog', 1, 1)",
+            rusqlite::params![created.id],
+        )
+        .expect("insert issue");
+
+    service
+        .delete_project(created.id)
+        .expect("delete project");
+
+    assert!(
+        repo_dir.join(".git").exists(),
+        "hard delete must not remove disk git repository"
+    );
+
+    let listed = service.list_projects().expect("list after delete");
+    assert!(
+        listed.projects.is_empty(),
+        "hard-deleted project must not appear in list"
+    );
+
+    let project_row_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM projects WHERE id = ?1 OR repo_path = ?2",
+            rusqlite::params![created.id, repo_dir.to_string_lossy().to_string()],
+            |row| row.get(0),
+        )
+        .expect("project row count");
+    assert_eq!(project_row_count, 0, "projects row must be gone (not soft-removed)");
+
+    let removed_at_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM projects WHERE removed_at IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .expect("removed_at count");
+    assert_eq!(removed_at_count, 0, "hard delete must not leave soft-removed rows");
+
+    let label_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM project_labels WHERE project_id = ?1 OR name = 'ops'",
+            [created.id],
+            |row| row.get(0),
+        )
+        .expect("label count");
+    assert_eq!(label_count, 0);
+
+    let skill_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM saved_agent_skills WHERE project_id = ?1 OR name = 'skill-a'",
+            [created.id],
+            |row| row.get(0),
+        )
+        .expect("skill count");
+    assert_eq!(skill_count, 0);
+
+    let issue_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM issues WHERE project_id = ?1 OR title = 'old-issue'",
+            [created.id],
+            |row| row.get(0),
+        )
+        .expect("issue count");
+    assert_eq!(issue_count, 0, "cascade/hard delete must remove old issues");
+
+    // 同 path create：新建项目（非软恢复），创建表单字段生效，历史业务数据不可见。
+    let recreated = service
+        .create_project(CreateProjectInput {
+            name: "brand-new-name".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            worktree_location: ProjectWorktreeLocation::UserHome,
+            worktree_setup_command: "echo brand-new".to_string(),
+        })
+        .expect("create after hard delete");
+
+    assert_eq!(recreated.name, "brand-new-name");
+    assert_eq!(
+        recreated.worktree_location,
+        ProjectWorktreeLocation::UserHome
+    );
+    assert_eq!(recreated.worktree_setup_command, "echo brand-new");
+    assert!(recreated.removed_at.is_none());
+
+    let listed_after = service.list_projects().expect("list after recreate");
+    assert_eq!(listed_after.projects.len(), 1);
+    assert_eq!(listed_after.projects[0].id, recreated.id);
+    assert_eq!(listed_after.projects[0].name, "brand-new-name");
+
+    let old_issue_visible: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM issues WHERE title = 'old-issue'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("old issue after recreate");
+    assert_eq!(
+        old_issue_visible, 0,
+        "create after hard delete must not restore previous issues"
+    );
+
+    let old_label_visible: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM project_labels WHERE name = 'ops'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("old label after recreate");
+    assert_eq!(
+        old_label_visible, 0,
+        "create after hard delete must not restore previous labels"
+    );
+
+    // 若误走软恢复路径，会保留旧 id 上的关联；这里断言新项目无历史 labels。
+    let recreated_label_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM project_labels WHERE project_id = ?1",
+            [recreated.id],
+            |row| row.get(0),
+        )
+        .expect("recreated label count");
+    assert_eq!(recreated_label_count, 0);
+}

@@ -33,6 +33,12 @@ pub struct RemoveProjectFromListInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeleteProjectInput {
+    pub project_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateProjectSettingsInput {
     pub project_id: i64,
     pub name: String,

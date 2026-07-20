@@ -10,7 +10,7 @@ import {
 import { useConfirmDialog } from "../../components/ui/use-confirm-dialog";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
-import { removeProjectFromList } from "./project-commands";
+import { deleteProject, removeProjectFromList } from "./project-commands";
 
 interface ProjectRemoveMenuProps {
   projectId: number;
@@ -28,7 +28,7 @@ export function ProjectRemoveMenu({
   const { messages, t } = useI18n();
   const copy = messages[messagesSource];
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [isRemoving, setIsRemoving] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
 
   async function handleRemove() {
     const confirmed = await confirm({
@@ -41,14 +41,37 @@ export function ProjectRemoveMenu({
       return;
     }
 
-    setIsRemoving(true);
+    setIsBusy(true);
     try {
       await removeProjectFromList({ projectId });
       await onRemoved();
     } catch (error: unknown) {
       onError?.(getCommandErrorMessage(error, t));
     } finally {
-      setIsRemoving(false);
+      setIsBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    const confirmed = await confirm({
+      title: copy.deleteProjectConfirmTitle,
+      message: copy.deleteProjectConfirmMessage,
+      confirmLabel: copy.deleteProject,
+      cancelLabel: messages.confirmDialog.cancel,
+      confirmVariant: "destructive",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      await deleteProject({ projectId });
+      await onRemoved();
+    } catch (error: unknown) {
+      onError?.(getCommandErrorMessage(error, t));
+    } finally {
+      setIsBusy(false);
     }
   }
 
@@ -58,7 +81,7 @@ export function ProjectRemoveMenu({
         <DropdownMenuTrigger
           className="project-item-more"
           aria-label={copy.moreActions}
-          disabled={isRemoving}
+          disabled={isBusy}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -76,7 +99,7 @@ export function ProjectRemoveMenu({
           }}
         >
           <DropdownMenuItem
-            disabled={isRemoving}
+            disabled={isBusy}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -84,6 +107,17 @@ export function ProjectRemoveMenu({
             }}
           >
             {copy.removeFromList}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isBusy}
+            variant="destructive"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void handleDelete();
+            }}
+          >
+            {copy.deleteProject}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

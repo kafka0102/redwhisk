@@ -7,7 +7,7 @@ use super::service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,
-    ProjectSummary, RemoveProjectFromListInput, UpdateProjectSettingsInput,
+    DeleteProjectInput, ProjectSummary, RemoveProjectFromListInput, UpdateProjectSettingsInput,
     ValidateProjectRepoPathInput, ValidateProjectRepoPathResponse,
 };
 
@@ -50,6 +50,22 @@ pub async fn remove_project_from_list(
     let project_id = input.project_id;
     tauri::async_runtime::spawn_blocking(move || {
         ProjectService::remove_project_from_list_in_data_dir(data_dir, project_id)
+    })
+    .await
+    .map_err(project_join_error)??;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_project(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: DeleteProjectInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    let project_id = input.project_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        ProjectService::delete_project_in_data_dir(data_dir, project_id)
     })
     .await
     .map_err(project_join_error)??;

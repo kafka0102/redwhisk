@@ -89,6 +89,7 @@ pub fn run() {
             features::project::commands::create_project,
             features::project::commands::list_projects,
             features::project::commands::remove_project_from_list,
+            features::project::commands::delete_project,
             features::project::commands::open_project,
             features::project::commands::open_project_window,
             features::project::commands::update_project_settings,

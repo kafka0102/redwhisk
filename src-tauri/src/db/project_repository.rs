@@ -72,6 +72,24 @@ impl<'connection> ProjectRepository<'connection> {
         Ok(projects)
     }
 
+    pub fn delete_project(&self, id: i64) -> rusqlite::Result<()> {
+        let tx = self.connection.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM project_labels WHERE project_id = ?1",
+            params![id],
+        )?;
+        tx.execute(
+            "DELETE FROM saved_agent_skills WHERE project_id = ?1",
+            params![id],
+        )?;
+        let deleted = tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+        if deleted == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn mark_removed(&self, id: i64) -> rusqlite::Result<ProjectSummary> {
         let updated = self.connection.execute(
             "UPDATE projects

@@ -72,6 +72,14 @@ impl<'connection> ProjectService<'connection> {
         Ok(())
     }
 
+    pub fn delete_project(&self, project_id: i64) -> Result<(), CommandError> {
+        self.project_by_id(project_id)?;
+        self.repository
+            .delete_project(project_id)
+            .map_err(project_database_error)?;
+        Ok(())
+    }
+
     pub fn list_projects(&self) -> Result<ProjectListResponse, CommandError> {
         let projects = self
             .repository
@@ -169,6 +177,15 @@ impl<'connection> ProjectService<'connection> {
         let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).remove_project_from_list(project_id)
+    }
+
+    pub fn delete_project_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+    ) -> Result<(), CommandError> {
+        let database = open_project_database(data_dir.as_ref())?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectService::new(repository).delete_project(project_id)
     }
 
     /// 打开项目热路径：路径校验、更新 last_opened、探测 code workspaces。

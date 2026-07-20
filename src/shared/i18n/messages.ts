@@ -175,6 +175,9 @@ export interface I18nMessages {
     openProject: (projectName: string) => string;
     pathUnavailable: string;
     projects: string;
+    deleteProject: string;
+    deleteProjectConfirmMessage: string;
+    deleteProjectConfirmTitle: string;
     removeFromList: string;
     removeFromListConfirmMessage: string;
     removeFromListConfirmTitle: string;
@@ -190,6 +193,9 @@ export interface I18nMessages {
     menu: string;
     moreActions: string;
     pathUnavailable: string;
+    deleteProject: string;
+    deleteProjectConfirmMessage: string;
+    deleteProjectConfirmTitle: string;
     removeFromList: string;
     removeFromListConfirmMessage: string;
     removeFromListConfirmTitle: string;
