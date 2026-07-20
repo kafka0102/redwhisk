@@ -198,7 +198,11 @@ pub fn rebase_branch_onto(
 ) -> Result<(), GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     run_git(&repo_path, &["checkout", branch])?;
-    run_git(&repo_path, &["rebase", base_branch])?;
+    if let Err(error) = run_git(&repo_path, &["rebase", base_branch]) {
+        // 冲突/失败后必须 abort，避免 worktree 残留冲突文件与 rebase-in-progress。
+        let _ = run_git(&repo_path, &["rebase", "--abort"]);
+        return Err(error);
+    }
     Ok(())
 }
 
@@ -659,6 +663,7 @@ mod tests {
         write_file(&worktree_path, "shared.txt", "issue\n");
         git(&worktree_path, &["add", "shared.txt"]);
         git(&worktree_path, &["commit", "-m", "issue change"]);
+        let pre_rebase_head = git_output(&worktree_path, &["rev-parse", "HEAD"]);
 
         write_file(&repo_dir, "shared.txt", "main\n");
         git(&repo_dir, &["add", "shared.txt"]);
@@ -671,6 +676,38 @@ mod tests {
             Err(GitWorktreeError::GitCommandFailed { .. })
         ));
         assert!(worktree_path.exists());
+        // rebase 冲突后必须 abort 还原，不能留下冲突态/进行中 rebase。
+        assert_eq!(
+            current_branch(&worktree_path).expect("current branch"),
+            "issue-1"
+        );
+        assert_eq!(
+            git_output(&worktree_path, &["rev-parse", "HEAD"]),
+            pre_rebase_head,
+            "HEAD 应回到 rebase 前的提交"
+        );
+        assert_eq!(
+            git_output(&worktree_path, &["status", "--porcelain"]),
+            "",
+            "工作区应干净，无冲突文件"
+        );
+        assert_eq!(
+            fs::read_to_string(worktree_path.join("shared.txt")).expect("read shared"),
+            "issue\n",
+            "文件内容应还原为 worktree 分支原内容"
+        );
+        assert!(
+            !worktree_git_dir(&worktree_path).join("rebase-merge").exists()
+                && !worktree_git_dir(&worktree_path).join("rebase-apply").exists(),
+            "不得残留 rebase 进行中状态"
+        );
+        // 主仓库不应被改动，也不得残留冲突。
+        assert_eq!(current_branch(&repo_dir).expect("repo branch"), "main");
+        assert_eq!(git_output(&repo_dir, &["status", "--porcelain"]), "");
+        assert_eq!(
+            fs::read_to_string(repo_dir.join("shared.txt")).expect("read main shared"),
+            "main\n"
+        );
     }
 
     #[test]
@@ -941,5 +978,29 @@ mod tests {
             args.join(" "),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    fn git_output(repo_dir: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .output()
+            .expect("run git");
+
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn worktree_git_dir(worktree_path: &Path) -> PathBuf {
+        let output = git_output(
+            worktree_path,
+            &["rev-parse", "--path-format=absolute", "--git-dir"],
+        );
+        PathBuf::from(output)
     }
 }
