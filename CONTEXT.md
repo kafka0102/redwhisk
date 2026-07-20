@@ -121,8 +121,16 @@ _Avoid_: 持久化后缀索引、全盘 watcher、gitignore 派生后缀表
 _Avoid_: 强制每次出现的播种、盲插未安装项、手动检测按钮
 
 **Agent 展示形式**（displayMode）：
-某 Agent profile 的输出在 UI 上的呈现方式，取值 json 或 tui；判定以 RedWhisk 当前是否已接入该 agentType 的 JSON 解析器为准——已接入（codex/claude）默认 json 且可在 json/tui 间切换，未接入（opencode/grok）锁定 tui 且隐藏切换。本期仅作数据记录与表单/表格展示，不驱动后端渲染切换；TUI 渲染与 opencode/grok 解析器留后续。
-_Avoid_: 纯 UI 别名、按 CLI 能力判定
+某 Agent profile 声明的输出呈现方式，取值 json 或 tui。判定以 RedWhisk 是否已接入该 agentType 的 JSON 解析器为准——已接入（codex/claude）默认 json 且可在 json/tui 间切换，未接入（opencode/grok）锁定 tui 且隐藏切换。启动会话时按该值分流：json 走结构化 provider（消息流 + composer），tui 走交互式 PTY（xterm 主区）；opencode/grok 在具备可启动实现前仍不可真正启动会话。
+_Avoid_: 纯 UI 别名、按 CLI 能力判定、运行中切换呈现方式
+
+**Session 展示形式快照**：
+Agent Session 启动瞬间从所属 Agent profile 拷贝并持久化的 displayMode；会话存续期间 UI 路由、恢复与重启语义只认该快照，不回读 profile 当前值。
+_Avoid_: 实时跟随 profile、内存-only 运行时标记
+
+**Agent TUI 会话视图**：
+Agents 工作台右侧在 Session 展示形式快照为 tui 时使用的主区：交互式 xterm 终端 surface，输入直达 PTY，不使用结构化消息流与底部 composer。
+_Avoid_: Project Terminal 配置实体、旁路只读 TUI 面板、双轨同显
 
 **Agent 启用状态**（enabled）：
 某 Agent profile 是否处于可用状态的布尔标记，默认启用；禁用的 profile 在 Agent 表中以浅灰行底区分并排序置末，且在「启动 Agent 会话」的选择列表中隐藏。本期启用状态仅前端过滤、后端不做启动校验。

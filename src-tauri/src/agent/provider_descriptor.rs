@@ -16,6 +16,11 @@ use crate::types::agent_session_stream::AgentModel;
 const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
 const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
 const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
+const CODEX_ASK_FOR_APPROVAL_ARG: &str = "--ask-for-approval";
+const CODEX_ON_REQUEST_APPROVAL: &str = "on-request";
+const CODEX_SANDBOX_ARG: &str = "--sandbox";
+const CODEX_SANDBOX_WORKSPACE_WRITE: &str = "workspace-write";
+const CODEX_SANDBOX_READ_ONLY: &str = "read-only";
 const CODEX_FALLBACK_BINARY: &str = "codex";
 const CLAUDE_FALLBACK_BINARY: &str = "claude";
 
@@ -54,6 +59,12 @@ pub trait AgentProviderDescriptor: Send + Sync {
     ///
     /// Codex 走 structured 协议（仅 trim，不加 CLI bypass）；Claude 走 CLI（补 bypass）。
     fn build_launch_command_snapshot(&self, raw_command: &str) -> String;
+
+    /// 构造交互式 TUI 路径的 command snapshot（不含 app-server / stream-json）。
+    ///
+    /// `mode` 为 profile 协作模式 id；`dangerous` 为 profile 危险开关。
+    /// 实现须按 provider 的交互式 CLI 语义映射审批/沙箱参数，且不得注入结构化协议参数。
+    fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String;
 
     /// resume 路径下 `command_snapshot` 为空时的兜底命令（provider 默认 binary + bypass）。
     fn fallback_command_when_snapshot_empty(&self) -> String;
@@ -123,6 +134,10 @@ impl AgentProviderDescriptor for CodexDescriptor {
         raw_command.trim().to_string()
     }
 
+    fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
+        build_codex_tui_command_snapshot(raw_command, mode, dangerous)
+    }
+
     fn fallback_command_when_snapshot_empty(&self) -> String {
         append_missing_args(
             CODEX_FALLBACK_BINARY,
@@ -169,6 +184,10 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
 
     fn build_launch_command_snapshot(&self, raw_command: &str) -> String {
         ensure_claude_bypass_permission_args(raw_command)
+    }
+
+    fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
+        build_claude_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
     fn fallback_command_when_snapshot_empty(&self) -> String {
@@ -222,6 +241,15 @@ impl AgentProviderDescriptor for StubDescriptor {
         raw_command.trim().to_string()
     }
 
+    fn build_tui_command_snapshot(
+        &self,
+        raw_command: &str,
+        _mode: &str,
+        _dangerous: bool,
+    ) -> String {
+        raw_command.trim().to_string()
+    }
+
     fn fallback_command_when_snapshot_empty(&self) -> String {
         match self.agent_type {
             AgentType::OpenCode => "opencode".to_string(),
@@ -240,6 +268,60 @@ impl AgentProviderDescriptor for StubDescriptor {
 }
 
 // ===== 内部工具：bypass 参数补全（原 features/agent_session/command_snapshot.rs） =====
+
+/// Codex 交互式 TUI：按 mode/dangerous 映射审批与沙箱，不注入 app-server。
+fn build_codex_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+    let trimmed = raw_command.trim();
+    match mode {
+        "full-access" | "full-auto" => {
+            append_missing_args(trimmed, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
+        }
+        "auto" => append_missing_args(
+            trimmed,
+            &[
+                CODEX_ASK_FOR_APPROVAL_ARG,
+                CODEX_ON_REQUEST_APPROVAL,
+                CODEX_SANDBOX_ARG,
+                CODEX_SANDBOX_WORKSPACE_WRITE,
+            ],
+        ),
+        "read-only" | "read_only" => append_missing_args(
+            trimmed,
+            &[
+                CODEX_ASK_FOR_APPROVAL_ARG,
+                CODEX_ON_REQUEST_APPROVAL,
+                CODEX_SANDBOX_ARG,
+                CODEX_SANDBOX_READ_ONLY,
+            ],
+        ),
+        _ if dangerous => {
+            append_missing_args(trimmed, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
+        }
+        _ => trimmed.to_string(),
+    }
+}
+
+/// Claude 交互式 TUI：按 mode/dangerous 映射 permission-mode，不注入 stream-json / -p。
+fn build_claude_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+    let trimmed = raw_command.trim();
+    if command_has_arg(trimmed, CLAUDE_PERMISSION_MODE_ARG) {
+        return trimmed.to_string();
+    }
+
+    if mode == "full-access" || dangerous {
+        return append_missing_args(
+            trimmed,
+            &[CLAUDE_PERMISSION_MODE_ARG, CLAUDE_BYPASS_PERMISSIONS_MODE],
+        );
+    }
+
+    match mode {
+        "plan" | "acceptEdits" | "auto" => {
+            append_missing_args(trimmed, &[CLAUDE_PERMISSION_MODE_ARG, mode])
+        }
+        _ => trimmed.to_string(),
+    }
+}
 
 fn ensure_claude_bypass_permission_args(command: &str) -> String {
     if command_has_arg(command, CLAUDE_PERMISSION_MODE_ARG) {

@@ -15,7 +15,7 @@
 - 包管理：`pnpm`，当前不使用 Turbo 或多 package workspace。
 - 数据库：SQLite migrations 位于 `src-tauri/migrations/`，结构化业务状态由 Rust 后端 读写。
 - 前后端边界：Tauri command + Tauri event；不引入 HTTP REST/GraphQL。
-- Agent 会话：Codex 走 `codex app-server` JSON-RPC，Claude 走 `claude -p --output-format stream-json`；两者均由 Rust 后端 归一化为结构化事件流，前端用同一消息流组件和底部 composer 输入。PTY + xterm.js 仅保留给 project terminal 等真正交互式终端。
+- Agent 会话：按 **Session 展示形式快照**（`displayMode`）分流——`json` 时 Codex 走 `codex app-server` JSON-RPC、Claude 走 `claude -p --output-format stream-json`，由 Rust 后端归一化为结构化事件流，前端用消息流与底部 composer；`tui` 时经 descriptor 构造交互式 CLI，走 `PtySessionManager` + xterm Agent TUI 会话视图（见 ADR-0022）。PTY + xterm.js 还用于 project terminal 等真正交互式终端；**json 快照不得**使用 PTY/xterm 作为 Agent 主渲染。
 
 ## 目录边界
 
@@ -199,7 +199,7 @@ Tauri event 只表示事实发生或终端输出，不发起业务写入。事�
 - project terminal 的 xterm 主渲染使用实时输出事件与 restore 结果，不再以轮询日志尾部作为主路径。
 - `read_agent_session_terminal` 只适合作为非活跃 PTY Session、Open Log 或诊断降级路径；结构化 Agent session 改用 `read_agent_timeline` 拉结构化历史。
 - 前端不得重放截断 ANSI 日志作为 Codex TUI 恢复方案。
-- 结构化 Agent session 不得使用 PTY/xterm 链路；其输入走 `send_agent_message`，输出走 `agent-session-stream-event`。
+- **json** 快照的 Agent session 不得使用 PTY/xterm 链路；其输入走 `send_agent_message`，输出走 `agent-session-stream-event`。**tui** 快照必须使用 Agent TUI 会话视图（xterm + 终端 transport），不得混用 structured composer / 权限卡。
 - Inspector、Dialog、Header 操作不得卸载当前 xterm 或结构化消息流。
 
 ## Issue 与 Agent Session 流程规则
@@ -251,7 +251,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Project 工作台 Activity Bar 只包含 `Issues`、`Agents`、`Settings`。
 - Project Switcher 属于窗口顶部 chrome，不属于内容 Header。
 - Activity Bar 主分组里的 `Settings` 是 Project Settings；Global Settings 是左侧菜单底部的仅图标 shell action，不属于 Project Activity 列表。
-- Agents Activity 使用左右两栏：左侧 Session list，右侧结构化 Agent Session View。该视图由结构化消息流与底部固定 composer 输入框组成，不再使用 xterm。
+- Agents Activity 使用左右两栏：左侧 Session list，右侧按 **Session 展示形式快照** 选择主区——`json` 为结构化 Agent Session View（消息流 + 底部固定 composer）；`tui` 为 Agent TUI 会话视图（交互式 xterm，输入直达 PTY）。
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。
 - 前端交互控件默认使用 `src/components/ui/` 下的 shadcn 组件；除非存在明确的语义、可访问性或第三方集成需要，不新增手写基础按钮、输入框、选择器、菜单、对话框等控件。
@@ -269,15 +269,15 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 
 - 新增营销式 hero、渐变装饰、大圆角卡片墙、彩色阶段柱或管理后台式重型组件库。
 - 在 feature 页面中绕过 shadcn 组件，直接用原生标签和散落 class 重做通用控件。
-- 在结构化 Agent 消息流之外另起 xterm 或独立输入框；结构化 session 的输入必须经底部 composer 与 `send_agent_message`。
+- 在 **json** 快照会话上另起 xterm 或独立输入框绕过 composer；json session 的输入必须经底部 composer 与 `send_agent_message`。也禁止在 **tui** 快照会话上叠 structured 权限卡 / composer 双轨。
 - Header 无关联 Issue 时显示 `No linked issue`。
 - Inspector/Dialog 打开关闭导致 xterm 或结构化消息流重建。
 
 ## Agent provider 接入边界
 
-Codex 与 Claude session 均走结构化 provider，不走 PTY。职责边界如下：
+Codex 与 Claude 的 **json** session 走结构化 provider，不走 PTY；**tui** session 走交互式 PTY（见 [ADR-0022](../adr/0022-display-mode-runtime-transport.md) 与 [Agent Provider 协议](./agent-provider-protocol.md)）。职责边界如下：
 
-- Rust 后端 负责 spawn provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播。
+- Rust 后端负责按 session 快照分流：json 时 spawn structured provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播；tui 时经 `AgentProviderDescriptor::build_tui_command_snapshot` 构造交互式命令并由 `PtySessionManager` 管理进程生命周期。
 - Codex 通过 `codex app-server` 的 NDJSON JSON-RPC 接入，维护 `threadId`、`currentTurnId`、待审批权限请求和 `seq`/`epoch` 游标；模型与 effort 经 `turn/start` 透传，token 用量来自 `thread/tokenUsage/updated`。
 - Claude 通过 `claude -p --output-format stream-json` 的单向 NDJSON 接入，每轮进程结束后以 session ID 恢复；它没有等价的 JSON-RPC 审批请求。
 - 附件（图片/文件）先落盘到 app data dir，再以本地路径随 provider 输入传递；不内联文件字节。

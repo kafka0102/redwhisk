@@ -204,3 +204,154 @@
 
         assert!(!ClaudeDescriptor.is_model_list_read_only(temp.path()));
     }
+
+    // ===== build_tui_command_snapshot =====
+
+    #[test]
+    fn codex_tui_command_is_interactive_without_app_server() {
+        let command = CodexDescriptor.build_tui_command_snapshot("codex", "full-access", true);
+        assert!(
+            !command.contains("app-server"),
+            "TUI 不得带 app-server：{command}"
+        );
+        assert!(
+            command.split_whitespace().next() == Some("codex")
+                || command.starts_with("codex "),
+            "应保持交互式 codex 命令：{command}"
+        );
+    }
+
+    #[test]
+    fn codex_tui_full_access_or_dangerous_appends_bypass() {
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "full-access", false),
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        );
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "full-auto", false),
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        );
+        // 未知 mode + dangerous → FullAccess 旁路
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "unknown-mode", true),
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        );
+    }
+
+    #[test]
+    fn codex_tui_auto_mode_maps_to_approval_and_sandbox() {
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "auto", false),
+            "codex --ask-for-approval on-request --sandbox workspace-write"
+        );
+        // 已知 mode 优先于 dangerous
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "auto", true),
+            "codex --ask-for-approval on-request --sandbox workspace-write"
+        );
+    }
+
+    #[test]
+    fn codex_tui_read_only_mode_maps_to_sandbox() {
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "read-only", false),
+            "codex --ask-for-approval on-request --sandbox read-only"
+        );
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot("codex", "read_only", false),
+            "codex --ask-for-approval on-request --sandbox read-only"
+        );
+    }
+
+    #[test]
+    fn codex_tui_preserves_user_args_and_does_not_duplicate_flags() {
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot(
+                "codex --dangerously-bypass-approvals-and-sandbox",
+                "full-access",
+                true
+            ),
+            "codex --dangerously-bypass-approvals-and-sandbox"
+        );
+        assert_eq!(
+            CodexDescriptor.build_tui_command_snapshot(
+                "  /usr/local/bin/codex  ",
+                "full-access",
+                false
+            ),
+            "/usr/local/bin/codex --dangerously-bypass-approvals-and-sandbox"
+        );
+    }
+
+    #[test]
+    fn claude_tui_command_is_interactive_without_stream_json() {
+        let command = ClaudeDescriptor.build_tui_command_snapshot("claude", "full-access", true);
+        assert!(
+            !command.contains("stream-json"),
+            "TUI 不得带 stream-json：{command}"
+        );
+        assert!(
+            !command.split_whitespace().any(|p| p == "-p" || p == "--print"),
+            "TUI 不得带 -p/--print：{command}"
+        );
+        assert!(
+            !command.contains("--output-format"),
+            "TUI 不得带 --output-format：{command}"
+        );
+    }
+
+    #[test]
+    fn claude_tui_dangerous_or_full_access_uses_bypass_permissions() {
+        assert_eq!(
+            ClaudeDescriptor.build_tui_command_snapshot("claude", "full-access", false),
+            "claude --permission-mode bypassPermissions"
+        );
+        assert_eq!(
+            ClaudeDescriptor.build_tui_command_snapshot("claude", "default", true),
+            "claude --permission-mode bypassPermissions"
+        );
+    }
+
+    #[test]
+    fn claude_tui_mode_maps_to_permission_mode() {
+        assert_eq!(
+            ClaudeDescriptor.build_tui_command_snapshot("claude", "plan", false),
+            "claude --permission-mode plan"
+        );
+        assert_eq!(
+            ClaudeDescriptor.build_tui_command_snapshot("claude", "acceptEdits", false),
+            "claude --permission-mode acceptEdits"
+        );
+        assert_eq!(
+            ClaudeDescriptor.build_tui_command_snapshot("claude", "auto", false),
+            "claude --permission-mode auto"
+        );
+    }
+
+    #[test]
+    fn claude_tui_keeps_existing_permission_mode() {
+        assert_eq!(
+            ClaudeDescriptor.build_tui_command_snapshot(
+                "claude --permission-mode plan",
+                "full-access",
+                true
+            ),
+            "claude --permission-mode plan"
+        );
+    }
+
+    #[test]
+    fn stub_tui_command_trims_only() {
+        assert_eq!(
+            descriptor_for(&AgentType::OpenCode).build_tui_command_snapshot(
+                "  opencode  ",
+                "full-access",
+                true
+            ),
+            "opencode"
+        );
+        assert_eq!(
+            descriptor_for(&AgentType::Grok).build_tui_command_snapshot("grok", "auto", false),
+            "grok"
+        );
+    }
