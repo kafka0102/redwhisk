@@ -5,6 +5,7 @@ pub mod codex_app_server;
 pub mod codex_config;
 pub mod command_detector;
 pub mod latest_output_writer;
+pub mod pty_osc_color_reply;
 pub mod pty_session_manager;
 pub mod provider_descriptor;
 pub mod provider_factory;

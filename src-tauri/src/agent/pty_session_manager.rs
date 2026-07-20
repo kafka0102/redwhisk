@@ -537,6 +537,9 @@ fn run_reader_loop(
 ) {
     let mut buffer = [0_u8; 4096];
     let mut sequence = 0_u64;
+    // Codex / Claude TUI 启动时的 OSC 10/11/12 颜色查询：在前端挂载前即时应答，
+    // 避免 restore 抑制 onData 导致 composer 背景与输出区无法区分。
+    let mut osc_color_scanner = crate::agent::pty_osc_color_reply::OscColorQueryScanner::new();
 
     loop {
         match reader.read(&mut buffer) {
@@ -549,6 +552,19 @@ fn run_reader_loop(
                     }
                 } else {
                     break;
+                }
+
+                let theme = store
+                    .app_theme
+                    .lock()
+                    .map(|theme| *theme)
+                    .unwrap_or(TerminalBackgroundTheme::Dark);
+                let osc_replies = osc_color_scanner.push(data, theme);
+                if !osc_replies.is_empty() {
+                    if let Ok(mut writer) = handle.writer.lock() {
+                        let _ = writer.write_all(&osc_replies);
+                        let _ = writer.flush();
+                    }
                 }
 
                 sequence = sequence.saturating_add(1);

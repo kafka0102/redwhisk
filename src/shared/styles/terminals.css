@@ -304,7 +304,7 @@
 :root[data-theme="dark"]
   .project-terminals-workspace__surface
   .terminal-surface-shell {
-  background: #050506;
+  background: #1f2022;
 }
 
 .project-terminals-workspace__empty {
@@ -555,7 +555,7 @@
 }
 
 :root[data-theme="dark"] .terminal-surface {
-  background: #050506;
+  background: #1f2022;
 }
 
 .terminal-surface .xterm {

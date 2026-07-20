@@ -86,3 +86,40 @@ function requireHex(value: string | undefined, label: string): string {
   }
   return value;
 }
+
+/**
+ * Codex TUI 用 OSC 11 读取默认背景后，把底部 composer 画成 truecolor ≈ bg+~30。
+ * 近纯黑背景（旧值 #050506）抬升后仍约 #232323，对比度 ~1.3:1，肉眼等同全黑。
+ * 要求 dark background 足够抬离纯黑，使自适应 composer 条带可辨。
+ */
+const CODEX_COMPOSER_LIFT = 30;
+const MIN_CODEX_COMPOSER_CONTRAST = 1.4;
+
+describe("terminal theme contrast (Codex dark composer strip)", () => {
+  it("dark: background is lifted so Codex adaptive composer stays distinguishable", () => {
+    const theme = getTerminalTheme("dark");
+    const background = requireHex(theme.background, "background");
+    const lifted = liftHex(background, CODEX_COMPOSER_LIFT);
+    const ratio = hexContrastRatio(background, lifted);
+    expect(
+      ratio,
+      `dark bg=${background} lifted=${lifted} contrast ${ratio.toFixed(2)} < ${MIN_CODEX_COMPOSER_CONTRAST} (Codex composer washout)`,
+    ).toBeGreaterThanOrEqual(MIN_CODEX_COMPOSER_CONTRAST);
+  });
+
+  it("documents legacy near-black dark bg fails the Codex composer threshold", () => {
+    const legacyBg = "#050506";
+    const lifted = liftHex(legacyBg, CODEX_COMPOSER_LIFT);
+    expect(hexContrastRatio(legacyBg, lifted)).toBeLessThan(
+      MIN_CODEX_COMPOSER_CONTRAST,
+    );
+  });
+});
+
+function liftHex(hex: string, amount: number): string {
+  const raw = hex.replace(/^#/, "");
+  const r = Math.min(255, parseInt(raw.slice(0, 2), 16) + amount);
+  const g = Math.min(255, parseInt(raw.slice(2, 4), 16) + amount);
+  const b = Math.min(255, parseInt(raw.slice(4, 6), 16) + amount);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}

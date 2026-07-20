@@ -14,9 +14,11 @@ import type { ITheme } from "@xterm/xterm";
 export function getTerminalTheme(theme: "light" | "dark"): ITheme {
   if (theme === "dark") {
     return {
-      background: "#050506",
+      // 与 app dark chrome (#1f2022) 对齐，并避免近纯黑导致 Codex TUI composer
+      // （OSC 11 自适应 truecolor ≈ bg+30）与输出区不可区分。
+      background: "#1f2022",
       cursor: "#f5f5f5",
-      cursorAccent: "#050506",
+      cursorAccent: "#1f2022",
       foreground: "#f2f3f5",
       selectionBackground: "#25324a",
       selectionInactiveBackground: "#20242b",
