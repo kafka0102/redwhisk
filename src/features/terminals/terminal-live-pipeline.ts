@@ -5,9 +5,17 @@ export type TerminalLivePhase = "idle" | "catchingUp" | "live";
 const TERMINAL_HISTORY_MAX_BYTES = 1024 * 1024;
 const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
 
+export interface WriteTerminalHistoryMeta {
+  /** restore 对齐后的 live sequence 头。用于判断隐藏期间是否有新输出。 */
+  restoreSequence: number;
+}
+
 export interface TerminalLivePipelineCallbacks {
   writeBytes: (bytes: Uint8Array) => void;
-  writeHistory: (text: string) => void | Promise<void>;
+  writeHistory: (
+    text: string,
+    meta: WriteTerminalHistoryMeta,
+  ) => void | Promise<void>;
   onRestoreIncomplete: () => void;
   onRestoreError: (error: unknown) => void;
   onInactive: () => void;
@@ -39,6 +47,10 @@ export class TerminalLivePipeline {
 
   getPhase(): TerminalLivePhase {
     return this.phase;
+  }
+
+  getLatestSequence(): number {
+    return this.latestSequence;
   }
 
   handleOutput(event: TerminalOutputChunk): void {
@@ -87,11 +99,16 @@ export class TerminalLivePipeline {
       }
 
       if (snapshotResult.snapshot) {
-        await this.callbacks.writeHistory(snapshotResult.snapshot);
+        await this.callbacks.writeHistory(snapshotResult.snapshot, {
+          restoreSequence: restoreResult.sequence,
+        });
         if (!this.isCurrentGeneration(generation)) {
           return;
         }
       }
+
+      // 无论 active 与否都记录 sequence，供隐藏/卸载时持久化滚动状态对照。
+      this.latestSequence = restoreResult.sequence;
 
       if (!restoreResult.isActive) {
         this.clearPendingEvents();
@@ -100,8 +117,6 @@ export class TerminalLivePipeline {
         await this.safeSetLiveSubscription(false);
         return;
       }
-
-      this.latestSequence = restoreResult.sequence;
       if (!restoreResult.isComplete) {
         this.callbacks.onRestoreIncomplete();
       } else {

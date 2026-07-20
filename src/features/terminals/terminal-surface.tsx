@@ -8,8 +8,15 @@ import { useEffect, useRef, useState } from "react";
 import { attachTerminalDragDrop } from "./terminal-drag-drop";
 import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
-import { writeTerminalHistory } from "./terminal-history-writer";
+import {
+  persistTerminalViewPosition,
+  writeTerminalHistoryPreservingView,
+} from "./terminal-history-writer";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
+import {
+  isCopyShortcut,
+  supportsXtermRuntime,
+} from "./terminal-surface-runtime";
 import { getTerminalTheme } from "./terminal-theme";
 import type { TerminalTransport } from "./terminal-types";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -287,10 +294,16 @@ export function TerminalSurface({
           showStatusMessage("output", getCommandErrorMessage(error, t));
         }
       },
-      writeHistory: (text) =>
-        writeTerminalHistory(terminal, text, (suppressed) => {
-          suppressPtyInput = suppressed;
-        }),
+      writeHistory: (text, meta) =>
+        writeTerminalHistoryPreservingView(
+          terminal,
+          text,
+          (suppressed) => {
+            suppressPtyInput = suppressed;
+          },
+          String(transportKey),
+          meta.restoreSequence,
+        ),
       onRestoreIncomplete: () => {
         showStatusMessage(
           "restore",
@@ -323,6 +336,14 @@ export function TerminalSurface({
     const isTerminalVisible = (): boolean =>
       isLayoutVisible() && isDocumentVisible();
 
+    const persistViewState = () => {
+      persistTerminalViewPosition(
+        String(transportKey),
+        pipeline.getLatestSequence(),
+        terminal.buffer.active.viewportY,
+      );
+    };
+
     const refreshLiveVisibility = async () => {
       if (isDisposed) {
         return;
@@ -339,6 +360,7 @@ export function TerminalSurface({
         return;
       }
 
+      persistViewState();
       await pipeline.becomeHidden();
     };
 
@@ -420,6 +442,7 @@ export function TerminalSurface({
     return () => {
       isDisposed = true;
       desiredVisible = false;
+      persistViewState();
       pipeline.dispose();
       inputWriter.dispose();
       unlistenOutput?.();
@@ -456,39 +479,4 @@ export function TerminalSurface({
       ) : null}
     </div>
   );
-}
-
-function supportsXtermRuntime(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  if (typeof window.matchMedia !== "function") {
-    return false;
-  }
-
-  return true;
-}
-
-function isCopyShortcut(event: KeyboardEvent): boolean {
-  if (event.type !== "keydown") {
-    return false;
-  }
-
-  const key = event.key.toLowerCase();
-  if (key !== "c") {
-    return false;
-  }
-
-  return isMacPlatform()
-    ? event.metaKey && !event.shiftKey
-    : event.ctrlKey && event.shiftKey;
-}
-
-function isMacPlatform(): boolean {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
 }

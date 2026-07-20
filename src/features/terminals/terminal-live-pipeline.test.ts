@@ -247,4 +247,32 @@ describe("TerminalLivePipeline", () => {
       data: textToBase64("after-hide"),
     });
   });
+
+  it("passes restoreSequence to writeHistory", async () => {
+    const metas: Array<{ restoreSequence: number }> = [];
+    const transport = createTransport({
+      restore: vi.fn(async () => ({
+        sequence: 42,
+        chunks: [],
+        isComplete: true,
+        isActive: true,
+      })),
+    });
+    const pipeline = new TerminalLivePipeline(transport, {
+      writeBytes: vi.fn(),
+      writeHistory: (_text, meta) => {
+        metas.push(meta);
+      },
+      onRestoreIncomplete: vi.fn(),
+      onRestoreError: vi.fn(),
+      onInactive: vi.fn(),
+      onLiveReady: vi.fn(),
+      onPendingDropped: vi.fn(),
+    });
+
+    await pipeline.becomeVisible();
+
+    expect(metas).toEqual([{ restoreSequence: 42 }]);
+    expect(pipeline.getLatestSequence()).toBe(42);
+  });
 });

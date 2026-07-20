@@ -1,7 +1,14 @@
 import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { writeTerminalHistory } from "./terminal-history-writer";
+import {
+  writeTerminalHistory,
+  writeTerminalHistoryPreservingView,
+} from "./terminal-history-writer";
+import {
+  clearTerminalViewStatesForTests,
+  saveTerminalViewState,
+} from "./terminal-view-state";
 
 /**
  * 反馈环：复现「restore 回放含终端查询的历史 → onData 应答被写回 PTY」的症状。
@@ -123,6 +130,8 @@ describe("writeTerminalHistory", () => {
         throw new Error("write failed");
       }),
       scrollToBottom: vi.fn(),
+      scrollToLine: vi.fn(),
+      buffer: { active: { baseY: 0 } },
     };
 
     await expect(
@@ -132,5 +141,114 @@ describe("writeTerminalHistory", () => {
     ).rejects.toThrow("write failed");
 
     expect(inputSuppressed).toBe(false);
+  });
+
+  it("scrolls to bottom by default after history write", async () => {
+    const term = mountTerminal();
+    const scrollToBottom = vi.spyOn(term, "scrollToBottom");
+    const scrollToLine = vi.spyOn(term, "scrollToLine");
+
+    await writeTerminalHistory(term, "line-1\r\nline-2\r\n", () => undefined);
+
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+    expect(scrollToLine).not.toHaveBeenCalled();
+  });
+
+  it("restores viewport when restoreViewportY is provided", async () => {
+    const scrollToBottom = vi.fn();
+    const scrollToLine = vi.fn();
+    const fakeTerminal = {
+      reset: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.();
+      }),
+      scrollToBottom,
+      scrollToLine,
+      buffer: { active: { baseY: 40 } },
+    };
+
+    await writeTerminalHistory(fakeTerminal, "history", () => undefined, {
+      restoreViewportY: 12,
+    });
+
+    expect(scrollToBottom).not.toHaveBeenCalled();
+    expect(scrollToLine).toHaveBeenCalledWith(12);
+  });
+
+  it("clamps restoreViewportY to baseY", async () => {
+    const scrollToLine = vi.fn();
+    const fakeTerminal = {
+      reset: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.();
+      }),
+      scrollToBottom: vi.fn(),
+      scrollToLine,
+      buffer: { active: { baseY: 5 } },
+    };
+
+    await writeTerminalHistory(fakeTerminal, "history", () => undefined, {
+      restoreViewportY: 99,
+    });
+
+    expect(scrollToLine).toHaveBeenCalledWith(5);
+  });
+});
+
+describe("writeTerminalHistoryPreservingView", () => {
+  afterEach(() => {
+    clearTerminalViewStatesForTests();
+  });
+
+  it("restores viewport when sequence is unchanged", async () => {
+    saveTerminalViewState("term-a", { sequence: 8, viewportY: 4 });
+    const scrollToBottom = vi.fn();
+    const scrollToLine = vi.fn();
+    const fakeTerminal = {
+      reset: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.();
+      }),
+      scrollToBottom,
+      scrollToLine,
+      buffer: { active: { baseY: 20, viewportY: 20 } },
+    };
+
+    await writeTerminalHistoryPreservingView(
+      fakeTerminal,
+      "history",
+      () => undefined,
+      "term-a",
+      8,
+    );
+
+    expect(scrollToLine).toHaveBeenCalledWith(4);
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
+  it("scrolls to bottom when sequence advanced", async () => {
+    saveTerminalViewState("term-a", { sequence: 8, viewportY: 4 });
+    const scrollToBottom = vi.fn();
+    const scrollToLine = vi.fn();
+    const fakeTerminal = {
+      reset: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.();
+      }),
+      scrollToBottom,
+      scrollToLine,
+      buffer: { active: { baseY: 20, viewportY: 20 } },
+    };
+
+    await writeTerminalHistoryPreservingView(
+      fakeTerminal,
+      "history",
+      () => undefined,
+      "term-a",
+      12,
+    );
+
+    expect(scrollToBottom).toHaveBeenCalledTimes(1);
+    expect(scrollToLine).not.toHaveBeenCalled();
   });
 });
