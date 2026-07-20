@@ -254,6 +254,102 @@ describe("useAgentMessageStream", () => {
     result.unmount();
   });
 
+  it("同一帧内 turn_completed 不越过未 flush 的 timeline，避免误恢复 running", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    mocks.listeners.length = 0;
+
+    const { getState, result } = await renderProbe({
+      projectId: 1,
+      sessionId: 121,
+      onState: () => {},
+    });
+
+    act(() => {
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 121,
+          seq: 1,
+          epoch: "epoch-1",
+          event: { type: "turn_started", turnId: "t-race" },
+        },
+      });
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 121,
+          seq: 2,
+          epoch: "epoch-1",
+          event: {
+            type: "timeline",
+            item: {
+              type: "tool_call",
+              callId: "call_1",
+              name: "shell",
+              detail: { type: "shell", command: "git status" },
+              status: "completed",
+            },
+            seq: 2,
+            timestamp: 0,
+          },
+        },
+      });
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 121,
+          seq: 3,
+          epoch: "epoch-1",
+          event: {
+            type: "timeline",
+            item: {
+              type: "assistant_message",
+              text: "已完成",
+              messageId: "a-race",
+            },
+            seq: 3,
+            timestamp: 0,
+          },
+        },
+      });
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 121,
+          seq: 4,
+          epoch: "epoch-1",
+          event: {
+            type: "turn_completed",
+            turnId: "t-race",
+            usage: null,
+            stopReason: "end_turn",
+          },
+        },
+      });
+    });
+
+    // 未 flush 前不应提前应用 turn_completed，否则会把 tool_call 当成末条异常中断。
+    expect(getState()!.turnStatus).toBe("idle");
+    expect(getState()!.entries).toHaveLength(0);
+
+    dispatchFrame();
+
+    const state = getState()!;
+    expect(state.turnStatus).toBe("idle");
+    expect(state.turnInterrupted).toBe(false);
+    expect(state.entries).toHaveLength(2);
+    expect(state.entries[1].item).toEqual({
+      type: "assistant_message",
+      text: "已完成",
+      messageId: "a-race",
+    });
+
+    result.unmount();
+    vi.useRealTimers();
+  });
+
   it("忽略其它 projectId/sessionId 的事件", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });

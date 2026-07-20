@@ -260,7 +260,8 @@ describe("AgentSessionView", () => {
       event: { type: "turn_started", turnId: "t1" },
     });
 
-    expect(screen.getByText("Thinking...")).toBeInTheDocument();
+    // turn_started 与 timeline 同序入队，按帧 flush 后才进入 running。
+    expect(await screen.findByText("Thinking...")).toBeInTheDocument();
   });
 
   it("从 session 列表恢复运行中轮次时立即显示思考状态", async () => {

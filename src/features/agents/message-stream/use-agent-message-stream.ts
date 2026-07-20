@@ -173,13 +173,15 @@ export function useAgentMessageStream({
 
     stateSessionIdRef.current = sessionId;
 
+    // 所有事件走同一有序队列再按帧 flush。
+    // 旧实现把 turn_completed 等非 timeline 事件立刻 dispatch，会越过尚未
+    // flush 的 assistant_message/reasoning：turn_completed 误把末条 completed
+    // tool_call 当成异常中断，后续 batched timeline 再把 turnStatus 恢复成
+    // running，于是 session card 已因 grace 结束变蓝点，session view 仍卡在
+    // 「思考中」。统一入队可保持事件相对顺序。
     const dispatchStreamEvent = (event: AgentStreamEvent) => {
       if (isWaitingForTimeline) {
         deferredEvents.push(event);
-        return;
-      }
-      if (event.type !== "timeline") {
-        dispatch({ type: "EVENT", event });
         return;
       }
       pendingEvents.push(event);
