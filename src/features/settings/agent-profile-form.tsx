@@ -1,14 +1,20 @@
 import type { FormEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   detectCodexCommand,
   saveAgentProfile,
   testAgentCommand,
+  type AgentDisplayMode,
   type AgentProfileRecord,
   type AgentScope,
   type AgentType,
 } from "./settings-commands";
+import {
+  getDisplayModeDefaults,
+  resolveDisplayModeOnAgentTypeChange,
+} from "./agent-display-mode";
+import { SearchableSelect } from "./searchable-select";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -21,6 +27,18 @@ import {
 } from "../../components/ui/select";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+
+// ADR-0019：表单可选 agentType 固定为 codex/claude/opencode/grok 四项。
+// claude_code 是前端 UI 别名（agent-visuals 视作 Claude），不在新建表单暴露。
+const AGENT_TYPE_OPTIONS: ReadonlyArray<{ value: AgentType; label: string }> = [
+  { value: "codex", label: "Codex" },
+  { value: "claude", label: "Claude Code" },
+  { value: "opencode", label: "OpenCode" },
+  { value: "grok", label: "Grok" },
+];
+
+// ADR-0019 决策 10：name 上限 20 字符（label 是 15，别混淆）。
+const AGENT_NAME_MAX_LENGTH = 20;
 
 interface AgentProfileFormProps {
   mode: "create" | "edit";
@@ -51,6 +69,14 @@ export function AgentProfileForm({
   const [modeValue] = useState(() => profile?.mode ?? "full-access");
   const [dangerous] = useState(() => profile?.dangerous ?? true);
   const [promptTemplate] = useState(() => profile?.promptTemplate ?? "");
+  // ADR-0019：displayMode/enabled。回填优先 profile，其次按 agentType 默认。
+  const [displayMode, setDisplayMode] = useState<AgentDisplayMode>(() => {
+    if (profile?.displayMode) return profile.displayMode;
+    return getDisplayModeDefaults(profile?.agentType ?? "codex").defaultMode;
+  });
+  const [enabled, setEnabled] = useState<boolean>(
+    () => profile?.enabled ?? true,
+  );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -108,6 +134,14 @@ export function AgentProfileForm({
     };
   }, [profile]);
 
+  function handleAgentTypeChange(nextAgentType: AgentType) {
+    setAgentType(nextAgentType);
+    // 切 agentType 时同步调整 displayMode（opencode/grok 强制 tui；codex/claude 可保留 tui）。
+    setDisplayMode((current) =>
+      resolveDisplayModeOnAgentTypeChange(nextAgentType, current),
+    );
+  }
+
   async function handleTestCommand() {
     setIsTesting(true);
     setStatusMessage(null);
@@ -126,13 +160,17 @@ export function AgentProfileForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // isNameTooLong 已在 isSubmitDisabled 中拦截，但 submit 仍可能被键盘 Enter
+    // 触发；这里再保护一次以匹配表单契约。
+    if (trimmedName.length > AGENT_NAME_MAX_LENGTH) {
+      return;
+    }
+
     setIsSaving(true);
     setStatusMessage(null);
 
     try {
       const effectiveProjectId = scopeValue === "project" ? projectId : null;
-      // ADR-0019：displayMode/enabled 字段在表单上由 ticket 05 接入；
-      // 此处临时传 json + true 保留既有保存行为，避免类型阻断。
       const savedProfile = await saveAgentProfile({
         id: profile?.id,
         name,
@@ -144,8 +182,8 @@ export function AgentProfileForm({
         dangerous,
         defaultSkill: "",
         promptTemplate,
-        displayMode: "json",
-        enabled: true,
+        displayMode,
+        enabled,
       });
       onSaved(savedProfile);
     } catch (error: unknown) {
@@ -155,13 +193,29 @@ export function AgentProfileForm({
     }
   }
 
+  const trimmedName = name.trim();
+  const trimmedCommand = command.trim();
+  const isNameTooLong = trimmedName.length > AGENT_NAME_MAX_LENGTH;
+  const nameError = isNameTooLong ? messages.settings.agentNameTooLong : null;
   const isSubmitDisabled =
-    isSaving || name.trim().length === 0 || command.trim().length === 0;
+    isSaving ||
+    trimmedName.length === 0 ||
+    trimmedCommand.length === 0 ||
+    isNameTooLong;
 
   const dialogTitle =
     mode === "create"
       ? messages.settings.newAgent
       : messages.settings.editAgent;
+
+  const displayModeDefaults = getDisplayModeDefaults(agentType);
+  const displayModeOptions: ReadonlyArray<{
+    value: AgentDisplayMode;
+    label: string;
+  }> = [
+    { value: "json", label: messages.settings.displayModeJson },
+    { value: "tui", label: messages.settings.displayModeTui },
+  ];
 
   return (
     <div
@@ -203,8 +257,15 @@ export function AgentProfileForm({
               id="agent-profile-name"
               aria-label={messages.settings.agentProfileName}
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value);
+              }}
             />
+            {nameError ? (
+              <span role="alert" className="text-xs text-destructive">
+                {nameError}
+              </span>
+            ) : null}
           </div>
 
           <div className="grid gap-1.5">
@@ -215,13 +276,13 @@ export function AgentProfileForm({
               {messages.settings.type}
             </Label>
             <Select
-              items={[
-                { value: "codex", label: "Codex" },
-                { value: "claude", label: "Claude Code" },
-              ]}
+              items={AGENT_TYPE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
               value={agentType}
               onValueChange={(value) => {
-                setAgentType(value as AgentType);
+                handleAgentTypeChange(value as AgentType);
               }}
             >
               <SelectTrigger
@@ -232,8 +293,11 @@ export function AgentProfileForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="codex">Codex</SelectItem>
-                <SelectItem value="claude">Claude Code</SelectItem>
+                {AGENT_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -263,6 +327,92 @@ export function AgentProfileForm({
                   : messages.settings.commandTest}
               </button>
             </div>
+          </div>
+
+          {displayModeDefaults.canSwitch ? (
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="agent-profile-display-mode"
+                className="text-xs text-muted-foreground"
+              >
+                {messages.settings.displayMode}
+              </Label>
+              <Select
+                items={displayModeOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                value={displayMode}
+                onValueChange={(value) => {
+                  setDisplayMode(value as AgentDisplayMode);
+                }}
+              >
+                <SelectTrigger
+                  id="agent-profile-display-mode"
+                  aria-label={messages.settings.displayMode}
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {displayModeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="agent-profile-display-mode-locked"
+                className="text-xs text-muted-foreground"
+              >
+                {messages.settings.displayMode}
+              </Label>
+              <Input
+                id="agent-profile-display-mode-locked"
+                aria-label={messages.settings.displayMode}
+                readOnly
+                value={messages.settings.displayModeTuiLocked}
+              />
+            </div>
+          )}
+
+          <div className="grid gap-1.5">
+            <Label
+              htmlFor="agent-profile-enabled"
+              className="text-xs text-muted-foreground"
+            >
+              {messages.settings.enabled}
+            </Label>
+            <Select
+              items={[
+                { value: "true", label: messages.settings.enabledYes },
+                { value: "false", label: messages.settings.enabledNo },
+              ]}
+              value={enabled ? "true" : "false"}
+              onValueChange={(value) => {
+                setEnabled(value === "true");
+              }}
+            >
+              <SelectTrigger
+                id="agent-profile-enabled"
+                aria-label={messages.settings.enabled}
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">
+                  {messages.settings.enabledYes}
+                </SelectItem>
+                <SelectItem value="false">
+                  {messages.settings.enabledNo}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <SearchableSelect
@@ -299,151 +449,6 @@ export function AgentProfileForm({
           </button>
         </div>
       </form>
-    </div>
-  );
-}
-
-interface SearchableSelectOption {
-  value: string;
-  label: string;
-  description?: string;
-}
-
-function SearchableSelect({
-  ariaLabel,
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  ariaLabel: string;
-  label: string;
-  onChange: (value: string) => void;
-  options: SearchableSelectOption[];
-  value: string;
-}) {
-  const { messages } = useI18n();
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const selectedOption = options.find((option) => option.value === value);
-  const displayValue = isOpen ? query : (selectedOption?.label ?? "");
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredOptions = normalizedQuery
-    ? options.filter((option) =>
-        option.label.toLowerCase().includes(normalizedQuery),
-      )
-    : options;
-
-  function commitOption(option: SearchableSelectOption) {
-    onChange(option.value);
-    setQuery("");
-    setIsOpen(false);
-  }
-
-  return (
-    <div
-      className="settings-search-select"
-      ref={rootRef}
-      onBlur={(event) => {
-        if (rootRef.current?.contains(event.relatedTarget as Node | null)) {
-          return;
-        }
-
-        setQuery("");
-        setIsOpen(false);
-      }}
-    >
-      <label className="settings-field">
-        <span>{label}</span>
-        <input
-          aria-autocomplete="list"
-          aria-expanded={isOpen}
-          aria-label={ariaLabel}
-          autoCapitalize="none"
-          className="settings-input settings-search-select__input"
-          role="combobox"
-          spellCheck={false}
-          value={displayValue}
-          onClick={() => {
-            setActiveIndex(0);
-            setIsOpen(true);
-          }}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActiveIndex(0);
-            setIsOpen(true);
-          }}
-          onFocus={() => {
-            setActiveIndex(0);
-            setIsOpen(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setIsOpen(true);
-              setActiveIndex((current) =>
-                Math.min(current + 1, filteredOptions.length - 1),
-              );
-            }
-
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setActiveIndex((current) => Math.max(current - 1, 0));
-            }
-
-            if (event.key === "Enter" && isOpen) {
-              event.preventDefault();
-              const option = filteredOptions[activeIndex];
-              if (option) commitOption(option);
-            }
-
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setQuery("");
-              setIsOpen(false);
-            }
-          }}
-        />
-      </label>
-      {isOpen ? (
-        <div className="settings-search-select__menu" role="listbox">
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option, index) => (
-              <button
-                aria-selected={option.value === value}
-                aria-label={
-                  option.description
-                    ? `${option.label} ${option.description}`
-                    : option.label
-                }
-                className="settings-search-select__option"
-                key={option.value}
-                role="option"
-                tabIndex={-1}
-                type="button"
-                data-active={index === activeIndex ? "true" : "false"}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => commitOption(option)}
-              >
-                <span className="settings-search-select__option-label">
-                  {option.label}
-                </span>
-                {option.description ? (
-                  <span className="settings-search-select__option-description">
-                    {option.description}
-                  </span>
-                ) : null}
-              </button>
-            ))
-          ) : (
-            <p className="settings-search-select__empty">
-              {messages.settings.noMatches}
-            </p>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }

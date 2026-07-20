@@ -1220,7 +1220,9 @@ describe("ProjectSettingsActivity", () => {
     });
     saveAgentProfileMock.mockResolvedValue({
       ...legacyPromptProfile,
-      name: "Legacy Prompt Codex Updated",
+      // ADR-0019 决策 10：name 上限 20 字符（ticket 05 新增校验），
+      // 测试名也需收敛在限内。
+      name: "Legacy Codex Updated",
     });
 
     render(
@@ -1243,7 +1245,7 @@ describe("ProjectSettingsActivity", () => {
     await user.clear(screen.getByLabelText("Agent profile name"));
     await user.type(
       screen.getByLabelText("Agent profile name"),
-      "Legacy Prompt Codex Updated",
+      "Legacy Codex Updated",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 

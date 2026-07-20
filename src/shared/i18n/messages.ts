@@ -125,6 +125,15 @@ export interface I18nMessages {
     agentProfileName: string;
     agentTypeLabel: string;
     agentCommand: string;
+    // ADR-0019：表单展示形式 / 启用状态 / 名称校验。ticket 05 使用。
+    agentNameTooLong: string;
+    displayMode: string;
+    displayModeJson: string;
+    displayModeTui: string;
+    displayModeTuiLocked: string;
+    enabled: string;
+    enabledYes: string;
+    enabledNo: string;
     skillLoadFailed: string;
     splitterLabel: string;
     status: string;
