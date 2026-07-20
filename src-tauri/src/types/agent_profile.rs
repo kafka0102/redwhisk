@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum AgentType {
     Codex,
     Claude,
+    #[serde(rename = "opencode")]
     OpenCode,
     Grok,
 }

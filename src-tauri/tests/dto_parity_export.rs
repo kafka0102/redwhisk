@@ -304,7 +304,13 @@ fn parse_enum(item: &ItemEnum) -> Option<(String, EnumSig)> {
     let variants = item
         .variants
         .iter()
-        .map(|v| apply_enum_rename(&v.ident.to_string(), &rename_all))
+        .map(|v| {
+            let ident = v.ident.to_string();
+            // per-variant #[serde(rename = "...")] 优先；否则按 enum rename_all 转换。
+            // 与 serde 运行时语义一致：变体 rename 覆盖 enum 级 rename_all
+            // （例如 OpenCode 在 snake_case 下默认是 "open_code"，加 rename 后应为 "opencode"）。
+            field_rename(&v.attrs).unwrap_or_else(|| apply_enum_rename(&ident, &rename_all))
+        })
         .collect();
     Some((
         item.ident.to_string(),
@@ -363,6 +369,19 @@ fn export_dto_signatures_writes_snapshot() {
     );
     assert!(sigs.enums.contains_key("ProjectWorktreeLocation"));
     assert!(sigs.enums.contains_key("CommandErrorCode"));
+
+    // AgentType 的 OpenCode 变体经 #[serde(rename = "opencode")] 与 DB/migration 值对齐；
+    // parity 收集器须尊重变体级 rename，不能只按 enum rename_all 误推成 "open_code"。
+    let agent_type = sigs.enums.get("AgentType").expect("AgentType 存在");
+    assert_eq!(
+        agent_type.variants,
+        vec![
+            "codex".to_string(),
+            "claude".to_string(),
+            "opencode".to_string(),
+            "grok".to_string()
+        ]
+    );
 
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../src/shared/commands/__parity__/rust-dto-signatures.json");
