@@ -285,3 +285,56 @@ fn reconcile_marks_tui_running_without_pty_stopped() {
         .expect("status");
     assert_eq!(status, "stopped");
 }
+
+
+
+
+
+#[test]
+fn start_tui_with_stdin_prompt_returns_after_register() {
+    let temp_dir = tempdir().expect("temp");
+    let repo_dir = temp_dir.path().join("repo");
+    create_git_repo(&repo_dir);
+    let script = temp_dir.path().join("fake-tui.sh");
+    write_sleep_script(&script);
+
+    let database = open_db(temp_dir.path());
+    seed_project_issue_profile(
+        &database.connection,
+        &repo_dir.to_string_lossy(),
+        &script.to_string_lossy(),
+        "tui",
+    );
+
+    let service = service(&database.connection);
+    let pty = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let result = service
+        .start_agent_session_with_runtime(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id: 1,
+                issue_id: 11,
+                agent_profile_id: 101,
+                // 非 codex 可执行名 → stdin 注入；覆盖 claude TUI 首条 prompt 路径。
+                prompt_snapshot: "hello from issue via stdin".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::CurrentBranch),
+                target_branch: None,
+                worktree_setup_command: None,
+            },
+            &pty,
+            &registry,
+            &broadcaster,
+        )
+        .expect("start tui session with stdin prompt");
+
+    assert!(result.session_id > 0);
+    assert!(
+        pty.contains(result.session_id),
+        "PTY must be registered before start returns"
+    );
+    let _ = pty.kill(result.session_id);
+}

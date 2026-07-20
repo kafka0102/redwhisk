@@ -90,7 +90,7 @@ impl AgentSessionService<'_> {
     }
 
 
-    fn rollback_failed_structured_issue_session(
+    pub(super) fn rollback_failed_structured_issue_session(
         &self,
         project_id: i64,
         issue_id: i64,

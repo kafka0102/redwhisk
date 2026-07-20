@@ -436,14 +436,12 @@ impl<'connection> AgentSessionService<'connection> {
         } else {
             None
         };
-        let mut pending_pty = pending_pty;
-        if !command_accepts_prompt_argument {
-            if let Some(pending_pty) = pending_pty.as_mut() {
-                pending_pty
-                    .write_input(&normalized_prompt)
-                    .map_err(agent_session_start_error)?;
-            }
-        }
+        // 注意：不得在 register（启动 master reader）之前向 pending PTY write_input。
+        // Claude/非 codex 的 Issue TUI 首条 prompt 靠 stdin 注入；若子进程（尤其是
+        // 交互式 TUI）已大量写 stdout 却无人 drain，再写 stdin 会因 PTY 双向缓冲
+        // 回压死锁，表现为 worktree 已建、claude 已起、但 start_agent_session 永不返回、
+        // DB 无 session、Issue 仍 backlog。
+        let pending_pty = pending_pty;
 
         let transaction = self
             .issue_repository
@@ -560,6 +558,34 @@ impl<'connection> AgentSessionService<'connection> {
                                 result.session_id,
                                 PtyExitStatus { exit_code: None },
                             );
+                            self.cleanup_owned_worktree(input.project_id, &launch);
+                            let _ = self.rollback_failed_structured_issue_session(
+                                input.project_id,
+                                input.issue_id,
+                                result.session_id,
+                            );
+                            return Err(agent_session_start_error(error.message));
+                        }
+
+                        // reader 已启动后再注入首条 prompt，避免 PTY 回压死锁。
+                        if !command_accepts_prompt_argument {
+                            if let Err(error) =
+                                pty_sessions.write_input(result.session_id, &normalized_prompt)
+                            {
+                                let _ = pty_sessions.kill(result.session_id);
+                                let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                    &data_dir,
+                                    result.session_id,
+                                    PtyExitStatus { exit_code: None },
+                                );
+                                self.cleanup_owned_worktree(input.project_id, &launch);
+                                let _ = self.rollback_failed_structured_issue_session(
+                                    input.project_id,
+                                    input.issue_id,
+                                    result.session_id,
+                                );
+                                return Err(agent_session_start_error(error));
+                            }
                         }
                     }
                 } else if let Some(child) = child.take() {
