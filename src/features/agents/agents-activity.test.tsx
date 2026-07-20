@@ -98,6 +98,14 @@ vi.mock("./session-pane/agent-session-view", () => ({
     }),
 }));
 
+vi.mock("./session-pane/agent-tui-session-view", () => ({
+  AgentTuiSessionView: () =>
+    createElement("div", {
+      "aria-label": "Agent TUI session view",
+      "data-testid": "agent-tui-session-view",
+    }),
+}));
+
 vi.mock("../terminals/project-terminal", () => ({
   ProjectTerminal: ({
     projectId,

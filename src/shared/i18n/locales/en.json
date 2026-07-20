@@ -477,6 +477,7 @@
     "reasoningTitle": "Thinking",
     "reasoningDuration": "Thought process ({{seconds}}s)",
     "structuredSessionView": "Agent structured session view",
+    "tuiSessionView": "Agent TUI session view",
     "readOnlyCompletedIssue": "Completed Issues cannot be run again.",
     "permissionCard": "Agent permission approval card",
     "sessionListControls": "Session list controls",

@@ -477,6 +477,7 @@
     "reasoningTitle": "正在思考…",
     "reasoningDuration": "思考过程（共进行了 {{seconds}} 秒）",
     "structuredSessionView": "智能体结构化会话视图",
+    "tuiSessionView": "智能体 TUI 会话视图",
     "readOnlyCompletedIssue": "已完成的 Issues 不能继续运行。",
     "permissionCard": "智能体权限审批卡片",
     "sessionListControls": "会话列表控制区",
