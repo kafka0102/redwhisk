@@ -1,6 +1,7 @@
 use tauri::{Manager, State};
 
 use crate::app_state::AppState;
+use crate::features::project_terminal::ProjectTerminalService;
 use crate::features::settings::agent_skill_commands::trigger_project_skill_refresh;
 use super::service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -48,16 +49,33 @@ pub async fn open_project(
 ) -> Result<ProjectSummary, CommandError> {
     let window_label = caller_window.label().to_string();
     let data_dir = project_data_dir(&app)?;
+    let restore_data_dir = data_dir.clone();
     let project_terminals = state.project_terminals.clone();
     let pty_sessions = state.pty_sessions.clone();
     let project = tauri::async_runtime::spawn_blocking(move || {
-        ProjectService::open_project_in_data_dir(data_dir, input, &project_terminals, &pty_sessions)
+        ProjectService::open_project_in_data_dir(data_dir, input)
     })
     .await
     .map_err(project_join_error)??;
 
     // 登记该项目当前显示在调用方窗口，切换菜单据此去重聚焦（含 main 原地占用的情况）。
     state.record_project_window(project.id, window_label);
+
+    // 终端恢复可能包含交互 shell PATH 解析与 PTY 启动（冷启动可达数秒），
+    // 不阻塞 open_project 返回，工作台可先渲染。
+    let project_id = project.id;
+    tauri::async_runtime::spawn(async move {
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            ProjectTerminalService::restore_project_terminals_in_data_dir(
+                restore_data_dir,
+                project_id,
+                &project_terminals,
+                &pty_sessions,
+            )
+        })
+        .await;
+    });
+
     trigger_project_skill_refresh(
         app,
         state.agent_skills.clone(),

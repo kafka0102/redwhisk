@@ -42,8 +42,6 @@ pub fn refresh_agent_skills(
             let project = ProjectService::open_project_for_window_in_data_dir(
                 &data_dir,
                 OpenProjectInput { project_id },
-                &state.project_terminals,
-                &state.pty_sessions,
             )?;
             trigger_project_skill_refresh(
                 app,

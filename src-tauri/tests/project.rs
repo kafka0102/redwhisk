@@ -1,11 +1,9 @@
 use redwhisk_lib::agent::pty_session_manager::PtySessionManager;
-use redwhisk_lib::features::project::ProjectService;
-use redwhisk_lib::features::project_terminal::{
-    ProjectTerminalRegistry, ProjectTerminalService,
-};
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
+use redwhisk_lib::features::project::ProjectService;
+use redwhisk_lib::features::project_terminal::{ProjectTerminalRegistry, ProjectTerminalService};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectPathStatus, ProjectWorktreeLocation,
@@ -820,12 +818,19 @@ fn open_project_restores_saved_project_terminals_without_duplicate_launches() {
         OpenProjectInput {
             project_id: stored_project.id,
         },
+    )
+    .expect("open project without blocking on terminal restore");
+
+    assert_eq!(opened.id, stored_project.id);
+
+    // open_project 热路径不再同步 restore；command 层异步触发同等逻辑。
+    ProjectTerminalService::restore_project_terminals_in_data_dir(
+        temp_dir.path(),
+        stored_project.id,
         &registry,
         &manager,
     )
-    .expect("open project with restored terminals");
-
-    assert_eq!(opened.id, stored_project.id);
+    .expect("restore terminals after open");
 
     let listed = terminal_service
         .list_project_terminals(
@@ -846,11 +851,16 @@ fn open_project_restores_saved_project_terminals_without_duplicate_launches() {
         OpenProjectInput {
             project_id: stored_project.id,
         },
+    )
+    .expect("reopen project");
+    assert_eq!(reopened.id, stored_project.id);
+    ProjectTerminalService::restore_project_terminals_in_data_dir(
+        temp_dir.path(),
+        stored_project.id,
         &registry,
         &manager,
     )
-    .expect("reopen project should not duplicate terminal");
-    assert_eq!(reopened.id, stored_project.id);
+    .expect("restore again should not duplicate terminal");
 
     let relisted = terminal_service
         .list_project_terminals(
@@ -926,12 +936,18 @@ fn open_project_ignores_individual_terminal_restore_failures() {
         OpenProjectInput {
             project_id: stored_project.id,
         },
-        &registry,
-        &manager,
     )
     .expect("open project should succeed");
 
     assert_eq!(opened.id, stored_project.id);
+
+    ProjectTerminalService::restore_project_terminals_in_data_dir(
+        temp_dir.path(),
+        stored_project.id,
+        &registry,
+        &manager,
+    )
+    .expect("partial restore failures are ignored");
 
     let listed = terminal_service
         .list_project_terminals(
@@ -1273,4 +1289,91 @@ fn table_column_type(
     statement
         .query_row([column_name], |row| row.get::<_, String>(0))
         .expect("column type")
+}
+
+#[test]
+fn open_project_does_not_restore_terminals_on_hot_path() {
+    let _env_lock = lock_terminal_test_env();
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = DatabaseConfig::new(temp_dir.path())
+        .open()
+        .expect("database");
+    MigrationRunner::default()
+        .run(&database.connection)
+        .expect("migrations");
+    let repo_dir = temp_dir.path().join("sample-repo");
+    fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+    let repository = ProjectRepository::new(&database.connection);
+    let stored_project = repository
+        .insert("sample-repo", repo_dir.to_str().unwrap())
+        .expect("insert project");
+    let terminal_service =
+        ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+    let registry = ProjectTerminalRegistry::new();
+    let manager = PtySessionManager::new();
+
+    let created = terminal_service
+        .create_terminal(
+            temp_dir.path(),
+            CreateProjectTerminalInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("create terminal");
+    terminal_service
+        .close_terminal(
+            redwhisk_lib::types::project_terminal::CloseProjectTerminalInput {
+                project_id: stored_project.id,
+                session_id: created.session_id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("close terminal");
+
+    let opened = ProjectService::open_project_in_data_dir(
+        temp_dir.path(),
+        OpenProjectInput {
+            project_id: stored_project.id,
+        },
+    )
+    .expect("open project");
+    assert_eq!(opened.id, stored_project.id);
+
+    let listed_before_restore = terminal_service
+        .list_project_terminals(
+            ListProjectTerminalsInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("list before restore");
+    assert_eq!(listed_before_restore.terminals.len(), 1);
+    assert!(
+        !manager.contains(listed_before_restore.terminals[0].session_id),
+        "open_project hot path must not restore terminal PTY sessions"
+    );
+
+    ProjectTerminalService::restore_project_terminals_in_data_dir(
+        temp_dir.path(),
+        stored_project.id,
+        &registry,
+        &manager,
+    )
+    .expect("restore terminals");
+
+    let listed_after_restore = terminal_service
+        .list_project_terminals(
+            ListProjectTerminalsInput {
+                project_id: stored_project.id,
+            },
+            &registry,
+            &manager,
+        )
+        .expect("list after restore");
+    assert_eq!(listed_after_restore.terminals.len(), 1);
+    assert!(manager.contains(listed_after_restore.terminals[0].session_id));
 }

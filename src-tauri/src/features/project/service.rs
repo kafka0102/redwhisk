@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::agent::pty_session_manager::PtySessionManager;
-use crate::features::project_terminal::{ProjectTerminalRegistry, ProjectTerminalService};
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
@@ -132,42 +130,24 @@ impl<'connection> ProjectService<'connection> {
         ProjectService::new(repository).list_projects()
     }
 
+    /// 打开项目热路径：路径校验、更新 last_opened、探测 code workspaces。
+    /// 终端恢复由 command 层异步触发，避免阻塞工作台首屏。
     pub fn open_project_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: OpenProjectInput,
-        project_terminals: &ProjectTerminalRegistry,
-        pty_sessions: &PtySessionManager,
     ) -> Result<ProjectSummary, CommandError> {
         let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
-        let project = ProjectService::new(repository).open_project(input)?;
-        let project_id = project.id;
-        let _ = ProjectTerminalService::restore_project_terminals_in_data_dir(
-            data_dir.as_ref(),
-            project_id,
-            project_terminals,
-            pty_sessions,
-        );
-        Ok(project)
+        ProjectService::new(repository).open_project(input)
     }
 
     pub fn open_project_for_window_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: OpenProjectInput,
-        project_terminals: &ProjectTerminalRegistry,
-        pty_sessions: &PtySessionManager,
     ) -> Result<ProjectSummary, CommandError> {
         let database = open_project_database(data_dir.as_ref())?;
         let repository = ProjectRepository::new(&database.connection);
-        let project = ProjectService::new(repository).open_project_for_window(input)?;
-        let project_id = project.id;
-        let _ = ProjectTerminalService::restore_project_terminals_in_data_dir(
-            data_dir.as_ref(),
-            project_id,
-            project_terminals,
-            pty_sessions,
-        );
-        Ok(project)
+        ProjectService::new(repository).open_project_for_window(input)
     }
 
     /// 轻量打开：仅校验项目可打开并返回记录（供 `open_project_window` 取标题用），
