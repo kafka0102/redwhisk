@@ -46,6 +46,9 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
             "default_skill",
             "prompt_template",
             "del",
+            // ADR-0019：display_mode/enabled 列由 migration 0047 引入。
+            "display_mode",
+            "enabled",
         ],
     );
 
