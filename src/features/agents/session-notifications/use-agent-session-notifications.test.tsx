@@ -402,6 +402,7 @@ function session({
 }) {
   return {
     agentType: "codex" as const,
+    displayMode: "json" as const,
     attention: "none" as const,
     closedAt: status === "running" ? null : 1_780_638_000_000,
     issueId: null,

@@ -41,6 +41,7 @@ export interface AgentSessionListItem {
   canCompleteAgentCommit: boolean;
   title: string | null;
   agentType: AgentType;
+  displayMode: "json" | "tui";
   status: AgentSessionStatus;
   attention: AgentSessionAttention;
   isTurnRunning: boolean;
@@ -342,4 +343,83 @@ export function readAgentTimeline(
   return invokeCommand<ReadAgentTimelineResult>("read_agent_timeline", {
     input,
   });
+}
+
+export interface WriteAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+  data: string;
+}
+
+export interface ResizeAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+  rows: number;
+  cols: number;
+}
+
+export interface RestoreAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface RestoreAgentSessionTerminalResult {
+  sessionId: number;
+  sequence: number;
+  chunks: number[][];
+  isComplete: boolean;
+  isActive: boolean;
+}
+
+export interface SubscribeAgentSessionTerminalOutputInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface ReadAgentSessionTerminalInput {
+  projectId: number;
+  sessionId: number;
+  maxBytes?: number;
+}
+
+export interface ReadAgentSessionTerminalResult {
+  sessionId: number;
+  snapshot: string;
+  isActive: boolean;
+}
+
+export function writeAgentSessionTerminal(
+  input: WriteAgentSessionTerminalInput,
+): Promise<void> {
+  return invokeCommand("write_agent_session_terminal", { input });
+}
+
+export function resizeAgentSessionTerminal(
+  input: ResizeAgentSessionTerminalInput,
+): Promise<void> {
+  return invokeCommand("resize_agent_session_terminal", { input });
+}
+
+export function restoreAgentSessionTerminal(
+  input: RestoreAgentSessionTerminalInput,
+): Promise<RestoreAgentSessionTerminalResult> {
+  return invokeCommand("restore_agent_session_terminal", { input });
+}
+
+export function subscribeAgentSessionTerminalOutput(
+  input: SubscribeAgentSessionTerminalOutputInput,
+): Promise<void> {
+  return invokeCommand("subscribe_agent_session_terminal_output", { input });
+}
+
+export function unsubscribeAgentSessionTerminalOutput(
+  input: SubscribeAgentSessionTerminalOutputInput,
+): Promise<void> {
+  return invokeCommand("unsubscribe_agent_session_terminal_output", { input });
+}
+
+export function readAgentSessionTerminal(
+  input: ReadAgentSessionTerminalInput,
+): Promise<ReadAgentSessionTerminalResult> {
+  return invokeCommand("read_agent_session_terminal", { input });
 }

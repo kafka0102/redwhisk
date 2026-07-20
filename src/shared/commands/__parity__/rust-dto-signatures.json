@@ -100,6 +100,7 @@
         "canCompleteAgentCommit": "required",
         "canCompleteClean": "required",
         "closedAt": "required",
+        "displayMode": "required",
         "isTurnRunning": "required",
         "issueId": "required",
         "issueNumber": "required",
@@ -137,6 +138,7 @@
         "closedAt": "required",
         "codexSessionId": "required",
         "commandSnapshot": "required",
+        "displayMode": "required",
         "id": "required",
         "issueId": "required",
         "lastActiveAt": "required",
@@ -868,6 +870,20 @@
         "signature": "required"
       }
     },
+    "ReadAgentSessionTerminalInput": {
+      "fields": {
+        "maxBytes": "optional",
+        "projectId": "required",
+        "sessionId": "required"
+      }
+    },
+    "ReadAgentSessionTerminalResult": {
+      "fields": {
+        "isActive": "required",
+        "sessionId": "required",
+        "snapshot": "required"
+      }
+    },
     "ReadAgentTimelineInput": {
       "fields": {
         "projectId": "required",
@@ -911,6 +927,14 @@
         "projectId": "optional"
       }
     },
+    "ResizeAgentSessionTerminalInput": {
+      "fields": {
+        "cols": "required",
+        "projectId": "required",
+        "rows": "required",
+        "sessionId": "required"
+      }
+    },
     "ResizeProjectTerminalInput": {
       "fields": {
         "cols": "required",
@@ -924,6 +948,21 @@
         "decision": "required",
         "projectId": "required",
         "requestId": "required",
+        "sessionId": "required"
+      }
+    },
+    "RestoreAgentSessionTerminalInput": {
+      "fields": {
+        "projectId": "required",
+        "sessionId": "required"
+      }
+    },
+    "RestoreAgentSessionTerminalResult": {
+      "fields": {
+        "chunks": "required",
+        "isActive": "required",
+        "isComplete": "required",
+        "sequence": "required",
         "sessionId": "required"
       }
     },
@@ -1146,6 +1185,12 @@
         "threadId": "required"
       }
     },
+    "SubscribeAgentSessionTerminalOutputInput": {
+      "fields": {
+        "projectId": "required",
+        "sessionId": "required"
+      }
+    },
     "SubscribeProjectTerminalOutputInput": {
       "fields": {
         "projectId": "required",
@@ -1352,6 +1397,13 @@
         "name": "required",
         "path": "required",
         "sizeBytes": "optional"
+      }
+    },
+    "WriteAgentSessionTerminalInput": {
+      "fields": {
+        "data": "required",
+        "projectId": "required",
+        "sessionId": "required"
       }
     },
     "WriteProjectTerminalInput": {

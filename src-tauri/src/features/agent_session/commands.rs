@@ -292,7 +292,7 @@ fn prepare_agent_session_data_dir(
 
 /// 打开 agent session 数据库并跑迁移。返回的 `Database` 由调用方持有，
 /// 供 `build_agent_session_service` 借用。
-fn open_agent_session_database(
+pub(crate) fn open_agent_session_database(
     app: &tauri::AppHandle,
 ) -> Result<crate::db::connection::Database, CommandError> {
     let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
@@ -321,7 +321,7 @@ fn open_agent_session_database(
 }
 
 /// 基于已打开的连接构造 `AgentSessionService`。
-fn build_agent_session_service(connection: &rusqlite::Connection) -> AgentSessionService<'_> {
+pub(crate) fn build_agent_session_service(connection: &rusqlite::Connection) -> AgentSessionService<'_> {
     AgentSessionService::new(
         crate::db::issue_repository::IssueRepository::new(connection),
         crate::db::project_repository::ProjectRepository::new(connection),

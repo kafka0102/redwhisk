@@ -75,6 +75,7 @@ const runningBase = makeSession({
   issueNumber: 1,
   issueTitle: "Merge conflict issue",
   agentType: "claude",
+  displayMode: "json",
   status: "running",
 });
 
@@ -191,6 +192,7 @@ function makeSession(
     canCompleteAgentCommit: false,
     title: null,
     agentType: "codex",
+    displayMode: "json",
     status: "closed",
     attention: "none",
     isTurnRunning: false,

@@ -148,8 +148,21 @@ impl<'connection> AgentSessionService<'connection> {
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
     ) -> Result<StartAgentSessionResult, CommandError> {
-        let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
-        // 当前 Codex / Claude 均走结构化路径；pty_sessions 保留给未来非结构化降级路径。
+        let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
+        if launch.profile.display_mode == "tui" {
+            launch.command_snapshot = descriptor_for(&launch.profile.agent_type)
+                .build_tui_command_snapshot(
+                    &launch.profile.command,
+                    &launch.profile.mode,
+                    launch.profile.dangerous,
+                );
+            return self.start_agent_session_internal_with_launch(
+                data_dir,
+                input,
+                launch,
+                Some(pty_sessions),
+            );
+        }
         let _ = pty_sessions;
         self.start_structured_issue_agent_session(
             data_dir.as_ref(),
@@ -462,6 +475,7 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.worktree_root_path.as_deref(),
                 launch.worktree_setup_command.as_deref(),
                 &launch.log_path,
+                launch.profile.display_mode.as_str(),
                 launch.started_at,
             )?;
 
@@ -680,6 +694,7 @@ impl<'connection> AgentSessionService<'connection> {
                 launch.worktree_root_path.as_deref(),
                 launch.worktree_setup_command.as_deref(),
                 &pending_log_path,
+                "json",
                 launch.started_at,
             )?;
             let structured_log_path = build_issue_runtime_structured_log_path(
@@ -856,6 +871,7 @@ impl<'connection> AgentSessionService<'connection> {
                     can_complete_agent_commit,
                     title: row.title,
                     agent_type: row.agent_type,
+                    display_mode: row.display_mode,
                     status: row.status,
                     attention: row.attention,
                     is_turn_running: is_session_running
@@ -1140,7 +1156,7 @@ impl<'connection> AgentSessionService<'connection> {
         Ok(())
     }
 
-    fn find_project_session(
+    pub(super) fn find_project_session(
         &self,
         project_id: i64,
         session_id: i64,
@@ -2625,7 +2641,7 @@ pub(super) fn worktree_create_error(error: impl std::fmt::Display) -> CommandErr
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-fn inactive_terminal_error(error: String) -> CommandError {
+pub(super) fn inactive_terminal_error(error: String) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "当前 Session 没有活跃终端。",
@@ -4535,6 +4551,7 @@ mod tests {
             working_dir: "/tmp/redwhisk".to_string(),
             command_snapshot: String::new(),
             prompt_snapshot: String::new(),
+            display_mode: "json".to_string(),
             workspace_mode: WorkspaceMode::CurrentBranch,
             target_branch: None,
             workspace_branch: None,
@@ -4566,6 +4583,7 @@ mod tests {
             working_dir: worktree_path.to_string(),
             command_snapshot: "codex".to_string(),
             prompt_snapshot: String::new(),
+            display_mode: "json".to_string(),
             workspace_mode: WorkspaceMode::Worktree,
             target_branch: Some("devlop".to_string()),
             workspace_branch: Some("issue-16".to_string()),

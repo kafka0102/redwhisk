@@ -288,6 +288,7 @@ function session(
 ): AgentSessionListItem {
   return {
     agentType: "codex",
+    displayMode: "json",
     attention: "none",
     closedAt: null,
     issueId: null,

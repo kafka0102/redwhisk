@@ -4667,6 +4667,7 @@ mod tests {
             working_dir,
             command_snapshot: String::new(),
             prompt_snapshot: String::new(),
+            display_mode: "json".to_string(),
             workspace_mode: WorkspaceMode::CurrentBranch,
             target_branch: None,
             workspace_branch: None,

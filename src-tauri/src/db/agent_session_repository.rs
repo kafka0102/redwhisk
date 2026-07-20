@@ -20,6 +20,7 @@ pub struct AgentSessionListRow {
     pub agent_profile_name: String,
     pub title: Option<String>,
     pub agent_type: AgentType,
+    pub display_mode: String,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
     pub is_turn_running: bool,
@@ -54,7 +55,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
                  FROM agent_sessions
                  WHERE id = ?1 AND del = 0",
                 params![id],
@@ -66,7 +67,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_issue_id(&self, issue_id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
                  FROM agent_sessions
                  WHERE issue_id = ?1 AND del = 0",
                 params![issue_id],
@@ -81,7 +82,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
                  FROM agent_sessions
                  WHERE issue_id = ?1
                  ORDER BY id DESC
@@ -103,7 +104,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
                  FROM agent_sessions
                  WHERE issue_id = ?1 AND workspace_mode = 'worktree'
                  ORDER BY id DESC
@@ -128,7 +129,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
                  FROM agent_sessions
                  WHERE project_id = ?1 AND workspace_path = ?2 AND del = 0
                  ORDER BY started_at DESC, id DESC
@@ -175,7 +176,8 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.turn_ended_at,
                 agent_sessions.turn_started_at,
                 agent_sessions.processing_ms,
-                agent_sessions.last_output_at
+                agent_sessions.last_output_at,
+                agent_sessions.display_mode
              FROM agent_sessions
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
@@ -288,7 +290,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         project_id: i64,
     ) -> rusqlite::Result<Vec<AgentSessionRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
              FROM agent_sessions
              WHERE project_id = ?1 AND status = 'running' AND del = 0
              ORDER BY last_active_at DESC, started_at DESC, id DESC",
@@ -326,6 +328,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         worktree_root_path: Option<&str>,
         worktree_setup_command: Option<&str>,
         log_path: &str,
+        display_mode: &str,
         started_at: i64,
     ) -> rusqlite::Result<AgentSessionRecord> {
         let number: i64 = transaction.query_row(
@@ -338,7 +341,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                project_id,
                number,
                issue_id,
-                agent_profile_id,
+               agent_profile_id,
                workflow_skill_name,
                status,
                attention,
@@ -354,10 +357,11 @@ impl<'connection> AgentSessionRepository<'connection> {
                worktree_root_path,
                worktree_setup_command,
                log_path,
+               display_mode,
                list_inserted_at,
                last_active_at,
                started_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, 'running', 'none', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?19)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, 'running', 'none', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?20)",
             params![
                 project_id,
                 number,
@@ -376,6 +380,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 worktree_root_path,
                 worktree_setup_command,
                 log_path,
+                display_mode,
                 started_at,
                 started_at
             ],
@@ -400,6 +405,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         worktree_root_path: Option<&str>,
         worktree_setup_command: Option<&str>,
         log_path: &str,
+        display_mode: &str,
         started_at: i64,
     ) -> rusqlite::Result<AgentSessionRecord> {
         let origin_branch = target_branch;
@@ -430,10 +436,11 @@ impl<'connection> AgentSessionRepository<'connection> {
                worktree_root_path,
                worktree_setup_command,
                log_path,
+               display_mode,
                list_inserted_at,
                last_active_at,
                started_at
-             ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?18)",
+             ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?19)",
             params![
                 project_id,
                 number,
@@ -451,6 +458,7 @@ impl<'connection> AgentSessionRepository<'connection> {
                 worktree_root_path,
                 worktree_setup_command,
                 log_path,
+                display_mode,
                 started_at,
                 started_at
             ],
@@ -805,7 +813,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<AgentSessionRecord>> {
     connection
         .query_row(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number
+            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, codex_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
              FROM agent_sessions
              WHERE id = ?1 AND del = 0",
             params![id],
@@ -828,6 +836,7 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSess
         working_dir: row.get(9)?,
         command_snapshot: row.get(10)?,
         prompt_snapshot: row.get(11)?,
+        display_mode: row.get(26)?,
         workspace_mode: workspace_mode_from_str(&row.get::<_, String>(12)?)?,
         target_branch: row.get(13)?,
         workspace_branch: row.get(14)?,
@@ -863,6 +872,7 @@ fn agent_session_list_row_from_row(
         agent_profile_name: row.get(8)?,
         title: row.get(9)?,
         agent_type: agent_type_from_str(&row.get::<_, String>(10)?)?,
+        display_mode: row.get(31)?,
         status: agent_session_status_from_str(&row.get::<_, String>(11)?)?,
         attention: agent_session_attention_from_str(&row.get::<_, String>(12)?)?,
         is_turn_running: row.get::<_, i64>(13)? != 0,
@@ -1155,8 +1165,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/s1.log",
-                    1_000,
-                )?;
+                    "json",
+                                        1_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1183,8 +1194,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/s2.log",
-                    2_000,
-                )?;
+                    "json",
+                                        2_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1220,8 +1232,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/sa1.log",
-                    1_000,
-                )?;
+                    "json",
+                                        1_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1245,8 +1258,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/sa2.log",
-                    2_000,
-                )?;
+                    "json",
+                                        2_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1282,8 +1296,9 @@ mod tests {
                         None,
                         None,
                         log,
-                        1_000,
-                    )?;
+                        "json",
+                                                1_000,
+            )?;
                     transaction.commit()?;
                     Ok(session)
                 })
@@ -1324,8 +1339,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/s1.log",
-                    1_000,
-                )?;
+                    "json",
+                                        1_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1349,8 +1365,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/s2.log",
-                    2_000,
-                )?;
+                    "json",
+                                        2_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1376,8 +1393,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/s3.log",
-                    3_000,
-                )?;
+                    "json",
+                                        3_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1423,8 +1441,9 @@ mod tests {
                     None,
                     None,
                     "/tmp/s.log",
-                    1_000,
-                )?;
+                    "json",
+                                        1_000,
+            )?;
                 transaction.commit()?;
                 Ok(session)
             })
