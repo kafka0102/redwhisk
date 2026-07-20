@@ -16,6 +16,11 @@ import {
   type StartStructuredAgentSessionResult,
 } from "../agent-session-commands";
 import {
+  filterLaunchVisibleAgentProfiles,
+  pickDefaultLaunchSelectableProfile,
+  resolveAgentProfileLaunchEligibility,
+} from "../agent-launch-eligibility";
+import {
   listAgentProfiles,
   type AgentProfileRecord,
 } from "../../settings/settings-commands";
@@ -70,12 +75,17 @@ export function TemporarySessionDialog({
           return;
         }
 
-        const mergedProfiles = [
+        // ADR-0020 决策 4：会话入口隐藏 enabled=false 的 profile（前端过滤）。
+        // 决策 5：opencode/grok 保留在下拉中，由 SelectItem disabled + 标注置灰。
+        const mergedProfiles = filterLaunchVisibleAgentProfiles([
           ...projectResponse.profiles,
           ...globalResponse.profiles,
-        ];
+        ]);
         setProfiles(mergedProfiles);
-        setSelectedProfileId(mergedProfiles[0]?.id ?? null);
+        // 默认选中首个「可选」profile，避免默认落到 opencode/grok 不可选项。
+        const defaultProfile =
+          pickDefaultLaunchSelectableProfile(mergedProfiles);
+        setSelectedProfileId(defaultProfile?.id ?? null);
 
         if (mergedProfiles.length === 0) {
           setStatusMessage(messages.agentsFeature.noProfilesForAgentType);
@@ -247,10 +257,18 @@ export function TemporarySessionDialog({
                 {messages.issues.agentProfile}
               </Label>
               <Select
-                items={profiles.map((profile) => ({
-                  value: profile.id,
-                  label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}`,
-                }))}
+                items={profiles.map((profile) => {
+                  const eligibility =
+                    resolveAgentProfileLaunchEligibility(profile);
+                  return {
+                    value: profile.id,
+                    label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}${
+                      eligibility.selectable
+                        ? ""
+                        : ` ${messages.agentsFeature.unsupportedLaunch}`
+                    }`,
+                  };
+                })}
                 value={selectedProfileId}
                 onValueChange={(value) => {
                   setSelectedProfileId(
@@ -267,12 +285,25 @@ export function TemporarySessionDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {profiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.name}
-                      {profile.scope === "project" ? " (Project)" : " (Global)"}
-                    </SelectItem>
-                  ))}
+                  {profiles.map((profile) => {
+                    const eligibility =
+                      resolveAgentProfileLaunchEligibility(profile);
+                    return (
+                      <SelectItem
+                        key={profile.id}
+                        disabled={!eligibility.selectable}
+                        value={profile.id}
+                      >
+                        {profile.name}
+                        {profile.scope === "project"
+                          ? " (Project)"
+                          : " (Global)"}
+                        {!eligibility.selectable
+                          ? ` ${messages.agentsFeature.unsupportedLaunch}`
+                          : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

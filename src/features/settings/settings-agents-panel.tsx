@@ -1,3 +1,5 @@
+import { Info } from "lucide-react";
+
 import { Button, Empty, EmptyTitle } from "@/components/ui";
 import {
   Table,
@@ -6,9 +8,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@/components/ui";
 import { type AgentProfileRecord } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
+import { useAgentCommandArgs } from "./use-agent-command-args";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -49,6 +55,9 @@ export function AgentsSettingsPanel({
   onProfileSaved,
 }: AgentsSettingsPanelProps) {
   const { messages, t } = useI18n();
+  // ADR-0020 决策 8：批量获取可见 profiles 的启动参数；codex/claude 返回非空、
+  // opencode/grok 当前为空。仅非空时命令列渲染「i」图标。
+  const { argsByProfileId } = useAgentCommandArgs(profiles);
 
   return (
     <>
@@ -74,14 +83,22 @@ export function AgentsSettingsPanel({
         <div className="min-w-0 overflow-x-auto rounded-[var(--radius-card)] border border-border bg-card">
           <Table
             aria-label={messages.settings.configuredAgents}
-            className="min-w-[820px] [&_td]:text-sm [&_th]:text-sm"
+            className="min-w-[960px] [&_td]:text-sm [&_th]:text-sm"
           >
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-14">{messages.settings.type}</TableHead>
-                <TableHead>{messages.settings.name}</TableHead>
+                <TableHead className="w-[300px]">
+                  {messages.settings.name}
+                </TableHead>
                 <TableHead className="w-[22%]">
                   {messages.settings.command}
+                </TableHead>
+                <TableHead className="w-24">
+                  {messages.settings.displayMode}
+                </TableHead>
+                <TableHead className="w-20">
+                  {messages.settings.enabled}
                 </TableHead>
                 <TableHead className="w-24">
                   {messages.settings.scope}
@@ -101,9 +118,21 @@ export function AgentsSettingsPanel({
                   });
                   onAddFormChange(null);
                 };
+                const commandArgs = argsByProfileId.get(profile.id) ?? [];
+                const hasCommandArgs = commandArgs.length > 0;
+                const displayModeLabel =
+                  profile.displayMode === "tui"
+                    ? messages.settings.displayModeTui
+                    : messages.settings.displayModeJson;
+                const enabledLabel = profile.enabled
+                  ? messages.settings.enabledYes
+                  : messages.settings.enabledNo;
 
                 return (
-                  <TableRow key={profile.id}>
+                  <TableRow
+                    key={profile.id}
+                    className={profile.enabled ? undefined : "bg-muted/50"}
+                  >
                     <TableCell>
                       <img
                         alt={t("agentsFeature.agentTypeAlt", {
@@ -113,7 +142,7 @@ export function AgentsSettingsPanel({
                         src={getAgentLogoSrc(profile.agentType)}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-w-[300px]">
                       <Button
                         type="button"
                         variant="ghost"
@@ -125,10 +154,42 @@ export function AgentsSettingsPanel({
                       </Button>
                     </TableCell>
                     <TableCell className="overflow-hidden font-mono text-muted-foreground">
-                      <span className="block truncate">
-                        {formatCommandName(profile.command)}
+                      <span className="flex items-center gap-1">
+                        <span className="min-w-0 truncate">
+                          {formatCommandName(profile.command)}
+                        </span>
+                        {hasCommandArgs ? (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label={
+                                    messages.settings.commandArgsTooltip
+                                  }
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Info
+                                    aria-hidden="true"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                </button>
+                              }
+                            />
+                            <TooltipContent
+                              side="top"
+                              aria-label={messages.settings.commandArgsTooltip}
+                            >
+                              <span className="font-mono whitespace-pre-wrap break-all">
+                                {commandArgs.join(" ")}
+                              </span>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
                       </span>
                     </TableCell>
+                    <TableCell>{displayModeLabel}</TableCell>
+                    <TableCell>{enabledLabel}</TableCell>
                     <TableCell>
                       {profile.scope === "global"
                         ? messages.settings.globalScope

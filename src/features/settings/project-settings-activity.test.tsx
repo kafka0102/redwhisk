@@ -11,6 +11,7 @@ import {
   listAgentSkills,
   listProjectLabels,
   listSavedAgentSkills,
+  previewAgentCommandArgs,
   saveAgentProfile,
   saveProjectLabel,
   testAgentCommand,
@@ -44,6 +45,7 @@ vi.mock("./settings-commands", async (importOriginal) => {
     listAgentSkills: vi.fn(),
     listProjectLabels: vi.fn(),
     listSavedAgentSkills: vi.fn(),
+    previewAgentCommandArgs: vi.fn(),
     saveAgentProfile: vi.fn(),
     saveProjectLabel: vi.fn(),
   };
@@ -100,6 +102,7 @@ const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const saveProjectLabelMock = vi.mocked(saveProjectLabel);
+const previewAgentCommandArgsMock = vi.mocked(previewAgentCommandArgs);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
 const toastSuccessMock = vi.mocked(toast.success);
@@ -120,6 +123,8 @@ const projectProfile: AgentProfileRecord = {
   defaultSkill: "",
   promptTemplate: "",
   del: 0,
+  displayMode: "json",
+  enabled: true,
 };
 
 const globalProfile: AgentProfileRecord = {
@@ -134,6 +139,8 @@ const globalProfile: AgentProfileRecord = {
   defaultSkill: "",
   promptTemplate: "",
   del: 0,
+  displayMode: "json",
+  enabled: true,
 };
 
 const legacyPromptProfile: AgentProfileRecord = {
@@ -176,6 +183,7 @@ describe("ProjectSettingsActivity", () => {
     listProjectLabelsMock.mockReset();
     saveAgentProfileMock.mockReset();
     saveProjectLabelMock.mockReset();
+    previewAgentCommandArgsMock.mockReset();
     updateProjectSettingsMock.mockReset();
     validateProjectRepoPathMock.mockReset();
     toastSuccessMock.mockReset();
@@ -189,6 +197,11 @@ describe("ProjectSettingsActivity", () => {
     });
     testAgentCommandMock.mockResolvedValue({
       command: "/usr/local/bin/codex",
+    });
+    // ADR-0020 决策 8：默认给 codex/claude 非空参数，opencode/grok 空参数。
+    previewAgentCommandArgsMock.mockImplementation(async ({ agentType }) => {
+      if (agentType === "opencode" || agentType === "grok") return [];
+      return ["--dangerously-skip", "--json"];
     });
     deleteAgentProfileMock.mockResolvedValue(undefined);
     deleteProjectLabelMock.mockResolvedValue(undefined);
@@ -853,6 +866,151 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders display mode and enabled columns with values per profile", async () => {
+    const user = userEvent.setup();
+    const tuiDisabledProfile: AgentProfileRecord = {
+      ...globalProfile,
+      id: 50,
+      name: "OpenCode TUI",
+      agentType: "opencode",
+      command: "opencode",
+      displayMode: "tui",
+      enabled: false,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [projectProfile] };
+      return { profiles: [tuiDisabledProfile] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    expect(
+      screen.getByRole("columnheader", { name: "Display mode" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Enabled" }),
+    ).toBeInTheDocument();
+
+    const cells = screen.getAllByRole("cell", { name: "JSON" });
+    expect(cells).toHaveLength(1);
+    expect(screen.getByRole("cell", { name: "TUI" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Yes" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "No" })).toBeInTheDocument();
+  });
+
+  it("shows command args info icon for codex/claude and hides for opencode/grok", async () => {
+    const user = userEvent.setup();
+    const opencodeProfile: AgentProfileRecord = {
+      ...globalProfile,
+      id: 60,
+      name: "OpenCode",
+      agentType: "opencode",
+      command: "opencode",
+      displayMode: "tui",
+      enabled: true,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [projectProfile] };
+      return { profiles: [opencodeProfile] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    // 等待 previewAgentCommandArgs mock 解析完成
+    await waitFor(() => expect(previewAgentCommandArgsMock).toHaveBeenCalled());
+
+    expect(
+      screen.getAllByRole("button", { name: "Launch arguments" }),
+    ).toHaveLength(1);
+    const codexRow = screen
+      .getByRole("button", { name: "Edit Project Codex" })
+      .closest("tr");
+    expect(
+      within(codexRow ?? document.body).getByRole("button", {
+        name: "Launch arguments",
+      }),
+    ).toBeInTheDocument();
+
+    await user.hover(screen.getByRole("button", { name: "Launch arguments" }));
+    expect(
+      await screen.findByText("--dangerously-skip --json"),
+    ).toBeInTheDocument();
+  });
+
+  it("places disabled profiles last while keeping id ascending inside each group", async () => {
+    const user = userEvent.setup();
+    const enabledHigher: AgentProfileRecord = {
+      ...projectProfile,
+      id: 30,
+      name: "Enabled Higher",
+      enabled: true,
+    };
+    const disabledLower: AgentProfileRecord = {
+      ...globalProfile,
+      id: 5,
+      name: "Disabled Lower",
+      enabled: false,
+    };
+    const disabledHigher: AgentProfileRecord = {
+      ...globalProfile,
+      id: 40,
+      name: "Disabled Higher",
+      enabled: false,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [enabledHigher] };
+      return { profiles: [disabledLower, disabledHigher] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    const rows = within(
+      screen.getByRole("table", { name: "Configured agents" }),
+    )
+      .getAllByRole("row")
+      .slice(1);
+    expect(
+      rows.map((row) => {
+        const buttons = row.querySelectorAll("button");
+        // Edit 按钮的 aria-label 形如 "Edit <name>"
+        const editButton = Array.from(buttons).find((button) =>
+          button.getAttribute("aria-label")?.startsWith("Edit "),
+        );
+        return editButton?.getAttribute("aria-label")?.replace(/^Edit /, "");
+      }),
+    ).toEqual(["Enabled Higher", "Disabled Lower", "Disabled Higher"]);
+
+    // 禁用行带灰底（bg-muted/50）
+    expect(rows[0]).not.toHaveClass("bg-muted/50");
+    expect(rows[1]).toHaveClass("bg-muted/50");
+    expect(rows[2]).toHaveClass("bg-muted/50");
+  });
+
   it("confirms before deleting an agent profile from the table", async () => {
     const user = userEvent.setup();
 
@@ -1216,7 +1374,9 @@ describe("ProjectSettingsActivity", () => {
     });
     saveAgentProfileMock.mockResolvedValue({
       ...legacyPromptProfile,
-      name: "Legacy Prompt Codex Updated",
+      // ADR-0020 决策 10：name 上限 20 字符（ticket 05 新增校验），
+      // 测试名也需收敛在限内。
+      name: "Legacy Codex Updated",
     });
 
     render(
@@ -1239,7 +1399,7 @@ describe("ProjectSettingsActivity", () => {
     await user.clear(screen.getByLabelText("Agent profile name"));
     await user.type(
       screen.getByLabelText("Agent profile name"),
-      "Legacy Prompt Codex Updated",
+      "Legacy Codex Updated",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 

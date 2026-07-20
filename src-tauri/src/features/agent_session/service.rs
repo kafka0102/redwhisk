@@ -1481,6 +1481,8 @@ impl AgentSessionService<'_> {
                 let requested_agent_type_literal = match requested_agent_type {
                     AgentType::Codex => "codex",
                     AgentType::Claude => "claude",
+                    AgentType::OpenCode => "opencode",
+                    AgentType::Grok => "grok",
                 };
                 return Err(CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
@@ -4596,6 +4598,8 @@ mod tests {
             default_skill: String::new(),
             prompt_template: String::new(),
             del: 0,
+            display_mode: String::from("json"),
+            enabled: true,
         }
     }
 

@@ -19,7 +19,7 @@ impl<'connection> AgentProfileRepository<'connection> {
         match scope {
             AgentScope::Global => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
                      FROM agent_profiles
                      WHERE scope = 'global' AND del = 0
                      ORDER BY id ASC",
@@ -31,7 +31,7 @@ impl<'connection> AgentProfileRepository<'connection> {
             }
             AgentScope::Project => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
                      FROM agent_profiles
                      WHERE scope = 'project' AND project_id = ?1 AND del = 0
                      ORDER BY id ASC",
@@ -47,7 +47,7 @@ impl<'connection> AgentProfileRepository<'connection> {
     pub fn find_profile_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentProfileRow>> {
         self.connection
             .query_row(
-                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
+                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
                  FROM agent_profiles
                  WHERE id = ?1",
                 params![id],
@@ -68,10 +68,13 @@ impl<'connection> AgentProfileRepository<'connection> {
         dangerous: bool,
         default_skill: &str,
         prompt_template: &str,
+        display_mode: &str,
+        enabled: bool,
     ) -> rusqlite::Result<AgentProfileRow> {
         let agent_type_str = agent_type_to_str(&agent_type);
         let scope_str = scope_to_str(scope);
         let dangerous_int = bool_to_sqlite(dangerous);
+        let enabled_int = bool_to_sqlite(enabled);
 
         match id {
             Some(id) => {
@@ -86,8 +89,10 @@ impl<'connection> AgentProfileRepository<'connection> {
                          dangerous = ?7,
                          default_skill = ?8,
                          prompt_template = ?9,
-                         del = 0
-                     WHERE id = ?10",
+                         del = 0,
+                         display_mode = ?10,
+                         enabled = ?11
+                     WHERE id = ?12",
                     params![
                         name,
                         agent_type_str,
@@ -98,6 +103,8 @@ impl<'connection> AgentProfileRepository<'connection> {
                         dangerous_int,
                         default_skill,
                         prompt_template,
+                        display_mode,
+                        enabled_int,
                         id
                     ],
                 )?;
@@ -108,8 +115,8 @@ impl<'connection> AgentProfileRepository<'connection> {
             None => {
                 self.connection.execute(
                     "INSERT INTO agent_profiles (
-                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)",
+                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11)",
                     params![
                         name,
                         agent_type_str,
@@ -119,7 +126,9 @@ impl<'connection> AgentProfileRepository<'connection> {
                         mode,
                         dangerous_int,
                         default_skill,
-                        prompt_template
+                        prompt_template,
+                        display_mode,
+                        enabled_int
                     ],
                 )?;
 
@@ -138,6 +147,19 @@ impl<'connection> AgentProfileRepository<'connection> {
 
         Ok(affected > 0)
     }
+
+    /// 按 `agent_type` 是否存在任意记录（含软删 `del=1`），用于内置 agent 播种幂等判定。
+    ///
+    /// 见 ADR-0020：库中已有该类型记录（含软删）则不再自动播种，软删后重启不冒回。
+    pub fn exists_profile_by_agent_type(&self, agent_type: AgentType) -> rusqlite::Result<bool> {
+        let agent_type_str = agent_type_to_str(&agent_type);
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM agent_profiles WHERE agent_type = ?1",
+            params![agent_type_str],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,6 +175,8 @@ pub struct AgentProfileRow {
     pub default_skill: String,
     pub prompt_template: String,
     pub del: i64,
+    pub display_mode: String,
+    pub enabled: bool,
 }
 
 fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProfileRow> {
@@ -168,6 +192,8 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
         default_skill: row.get(8)?,
         prompt_template: row.get(9)?,
         del: row.get(10)?,
+        display_mode: row.get(11)?,
+        enabled: sqlite_to_bool(row.get(12)?),
     })
 }
 
@@ -175,6 +201,8 @@ fn agent_type_to_str(agent_type: &AgentType) -> &'static str {
     match agent_type {
         AgentType::Codex => "codex",
         AgentType::Claude => "claude",
+        AgentType::OpenCode => "opencode",
+        AgentType::Grok => "grok",
     }
 }
 
@@ -182,6 +210,8 @@ fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
     match value {
         "codex" => Ok(AgentType::Codex),
         "claude" => Ok(AgentType::Claude),
+        "opencode" => Ok(AgentType::OpenCode),
+        "grok" => Ok(AgentType::Grok),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -212,3 +242,8 @@ fn bool_to_sqlite(value: bool) -> i64 {
 fn sqlite_to_bool(value: i64) -> bool {
     value != 0
 }
+
+
+#[cfg(test)]
+#[path = "agent_profile_repository_tests.rs"]
+mod tests;

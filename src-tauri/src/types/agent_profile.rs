@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 pub enum AgentType {
     Codex,
     Claude,
+    #[serde(rename = "opencode")]
+    OpenCode,
+    Grok,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +31,8 @@ pub struct AgentProfileRecord {
     pub default_skill: String,
     pub prompt_template: String,
     pub del: i64,
+    pub display_mode: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -43,6 +48,8 @@ pub struct SaveAgentProfileInput {
     pub dangerous: bool,
     pub default_skill: String,
     pub prompt_template: String,
+    pub display_mode: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -74,4 +81,14 @@ pub struct ListAgentProfilesInput {
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAgentProfileInput {
     pub id: i64,
+}
+
+/// 参数预览入参（ADR-0020）：依据 profile 的启动相关字段计算命令行参数。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewAgentCommandArgsInput {
+    pub agent_type: AgentType,
+    pub command: String,
+    pub mode: String,
+    pub dangerous: bool,
 }

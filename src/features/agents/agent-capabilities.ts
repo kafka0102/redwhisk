@@ -47,6 +47,23 @@ const AGENT_CAPABILITIES: Record<AgentType, AgentCapabilities> = {
     supportsReasoningEffort: false,
     supportsModes: false,
   },
+  // ADR-0020：opencode/grok 本期仅登记展示，不接入会话执行（无 JSON 解析器）。
+  // 能力全部置 false，确保 composer 不会为它们渲染模型/思考/模式控件。
+  // 待后续 ticket 接入解析器时按实际能力补齐。
+  opencode: {
+    modelTypeLabel: "OpenCode",
+    canShowModel: false,
+    supportsModelSwitching: false,
+    supportsReasoningEffort: false,
+    supportsModes: false,
+  },
+  grok: {
+    modelTypeLabel: "Grok",
+    canShowModel: false,
+    supportsModelSwitching: false,
+    supportsReasoningEffort: false,
+    supportsModes: false,
+  },
 };
 
 const DEFAULT_CAPABILITIES: AgentCapabilities = AGENT_CAPABILITIES.codex;

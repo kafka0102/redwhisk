@@ -138,6 +138,9 @@ pub fn plan_provider_start(
             };
             Ok(ProviderStartPlan::Claude { backfill })
         }
+        AgentType::OpenCode | AgentType::Grok => Err(AgentSessionError::Other(
+            "暂不支持启动 OpenCode / Grok 类型的 Agent 会话。".to_string(),
+        )),
     }
 }
 

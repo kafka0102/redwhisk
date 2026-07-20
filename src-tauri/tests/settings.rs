@@ -46,6 +46,9 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
             "default_skill",
             "prompt_template",
             "del",
+            // ADR-0020：display_mode/enabled 列由 migration 0047 引入。
+            "display_mode",
+            "enabled",
         ],
     );
 
@@ -182,6 +185,8 @@ fn save_global_agent_profile_resolves_command() {
             dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved agent profile");
 
@@ -223,6 +228,8 @@ fn settings_save_global_claude_agent_profile_persists_and_lists_profile() {
             dangerous: false,
             default_skill: "review".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved claude agent profile");
 
@@ -260,6 +267,8 @@ fn delete_agent_profile_marks_profile_deleted_and_excludes_from_lists() {
             dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved agent profile");
 
@@ -375,6 +384,8 @@ fn settings_migrations_upgrade_existing_codex_only_profiles_schema_for_claude_pr
             dangerous: false,
             default_skill: "review".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved claude profile after schema upgrade");
 
@@ -430,6 +441,8 @@ fn save_agent_profile_rejects_unavailable_command_without_persisting() {
             dangerous: true,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect_err("should fail without executable command");
 
@@ -483,6 +496,8 @@ fn project_scope_agent_only_visible_to_target_project() {
             dangerous: false,
             default_skill: "".to_string(),
             prompt_template: "".to_string(),
+            display_mode: "json".to_string(),
+            enabled: true,
         })
         .expect("saved project profile");
 
@@ -627,8 +642,15 @@ impl StubCommandDetector {
 }
 
 impl AgentCommandDetector for StubCommandDetector {
-    fn detect_codex_command(&self) -> Result<String, String> {
-        self.detect_result.clone()
+    fn detect_command(&self, command_name: &str) -> Result<String, String> {
+        if command_name == "codex" {
+            return self.detect_result.clone();
+        }
+        // 其他命令默认按 test_results 解析；找不到时回退成功（原样返回）以兼容未来扩展。
+        self.test_results
+            .get(command_name)
+            .cloned()
+            .unwrap_or_else(|| Ok(command_name.to_string()))
     }
 
     fn test_command(&self, command: &str) -> Result<String, String> {

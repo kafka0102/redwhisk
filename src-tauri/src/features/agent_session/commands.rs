@@ -716,6 +716,8 @@ pub async fn list_agent_models(
             let (reason, message) = match descriptor.agent_type() {
                 AgentType::Codex => ("codexConfigReadFailed", "读取 Codex 配置失败。"),
                 AgentType::Claude => ("claudeConfigReadFailed", "读取 Claude 配置失败。"),
+                AgentType::OpenCode => ("opencodeConfigReadFailed", "读取 OpenCode 配置失败。"),
+                AgentType::Grok => ("grokConfigReadFailed", "读取 Grok 配置失败。"),
             };
             CommandError::new(CommandErrorCode::AgentSessionPersistenceFailed, message)
                 .with_reason(reason)

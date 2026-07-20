@@ -11,6 +11,10 @@ export type AgentSkillScope = "project" | "global";
 export type AgentSkillRefreshStatus = "idle" | "loading" | "ready" | "failed";
 export type ProjectLabelScope = "project" | "global";
 
+// ADR-0020：displayMode（json/tui）默认 json；enabled（默认 true）。
+// 与 Rust `AgentProfileRecord` 字段一一对应（camelCase 跨边界）。
+export type AgentDisplayMode = "json" | "tui";
+
 export interface AgentProfileRecord {
   id: number;
   name: string;
@@ -23,6 +27,8 @@ export interface AgentProfileRecord {
   defaultSkill: string;
   promptTemplate: string;
   del: number;
+  displayMode: AgentDisplayMode;
+  enabled: boolean;
 }
 
 export interface ListAgentProfilesInput {
@@ -41,6 +47,16 @@ export interface SaveAgentProfileInput {
   dangerous: boolean;
   defaultSkill: string;
   promptTemplate: string;
+  displayMode: AgentDisplayMode;
+  enabled: boolean;
+}
+
+// ADR-0020：参数预览入参。与 Rust `PreviewAgentCommandArgsInput` 一一对应（camelCase）。
+export interface PreviewAgentCommandArgsInput {
+  agentType: AgentType;
+  command: string;
+  mode: string;
+  dangerous: boolean;
 }
 
 export interface AgentProfileListResponse {
@@ -214,6 +230,16 @@ export function saveAgentProfile(
   input: SaveAgentProfileInput,
 ): Promise<AgentProfileRecord> {
   return invokeCommand<AgentProfileRecord>("save_agent_profile", {
+    input,
+  });
+}
+
+// ADR-0020：预览某 profile 启动时附带的命令行参数（不含命令本身）。
+// codex/claude 在 dangerous 下返回非空参数；opencode/grok 当前为空（占位 descriptor）。
+export function previewAgentCommandArgs(
+  input: PreviewAgentCommandArgsInput,
+): Promise<string[]> {
+  return invokeCommand<string[]>("preview_agent_command_args", {
     input,
   });
 }

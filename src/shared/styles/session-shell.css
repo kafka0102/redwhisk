@@ -241,6 +241,24 @@
   outline: none;
 }
 
+/* ADR-0020：opencode/grok 在会话入口置灰不可选（disabled button）。 */
+.agents-session-toolbar__menu-item:disabled,
+.agents-session-toolbar__menu-item[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agents-session-toolbar__menu-item:disabled:hover,
+.agents-session-toolbar__menu-item[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+.agents-session-toolbar__menu-item-note {
+  margin-left: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
 .agents-session-toolbar__menu-item--danger {
   color: var(--color-danger);
 }

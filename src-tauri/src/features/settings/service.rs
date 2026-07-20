@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::agent::command_detector::{AgentCommandDetector, ShellAgentCommandDetector};
+use crate::agent::provider_descriptor::descriptor_for;
 use crate::db::agent_profile_repository::AgentProfileRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
@@ -8,8 +9,9 @@ use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
 use crate::db::saved_agent_skill_repository::SavedAgentSkillRepository;
 use crate::types::agent_profile::{
-    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope,
-    DeleteAgentProfileInput, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
+    AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope, AgentType,
+    DeleteAgentProfileInput, ListAgentProfilesInput, PreviewAgentCommandArgsInput,
+    SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::agent_skill::AgentSkillScope;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -55,6 +57,73 @@ where
             .detect_codex_command()
             .map(|command| AgentCommandCheckResult { command })
             .map_err(agent_command_error)
+    }
+
+    /// 启动时异步检测 + 幂等播种四内置 agent（ADR-0020）。
+    ///
+    /// 按 `[codex, claude, opencode, grok]` 顺序逐个探测命令；探测成功且库中**无任何
+    /// 记录（含软删 `del=1`）**则按内置默认值表插入一条 global profile。探测失败（未装）
+    /// 或已存在记录则静默跳过。单条 profile 写入失败会记 stderr 但不阻断其余 agent 播种。
+    pub fn seed_builtin_agents(&self) -> Result<(), CommandError> {
+        for agent_type in BUILTIN_AGENT_SEED_ORDER {
+            let command_name = builtin_agent_command_name(&agent_type);
+            let detected_command = match self.detector.detect_command(command_name) {
+                Ok(command) => command,
+                Err(_) => continue,
+            };
+
+            let already_seeded = self
+                .repository
+                .exists_profile_by_agent_type(agent_type.clone())
+                .map_err(settings_database_error)?;
+            if already_seeded {
+                continue;
+            }
+
+            let default_input = default_builtin_profile_input(agent_type.clone(), &detected_command);
+            if let Err(error) = self.repository.save_profile(
+                default_input.id,
+                &default_input.name,
+                default_input.agent_type,
+                &default_input.command,
+                &default_input.scope,
+                default_input.project_id,
+                &default_input.mode,
+                default_input.dangerous,
+                default_input.default_skill.trim(),
+                default_input.prompt_template.trim(),
+                &default_input.display_mode,
+                default_input.enabled,
+            ) {
+                // 单条失败不阻断其余 agent 播种；上层 setup 钩子只关心整体是否 OK。
+                eprintln!(
+                    "[settings] 内置 agent {agent_type:?} 播种失败：{error}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// 预览给定 profile 启动 PTY 时实际带上的 CLI 参数（ADR-0020）。
+    ///
+    /// 复用 `provider_descriptor::descriptor_for(agent_type).build_command_snapshot_with_bypass`
+    /// 计算命令行，再剥掉命令本身只返回参数部分。`dangerous=false` 时不补 bypass 参数；
+    /// opencode/grok 的占位 descriptor 不加任何参数，返回空 Vec。
+    pub fn preview_agent_command_args(
+        &self,
+        input: PreviewAgentCommandArgsInput,
+    ) -> Result<Vec<String>, CommandError> {
+        let command = validate_command(&input.command)?;
+        let descriptor = descriptor_for(&input.agent_type);
+        let command_line = if input.dangerous {
+            descriptor.build_command_snapshot_with_bypass(&command)
+        } else {
+            command.trim().to_string()
+        };
+
+        let mut parts = command_line.split_whitespace();
+        let _ = parts.next();
+        Ok(parts.map(String::from).collect())
     }
 
     pub fn test_agent_command(
@@ -151,6 +220,8 @@ where
                 input.dangerous,
                 input.default_skill.trim(),
                 input.prompt_template.trim(),
+                &input.display_mode,
+                input.enabled,
             )
             .map_err(settings_database_error)?;
 
@@ -571,6 +642,46 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
         )
         .delete_saved_agent_skill(input)
     }
+
+    /// 启动时播种内置 agent（ADR-0020）；开库 + 迁移 + 构造 service 后调用。
+    /// 供 `lib.rs` 的 setup 钩子在 `spawn_blocking` 中调用，失败仅记日志不阻断启动。
+    pub fn seed_builtin_agents_in_data_dir(
+        data_dir: impl AsRef<Path>,
+    ) -> Result<(), CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            saved_agent_skill_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .seed_builtin_agents()
+    }
+
+    /// 参数预览（ADR-0020）；无状态查询，开只读连接即可，沿用现有 `_in_data_dir` 模式。
+    pub fn preview_agent_command_args_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: PreviewAgentCommandArgsInput,
+    ) -> Result<Vec<String>, CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            saved_agent_skill_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .preview_agent_command_args(input)
+    }
 }
 
 fn open_settings_database(
@@ -607,6 +718,8 @@ fn agent_profile_record_from_row(
         default_skill: row.default_skill,
         prompt_template: row.prompt_template,
         del: row.del,
+        display_mode: row.display_mode,
+        enabled: row.enabled,
     }
 }
 
@@ -740,279 +853,51 @@ fn settings_database_error(error: rusqlite::Error) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agent::command_detector::AgentCommandDetector;
-    use crate::db::connection::DatabaseConfig;
-    use crate::db::migrations::MigrationRunner;
-    use crate::types::agent_profile::{AgentScope, AgentType, SaveAgentProfileInput};
-    use rusqlite::Connection;
+/// 内置 agent 播种顺序与默认值（ADR-0020 决策清单 #1 与「内置 Agent 默认值表」）。
+const BUILTIN_AGENT_SEED_ORDER: [AgentType; 4] = [
+    AgentType::Codex,
+    AgentType::Claude,
+    AgentType::OpenCode,
+    AgentType::Grok,
+];
 
-    #[derive(Default)]
-    struct TestDetector;
-
-    impl AgentCommandDetector for TestDetector {
-        fn detect_codex_command(&self) -> Result<String, String> {
-            Ok("codex".to_string())
-        }
-
-        fn test_command(&self, command: &str) -> Result<String, String> {
-            Ok(command.to_string())
-        }
-    }
-
-    #[test]
-    fn save_project_label_rejects_name_longer_than_fifteen_chars() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-        let project_id = insert_project(&database.connection, "repo-a");
-
-        let error = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "1234567890abcdef".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_id),
-                color: "#112233".to_string(),
-                workflow_skill: None,
-            })
-            .expect_err("long label should fail");
-
-        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
-    }
-
-    #[test]
-    fn save_project_label_rejects_duplicate_name_within_same_project() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-        let project_id = insert_project(&database.connection, "repo-a");
-
-        service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_id),
-                color: "#112233".to_string(),
-                workflow_skill: None,
-            })
-            .expect("first label");
-
-        let error = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_id),
-                color: "#445566".to_string(),
-                workflow_skill: None,
-            })
-            .expect_err("duplicate should fail");
-
-        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
-    }
-
-    #[test]
-    fn save_global_label_rejects_duplicate_name_within_global_scope() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-
-        service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Global,
-                project_id: None,
-                color: "#112233".to_string(),
-                workflow_skill: None,
-            })
-            .expect("first global label");
-
-        let error = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Global,
-                project_id: None,
-                color: "#445566".to_string(),
-                workflow_skill: None,
-            })
-            .expect_err("global duplicate should fail");
-
-        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
-    }
-
-    #[test]
-    fn save_global_label_allows_same_name_present_in_project_scope() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-        let project_id = insert_project(&database.connection, "repo-a");
-
-        let project_label = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "hotfix".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_id),
-                color: "#112233".to_string(),
-                workflow_skill: None,
-            })
-            .expect("project label");
-
-        let global_label = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "hotfix".to_string(),
-                scope: ProjectLabelScope::Global,
-                project_id: None,
-                color: "#445566".to_string(),
-                workflow_skill: None,
-            })
-            .expect("global label should coexist with project label");
-
-        assert_eq!(global_label.scope, ProjectLabelScope::Global);
-        assert_ne!(global_label.id, project_label.id);
-
-        service
-            .save_project_label(SaveProjectLabelInput {
-                id: Some(global_label.id),
-                name: "hotfix".to_string(),
-                scope: ProjectLabelScope::Global,
-                project_id: None,
-                color: "#778899".to_string(),
-                workflow_skill: None,
-            })
-            .expect("editing global label should succeed");
-    }
-
-    #[test]
-    fn save_project_label_allows_workflow_skill_without_agent() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-        let project_id = insert_project(&database.connection, "repo-a");
-
-        let saved = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_id),
-                color: "#112233".to_string(),
-                workflow_skill: Some(" skill-a ".to_string()),
-            })
-            .expect("workflow skill without agent should save");
-
-        assert_eq!(saved.workflow_skill.as_deref(), Some("skill-a"));
-    }
-
-    #[test]
-    fn save_project_label_allows_same_name_in_other_project() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-        let project_a = insert_project(&database.connection, "repo-a");
-        let project_b = insert_project(&database.connection, "repo-b");
-
-        service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_a),
-                color: "#112233".to_string(),
-                workflow_skill: None,
-            })
-            .expect("project a label");
-
-        let saved = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "ops".to_string(),
-                scope: ProjectLabelScope::Project,
-                project_id: Some(project_b),
-                color: "#445566".to_string(),
-                workflow_skill: None,
-            })
-            .expect("project b label");
-
-        assert_eq!(saved.name, "ops");
-        assert_eq!(saved.project_id, Some(project_b));
-    }
-
-    #[test]
-    fn save_global_label_allows_no_agent_profile() {
-        // agent_profile_id 字段已在 decouple-label-agent-skills 中移除；
-        // global label 不再因绑定 project agent 而被拒绝。
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let database = test_database(temp_dir.path());
-        let service = test_settings_service(&database.connection);
-        let _project_id = insert_project(&database.connection, "repo-a");
-
-        let saved = service
-            .save_project_label(SaveProjectLabelInput {
-                id: None,
-                name: "release".to_string(),
-                scope: ProjectLabelScope::Global,
-                project_id: None,
-                color: "#112233".to_string(),
-                workflow_skill: None,
-            })
-            .expect("global label without agent profile should save");
-
-        assert_eq!(saved.name, "release");
-    }
-
-    fn test_database(data_dir: &std::path::Path) -> crate::db::connection::Database {
-        let database = DatabaseConfig::new(data_dir).open().expect("database");
-        MigrationRunner::default()
-            .run(&database.connection)
-            .expect("migrations");
-        database
-    }
-
-    fn test_settings_service<'a>(connection: &'a Connection) -> SettingsService<'a, TestDetector> {
-        SettingsService::new(
-            AgentProfileRepository::new(connection),
-            ProjectLabelRepository::new(connection),
-            SavedAgentSkillRepository::new(connection),
-            ProjectRepository::new(connection),
-            TestDetector,
-        )
-    }
-
-    fn insert_project(connection: &Connection, repo_name: &str) -> i64 {
-        ProjectRepository::new(connection)
-            .insert(repo_name, &format!("/tmp/{repo_name}"))
-            .expect("project")
-            .id
-    }
-
-    #[allow(dead_code)]
-    fn insert_agent_profile(
-        service: &SettingsService<'_, TestDetector>,
-        project_id: Option<i64>,
-        scope: AgentScope,
-    ) -> i64 {
-        service
-            .save_agent_profile(SaveAgentProfileInput {
-                id: None,
-                name: format!("agent-{scope:?}"),
-                agent_type: AgentType::Codex,
-                command: "codex".to_string(),
-                scope,
-                project_id,
-                mode: "default".to_string(),
-                dangerous: true,
-                default_skill: "".to_string(),
-                prompt_template: "".to_string(),
-            })
-            .expect("agent profile")
-            .id
+fn builtin_agent_command_name(agent_type: &AgentType) -> &'static str {
+    match agent_type {
+        AgentType::Codex => "codex",
+        AgentType::Claude => "claude",
+        AgentType::OpenCode => "opencode",
+        AgentType::Grok => "grok",
     }
 }
+
+/// 按 spec 默认值表构造内置 agent 的 global profile；command 用探测解析后的命令字符串。
+fn default_builtin_profile_input(agent_type: AgentType, detected_command: &str) -> SaveAgentProfileInput {
+    let (name, display_mode) = match agent_type {
+        AgentType::Codex => ("Codex", "json"),
+        AgentType::Claude => ("Claude Code", "json"),
+        AgentType::OpenCode => ("OpenCode", "tui"),
+        AgentType::Grok => ("Grok", "tui"),
+    };
+    SaveAgentProfileInput {
+        id: None,
+        name: name.to_string(),
+        agent_type,
+        command: detected_command.to_string(),
+        scope: AgentScope::Global,
+        project_id: None,
+        mode: "full-access".to_string(),
+        dangerous: true,
+        default_skill: String::new(),
+        prompt_template: String::new(),
+        display_mode: display_mode.to_string(),
+        enabled: true,
+    }
+}
+
+#[cfg(test)]
+#[path = "service_label_tests.rs"]
+mod label_tests;
+
+#[cfg(test)]
+#[path = "service_seed_preview_tests.rs"]
+mod seed_preview_tests;

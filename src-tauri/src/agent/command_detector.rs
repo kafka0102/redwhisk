@@ -14,7 +14,17 @@ pub(crate) struct CommandLookupResult {
 }
 
 pub trait AgentCommandDetector {
-    fn detect_codex_command(&self) -> Result<String, String>;
+    /// 探测任意命令名是否在本机可用，返回解析后的命令路径或原始名。
+    ///
+    /// 见 ADR-0020：app 启动时按 `[codex, claude, opencode, grok]` 顺序逐个调用本方法，
+    /// 探测成功且库中无对应记录则播种默认 profile。
+    fn detect_command(&self, command_name: &str) -> Result<String, String>;
+
+    /// 探测 codex 命令（向后兼容入口）；默认委托 `detect_command("codex")`。
+    fn detect_codex_command(&self) -> Result<String, String> {
+        self.detect_command("codex")
+    }
+
     fn test_command(&self, command: &str) -> Result<String, String>;
 }
 
@@ -33,8 +43,8 @@ impl Default for ShellAgentCommandDetector {
 }
 
 impl AgentCommandDetector for ShellAgentCommandDetector {
-    fn detect_codex_command(&self) -> Result<String, String> {
-        run_command_lookup("codex")
+    fn detect_command(&self, command_name: &str) -> Result<String, String> {
+        run_command_lookup(command_name)
     }
 
     fn test_command(&self, command: &str) -> Result<String, String> {

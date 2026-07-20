@@ -28,6 +28,7 @@ import {
 import {
   deleteAgentProfile,
   detectCodexCommand,
+  previewAgentCommandArgs,
   listAgentProfiles,
   saveAgentProfile,
   testAgentCommand,
@@ -625,6 +626,8 @@ describe("command client", () => {
           defaultSkill: "",
           promptTemplate: "",
           del: 0,
+          displayMode: "json",
+          enabled: true,
         },
       ],
     });
@@ -645,6 +648,8 @@ describe("command client", () => {
           defaultSkill: "",
           promptTemplate: "",
           del: 0,
+          displayMode: "json",
+          enabled: true,
         },
       ],
     });
@@ -666,6 +671,8 @@ describe("command client", () => {
       defaultSkill: "",
       promptTemplate: "",
       del: 0,
+      displayMode: "json",
+      enabled: true,
     });
 
     await expect(
@@ -679,6 +686,8 @@ describe("command client", () => {
         dangerous: true,
         defaultSkill: "",
         promptTemplate: "",
+        displayMode: "json",
+        enabled: true,
       }),
     ).resolves.toEqual({
       id: 1,
@@ -692,6 +701,8 @@ describe("command client", () => {
       defaultSkill: "",
       promptTemplate: "",
       del: 0,
+      displayMode: "json",
+      enabled: true,
     });
     expect(invokeMock).toHaveBeenCalledWith("save_agent_profile", {
       input: {
@@ -704,6 +715,29 @@ describe("command client", () => {
         dangerous: true,
         defaultSkill: "",
         promptTemplate: "",
+        displayMode: "json",
+        enabled: true,
+      },
+    });
+  });
+
+  it("invokes Rust Core through the preview agent command args command", async () => {
+    invokeMock.mockResolvedValue(["exec", "--dangerously-bypass"]);
+
+    await expect(
+      previewAgentCommandArgs({
+        agentType: "codex",
+        command: "/usr/local/bin/codex",
+        mode: "full-access",
+        dangerous: true,
+      }),
+    ).resolves.toEqual(["exec", "--dangerously-bypass"]);
+    expect(invokeMock).toHaveBeenCalledWith("preview_agent_command_args", {
+      input: {
+        agentType: "codex",
+        command: "/usr/local/bin/codex",
+        mode: "full-access",
+        dangerous: true,
       },
     });
   });

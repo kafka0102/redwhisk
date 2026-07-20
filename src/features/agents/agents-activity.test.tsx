@@ -307,6 +307,8 @@ const defaultProfiles = {
       defaultSkill: "",
       promptTemplate: "",
       del: 0,
+      displayMode: "json" as const,
+      enabled: true,
     },
   ],
   global: [
@@ -322,6 +324,8 @@ const defaultProfiles = {
       defaultSkill: "",
       promptTemplate: "",
       del: 0,
+      displayMode: "json" as const,
+      enabled: true,
     },
   ],
 };
