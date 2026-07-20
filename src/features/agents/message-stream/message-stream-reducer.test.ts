@@ -1154,4 +1154,53 @@ describe("messageStreamReducer", () => {
       expect(next.turnStatus).toBe("idle");
     });
   });
+
+  describe("timeline 子代理中断", () => {
+    it("子代理 tool_call 被取消时挂 subagentInterrupted 横幅", () => {
+      const next = messageStreamReducer(
+        { ...createInitialState(), turnStatus: "running", isInitialized: true },
+        {
+          type: "EVENT",
+          event: timelineEvent({
+            type: "tool_call",
+            callId: "call_subagent_1",
+            name: "subagent",
+            detail: { type: "sub_agent" },
+            status: "canceled",
+            error: "子代理被中断（status: killed）",
+          }),
+        },
+      );
+      expect(next.subagentInterrupted).toBe(true);
+    });
+
+    it("子代理正常完成不挂横幅", () => {
+      const next = messageStreamReducer(
+        { ...createInitialState(), turnStatus: "running", isInitialized: true },
+        {
+          type: "EVENT",
+          event: timelineEvent({
+            type: "tool_call",
+            callId: "call_subagent_2",
+            name: "subagent",
+            detail: { type: "sub_agent" },
+            status: "completed",
+          }),
+        },
+      );
+      expect(next.subagentInterrupted).toBe(false);
+    });
+
+    it("turn_started 清除子代理中断横幅", () => {
+      const next = messageStreamReducer(
+        {
+          ...createInitialState(),
+          subagentInterrupted: true,
+          isInitialized: true,
+        },
+        { type: "EVENT", event: { type: "turn_started", turnId: "t2" } },
+      );
+      expect(next.subagentInterrupted).toBe(false);
+    });
+  });
 });

@@ -78,6 +78,11 @@ struct SessionState {
     /// 当前 turn 的进程标识（单轮模型下用进程启动时间戳模拟）。
     current_turn_id: Option<String>,
     current_model: Option<String>,
+    /// 异步子代理 task_id → 主进程 Agent tool_use_id 映射。
+    ///
+    /// `system/task_started` 建立，`system/task_notification` 据此把子代理完成/中断
+    /// 状态回填到对应 Agent tool_call（child tool_use_id）。
+    pending_subagents: HashMap<String, String>,
     /// 当前 turn 内 assistant message 的序号，用于派生跨 message 不冲突的 message_id。
     ///
     /// Claude 每个 message 的 content block index 都从 0 重置，若 message_id
@@ -148,6 +153,7 @@ impl ClaudeSessionHandle {
             session_id: config.resume_session_id.clone(),
             current_turn_id: None,
             current_model: config.model.clone(),
+            pending_subagents: HashMap::new(),
             message_index: 0,
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
@@ -775,9 +781,84 @@ fn build_events(
                 AgentTimelineItem::Error { message: desc },
             ));
         }
+        ClaudeStreamMessage::SystemTaskStarted { task_id, tool_use_id } => {
+            if let (Some(tool_use_id), true) = (tool_use_id, !task_id.is_empty()) {
+                if let Ok(mut guard) = state.lock() {
+                    guard.pending_subagents.insert(task_id, tool_use_id);
+                }
+            }
+        }
+        ClaudeStreamMessage::SystemTaskNotification {
+            task_id,
+            tool_use_id,
+            status,
+        } => {
+            events.extend(handle_task_notification(
+                state,
+                turn_id,
+                task_id,
+                tool_use_id,
+                &status,
+            ));
+        }
         ClaudeStreamMessage::Other => {}
     }
     events
+}
+
+/// 处理 `system/task_notification`：把异步子代理完成/中断状态回填到对应 Agent tool_call。
+///
+/// 关联主进程 Agent tool_use 的 call_id：优先 notification 自带的 `tool_use_id`，
+/// 否则按 `task_id` 查 `task_started` 建立的映射。status 非 completed/success 视为异常
+/// （被中断/超时），把子代理 tool_call 标为 Canceled 并附说明，供前端横幅提示。
+/// 无法关联 tool_use_id 时降级为 timeline Error，至少给出事实性提示。
+fn handle_task_notification(
+    state: &Arc<Mutex<SessionState>>,
+    turn_id: &Option<String>,
+    task_id: Option<String>,
+    tool_use_id: Option<String>,
+    status: &str,
+) -> Vec<AgentStreamEvent> {
+    let call_id = tool_use_id.or_else(|| {
+        let task_id = task_id.as_deref()?;
+        state
+            .lock()
+            .ok()
+            .and_then(|guard| guard.pending_subagents.get(task_id).cloned())
+    });
+    let is_abnormal = !matches!(status, "completed" | "success" | "");
+    let Some(call_id) = call_id else {
+        return if is_abnormal {
+            vec![timeline_event(
+                turn_id,
+                AgentTimelineItem::Error {
+                    message: format!("子代理被中断（status: {status}）"),
+                },
+            )]
+        } else {
+            Vec::new()
+        };
+    };
+    let (tool_status, error) = if is_abnormal {
+        (
+            ToolCallStatus::Canceled,
+            Some(format!("子代理被中断（status: {status}）")),
+        )
+    } else {
+        (ToolCallStatus::Completed, None)
+    };
+    vec![timeline_event(
+        turn_id,
+        AgentTimelineItem::ToolCall {
+            call_id,
+            name: "subagent".into(),
+            detail: ToolCallDetail::SubAgent {
+                child_session_id: None,
+            },
+            status: tool_status,
+            error,
+        },
+    )]
 }
 
 /// 处理 stream_event（流式增量）。
@@ -1197,6 +1278,7 @@ fn tool_name_for_patch(patch: &ToolResultPatch) -> String {
         ToolResultPatch::Read { .. } => "read".into(),
         ToolResultPatch::Edit => "edit".into(),
         ToolResultPatch::Write => "write".into(),
+        ToolResultPatch::SubAgent { .. } => "subagent".into(),
         ToolResultPatch::Unknown { .. } => "tool".into(),
     }
 }
@@ -1223,6 +1305,11 @@ fn patch_detail(patch: ToolResultPatch) -> ToolCallDetail {
             path: String::new(),
             content: None,
         },
+        // 子代理启动回执：回填 agentId 到 child_session_id；raw_output 仅供诊断不进 detail。
+        ToolResultPatch::SubAgent {
+            child_session_id,
+            raw_output: _,
+        } => ToolCallDetail::SubAgent { child_session_id },
         ToolResultPatch::Unknown { raw_output } => ToolCallDetail::Unknown {
             raw_input: None,
             raw_output,
@@ -2412,6 +2499,7 @@ mod tests {
             session_id,
             current_turn_id: Some("t1".into()),
             current_model: None,
+            pending_subagents: HashMap::new(),
             message_index: 0,
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),
@@ -2499,6 +2587,7 @@ mod tests {
             session_id: None,
             current_turn_id: Some("t1".into()),
             current_model: None,
+            pending_subagents: HashMap::new(),
             message_index: 0,
             text_buffer: HashMap::new(),
             text_last_flush_at: HashMap::new(),

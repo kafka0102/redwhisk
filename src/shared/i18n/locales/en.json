@@ -463,6 +463,7 @@
     "scrollToTop": "Scroll to top",
     "turnInterrupted": "This turn may not have finished normally (interrupted). Send a message to continue.",
     "turnInterruptedWithReason": "This turn may not have finished normally (interrupted, stop_reason: {{stopReason}}). Send a message to continue.",
+    "subagentInterrupted": "A background subagent was interrupted. The workflow may be paused. Send a message to continue.",
     "reasoningTitle": "Thinking",
     "reasoningDuration": "Thought process ({{seconds}}s)",
     "structuredSessionView": "Agent structured session view",

@@ -41,6 +41,7 @@ function createMessageStreamState(
     lastError: null,
     turnInterrupted: false,
     interruptedStopReason: null,
+    subagentInterrupted: false,
     isInitialized: true,
     ...overrides,
   };

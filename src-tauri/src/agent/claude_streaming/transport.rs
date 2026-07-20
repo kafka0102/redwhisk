@@ -29,6 +29,14 @@ use crate::agent::command_detector::{run_command_lookup_with_path, CommandLookup
 
 /// stderr 缓冲上限，避免内存膨胀；保留尾部用于诊断。
 const STDERR_BUFFER_LIMIT: usize = 8192;
+/// claude 后台子代理等待上限 env 名（毫秒，`0` = 无限等待）。
+///
+/// claude 自 v2.1.182 起对后台子代理（background subagent）默认设 10 分钟
+/// 等待 cap，超时自动终止子代理并标记为「用户中断」（`[Request interrupted
+/// by user]`）。RedWhisk 作为本地工具、用户在场，设为 `0` 放开该限制，避免
+/// 长任务子代理（如多步工作流的单张 ticket 实现）被静默打断；失控时由子代理
+/// 中断提示与手动 cancel 兜底。
+const CLAUDE_PRINT_BG_WAIT_CEILING_ENV: &str = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS";
 /// 传输层错误。
 #[derive(Debug, thiserror::Error)]
 pub enum ClaudeStreamingError {
@@ -97,6 +105,9 @@ impl ClaudeTransport {
             );
             command
         };
+        // 放开 claude 后台子代理 10 分钟等待 cap，避免长任务子代理被静默
+        // 中断（见 CLAUDE_PRINT_BG_WAIT_CEILING_ENV 注释）。
+        command.env(CLAUDE_PRINT_BG_WAIT_CEILING_ENV, "0");
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

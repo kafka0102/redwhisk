@@ -30,6 +30,17 @@ pub enum ClaudeStreamMessage {
         tool_name: Option<String>,
         message: Option<String>,
     },
+    /// `system/task_started`：异步子代理已派生（含 task_id 与对应 tool_use_id）。
+    SystemTaskStarted {
+        task_id: String,
+        tool_use_id: Option<String>,
+    },
+    /// `system/task_notification`：异步子代理完成/中断上报（status 区分结果）。
+    SystemTaskNotification {
+        task_id: Option<String>,
+        tool_use_id: Option<String>,
+        status: String,
+    },
     /// `stream_event`：原生 Anthropic 流事件（增量）。
     StreamEvent(AnthropicStreamEvent),
     /// `assistant`：完整的 assistant 消息。
@@ -199,6 +210,29 @@ fn parse_system(value: &Value) -> ClaudeStreamMessage {
                 .get("message")
                 .and_then(Value::as_str)
                 .map(String::from),
+        },
+        "task_started" => ClaudeStreamMessage::SystemTaskStarted {
+            task_id: value
+                .get("task_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            tool_use_id: value
+                .get("tool_use_id")
+                .and_then(Value::as_str)
+                .map(String::from),
+        },
+        "task_notification" => ClaudeStreamMessage::SystemTaskNotification {
+            task_id: value.get("task_id").and_then(Value::as_str).map(String::from),
+            tool_use_id: value
+                .get("tool_use_id")
+                .and_then(Value::as_str)
+                .map(String::from),
+            status: value
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
         },
         _ => ClaudeStreamMessage::Other,
     }
@@ -518,6 +552,51 @@ mod tests {
                 assert_eq!(tools, vec!["Bash", "Read", "Edit"]);
             }
             other => panic!("期望 SystemInit，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_system_task_started() {
+        let value = json!({
+            "type": "system",
+            "subtype": "task_started",
+            "task_id": "task_abc",
+            "tool_use_id": "toolu_1"
+        });
+        let parsed = parse_message(&value);
+        match parsed {
+            ClaudeStreamMessage::SystemTaskStarted {
+                task_id,
+                tool_use_id,
+            } => {
+                assert_eq!(task_id, "task_abc");
+                assert_eq!(tool_use_id.as_deref(), Some("toolu_1"));
+            }
+            other => panic!("期望 SystemTaskStarted，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_system_task_notification() {
+        let value = json!({
+            "type": "system",
+            "subtype": "task_notification",
+            "task_id": "task_abc",
+            "tool_use_id": "toolu_1",
+            "status": "killed"
+        });
+        let parsed = parse_message(&value);
+        match parsed {
+            ClaudeStreamMessage::SystemTaskNotification {
+                task_id,
+                tool_use_id,
+                status,
+            } => {
+                assert_eq!(task_id.as_deref(), Some("task_abc"));
+                assert_eq!(tool_use_id.as_deref(), Some("toolu_1"));
+                assert_eq!(status, "killed");
+            }
+            other => panic!("期望 SystemTaskNotification，实际 {other:?}"),
         }
     }
 

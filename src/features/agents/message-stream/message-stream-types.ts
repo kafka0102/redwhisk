@@ -40,6 +40,8 @@ export interface MessageStreamState {
   turnInterrupted: boolean;
   /** 异常终止时携带的 SDK stop_reason（后端未上报时为 null）。 */
   interruptedStopReason: string | null;
+  /** 异步子代理是否被中断（task_notification status 异常）：工作流可能因此暂停。 */
+  subagentInterrupted: boolean;
   /** readAgentTimeline 完成前为 false，完成后为 true。 */
   isInitialized: boolean;
 }

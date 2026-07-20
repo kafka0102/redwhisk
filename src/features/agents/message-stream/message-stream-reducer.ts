@@ -42,6 +42,7 @@ export function createInitialState(): MessageStreamState {
     lastError: null,
     turnInterrupted: false,
     interruptedStopReason: null,
+    subagentInterrupted: false,
     isInitialized: false,
   };
 }
@@ -161,6 +162,7 @@ export function messageStreamReducer(
         entries: [...state.entries, entry],
         turnInterrupted: false,
         interruptedStopReason: null,
+        subagentInterrupted: false,
       };
     }
 
@@ -183,6 +185,7 @@ function applyEvent(
         turnStatus: "running",
         turnInterrupted: false,
         interruptedStopReason: null,
+        subagentInterrupted: false,
       };
 
     case "turn_completed": {
@@ -241,7 +244,19 @@ function applyEvent(
       const entries = applyTimelineItem(state.entries, event.item);
       const lastSeq =
         event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
-      return { ...state, ...turnPatch, entries, lastSeq };
+      // 异步子代理被中断（task_notification status 异常）：工作流可能因此暂停，
+      // 挂横幅提示用户。与 turnInterrupted 独立——主 turn 仍可能以 end_turn 正常结束。
+      const subagentInterrupted =
+        event.item.type === "tool_call" &&
+        event.item.detail.type === "sub_agent" &&
+        event.item.status === "canceled";
+      return {
+        ...state,
+        ...turnPatch,
+        entries,
+        lastSeq,
+        ...(subagentInterrupted ? { subagentInterrupted: true } : {}),
+      };
     }
 
     case "usage_updated":

@@ -82,7 +82,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   isActive = true,
   autoScrollOnActivate = false,
 }: AgentMessageStreamViewProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const [navTarget, setNavTarget] = useState<ScrollNavTarget>("hidden");
@@ -93,6 +93,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     lastError,
     turnInterrupted,
     interruptedStopReason,
+    subagentInterrupted,
   } = state;
   const isClaude = agentType === "claude" || agentType === "claude_code";
   const isTurnActive = turnStatus === "running" || isTurnRunning;
@@ -124,6 +125,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     shouldShowThinking,
     hasClaudeOutput,
     turnInterrupted,
+    subagentInterrupted,
   ]);
   // 切换到本 session（isActive 由 false 变 true）时，若非完成态且消息流可见，
   // 定位到底部，便于查看正在执行的输出或待确认项。
@@ -175,6 +177,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     shouldShowThinking,
     hasClaudeOutput,
     turnInterrupted,
+    subagentInterrupted,
     measureNav,
   ]);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
@@ -226,6 +229,13 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
                     interruptedStopReason,
                   )
                 : messages.agentsFeature.turnInterrupted}
+            </p>
+          </div>
+        ) : null}
+        {subagentInterrupted ? (
+          <div className="agents-message__entry agents-message__entry--interrupted">
+            <p className="agents-message-stream__interrupted" role="status">
+              {t("agentsFeature.subagentInterrupted")}
             </p>
           </div>
         ) : null}

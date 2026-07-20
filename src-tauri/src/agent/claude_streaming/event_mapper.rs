@@ -138,6 +138,22 @@ fn map_tool_use(name: &str, input: &Value) -> (ToolCallDetail, String) {
                 "search".into(),
             )
         }
+        "Agent" | "Task" | "TaskTool" => {
+            // 异步后台子代理：派生后立即返回「启动回执」，子代理在后台运行；
+            // 其结果/中断信号经 system/task_notification 上报（见 session.rs
+            // build_events 的 TaskNotification 分支），不进 tool_result。
+            let display_name = input
+                .get("subagent_type")
+                .and_then(Value::as_str)
+                .unwrap_or("subagent")
+                .to_string();
+            (
+                ToolCallDetail::SubAgent {
+                    child_session_id: None,
+                },
+                display_name,
+            )
+        }
         _ => {
             let raw_input = serde_json::to_string(input).ok();
             (
@@ -188,6 +204,11 @@ pub enum ToolResultPatch {
     Edit,
     /// Write 结果：同 Edit，成功无信息量，仅保持 type 一致。
     Write,
+    /// 异步子代理启动回执：回填 agentId 到 child_session_id，raw_output 保留回执文本。
+    SubAgent {
+        child_session_id: Option<String>,
+        raw_output: Option<String>,
+    },
     /// 其他工具：原始输出。
     Unknown { raw_output: Option<String> },
 }
@@ -218,13 +239,22 @@ pub fn map_tool_results(
                 };
                 let patch =
                     build_tool_result_patch(tool_name.as_deref(), output, content, *is_error);
+                let is_subagent = matches!(
+                    tool_name.as_deref(),
+                    Some("Agent") | Some("Task") | Some("TaskTool")
+                );
+                let status = if *is_error {
+                    ToolCallStatus::Failed
+                } else if is_subagent {
+                    // 异步子代理：tool_result 只是「启动回执」，子代理仍在后台
+                    // 运行；完成/中断由 system/task_notification 更新，保持 Running。
+                    ToolCallStatus::Running
+                } else {
+                    ToolCallStatus::Completed
+                };
                 Some(ToolResultUpdate {
                     call_id: tool_use_id.clone(),
-                    status: if *is_error {
-                        ToolCallStatus::Failed
-                    } else {
-                        ToolCallStatus::Completed
-                    },
+                    status,
                     patch,
                 })
             }
@@ -257,6 +287,10 @@ fn build_tool_result_patch(
         Some("Read") => ToolResultPatch::Read { content: output },
         Some("Edit") => ToolResultPatch::Edit,
         Some("Write") => ToolResultPatch::Write,
+        Some("Agent") | Some("Task") | Some("TaskTool") => ToolResultPatch::SubAgent {
+            child_session_id: extract_subagent_id(content),
+            raw_output: output,
+        },
         _ => ToolResultPatch::Unknown { raw_output: output },
     }
 }
@@ -280,6 +314,19 @@ fn extract_exit_code(content: &str) -> Option<i32> {
             .parse::<i32>()
             .ok()
     })
+}
+
+/// 从异步子代理启动回执文本提取 agentId。
+///
+/// 回执格式：`Async agent launched successfully. ... agentId: <hash> ...`。
+/// 提取 `agentId:` 后第一个非空白 token，供前端关联子代理；缺失时返回 None。
+fn extract_subagent_id(content: &str) -> Option<String> {
+    let idx = content.find("agentId:")?;
+    let rest = &content[idx + "agentId:".len()..];
+    rest.trim_start()
+        .split_whitespace()
+        .next()
+        .map(String::from)
 }
 
 /// 从用量统计构造 `AgentUsage`。
@@ -372,6 +419,33 @@ mod tests {
             MappedBlock::ToolUse { name, detail, .. } => {
                 assert_eq!(name, "CustomTool");
                 assert!(matches!(detail, ToolCallDetail::Unknown { .. }));
+            }
+            other => panic!("期望 ToolUse，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_agent_tool_use_to_subagent() {
+        let blocks = vec![tool_use(
+            "Agent",
+            json!({ "subagent_type": "Explore", "description": "探索代码" }),
+        )];
+        let mapped = map_assistant_blocks(&blocks);
+        match &mapped[0] {
+            MappedBlock::ToolUse {
+                name,
+                detail,
+                status,
+                ..
+            } => {
+                assert_eq!(name, "Explore");
+                assert!(matches!(
+                    detail,
+                    ToolCallDetail::SubAgent {
+                        child_session_id: None
+                    }
+                ));
+                assert_eq!(*status, ToolCallStatus::Running);
             }
             other => panic!("期望 ToolUse，实际 {other:?}"),
         }
