@@ -37,7 +37,30 @@ use super::registry::{
 };
 use super::shortcut::{shortcut_command_record_from_row, validate_shortcut_command};
 
-const DEFAULT_PROJECT_TERMINAL_NAME: &str = "New Terminal";
+const PROJECT_TERMINAL_NAME_PREFIX: &str = "terminal-";
+
+fn parse_project_terminal_number(name: &str) -> Option<u64> {
+    let suffix = name.strip_prefix(PROJECT_TERMINAL_NAME_PREFIX)?;
+    if suffix.is_empty() || !suffix.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    if suffix.len() > 1 && suffix.starts_with('0') {
+        return None;
+    }
+    let number = suffix.parse::<u64>().ok()?;
+    (number > 0).then_some(number)
+}
+
+fn next_project_terminal_name(existing_names: impl IntoIterator<Item = impl AsRef<str>>) -> String {
+    let mut max_number = 0_u64;
+    for name in existing_names {
+        if let Some(number) = parse_project_terminal_number(name.as_ref()) {
+            max_number = max_number.max(number);
+        }
+    }
+    format!("{PROJECT_TERMINAL_NAME_PREFIX}{}", max_number + 1)
+}
+
 const TEMPORARY_PROJECT_TERMINAL_CONFIG_ID: i64 = -1;
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
@@ -66,11 +89,18 @@ impl<'connection> ProjectTerminalService<'connection> {
             let session_id = registry.allocate_session_id();
             let log_path = terminal_log_path(data_dir.as_ref(), project.id, session_id)?;
             let shell_command = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+            let existing_names = self
+                .project_repository
+                .list_project_terminal_configs(project.id)
+                .map_err(project_terminal_database_error)?
+                .into_iter()
+                .map(|config| config.name);
+            let terminal_name = next_project_terminal_name(existing_names);
             let config = self
                 .project_repository
                 .insert_project_terminal_config(
                     project.id,
-                    DEFAULT_PROJECT_TERMINAL_NAME,
+                    &terminal_name,
                     &project.repo_path,
                     &shell_command,
                 )
@@ -101,7 +131,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                     ProjectTerminalSession {
                         project_id: project.id,
                         config_id: config.id,
-                        name: DEFAULT_PROJECT_TERMINAL_NAME.to_string(),
+                        name: terminal_name.clone(),
                         log_path: log_path.to_string_lossy().to_string(),
                         is_active: true,
                     },
@@ -998,6 +1028,57 @@ struct RestoreTestHooks {
 }
 
 #[cfg(test)]
+mod project_terminal_name_tests {
+    use super::{next_project_terminal_name, parse_project_terminal_number};
+
+    #[test]
+    fn parse_accepts_positive_terminal_numbers() {
+        assert_eq!(parse_project_terminal_number("terminal-1"), Some(1));
+        assert_eq!(parse_project_terminal_number("terminal-12"), Some(12));
+        assert_eq!(parse_project_terminal_number("terminal-0"), None);
+        assert_eq!(parse_project_terminal_number("terminal-01"), None);
+        assert_eq!(parse_project_terminal_number("terminal-"), None);
+        assert_eq!(parse_project_terminal_number("Terminal-1"), None);
+        assert_eq!(parse_project_terminal_number("API"), None);
+        assert_eq!(parse_project_terminal_number("New Terminal"), None);
+    }
+
+    #[test]
+    fn next_name_starts_from_one_and_uses_max_plus_one() {
+        assert_eq!(next_project_terminal_name(std::iter::empty::<&str>()), "terminal-1");
+        assert_eq!(
+            next_project_terminal_name(["terminal-1", "terminal-2"]),
+            "terminal-3"
+        );
+        assert_eq!(
+            next_project_terminal_name(["terminal-1", "terminal-3"]),
+            "terminal-4"
+        );
+        assert_eq!(
+            next_project_terminal_name(["API", "Worker"]),
+            "terminal-1"
+        );
+        assert_eq!(
+            next_project_terminal_name(["API", "terminal-2"]),
+            "terminal-3"
+        );
+        assert_eq!(
+            next_project_terminal_name(["terminal-1", "terminal-2"]),
+            "terminal-3"
+        );
+    }
+
+    #[test]
+    fn next_name_reuses_deleted_max_number() {
+        // terminal-1, terminal-2, terminal-3 删除 terminal-3 后，现有最大为 2，下一个复用 3。
+        assert_eq!(
+            next_project_terminal_name(["terminal-1", "terminal-2"]),
+            "terminal-3"
+        );
+    }
+}
+
+#[cfg(test)]
 fn restore_test_hooks() -> &'static Mutex<RestoreTestHooks> {
     static HOOKS: std::sync::OnceLock<Mutex<RestoreTestHooks>> = std::sync::OnceLock::new();
     HOOKS.get_or_init(|| Mutex::new(RestoreTestHooks::default()))
@@ -1182,7 +1263,7 @@ mod tests {
 
         assert!(created.session_id < 0);
         assert!(created.config_id > 0);
-        assert_eq!(created.name, "New Terminal");
+        assert_eq!(created.name, "terminal-1");
         assert_eq!(created.working_dir, current_repo.to_string_lossy());
         assert!(!created.launch_command.is_empty());
 
