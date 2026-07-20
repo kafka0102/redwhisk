@@ -81,3 +81,13 @@ pub struct ListAgentProfilesInput {
 pub struct DeleteAgentProfileInput {
     pub id: i64,
 }
+
+/// 参数预览入参（ADR-0019）：依据 profile 的启动相关字段计算命令行参数。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewAgentCommandArgsInput {
+    pub agent_type: AgentType,
+    pub command: String,
+    pub mode: String,
+    pub dangerous: bool,
+}

@@ -45,7 +45,7 @@ pub fn run() {
             // 启动即清空所有终端历史日志，软件再次打开不保留上次会话输出。
             features::project_terminal::purge_terminal_log_dir(&data_dir);
             let app_handle = app.handle().clone();
-            let latest_output_writer = LatestOutputWriter::new(data_dir);
+            let latest_output_writer = LatestOutputWriter::new(data_dir.clone());
             let state = app.state::<AppState>();
             state.pty_sessions.set_output_sink(move |event| {
                 latest_output_writer.record_terminal_output(&event);
@@ -61,6 +61,17 @@ pub fn run() {
                 .agent_event_broadcaster
                 .set_app_handle(app.handle().clone());
             trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
+            // 异步播种内置 agent（ADR-0019）：开库 + 跑迁移 + 检测 codex/claude/opencode/grok
+            // 命令是否安装，对已装且库中无任何记录者插入默认 global profile。不阻塞启动；
+            // 失败仅记日志，不影响应用可用性。
+            let seed_data_dir = data_dir.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Err(error) =
+                    features::settings::SettingsService::seed_builtin_agents_in_data_dir(seed_data_dir)
+                {
+                    eprintln!("[settings] 内置 agent 自动播种失败：{error:?}");
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -151,6 +162,7 @@ pub fn run() {
             features::settings::commands::list_agent_profiles,
             features::settings::commands::save_agent_profile,
             features::settings::commands::delete_agent_profile,
+            features::settings::commands::preview_agent_command_args,
             features::settings::commands::list_project_labels,
             features::settings::commands::save_project_label,
             features::settings::commands::delete_project_label,

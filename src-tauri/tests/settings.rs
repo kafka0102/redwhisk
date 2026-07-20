@@ -639,8 +639,15 @@ impl StubCommandDetector {
 }
 
 impl AgentCommandDetector for StubCommandDetector {
-    fn detect_codex_command(&self) -> Result<String, String> {
-        self.detect_result.clone()
+    fn detect_command(&self, command_name: &str) -> Result<String, String> {
+        if command_name == "codex" {
+            return self.detect_result.clone();
+        }
+        // 其他命令默认按 test_results 解析；找不到时回退成功（原样返回）以兼容未来扩展。
+        self.test_results
+            .get(command_name)
+            .cloned()
+            .unwrap_or_else(|| Ok(command_name.to_string()))
     }
 
     fn test_command(&self, command: &str) -> Result<String, String> {

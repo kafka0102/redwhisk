@@ -81,6 +81,8 @@
         "dangerous": "required",
         "defaultSkill": "required",
         "del": "required",
+        "displayMode": "required",
+        "enabled": "required",
         "id": "required",
         "mode": "required",
         "name": "required",
@@ -730,6 +732,14 @@
         "projectId": "required"
       }
     },
+    "PreviewAgentCommandArgsInput": {
+      "fields": {
+        "agentType": "required",
+        "command": "required",
+        "dangerous": "required",
+        "mode": "required"
+      }
+    },
     "PreviewIssueAttachmentInput": {
       "fields": {
         "attachmentId": "optional",
@@ -846,6 +856,7 @@
     },
     "ProjectWorktreeCommitHistoryResponse": {
       "fields": {
+        "baseBranch": "optional",
         "commits": "required",
         "isWorktree": "required",
         "signature": "required"
@@ -964,6 +975,8 @@
         "command": "required",
         "dangerous": "required",
         "defaultSkill": "required",
+        "displayMode": "required",
+        "enabled": "required",
         "id": "optional",
         "mode": "required",
         "name": "required",
@@ -1410,7 +1423,9 @@
       "rename": "snake_case",
       "variants": [
         "codex",
-        "claude"
+        "claude",
+        "open_code",
+        "grok"
       ]
     },
     "CommandErrorCode": {

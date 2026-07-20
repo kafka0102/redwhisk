@@ -4,7 +4,8 @@ use crate::app_state::AppState;
 use super::service::SettingsService;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, DeleteAgentProfileInput,
-    ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
+    ListAgentProfilesInput, PreviewAgentCommandArgsInput, SaveAgentProfileInput,
+    TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_label::{
@@ -64,6 +65,20 @@ pub fn delete_agent_profile(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::delete_agent_profile_in_data_dir(data_dir, input)
+}
+
+/// 预览给定 profile 启动 PTY 时实际带上的 CLI 参数（ADR-0019）。
+///
+/// 入参：`agentType` + `command` + `mode` + `dangerous`（profile 启动相关字段）。
+/// 出参：`Vec<String>`，参数数组（不含命令本身）；opencode/grok 与 `dangerous=false` 返回空。
+#[tauri::command]
+pub fn preview_agent_command_args(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: PreviewAgentCommandArgsInput,
+) -> Result<Vec<String>, CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::preview_agent_command_args_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]
