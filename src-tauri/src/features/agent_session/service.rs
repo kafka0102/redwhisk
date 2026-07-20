@@ -1883,6 +1883,26 @@ impl AgentSessionService<'_> {
             }
         }
 
+        // 已在 registry 的 live handle 优先 short-circuit：不依赖 DB 中的
+        // codex_session_id。否则已运行会话若尚未回填 thread id（或 TUI 路径无该字段）
+        // 会误报 missingResumeSessionId。
+        if let Some(handle) = agent_registry.get(session.id) {
+            let active_thread_id = handle
+                .thread_id()
+                .or_else(|| {
+                    session
+                        .codex_session_id
+                        .clone()
+                        .filter(|value| !value.trim().is_empty())
+                })
+                .unwrap_or_default();
+            self.mark_structured_session_resumed(&session, &active_thread_id)?;
+            return Ok(ResumeStructuredAgentSessionResult {
+                session_id: session.id,
+                thread_id: active_thread_id,
+            });
+        }
+
         let thread_id = session
             .codex_session_id
             .clone()
@@ -1894,15 +1914,6 @@ impl AgentSessionService<'_> {
                 ).with_reason("missingResumeSessionId")
                 .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
             })?;
-
-        if let Some(handle) = agent_registry.get(session.id) {
-            let active_thread_id = handle.thread_id().unwrap_or_else(|| thread_id.clone());
-            self.mark_structured_session_resumed(&session, &active_thread_id)?;
-            return Ok(ResumeStructuredAgentSessionResult {
-                session_id: session.id,
-                thread_id: active_thread_id,
-            });
-        }
 
         // 通过 profile 判定 agent 类型，构造走 provider factory。
         let profile = self
@@ -5649,6 +5660,46 @@ mod tests {
                 .expect("query")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn resume_structured_session_short_circuits_live_handle_without_codex_session_id() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            602,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            100,
+            None,
+        );
+        // 故意不写 codex_session_id：live handle 仍应 short-circuit 成功。
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        registry.register(
+            602,
+            Arc::new(ControllableHandle {
+                thread_id: Some("thread-live".into()),
+                send_error: None,
+                shutdown_count: Arc::new(std::sync::Mutex::new(0)),
+            }),
+        );
+        let result = service
+            .resume_structured_agent_session(
+                std::env::temp_dir().as_path(),
+                crate::types::agent_session::ResumeStructuredAgentSessionInput {
+                    project_id: 1,
+                    session_id: 602,
+                },
+                &registry,
+                &broadcaster,
+            )
+            .expect("live handle should short-circuit without codex_session_id");
+        assert_eq!(result.session_id, 602);
+        assert_eq!(result.thread_id, "thread-live");
     }
 
     #[test]

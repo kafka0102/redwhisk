@@ -4001,14 +4001,73 @@ describe("IssuesActivity", () => {
         ),
       }),
     );
-    // resume 必须在 inject 之前被调用，以保证 session 在 agent_registry 中有 handle。
-    expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 506,
-    });
+    // live session 直接 inject 成功时无需 resume。
+    expect(resumeStructuredAgentSessionMock).not.toHaveBeenCalled();
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(506);
     expect(
       screen.queryByRole("dialog", { name: "Complete issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hands off merge conflicts on live sessions without requiring resume (Codex TUI)", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    const reviewWithSession = {
+      ...reviewIssue,
+      linkedSessionId: 536,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reviewWithSession] });
+    completeIssueFlowMock.mockResolvedValueOnce({
+      action: "blocked",
+      issue: reviewWithSession,
+      flow: null,
+      message: "Agent worktree 合并被阻止，请手动处理冲突。",
+      mergeBlockReason: "merge_conflict",
+      targetBranch: "dev",
+      workspaceBranch: "issue-536",
+      workspacePath: "/tmp/worktrees/issue-536",
+      actualPath: null,
+      drifted: false,
+      sessionId: 536,
+    });
+    // live TUI/PTY：inject 可直接写入；resume 会因缺少 codex_session_id 失败。
+    resumeStructuredAgentSessionMock.mockRejectedValueOnce({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "当前 Session 缺少可续接的会话标识。",
+      reason: "missingResumeSessionId",
+    });
+    injectAgentSessionPromptMock.mockResolvedValueOnce({
+      sessionId: 536,
+      codexSessionId: null,
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Review issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(injectAgentSessionPromptMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 536,
+        kind: "follow_up",
+        prompt: expect.stringContaining(
+          "Please resolve the conflicts from merging issue-536 into the originally recorded target branch dev",
+        ),
+      }),
+    );
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(536);
+    expect(
+      screen.queryByText("当前 Session 缺少可续接的会话标识。"),
     ).not.toBeInTheDocument();
   });
 
@@ -4035,10 +4094,16 @@ describe("IssuesActivity", () => {
       drifted: false,
       sessionId: 526,
     });
-    // resume 重建 handle 失败（如工作区丢失）→ 不应静默吞掉后继续 inject。
+    // session 未运行 → inject 失败后才 resume；resume 失败不应继续第二次 inject。
+    injectAgentSessionPromptMock.mockRejectedValueOnce({
+      code: "AGENT_SESSION_NOT_RUNNING",
+      message: "当前 Session 未运行，请先恢复会话后再注入。",
+      reason: "notRunningForInject",
+    });
     resumeStructuredAgentSessionMock.mockRejectedValueOnce({
       code: "RESUME_FAILURE_TEST",
       message: "resume workspace missing",
+      reason: "workspaceMissingForResume",
     });
 
     renderIssuesActivity({ onOpenAgentsActivity });
@@ -4053,11 +4118,11 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
 
-    // resume 失败 → 具体错误展示在对话框，inject 不被调用，不跳转 agents activity。
+    // resume 失败 → 具体错误展示在对话框，不二次 inject，不跳转 agents activity。
     expect(
       await screen.findByText("resume workspace missing"),
     ).toBeInTheDocument();
-    expect(injectAgentSessionPromptMock).not.toHaveBeenCalled();
+    expect(injectAgentSessionPromptMock).toHaveBeenCalledTimes(1);
     expect(onOpenAgentsActivity).not.toHaveBeenCalled();
   });
 

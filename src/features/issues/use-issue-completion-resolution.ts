@@ -20,10 +20,7 @@ import {
   buildWorktreeMergeConflictPrompt,
   type WorktreeMergeDetail,
 } from "./issue-completion/issue-completion-helpers";
-import {
-  injectAgentSessionPrompt,
-  resumeStructuredAgentSession,
-} from "../agents/agent-session-commands";
+import { injectSessionPromptWithResume } from "../agents/inject-session-prompt-with-resume";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import type { useI18n } from "../../shared/i18n/i18n";
 import type { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
@@ -275,18 +272,12 @@ export function useIssueCompletionResolution({
     }
 
     const prompt = buildWorktreeMergeConflictPrompt(detail, locale);
-    // worktree session 关闭后 handle 会从 agent_registry 移除，直接注入会报
-    // AgentSessionNotRunning。先 resume 重建 handle，再注入合并 prompt。
-    // resume 失败（如工作区丢失、provider 不支持续接）时 handle 必然不在
-    // registry，inject 随后也会失败——这里捕获并在对话框展示具体错误，避免
-    // 错误冒泡出 completeIssueWithCompletionChecks 的 catch 块成为 unhandled
-    // rejection，且比 inject 的泛化 notRunning 错误更有利于排查。
+    // worktree session 关闭后 handle / PTY 会移除，直接注入会报 notRunning。
+    // injectSessionPromptWithResume：live session（含 Codex TUI PTY）直接注入；
+    // 仅 notRunning 时再 resume 重建。resume 失败时在对话框展示具体错误，避免
+    // 冒泡成 unhandled rejection，也避免 live TUI 因缺少 codex_session_id 误报。
     try {
-      await resumeStructuredAgentSession({
-        projectId: requestProjectId,
-        sessionId,
-      });
-      await injectAgentSessionPrompt({
+      await injectSessionPromptWithResume({
         projectId: requestProjectId,
         sessionId,
         prompt,

@@ -6237,11 +6237,8 @@ describe("AgentsActivity", () => {
         ),
       }),
     );
-    // resume 必须在 inject 之前被调用，以保证 session 在 agent_registry 中有 handle。
-    expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 302,
-    });
+    // live session 直接 inject 成功时无需 resume。
+    expect(resumeStructuredAgentSessionMock).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("dialog", {
         name: "Let the agent auto-merge the current branch into the base branch?",

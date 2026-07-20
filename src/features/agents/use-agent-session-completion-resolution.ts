@@ -6,11 +6,10 @@ import {
 } from "react";
 
 import {
-  injectAgentSessionPrompt,
   listAgentSessions,
-  resumeStructuredAgentSession,
   type AgentSessionListItem,
 } from "./agent-session-commands";
+import { injectSessionPromptWithResume } from "./inject-session-prompt-with-resume";
 import { applySessionOverlays } from "./agent-session-overlays";
 import type { LinkedSessionIssue } from "./session-pane/agents-session-pane";
 import {
@@ -383,16 +382,9 @@ export function useAgentSessionCompletionResolution({
     setIsSubmittingMergePrompt(true);
 
     try {
-      // worktree session 关闭后 handle 会从 agent_registry 移除，直接注入会报
-      // AgentSessionNotRunning。先 resume 重建 handle，再注入合并 prompt。
-      // resume 失败（如工作区丢失、provider 不支持续接）时 handle 必然不在
-      // registry，inject 随后也会失败——这里让 resume 的具体错误直接冒泡到
-      // 下面的 catch 展示，比被 inject 的泛化 notRunning 错误掩盖更有利于排查。
-      await resumeStructuredAgentSession({
-        projectId,
-        sessionId: mergePromptSessionId,
-      });
-      await injectAgentSessionPrompt({
+      // live session（含 Codex TUI PTY）直接注入；仅 notRunning 时 resume 再注入。
+      // 避免 live TUI 因缺少 codex_session_id 被 resume 误拦。
+      await injectSessionPromptWithResume({
         projectId,
         sessionId: mergePromptSessionId,
         prompt: mergePromptContent,
