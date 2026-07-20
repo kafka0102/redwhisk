@@ -415,6 +415,7 @@
     "noProfilesForAgentType": "未找到可用于当前智能体类型的智能体配置。",
     "noReviewSessions": "暂无待验收的会话。",
     "noSessions": "暂无会话。",
+    "unsupportedLaunch": "（暂不支持启动）",
     "openAgentSettingsNo": "否",
     "openAgentSettingsYes": "是",
     "openSessionActions": "更多会话操作",

@@ -20,6 +20,10 @@ import {
   type WorkspaceMode,
 } from "../issue-commands";
 import {
+  filterLaunchVisibleAgentProfiles,
+  resolveAgentProfileLaunchEligibility,
+} from "../../agents/agent-launch-eligibility";
+import {
   listAgentProfiles,
   listSavedAgentSkills,
   type AgentProfileRecord,
@@ -129,18 +133,29 @@ export function IssueRunDialog({
           return;
         }
 
-        const mergedProfiles = [
+        const mergedProfiles = filterLaunchVisibleAgentProfiles([
           ...projectProfilesResponse.profiles,
           ...globalProfilesResponse.profiles,
-        ];
+        ]);
         const mergedSavedSkills = [
           ...projectSavedSkillsResponse.skills,
           ...globalSavedSkillsResponse.skills,
         ];
+        // ADR-0019 决策 4/5：enabled=false 隐藏；opencode/grok 显示但置灰不可选。
+        // 默认选中需从「可选」子集中挑，避免 initial profile 落到 opencode/grok
+        // 不可选项上。resolveInitialProfile 的入参也用 selectable 子集。
+        const selectableProjectProfiles =
+          projectProfilesResponse.profiles.filter(
+            (profile) =>
+              resolveAgentProfileLaunchEligibility(profile).selectable,
+          );
+        const selectableGlobalProfiles = globalProfilesResponse.profiles.filter(
+          (profile) => resolveAgentProfileLaunchEligibility(profile).selectable,
+        );
         const initialProfile = resolveInitialProfile({
-          profiles: mergedProfiles,
-          projectProfiles: projectProfilesResponse.profiles,
-          globalProfiles: globalProfilesResponse.profiles,
+          profiles: [...selectableProjectProfiles, ...selectableGlobalProfiles],
+          projectProfiles: selectableProjectProfiles,
+          globalProfiles: selectableGlobalProfiles,
           sessions: sessionsResponse.sessions,
         });
         const initialWorkspaceMode = resolveInitialWorkspaceMode({
@@ -401,10 +416,18 @@ export function IssueRunDialog({
                 {messages.issues.agentProfile}
               </Label>
               <Select
-                items={profiles.map((profile) => ({
-                  value: profile.id,
-                  label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}`,
-                }))}
+                items={profiles.map((profile) => {
+                  const eligibility =
+                    resolveAgentProfileLaunchEligibility(profile);
+                  return {
+                    value: profile.id,
+                    label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}${
+                      eligibility.selectable
+                        ? ""
+                        : ` ${messages.agentsFeature.unsupportedLaunch}`
+                    }`,
+                  };
+                })}
                 value={selectedProfileId}
                 onValueChange={(value) => {
                   const nextProfileId = value as number;
@@ -439,12 +462,25 @@ export function IssueRunDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {profiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.name}
-                      {profile.scope === "project" ? " (Project)" : " (Global)"}
-                    </SelectItem>
-                  ))}
+                  {profiles.map((profile) => {
+                    const eligibility =
+                      resolveAgentProfileLaunchEligibility(profile);
+                    return (
+                      <SelectItem
+                        key={profile.id}
+                        disabled={!eligibility.selectable}
+                        value={profile.id}
+                      >
+                        {profile.name}
+                        {profile.scope === "project"
+                          ? " (Project)"
+                          : " (Global)"}
+                        {!eligibility.selectable
+                          ? ` ${messages.agentsFeature.unsupportedLaunch}`
+                          : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
