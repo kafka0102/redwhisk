@@ -131,6 +131,8 @@ export function AgentProfileForm({
 
     try {
       const effectiveProjectId = scopeValue === "project" ? projectId : null;
+      // ADR-0019：displayMode/enabled 字段在表单上由 ticket 05 接入；
+      // 此处临时传 json + true 保留既有保存行为，避免类型阻断。
       const savedProfile = await saveAgentProfile({
         id: profile?.id,
         name,
@@ -142,6 +144,8 @@ export function AgentProfileForm({
         dangerous,
         defaultSkill: "",
         promptTemplate,
+        displayMode: "json",
+        enabled: true,
       });
       onSaved(savedProfile);
     } catch (error: unknown) {

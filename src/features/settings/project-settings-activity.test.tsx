@@ -120,6 +120,8 @@ const projectProfile: AgentProfileRecord = {
   defaultSkill: "",
   promptTemplate: "",
   del: 0,
+  displayMode: "json",
+  enabled: true,
 };
 
 const globalProfile: AgentProfileRecord = {
@@ -134,6 +136,8 @@ const globalProfile: AgentProfileRecord = {
   defaultSkill: "",
   promptTemplate: "",
   del: 0,
+  displayMode: "json",
+  enabled: true,
 };
 
 const legacyPromptProfile: AgentProfileRecord = {

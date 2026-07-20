@@ -397,6 +397,8 @@ const projectProfile = {
   defaultSkill: "bmad-dev-story",
   promptTemplate: "Review {{issue.description}} in {{project.name}}.",
   del: 0,
+  displayMode: "json" as const,
+  enabled: true,
 };
 
 const globalProfile = {
@@ -411,6 +413,8 @@ const globalProfile = {
   defaultSkill: "",
   promptTemplate: "",
   del: 0,
+  displayMode: "json" as const,
+  enabled: true,
 };
 
 const projectLabel = {

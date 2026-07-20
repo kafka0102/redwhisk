@@ -7,7 +7,15 @@ import type {
   SaveAgentAttachmentResult,
 } from "./agent-stream-types";
 
-export type AgentType = "codex" | "claude" | "claude_code";
+// 与后端 `AgentType` 枚举（snake_case 序列化）对齐：
+// - codex / claude / opencode / grok 跨 IPC 边界字面量。
+// - claude_code 是前端 UI 别名（视作 Claude），不跨 IPC 边界。
+export type AgentType =
+  | "codex"
+  | "claude"
+  | "claude_code"
+  | "opencode"
+  | "grok";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
 export type AgentSessionAttention = "none" | "requested";
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
