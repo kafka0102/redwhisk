@@ -32,6 +32,7 @@ use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::issue_completion::IssueCompletionPhase;
 use redwhisk_lib::types::session_event::SessionEventType;
+use redwhisk_lib::git::worktree_name::issue_worktree_base_name;
 use serde_json::Value;
 
 struct NoopStructuredHandle;
@@ -1329,14 +1330,15 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
             |row| row.get(0),
         )
         .expect("read issue number");
-    // workspace_branch 必须用 issue 的项目内编号，而不是全局 id。
+    // workspace_branch 使用项目内编号 + 仓库 basename slug，而不是全局 id。
+    let expected_base = issue_worktree_base_name(issue_number, &repo_path);
     assert_eq!(
         session.workspace_branch.as_deref(),
-        Some(format!("issue-{issue_number}").as_str())
+        Some(expected_base.as_str())
     );
     assert!(
-        workspace_path.replace('\\', "/").ends_with(&format!("issue-{issue_number}")),
-        "workspace path should end with issue-{{{issue_number}}}, got: {workspace_path}"
+        workspace_path.replace('\\', "/").ends_with(&expected_base),
+        "workspace path should end with {expected_base}, got: {workspace_path}"
     );
     assert_eq!(session.working_dir, workspace_path);
 }
@@ -1397,10 +1399,9 @@ fn start_agent_session_in_worktree_mode_rejects_leftover_worktree_on_disk() {
         AgentSessionRepository::new(&database.connection),
     );
 
-    // 模拟上次启动失败遗留的同名 worktree 主路径（无 session 行，纯磁盘残留）。
-    let leftover_path = repo_path
-        .join(".worktrees")
-        .join(format!("issue-{issue_number}"));
+    // 模拟上次启动失败遗留的新主路径 worktree（无 session 行，纯磁盘残留）。
+    let expected_base = issue_worktree_base_name(issue_number, &repo_path);
+    let leftover_path = repo_path.join(".worktrees").join(&expected_base);
     std::fs::create_dir_all(&leftover_path).expect("create leftover worktree dir");
 
     let error = service
@@ -1433,6 +1434,98 @@ fn start_agent_session_in_worktree_mode_rejects_leftover_worktree_on_disk() {
             .is_none(),
         "no session should be created"
     );
+}
+
+#[test]
+fn start_agent_session_in_worktree_mode_allows_orphan_legacy_issue_dir() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-legacy-orphan-project");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let issue_number: i64 = database
+        .connection
+        .query_row(
+            "SELECT number FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("read issue number");
+    database
+        .connection
+        .execute(
+            "UPDATE projects
+             SET worktree_location = 'repo_internal',
+                 worktree_setup_command = 'printf project-setup > project-setup.txt'
+             WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree settings");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+            "json",
+            true,
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    // 无 session 的旧式 issue-N 目录不应阻止创建 issue-N-reponame。
+    let legacy_path = repo_path
+        .join(".worktrees")
+        .join(format!("issue-{issue_number}"));
+    std::fs::create_dir_all(&legacy_path).expect("create legacy worktree dir");
+
+    let result = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: Some("printf run-setup > run-setup.txt".to_string()),
+            },
+        )
+        .expect("start should allow orphan legacy dir");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find session")
+        .expect("session exists");
+    let expected_base = issue_worktree_base_name(issue_number, &repo_path);
+    assert_eq!(session.workspace_branch.as_deref(), Some(expected_base.as_str()));
+    let workspace_path = session.workspace_path.expect("workspace path");
+    assert!(
+        workspace_path.replace('\\', "/").ends_with(&expected_base),
+        "workspace path should end with {expected_base}, got: {workspace_path}"
+    );
+    assert!(legacy_path.exists(), "legacy orphan dir remains untouched");
 }
 
 #[test]

@@ -12,6 +12,7 @@ use crate::db::issue_repository::IssueRepository;
 use crate::git::worktree::{
     cleanup_worktree, create_worktree_for_issue, list_local_branches,
 };
+use crate::git::worktree_name::issue_worktree_base_name;
 use crate::types::agent_session::{
     StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
@@ -246,8 +247,10 @@ impl AgentSessionService<'_> {
                 // session 行检查（上方）覆盖有 session 记录的情况；此处补 disk 检测，
                 // 覆盖回滚后无 session 但 worktree 目录仍在的情况，给出清晰「占用」错误，
                 // 避免走到 create_worktree_for_issue 因分支已检出被误标成「进程启动失败」。
+                let workspace_base_name =
+                    issue_worktree_base_name(issue_number, Path::new(&project.repo_path));
                 let primary_worktree_path =
-                    Path::new(&worktree_root_path).join(format!("issue-{issue_number}"));
+                    Path::new(&worktree_root_path).join(&workspace_base_name);
                 if primary_worktree_path.exists() {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueWorktreeOccupied,

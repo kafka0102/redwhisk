@@ -32,6 +32,10 @@ _Avoid_: completion policy、手动 / 自动提交二分
 某一 Agent worktree 由谁负责自动清理：RedWhisk 托管，或外部 / 用户提供。仅 RedWhisk 托管的 worktree 在完成流程中可被自动对账清理；外部 worktree 需用户确认。
 _Avoid_: workspace mode、session 工作目录归属
 
+**Issue Worktree 名**：
+为 Issue 创建 RedWhisk 托管 worktree 时使用的工作分支名与目录主名；形态为 `issue-{项目内编号}-{仓库名 slug}`，仓库名取自仓库路径最后一级目录，经小写、中文按字转拼音（无声调）、非 `[a-z0-9]` 剔除后按 `-` 连接，且不超过 20 字符（截断优先保留完整词）；仓库名 slug 为空时退回 `issue-{项目内编号}`。历史 session 已记录的路径与分支不改写。
+_Avoid_: Issue 标题 slug、全局 issue id 命名、在线翻译名
+
 **实际执行路径**：
 Issue 完成时认定的 session 真实工作目录；用于未提交改动检测、Worktree 漂移判定与完成弹框预填。路径来源优先级由完成编排决定，不由 git 层决定。
 _Avoid_: working_dir 快照、codex cwd 裸字段
