@@ -7,6 +7,7 @@ import { Input } from "../../components/ui/input";
 import { useI18n } from "../../shared/i18n/i18n";
 import { formatHomePathForDisplay } from "../../shared/paths/home-path";
 import { getProjectIconColor } from "./project-icon-color";
+import { openProjectWindow } from "./project-commands";
 import { ProjectRemoveMenu } from "./project-remove-menu";
 
 interface ProjectListProps {
@@ -113,11 +114,19 @@ export function ProjectList({
                   ) : null}
                 </span>
               </button>
-              <ProjectRemoveMenu
-                messagesSource="projectHome"
-                projectId={project.id}
-                onRemoved={onProjectsRefresh}
-              />
+              {!project.hasOpenWindow ? (
+                <ProjectRemoveMenu
+                  messagesSource="projectHome"
+                  projectId={project.id}
+                  onRemoved={onProjectsRefresh}
+                  onOpenInCurrentWindow={async () => {
+                    onProjectOpen({ ...project, hasOpenWindow: false });
+                  }}
+                  onOpenInNewWindow={async () => {
+                    await openProjectWindow({ projectId: project.id });
+                  }}
+                />
+              ) : null}
             </div>
           </li>
         ))}

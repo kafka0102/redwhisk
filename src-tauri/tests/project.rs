@@ -802,11 +802,13 @@ fn list_projects_returns_all_projects_with_path_status_in_recent_order() {
     assert_eq!(projects.projects.len(), 2);
     assert_eq!(projects.projects[0].id, new_project.id);
     assert_eq!(projects.projects[0].path_status, ProjectPathStatus::Missing);
+    assert!(!projects.projects[0].has_open_window);
     assert_eq!(projects.projects[1].id, old_project.id);
     assert_eq!(
         projects.projects[1].path_status,
         ProjectPathStatus::Available
     );
+    assert!(!projects.projects[1].has_open_window);
 }
 
 #[test]

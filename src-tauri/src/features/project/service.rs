@@ -417,6 +417,7 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         created_at: project.created_at,
         last_opened_at: project.last_opened_at,
         path_status,
+        has_open_window: false,
     }
 }
 

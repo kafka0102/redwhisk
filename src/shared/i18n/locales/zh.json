@@ -206,7 +206,9 @@
     "removeFromListConfirmMessage": "移除后项目数据不会删除，下次使用相同路径的仓库时可恢复显示，确定要移除该项目？",
     "deleteProject": "删除项目",
     "deleteProjectConfirmTitle": "删除项目",
-    "deleteProjectConfirmMessage": "删除项目将移除该项目的所有数据，确定要删除项目吗？"
+    "deleteProjectConfirmMessage": "删除项目将移除该项目的所有数据，确定要删除项目吗？",
+    "openInCurrentWindow": "在当前窗口打开",
+    "openInNewWindow": "在新窗口打开"
   },
   "projectSwitcher": {
     "createProject": "创建项目",
@@ -221,7 +223,9 @@
     "removeFromListConfirmMessage": "移除后项目数据不会删除，下次使用相同路径的仓库时可恢复显示，确定要移除该项目？",
     "deleteProject": "删除项目",
     "deleteProjectConfirmTitle": "删除项目",
-    "deleteProjectConfirmMessage": "删除项目将移除该项目的所有数据，确定要删除项目吗？"
+    "deleteProjectConfirmMessage": "删除项目将移除该项目的所有数据，确定要删除项目吗？",
+    "openInCurrentWindow": "在当前窗口打开",
+    "openInNewWindow": "在新窗口打开"
   },
   "createProject": {
     "create": "创建项目",

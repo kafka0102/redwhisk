@@ -206,7 +206,9 @@
     "removeFromListConfirmMessage": "Removing this project will not delete its data. It will reappear when you open a repository at the same path. Remove this project from the list?",
     "deleteProject": "Delete project",
     "deleteProjectConfirmTitle": "Delete project",
-    "deleteProjectConfirmMessage": "Deleting a project will remove all of its data. Are you sure you want to delete this project?"
+    "deleteProjectConfirmMessage": "Deleting a project will remove all of its data. Are you sure you want to delete this project?",
+    "openInCurrentWindow": "Open in current window",
+    "openInNewWindow": "Open in new window"
   },
   "projectSwitcher": {
     "createProject": "Create Project",
@@ -221,7 +223,9 @@
     "removeFromListConfirmMessage": "Removing this project will not delete its data. It will reappear when you open a repository at the same path. Remove this project from the list?",
     "deleteProject": "Delete project",
     "deleteProjectConfirmTitle": "Delete project",
-    "deleteProjectConfirmMessage": "Deleting a project will remove all of its data. Are you sure you want to delete this project?"
+    "deleteProjectConfirmMessage": "Deleting a project will remove all of its data. Are you sure you want to delete this project?",
+    "openInCurrentWindow": "Open in current window",
+    "openInNewWindow": "Open in new window"
   },
   "createProject": {
     "create": "Create Project",

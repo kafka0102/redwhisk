@@ -11,6 +11,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 interface ProjectSwitcherProps {
   currentProject: ProjectSummary;
   onCreateProject: () => void;
+  onOpenInCurrentWindow: (project: ProjectSummary) => Promise<void>;
   projects: ProjectSummary[];
   onProjectsRefresh: () => Promise<void>;
 }
@@ -18,6 +19,7 @@ interface ProjectSwitcherProps {
 export function ProjectSwitcher({
   currentProject,
   onCreateProject,
+  onOpenInCurrentWindow,
   onProjectsRefresh,
   projects,
 }: ProjectSwitcherProps) {
@@ -187,11 +189,21 @@ export function ProjectSwitcher({
                       />
                     ) : null}
                   </button>
-                  {!isCurrent ? (
+                  {!isCurrent && !project.hasOpenWindow ? (
                     <ProjectRemoveMenu
                       messagesSource="projectSwitcher"
                       projectId={project.id}
                       onError={setError}
+                      onOpenInCurrentWindow={async () => {
+                        setError(null);
+                        await onOpenInCurrentWindow(project);
+                        setIsOpen(false);
+                      }}
+                      onOpenInNewWindow={async () => {
+                        setError(null);
+                        await openProjectWindow({ projectId: project.id });
+                        setIsOpen(false);
+                      }}
                       onRemoved={async () => {
                         setError(null);
                         await onProjectsRefresh();

@@ -93,6 +93,7 @@ pub struct ProjectListItem {
     pub created_at: i64,
     pub last_opened_at: i64,
     pub path_status: ProjectPathStatus,
+    pub has_open_window: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

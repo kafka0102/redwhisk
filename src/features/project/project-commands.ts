@@ -68,6 +68,7 @@ export interface ProjectRecord {
 
 export interface ProjectListItem extends Omit<ProjectRecord, "codeWorkspaces"> {
   pathStatus: ProjectPathStatus;
+  hasOpenWindow: boolean;
 }
 
 export interface ProjectListResponse {

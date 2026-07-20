@@ -31,13 +31,20 @@ pub fn create_project(
 #[tauri::command]
 pub async fn list_projects(
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<ProjectListResponse, CommandError> {
     let data_dir = project_data_dir(&app)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let mut response = tauri::async_runtime::spawn_blocking(move || {
         ProjectService::list_projects_in_data_dir(data_dir)
     })
     .await
-    .map_err(project_join_error)?
+    .map_err(project_join_error)??;
+
+    for project in &mut response.projects {
+        project.has_open_window = project_has_live_window(&app, &state, project.id);
+    }
+
+    Ok(response)
 }
 
 #[tauri::command]
@@ -194,6 +201,28 @@ pub async fn open_project_window(
         project_id: project.id,
         window_label,
     })
+}
+
+
+fn project_has_live_window(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+    project_id: i64,
+) -> bool {
+    if let Some(label) = state.find_project_window(project_id) {
+        if app.get_webview_window(&label).is_some() {
+            return true;
+        }
+        state.forget_project_window(project_id);
+    }
+
+    let fallback_label = format!("project-{}", project_id);
+    if app.get_webview_window(&fallback_label).is_some() {
+        state.record_project_window(project_id, fallback_label);
+        return true;
+    }
+
+    false
 }
 
 fn focus_existing_window(

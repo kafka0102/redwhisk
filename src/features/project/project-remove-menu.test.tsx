@@ -14,14 +14,30 @@ vi.mock("./project-commands", () => ({
 const removeProjectFromListMock = vi.mocked(removeProjectFromList);
 const deleteProjectMock = vi.mocked(deleteProject);
 
-function renderMenu(onRemoved = vi.fn().mockResolvedValue(undefined)) {
+function renderMenu(
+  overrides: {
+    onOpenInCurrentWindow?: () => Promise<void>;
+    onOpenInNewWindow?: () => Promise<void>;
+    onRemoved?: () => Promise<void>;
+  } = {},
+) {
+  const onOpenInCurrentWindow =
+    overrides.onOpenInCurrentWindow ?? vi.fn().mockResolvedValue(undefined);
+  const onOpenInNewWindow =
+    overrides.onOpenInNewWindow ?? vi.fn().mockResolvedValue(undefined);
+  const onRemoved = overrides.onRemoved ?? vi.fn().mockResolvedValue(undefined);
+
   return {
+    onOpenInCurrentWindow,
+    onOpenInNewWindow,
     onRemoved,
     ...render(
       <I18nProvider initialLocale="zh">
         <ProjectRemoveMenu
           messagesSource="projectHome"
           projectId={7}
+          onOpenInCurrentWindow={onOpenInCurrentWindow}
+          onOpenInNewWindow={onOpenInNewWindow}
           onRemoved={onRemoved}
         />
       </I18nProvider>,
@@ -35,6 +51,32 @@ describe("ProjectRemoveMenu", () => {
     removeProjectFromListMock.mockResolvedValue(undefined);
     deleteProjectMock.mockReset();
     deleteProjectMock.mockResolvedValue(undefined);
+  });
+
+  it("calls open in current window without opening the project row", async () => {
+    const user = userEvent.setup();
+    const { onOpenInCurrentWindow, onOpenInNewWindow } = renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(await screen.findByText("在当前窗口打开"));
+
+    await waitFor(() => {
+      expect(onOpenInCurrentWindow).toHaveBeenCalledTimes(1);
+    });
+    expect(onOpenInNewWindow).not.toHaveBeenCalled();
+  });
+
+  it("calls open in new window", async () => {
+    const user = userEvent.setup();
+    const { onOpenInCurrentWindow, onOpenInNewWindow } = renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(await screen.findByText("在新窗口打开"));
+
+    await waitFor(() => {
+      expect(onOpenInNewWindow).toHaveBeenCalledTimes(1);
+    });
+    expect(onOpenInCurrentWindow).not.toHaveBeenCalled();
   });
 
   it("does not call remove when confirmation is cancelled", async () => {

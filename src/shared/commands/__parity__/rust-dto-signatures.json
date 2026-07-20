@@ -384,6 +384,11 @@
         "workspacePath": "required"
       }
     },
+    "DeleteProjectInput": {
+      "fields": {
+        "projectId": "required"
+      }
+    },
     "DeleteProjectLabelInput": {
       "fields": {
         "id": "required"
@@ -780,6 +785,7 @@
     "ProjectListItem": {
       "fields": {
         "createdAt": "required",
+        "hasOpenWindow": "required",
         "id": "required",
         "lastOpenedAt": "required",
         "name": "required",
@@ -925,6 +931,11 @@
     "RefreshAgentSkillsInput": {
       "fields": {
         "projectId": "optional"
+      }
+    },
+    "RemoveProjectFromListInput": {
+      "fields": {
+        "projectId": "required"
       }
     },
     "ResizeAgentSessionTerminalInput": {

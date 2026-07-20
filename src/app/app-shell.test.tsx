@@ -158,6 +158,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -203,6 +204,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -235,6 +237,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -268,6 +271,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -300,6 +304,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -335,6 +340,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -362,6 +368,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{
@@ -404,6 +411,7 @@ describe("AppShell terminals activity persistence", () => {
     render(
       <AppShell
         onCreateProject={() => {}}
+        onOpenInCurrentWindow={async () => {}}
         onProjectUpdated={() => {}}
         onProjectsRefresh={vi.fn().mockResolvedValue(undefined)}
         project={{

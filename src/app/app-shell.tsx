@@ -28,6 +28,7 @@ import { useI18n } from "../shared/i18n/i18n";
 
 interface AppShellProps {
   onCreateProject: () => void;
+  onOpenInCurrentWindow: (project: ProjectSummary) => Promise<void>;
   onProjectUpdated: (project: ProjectSummary) => void;
   project: ProjectSummary;
   projects: ProjectSummary[];
@@ -53,6 +54,7 @@ const ACTIVITIES: Array<{
 
 export function AppShell({
   onCreateProject,
+  onOpenInCurrentWindow,
   onProjectUpdated,
   onProjectsRefresh,
   openAgentSessionRequest,
@@ -217,6 +219,7 @@ export function AppShell({
           }}
         >
           <ProjectSwitcher
+            onOpenInCurrentWindow={onOpenInCurrentWindow}
             currentProject={project}
             onCreateProject={onCreateProject}
             projects={projects}

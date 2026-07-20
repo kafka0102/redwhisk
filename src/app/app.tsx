@@ -48,6 +48,7 @@ export interface ProjectSummary {
   worktreeSetupCommand: string;
   recentOpenedAt: string;
   status: "available" | "missing";
+  hasOpenWindow?: boolean;
   codeWorkspaces?: CodeWorkspaceRoot[];
 }
 
@@ -247,11 +248,32 @@ function ProjectApp() {
     void startCreateProject(true);
   }
 
+  async function handleOpenInCurrentWindow(project: ProjectSummary) {
+    setProjectCreationError(null);
+    setProjectOpenError(null);
+
+    try {
+      const openedProject = await openProject({ projectId: project.id });
+      const projectSummary = toProjectSummary(openedProject);
+      setProjects((currentProjects) =>
+        mergeProject(currentProjects, projectSummary),
+      );
+      setSelectedProject(projectSummary);
+    } catch (error) {
+      setProjectOpenError(getCommandErrorMessage(error, translate));
+    }
+  }
+
   async function handleProjectOpen(project: ProjectSummary) {
     setProjectCreationError(null);
     setProjectOpenError(null);
 
     try {
+      if (project.hasOpenWindow) {
+        await openProjectWindow({ projectId: project.id });
+        return;
+      }
+
       const openedProject = await openProject({ projectId: project.id });
       const projectSummary = toProjectSummary(openedProject);
       setProjects((currentProjects) =>
@@ -380,6 +402,7 @@ function ProjectApp() {
     <I18nProvider initialLocale={getDefaultLocale()}>
       <>
         <AppShell
+          onOpenInCurrentWindow={handleOpenInCurrentWindow}
           onCreateProject={handleCreateProjectFromSwitcher}
           onProjectUpdated={handleProjectUpdated}
           project={selectedProject}
@@ -415,6 +438,8 @@ function toProjectSummary(
     worktreeSetupCommand: project.worktreeSetupCommand,
     recentOpenedAt: `Opened ${formatLocalTimestamp(project.lastOpenedAt)}`,
     status: "pathStatus" in project ? project.pathStatus : "available",
+    hasOpenWindow:
+      "hasOpenWindow" in project ? Boolean(project.hasOpenWindow) : false,
     codeWorkspaces,
   };
 }

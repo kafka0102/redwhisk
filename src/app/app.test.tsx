@@ -198,6 +198,7 @@ describe("App project entry", () => {
           createdAt: 1_780_581_600_000,
           lastOpenedAt: 1_780_624_800_000,
           pathStatus: "available",
+          hasOpenWindow: false,
         },
         {
           id: 2,
@@ -208,6 +209,7 @@ describe("App project entry", () => {
           createdAt: 1_780_578_000_000,
           lastOpenedAt: 1_780_621_200_000,
           pathStatus: "missing",
+          hasOpenWindow: false,
         },
       ],
     };
@@ -1095,6 +1097,7 @@ describe("App project entry", () => {
           createdAt: 1_780_581_600_000,
           lastOpenedAt: 1_780_624_800_000,
           pathStatus: "available",
+          hasOpenWindow: false,
         },
         {
           id: 3,
@@ -1105,6 +1108,7 @@ describe("App project entry", () => {
           createdAt: 1_780_578_000_000,
           lastOpenedAt: 1_780_621_200_000,
           pathStatus: "available",
+          hasOpenWindow: false,
         },
       ],
     };
@@ -1208,6 +1212,127 @@ describe("App project entry", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "当前项目 RedWhisk" }),
+    ).toBeInTheDocument();
+  });
+
+  it("focuses an already open project window from the home list", async () => {
+    const user = userEvent.setup();
+    currentProjectList = {
+      projects: [
+        {
+          id: 1,
+          name: "RedWhisk",
+          repoPath: "/Users/kafka0102/workspace/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          createdAt: 1_780_574_400_000,
+          lastOpenedAt: 1_780_624_800_000,
+          pathStatus: "available",
+          hasOpenWindow: false,
+        },
+        {
+          id: 3,
+          name: "Other Project",
+          repoPath: "/Users/kafka0102/workspace/other-project",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          createdAt: 1_780_578_000_000,
+          lastOpenedAt: 1_780_621_200_000,
+          pathStatus: "available",
+          hasOpenWindow: true,
+        },
+      ],
+    };
+    openProjectWindowMock.mockResolvedValue({
+      projectId: 3,
+      windowLabel: "project-3",
+    });
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开项目 Other Project" }),
+    );
+
+    expect(openProjectWindowMock).toHaveBeenCalledWith({ projectId: 3 });
+    expect(openProjectMock).not.toHaveBeenCalled();
+  });
+
+  it("hides more actions for projects that already have an open window", async () => {
+    const user = userEvent.setup();
+    currentProjectList = {
+      projects: [
+        {
+          id: 1,
+          name: "RedWhisk",
+          repoPath: "/Users/kafka0102/workspace/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          createdAt: 1_780_574_400_000,
+          lastOpenedAt: 1_780_624_800_000,
+          pathStatus: "available",
+          hasOpenWindow: false,
+        },
+        {
+          id: 3,
+          name: "Other Project",
+          repoPath: "/Users/kafka0102/workspace/other-project",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          createdAt: 1_780_578_000_000,
+          lastOpenedAt: 1_780_621_200_000,
+          pathStatus: "available",
+          hasOpenWindow: true,
+        },
+      ],
+    };
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "打开项目 RedWhisk" });
+    // home list more buttons: only for closed window projects
+    const moreButtons = screen.getAllByRole("button", { name: "更多操作" });
+    expect(moreButtons).toHaveLength(1);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
+    );
+    await user.click(screen.getByRole("button", { name: "当前项目 RedWhisk" }));
+
+    // switcher: current project no more; open-window project no more
+    expect(screen.queryAllByRole("button", { name: "更多操作" })).toHaveLength(
+      0,
+    );
+  });
+
+  it("opens a project in the current window from the home more menu", async () => {
+    const user = userEvent.setup();
+    currentProjectList = {
+      projects: [
+        {
+          id: 1,
+          name: "RedWhisk",
+          repoPath: "/Users/kafka0102/workspace/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          createdAt: 1_780_574_400_000,
+          lastOpenedAt: 1_780_624_800_000,
+          pathStatus: "available",
+          hasOpenWindow: false,
+        },
+      ],
+    };
+    render(<App />);
+
+    await screen.findByRole("button", { name: "打开项目 RedWhisk" });
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    await user.click(await screen.findByText("在当前窗口打开"));
+
+    await waitFor(() => {
+      expect(openProjectMock).toHaveBeenCalledWith({ projectId: 1 });
+    });
+    expect(
+      await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
   });
 

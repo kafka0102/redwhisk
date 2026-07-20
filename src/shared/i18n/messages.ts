@@ -172,6 +172,8 @@ export interface I18nMessages {
     localProjects: string;
     moreActions: string;
     newProject: string;
+    openInCurrentWindow: string;
+    openInNewWindow: string;
     openProject: (projectName: string) => string;
     pathUnavailable: string;
     projects: string;
@@ -192,6 +194,8 @@ export interface I18nMessages {
     currentProjectWithName: (projectName: string) => string;
     menu: string;
     moreActions: string;
+    openInCurrentWindow: string;
+    openInNewWindow: string;
     pathUnavailable: string;
     deleteProject: string;
     deleteProjectConfirmMessage: string;
