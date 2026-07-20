@@ -224,16 +224,22 @@ function applyEvent(
 
     case "timeline": {
       // 收到「有产出」事件说明 turn 实际仍在跑。若此前被 spurious turn_completed
-      // 误置异常中断态，恢复 running 并清红条，避免活动进行中却挂着「异常中断」。
+      // 误置异常中断态（含子代理被取消留下的 subagentInterrupted 横幅），恢复
+      // running 并清红条，避免活动进行中却挂着「异常中断 / 工作流可能已暂停」。
       const turnPatch =
-        state.turnInterrupted && timelineItemIndicatesActiveWork(event.item)
+        (state.turnInterrupted || state.subagentInterrupted) &&
+        timelineItemIndicatesActiveWork(event.item)
           ? ({
               turnStatus: "running",
               turnInterrupted: false,
               interruptedStopReason: null,
+              subagentInterrupted: false,
             } as Pick<
               MessageStreamState,
-              "turnStatus" | "turnInterrupted" | "interruptedStopReason"
+              | "turnStatus"
+              | "turnInterrupted"
+              | "interruptedStopReason"
+              | "subagentInterrupted"
             >)
           : {};
       if (shouldSkipTimelineItem(event.item, state.entries)) {

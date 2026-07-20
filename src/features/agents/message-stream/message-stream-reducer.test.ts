@@ -1202,5 +1202,31 @@ describe("messageStreamReducer", () => {
       );
       expect(next.subagentInterrupted).toBe(false);
     });
+
+    it("子代理被取消后收到产出事件清除 subagentInterrupted 横幅", () => {
+      const canceled = messageStreamReducer(
+        { ...createInitialState(), turnStatus: "running", isInitialized: true },
+        {
+          type: "EVENT",
+          event: timelineEvent({
+            type: "tool_call",
+            callId: "call_subagent_1",
+            name: "subagent",
+            detail: { type: "sub_agent" },
+            status: "canceled",
+            error: "子代理被中断（status: failed）",
+          }),
+        },
+      );
+      expect(canceled.subagentInterrupted).toBe(true);
+
+      // 主 turn 仍继续产出 → 说明工作流未暂停，横幅应自动消失。
+      const next = messageStreamReducer(canceled, {
+        type: "EVENT",
+        event: timelineEvent({ type: "reasoning", text: "继续思考" }),
+      });
+      expect(next.subagentInterrupted).toBe(false);
+      expect(next.turnStatus).toBe("running");
+    });
   });
 });
