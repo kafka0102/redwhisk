@@ -241,4 +241,76 @@ describe("terminal scrollback without alternate screen", () => {
     expect(snap.type).toBe("normal");
     expect(snap.baseY).toBeGreaterThanOrEqual(before);
   });
+
+
+  it("RED: short shell prompt is destroyed by full-screen in-place CUP redraw", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    // Typical first-terminal state: only a few prompt lines, still within one screen.
+    await writeSync(
+      terminal,
+      "user@host project % \r\nuser@host project % codex\r\n",
+    );
+    expect(snapshotBuffer(terminal).type).toBe("normal");
+    expect(snapshotBuffer(terminal).baseY).toBe(0);
+    expect(bufferContains(terminal, "user@host project %")).toBe(true);
+
+    // Codex-like full viewport redraw from home without alt-screen.
+    for (let frame = 0; frame < 10; frame += 1) {
+      const rows = Array.from(
+        { length: 24 },
+        (_, i) => `CODEX-UI-${frame}-${String(i).padStart(2, "0")}`,
+      );
+      await writeSync(terminal, inPlaceRedraw(rows));
+    }
+
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(snap.baseY).toBe(0);
+    expect(snap.canScroll).toBe(false);
+    // USER SYMPTOM: cannot reach pre-codex shell output
+    expect(bufferContains(terminal, "user@host project %")).toBe(false);
+    expect(bufferContains(terminal, "CODEX-UI-9-00")).toBe(true);
+  });
+
+  it("after short-shell wipe, line-mode stream restores scroll but not shell", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    await writeSync(terminal, "prompt % codex\r\n");
+    await writeSync(
+      terminal,
+      inPlaceRedraw(
+        Array.from({ length: 24 }, (_, i) => `UI-${i}`),
+      ),
+    );
+    expect(bufferContains(terminal, "prompt %")).toBe(false);
+    expect(snapshotBuffer(terminal).baseY).toBe(0);
+
+    await writeSync(terminal, fillLines(40, "STREAM"));
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
+    expect(bufferContains(terminal, "prompt %")).toBe(false);
+    expect(bufferContains(terminal, "STREAM-0000")).toBe(true);
+  });
+
+  it("long shell already in scrollback survives full-screen in-place redraw", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    await writeSync(terminal, fillLines(80, "SHELL"));
+    await writeSync(
+      terminal,
+      inPlaceRedraw(
+        Array.from({ length: 24 }, (_, i) => `UI-${i}`),
+      ),
+    );
+    expect(snapshotBuffer(terminal).type).toBe("normal");
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
+    expect(bufferContains(terminal, "SHELL-0000")).toBe(true);
+  });
+
 });
