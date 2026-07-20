@@ -370,6 +370,7 @@ pub async fn start_structured_agent_session(
     let data_dir = prepare_agent_session_data_dir(&app, &state)?;
     let agent_sessions = state.agent_sessions.clone();
     let agent_event_broadcaster = state.agent_event_broadcaster.clone();
+    let pty_sessions = state.pty_sessions.clone();
     let project_id = input.project_id;
     let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -378,6 +379,7 @@ pub async fn start_structured_agent_session(
             input,
             &agent_sessions,
             &agent_event_broadcaster,
+            &pty_sessions,
         )?;
         emit_agent_session_list_changed(
             &app,

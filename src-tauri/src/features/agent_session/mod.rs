@@ -29,5 +29,4 @@ pub(crate) use timeline::read_last_assistant_text_for_turn;
 pub(crate) use log_path::build_issue_archive_log_path;
 
 #[cfg(test)]
-#[path = "tui_start_tests.rs"]
 mod tui_start_tests;

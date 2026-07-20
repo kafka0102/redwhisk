@@ -53,13 +53,13 @@ use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
 
-use super::command_snapshot::build_structured_command_snapshot;
+use super::command_snapshot::{build_structured_command_snapshot, build_tui_command_snapshot_for_profile};
 use super::codex_session_id_capture::{
     command_supports_prompt_argument, should_attempt_codex_session_capture,
 };
 use crate::agent::descriptor_for;
 use super::launch::{persist_started_session_thread_id, start_provider_session};
-use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
+use super::log_path::{build_issue_runtime_structured_log_path, build_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
 use super::timeline::{is_empty_standalone_thread_timeline_error, latest_effort_from_session_log, latest_output_from_session_log, read_timeline_from_session_log};
 use super::validation::{validate_injected_prompt, validate_profile_not_deleted, validate_profile_scope, validate_prompt_snapshot, validate_session_title, validate_working_dir};
 use super::worktree_setup::run_worktree_setup_command;
@@ -150,12 +150,7 @@ impl<'connection> AgentSessionService<'connection> {
     ) -> Result<StartAgentSessionResult, CommandError> {
         let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
         if launch.profile.display_mode == "tui" {
-            launch.command_snapshot = descriptor_for(&launch.profile.agent_type)
-                .build_tui_command_snapshot(
-                    &launch.profile.command,
-                    &launch.profile.mode,
-                    launch.profile.dangerous,
-                );
+            launch.command_snapshot = build_tui_command_snapshot_for_profile(&launch.profile);
             return self.start_agent_session_internal_with_launch(
                 data_dir,
                 input,
@@ -1404,6 +1399,7 @@ impl AgentSessionService<'_> {
         input: StartStructuredAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
+        pty_sessions: &PtySessionManager,
     ) -> Result<StartStructuredAgentSessionResult, CommandError> {
         let database = DatabaseConfig::new(&data_dir)
             .open()
@@ -1423,6 +1419,7 @@ impl AgentSessionService<'_> {
             input,
             agent_registry,
             broadcaster,
+            pty_sessions,
         )
     }
 
@@ -1432,6 +1429,7 @@ impl AgentSessionService<'_> {
         input: StartStructuredAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
+        pty_sessions: &PtySessionManager,
     ) -> Result<StartStructuredAgentSessionResult, CommandError> {
         let project = self.project_by_id(input.project_id)?;
         let cwd = validate_working_dir(&project.repo_path).map_err(|mut error| {
@@ -1442,77 +1440,22 @@ impl AgentSessionService<'_> {
             error
         })?;
 
-        let requested_agent_type = input.agent_type.unwrap_or(AgentType::Codex);
+        let profile = self.resolve_temporary_session_profile(&input)?;
+        if profile.display_mode == "tui" {
+            return self.start_standalone_tui_agent_session(
+                data_dir,
+                &input,
+                &profile,
+                &cwd,
+                pty_sessions,
+            );
+        }
+        let _ = pty_sessions;
 
-        // 查找 agent profile：先看有没有指定 id，否则按 agent 类型找第一个可用的 profile。
-        let (agent_profile_id, agent_type, command_snapshot) = if let Some(profile_id) =
-            input.agent_profile_id
-        {
-            let profile = self
-                .agent_profile_repository
-                .find_profile_by_id(profile_id)
-                .map_err(agent_session_database_error)?
-                .ok_or_else(|| {
-                    CommandError::new(
-                        CommandErrorCode::AgentProfileValidationFailed,
-                        "Agent Profile 不存在。",
-                    ).with_reason("profileNotFound")
-                    .with_detail(
-                        ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile_id),
-                    )
-                })?;
-            validate_profile_not_deleted(&profile)?;
-            validate_profile_scope(&profile, input.project_id)?;
-            (
-                profile.id,
-                profile.agent_type.clone(),
-                build_structured_command_snapshot(&profile),
-            )
-        } else {
-            // 没有指定 profile id，找第一个可用的 profile（先 project scope，后 global scope）。
-            let project_profiles = self
-                .agent_profile_repository
-                .list_profiles_by_scope(&AgentScope::Project, Some(input.project_id))
-                .map_err(agent_session_database_error)?;
-            let global_profiles = self
-                .agent_profile_repository
-                .list_profiles_by_scope(&AgentScope::Global, None)
-                .map_err(agent_session_database_error)?;
-
-            let all_profiles: Vec<_> = project_profiles
-                .into_iter()
-                .chain(global_profiles.into_iter())
-                .collect();
-
-            if let Some(profile) = all_profiles
-                .into_iter()
-                .find(|profile| profile.agent_type == requested_agent_type)
-            {
-                (
-                    profile.id,
-                    profile.agent_type.clone(),
-                    build_structured_command_snapshot(&profile),
-                )
-            } else {
-                let requested_agent_type_literal = match requested_agent_type {
-                    AgentType::Codex => "codex",
-                    AgentType::Claude => "claude",
-                    AgentType::OpenCode => "opencode",
-                    AgentType::Grok => "grok",
-                };
-                return Err(CommandError::new(
-                    CommandErrorCode::AgentProfileValidationFailed,
-                    "未找到可用于当前 Agent 类型的 Agent Profile。",
-                ).with_reason("noProfileForAgentType")
-                .with_detail(
-                    ErrorDetail::new("AgentType")
-                        .with_value("agentType", requested_agent_type_literal),
-                )
-                .with_detail(
-                    ErrorDetail::new("Project").with_value("projectId", input.project_id),
-                ));
-            }
-        };
+        let agent_profile_id = profile.id;
+        let agent_type = profile.agent_type.clone();
+        let command_snapshot = build_structured_command_snapshot(&profile);
+        let display_mode = profile.display_mode.as_str();
 
         let title = input
             .title
@@ -1538,6 +1481,7 @@ impl AgentSessionService<'_> {
                 &cwd,
                 &command_snapshot,
                 &pending_log_path,
+                display_mode,
                 started_at,
             )?;
             let log_path = build_standalone_runtime_structured_log_path(
@@ -1607,6 +1551,188 @@ impl AgentSessionService<'_> {
             session_id,
             thread_id,
         })
+    }
+
+    fn start_standalone_tui_agent_session(
+        &self,
+        data_dir: &Path,
+        input: &StartStructuredAgentSessionInput,
+        profile: &AgentProfileRow,
+        cwd: &str,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<StartStructuredAgentSessionResult, CommandError> {
+        let title = input
+            .title
+            .as_deref()
+            .map(validate_session_title)
+            .transpose()?;
+        let started_at = current_epoch_millis()?;
+        let command_snapshot = build_tui_command_snapshot_for_profile(profile);
+        let log_path = build_log_path(
+            data_dir,
+            input.project_id,
+            "standalone",
+            profile.id,
+            started_at,
+        )?;
+
+        let pending_pty = pty_sessions
+            .spawn_pending(&PtySpawnRequest {
+                mode: PtyCommandMode::ExecReplace,
+                command: command_snapshot.clone(),
+                working_dir: cwd.to_string(),
+                log_path: log_path.clone(),
+                initial_prompt: None,
+                rows: 32,
+                cols: 120,
+                startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+                startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+            })
+            .map_err(agent_session_start_error)?;
+
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        let session = (|| {
+            let session = insert_structured_session_in_transaction(
+                &transaction,
+                input.project_id,
+                profile.id,
+                title.as_deref(),
+                cwd,
+                &command_snapshot,
+                &log_path,
+                profile.display_mode.as_str(),
+                started_at,
+            )?;
+            let event_payload = json!({
+                "sessionId": session.id,
+                "projectId": input.project_id,
+                "issueId": Value::Null,
+                "title": title,
+                "status": "running",
+                "structuredStream": false,
+                "displayMode": profile.display_mode,
+                "logPath": log_path,
+            })
+            .to_string();
+            EventRepository::insert_session_event_in_transaction(
+                &transaction,
+                session.id,
+                SessionEventType::SessionStarted,
+                &event_payload,
+                started_at,
+            )?;
+            transaction.commit()?;
+            Ok::<_, rusqlite::Error>(session)
+        })();
+
+        let session = match session {
+            Ok(session) => session,
+            Err(error) => {
+                pending_pty.terminate();
+                return Err(agent_session_database_error(error));
+            }
+        };
+
+        let session_id = session.id;
+        let data_dir_for_exit = data_dir.to_path_buf();
+        if let Err(error) = pty_sessions.register_for_project(
+            input.project_id,
+            session_id,
+            pending_pty,
+            move |exit_status| {
+                let _ = AgentSessionService::record_session_termination_in_data_dir(
+                    &data_dir_for_exit,
+                    session_id,
+                    exit_status,
+                );
+            },
+        ) {
+            error.pending.terminate();
+            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                data_dir,
+                session_id,
+                PtyExitStatus { exit_code: None },
+            );
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionStartFailed,
+                "Agent TUI Session 注册失败。",
+            )
+            .with_reason("tuiRegisterFailed")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.message)));
+        }
+
+        Ok(StartStructuredAgentSessionResult {
+            session_id,
+            thread_id: String::new(),
+        })
+    }
+
+    fn resolve_temporary_session_profile(
+        &self,
+        input: &StartStructuredAgentSessionInput,
+    ) -> Result<AgentProfileRow, CommandError> {
+        let requested_agent_type = input.agent_type.clone().unwrap_or(AgentType::Codex);
+
+        if let Some(profile_id) = input.agent_profile_id {
+            let profile = self
+                .agent_profile_repository
+                .find_profile_by_id(profile_id)
+                .map_err(agent_session_database_error)?
+                .ok_or_else(|| {
+                    CommandError::new(
+                        CommandErrorCode::AgentProfileValidationFailed,
+                        "Agent Profile 不存在。",
+                    )
+                    .with_reason("profileNotFound")
+                    .with_detail(
+                        ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile_id),
+                    )
+                })?;
+            validate_profile_not_deleted(&profile)?;
+            validate_profile_scope(&profile, input.project_id)?;
+            return Ok(profile);
+        }
+
+        let project_profiles = self
+            .agent_profile_repository
+            .list_profiles_by_scope(&AgentScope::Project, Some(input.project_id))
+            .map_err(agent_session_database_error)?;
+        let global_profiles = self
+            .agent_profile_repository
+            .list_profiles_by_scope(&AgentScope::Global, None)
+            .map_err(agent_session_database_error)?;
+
+        let all_profiles: Vec<_> = project_profiles
+            .into_iter()
+            .chain(global_profiles.into_iter())
+            .collect();
+
+        if let Some(profile) = all_profiles
+            .into_iter()
+            .find(|profile| profile.agent_type == requested_agent_type)
+        {
+            return Ok(profile);
+        }
+
+        let requested_agent_type_literal = match requested_agent_type {
+            AgentType::Codex => "codex",
+            AgentType::Claude => "claude",
+            AgentType::OpenCode => "opencode",
+            AgentType::Grok => "grok",
+        };
+        Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "未找到可用于当前 Agent 类型的 Agent Profile。",
+        )
+        .with_reason("noProfileForAgentType")
+        .with_detail(
+            ErrorDetail::new("AgentType").with_value("agentType", requested_agent_type_literal),
+        )
+        .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)))
     }
 
     /// DB commit 之后的 standalone 启动后半段（无 initial prompt）。
@@ -2398,6 +2524,7 @@ fn insert_structured_session_in_transaction(
     working_dir: &str,
     command_snapshot: &str,
     log_path: &str,
+    display_mode: &str,
     started_at: i64,
 ) -> rusqlite::Result<crate::types::agent_session::AgentSessionRecord> {
     let number: i64 = transaction.query_row(
@@ -2423,10 +2550,11 @@ fn insert_structured_session_in_transaction(
            workspace_path,
            worktree_root_path,
            log_path,
+           display_mode,
            list_inserted_at,
            last_active_at,
            started_at
-         ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, '', 'current_branch', NULL, NULL, ?5, NULL, ?7, ?8, ?8, ?8)",
+         ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, '', 'current_branch', NULL, NULL, ?5, NULL, ?7, ?8, ?9, ?9, ?9)",
         params![
             project_id,
             number,
@@ -2435,6 +2563,7 @@ fn insert_structured_session_in_transaction(
             working_dir,
             command_snapshot,
             log_path,
+            display_mode,
             started_at
         ],
     )?;

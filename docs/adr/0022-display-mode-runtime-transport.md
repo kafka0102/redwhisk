@@ -1,6 +1,6 @@
 # 0022. displayMode 驱动运行时传输（json=structured / tui=PTY）
 
-**状态**：采纳（待执行）
+**状态**：采纳（已执行）
 
 ## 背景
 
