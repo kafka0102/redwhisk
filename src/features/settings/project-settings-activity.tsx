@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -34,6 +35,8 @@ import { GeneralSettingsPanel } from "./settings-general-panel";
 import { AgentsSettingsPanel } from "./settings-agents-panel";
 import { LabelsSettingsPanel } from "./settings-labels-panel";
 import { SkillsSettingsPanel } from "./settings-skills-panel";
+// ADR-0019 决策 9：表格排序——禁用置末、同组按 id 升序。
+import { sortAgentProfilesForDisplay } from "./agent-profile-sort";
 
 export type SettingsMenu = "general" | "agents" | "labels" | "skills";
 
@@ -187,12 +190,16 @@ export function ProjectSettingsActivity({
     SETTINGS_MENU_ITEMS[0];
   const activeMenuLabel = getSettingsMenuLabel(activeMenuItem.key, messages);
   const isProfilesCurrent = profilesProjectId === projectId;
-  const currentProjectProfiles = isProfilesCurrent ? projectProfiles : [];
-  const currentGlobalProfiles = isProfilesCurrent ? globalProfiles : [];
-  const currentProfiles = [
-    ...currentProjectProfiles,
-    ...currentGlobalProfiles,
-  ].sort((left, right) => left.id - right.id);
+  // ADR-0019 决策 9：表格排序——禁用置末、同组按 id 升序。useMemo 稳定引用，
+  // 供下游 useAgentCommandArgs 据此判定是否需要重新拉取参数（内容未变不重跑）。
+  const currentProfiles = useMemo(
+    () =>
+      sortAgentProfilesForDisplay([
+        ...(isProfilesCurrent ? projectProfiles : []),
+        ...(isProfilesCurrent ? globalProfiles : []),
+      ]),
+    [isProfilesCurrent, projectProfiles, globalProfiles],
+  );
   const currentProfilesErrorMessage = isProfilesCurrent
     ? profilesErrorMessage
     : null;

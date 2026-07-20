@@ -85,6 +85,7 @@ export interface I18nMessages {
     closeTerminalDialog: string;
     color: string;
     command: string;
+    commandArgsTooltip: string;
     commandAvailable: (commandName: string) => string;
     commandTesting: string;
     commandTest: string;

@@ -109,6 +109,7 @@
     "closeTerminalDialog": "关闭终端弹窗",
     "color": "颜色",
     "command": "命令",
+    "commandArgsTooltip": "启动参数",
     "commandAvailable": "命令可用：{{commandName}}",
     "commandTesting": "测试中...",
     "commandTest": "测试",

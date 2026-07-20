@@ -109,6 +109,7 @@
     "closeTerminalDialog": "Close terminal dialog",
     "color": "Color",
     "command": "Command",
+    "commandArgsTooltip": "Launch arguments",
     "commandAvailable": "Command available: {{commandName}}",
     "commandTesting": "Testing...",
     "commandTest": "Test",
