@@ -4,14 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { writeTerminalHistory } from "./terminal-history-writer";
 
 /**
- * 诊断环：复现「终端有时只能看到最近一屏、无法上滚看更早输出；
- * 过一会输出刷新后又恢复」的机制。
- *
- * 用户症状对应 xterm 的 buffer 状态：
- * - active.type === "alternate" 且 baseY === 0 → 无法上滚（TUI 备用屏）
- * - active.type === "normal" 且 baseY > 0 → 可上滚
- *
- * Codex CLI 二进制包含 EnterAlternateScreen / CSI ?1049h / CSI 3J。
+ * 用户更正：故障时并非 alternate/fullscreen。
+ * 在 normal buffer 上锁定能复现「只能看最近一屏、无法上滚；输出刷新后恢复」的路径。
  */
 
 function mountTerminal(options?: ConstructorParameters<typeof Terminal>[0]): {
@@ -62,7 +56,44 @@ function fillLines(count: number, prefix = "LINE"): string {
   ).join("");
 }
 
-describe("terminal scrollback control sequences", () => {
+function snapshotBuffer(terminal: Terminal): {
+  type: string;
+  baseY: number;
+  viewportY: number;
+  length: number;
+  canScroll: boolean;
+} {
+  const active = terminal.buffer.active;
+  return {
+    type: active.type,
+    baseY: active.baseY,
+    viewportY: active.viewportY,
+    length: active.length,
+    canScroll: active.baseY > 0,
+  };
+}
+
+function bufferContains(terminal: Terminal, needle: string): boolean {
+  const parts: string[] = [];
+  for (let y = 0; y < terminal.buffer.active.length; y += 1) {
+    parts.push(terminal.buffer.active.getLine(y)?.translateToString(true) ?? "");
+  }
+  return parts.join("\n").includes(needle);
+}
+
+/** In-place TUI redraw on normal buffer: CUP home + rewrite rows (no alt-screen). */
+function inPlaceRedraw(lines: string[]): string {
+  let out = "\x1b[H";
+  for (let i = 0; i < lines.length; i += 1) {
+    out += `${lines[i]}\x1b[K`;
+    if (i < lines.length - 1) {
+      out += "\r\n";
+    }
+  }
+  return out;
+}
+
+describe("terminal scrollback without alternate screen", () => {
   let terminal: Terminal | null = null;
   let host: HTMLDivElement | null = null;
 
@@ -73,171 +104,141 @@ describe("terminal scrollback control sequences", () => {
     host = null;
   });
 
-  it("normal long output creates scrollback", async () => {
+  it("baseline: long normal output is scrollable", async () => {
     const mounted = mountTerminal();
     terminal = mounted.terminal;
     host = mounted.host;
-
     await writeSync(terminal, fillLines(80));
-
-    expect(terminal.buffer.active.baseY).toBeGreaterThan(0);
-    expect(terminal.buffer.active.type).toBe("normal");
+    expect(snapshotBuffer(terminal).type).toBe("normal");
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
   });
 
-  it("CSI ?1049h alternate screen removes scroll capability (user symptom)", async () => {
+  it("in-place viewport redraw never grows scrollback (normal-buffer symptom)", async () => {
     const mounted = mountTerminal();
     terminal = mounted.terminal;
     host = mounted.host;
 
-    await writeSync(terminal, fillLines(60, "SHELL"));
-    const normalBaseY = terminal.buffer.normal.baseY;
-    expect(normalBaseY).toBeGreaterThan(0);
+    await writeSync(terminal, fillLines(5, "SHELL"));
+    expect(snapshotBuffer(terminal).baseY).toBe(0);
 
-    await writeSync(
-      terminal,
-      "\x1b[?1049h\x1b[H\x1b[2J" + fillLines(20, "CODEX"),
-    );
-
-    expect(terminal.buffer.active.type).toBe("alternate");
-    expect(terminal.buffer.active.baseY).toBe(0);
-    expect(terminal.buffer.normal.baseY).toBe(normalBaseY);
-  });
-
-  it("CSI ?1049l leaves alternate screen and restores scrollback", async () => {
-    const mounted = mountTerminal();
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    await writeSync(terminal, fillLines(60, "SHELL"));
-    await writeSync(
-      terminal,
-      "\x1b[?1049h\x1b[H\x1b[2J" + fillLines(15, "CODEX"),
-    );
-    expect(terminal.buffer.active.type).toBe("alternate");
-
-    await writeSync(terminal, "\x1b[?1049l");
-    expect(terminal.buffer.active.type).toBe("normal");
-    expect(terminal.buffer.active.baseY).toBeGreaterThan(0);
-  });
-
-  it("legacy CSI ?47h also enters non-scrollable alternate screen", async () => {
-    const mounted = mountTerminal();
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    await writeSync(terminal, fillLines(40, "SHELL"));
-    await writeSync(terminal, "\x1b[?47h" + fillLines(10, "TUI"));
-    expect(terminal.buffer.active.type).toBe("alternate");
-    expect(terminal.buffer.active.baseY).toBe(0);
-  });
-
-  it("split CSI alternate-enter across chunk boundaries still enters alt screen", async () => {
-    const mounted = mountTerminal();
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    await writeSync(terminal, fillLines(40, "SHELL"));
-    await writeSync(terminal, "\x1b[?");
-    await writeSync(terminal, "1049h\x1b[H\x1b[2J" + fillLines(8, "SPLIT"));
-    expect(terminal.buffer.active.type).toBe("alternate");
-    expect(terminal.buffer.active.baseY).toBe(0);
-  });
-
-  it("history restore while log ends inside alt screen stays non-scrollable", async () => {
-    const mounted = mountTerminal();
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    const log =
-      fillLines(50, "SHELL") +
-      "\x1b[?1049h\x1b[H\x1b[2J" +
-      fillLines(12, "CODEX");
-
-    await writeTerminalHistory(terminal, log, () => {});
-
-    expect(terminal.buffer.active.type).toBe("alternate");
-    expect(terminal.buffer.active.baseY).toBe(0);
-  });
-
-  it("history restore after alt screen exit is scrollable again", async () => {
-    const mounted = mountTerminal();
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    const log =
-      fillLines(50, "SHELL") +
-      "\x1b[?1049h\x1b[H\x1b[2J" +
-      fillLines(12, "CODEX") +
-      "\x1b[?1049l" +
-      fillLines(30, "AFTER");
-
-    await writeTerminalHistory(terminal, log, () => {});
-    expect(terminal.buffer.active.type).toBe("normal");
-    expect(terminal.buffer.active.baseY).toBeGreaterThan(0);
-  });
-
-  it("ED clear with scrollOnEraseInDisplay keeps scrollback on normal buffer", async () => {
-    const mounted = mountTerminal({ scrollOnEraseInDisplay: true });
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    await writeSync(terminal, fillLines(50, "OLD"));
-    const before = terminal.buffer.active.baseY;
-    expect(before).toBeGreaterThan(0);
-
-    await writeSync(terminal, "\x1b[H\x1b[2J" + fillLines(5, "NEW"));
-    expect(terminal.buffer.active.type).toBe("normal");
-    expect(terminal.buffer.active.baseY).toBeGreaterThanOrEqual(before);
-  });
-
-  it("CSI 3J erase saved lines can wipe scrollback content", async () => {
-    const mounted = mountTerminal();
-    terminal = mounted.terminal;
-    host = mounted.host;
-
-    await writeSync(terminal, fillLines(50, "OLD"));
-    expect(terminal.buffer.active.baseY).toBeGreaterThan(0);
-
-    await writeSync(terminal, "\x1b[3J\x1b[H\x1b[2J" + fillLines(5, "NEW"));
-    const bufferText: string[] = [];
-    for (let y = 0; y < terminal.buffer.active.length; y += 1) {
-      bufferText.push(
-        terminal.buffer.active.getLine(y)?.translateToString(true) ?? "",
+    for (let frame = 0; frame < 30; frame += 1) {
+      const rows = Array.from(
+        { length: 20 },
+        (_, i) => `FRAME-${frame}-ROW-${String(i).padStart(2, "0")}`,
       );
+      await writeSync(terminal, inPlaceRedraw(rows));
     }
-    const joined = bufferText.join("\n");
-    expect(joined).not.toContain("OLD-0000");
-    expect(joined).toContain("NEW-0000");
+
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(snap.canScroll).toBe(false);
+    expect(snap.baseY).toBe(0);
+    expect(bufferContains(terminal, "FRAME-29-ROW-00")).toBe(true);
   });
 
-  it("synchronized update + alt screen enter is non-scrollable", async () => {
+  it("after in-place redraw, line-mode overflow restores scroll", async () => {
     const mounted = mountTerminal();
     terminal = mounted.terminal;
     host = mounted.host;
 
-    await writeSync(terminal, fillLines(50, "SHELL"));
-    await writeSync(
-      terminal,
-      "\x1b[?2026h\x1b[?1049h\x1b[H\x1b[2J" +
-        fillLines(18, "CODEX") +
-        "\x1b[?2026l",
-    );
-    expect(terminal.buffer.active.type).toBe("alternate");
-    expect(terminal.buffer.active.baseY).toBe(0);
+    for (let frame = 0; frame < 5; frame += 1) {
+      const rows = Array.from({ length: 20 }, (_, i) => `F${frame}-R${i}`);
+      await writeSync(terminal, inPlaceRedraw(rows));
+    }
+    expect(snapshotBuffer(terminal).baseY).toBe(0);
+
+    await writeSync(terminal, fillLines(40, "STREAM"));
+    expect(snapshotBuffer(terminal).type).toBe("normal");
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
   });
 
-  it("missing 1049l leaves session stuck non-scrollable across redraws", async () => {
+  it("shell history remains scrollable after in-place TUI frames", async () => {
     const mounted = mountTerminal();
     terminal = mounted.terminal;
     host = mounted.host;
 
-    await writeSync(terminal, fillLines(40, "SHELL"));
-    await writeSync(
-      terminal,
-      "\x1b[?1049h\x1b[H\x1b[2J" + fillLines(10, "CODEX"),
-    );
-    await writeSync(terminal, "\x1b[H\x1b[2J" + fillLines(10, "REDRAW"));
-    expect(terminal.buffer.active.type).toBe("alternate");
-    expect(terminal.buffer.active.baseY).toBe(0);
+    await writeSync(terminal, fillLines(80, "SHELL"));
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
+    expect(bufferContains(terminal, "SHELL-0000")).toBe(true);
+
+    for (let frame = 0; frame < 10; frame += 1) {
+      const rows = Array.from({ length: 20 }, (_, i) => `TUI-${frame}-${i}`);
+      await writeSync(terminal, inPlaceRedraw(rows));
+    }
+
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    // pure in-place rewrite should NOT wipe prior scrollback
+    expect(snap.canScroll).toBe(true);
+    expect(bufferContains(terminal, "SHELL-0000")).toBe(true);
+  });
+
+  it("CSI 3J after shell history removes ability to reach earlier output", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    await writeSync(terminal, fillLines(80, "SHELL"));
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
+
+    await writeSync(terminal, "\x1b[3J");
+    for (let frame = 0; frame < 5; frame += 1) {
+      const rows = Array.from({ length: 20 }, (_, i) => `TUI-${frame}-${i}`);
+      await writeSync(terminal, inPlaceRedraw(rows));
+    }
+
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(bufferContains(terminal, "SHELL-0000")).toBe(false);
+    expect(snap.baseY).toBe(0);
+  });
+
+  it("history rewrite with short tail collapses scrollable history", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+    await writeSync(terminal, fillLines(120, "LIVE"));
+    expect(snapshotBuffer(terminal).canScroll).toBe(true);
+
+    await writeTerminalHistory(terminal, fillLines(20, "TAIL"), () => {});
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(bufferContains(terminal, "LIVE-0000")).toBe(false);
+    expect(snap.baseY).toBe(0);
+  });
+
+  it("replaying log of in-place frames leaves only final screen (no scroll)", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    let log = fillLines(5, "SHELL");
+    for (let frame = 0; frame < 20; frame += 1) {
+      const rows = Array.from(
+        { length: 20 },
+        (_, i) => `FRAME-${frame}-ROW-${String(i).padStart(2, "0")}`,
+      );
+      log += inPlaceRedraw(rows);
+    }
+
+    await writeTerminalHistory(terminal, log, () => {});
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(snap.baseY).toBe(0);
+    expect(bufferContains(terminal, "FRAME-19-ROW-00")).toBe(true);
+  });
+
+  it("scrollOnEraseInDisplay keeps scrollback across CSI 2J redraws", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+    await writeSync(terminal, fillLines(60, "OLD"));
+    const before = snapshotBuffer(terminal).baseY;
+    for (let i = 0; i < 5; i += 1) {
+      await writeSync(terminal, `\x1b[H\x1b[2J` + fillLines(10, `DRAW${i}`));
+    }
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(snap.baseY).toBeGreaterThanOrEqual(before);
   });
 });
