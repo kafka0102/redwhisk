@@ -11,6 +11,7 @@ mod codex_session_id_capture;
 mod command_snapshot;
 mod launch;
 mod log_path;
+mod terminal_archive_clean;
 mod service;
 mod timeline;
 mod validation;

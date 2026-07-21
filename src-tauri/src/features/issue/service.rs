@@ -2673,6 +2673,7 @@ impl<'connection> IssueService<'connection> {
             session.number,
             session.id,
             &session.log_path,
+            &session.display_mode,
         )?;
         AgentSessionRepository::update_log_path_and_latest_output_in_transaction(
             transaction,
