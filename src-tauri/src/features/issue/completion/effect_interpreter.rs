@@ -4,7 +4,7 @@
 //! 本 module 把 `Effect` 解释为副作用（DB / git / agent），是完成流程的「深 module」：
 //!
 //! - 两个完成流程入口（`complete_issue_flow` / `detect_agent_commit_completion`）在
-//!   `advance()` 之后都调用 [`IssueService::interpret_effects`]，取代各自内嵌的
+//!   `advance()` 之后都调用 [`CompletionFlow::interpret_effects`]，取代各自内嵌的
 //!   `match` 循环。`Effect` 在一处穷尽 match，arm 分歧不再可能。
 //! - 边界只取 effect 解释：循环 + `FailurePolicy::Block` 相位改写 + flow upsert
 //!   （含「Completed 跳过 upsert」迁移不变式）。纯 `advance()` 与调用方的结果投影不变。
@@ -21,7 +21,7 @@ use crate::features::issue::completion::git_reconcile::{
     merge_block_from_worktree_error, reconcile_session_worktree, WorktreeMergeBlockDescription,
 };
 use crate::features::issue::time::current_epoch_millis;
-use crate::features::issue::service::IssueService;
+use super::use_case::CompletionFlow;
 use crate::features::issue::validation::issue_database_error;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -57,7 +57,7 @@ pub(crate) struct InterpretationOutcome {
     pub(crate) flow_record: Option<IssueCompletionFlowRecord>,
 }
 
-impl<'connection> IssueService<'connection> {
+impl<'connection> CompletionFlow<'_, 'connection> {
     /// 解释执行一次迁移的全部 `Effect`（按序），并 upsert 终态 flow。
     pub(crate) fn interpret_effects(
         &self,
@@ -75,7 +75,7 @@ impl<'connection> IssueService<'connection> {
                         &ctx.issue.title,
                         &ctx.world.snapshot.head,
                     );
-                    let _ = AgentSessionRepository::new(self.issue_repository.connection())
+                    let _ = AgentSessionRepository::new(self.service.issue_repository.connection())
                         .update_current_turn_source(ctx.session.id, "completion");
                     if let Some(handle) = ctx.agent_registry.get(ctx.session.id) {
                         handle
@@ -98,6 +98,7 @@ impl<'connection> IssueService<'connection> {
                         }
                     };
                     let transaction = self
+                        .service
                         .issue_repository
                         .connection()
                         .unchecked_transaction()
@@ -246,6 +247,7 @@ mod tests {
         CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
         Transition,
     };
+    use crate::features::issue::completion::use_case::CompletionFlow;
     use crate::features::issue::service::IssueService;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -443,7 +445,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        let outcome = service
+        let outcome = CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -495,7 +497,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        service
+        CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -535,7 +537,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        service
+        CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -602,7 +604,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        service
+        CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -648,7 +650,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        let outcome = service
+        let outcome = CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -699,7 +701,7 @@ mod tests {
         };
 
         // 无 effect、终态非 Completed（如 prompt_dirty）→ 仅 upsert flow。
-        let outcome = service
+        let outcome = CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -741,7 +743,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        service
+        CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
@@ -848,7 +850,7 @@ mod tests {
             agent_registry: &registry,
         };
 
-        let outcome = service
+        let outcome = CompletionFlow::new(&service)
             .interpret_effects(
                 &ctx,
                 Transition {
