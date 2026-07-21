@@ -149,24 +149,28 @@ impl<'connection> AgentSessionService<'connection> {
         broadcaster: &AgentEventBroadcaster,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
-        if launch.profile.display_mode == "tui" {
-            launch.command_snapshot = build_tui_command_snapshot_for_profile(&launch.profile);
-            return self.start_agent_session_internal_with_launch(
-                data_dir,
-                input,
-                launch,
-                Some(pty_sessions),
-            );
+        match super::lifecycle::runtime_transport_from_raw(&launch.profile.display_mode)? {
+            super::lifecycle::RuntimeTransport::InteractiveTui => {
+                launch.command_snapshot = build_tui_command_snapshot_for_profile(&launch.profile);
+                self.start_agent_session_internal_with_launch(
+                    data_dir,
+                    input,
+                    launch,
+                    Some(pty_sessions),
+                )
+            }
+            super::lifecycle::RuntimeTransport::StructuredJson => {
+                let _ = pty_sessions;
+                self.start_structured_issue_agent_session(
+                    data_dir.as_ref(),
+                    input,
+                    launch,
+                    agent_registry,
+                    broadcaster,
+                    &DefaultAgentSessionProviderFactory,
+                )
+            }
         }
-        let _ = pty_sessions;
-        self.start_structured_issue_agent_session(
-            data_dir.as_ref(),
-            input,
-            launch,
-            agent_registry,
-            broadcaster,
-            &DefaultAgentSessionProviderFactory,
-        )
     }
 
     /// 查询 Issue 最近一次 worktree 模式 session 的残留状态。
@@ -1430,16 +1434,20 @@ impl AgentSessionService<'_> {
         })?;
 
         let profile = self.resolve_temporary_session_profile(&input)?;
-        if profile.display_mode == "tui" {
-            return self.start_standalone_tui_agent_session(
-                data_dir,
-                &input,
-                &profile,
-                &cwd,
-                pty_sessions,
-            );
+        match super::lifecycle::runtime_transport_from_raw(&profile.display_mode)? {
+            super::lifecycle::RuntimeTransport::InteractiveTui => {
+                return self.start_standalone_tui_agent_session(
+                    data_dir,
+                    &input,
+                    &profile,
+                    &cwd,
+                    pty_sessions,
+                );
+            }
+            super::lifecycle::RuntimeTransport::StructuredJson => {
+                let _ = pty_sessions;
+            }
         }
-        let _ = pty_sessions;
 
         let agent_profile_id = profile.id;
         let agent_type = profile.agent_type.clone();
