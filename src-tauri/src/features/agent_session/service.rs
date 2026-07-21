@@ -60,7 +60,7 @@ use super::codex_session_id_capture::{
 use crate::agent::descriptor_for;
 use super::launch::{persist_started_session_thread_id, start_provider_session};
 use super::log_path::{build_issue_runtime_structured_log_path, build_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
-use super::timeline::{is_empty_standalone_thread_timeline_error, latest_effort_from_session_log, latest_output_from_session_log, read_timeline_from_session_log};
+use super::timeline::latest_output_from_session_log;
 use super::validation::{validate_injected_prompt, validate_profile_not_deleted, validate_profile_scope, validate_prompt_snapshot, validate_session_title, validate_working_dir};
 use super::worktree_setup::run_worktree_setup_command;
 
@@ -1346,41 +1346,7 @@ impl<'connection> AgentSessionService<'connection> {
         handle: Option<Arc<dyn AgentSessionHandle>>,
     ) -> Result<ReadAgentTimelineResult, CommandError> {
         let session = self.find_project_session(project_id, session_id)?;
-        let history = read_timeline_from_session_log(&session)?;
-
-        if !history.items.is_empty() || history.effort.is_some() {
-            return Ok(ReadAgentTimelineResult {
-                items: history.items,
-                effort: history.effort,
-            });
-        }
-
-        if let Some(handle) = handle {
-            match handle.read_timeline() {
-                Ok(items) => {
-                    return Ok(ReadAgentTimelineResult {
-                        items,
-                        effort: latest_effort_from_session_log(&session),
-                    });
-                }
-                Err(AgentSessionError::NotRunning(_)) => {}
-                Err(AgentSessionError::Protocol(message))
-                    if session.issue_id.is_none()
-                        && is_empty_standalone_thread_timeline_error(&message) =>
-                {
-                    return Ok(ReadAgentTimelineResult {
-                        items: Vec::new(),
-                        effort: latest_effort_from_session_log(&session),
-                    });
-                }
-                Err(error) => return Err(agent_session_error_to_command_error(error)),
-            }
-        }
-
-        Ok(ReadAgentTimelineResult {
-            items: history.items,
-            effort: history.effort,
-        })
+        super::lifecycle::read_timeline_for_session(&session, handle)
     }
 }
 

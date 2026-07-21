@@ -505,7 +505,7 @@ fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
 }
 
 
-pub(super) fn latest_effort_from_session_log(
+pub(crate) fn latest_effort_from_session_log(
     session: &crate::types::agent_session::AgentSessionRecord,
 ) -> Option<String> {
     let path = Path::new(&session.log_path);
@@ -516,7 +516,7 @@ pub(super) fn latest_effort_from_session_log(
 }
 
 
-pub(super) fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
+pub(crate) fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
     message.contains("includeTurns is unavailable before first user message")
         || message.contains("is not materialized yet")
 }
