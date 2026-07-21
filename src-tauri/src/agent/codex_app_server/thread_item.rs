@@ -115,7 +115,7 @@ fn map_command_execution(item: &Value) -> Option<AgentTimelineItem> {
     };
 
     let error = if status == ToolCallStatus::Failed {
-        str_field(item, "stderr").or(Some("Command failed".to_string()))
+        str_field(item, "stderr").or_else(|| Some(command_failure_message(exit_code)))
     } else {
         None
     };
@@ -134,6 +134,14 @@ fn map_command_execution(item: &Value) -> Option<AgentTimelineItem> {
         status,
         error,
     })
+}
+
+/// Codex shell 工具默认 `timeout_ms=10000`；超时后通常以 exit code 124 结束。
+fn command_failure_message(exit_code: Option<i32>) -> String {
+    match exit_code {
+        Some(124) => "Command timed out after 10s (shell default timeout)".to_string(),
+        _ => "Command failed".to_string(),
+    }
 }
 
 fn map_file_change(item: &Value) -> Option<AgentTimelineItem> {
@@ -586,6 +594,56 @@ mod tests {
                 }
             }
             other => panic!("期望 ToolCall，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_command_execution_timeout_exit_code_as_timeout_message() {
+        let item = map_thread_item(
+            &json!({
+                "id": "c-timeout",
+                "type": "commandExecution",
+                "command": "sleep 20",
+                "exitCode": 124,
+            }),
+            true,
+        );
+        match item {
+            Some(AgentTimelineItem::ToolCall {
+                status,
+                error,
+                detail: ToolCallDetail::Shell { exit_code, .. },
+                ..
+            }) => {
+                assert_eq!(status, ToolCallStatus::Failed);
+                assert_eq!(exit_code, Some(124));
+                assert_eq!(
+                    error.as_deref(),
+                    Some("Command timed out after 10s (shell default timeout)")
+                );
+            }
+            other => panic!("期望失败 ToolCall，实际 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_command_execution_failed_prefers_stderr_over_timeout_message() {
+        let item = map_thread_item(
+            &json!({
+                "id": "c-timeout-stderr",
+                "type": "commandExecution",
+                "command": "sleep 20",
+                "exitCode": 124,
+                "stderr": "killed by watchdog",
+            }),
+            true,
+        );
+        match item {
+            Some(AgentTimelineItem::ToolCall { status, error, .. }) => {
+                assert_eq!(status, ToolCallStatus::Failed);
+                assert_eq!(error.as_deref(), Some("killed by watchdog"));
+            }
+            other => panic!("期望失败 ToolCall，实际 {other:?}"),
         }
     }
 
