@@ -7,8 +7,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
-use rusqlite::{params, Transaction};
-
 use crate::agent::agent_event_broadcaster::{AgentEventBroadcaster, TURN_GRACE_MS};
 use crate::local_data_path::user_home_from_data_dir;
 use crate::agent::provider_factory::{
@@ -1470,7 +1468,7 @@ impl AgentSessionService<'_> {
             .unchecked_transaction()
             .map_err(agent_session_database_error)?;
         let session = (|| {
-            let session = insert_structured_session_in_transaction(
+            let session = AgentSessionRepository::insert_structured_in_transaction(
                 &transaction,
                 input.project_id,
                 agent_profile_id,
@@ -1593,7 +1591,7 @@ impl AgentSessionService<'_> {
             .unchecked_transaction()
             .map_err(agent_session_database_error)?;
         let session = (|| {
-            let session = insert_structured_session_in_transaction(
+            let session = AgentSessionRepository::insert_structured_in_transaction(
                 &transaction,
                 input.project_id,
                 profile.id,
@@ -2520,66 +2518,6 @@ pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> 
     command_error
 }
 
-/// 在事务中插入一条结构化 session 行。
-///
-/// 与 `insert_standalone_in_transaction` 不同：PTY 专用字段填占位空串以满足 NOT NULL
-/// 约束，`codex_session_id` 留空待 handle.start 后回填。
-fn insert_structured_session_in_transaction(
-    transaction: &Transaction<'_>,
-    project_id: i64,
-    agent_profile_id: i64,
-    title: Option<&str>,
-    working_dir: &str,
-    command_snapshot: &str,
-    log_path: &str,
-    display_mode: &str,
-    started_at: i64,
-) -> rusqlite::Result<crate::types::agent_session::AgentSessionRecord> {
-    let number: i64 = transaction.query_row(
-        "SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = ?1",
-        params![project_id],
-        |row| row.get(0),
-    )?;
-    transaction.execute(
-        "INSERT INTO agent_sessions (
-           project_id,
-           number,
-           issue_id,
-           title,
-           agent_profile_id,
-           status,
-           attention,
-           working_dir,
-           command_snapshot,
-           prompt_snapshot,
-           workspace_mode,
-           target_branch,
-           workspace_branch,
-           workspace_path,
-           worktree_root_path,
-           log_path,
-           display_mode,
-           list_inserted_at,
-           last_active_at,
-           started_at
-         ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, '', 'current_branch', NULL, NULL, ?5, NULL, ?7, ?8, ?9, ?9, ?9)",
-        params![
-            project_id,
-            number,
-            title,
-            agent_profile_id,
-            working_dir,
-            command_snapshot,
-            log_path,
-            display_mode,
-            started_at
-        ],
-    )?;
-
-    let id = transaction.last_insert_rowid();
-    AgentSessionRepository::find_by_id_in_transaction(transaction, id)?
-        .ok_or(rusqlite::Error::QueryReturnedNoRows)
-}
 
 pub(super) fn resolve_target_branch(
     branch_info: &GitBranchInfo,

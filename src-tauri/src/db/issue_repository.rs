@@ -284,6 +284,34 @@ impl<'connection> IssueRepository<'connection> {
         self.find_by_id(issue_id)
     }
 
+    pub fn update_title_and_description_in_transaction(
+        transaction: &Transaction<'_>,
+        project_id: i64,
+        issue_id: i64,
+        title: &str,
+        description: &str,
+        label_ids_json: &str,
+    ) -> rusqlite::Result<Option<IssueRecord>> {
+        let changed = transaction.execute(
+            "UPDATE issues
+             SET title = ?1,
+                 description = ?2,
+                 label_ids = ?3,
+                 updated_at = MAX(
+                   updated_at + 1,
+                   CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+                 )
+             WHERE id = ?4 AND project_id = ?5 AND del = 0",
+            params![title, description, label_ids_json, issue_id, project_id],
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        find_by_id_on_connection(transaction, issue_id)
+    }
+
     pub fn find_running_linked_session_id(
         &self,
         project_id: i64,

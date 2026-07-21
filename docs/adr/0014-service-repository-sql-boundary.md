@@ -2,7 +2,7 @@
 
 ## 状态
 
-采纳（待执行；执行清单见下文）。[ADR-0013](./0013-feature-first-module-organization.md) 的 feature 边界已落地，本 ADR 由草案转采纳。
+采纳（主体已执行；残余项见清单）。[ADR-0013](./0013-feature-first-module-organization.md) 的 feature 边界已落地，本 ADR 由草案转采纳。
 
 ## 背景
 
@@ -36,21 +36,22 @@
 ### 已完成
 
 - **issue 完成流 blocked 写入收口**：`record_blocked_completion_attempt`（原 `features/issue/completion/flow.rs` 的 helper）下沉为 `CompletionAttemptRepository::record_blocked_in_transaction`，blocked attempt 的 `changed_files_json` 形状与 `GitOperationBlocked` 结果映射归 repository；调用方传已格式化的 `operation_state_str` 与 `created_at`，避免 db 层反向依赖 git 模块。
+- **`features/issue/service.rs` 生产路径 SQL 清空**：时间轴查询 → `EventRepository::list_issue_timeline_rows`；评论写入 / 幂等查询 → `IssueCommentRepository`；交付摘要 `try_publish_completion_comment` 的 turn / issue / profile 查询 → `AgentSessionRepository` / `AgentProfileRepository`；标题描述更新 → `IssueRepository::update_title_and_description_in_transaction`。`create_issue` / `update_issue` / `delete_issue` / `mark_issue_review` / 状态推进与回滚等事务块此前已只编排 `*_in_transaction`。
+- **`features/agent_session/service.rs` 生产路径 SQL 清空**：结构化 standalone 插入下沉为 `AgentSessionRepository::insert_structured_in_transaction`；其余写路径此前已走 repository，service 仅保留 `unchecked_transaction()` 开事务。
+- **`features/project_terminal/service.rs`**：生产路径无内联 SQL（仅 `connection()` 组装 repository）。
+- **文件 IO**：附件预览 / 删除 / 草稿等已落在 `features/issue/attachment.rs`，service 不直接拼 SQL；`std::fs` 仍可能出现在 feature 内 IO 辅助（非本 ADR SQL 边界核心）。
 
-### 待执行（按收益排序）
+### 待执行（收尾）
 
-1. **`features/issue/service.rs`（73 处 SQL / 10 事务块）**：逐事务块将内联 `prepare` / `execute` / `query_row` 迁至 `IssueRepository` / `EventRepository` / `IssueCompletionFlowRepository` 的 `*_in_transaction`，补缺失写方法；service 只开事务传 `&Transaction`。优先 `create_issue` / `update_issue` / `delete_issue` / `mark_issue_review` / `advance_issue_status_with_transaction` / `rollback_issue_to_backlog_with_transaction`。
-2. **`features/agent_session/service.rs`（39 处 SQL / 10 事务块）**：同手法迁至 `AgentSessionRepository`。
-3. **`features/project_terminal/service.rs`（1 处）**：收尾。
-4. **`repository.connection()` 访问器收敛**为「仅用于开事务 / 读 data_dir」，禁止 `prepare`。
-5. **`db/connection.rs` 扩展**：统一事务入口与 `rusqlite::Error -> CommandError` 转换，消除各 service 重复 `map_err(database_error)`。
-6. **文件 IO 收敛**：`read_previewable_text_file` / `delete_attachment_files` / `cleanup_created_files` 等收进 feature 内 `io` 模块或 `shared/fs`，service 不直接 `std::fs`。
+1. **`repository.connection()` 访问器收敛**：限定为「仅用于开事务 / 读 data_dir / 组装同库 repository」，禁止业务 SQL；可考虑类型封装或 lint 规则防止回潮。
+2. **`db/connection.rs` 扩展**：统一事务入口与 `rusqlite::Error → CommandError` 转换。注意各 feature 错误码不同（`IssuePersistenceFailed` / agent session 等），转换需可注入 code 或保持 feature 侧 `map_err`。
+3. **单测内种子 SQL**：`service` 与 `tui_start_tests` 等测试模块仍可直连 `execute` 铺数据；不计入生产边界，可选后续改为 repository / fixture helper。
 
 ## 后果
 
 - service 只见 record 与事务编排，SQL 全在 repository，可单测、可审计。
 - 跨表事务（issue + agent_session + completion_flow）仍由 service 编排，repository 不感知跨聚合业务规则。
-- 代价：迁移 215 处直连 SQL，逐 feature 推进；`issue_service`（115）、`agent_session_service`（67）是大头，需补集成测试钉死行为。
+- 代价：主体迁移已完成；后续代价集中在 `connection()` 收敛与统一事务入口，避免 service 再次内联 SQL。
 
 ## 考虑过的替代方案
 

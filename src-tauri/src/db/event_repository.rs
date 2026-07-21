@@ -3,6 +3,18 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use crate::types::issue_action::{IssueActionActor, IssueActionRecord, IssueActionType};
 use crate::types::session_event::{SessionEventRecord, SessionEventType};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueTimelineActionRow {
+    pub action_type: String,
+    pub actor_kind: String,
+    pub agent_name_snapshot: Option<String>,
+    pub agent_type: Option<String>,
+    pub user_name: Option<String>,
+    pub user_avatar_path: Option<String>,
+    pub created_at: i64,
+    pub comment_body: Option<String>,
+}
+
 pub struct EventRepository<'connection> {
     connection: &'connection Connection,
 }
@@ -67,6 +79,50 @@ impl<'connection> EventRepository<'connection> {
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(issue_actions)
+    }
+
+    /// Issue 时间轴查询行：动作 + actor 展示字段 + 评论正文（若为评论动作）。
+    pub fn list_issue_timeline_rows(
+        &self,
+        issue_id: i64,
+    ) -> rusqlite::Result<Vec<IssueTimelineActionRow>> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                issue_actions.action_type,
+                issue_actions.actor_kind,
+                issue_actions.actor_agent_name_snapshot,
+                agent_profiles.agent_type,
+                user_profiles.name,
+                user_profiles.avatar_path,
+                issue_actions.created_at,
+                issue_comments.body
+             FROM issue_actions
+             LEFT JOIN user_profiles
+                ON user_profiles.id = issue_actions.actor_user_profile_id
+             LEFT JOIN agent_profiles
+                ON agent_profiles.id = issue_actions.actor_agent_profile_id
+             LEFT JOIN issue_comments
+                ON issue_comments.id = json_extract(issue_actions.payload_json, '$.commentId')
+             WHERE issue_actions.issue_id = ?1
+             ORDER BY issue_actions.created_at ASC, issue_actions.id ASC",
+        )?;
+
+        let rows = statement
+            .query_map(params![issue_id], |row| {
+                Ok(IssueTimelineActionRow {
+                    action_type: row.get(0)?,
+                    actor_kind: row.get(1)?,
+                    agent_name_snapshot: row.get(2)?,
+                    agent_type: row.get(3)?,
+                    user_name: row.get(4)?,
+                    user_avatar_path: row.get(5)?,
+                    created_at: row.get(6)?,
+                    comment_body: row.get(7)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(rows)
     }
 
     pub fn insert_session_event_in_transaction(

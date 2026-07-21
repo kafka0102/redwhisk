@@ -4,18 +4,18 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use rusqlite::OptionalExtension;
-
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::features::agent_session::{
     build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
     IssueSessionArchive,
 };
+use crate::db::agent_profile_repository::AgentProfileRepository;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::event_repository::EventRepository;
 use crate::db::issue_attachment_repository::IssueAttachmentRepository;
+use crate::db::issue_comment_repository::IssueCommentRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
@@ -248,57 +248,20 @@ impl<'connection> IssueService<'connection> {
             .filter(|issue| issue.project_id == input.project_id)
             .ok_or_else(|| issue_not_found(input.issue_id))?;
 
-        let mut statement = self
-            .issue_repository
-            .connection()
-            .prepare(
-                "SELECT
-                    issue_actions.action_type,
-                    issue_actions.actor_kind,
-                    issue_actions.actor_agent_name_snapshot,
-                    agent_profiles.agent_type,
-                    user_profiles.name,
-                    user_profiles.avatar_path,
-                    issue_actions.created_at,
-                    issue_comments.body
-                 FROM issue_actions
-                 LEFT JOIN user_profiles
-                    ON user_profiles.id = issue_actions.actor_user_profile_id
-                 LEFT JOIN agent_profiles
-                    ON agent_profiles.id = issue_actions.actor_agent_profile_id
-                 LEFT JOIN issue_comments
-                    ON issue_comments.id = json_extract(issue_actions.payload_json, '$.commentId')
-                 WHERE issue_actions.issue_id = ?1
-                 ORDER BY issue_actions.created_at ASC, issue_actions.id ASC",
-            )
-            .map_err(issue_database_error)?;
-        let rows = statement
-            .query_map(rusqlite::params![issue.id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, i64>(6)?,
-                    row.get::<_, Option<String>>(7)?,
-                ))
-            })
+        let rows = EventRepository::new(self.issue_repository.connection())
+            .list_issue_timeline_rows(issue.id)
             .map_err(issue_database_error)?;
 
         let mut entries = Vec::new();
         for row in rows {
-            let (
-                action_type,
-                actor_kind,
-                agent_name_snapshot,
-                agent_type,
-                user_name,
-                user_avatar_path,
-                created_at,
-                comment_body,
-            ) = row.map_err(issue_database_error)?;
+            let action_type = row.action_type;
+            let actor_kind = row.actor_kind;
+            let agent_name_snapshot = row.agent_name_snapshot;
+            let agent_type = row.agent_type;
+            let user_name = row.user_name;
+            let user_avatar_path = row.user_avatar_path;
+            let created_at = row.created_at;
+            let comment_body = row.comment_body;
             let Some(action_type) = IssueTimelineActionType::from_action_str(&action_type) else {
                 continue;
             };
@@ -358,18 +321,18 @@ impl<'connection> IssueService<'connection> {
             .unchecked_transaction()
             .map_err(issue_database_error)?;
 
-        let inserted = transaction
-            .execute(
-                "INSERT INTO issue_comments (issue_id, body, linked_session_id, linked_turn_id, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT(linked_session_id, linked_turn_id) DO NOTHING",
-                rusqlite::params![issue_id, body, linked_session_id, linked_turn_id, created_at],
-            )
-            .map_err(issue_database_error)?;
-        let comment_id = transaction.last_insert_rowid();
+        let comment_id = IssueCommentRepository::insert_if_absent_in_transaction(
+            &transaction,
+            issue_id,
+            body,
+            linked_session_id,
+            linked_turn_id,
+            created_at,
+        )
+        .map_err(issue_database_error)?;
 
         // 仅在真正写入新评论时才追加动作；重复触发（UNIQUE 冲突）整体忽略。
-        if inserted > 0 {
+        if let Some(comment_id) = comment_id {
             let payload_json = json!({
                 "commentId": comment_id,
                 "linkedSessionId": linked_session_id,
@@ -408,15 +371,11 @@ impl<'connection> IssueService<'connection> {
         turn_id: &str,
     ) -> Result<bool, CommandError> {
         let connection = self.issue_repository.connection();
+        let session_repository = AgentSessionRepository::new(connection);
 
-        // 直接 SQL 读 current_turn_* 列（未映射进 AgentSessionRecord）。
-        let (current_turn_source, current_turn_id): (Option<String>, Option<String>) = connection
-            .query_row(
-                "SELECT current_turn_source, current_turn_id FROM agent_sessions
-                 WHERE id = ?1 AND del = 0",
-                rusqlite::params![session_id],
-                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
-            )
+        // current_turn_* 未映射进 AgentSessionRecord，经 repository 读取。
+        let (current_turn_source, current_turn_id) = session_repository
+            .find_current_turn(session_id)
             .map_err(issue_database_error)?;
 
         if current_turn_source.as_deref() != Some("completion") {
@@ -427,7 +386,7 @@ impl<'connection> IssueService<'connection> {
             return Ok(false);
         }
 
-        let session = AgentSessionRepository::new(connection)
+        let session = session_repository
             .find_by_id(session_id)
             .map_err(issue_database_error)?
             .ok_or_else(|| {
@@ -439,54 +398,34 @@ impl<'connection> IssueService<'connection> {
                 .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
             })?;
 
-        // 取关联 Issue：session 经 agent_sessions.issue_id 关联到 issue，确认未删除。
-        let issue_id: Option<i64> = connection
-            .query_row(
-                "SELECT issues.id FROM issues
-                 JOIN agent_sessions ON agent_sessions.issue_id = issues.id
-                 WHERE agent_sessions.id = ?1 AND issues.del = 0",
-                rusqlite::params![session_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()
-            .map_err(issue_database_error)?;
-        let Some(issue_id) = issue_id else {
+        let Some(issue_id) = session_repository
+            .find_active_issue_id_by_session_id(session_id)
+            .map_err(issue_database_error)?
+        else {
             return Ok(false);
         };
 
         // Agent 名称快照：查不到用空串兜底。
-        let name_snapshot: String = connection
-            .query_row(
-                "SELECT name FROM agent_profiles WHERE id = ?1",
-                rusqlite::params![session.agent_profile_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
+        let name_snapshot = AgentProfileRepository::new(connection)
+            .find_profile_by_id(session.agent_profile_id)
             .map_err(issue_database_error)?
+            .map(|profile| profile.name)
             .unwrap_or_default();
 
-        let Some(text) = crate::features::agent_session::read_last_assistant_text_for_turn(
+        let Some(assistant_text) = crate::features::agent_session::read_last_assistant_text_for_turn(
             &session.log_path,
             turn_id,
         ) else {
             return Ok(false);
         };
-        let Some(body) = extract_issue_comment_from_assistant_text(&text) else {
+        let Some(body) = extract_issue_comment_from_assistant_text(&assistant_text) else {
             return Ok(false);
         };
 
         // 幂等：命中 UNIQUE 时 add_issue_comment 静默忽略并整体不写动作；这里通过
         // 先查是否已存在评论来决定返回值（并发触发由 UNIQUE 兜底，最多多算一次）。
-        let already_exists: bool = connection
-            .query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM issue_comments
-                    WHERE linked_session_id = ?1 AND linked_turn_id = ?2
-                 )",
-                rusqlite::params![session_id, turn_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .map(|v: i64| v != 0)
+        let already_exists = IssueCommentRepository::new(connection)
+            .exists_by_session_and_turn(session_id, turn_id)
             .map_err(issue_database_error)?;
         if already_exists {
             return Ok(false);
@@ -537,7 +476,7 @@ impl<'connection> IssueService<'connection> {
                 } else {
                     let rewritten_description =
                         rewrite_attachment_tokens(&description, &attachments)?;
-                    update_issue_title_and_description_in_transaction(
+                    IssueRepository::update_title_and_description_in_transaction(
                         &transaction,
                         input.project_id,
                         issue.id,
@@ -618,7 +557,7 @@ impl<'connection> IssueService<'connection> {
             .filter(|attachment| !referenced_attachment_ids.contains(&attachment.id))
             .cloned()
             .collect::<Vec<_>>();
-        update_issue_title_and_description_in_transaction(
+        IssueRepository::update_title_and_description_in_transaction(
             &transaction,
             input.project_id,
             input.issue_id,
@@ -2196,34 +2135,6 @@ fn redwhisk_worktree_cleanup_from_session(
 // 2. 图片占位符：Markdown 图片语法 `![alt]({{issue-attachment-temp:token}})`，
 //    其 URL 部分即该 token 子串，替换后得到 `![alt]({{issue-attachment:id}})`。
 // 每个临时 token 都必须在 description 中出现（无论哪种形态），否则视为缺失附件标记。
-
-fn update_issue_title_and_description_in_transaction(
-    transaction: &rusqlite::Transaction<'_>,
-    project_id: i64,
-    issue_id: i64,
-    title: &str,
-    description: &str,
-    label_ids_json: &str,
-) -> rusqlite::Result<Option<IssueRecord>> {
-    let changed = transaction.execute(
-        "UPDATE issues
-         SET title = ?1,
-             description = ?2,
-             label_ids = ?3,
-             updated_at = MAX(
-               updated_at + 1,
-               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
-             )
-         WHERE id = ?4 AND project_id = ?5",
-        rusqlite::params![title, description, label_ids_json, issue_id, project_id],
-    )?;
-
-    if changed == 0 {
-        return Ok(None);
-    }
-
-    IssueRepository::find_by_id_in_transaction(transaction, issue_id)
-}
 
 #[cfg(test)]
 mod tests {
