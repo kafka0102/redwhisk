@@ -49,6 +49,20 @@ Agent TUI 会话视图 (xterm)
 - **Claude TUI**：已有 `--permission-mode` 则保留；`full-access` 或 `dangerous` → `--permission-mode bypassPermissions`；`plan` / `acceptEdits` / `auto` 映射对应 permission-mode；trim 路径。
 - **Stub（opencode/grok）**：仅 trim。
 
+## Session 生命周期 seam（displayMode）
+
+运行时传输选择集中在 `features/agent_session/lifecycle`：
+
+| 意图 | 入口 | 真相来源 |
+| --- | --- | --- |
+| 启动分流 | service start* → `runtime_transport_from_raw(profile.display_mode)` 后持久化为 session 快照 | profile → session 快照 |
+| inject | `lifecycle::inject_prompt(session.display_mode, …)` | **仅** session 快照 |
+| timeline 观察 | `lifecycle::read_timeline_for_session` | **仅** session 快照；tui 不返回 structured timeline |
+| archive | `build_issue_session_archive(..., display_mode)`（[ADR-0023](../adr/0023-tui-issue-archive-plain-text.md)） | session 快照 |
+| UI 能力 | `descriptor.ui_capabilities()` → `list_agent_models.capabilities` | provider descriptor，前端不维护静态双表 |
+
+禁止：用 `pty_sessions.contains` / registry membership **选择**传输层；membership 只表示进程是否仍在。
+
 ## Provider 差异（structured / json）
 
 | 项目      | Codex                                                         | Claude                                                  |
@@ -108,8 +122,8 @@ Agent TUI 会话视图 (xterm)
 
 1. **术语与 ADR**：`CONTEXT.md` 术语是否需要扩展？是否新建/更新 ADR（如传输分流）？
 2. **类型与持久化**：Rust / TS 的 `AgentType`、`displayMode`、DTO、migration 默认值与列表字段是否同步？
-3. **Descriptor**：`AgentProviderDescriptor` 是否实现 structured 与（若支持）`build_tui_command_snapshot`？是否在 `descriptor_for` 注册？
-4. **Factory / 启动分流**：`provider_factory` 与 `start_*_agent_session` 是否按 session 快照在 structured / PTY 间分流？未支持组合是否明确失败？
+3. **Descriptor**：`AgentProviderDescriptor` 是否实现 structured 与（若支持）`build_tui_command_snapshot`，以及 `ui_capabilities()`？是否在 `descriptor_for` 注册？`list_agent_models.capabilities` 是否同步？
+4. **Factory / 启动分流**：`provider_factory` 与 `start_*_agent_session` 是否经 `lifecycle::runtime_transport_from_raw` 按 session 快照在 structured / PTY 间分流？未支持组合是否明确失败？
 5. **命令与参数**：TUI 是否避免 app-server / stream-json？mode/dangerous 映射是否有单测？
 6. **传输命令**：agent session 终端 read/write/resize/restore/subscribe（或等价）是否与 project terminal 对称且不混配置表？
 7. **前端视图**：Agents 右侧是否按 **Session 展示形式快照** 在消息流与 Agent TUI 会话视图间切换？json 是否仍走 composer / 权限卡？

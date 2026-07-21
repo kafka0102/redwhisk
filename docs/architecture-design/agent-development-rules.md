@@ -55,7 +55,7 @@ Rust 按 command adapter、feature service、repository、类型和外部能力�
 - `service.rs`：业务编排主文件（struct + 主 `impl`），声明事务边界、调 repository，不直接写 SQL。
 - `commands.rs`：Tauri command adapter，注册到 `lib.rs` 的 `generate_handler!`；只做参数承接、状态注入、错误映射。
 - 按职责聚簇的子模块文件（如 `launch.rs`、`timeline.rs`、`validation.rs`、`archive.rs`、`attachment.rs`、`log_path.rs`、`registry.rs`、`workspace.rs` 等），通过 `mod.rs` 聚合。
-- 强相关的多文件可聚簇为子目录（如 `features/issue/completion/`、`features/app_update/{service,github,version}.rs`）。
+- 强相关的多文件可聚簇为子目录（如 `features/issue/completion/`、`features/agent_session/lifecycle/`、`features/app_update/{service,github,version}.rs`）。
 
 不得跨 feature 引用对方私有子模块；跨 feature 复用走 `pub use` 或横切模块（`db/`、`agent/`、`git/` 等）。
 
@@ -252,6 +252,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Project Switcher 属于窗口顶部 chrome，不属于内容 Header。
 - Activity Bar 主分组里的 `Settings` 是 Project Settings；Global Settings 是左侧菜单底部的仅图标 shell action，不属于 Project Activity 列表。
 - Agents Activity 使用左右两栏：左侧 Session list，右侧按 **Session 展示形式快照** 选择主区——`json` 为结构化 Agent Session View（消息流 + 底部固定 composer）；`tui` 为 Agent TUI 会话视图（交互式 xterm，输入直达 PTY）。
+- composer 的模型 / Think / modes 等 UI 能力位以 `list_agent_models.capabilities`（`descriptor.ui_capabilities()` 投影）为唯一来源；前端不得维护按 agentType 的静态能力双表。
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。
 - 前端交互控件默认使用 `src/components/ui/` 下的 shadcn 组件；除非存在明确的语义、可访问性或第三方集成需要，不新增手写基础按钮、输入框、选择器、菜单、对话框等控件。
